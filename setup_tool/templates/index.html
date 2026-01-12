@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Tool | Music Platform</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/js/all.min.js"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-10">
+            <div class="flex items-center space-x-3">
+                <i class="fas fa-cloud-music text-3xl text-blue-500"></i>
+                <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+                    Self-Hosted Music Hub
+                </h1>
+            </div>
+            <div class="status-indicator flex items-center space-x-2">
+                <div id="connection-dot" class="w-3 h-3 rounded-full bg-red-500"></div>
+                <span id="connection-status" class="text-sm text-gray-400">Disconnected</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main>
+            {% if not config_loaded %}
+            <div class="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded relative mb-6" role="alert">
+                <strong class="font-bold">Configuration Missing!</strong>
+                <span class="block sm:inline">Please run the CLI setup tool first to create a configuration file.</span>
+            </div>
+            {% else %}
+            
+            <!-- Configuration Info -->
+            <div class="bg-gray-800 rounded-lg p-6 mb-8 shadow-lg border border-gray-700">
+                <h2 class="text-xl font-semibold mb-4 text-gray-200">Current Configuration</h2>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-gray-500">Provider:</span>
+                        <span class="ml-2 text-cyan-400 font-mono">{{ config.provider.value }}</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Bucket:</span>
+                        <span class="ml-2 text-cyan-400 font-mono">{{ config.bucket }}</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Endpoint:</span>
+                        <span class="ml-2 text-gray-400 font-mono truncate block">{{ config.endpoint }}</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Access:</span>
+                        <span class="ml-2 text-green-400">
+                            {% if config.public %}Public{% else %}Private{% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Zone -->
+            <div class="upload-section mb-8">
+                <div id="drop-zone" class="border-4 border-dashed border-gray-700 rounded-xl p-10 text-center transition-all duration-300 hover:border-blue-500 hover:bg-gray-800 cursor-pointer">
+                    <div class="space-y-4">
+                        <i class="fas fa-folder-open text-5xl text-gray-600 mb-4"></i>
+                        <h3 class="text-xl font-medium text-gray-300">Drag & Drop Music Folder</h3>
+                        <p class="text-gray-500">or enter the absolute path below</p>
+                        
+                        <div class="flex max-w-md mx-auto mt-6">
+                            <input type="text" id="path-input" 
+                                class="flex-1 bg-gray-900 border border-gray-600 rounded-l-lg px-4 py-2 focus:outline-none focus:border-blue-500" 
+                                placeholder="/home/user/Music">
+                            <button id="upload-btn" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-r-lg transition-colors">
+                                Upload
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Section -->
+            <div id="progress-section" class="hidden bg-gray-800 rounded-lg p-6 shadow-lg border border-gray-700">
+                <h3 class="text-lg font-semibold mb-4 text-gray-200">Upload Progress</h3>
+                
+                <!-- Main Progress Bar -->
+                <div class="mb-4">
+                    <div class="flex justify-between mb-1">
+                        <span class="text-sm font-medium text-blue-400">Total Progress</span>
+                        <span id="total-percent" class="text-sm font-medium text-blue-400">0%</span>
+                    </div>
+                    <div class="w-full bg-gray-700 rounded-full h-2.5">
+                        <div id="main-progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Log / Activity -->
+                <div id="activity-log" class="bg-gray-900 rounded p-4 h-48 overflow-y-auto font-mono text-xs text-gray-400 border border-gray-700">
+                    <p class="text-gray-500 italic">Waiting for upload start...</p>
+                </div>
+            </div>
+            {% endif %}
+        </main>
+
+        <footer class="mt-12 text-center text-gray-600 text-sm">
+            <p>Self-Hosted Music Hub &copy; 2026</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Configuration files with secrets
+config.json
+*.key
+*.pem
+.env
+
+# Cache and temporary files
+*.log
+.cache/
+tmp/
+
+# Music files (don't commit test libraries)
+*.mp3
+*.flac
+*.ogg
+*.m4a
+*.wav

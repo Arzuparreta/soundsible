@@ -1,0 +1,36 @@
+# S3-Compatible Storage (Multi-Provider Support)
+boto3>=1.28.0              # AWS S3, Cloudflare R2, generic S3
+b2sdk>=1.19.0              # Backblaze B2 native SDK (fallback)
+
+# Audio Processing
+mutagen>=1.46.0            # Audio metadata extraction
+ffmpeg-python>=0.2.0       # Audio format conversion
+
+# CLI Framework
+click>=8.1.0               # Command-line interface
+colorama>=0.4.6            # Terminal colors
+rich>=13.5.0               # Progress bars and rich UI
+
+# Web Interface
+flask>=2.3.0               # Web server
+flask-socketio>=5.3.0      # Real-time progress updates
+
+# HTTP Client
+aiohttp>=3.9.0             # Async HTTP requests
+requests>=2.31.0           # Sync HTTP requests
+
+# Player Dependencies (GTK)
+PyGObject>=3.42.0          # GTK bindings
+python-mpv>=1.0.1          # mpv media player integration
+
+# Utilities
+cryptography>=41.0.0       # Encrypt stored credentials
+qrcode>=7.4.2              # Multi-device pairing
+pillow>=10.0.0             # Image processing
+segno>=1.6.0               # Better QR codes
+
+# Development
+pytest>=7.4.0              # Testing framework
+pytest-asyncio>=0.21.0     # Async test support
+black>=23.0.0              # Code formatting
+mypy>=1.5.0                # Type checking
