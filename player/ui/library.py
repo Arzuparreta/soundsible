@@ -1,4 +1,6 @@
 from gi.repository import Gtk, GObject, Gio, Pango, GLib, Gdk
+from shared.constants import DEFAULT_CACHE_DIR
+from player.cover_manager import CoverFetchManager
 
 class TrackObject(GObject.Object):
     """
@@ -175,6 +177,9 @@ class EditTrackDialog(Gtk.Window):
         
     def on_save_complete(self, success):
         if success:
+            # Signal parent to refresh
+            if hasattr(self.library_manager, 'refresh_callback') and self.library_manager.refresh_callback:
+                self.library_manager.refresh_callback()
             self.close()
         else:
             self.status.set_label("Update failed. Check logs.")
@@ -226,6 +231,18 @@ class LibraryView(Gtk.Box):
         click_gesture.set_button(3) # Right mouse button
         click_gesture.connect("pressed", self.on_right_click)
         self.column_view.add_controller(click_gesture)
+
+        # Register callback for refreshing
+        # This is a bit hacky, attaching to manager, but works for this scope
+        self.library_manager.refresh_callback = self.refresh
+
+    def refresh(self):
+        """Reload the library from the manager (re-sync optional)."""
+        print("Refreshing library view...")
+        # Clear store
+        self.store.remove_all()
+        # Repopulate
+        self._populate_library()
 
     def on_right_click(self, gesture, n_press, x, y):
         # We need to find which item was clicked. 
@@ -348,7 +365,15 @@ class LibraryView(Gtk.Box):
                 self.store.remove(found_idx)
                 print(f"Removed '{track.title}' from UI list.")
             
+            
+            if found_idx >= 0:
+                self.store.remove(found_idx)
+                print(f"Removed '{track.title}' from UI list.")
+            
             # Additional cleanup if needed (e.g. selection)
+            
+            # Trigger full refresh to be safe?
+            # self.refresh()
             
         else:
             # Show error
@@ -393,43 +418,36 @@ class LibraryView(Gtk.Box):
         self.column_view.append_column(column)
     
     def _load_cover_thumbnail(self, image, track):
-        """Load cover art thumbnail for a track."""
-        import threading
-        from setup_tool.audio import AudioProcessor
-        from gi.repository import GdkPixbuf
-        import tempfile
+        """Load cover art thumbnail for a track with smart fetching."""
         import os
+        from gi.repository import GdkPixbuf
         
-        def load_in_background():
+        # Tag image to avoid recycling issues
+        image.track_id = track.id
+        image.set_from_icon_name("emblem-music-symbolic") # Default
+        
+        # 1. Access Manager
+        manager = CoverFetchManager.get_instance()
+        
+        # 2. Prepare embedded info if available (path to audio file)
+        embedded_path = None
+        if self.library_manager.cache:
+            # We trust cache path lookup is fast (sqlite indexed)
+             embedded_path = self.library_manager.cache.get_cached_path(track.id)
+
+        # 3. Callback
+        def on_fetched(pixbuf):
             try:
-                # Check if track is cached
-                if self.library_manager.cache:
-                    cached = self.library_manager.cache.get_cached_path(track.id)
-                    if cached and os.path.exists(cached):
-                        # Extract cover
-                        cover_data = AudioProcessor.extract_cover_art(cached)
-                        if cover_data:
-                            # Save to temp and load
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
-                                tmp.write(cover_data)
-                                tmp_path = tmp.name
-                            
-                            try:
-                                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
-                                    tmp_path, 32, 32, True
-                                )
-                                GLib.idle_add(image.set_from_pixbuf, pixbuf)
-                            finally:
-                                os.remove(tmp_path)
-                            return
-                
-                # No cover or not cached - show default icon
-                GLib.idle_add(image.set_from_icon_name, "emblem-music-symbolic")
-            except Exception as e:
-                GLib.idle_add(image.set_from_icon_name, "emblem-music-symbolic")
-        
-        # Start background loading
-        threading.Thread(target=load_in_background, daemon=True).start()
+                self._safe_set_image(image, track.id, pixbuf)
+            except: pass
+            
+        # 4. Request (Handles smart cache check + queued processing)
+        manager.request_cover(track, embedded_cache_info=embedded_path, callback=on_fetched)
+
+    def _safe_set_image(self, image, track_id, pixbuf):
+        """Only set image if it still belongs to the same track (handle recycling)."""
+        if getattr(image, 'track_id', None) == track_id:
+            image.set_from_pixbuf(pixbuf)
     
     def _add_text_column(self, title, property_name, expand=False, fixed_width=0):
         factory = Gtk.SignalListItemFactory()

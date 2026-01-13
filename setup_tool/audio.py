@@ -355,25 +355,44 @@ class AudioProcessor:
                 except ID3NoHeaderError:
                     audio = ID3()
                 
+                # Remove existing covers
+                audio.delall('APIC')
+                
                 with open(cover_path, 'rb') as img:
-                    audio.add(APIC(
-                        encoding=3, # 3 is UTF-8
-                        mime='image/jpeg', # Assuming JPEG from iTunes
-                        type=3, # 3 is cover(front)
-                        desc=u'Cover',
-                        data=img.read()
-                    ))
-                audio.save(file_path)
+                    data = img.read()
+                    
+                # Simple header check for mime
+                mime = 'image/jpeg'
+                if data.startswith(b'\x89PNG'):
+                    mime = 'image/png'
+                    
+                audio.add(APIC(
+                    encoding=3, # 3 is UTF-8
+                    mime=mime, 
+                    type=3, # 3 is cover(front)
+                    desc=u'Cover',
+                    data=data
+                ))
+                audio.save(file_path, v2_version=3)
                 return True
                 
             elif ext == '.flac':
                 audio = FLAC(file_path)
+                audio.clear_pictures()
+                
                 image = Picture()
                 image.type = 3
-                image.mime = u"image/jpeg"
-                image.desc = u"Cover"
+                
                 with open(cover_path, 'rb') as f:
-                    image.data = f.read()
+                    data = f.read()
+                    
+                image.mime = u"image/jpeg"
+                if data.startswith(b'\x89PNG'):
+                    image.mime = u"image/png"
+                    
+                image.desc = u"Cover"
+                image.data = data
+                
                 audio.add_picture(image)
                 audio.save()
                 return True

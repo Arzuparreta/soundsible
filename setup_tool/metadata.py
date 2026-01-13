@@ -4,7 +4,13 @@ Metadata fetching utilities using iTunes Search API.
 
 import requests
 import urllib.parse
+import time
 from typing import List, Dict, Optional, Any
+
+_session = requests.Session()
+adapter = requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20, max_retries=3)
+_session.mount('https://', adapter)
+_session.mount('http://', adapter)
 
 def search_itunes(query: str, limit: int = 5) -> List[Dict[str, Any]]:
     """
@@ -33,8 +39,22 @@ def search_itunes(query: str, limit: int = 5) -> List[Dict[str, Any]]:
     }
     
     try:
-        response = requests.get(base_url, params=params, timeout=10)
-        response.raise_for_status()
+        retries = 3
+        for attempt in range(retries):
+            response = _session.get(base_url, params=params, timeout=10)
+            
+            if response.status_code == 429:
+                wait = 2 ** (attempt + 1)
+                print(f"DEBUG: API Rate Limited (429). Waiting {wait}s...")
+                time.sleep(wait)
+                continue
+                
+            response.raise_for_status()
+            break
+        else:
+            print(f"DEBUG: Failed to search iTunes after {retries} attempts.")
+            return []
+            
         data = response.json()
         
         results = []
@@ -68,7 +88,7 @@ def search_itunes(query: str, limit: int = 5) -> List[Dict[str, Any]]:
 def download_image(url: str) -> Optional[bytes]:
     """Download image data from URL."""
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         response.raise_for_status()
         return response.content
     except Exception as e:

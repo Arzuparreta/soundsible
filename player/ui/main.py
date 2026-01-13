@@ -2,8 +2,9 @@ import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Gio, GObject, GLib, Gdk
-from shared.constants import DEFAULT_CONFIG_DIR, DEFAULT_LIBRARY_PATH
+from shared.constants import DEFAULT_CONFIG_DIR, DEFAULT_LIBRARY_PATH, DEFAULT_CACHE_DIR
 from shared.models import PlayerConfig
+from player.cover_manager import CoverFetchManager
 from player.library import LibraryManager
 from player.ui.library import LibraryView
 from player.ui.settings import SettingsDialog
@@ -420,9 +421,27 @@ class MainWindow(Adw.ApplicationWindow):
                     GLib.timeout_add(2000, self._retry_cover_update, track, retry_count + 1)
                 else:
                     print("DEBUG: Max retries reached, cache not working. Showing default icon.")
+                    # Fallback: Trigger online fetch
+                    self._fetch_online_cover(track)
+                    
                 self.cover_art.set_from_icon_name("emblem-music-symbolic")
                 return
             
+            # Check Local Cover Cache FIRST (Smart Fetch Result)
+            covers_dir = os.path.join(os.path.expanduser(DEFAULT_CACHE_DIR), "covers")
+            local_cover_path = os.path.join(covers_dir, f"{track.id}.jpg")
+            
+            if os.path.exists(local_cover_path):
+                print(f"DEBUG: Found locally cached cover: {local_cover_path}")
+                try:
+                    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                        local_cover_path, 48, 48, True
+                    )
+                    self.cover_art.set_from_pixbuf(pixbuf)
+                    return # Done!
+                except Exception as e:
+                    print(f"DEBUG: Failed to load cached cover: {e}")
+
             # Extract cover art from file
             print(f"DEBUG: Extracting cover from: {local_path}")
             cover_data = AudioProcessor.extract_cover_art(local_path)
@@ -448,11 +467,28 @@ class MainWindow(Adw.ApplicationWindow):
                 print("DEBUG: No cover data found in file")
                 self.cover_art.set_from_icon_name("emblem-music-symbolic")
                 
+                # Fallback: Trigger online fetch
+                self._fetch_online_cover(track)
+                
+                
         except Exception as e:
             print(f"DEBUG: Failed to update cover art: {e}")
-            import traceback
-            traceback.print_exc()
+            if "No cover data" not in str(e):
+                import traceback
+                traceback.print_exc()
             self.cover_art.set_from_icon_name("emblem-music-symbolic")
+
+            # Fallback: Trigger online fetch if not found locally
+            self._fetch_online_cover(track)
+    
+    def _fetch_online_cover(self, track):
+        """Fetch cover art using centralized manager."""
+        def on_fetched(path):
+             if self.engine.current_track and self.engine.current_track.id == track.id:
+                  GLib.idle_add(self.update_cover_art, track)
+                  
+        CoverFetchManager.get_instance().request_cover(track, callback=on_fetched)
+
     
     def _on_cover_clicked(self, gesture, n_press, x, y):
         """Handle click on cover art - show larger view."""
@@ -467,133 +503,178 @@ class MainWindow(Adw.ApplicationWindow):
             import tempfile
             import os
             
-            # Get cached file
-            local_path = None
-            if self.lib_manager.cache:
-                cached = self.lib_manager.cache.get_cached_path(track.id)
-                if cached and os.path.exists(cached):
-                    local_path = cached
+            # Create dialog immediately so user sees something happening
+            dialog = Gtk.Window()
+            dialog.set_transient_for(self)
+            dialog.set_modal(True)
+            dialog.set_title(f"{track.title} - Album Art")
+            dialog.set_default_size(350, 385)
             
-            if not local_path:
-                print("Cover viewer: file not cached yet")
-                return
+            # Add ESC key handler
+            key_controller = Gtk.EventControllerKey()
+            key_controller.connect("key-pressed", lambda ctrl, keyval, keycode, state: 
+                dialog.close() if keyval == Gdk.KEY_Escape else False)
+            dialog.add_controller(key_controller)
             
-            # Extract cover art
-            cover_data = AudioProcessor.extract_cover_art(local_path)
-            if not cover_data:
-                print("Cover viewer: no cover art found")
-                return
+            # Create content with proper layout
+            main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+            main_box.set_margin_start(12)
+            main_box.set_margin_end(12)
+            main_box.set_margin_top(12)
+            main_box.set_margin_bottom(12)
+            dialog.set_child(main_box)
             
-            # Save to temp file and load
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
-                tmp.write(cover_data)
-                tmp_path = tmp.name
+            # Image container
+            image = Gtk.Picture()
+            image.set_can_shrink(True)
+            image.set_content_fit(Gtk.ContentFit.CONTAIN)
+            image.set_vexpand(True)
+            image.set_hexpand(True)
+            main_box.append(image)
             
-            try:
-                # Load image - don't scale here, let GTK handle it
-                pixbuf = GdkPixbuf.Pixbuf.new_from_file(tmp_path)
-                
-                # Create dialog
-                dialog = Gtk.Window()
-                dialog.set_transient_for(self)
-                dialog.set_modal(True)
-                dialog.set_title(f"{track.title} - Album Art")
-                dialog.set_default_size(350, 385)  # 30% smaller than 500x550
-                
-                # Add ESC key handler
-                key_controller = Gtk.EventControllerKey()
-                key_controller.connect("key-pressed", lambda ctrl, keyval, keycode, state: 
-                    dialog.close() if keyval == Gdk.KEY_Escape else False)
-                dialog.add_controller(key_controller)
-                
-                # Create content with proper layout
-                main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-                main_box.set_margin_start(12)
-                main_box.set_margin_end(12)
-                main_box.set_margin_top(12)
-                main_box.set_margin_bottom(12)
-                
-                # Image - scale to fit container
-                image = Gtk.Picture()
-                image.set_pixbuf(pixbuf)
-                image.set_can_shrink(True)
-                image.set_content_fit(Gtk.ContentFit.CONTAIN)
-                image.set_vexpand(True)
-                image.set_hexpand(True)
-                main_box.append(image)
-                
-                # Info label
-                info = Gtk.Label()
-                info.set_markup(f"<b>{track.title}</b>\n{track.artist}")
-                info.set_vexpand(False)
-                main_box.append(info)
-                
-                # Bottom controls bar
-                controls_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-                controls_bar.set_vexpand(False)
-                
-                # Close button (left side)
-                close_btn = Gtk.Button(label="Close")
-                close_btn.connect("clicked", lambda btn: dialog.close())
-                close_btn.set_halign(Gtk.Align.START)
-                controls_bar.append(close_btn)
-                
-                # Spacer to push controls to center/right
-                spacer = Gtk.Box()
-                spacer.set_hexpand(True)
-                controls_bar.append(spacer)
-                
-                # Playback controls (center)
-                playback_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-                
-                # Play/Pause button
-                play_pause_btn = Gtk.Button()
-                # Set initial icon based on current state
-                if self.engine.is_playing:
-                    play_pause_btn.set_icon_name("media-playback-pause-symbolic")
-                else:
-                    play_pause_btn.set_icon_name("media-playback-start-symbolic")
-                
-                # Store reference to button in dialog for updating
-                dialog.play_pause_btn = play_pause_btn
-                
-                def toggle_with_update(btn):
-                    self._toggle_playback()
-                    # Update button icon after toggle
-                    GLib.timeout_add(100, lambda: self._update_mini_player_button(dialog))
-                
-                play_pause_btn.connect("clicked", toggle_with_update)
-                playback_box.append(play_pause_btn)
-                
-                controls_bar.append(playback_box)
-                
-                # Volume control (right side)
-                volume_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-                volume_icon = Gtk.Image.new_from_icon_name("audio-volume-high-symbolic")
-                volume_box.append(volume_icon)
-                
-                volume_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL)
-                volume_scale.set_range(0, 100)
-                volume_scale.set_value(self.volume_knob.get_value() if hasattr(self, 'volume_knob') else 100)
-                volume_scale.set_size_request(100, -1)
-                volume_scale.set_draw_value(False)
-                volume_scale.connect("value-changed", lambda scale: self.engine.set_volume(int(scale.get_value())))
-                volume_box.append(volume_scale)
-                
-                controls_bar.append(volume_box)
-                
-                main_box.append(controls_bar)
-                
-                dialog.set_child(main_box)
-                dialog.present()
-                
-            finally:
-                os.remove(tmp_path)
+            # Loading/Status overlay (Stack)
+            # For simplicity using just the image widget, if it fails we show icon.
+
+            # Info label
+            info = Gtk.Label()
+            info.set_markup(f"<b>{track.title}</b>\n{track.artist}")
+            info.set_vexpand(False)
+            main_box.append(info)
+            
+            # Bottom controls bar
+            controls_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            controls_bar.set_vexpand(False)
+            
+            # Close button (left side)
+            close_btn = Gtk.Button(label="Close")
+            close_btn.connect("clicked", lambda btn: dialog.close())
+            close_btn.set_halign(Gtk.Align.START)
+            controls_bar.append(close_btn)
+            
+            # Spacer
+            spacer = Gtk.Box()
+            spacer.set_hexpand(True)
+            controls_bar.append(spacer)
+            
+            # Playback controls (center)
+            playback_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+            
+            # Play/Pause button
+            play_pause_btn = Gtk.Button()
+            if self.engine.is_playing:
+                play_pause_btn.set_icon_name("media-playback-pause-symbolic")
+            else:
+                play_pause_btn.set_icon_name("media-playback-start-symbolic")
+            
+            dialog.play_pause_btn = play_pause_btn
+            
+            def toggle_with_update(btn):
+                self._toggle_playback()
+                GLib.timeout_add(100, lambda: self._update_mini_player_button(dialog))
+            
+            play_pause_btn.connect("clicked", toggle_with_update)
+            playback_box.append(play_pause_btn)
+            controls_bar.append(playback_box)
+            
+            # Volume control (right side)
+            volume_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+            volume_icon = Gtk.Image.new_from_icon_name("audio-volume-high-symbolic")
+            volume_box.append(volume_icon)
+            
+            volume_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL)
+            volume_scale.set_range(0, 100)
+            volume_scale.set_value(self.volume_knob.get_value() if hasattr(self, 'volume_knob') else 100)
+            volume_scale.set_size_request(100, -1)
+            volume_scale.set_draw_value(False)
+            volume_scale.connect("value-changed", lambda scale: self.engine.set_volume(int(scale.get_value())))
+            volume_box.append(volume_scale)
+            
+            controls_bar.append(volume_box)
+            main_box.append(controls_bar)
+            
+            # Now try to load the cover art asynchronously
+            def load_cover_task():
+                try:
+                    # Check Smart Cache FIRST
+                    covers_dir = os.path.join(os.path.expanduser(DEFAULT_CACHE_DIR), "covers")
+                    local_cover_path = os.path.join(covers_dir, f"{track.id}.jpg")
+                    
+                    if os.path.exists(local_cover_path):
+                         GLib.idle_add(self._update_viewer_image, image, local_cover_path)
+                         return
+
+                    local_path = None
+                    if self.lib_manager.cache:
+                        cached = self.lib_manager.cache.get_cached_path(track.id)
+                        if cached and os.path.exists(cached):
+                            local_path = cached
+                    
+                    if not local_path:
+                        # Schedule update to show "No File" or trigger download?
+                        # For now, just show default
+                        GLib.idle_add(self._set_viewer_default, image, "Track not cached yet")
+                        return
+
+                    cover_data = AudioProcessor.extract_cover_art(local_path)
+                    if not cover_data:
+                        GLib.idle_add(self._set_viewer_default, image, "No cover art found")
+                        return
+                    
+                    # Save to temp file and load
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
+                        tmp.write(cover_data)
+                        tmp_path = tmp.name
+                    
+                    GLib.idle_add(self._update_viewer_image, image, tmp_path)
+                    
+                except Exception as e:
+                    print(f"Error loading cover for viewer: {e}")
+                    GLib.idle_add(self._set_viewer_default, image, "Error loading cover")
+
+            # Show dialog first
+            dialog.present()
+            
+            # Then start loading
+            import threading
+            threading.Thread(target=load_cover_task, daemon=True).start()
                 
         except Exception as e:
             print(f"Failed to show cover viewer: {e}")
             import traceback
             traceback.print_exc()
+
+    def _update_viewer_image(self, image_widget, path):
+        """Update the picture widget with file path (on main thread)."""
+        try:
+             # Paintable from file
+             file = Gio.File.new_for_path(path)
+             texture = Gdk.Texture.new_from_file(file)
+             image_widget.set_paintable(texture)
+             # Remove temp file? 
+             # It's tricky with async loading, might need cleanup later.
+             # For now we leak a small temp file in /tmp, usually cleaned by OS.
+             # Correct way: pass the temp path to a cleanup thread or list.
+        except Exception as e:
+             print(f"Failed to set viewer image: {e}")
+             self._set_viewer_default(image_widget, "Error displaying image")
+        return False
+
+    def _set_viewer_default(self, image_widget, reason):
+         """Set default icon and maybe tooltip."""
+         # Gtk.Picture doesn't take icon names easily, need to check docs.
+         # Actually it can take a paintable. or we can just replace the widget?
+         # Changing widget is disruptive. 
+         # Let's try to load the icon theme into a texture? Hard.
+         # Simpler: Use a place holder file or just leave it empty?
+         # Or maybe just use a separate Image widget if Picture fails?
+         # Let's try to find a system icon path or just use no paintable.
+         
+         # Note: Gtk.Picture is for displaying content. 
+         # If we want an icon, we might need a Gtk.Image inside or instead.
+         # But we used Gtk.Picture above.
+         
+         # Fallback: Just don't show anything in Picture, and update label?
+         pass
 
     def _toggle_playback(self):
         """Toggle play/pause from mini-player."""

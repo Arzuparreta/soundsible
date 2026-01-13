@@ -211,7 +211,7 @@ class S3StorageProvider(ABC):
         try:
             from shared.constants import LIBRARY_METADATA_FILENAME
             metadata_json = metadata.to_json()
-            return self.upload_json(LIBRARY_METADATA_FILENAME, metadata_json)
+            return self.upload_json(metadata_json, LIBRARY_METADATA_FILENAME)
         except Exception as e:
             print(f"Failed to save library: {e}")
             return False

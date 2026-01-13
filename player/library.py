@@ -261,6 +261,14 @@ class LibraryManager:
                     old_key = f"tracks/{track.id}.{track.format}"
                     self.provider.delete_file(old_key)
 
+                # Update Cache Identically
+                if self.cache:
+                    print("Updating cache with new version...")
+                    # We move the local_path to cache, so we don't need to delete it later
+                    # cache.add_to_cache(id, path, move=True/False)
+                    # We used a temp path, let's copy it to cache to be safe
+                    self.cache.add_to_cache(new_track.id, local_path, move=False)
+
                 os.remove(local_path)
                 print("Update complete!")
                 return True

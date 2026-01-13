@@ -275,7 +275,9 @@ def _manual_setup(provider):
               help='Number of parallel upload threads')
 @click.option('--bitrate', default=320, type=click.IntRange(128, 320),
               help='MP3 bitrate for compression (kbps)')
-def upload(music_path, compress, parallel, bitrate):
+@click.option('--auto-fetch/--no-auto-fetch', default=False,
+              help='Automatically fetch and embed covers for tracks with missing art')
+def upload(music_path, compress, parallel, bitrate, auto_fetch):
     """
     Upload music files from a directory.
     
@@ -310,7 +312,8 @@ def upload(music_path, compress, parallel, bitrate):
             TextColumn("[progress.description]{task.description}"),
             console=console
         ) as progress:
-            library = uploader.run(music_path, compress=compress, parallel=parallel, bitrate=bitrate, progress=progress)
+            library = uploader.run(music_path, compress=compress, parallel=parallel, bitrate=bitrate, 
+                                 auto_fetch=auto_fetch, progress=progress)
             
         if library:
             console.print(f"\n[green]✅ Upload Complete![/green]")
@@ -438,6 +441,73 @@ def web(port, debug):
     except ImportError as e:
         console.print(f"[red]Error starting web server: {e}[/red]")
         console.print("Make sure flask and flask-socketio are installed.")
+
+@cli.command()
+@click.option('--force', is_flag=True, help='Force check covers for all tracks (even if seemingly fine)')
+def fix_library_covers(force):
+    """
+    [Advanced] Embed covers into audio files and re-upload.
+    
+    This command modifies your actual files. It scans the library, finds tracks with missing covers,
+    downloads artwork, embeds it into the MP3/FLAC tags, and re-uploads the file to cloud storage.
+    Use this if you want covers to be permanently part of the file (e.g. for other players).
+    """
+    from .batch_fix import BatchCoverFixer
+    
+    # Load config
+    config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
+    if not config_path.exists():
+        console.print("[red]Error: Configuration not found. Run 'init' first.[/red]")
+        return
+        
+    try:
+        with open(config_path, 'r') as f:
+            config_data = json.load(f)
+        config = PlayerConfig.from_dict(config_data)
+    except Exception as e:
+        console.print(f"[red]Error loading config: {e}[/red]")
+        return
+    
+    try:
+        fixer = BatchCoverFixer(config)
+        fixer.run(force_all=force)
+    except Exception as e:
+        console.print(f"[red]Batch process failed: {e}[/red]")
+
+@cli.command()
+@click.option('--force', is_flag=True, help='Re-download covers even if they exist in cache')
+def fetch_missing_covers(force):
+    """
+    [Recommended] Download missing covers to local cache.
+    
+    This command DOES NOT modify your audio files. It simply scans your library and
+    downloads missing cover art to your local computer's cache (~/.cache/sh-music-hub/covers/).
+    This is fast and safe.
+    Downloads cover art for all tracks in the library and saves them
+    locally to ~/.cache/sh-music-hub/covers/.
+    """
+    from .cache_populate import CachePopulator
+    
+    # Load config
+    config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
+    if not config_path.exists():
+        console.print("[red]Error: Configuration not found. Run 'init' first.[/red]")
+        return
+        
+    try:
+        with open(config_path, 'r') as f:
+            config_data = json.load(f)
+        config = PlayerConfig.from_dict(config_data)
+    except Exception as e:
+        console.print(f"[red]Error loading config: {e}[/red]")
+        return
+    
+    try:
+        populator = CachePopulator(config)
+        populator.run(force=force)
+    except Exception as e:
+        console.print(f"[red]Populate failed: {e}[/red]")
+
 
 if __name__ == '__main__':
     cli()
