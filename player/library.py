@@ -273,5 +273,70 @@ class LibraryManager:
             if 'local_path' in locals() and local_path and os.path.exists(local_path):
                 os.remove(local_path)
             return False
+
+    def delete_track(self, track: Track) -> bool:
+        """
+        Permanently delete a track from:
+        1. Local cache
+        2. Cloud storage (R2/S3)
+        3. Library metadata
+        """
+        print(f"Deleting track: {track.title} ({track.id})...")
         
+        try:
+            # 1. Remove from Cache
+            if self.cache:
+                self.cache.remove_track(track.id)
+                
+            # 2. Remove from Cloud Storage
+            if self.provider:
+                remote_key = f"tracks/{track.id}.{track.format}"
+                if self.provider.file_exists(remote_key):
+                    print(f"Deleting remote file: {remote_key}")
+                    if not self.provider.delete_file(remote_key):
+                        print("Failed to delete remote file. Proceeding anyway.")
+                
+                # Check for cover art if stored separately? 
+                # Currently cover art seems embedded or fetched from URL, but if we stored it in S3 we should delete it too.
+                # The Track model has cover_art_key.
+                if track.cover_art_key:
+                    print(f"Deleting cover art: {track.cover_art_key}")
+                    self.provider.delete_file(track.cover_art_key)
+
+            # 3. Update Library Metadata
+            # Remove from track list
+            original_count = len(self.metadata.tracks)
+            self.metadata.tracks = [t for t in self.metadata.tracks if t.id != track.id]
+            
+            if len(self.metadata.tracks) < original_count:
+                print("Removed track from metadata.")
+                self.metadata.version += 1
+                
+                # Remove from playlists
+                for name, playlist in self.metadata.playlists.items():
+                    if track.id in playlist:
+                        self.metadata.playlists[name] = [pid for pid in playlist if pid != track.id]
+
+                # Save Library
+                # We need a way to save. LibraryManager doesn't perfectly expose save, 
+                # but update_track used: uploader.storage.save_library(self.metadata)
+                # We can try to reuse the provider's save_library if available or instantiate UploadEngine logic.
+                
+                if self.provider:
+                    success = self.provider.save_library(self.metadata)
+                    if success:
+                        print("Library metadata updated and saved.")
+                        return True
+                    else:
+                        print("Failed to save library metadata.")
+                        return False
+            else:
+                print("Track not found in metadata.")
+                return False
+                
+        except Exception as e:
+            print(f"Error deleting track: {e}")
+            return False
+        
+        return True
 

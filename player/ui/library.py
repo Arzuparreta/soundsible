@@ -269,6 +269,14 @@ class LibraryView(Gtk.Box):
         btn.connect('clicked', lambda b: self._open_edit_dialog(p, selected_obj.track))
         box.append(btn)
         
+        # Delete Button
+        del_btn = Gtk.Button(label="Delete Song")
+        del_btn.add_css_class("flat")
+        del_btn.add_css_class("destructive-action") # If available, or just error color
+        del_btn.set_halign(Gtk.Align.START)
+        del_btn.connect('clicked', lambda b: self._confirm_delete(p, selected_obj.track))
+        box.append(del_btn)
+        
         p.set_child(box)
         p.popup()
     
@@ -288,7 +296,73 @@ class LibraryView(Gtk.Box):
         return (self.search_query in track.title.lower() or
                 self.search_query in track.artist.lower() or
                 self.search_query in track.album.lower())
+                
+    def _confirm_delete(self, popover, track):
+        popover.popdown()
         
+        # Create confirmation dialog
+        dialog = Gtk.MessageDialog(
+            transient_for=self.get_root(),
+            modal=True,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.OK_CANCEL,
+            text=f"Delete '{track.title}'?"
+        )
+        dialog.props.secondary_text = "This will permanently delete the file from your local storage AND cloud library. This action cannot be undone."
+        
+        dialog.connect('response', lambda d, response: self._on_delete_response(d, response, track))
+        dialog.present()
+        
+    def _on_delete_response(self, dialog, response, track):
+        dialog.destroy()
+        if response == Gtk.ResponseType.OK:
+            self._perform_delete(track)
+            
+    def _perform_delete(self, track):
+        # Show some loading state?
+        print(f"Starting deletion for: {track.title}")
+        
+        def delete_thread():
+            success = self.library_manager.delete_track(track)
+            GLib.idle_add(self._on_delete_complete, success, track)
+            
+        import threading
+        threading.Thread(target=delete_thread, daemon=True).start()
+        
+    def _on_delete_complete(self, success, track):
+        if success:
+            # Remove from store
+            # Since we don't have direct index map, we iterate (slow but fine for now)
+            # Or assume library sync will handle it? 
+            # library sync might be too heavy. Let's manually remove from UI list.
+            
+            # Find item in store
+            found_idx = -1
+            for i in range(self.store.get_n_items()):
+                item = self.store.get_item(i)
+                if item.track.id == track.id:
+                    found_idx = i
+                    break
+            
+            if found_idx >= 0:
+                self.store.remove(found_idx)
+                print(f"Removed '{track.title}' from UI list.")
+            
+            # Additional cleanup if needed (e.g. selection)
+            
+        else:
+            # Show error
+            error_dialog = Gtk.MessageDialog(
+                transient_for=self.get_root(),
+                modal=True,
+                message_type=Gtk.MessageType.ERROR,
+                buttons=Gtk.ButtonsType.OK,
+                text="Deletion Failed"
+            )
+            error_dialog.format_secondary_text("An error occurred while trying to delete the track. Check logs.")
+            error_dialog.connect('response', lambda d, r: d.destroy())
+            error_dialog.present()
+
     def _open_edit_dialog(self, popover, track):
         popover.popdown()
         dialog = EditTrackDialog(self.get_root(), track, self.library_manager)

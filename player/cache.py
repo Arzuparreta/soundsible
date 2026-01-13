@@ -141,3 +141,27 @@ class CacheManager:
         self._init_cache()
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("DELETE FROM cache_entries")
+
+    def remove_track(self, track_id: str):
+        """
+        Remove a specific track from the cache (file and DB entry).
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT file_path FROM cache_entries WHERE track_id = ?",
+                (track_id,)
+            )
+            row = cursor.fetchone()
+            
+            if row:
+                file_path = row[0]
+                # Remove file
+                try:
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                        print(f"Removed cached file: {file_path}")
+                except OSError as e:
+                    print(f"Error removing cached file: {e}")
+                
+            # Remove from DB
+            conn.execute("DELETE FROM cache_entries WHERE track_id = ?", (track_id,))
