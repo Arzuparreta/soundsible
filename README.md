@@ -75,13 +75,13 @@ pip install mpris-server
 - **Parallel uploads**: Fast multi-threaded file uploads with progress tracking
 - **QR code pairing**: Easy multi-device setup
 
-### Music Player ✅
-- **Streaming playback**: Stream music directly from cloud storage ✅
-- **Smart caching**: LRU cache with configurable size (default 50GB) ✅
-- **Offline mode**: Play cached tracks without internet ✅
-- **Multi-device sync**: Automatic library synchronization across devices ✅
-- **GTK interface**: Native Linux desktop integration (GTK4/Adwaita) ✅
-- **MPRIS integration**: Media key support (optional) ✅
+### Music Player 
+- **Streaming playback**: Stream music directly from cloud storage 
+- **Smart caching**: LRU cache with configurable size (default 50GB) 
+- **Offline mode**: Play cached tracks without internet 
+- **Multi-device sync**: Automatic library synchronization across devices 
+- **GTK interface**: Native Linux desktop integration (GTK4/Adwaita) 
+- **MPRIS integration**: Media key support (optional) 
 - **Queue management**: Playlist features (coming soon)
 - **Search/Filter**: In-app library search (coming soon)
 
@@ -224,21 +224,21 @@ sh-music-hub/
 
 ## Development Status
 
-✅ **Phase 0: Foundation** (Complete)
+ **Phase 0: Foundation** (Complete)
 - Project structure and virtual environment
 - Data models and shared utilities
 - S3 storage provider abstraction
 - Cloudflare R2 and Backblaze B2 implementations
 - Audio metadata extraction and compression
 
-🚧 **Phase 1: Setup Tool Core** (In Progress)
+ **Phase 1: Setup Tool Core** (In Progress)
 - CLI interface with guided setup
 - Parallel upload engine
 - Configuration management
 
-📋 **Phase 2-3: Upload Engine & Web Interface** (Planned)
+ **Phase 2-3: Upload Engine & Web Interface** (Planned)
 
-📋 **Phase 4-6: Music Player** (Planned)
+ **Phase 4-6: Music Player** (Planned)
 
 ## Legal & Security
 
