@@ -91,16 +91,20 @@ class MainWindow(Adw.ApplicationWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
+        print("DEBUG: MainWindow initializing...")
         self.set_title("Music Hub")
         self.set_default_size(1000, 700)
         
         # Audio Engine
+        print("DEBUG: Initializing PlaybackEngine...")
         self.engine = PlaybackEngine()
+        print("DEBUG: PlaybackEngine initialized.")
         self.engine.set_state_change_callback(self.on_player_state_change)
         
         
         # MPRIS Integration (optional - requires mpris_server package)
         try:
+            print("DEBUG: Initializing MPRIS...")
             from player.mpris import MusicHubMpris
             from mpris_server import Server
             
@@ -152,7 +156,53 @@ class MainWindow(Adw.ApplicationWindow):
         player_container.set_spacing(8)
         # Add some padding to the container itself if needed, usually css handles it via toolbar class
         
-        # Play/Pause Button
+        # Playback controls container (Bottom bar)
+        # We need to restructure this to have: [Cover] [Title/Artist] [Controls] [Volume]
+        # Current structure seems to be just buttons. Let's inspect where this is added.
+        
+        # NOTE: The view above shows `player_container` having play button and progress bar. 
+        # But earlier I thought it was `playback_box`.
+        
+        # Let's look at lines 150-174 in the view.
+        # It adds `play_btn` and `progress_scale` to `player_container`.
+        # This seems to be a reliable place.
+        
+        # Revamped Layout:
+        # [Image] [Col: Title, Artist] [Space] [Prev] [Play] [Next] [Space] [Progress]
+        
+        # Let's rebuild the container content carefully.
+        
+        # 1. Cover Art
+        self.cover_art = Gtk.Image()
+        self.cover_art.set_pixel_size(48)
+        self.cover_art.set_size_request(48, 48)
+        self.cover_art.add_css_class("card")
+        self.cover_art.set_from_icon_name("emblem-music-symbolic")
+        self.cover_art.set_margin_end(12)
+        player_container.append(self.cover_art)
+        
+        # 2. Track Info
+        info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        info_box.set_valign(Gtk.Align.CENTER)
+        info_box.set_margin_end(12)
+        
+        self.title_label = Gtk.Label(label="Not Playing")
+        self.title_label.add_css_class("title-4")
+        self.title_label.set_halign(Gtk.Align.START)
+        self.title_label.set_ellipsize(3) # END
+        self.title_label.set_max_width_chars(25)
+        
+        self.artist_label = Gtk.Label(label="--")
+        self.artist_label.add_css_class("caption")
+        self.artist_label.set_halign(Gtk.Align.START)
+        self.artist_label.set_ellipsize(3)
+        self.artist_label.set_max_width_chars(25)
+        
+        info_box.append(self.title_label)
+        info_box.append(self.artist_label)
+        player_container.append(info_box)
+
+        # 3. Play/Pause Button
         self.play_btn = Gtk.Button(icon_name="media-playback-start-symbolic")
         self.play_btn.add_css_class("circular")
         self.play_btn.add_css_class("play-button")
@@ -160,13 +210,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.play_btn.connect('clicked', self.on_play_toggle)
         player_container.append(self.play_btn)
         
-        # Progress Bar (Scale)
+        # 4. Progress Bar (Scale)
         self.progress_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL)
         self.progress_scale.set_draw_value(False)
         self.progress_scale.set_range(0, 100) # Default, updated on play
         self.progress_scale.set_hexpand(True) # Fill remaining space
         self.progress_scale.set_valign(Gtk.Align.CENTER)
-        self.progress_scale.set_margin_start(5)
+        self.progress_scale.set_margin_start(12)
         self.progress_scale.set_margin_end(5)
         self.progress_scale.connect('value-changed', self.on_seek)
         player_container.append(self.progress_scale)

@@ -1,94 +1,78 @@
 """
-Core upload engine for processing and syncing music files.
-
-Handles parallel uploads, format conversion, deductible detection,
-and library metadata generation.
+Upload engine for managing music uploads to cloud storage.
 """
 
 import os
-import json
+import re
 import concurrent.futures
+import traceback
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple, Set
-from rich.progress import Progress, TaskID
-from datetime import datetime
+from typing import List, Dict, Optional, Tuple, Any
+from concurrent.futures import ThreadPoolExecutor
 
-from shared.models import Track, LibraryMetadata, PlayerConfig, StorageProvider
-from shared.constants import LIBRARY_METADATA_FILENAME, DEFAULT_MP3_BITRATE
-from setup_tool.audio import AudioProcessor
+from shared.models import PlayerConfig, Track, LibraryMetadata
+# from setup_tool.cloud import CloudStorage  <-- REMOVED
 from setup_tool.provider_factory import StorageProviderFactory
-from setup_tool.storage_provider import S3StorageProvider
+from setup_tool.audio import AudioProcessor
+from shared.constants import DEFAULT_MP3_BITRATE
+
+# Optional progress reporting
+try:
+    from rich.progress import Progress
+except ImportError:
+    Progress = None # type: ignore
 
 
 class UploadEngine:
-    """
-    Manages the upload process for music files.
-    """
+    """Handles scanning, verification, and uploading of music files."""
     
     def __init__(self, config: PlayerConfig):
         self.config = config
-        self.provider = StorageProviderFactory.create(config.provider)
         
-        # Re-authenticate using stored config
-        # Note: In a real app we'd decrypt these first
-        creds = {}
-        if config.provider == StorageProvider.CLOUDFLARE_R2:
-            # We need account_id for R2 which might not be explicitly stored 
-            # in the simple config object if not careful, but PlayerConfig usually has endpoint
-            # Extract account ID from endpoint if possible or strictly use stored keys
-            # For this MVP we'll rely on the simplified auth flow or what's in config
-             creds = {
-                'account_id': self._extract_account_id(config.endpoint), # Helper needed?
-                'access_key_id': config.access_key_id,
-                'secret_access_key': config.secret_access_key,
-                'bucket': config.bucket
-            }
-        elif config.provider == StorageProvider.BACKBLAZE_B2:
-            creds = {
-                'application_key_id': config.access_key_id,
-                'application_key': config.secret_access_key,
-                'bucket': config.bucket
-            }
-            
-        # R2 Provider implementation expects 'account_id'
-        # Let's handle the R2 specific auth slightly better if we can
-        # For now, pass what we have; the provider implementation might need adjustment 
-        # if it strictly requires account_id separate from endpoint.
-        # Actually, looking at CloudflareR2Provider.authenticate:
-        # It sets self.endpoint_url based on account_id.
-        # If we already have the endpoint in config, we might want to adjust the provider 
-        # to accept that or extract account_id. 
-        # Let's extract account_id from the endpoint "https://{account_id}.r2.cloudflarestorage.com"
+        # Initialize storage provider
+        self.storage = StorageProviderFactory.create(self.config.provider)
         
-        if config.provider == StorageProvider.CLOUDFLARE_R2 and not creds.get('account_id'):
-             # Try to extract from endpoint
-             if '.r2.cloudflarestorage.com' in config.endpoint:
-                 creds['account_id'] = config.endpoint.split('//')[1].split('.')[0]
-        
-        if not self.provider.authenticate(creds):
-            raise ValueError("Failed to authenticate with storage provider using saved configuration.")
+        # Authenticate using config credentials
+        creds = {
+            'access_key_id': self.config.access_key_id,
+            'secret_access_key': self.config.secret_access_key,
+            'region': self.config.region,
+            'endpoint': self.config.endpoint,
+            # B2 compatibility mappings if needed
+            'application_key_id': self.config.access_key_id, 
+            'application_key': self.config.secret_access_key
+        }
 
-    def _extract_account_id(self, endpoint: str) -> str:
-        try:
-             # Basic extraction for R2: https://<id>.r2...
-             if '//' in endpoint:
-                 return endpoint.split('//')[1].split('.')[0]
-        except:
-            pass
-        return ""
+        # R2 specific: Need to extract account_id from endpoint
+        if self.config.provider.name == 'CLOUDFLARE_R2' and self.config.endpoint:
+            try:
+                # Endpoint format: https://<account_id>.r2.cloudflarestorage.com
+                creds['account_id'] = self.config.endpoint.split('//')[1].split('.')[0]
+            except IndexError:
+                pass # Should probably log this warning
+        
+        if not self.storage.authenticate(creds):
+            raise ValueError("Failed to authenticate storage provider with cached config")
+            
+        # Ensure bucket exists/is selectable
+        self.storage.bucket_name = self.config.bucket
+
 
     def scan_directory(self, path: str) -> List[Path]:
-        """Recursively scan for supported audio files (or single file)."""
+        """
+        Recursively scan directory for supported audio files.
+        """
         files = []
         path_obj = Path(path).expanduser().resolve()
         
-        # Handle single file case
+        if not path_obj.exists():
+            return []
+            
         if path_obj.is_file():
-            if AudioProcessor.is_supported_format(str(path_obj)):
-                files.append(path_obj)
-            return files
+             if AudioProcessor.is_supported_format(str(path_obj)):
+                 return [path_obj]
+             return []
 
-        # Handle directory case
         for root, _, filenames in os.walk(str(path_obj)):
             for filename in filenames:
                 file_path = Path(root) / filename
@@ -98,6 +82,8 @@ class UploadEngine:
 
     def run(self, source_path: str, compress: bool = True, 
             parallel: int = 4, bitrate: int = DEFAULT_MP3_BITRATE, 
+            cover_image_path: Optional[str] = None,
+            auto_fetch: bool = False,
             progress: Optional[Progress] = None) -> LibraryMetadata:
         """
         Execute the upload process.
@@ -113,25 +99,27 @@ class UploadEngine:
         audio_files = self.scan_directory(str(source_dir))
         
         if progress:
-            progress.update(scan_task, completed=1, total=1, visible=False)
-        
+            progress.update(scan_task, completed=100, visible=False)
+
         if not audio_files:
             return None
 
-        # 2. Load existing library if available
-        existing_library = self._load_remote_library()
-        existing_tracks = {t.file_hash: t for t in existing_library.tracks} if existing_library else {}
+        # 2. Fetch remote library to check for duplicates
+        if progress:
+            sync_task = progress.add_task("[cyan]Syncing library...", total=None)
+            
+        existing_library = self.storage.get_library()
+        existing_tracks = {t.id: t for t in existing_library.tracks}
         
-        new_tracks = []
-        skipped_count = 0
-        upload_count = 0
-        
+        if progress:
+            progress.update(sync_task, completed=100, visible=False)
+
         # 3. Process and Upload
+        updated_tracks = []
         if progress:
             main_task = progress.add_task(f"[green]Processing {len(audio_files)} files...", total=len(audio_files))
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=parallel) as executor:
-            # Map files to future objects
+        with ThreadPoolExecutor(max_workers=parallel) as executor:
             future_to_file = {
                 executor.submit(
                     self._process_single_file, 
@@ -139,156 +127,225 @@ class UploadEngine:
                     source_dir, 
                     compress, 
                     bitrate,
-                    existing_tracks
+                    existing_tracks,
+                    cover_image_path,
+                    auto_fetch
                 ): file_path for file_path in audio_files
             }
 
             for future in concurrent.futures.as_completed(future_to_file):
-                file_path = future_to_file[future]
                 try:
                     result_track, uploaded = future.result()
                     if result_track:
-                        new_tracks.append(result_track)
-                        if uploaded:
-                            upload_count += 1
-                        else:
-                            skipped_count += 1
+                        updated_tracks.append(result_track)
+                    
+                    if progress:
+                        progress.advance(main_task)
                 except Exception as e:
-                    print(f"Error processing {file_path.name}: {e}")
-                
-                if progress:
-                    progress.advance(main_task)
+                    print(f"Error processing file: {e}")
 
-        # 4. Generate and Upload updated Library Metadata
-        # Merge new tracks with existing ones (updating if needed, or just appending?)
-        # For simplicity, we'll rebuild the track list based on what we just scanned/verified
-        # BUT we should preserve playlists etc from existing_library
-        
-        # Current strategy: The 'new_tracks' list contains everything valid found in the scan.
-        # If we want to keep tracks that weren't in this specific scan (additive), we'd need more logic.
-        # For now, let's assume 'sync' means 'make cloud match this folder' OR 
-        # mostly likely for a setup tool cleanup: invalid/missing tracks should be handled carefully.
-        # Let's do ADDITIVE for now: keep existing tracks if they aren't duplicates of new ones.
-        
-        final_track_list = list(new_tracks)
-        
-        # (Optional: Add logic here to keep tracks from existing_library that weren't part of this upload scan
-        #  but still exist in the bucket? Not implemented for MVP to avoid "ghost" tracks)
-
+        # 4. Update Library Manifest
+        new_version = existing_library.version + 1
         updated_library = LibraryMetadata(
-            library_version="1.0",
-            tracks=final_track_list,
-            playlists=existing_library.playlists if existing_library else {},
-            settings=existing_library.settings if existing_library else {},
-            last_updated=datetime.utcnow().isoformat()
+            version=new_version,
+            last_updated=0, # Will be set by models default or server
+            tracks=updated_tracks
         )
         
-        if progress:
-            sync_task = progress.add_task("[yellow]Syncing library metadata...", total=1)
-
-        self._save_remote_library(updated_library)
-        
-        if progress:
-            progress.update(sync_task, completed=1)
+        # Save library to cloud
+        self.storage.save_library(updated_library)
 
         return updated_library
 
     def _process_single_file(self, file_path: Path, source_root: Path, 
                              compress: bool, bitrate: int, 
-                             existing_tracks: Dict[str, Track]) -> Tuple[Optional[Track], bool]:
+                             existing_tracks: Dict[str, Track],
+                             cover_image_path: Optional[str] = None,
+                             auto_fetch: bool = False) -> Tuple[Optional[Track], bool]:
         """
-        Process a single audio file: hash, compress (if needed), upload.
-        Returns (Track, uploaded_bool)
+        Process a single audio file: hash, compress, embed art, upload.
         """
         try:
             # Calculate hash first to check for duplicates
             file_hash = AudioProcessor.calculate_hash(str(file_path))
             
-            # Check if exists in remote library
-            # If so, we can skip processing logic if we trust the hash (Deduplication)
-            if file_hash in existing_tracks:
-                # We still return the track object so it ends up in the new library manifest
-                # But we skip upload
+            # Check for duplicates, BUT allow overwrite if we are manually setting a cover
+            # (This allows fixing missing covers by re-uploading same file)
+            if file_hash in existing_tracks and not cover_image_path:
                 return existing_tracks[file_hash], False
 
             # Extract metadata
             metadata = AudioProcessor.extract_metadata(str(file_path))
+            print(f"DEBUG: Processing {file_path}")
+            print(f"DEBUG: Metadata: {metadata}")
+            print(f"DEBUG: Cover Path: {cover_image_path}")
+            
+            # Auto-Fetch / Cover Logic
+            fetched_cover_path = None
+            if auto_fetch and not cover_image_path and not metadata.get('cover_art', False):
+                try:
+                    from setup_tool.metadata import search_itunes, download_image
+                    import tempfile
+                    
+                    # Construct query with progressive fallbacks
+                    queries = []
+                    
+                    # 1. Artist + Title (Best)
+                    if metadata['artist'] != 'Unknown Artist' and metadata['title'] != 'Unknown Title':
+                         queries.append(f"{metadata['artist']} {metadata['title']}")
+                    
+                    # 2. Filename cleaned (smarter)
+                    stem = file_path.stem
+                    # Remove "Original Soundtrack", "OST", etc
+                    stem = re.sub(r'(?i)original soundtrack|ost', '', stem)
+                    # Remove track numbers "01 ", "04-"
+                    stem = re.sub(r'^\d+\s*[-_.]?\s*', '', stem)
+                    
+                    # Strategy 3: Hyphen Split
+                    if ' - ' in file_path.stem:
+                        parts = file_path.stem.split(' - ')
+                        if len(parts) >= 2:
+                            possible_title = parts[-1]
+                            possible_title = re.sub(r'^\d+\s*[-_.]?\s*', '', possible_title)
+                            queries.append(possible_title)
+                            
+                            possible_artist = parts[0].replace('_', ' ').strip()
+                            queries.append(f"{possible_artist} {possible_title}")
+
+                    # Replace separators (Strategy 2 cont)
+                    stem = stem.replace('_', ' ').replace('-', ' ')
+                    stem = " ".join(stem.split())
+                    queries.append(stem)
+                    
+                    # 4. Simple Filename (last resort)
+                    if stem != file_path.stem:
+                        queries.append(file_path.stem.replace('_', ' '))
+
+                    # Try queries until one works
+                    results = None
+                    for q in queries:
+                        if len(q) < 3: continue 
+                        results = search_itunes(q, limit=1)
+                        if results:
+                            break
+                            
+                    if results:
+                        img_url = results[0]['artwork_url']
+                        img_data = download_image(img_url)
+                        if img_data:
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                                tmp.write(img_data)
+                                fetched_cover_path = tmp.name
+                except Exception as e:
+                    print(f"Auto-fetch failed for {file_path.name}: {e}")
+
+            # Determine active cover source
+            active_cover_path = cover_image_path or fetched_cover_path
+            
+            # Logic: If we need to embed art we might need a temp copy
+            working_file_path = file_path
+            is_temp_copy = False
+            
+            print(f"DEBUG: Checking compression for {file_path}")
+            compression_needed, _ = AudioProcessor.should_compress(str(file_path))
+            will_compress = compress and compression_needed
+            
+            # Case 1: Embedding into original format (no compression)
+            if active_cover_path and not will_compress:
+                print("DEBUG: Checkpoint A - Embedding art")
+                import shutil
+                import tempfile
+                fd, temp_path = tempfile.mkstemp(suffix=file_path.suffix)
+                os.close(fd)
+                shutil.copy2(file_path, temp_path)
+                working_file_path = Path(temp_path)
+                is_temp_copy = True
+                
+                AudioProcessor.embed_artwork(str(working_file_path), active_cover_path)
             
             # Compression decision
-            should_compress, reason = AudioProcessor.should_compress(str(file_path))
-            final_file_path = file_path
+            print("DEBUG: Checkpoint B - Compression check 2")
+            should_compress, reason = AudioProcessor.should_compress(str(working_file_path))
+            final_file_path = working_file_path
             is_compressed_copy = False
             
             if compress and should_compress:
-                # Create a temporary compressed version
-                # For MVP, maybe just use /tmp or a cache dir. 
-                # Let's assume we upload the processed stream or file.
-                # Since our S3 provider takes a path, we need a temp file.
+                print("DEBUG: Checkpoint C - Compressing")
                 import tempfile
                 fd, temp_path = tempfile.mkstemp(suffix=".mp3")
                 os.close(fd)
                 
-                success = AudioProcessor.compress_to_mp3(str(file_path), temp_path, bitrate)
+                success = AudioProcessor.compress_to_mp3(str(working_file_path), temp_path, bitrate)
                 if success:
                     final_file_path = Path(temp_path)
                     is_compressed_copy = True
-                    # Update metadata for the new compressed file (size, format) ?
-                    # Ideally yes, but we keep original metadata (Artist/Title)
                     metadata['format'] = 'mp3'
                     metadata['bitrate'] = bitrate
+                    
+                    # Embed art into the NEW mp3 if we have it
+                    if active_cover_path:
+                         AudioProcessor.embed_artwork(str(final_file_path), active_cover_path)
             
+            # Use temp copy if no compression happened
+            if is_temp_copy and not is_compressed_copy:
+                 final_file_path = working_file_path
+
             # Upload
-            # Remote key structure: tracks/{uuid}.{ext}
-            track_id = Track.generate_id()
-            ext = final_file_path.suffix.lstrip('.')
-            remote_key = f"tracks/{track_id}.{ext}"
+            print("DEBUG: Checkpoint D - Uploading")
+            track_id = file_hash
+            remote_key = f"tracks/{track_id}.{metadata['format']}"
             
-            uploaded = self.provider.upload_file(str(final_file_path), remote_key, metadata={
-                'title': str(metadata.get('title', '')),
-                'artist': str(metadata.get('artist', ''))
-            })
+            uploaded = self.storage.upload_file(str(final_file_path), remote_key)
+            print(f"DEBUG: Checkpoint E - Upload result: {uploaded}")
             
-            # Cleanup temp file
+            # Update metadata with remote URL? No, URL is generated.
+            # But we might want size
+            metadata['size'] = os.path.getsize(final_file_path)
+
+             # Cleanup temp files
             if is_compressed_copy:
                 os.remove(final_file_path)
+            
+            if is_temp_copy:
+                 os.remove(working_file_path)
+
+            # Cleanup fetched cover
+            if fetched_cover_path and os.path.exists(fetched_cover_path):
+                os.remove(fetched_cover_path)
             
             if not uploaded:
                 return None, False
 
             # Create Track object
+            # Validate metadata fields are not None
+            title = metadata.get('title', 'Unknown') or 'Unknown'
+            artist = metadata.get('artist', 'Unknown') or 'Unknown' 
+            album = metadata.get('album', 'Unknown') or 'Unknown'
+            
+            # Calculate original filename relative to source_root safely
+            try:
+                orig_name = str(file_path.relative_to(source_root))
+            except ValueError:
+                orig_name = file_path.name
+
             track = Track(
                 id=track_id,
-                title=metadata.get('title', 'Unknown'),
-                artist=metadata.get('artist', 'Unknown'),
-                album=metadata.get('album', 'Unknown'),
-                duration=metadata.get('duration', 0),
+                title=title,
+                artist=artist,
+                album=album,
+                duration=metadata.get('duration', 0) or 0,
+                format=metadata.get('format', 'mp3'),
+                bitrate=metadata.get('bitrate', 0) or 0,
+                file_size=metadata.get('size', 0) or 0,
                 file_hash=file_hash,
-                original_filename=file_path.name,
+                original_filename=orig_name,
                 compressed=is_compressed_copy,
-                file_size=os.path.getsize(str(file_path)), # Original size or new? 
-                # Let's store the size of the file we actually possess locally or the one in cloud?
-                # Usually cloud size.
-                bitrate=metadata.get('bitrate', 0),
-                format=ext,
-                year=metadata.get('year'),
-                genre=metadata.get('genre'),
-                track_number=metadata.get('track_number')
+                cover_art_key=None
             )
             
             return track, True
 
         except Exception as e:
-            print(f"Error in worker for {file_path}: {e}")
+            print(f"Failed to process {file_path}: {e}")
+            traceback.print_exc()
             return None, False
-
-    def _load_remote_library(self) -> Optional[LibraryMetadata]:
-        try:
-            json_str = self.provider.download_json(LIBRARY_METADATA_FILENAME)
-            if json_str:
-                return LibraryMetadata.from_json(json_str)
-        except Exception:
-            pass # File doesn't exist or error
-        return None
-
-    def _save_remote_library(self, library: LibraryMetadata):
-        self.provider.upload_json(library.to_json(), LIBRARY_METADATA_FILENAME)

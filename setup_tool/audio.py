@@ -293,3 +293,93 @@ class AudioProcessor:
         
         # Default: don't compress unknown formats
         return False, "Format not recognized for compression"
+
+    @staticmethod
+    def update_tags(file_path: str, tags: Dict[str, str]) -> bool:
+        """
+        Update audio file tags.
+        """
+        try:
+            import mutagen
+            from mutagen.easyid3 import EasyID3
+            from mutagen.flac import FLAC
+            from mutagen.oggvorbis import OggVorbis
+            from mutagen.mp3 import MP3
+            
+            path_obj = Path(file_path)
+            ext = path_obj.suffix.lower()
+            
+            if ext == '.mp3':
+                try:
+                    audio = EasyID3(file_path)
+                except mutagen.id3.ID3NoHeaderError:
+                    audio = EasyID3()
+                    audio.save(file_path)
+                    audio = EasyID3(file_path)
+            elif ext == '.flac':
+                audio = FLAC(file_path)
+            elif ext == '.ogg':
+                audio = OggVorbis(file_path)
+            else:
+                return False
+                
+            if 'title' in tags: audio['title'] = tags['title']
+            if 'artist' in tags: audio['artist'] = tags['artist']
+            if 'album' in tags: audio['album'] = tags['album']
+            
+            audio.save()
+            return True
+            
+        except Exception as e:
+            print(f"Error updating tags: {e}")
+            return False
+
+    @staticmethod
+    def embed_artwork(file_path: str, cover_path: str) -> bool:
+        """
+        Embed album art into the audio file.
+        Supports MP3 (ID3 APIC) and FLAC (Picture).
+        """
+        try:
+            import mutagen
+            from mutagen.id3 import ID3, APIC, ID3NoHeaderError
+            from mutagen.flac import FLAC, Picture
+            from mutagen.mp3 import MP3
+            
+            path_obj = Path(file_path)
+            ext = path_obj.suffix.lower()
+            
+            if ext == '.mp3':
+                try:
+                    audio = ID3(file_path)
+                except ID3NoHeaderError:
+                    audio = ID3()
+                
+                with open(cover_path, 'rb') as img:
+                    audio.add(APIC(
+                        encoding=3, # 3 is UTF-8
+                        mime='image/jpeg', # Assuming JPEG from iTunes
+                        type=3, # 3 is cover(front)
+                        desc=u'Cover',
+                        data=img.read()
+                    ))
+                audio.save(file_path)
+                return True
+                
+            elif ext == '.flac':
+                audio = FLAC(file_path)
+                image = Picture()
+                image.type = 3
+                image.mime = u"image/jpeg"
+                image.desc = u"Cover"
+                with open(cover_path, 'rb') as f:
+                    image.data = f.read()
+                audio.add_picture(image)
+                audio.save()
+                return True
+                
+            return False
+            
+        except Exception as e:
+            print(f"Error embedding artwork: {e}")
+            return False

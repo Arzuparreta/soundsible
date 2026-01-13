@@ -82,7 +82,7 @@ class LibraryMetadata:
     This is serialized to library.json and stored in the cloud bucket.
     All clients sync against this metadata file.
     """
-    library_version: str
+    version: int
     tracks: List[Track]
     playlists: Dict[str, List[str]]  # playlist_name -> [track_ids]
     settings: Dict[str, Any]
@@ -99,7 +99,7 @@ class LibraryMetadata:
             JSON string representation
         """
         data = {
-            "library_version": self.library_version,
+            "version": self.version,
             "tracks": [track.to_dict() for track in self.tracks],
             "playlists": self.playlists,
             "settings": self.settings,
@@ -120,8 +120,19 @@ class LibraryMetadata:
         """
         data = json.loads(json_str)
         tracks = [Track.from_dict(t) for t in data["tracks"]]
+        
+        # Handle migration from library_version (str) to version (int)
+        raw_version = data.get("version")
+        if raw_version is None:
+            raw_version = data.get("library_version", "1")
+            
+        try:
+            version = int(raw_version)
+        except (ValueError, TypeError):
+            version = 1
+            
         return cls(
-            library_version=data["library_version"],
+            version=version,
             tracks=tracks,
             playlists=data.get("playlists", {}),
             settings=data.get("settings", {}),

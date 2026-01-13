@@ -197,3 +197,21 @@ class S3StorageProvider(ABC):
             JSON string if successful, None otherwise
         """
         pass
+
+    def save_library(self, metadata: Any) -> bool:
+        """
+        Save library metadata to storage.
+        
+        Args:
+            metadata: LibraryMetadata object
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            from shared.constants import LIBRARY_METADATA_FILENAME
+            json_str = metadata.to_json()
+            return self.upload_json(json_str, LIBRARY_METADATA_FILENAME)
+        except Exception as e:
+            print(f"Failed to save library: {e}")
+            return False

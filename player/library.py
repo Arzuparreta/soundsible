@@ -10,6 +10,10 @@ from typing import Dict, List, Optional
 from shared.models import LibraryMetadata, Track, PlayerConfig
 from shared.constants import LIBRARY_METADATA_FILENAME, DEFAULT_CONFIG_DIR
 from setup_tool.provider_factory import StorageProviderFactory
+from setup_tool.audio import AudioProcessor
+from setup_tool.uploader import UploadEngine
+import shutil
+import tempfile
 
 class LibraryManager:
     """Manages the music library and stream URLs."""
@@ -149,5 +153,123 @@ class LibraryManager:
     def get_all_tracks(self) -> List[Track]:
         """Return all tracks from library metadata."""
         return self.metadata.tracks if self.metadata else []
+
+    def update_track(self, track: Track, new_metadata: Dict[str, str], cover_path: Optional[str] = None) -> bool:
+        """
+        Update track metadata and/or cover art.
+        This involves:
+        1. Downloading the file (if not cached).
+        2. Modifying tags/embedding art.
+        3. Re-uploading (if hash changed).
+        4. Updating library.json.
+        """
+        try:
+            print(f"Updating track: {track.title}")
+            
+            # 1. Get local file
+            local_path = None
+            
+            # Try cache first
+            if self.cache:
+                cached = self.cache.get_cached_path(track.id)
+                if cached:
+                    # Copy to temp to avoid messing up cache directly
+                    fd, temp_path = tempfile.mkstemp(suffix=f".{track.format}")
+                    os.close(fd)
+                    shutil.copy2(cached, temp_path)
+                    local_path = temp_path
+            
+            # If not in cache, download it
+            if not local_path and self.provider:
+                remote_key = f"tracks/{track.id}.{track.format}"
+                fd, temp_path = tempfile.mkstemp(suffix=f".{track.format}")
+                os.close(fd)
+                print("Downloading track for update...")
+                if self.provider.download_file(remote_key, temp_path):
+                    local_path = temp_path
+                else:
+                    print("Failed to download track.")
+                    return False
+            
+            if not local_path:
+                return False
+                
+            # 2. Modify File
+            changes_made = False
+            
+            # Update Tags
+            if new_metadata:
+                if AudioProcessor.update_tags(local_path, new_metadata):
+                    changes_made = True
+            
+            # Embed Art
+            if cover_path:
+                print(f"Embedding artwork from {cover_path}...")
+                if AudioProcessor.embed_artwork(local_path, cover_path):
+                    changes_made = True
+            
+            if not changes_made:
+                print("No changes applied.")
+                os.remove(local_path)
+                return True # Success but nothing to do
+                
+            # 3. Process as "New" Upload
+            # We use UploadEngine logic to re-hash and upload
+            print("Re-processing file...")
+            uploader = UploadEngine(self.config)
+            
+            # Hack: We use _process_single_file but we need to pass a valid source_root
+            # We treat the temp dir as root
+            source_root = Path(local_path).parent
+            
+            new_track, uploaded = uploader._process_single_file(
+                Path(local_path),
+                source_root,
+                compress=False, # Don't re-compress if possible, just upload
+                bitrate=track.bitrate or 320,
+                existing_tracks={}, # Force upload
+                cover_image_path=None, # Already embedded
+                auto_fetch=False
+            )
+            
+            if new_track:
+                # 4. Update Library
+                print("Updating library registry...")
+                
+                # Remove old track
+                self.metadata.tracks = [t for t in self.metadata.tracks if t.id != track.id]
+                
+                # Add new track
+                self.metadata.tracks.append(new_track)
+                self.metadata.version += 1
+                
+                # Save Library
+                # Use uploader storage to save library
+                uploader.storage.save_library(self.metadata)
+                
+                # 5. Cleanup Old Remote File (if hash changed)
+                if new_track.id != track.id:
+                    print("Removing old file from storage...")
+                    old_key = f"tracks/{track.id}.{track.format}"
+                    self.provider.delete_file(old_key)
+                    
+                    # Also remove old from cache if exists
+                    if self.cache:
+                        cache_file = self.cache.cache_dir / old_key.replace('/', '_')
+                        if cache_file.exists():
+                            os.remove(cache_file)
+
+                os.remove(local_path)
+                print("Update complete!")
+                return True
+                
+            os.remove(local_path)
+            return False
+            
+        except Exception as e:
+            print(f"Update failed: {e}")
+            if 'local_path' in locals() and local_path and os.path.exists(local_path):
+                os.remove(local_path)
+            return False
         
 
