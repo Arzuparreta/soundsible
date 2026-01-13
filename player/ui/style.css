@@ -1,0 +1,38 @@
+/* Main toolbar styles */
+.toolbar {
+    padding: 4px;
+    background-color: @window_bg_color;
+    /* Fallback or just solid for now */
+    border-bottom: 1px solid @borders;
+    /* Changed to bottom since it's on top now */
+}
+
+/* Play button - remove native styling/fade */
+.play-button {
+    background: transparent;
+    box-shadow: none;
+    border: none;
+    border-radius: 50%;
+    padding: 0;
+    transition: transform 0.1s ease;
+}
+
+.play-button:hover {
+    background: rgba(128, 128, 128, 0.1);
+}
+
+.play-button:active {
+    background: rgba(128, 128, 128, 0.2);
+    transform: scale(0.95);
+}
+
+/* Remove focus ring if desired (can accessibility issues, but user asked) */
+.play-button:focus {
+    outline: none;
+}
+
+.circular {
+    min-width: 34px;
+    min-height: 34px;
+    padding: 0;
+}

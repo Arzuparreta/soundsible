@@ -31,10 +31,14 @@ class PlaybackEngine:
         self.current_track: Optional[Track] = None
         self.is_playing = False
         
+        # Throttling for time updates (reduce CPU usage)
+        self._last_time_update = 0.0
+        
         # Bind events
         self.player.observe_property('time-pos', self._handle_time_update)
         self.player.observe_property('eof-reached', self._handle_eof)
-        self.player.observe_property('pause', self._handle_pause_change)
+        # Pause observer disabled - using explicit state updates in play()/pause()
+        # self.player.observe_property('pause', self._handle_pause_change)
         
         # Set initial volume
         self.player.volume = 100
@@ -43,9 +47,10 @@ class PlaybackEngine:
         """Start playing a track from a URL (local or remote)."""
         self.current_track = track
         self.player.play(url)
-        self.is_playing = True
         self.player.pause = False
+        self.is_playing = True
         
+        # Notify UI of state change
         if self._on_state_change:
             self._on_state_change('playing')
             
@@ -54,8 +59,9 @@ class PlaybackEngine:
         self.player.pause = not self.player.pause
         self.is_playing = not self.player.pause
         
-        state = 'paused' if self.player.pause else 'playing'
+        # Explicitly notify UI immediately
         if self._on_state_change:
+            state = 'paused' if self.player.pause else 'playing'
             self._on_state_change(state)
             
     def stop(self):
@@ -85,17 +91,31 @@ class PlaybackEngine:
 
     # Event handlers
     def _handle_time_update(self, name, value):
+        """Handle time position updates from MPV with throttling."""
         if value is not None and self._on_time_update:
-            self._on_time_update(value)
+            # Throttle to ~4 updates per second (250ms between updates)
+            import time
+            current_time = time.time()
+            if current_time - self._last_time_update >= 0.25:
+                self._last_time_update = current_time
+                self._on_time_update(value)
             
     def _handle_eof(self, name, value):
         if value and self._on_track_end:
             self._on_track_end()
             
     def _handle_pause_change(self, name, value):
+        """Handle pause state changes from MPV."""
+        # Ignore None values (MPV initialization)
+        if value is None:
+            return
+            
         self.is_playing = not value
-        state = 'paused' if value else 'playing'
+        
+        # Only send state change callbacks if we have a track
+        # This prevents UI updates for spurious MPV state changes
         if self._on_state_change:
+            state = 'paused' if value else 'playing'
             self._on_state_change(state)
 
     # Callback setters

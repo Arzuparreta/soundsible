@@ -93,42 +93,61 @@ class LibraryManager:
                  except: pass
 
     def sync_library(self) -> bool:
-        """Download latest library.json."""
+        """
+        Download latest library.json from cloud storage.
+        Falls back to local cache if network fails.
+        """
+        cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+        
         if not self.provider:
-            return False
+            print("No storage provider configured. Attempting to load from cache...")
+            return self._load_from_cache(cache_path)
             
         try:
+            print("Syncing library from cloud storage...")
             json_str = self.provider.download_json(LIBRARY_METADATA_FILENAME)
             if json_str:
                 self.metadata = LibraryMetadata.from_json(json_str)
-                # TODO: Cache locally
+                # Cache locally for offline use
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                cache_path.write_text(json_str)
+                print("Library synced successfully and cached locally.")
                 return True
+        except (ConnectionError, TimeoutError) as e:
+            print(f"Network error during sync: {e}")
+            print("Attempting to use cached library (offline mode)...")
+            return self._load_from_cache(cache_path)
         except Exception as e:
             print(f"Sync failed: {e}")
+            print("Attempting to use cached library...")
+            return self._load_from_cache(cache_path)
             
+        return False
+    
+    def _load_from_cache(self, cache_path: Path) -> bool:
+        """
+        Load library metadata from local cache.
+        
+        Args:
+            cache_path: Path to cached library.json file
+            
+        Returns:
+            True if cache loaded successfully, False otherwise
+        """
+        try:
+            if cache_path.exists():
+                json_str = cache_path.read_text()
+                self.metadata = LibraryMetadata.from_json(json_str)
+                print(f"✓ Loaded library from cache (offline mode) - {len(self.metadata.tracks)} tracks")
+                return True
+            else:
+                print("No cached library found.")
+        except Exception as e:
+            print(f"Failed to load cached library: {e}")
         return False
         
     def get_all_tracks(self) -> List[Track]:
-        """Return all tracks."""
+        """Return all tracks from library metadata."""
         return self.metadata.tracks if self.metadata else []
         
-    def get_track_url(self, track: Track) -> str:
-        """
-        Get streamable URL for a track.
-        Checks local cache first, returns remote URL if not cached.
-        """
-        # 1. Check Cache
-        if self.cache:
-            cached_path = self.cache.get_cached_path(track.id)
-            if cached_path:
-                return cached_path
 
-        # 2. Return Remote URL
-        if not self.provider:
-            return ""
-            
-        remote_key = f"tracks/{track.id}.{track.format}"
-        # Start background download to cache? (For next time)
-        # For now, just stream remote.
-        
-        return self.provider.get_file_url(remote_key, expires_in=3600*2)

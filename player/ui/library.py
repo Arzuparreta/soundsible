@@ -1,4 +1,4 @@
-from gi.repository import Gtk, GObject, Gio, Pango
+from gi.repository import Gtk, GObject, Gio, Pango, GLib
 
 class TrackObject(GObject.Object):
     """
@@ -25,9 +25,10 @@ class TrackObject(GObject.Object):
         return self.track.album
 
 class LibraryView(Gtk.Box):
-    def __init__(self, library_manager):
+    def __init__(self, library_manager, on_track_activated=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.library_manager = library_manager
+        self.on_track_activated = on_track_activated
         
         # 1. Screen Title / Search (Mockup)
         # top_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -96,17 +97,62 @@ class LibraryView(Gtk.Box):
         self.column_view.append_column(column)
 
     def _populate_library(self):
-        # Async loading would be better, but doing sync strictly for prototype
+        """Initiate asynchronous library loading to avoid blocking UI."""
+        # Show loading state
+        self.loading_label = Gtk.Label(label="Loading library...")
+        self.loading_label.add_css_class("title-2")
+        self.loading_label.set_margin_top(50)
+        self.loading_label.set_margin_bottom(50)
+        self.append(self.loading_label)
+        
+        # Load in background using GLib thread pool
+        import threading
+        thread = threading.Thread(target=self._load_library_thread, daemon=True)
+        thread.start()
+
+    def _load_library_thread(self):
+        """Background thread for library loading (non-UI thread)."""
         try:
-            self.library_manager.sync() 
-            tracks = self.library_manager.library.tracks
-            
-            # Bulk append? ListStore doesn't strictly have bulk, but simpleloop is fine for <1000 items
+            if self.library_manager.sync_library():
+                tracks = self.library_manager.metadata.tracks
+                print(f"Found {len(tracks)} tracks in library.")
+                
+                # Update UI on main thread
+                GLib.idle_add(self._populate_ui, tracks)
+            else:
+                GLib.idle_add(self._show_error, "Failed to sync library or library is empty.")
+        except Exception as e:
+            GLib.idle_add(self._show_error, f"Error loading library: {e}")
+
+    def _populate_ui(self, tracks):
+        """Populate UI with tracks (called on main thread)."""
+        # Remove loading indicator
+        if hasattr(self, 'loading_label') and self.loading_label.get_parent():
+            self.remove(self.loading_label)
+        
+        # Batch UI updates for better performance
+        self.store.freeze_notify()
+        try:
             for track in tracks:
                 self.store.append(TrackObject(track))
-                
-        except Exception as e:
-            print(f"Error loading library: {e}")
+        finally:
+            self.store.thaw_notify()
+        
+        return False  # Remove from idle queue
+
+    def _show_error(self, message):
+        """Show error message in UI (called on main thread)."""
+        # Remove loading indicator if present
+        if hasattr(self, 'loading_label') and self.loading_label.get_parent():
+            self.remove(self.loading_label)
+        
+        error_label = Gtk.Label(label=message)
+        error_label.add_css_class("error")
+        error_label.set_margin_top(50)
+        self.append(error_label)
+        
+        print(f"Library Error: {message}")
+        return False  # Remove from idle queue
 
     def _format_duration(self, seconds):
         if not seconds: return "--:--"
@@ -120,5 +166,5 @@ class LibraryView(Gtk.Box):
         selected_obj = self.selection_model.get_selected_item()
         if selected_obj:
             print(f"Playing: {selected_obj.title}")
-            # Fire event or call controller to play this track ID
-            # For now, we print.
+            if self.on_track_activated:
+                self.on_track_activated(selected_obj.track)

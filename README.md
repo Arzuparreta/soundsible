@@ -23,18 +23,38 @@ python -m setup_tool upload ~/Music --parallel 4
 ```
 
 ### 3. Play Music
+
 ```bash
-# List all tracks
+# GUI Player (Recommended)
+./gui.sh
+
+# List all tracks (CLI)
 ./player.sh list
 
-# Start Player (TUI)
+# Start Player (CLI/TUI)
 ./player.sh play
 
 # Play match
 ./player.sh play "Daft Punk"
 ```
 
-### 4. Offline / Downloads
+### 4. Optional: Enable Media Keys
+
+For keyboard media control support in the GUI:
+
+```bash
+# Activate virtual environment first (choose your shell)
+source venv/bin/activate       # Bash/Zsh
+source venv/bin/activate.fish  # Fish shell
+
+# Then install MPRIS support
+pip install mpris-server
+
+# Or check AUR for system package (Arch users)
+# yay -S python-mpris-server
+```
+
+### 5. Offline / Downloads
 ```bash
 # Download tracks for offline use
 ./player.sh download "Jazz"
@@ -55,12 +75,15 @@ python -m setup_tool upload ~/Music --parallel 4
 - **Parallel uploads**: Fast multi-threaded file uploads with progress tracking
 - **QR code pairing**: Easy multi-device setup
 
-### Music Player (Coming in Phase 4-6)
-- **Streaming playback**: Stream music directly from cloud storage
-- **Smart caching**: LRU cache with configurable size (default 50GB)
-- **Offline mode**: Play cached tracks without internet
-- **Multi-device sync**: Automatic library synchronization across devices
-- **GTK interface**: Native Linux desktop integration
+### Music Player ✅
+- **Streaming playback**: Stream music directly from cloud storage ✅
+- **Smart caching**: LRU cache with configurable size (default 50GB) ✅
+- **Offline mode**: Play cached tracks without internet ✅
+- **Multi-device sync**: Automatic library synchronization across devices ✅
+- **GTK interface**: Native Linux desktop integration (GTK4/Adwaita) ✅
+- **MPRIS integration**: Media key support (optional) ✅
+- **Queue management**: Playlist features (coming soon)
+- **Search/Filter**: In-app library search (coming soon)
 
 ## Architecture
 
@@ -79,17 +102,25 @@ python -m setup_tool upload ~/Music --parallel 4
 
 - Python 3.8 or higher
 - ffmpeg (for audio conversion)
-- System packages:
-  ```bash
-  # Ubuntu/Debian
-  sudo apt install python3-pip python3-venv ffmpeg
-  
-  # Fedora
-  sudo dnf install python3-pip ffmpeg
-  
-  # Arch
-  sudo pacman -S python-pip ffmpeg
-  ```
+- **libmpv1** (required for music playback)
+- **python-mpris-server** (optional, for media key support)
+
+#### System Packages
+
+Install required system dependencies:
+
+```bash
+# Ubuntu/Debian
+sudo apt install python3-pip python3-venv ffmpeg libmpv1 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
+
+# Fedora
+sudo dnf install python3-pip ffmpeg mpv-libs python3-gobject gtk4 libadwaita
+
+# Arch
+sudo pacman -S python-pip ffmpeg mpv python-gobject gtk4 libadwaita
+```
+
+**Note:** The player requires GTK 4 and libadwaita for the GUI.
 
 ### Setup
 
@@ -102,10 +133,18 @@ python -m setup_tool upload ~/Music --parallel 4
 2. Create and activate virtual environment:
    ```bash
    python3 -m venv venv
-   source venv/bin/activate  # Linux/Mac
-   # or
-   venv\Scripts\activate  # Windows
+   
+   # Bash/Zsh users:
+   source venv/bin/activate
+   
+   # Fish shell users:
+   source venv/bin/activate.fish
+   
+   # Windows:
+   venv\Scripts\activate
    ```
+   
+   > **Note for Arch users:** Due to PEP 668, you must use a virtual environment for pip installations. Always activate the venv before installing Python packages.
 
 3. Install dependencies:
    ```bash
