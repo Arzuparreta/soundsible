@@ -2,7 +2,7 @@
 
 A cloud-first, self-hosted music platform that streams your own library from Cloudflare R2 / Backblaze B2 to any Linux device.
 
-## 🚀 Quick Start Cheatsheet
+## Quick Start Cheatsheet
 
 ### 1. Setup (Run once)
 ```bash
