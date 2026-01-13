@@ -192,13 +192,14 @@ class MainWindow(Adw.ApplicationWindow):
         
         # Playback controls container (Bottom bar)
         # We need to restructure this to have: [Cover] [Title/Artist] [Controls] [Volume]
-        # Current structure seems to be just buttons. Let's inspect where this is added.
+        # Current structure seems to be just buttons. Let's        # 1. Cover Art (clickable)
         self.cover_art = Gtk.Image()
         self.cover_art.set_pixel_size(48)
         self.cover_art.set_size_request(48, 48)
         self.cover_art.add_css_class("card")
         self.cover_art.set_from_icon_name("emblem-music-symbolic")
         self.cover_art.set_margin_end(12)
+        self.cover_art.set_visible(False)  # Hide initially when no music playing
         
         # Make cover art clickable
         cover_click = Gtk.GestureClick()
@@ -327,7 +328,8 @@ class MainWindow(Adw.ApplicationWindow):
         if url:
              self.engine.play(url, track)
              
-             # Update title labels
+             # Show cover art and update labels
+             self.cover_art.set_visible(True)
              self.title_label.set_text(track.title)
              self.artist_label.set_text(track.artist)
              
