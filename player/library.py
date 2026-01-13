@@ -236,6 +236,14 @@ class LibraryManager:
                 # 4. Update Library
                 print("Updating library registry...")
                 
+                # Clear cache for this track so new version with cover will be downloaded
+                if self.cache:
+                    old_cache_key = f"tracks/{track.id}.{track.format}"
+                    cache_file = self.cache.cache_dir / old_cache_key.replace('/', '_')
+                    if cache_file.exists():
+                        print(f"Clearing cache for updated track...")
+                        os.remove(cache_file)
+                
                 # Remove old track
                 self.metadata.tracks = [t for t in self.metadata.tracks if t.id != track.id]
                 
@@ -252,12 +260,6 @@ class LibraryManager:
                     print("Removing old file from storage...")
                     old_key = f"tracks/{track.id}.{track.format}"
                     self.provider.delete_file(old_key)
-                    
-                    # Also remove old from cache if exists
-                    if self.cache:
-                        cache_file = self.cache.cache_dir / old_key.replace('/', '_')
-                        if cache_file.exists():
-                            os.remove(cache_file)
 
                 os.remove(local_path)
                 print("Update complete!")

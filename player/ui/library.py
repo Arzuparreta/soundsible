@@ -168,6 +168,9 @@ class EditTrackDialog(Gtk.Window):
         
     def _save_thread(self, meta):
         success = self.library_manager.update_track(self.track, meta, self.cover_path)
+        if success:
+            # Sync library to get latest version
+            self.library_manager.sync_library()
         GLib.idle_add(self.on_save_complete, success)
         
     def on_save_complete(self, success):
@@ -201,7 +204,8 @@ class LibraryView(Gtk.Box):
         self.column_view = Gtk.ColumnView(model=self.selection_model)
         self.column_view.add_css_class("rich-list") # Adwaita style class
         
-        # Columns
+        # Columns - Add cover art first
+        self._add_cover_column()
         self._add_text_column("Title", "title", expand=True)
         self._add_text_column("Artist", "artist")
         self._add_text_column("Album", "album")
@@ -271,7 +275,70 @@ class LibraryView(Gtk.Box):
         popover.popdown()
         dialog = EditTrackDialog(self.get_root(), track, self.library_manager)
         dialog.present()
-
+        
+    def _add_cover_column(self):
+        """Add cover art thumbnail column."""
+        factory = Gtk.SignalListItemFactory()
+        
+        def on_setup(factory, list_item):
+            image = Gtk.Image()
+            image.set_pixel_size(32)
+            image.set_size_request(32, 32)
+            list_item.set_child(image)
+        
+        def on_bind(factory, list_item):
+            image = list_item.get_child()
+            track_obj = list_item.get_item()
+            
+            # Try to load cover art
+            self._load_cover_thumbnail(image, track_obj.track)
+        
+        factory.connect("setup", on_setup)
+        factory.connect("bind", on_bind)
+        
+        column = Gtk.ColumnViewColumn(title="", factory=factory)
+        column.set_fixed_width(40)
+        self.column_view.append_column(column)
+    
+    def _load_cover_thumbnail(self, image, track):
+        """Load cover art thumbnail for a track."""
+        import threading
+        from setup_tool.audio import AudioProcessor
+        from gi.repository import GdkPixbuf
+        import tempfile
+        import os
+        
+        def load_in_background():
+            try:
+                # Check if track is cached
+                if self.library_manager.cache:
+                    cached = self.library_manager.cache.get_cached_path(track.id)
+                    if cached and os.path.exists(cached):
+                        # Extract cover
+                        cover_data = AudioProcessor.extract_cover_art(cached)
+                        if cover_data:
+                            # Save to temp and load
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
+                                tmp.write(cover_data)
+                                tmp_path = tmp.name
+                            
+                            try:
+                                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                                    tmp_path, 32, 32, True
+                                )
+                                GLib.idle_add(image.set_from_pixbuf, pixbuf)
+                            finally:
+                                os.remove(tmp_path)
+                            return
+                
+                # No cover or not cached - show default icon
+                GLib.idle_add(image.set_from_icon_name, "emblem-music-symbolic")
+            except Exception as e:
+                GLib.idle_add(image.set_from_icon_name, "emblem-music-symbolic")
+        
+        # Start background loading
+        threading.Thread(target=load_in_background, daemon=True).start()
+    
     def _add_text_column(self, title, property_name, expand=False, fixed_width=0):
         factory = Gtk.SignalListItemFactory()
         

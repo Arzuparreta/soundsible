@@ -383,3 +383,48 @@ class AudioProcessor:
         except Exception as e:
             print(f"Error embedding artwork: {e}")
             return False
+
+    @staticmethod
+    def extract_cover_art(file_path: str) -> Optional[bytes]:
+        """
+        Extract embedded album art from audio file.
+        
+        Args:
+            file_path: Path to audio file
+            
+        Returns:
+            Image data as bytes, or None if no cover art found
+        """
+        try:
+            from mutagen.id3 import ID3
+            from mutagen.flac import FLAC
+            from mutagen.mp4 import MP4
+            
+            path_obj = Path(file_path)
+            ext = path_obj.suffix.lower()
+            
+            if ext == '.mp3':
+                try:
+                    audio = ID3(file_path)
+                    # Look for APIC frames (album pictures)
+                    for key in audio.keys():
+                        if key.startswith('APIC:'):
+                            return audio[key].data
+                except:
+                    pass
+                    
+            elif ext == '.flac':
+                audio = FLAC(file_path)
+                if audio.pictures:
+                    return audio.pictures[0].data
+                    
+            elif ext == '.m4a' or ext == '.mp4':
+                audio = MP4(file_path)
+                if 'covr' in audio.tags:
+                    return bytes(audio.tags['covr'][0])
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error extracting cover art: {e}")
+            return None

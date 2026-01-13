@@ -7,6 +7,7 @@ from shared.models import PlayerConfig
 from player.library import LibraryManager
 from player.engine import PlaybackEngine
 from .library import LibraryView
+from .volume_knob import VolumeKnob
 from pathlib import Path
 import os
 import json
@@ -172,13 +173,19 @@ class MainWindow(Adw.ApplicationWindow):
         
         # Let's rebuild the container content carefully.
         
-        # 1. Cover Art
+        # 1. Cover Art (clickable)
         self.cover_art = Gtk.Image()
         self.cover_art.set_pixel_size(48)
         self.cover_art.set_size_request(48, 48)
         self.cover_art.add_css_class("card")
         self.cover_art.set_from_icon_name("emblem-music-symbolic")
         self.cover_art.set_margin_end(12)
+        
+        # Make cover art clickable
+        cover_click = Gtk.GestureClick()
+        cover_click.connect("released", self._on_cover_clicked)
+        self.cover_art.add_controller(cover_click)
+        
         player_container.append(self.cover_art)
         
         # 2. Track Info
@@ -220,6 +227,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.progress_scale.set_margin_end(5)
         self.progress_scale.connect('value-changed', self.on_seek)
         player_container.append(self.progress_scale)
+        
+        # 5. Volume Knob
+        self.volume_knob = VolumeKnob(initial_value=100.0)
+        self.volume_knob.set_margin_start(8)
+        self.volume_knob.set_margin_end(8)
+        self.volume_knob.connect('value-changed', self.on_volume_changed)
+        player_container.append(self.volume_knob)
         
         main_box.append(player_container)
 
@@ -270,6 +284,11 @@ class MainWindow(Adw.ApplicationWindow):
         if self.engine.current_track:
              self.engine.seek(value)
 
+    def on_volume_changed(self, knob, value):
+        """Handle volume knob changes."""
+        self.engine.set_volume(int(value))
+
+
     def on_time_update(self, time):
         """Callback from engine when playback time updates."""
         # Schedule UI update on main thread
@@ -288,11 +307,58 @@ class MainWindow(Adw.ApplicationWindow):
         url = self.lib_manager.get_track_url(track)
         if url:
              self.engine.play(url, track)
+             
+             # Update title labels
+             self.title_label.set_text(track.title)
+             self.artist_label.set_text(track.artist)
+             
              self.title_widget.set_subtitle(f"Playing: {track.title}")
              # Wait for MPV to load and get actual duration
              GLib.timeout_add(100, self._update_duration_range, track)
+             # Start background download to cache for cover art
+             self._cache_track_async(track)
+             # Try to update cover art (will retry if not cached yet)
+             self.update_cover_art(track)
         else:
              print("Error: Could not resolve URL for track.")
+    
+    def _cache_track_async(self, track):
+        """Download track to cache in background thread."""
+        import threading
+        def download_to_cache():
+            try:
+                # Check if already cached
+                if self.lib_manager.cache:
+                    cached = self.lib_manager.cache.get_cached_path(track.id)
+                    if cached:
+                        print(f"DEBUG: Track already cached at {cached}")
+                        return
+                    
+                    # Download to cache
+                    print(f"DEBUG: Starting background download to cache for: {track.title}")
+                    remote_key = f"tracks/{track.id}.{track.format}"
+                    
+                    import tempfile
+                    import os
+                    # Download to temp first
+                    fd, temp_path = tempfile.mkstemp(suffix=f".{track.format}")
+                    os.close(fd)
+                    
+                    if self.lib_manager.provider.download_file(remote_key, temp_path):
+                        # Add to cache
+                        cached_path = self.lib_manager.cache.add_to_cache(track.id, temp_path, move=True)
+                        print(f"DEBUG: Track cached successfully at {cached_path}")
+                        # Trigger cover update now that file is cached
+                        GLib.idle_add(self.update_cover_art, track, 0)
+                    else:
+                        print(f"DEBUG: Failed to download track for caching")
+                        os.remove(temp_path)
+            except Exception as e:
+                print(f"DEBUG: Cache download failed: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        threading.Thread(target=download_to_cache, daemon=True).start()
     
     def _update_duration_range(self, track):
         """Update progress bar range after track loads in MPV."""
@@ -304,6 +370,230 @@ class MainWindow(Adw.ApplicationWindow):
         else:
             self.progress_scale.set_range(0, 300)  # Fallback
         return False  # Remove from timeout queue
+    
+    def update_cover_art(self, track, retry_count=0):
+        """Extract and display cover art for the given track."""
+        try:
+            from setup_tool.audio import AudioProcessor
+            from gi.repository import GdkPixbuf
+            import tempfile
+            import os
+            
+            print(f"DEBUG: update_cover_art called for: {track.title} (attempt {retry_count + 1})")
+            
+            # Get local file path (from cache or download)
+            local_path = None
+            
+            # Try cache first
+            if self.lib_manager.cache:
+                cached = self.lib_manager.cache.get_cached_path(track.id)
+                print(f"DEBUG: Cached path result: {cached}")
+                if cached and os.path.exists(cached):
+                    local_path = cached
+                    print(f"DEBUG: Using cached file: {local_path}")
+            
+            if not local_path:
+                # File not cached yet, retry after a delay (max 3 attempts)
+                if retry_count < 3:
+                    print(f"DEBUG: File not cached yet, will retry in 2 seconds... (attempt {retry_count + 1}/3)")
+                    GLib.timeout_add(2000, self._retry_cover_update, track, retry_count + 1)
+                else:
+                    print("DEBUG: Max retries reached, cache not working. Showing default icon.")
+                self.cover_art.set_from_icon_name("emblem-music-symbolic")
+                return
+            
+            # Extract cover art from file
+            print(f"DEBUG: Extracting cover from: {local_path}")
+            cover_data = AudioProcessor.extract_cover_art(local_path)
+            
+            if cover_data:
+                print(f"DEBUG: Cover data extracted, size: {len(cover_data)} bytes")
+                # Save to temp file and load into GdkPixbuf
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
+                    tmp.write(cover_data)
+                    tmp_path = tmp.name
+                
+                try:
+                    # Load and scale image
+                    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                        tmp_path, 48, 48, True
+                    )
+                    self.cover_art.set_from_pixbuf(pixbuf)
+                    print("DEBUG: Cover art displayed successfully!")
+                finally:
+                    os.remove(tmp_path)
+            else:
+                # No cover found, use default
+                print("DEBUG: No cover data found in file")
+                self.cover_art.set_from_icon_name("emblem-music-symbolic")
+                
+        except Exception as e:
+            print(f"DEBUG: Failed to update cover art: {e}")
+            import traceback
+            traceback.print_exc()
+            self.cover_art.set_from_icon_name("emblem-music-symbolic")
+    
+    def _on_cover_clicked(self, gesture, n_press, x, y):
+        """Handle click on cover art - show larger view."""
+        if self.engine.current_track:
+            self._show_cover_viewer(self.engine.current_track)
+    
+    def _show_cover_viewer(self, track):
+        """Show cover art in a larger dialog."""
+        try:
+            from setup_tool.audio import AudioProcessor
+            from gi.repository import GdkPixbuf
+            import tempfile
+            import os
+            
+            # Get cached file
+            local_path = None
+            if self.lib_manager.cache:
+                cached = self.lib_manager.cache.get_cached_path(track.id)
+                if cached and os.path.exists(cached):
+                    local_path = cached
+            
+            if not local_path:
+                print("Cover viewer: file not cached yet")
+                return
+            
+            # Extract cover art
+            cover_data = AudioProcessor.extract_cover_art(local_path)
+            if not cover_data:
+                print("Cover viewer: no cover art found")
+                return
+            
+            # Save to temp file and load
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
+                tmp.write(cover_data)
+                tmp_path = tmp.name
+            
+            try:
+                # Load image - don't scale here, let GTK handle it
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file(tmp_path)
+                
+                # Create dialog
+                dialog = Gtk.Window()
+                dialog.set_transient_for(self)
+                dialog.set_modal(True)
+                dialog.set_title(f"{track.title} - Album Art")
+                dialog.set_default_size(500, 550)
+                
+                # Add ESC key handler
+                key_controller = Gtk.EventControllerKey()
+                key_controller.connect("key-pressed", lambda ctrl, keyval, keycode, state: 
+                    dialog.close() if keyval == Gdk.KEY_Escape else False)
+                dialog.add_controller(key_controller)
+                
+                # Create content with proper layout
+                main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+                main_box.set_margin_start(12)
+                main_box.set_margin_end(12)
+                main_box.set_margin_top(12)
+                main_box.set_margin_bottom(12)
+                
+                # Image - scale to fit container
+                image = Gtk.Picture()
+                image.set_pixbuf(pixbuf)
+                image.set_can_shrink(True)
+                image.set_content_fit(Gtk.ContentFit.CONTAIN)
+                image.set_vexpand(True)
+                image.set_hexpand(True)
+                main_box.append(image)
+                
+                # Info label
+                info = Gtk.Label()
+                info.set_markup(f"<b>{track.title}</b>\n{track.artist}")
+                info.set_vexpand(False)
+                main_box.append(info)
+                
+                # Bottom controls bar
+                controls_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                controls_bar.set_vexpand(False)
+                
+                # Close button (left side)
+                close_btn = Gtk.Button(label="Close")
+                close_btn.connect("clicked", lambda btn: dialog.close())
+                close_btn.set_halign(Gtk.Align.START)
+                controls_bar.append(close_btn)
+                
+                # Spacer to push controls to center/right
+                spacer = Gtk.Box()
+                spacer.set_hexpand(True)
+                controls_bar.append(spacer)
+                
+                # Playback controls (center)
+                playback_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+                
+                # Play/Pause button
+                play_pause_btn = Gtk.Button()
+                # Set initial icon based on current state
+                if self.engine.is_playing:
+                    play_pause_btn.set_icon_name("media-playback-pause-symbolic")
+                else:
+                    play_pause_btn.set_icon_name("media-playback-start-symbolic")
+                
+                # Store reference to button in dialog for updating
+                dialog.play_pause_btn = play_pause_btn
+                
+                def toggle_with_update(btn):
+                    self._toggle_playback()
+                    # Update button icon after toggle
+                    GLib.timeout_add(100, lambda: self._update_mini_player_button(dialog))
+                
+                play_pause_btn.connect("clicked", toggle_with_update)
+                playback_box.append(play_pause_btn)
+                
+                controls_bar.append(playback_box)
+                
+                # Volume control (right side)
+                volume_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+                volume_icon = Gtk.Image.new_from_icon_name("audio-volume-high-symbolic")
+                volume_box.append(volume_icon)
+                
+                volume_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL)
+                volume_scale.set_range(0, 100)
+                volume_scale.set_value(self.volume_knob.get_value() if hasattr(self, 'volume_knob') else 100)
+                volume_scale.set_size_request(100, -1)
+                volume_scale.set_draw_value(False)
+                volume_scale.connect("value-changed", lambda scale: self.engine.set_volume(int(scale.get_value())))
+                volume_box.append(volume_scale)
+                
+                controls_bar.append(volume_box)
+                
+                main_box.append(controls_bar)
+                
+                dialog.set_child(main_box)
+                dialog.present()
+                
+            finally:
+                os.remove(tmp_path)
+                
+        except Exception as e:
+            print(f"Failed to show cover viewer: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _toggle_playback(self):
+        """Toggle play/pause from mini-player."""
+        # pause() method toggles pause state
+        self.engine.pause()
+    
+    def _update_mini_player_button(self, dialog):
+        """Update mini-player button icon based on playback state."""
+        if hasattr(dialog, 'play_pause_btn'):
+            if self.engine.is_playing:
+                dialog.play_pause_btn.set_icon_name("media-playback-pause-symbolic")
+            else:
+                dialog.play_pause_btn.set_icon_name("media-playback-start-symbolic")
+        return False  # Don't repeat
+
+    
+    def _retry_cover_update(self, track, retry_count):
+        """Retry cover art update after file is cached."""
+        print(f"DEBUG: Retrying cover update... (attempt {retry_count + 1})")
+        self.update_cover_art(track, retry_count)
+        return False  # Don't repeat timeout
 
         
     def _update_ui_state(self, state):
