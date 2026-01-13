@@ -5,8 +5,9 @@ from gi.repository import Gtk, Adw, Gio, GObject, GLib, Gdk
 from shared.constants import DEFAULT_CONFIG_DIR, DEFAULT_LIBRARY_PATH
 from shared.models import PlayerConfig
 from player.library import LibraryManager
+from player.ui.library import LibraryView
+from player.ui.settings import SettingsDialog
 from player.engine import PlaybackEngine
-from .library import LibraryView
 from .volume_knob import VolumeKnob
 from pathlib import Path
 import os
@@ -126,11 +127,16 @@ class MainWindow(Adw.ApplicationWindow):
         
         # Header Bar
         header = Adw.HeaderBar()
-        main_box.append(header)
         
-        # Title
+        # Title widget (create before setting)
         self.title_widget = Adw.WindowTitle(title="Music Hub", subtitle="Local Library")
         header.set_title_widget(self.title_widget)
+        main_box.append(header)
+        
+        # Settings action
+        settings_action = Gio.SimpleAction.new("settings", None)
+        settings_action.connect("activate", self._on_settings_clicked)
+        self.add_action(settings_action)
         
         # Settings menu button (right side)
         menu_button = Gtk.MenuButton()
@@ -142,6 +148,11 @@ class MainWindow(Adw.ApplicationWindow):
         setup_section.append("Setup Wizard", "app.setup-wizard")
         setup_section.append("Upload Music", "app.upload-music")
         menu.append_section(None, setup_section)
+        
+        # Settings section
+        settings_section = Gio.Menu()
+        settings_section.append("Settings", "win.settings")
+        menu.append_section(None, settings_section)
         
         # About section
         about_section = Gio.Menu()
@@ -174,6 +185,14 @@ class MainWindow(Adw.ApplicationWindow):
         # Let's rebuild the container content carefully.
         
         # 1. Cover Art (clickable)
+        player_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        player_container.add_css_class("toolbar")
+        player_container.set_spacing(8)
+        # Add some padding to the container itself if needed, usually css handles it via toolbar class
+        
+        # Playback controls container (Bottom bar)
+        # We need to restructure this to have: [Cover] [Title/Artist] [Controls] [Volume]
+        # Current structure seems to be just buttons. Let's inspect where this is added.
         self.cover_art = Gtk.Image()
         self.cover_art.set_pixel_size(48)
         self.cover_art.set_size_request(48, 48)
@@ -193,13 +212,13 @@ class MainWindow(Adw.ApplicationWindow):
         info_box.set_valign(Gtk.Align.CENTER)
         info_box.set_margin_end(12)
         
-        self.title_label = Gtk.Label(label="Not Playing")
+        self.title_label = Gtk.Label(label="")
         self.title_label.add_css_class("title-4")
         self.title_label.set_halign(Gtk.Align.START)
         self.title_label.set_ellipsize(3) # END
         self.title_label.set_max_width_chars(25)
         
-        self.artist_label = Gtk.Label(label="--")
+        self.artist_label = Gtk.Label(label="")
         self.artist_label.add_css_class("caption")
         self.artist_label.set_halign(Gtk.Align.START)
         self.artist_label.set_ellipsize(3)
@@ -477,7 +496,7 @@ class MainWindow(Adw.ApplicationWindow):
                 dialog.set_transient_for(self)
                 dialog.set_modal(True)
                 dialog.set_title(f"{track.title} - Album Art")
-                dialog.set_default_size(500, 550)
+                dialog.set_default_size(350, 385)  # 30% smaller than 500x550
                 
                 # Add ESC key handler
                 key_controller = Gtk.EventControllerKey()
@@ -628,11 +647,60 @@ class MainWindow(Adw.ApplicationWindow):
         self.lib_manager = LibraryManager()
         
         # Library View
-        self.library_view = LibraryView(self.lib_manager, on_track_activated=self.play_track)
-        main_box.append(self.library_view)
+        self.library_ui = LibraryView(self.lib_manager, on_track_activated=self.play_track)
+        
+        # Click on library to unfocus search
+        library_click = Gtk.GestureClick()
+        library_click.connect("pressed", lambda g, n, x, y: self._unfocus_search())
+        self.library_ui.add_controller(library_click)
+        
+        main_box.append(self.library_ui)
         
         # Need to set expand so it fills space
-        self.library_view.set_vexpand(True)
+        self.library_ui.set_vexpand(True)
+        
+        # Search Bar (at bottom)
+        search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        search_box.set_margin_start(12)
+        search_box.set_margin_end(12)
+        search_box.set_margin_top(4)
+        search_box.set_margin_bottom(8)
+        
+        search_label = Gtk.Label(label="Search:")
+        search_box.append(search_label)
+        
+        self.search_entry = Gtk.SearchEntry()
+        self.search_entry.set_placeholder_text("Search by title, artist, or album...")
+        self.search_entry.set_hexpand(True)
+        
+        # ESC key to unfocus and clear
+        search_key_controller = Gtk.EventControllerKey()
+        search_key_controller.connect("key-pressed", self._on_search_key_pressed)
+        self.search_entry.add_controller(search_key_controller)
+        
+        search_box.append(self.search_entry)
+        
+        main_box.append(search_box)
+        
+        # Connect search entry to library filter
+        self.search_entry.connect("search-changed", self.library_ui._on_search_changed)
+    
+    def _on_search_key_pressed(self, controller, keyval, keycode, state):
+        """Handle ESC key in search entry."""
+        if keyval == Gdk.KEY_Escape:
+            self._unfocus_search()
+            return True
+        return False
+    
+    def _unfocus_search(self):
+        """Remove focus from search entry."""
+        # Set focus to main window (removes focus from search)
+        self.set_focus(None)
+    
+    def _on_settings_clicked(self, action, param):
+        """Open settings dialog."""
+        settings_dialog = SettingsDialog(self, self.lib_manager)
+        settings_dialog.present()
     
     def _show_first_run_wizard(self):
         """Show setup wizard for first-run configuration."""

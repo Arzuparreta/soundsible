@@ -185,22 +185,23 @@ class LibraryView(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.library_manager = library_manager
         self.on_track_activated = on_track_activated
-        
-        # 1. Screen Title / Search (Mockup)
-        # top_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        # top_bar.append(Gtk.Label(label="Library"))
-        # self.append(top_bar)
 
-        # 2. Setup List Model
+        # Setup List Model
         self.store = Gio.ListStore(item_type=TrackObject)
         self._populate_library()
+        
+        # 3. Setup Filter Model
+        self.filter = Gtk.CustomFilter()
+        self.filter.set_filter_func(self._filter_func)
+        self.filter_model = Gtk.FilterListModel(model=self.store, filter=self.filter)
+        self.search_query = ""  # Store current search query
 
-        # 3. Setup Selection Model
+        # 4. Setup Selection Model
         # Single selection for now
-        self.selection_model = Gtk.SingleSelection(model=self.store)
+        self.selection_model = Gtk.SingleSelection(model=self.filter_model)
         self.selection_model.connect('selection-changed', self.on_selection_changed)
 
-        # 4. Create Column View
+        # 5. Create Column View
         self.column_view = Gtk.ColumnView(model=self.selection_model)
         self.column_view.add_css_class("rich-list") # Adwaita style class
         
@@ -270,6 +271,23 @@ class LibraryView(Gtk.Box):
         
         p.set_child(box)
         p.popup()
+    
+    def _on_search_changed(self, entry):
+        """Handle search query changes."""
+        self.search_query = entry.get_text().lower().strip()
+        # Trigger filter update
+        self.filter.changed(Gtk.FilterChange.DIFFERENT)
+    
+    def _filter_func(self, track_obj):
+        """Filter function to match tracks against search query."""
+        if not self.search_query:
+            return True  # Show all when no search
+        
+        track = track_obj.track
+        # Search in title, artist, and album (case-insensitive)
+        return (self.search_query in track.title.lower() or
+                self.search_query in track.artist.lower() or
+                self.search_query in track.album.lower())
         
     def _open_edit_dialog(self, popover, track):
         popover.popdown()

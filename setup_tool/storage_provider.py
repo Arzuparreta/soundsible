@@ -210,8 +210,31 @@ class S3StorageProvider(ABC):
         """
         try:
             from shared.constants import LIBRARY_METADATA_FILENAME
-            json_str = metadata.to_json()
-            return self.upload_json(json_str, LIBRARY_METADATA_FILENAME)
+            metadata_json = metadata.to_json()
+            return self.upload_json(LIBRARY_METADATA_FILENAME, metadata_json)
         except Exception as e:
             print(f"Failed to save library: {e}")
             return False
+    
+    def calculate_bucket_size(self) -> int:
+        """
+        Calculate total size of all objects in bucket.
+        
+        Returns:
+            Total size in bytes, or 0 if error
+        """
+        try:
+            total_size = 0
+            # List all objects in bucket
+            paginator = self.s3_client.get_paginator('list_objects_v2')
+            pages = paginator.paginate(Bucket=self.bucket_name)
+            
+            for page in pages:
+                if 'Contents' in page:
+                    for obj in page['Contents']:
+                        total_size += obj['Size']
+            
+            return total_size
+        except Exception as e:
+            print(f"Error calculating bucket size: {e}")
+            return 0
