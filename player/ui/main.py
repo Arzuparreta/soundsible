@@ -230,15 +230,7 @@ class MainWindow(Adw.ApplicationWindow):
         info_box.append(self.artist_label)
         player_container.append(info_box)
 
-        # 3. Play/Pause Button
-        self.play_btn = Gtk.Button(icon_name="media-playback-start-symbolic")
-        self.play_btn.add_css_class("circular")
-        self.play_btn.add_css_class("play-button")
-        self.play_btn.set_valign(Gtk.Align.CENTER)
-        self.play_btn.connect('clicked', self.on_play_toggle)
-        player_container.append(self.play_btn)
-        
-        # 4. Progress Bar (Scale)
+        # 3. Progress Bar (Scale) - Moved Left
         self.progress_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL)
         self.progress_scale.set_draw_value(False)
         self.progress_scale.set_range(0, 100) # Default, updated on play
@@ -248,6 +240,30 @@ class MainWindow(Adw.ApplicationWindow):
         self.progress_scale.set_margin_end(5)
         self.progress_scale.connect('value-changed', self.on_seek)
         player_container.append(self.progress_scale)
+
+        # 4. Playback Controls - Moved Right
+        
+        # Previous
+        self.prev_btn = Gtk.Button(icon_name="media-skip-backward-symbolic")
+        self.prev_btn.add_css_class("circular")
+        self.prev_btn.set_valign(Gtk.Align.CENTER)
+        self.prev_btn.connect('clicked', self.play_previous)
+        player_container.append(self.prev_btn)
+
+        # Play/Pause
+        self.play_btn = Gtk.Button(icon_name="media-playback-start-symbolic")
+        self.play_btn.add_css_class("circular")
+        self.play_btn.add_css_class("play-button")
+        self.play_btn.set_valign(Gtk.Align.CENTER)
+        self.play_btn.connect('clicked', self.on_play_toggle)
+        player_container.append(self.play_btn)
+        
+        # Next
+        self.next_btn = Gtk.Button(icon_name="media-skip-forward-symbolic")
+        self.next_btn.add_css_class("circular")
+        self.next_btn.set_valign(Gtk.Align.CENTER)
+        self.next_btn.connect('clicked', self.play_next)
+        player_container.append(self.next_btn)
         
         # 5. Volume Knob
         self.volume_knob = VolumeKnob(initial_value=100.0)
@@ -308,6 +324,11 @@ class MainWindow(Adw.ApplicationWindow):
     def on_volume_changed(self, knob, value):
         """Handle volume knob changes."""
         self.engine.set_volume(int(value))
+        # Sync to mini-player if active
+        if hasattr(self, 'mini_volume_knob') and self.mini_volume_knob:
+            # Sync only if difference ensures no infinite loop (though knob handles exact match)
+            if abs(self.mini_volume_knob.get_value() - value) > 0.1:
+                self.mini_volume_knob.set_value(value)
 
 
     def on_time_update(self, time):
@@ -507,7 +528,7 @@ class MainWindow(Adw.ApplicationWindow):
             dialog = Gtk.Window()
             dialog.set_transient_for(self)
             dialog.set_modal(True)
-            dialog.set_title(f"{track.title} - Album Art")
+            dialog.set_title(f"{track.title} - Cover Art")
             dialog.set_default_size(350, 385)
             
             # Add ESC key handler
@@ -515,6 +536,11 @@ class MainWindow(Adw.ApplicationWindow):
             key_controller.connect("key-pressed", lambda ctrl, keyval, keycode, state: 
                 dialog.close() if keyval == Gdk.KEY_Escape else False)
             dialog.add_controller(key_controller)
+            
+            # Cleanup sync ref on close
+            def on_dialog_close(d):
+                self.mini_volume_knob = None
+            dialog.connect("close-request", on_dialog_close)
             
             # Create content with proper layout
             main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
@@ -549,6 +575,7 @@ class MainWindow(Adw.ApplicationWindow):
             close_btn = Gtk.Button(label="Close")
             close_btn.connect("clicked", lambda btn: dialog.close())
             close_btn.set_halign(Gtk.Align.START)
+            close_btn.add_css_class("flat") # Make it smaller/cleaner
             controls_bar.append(close_btn)
             
             # Spacer
@@ -559,6 +586,12 @@ class MainWindow(Adw.ApplicationWindow):
             # Playback controls (center)
             playback_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
             
+            # Prev Button
+            prev_btn = Gtk.Button(icon_name="media-skip-backward-symbolic")
+            prev_btn.add_css_class("flat")
+            prev_btn.connect("clicked", self.play_previous)
+            playback_box.append(prev_btn)
+            
             # Play/Pause button
             play_pause_btn = Gtk.Button()
             if self.engine.is_playing:
@@ -566,6 +599,7 @@ class MainWindow(Adw.ApplicationWindow):
             else:
                 play_pause_btn.set_icon_name("media-playback-start-symbolic")
             
+            play_pause_btn.add_css_class("flat")
             dialog.play_pause_btn = play_pause_btn
             
             def toggle_with_update(btn):
@@ -574,20 +608,33 @@ class MainWindow(Adw.ApplicationWindow):
             
             play_pause_btn.connect("clicked", toggle_with_update)
             playback_box.append(play_pause_btn)
+            
+            # Next Button
+            next_btn = Gtk.Button(icon_name="media-skip-forward-symbolic")
+            next_btn.add_css_class("flat")
+            next_btn.connect("clicked", self.play_next)
+            playback_box.append(next_btn)
+            
             controls_bar.append(playback_box)
             
             # Volume control (right side)
             volume_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-            volume_icon = Gtk.Image.new_from_icon_name("audio-volume-high-symbolic")
-            volume_box.append(volume_icon)
+            # volume_icon removed as per request
             
-            volume_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL)
-            volume_scale.set_range(0, 100)
-            volume_scale.set_value(self.volume_knob.get_value() if hasattr(self, 'volume_knob') else 100)
-            volume_scale.set_size_request(100, -1)
-            volume_scale.set_draw_value(False)
-            volume_scale.connect("value-changed", lambda scale: self.engine.set_volume(int(scale.get_value())))
-            volume_box.append(volume_scale)
+            # Use VolumeKnob instead of Scale
+            self.mini_volume_knob = VolumeKnob(initial_value=self.volume_knob.get_value())
+            # Reduce size to make bar shorter
+            self.mini_volume_knob.set_size_request(28, 28) 
+            self.mini_volume_knob.set_margin_start(4)
+            self.mini_volume_knob.set_margin_end(4)
+            
+            def on_mini_vol_changed(k, v):
+                # Update main knob
+                if abs(self.volume_knob.get_value() - v) > 0.1:
+                    self.volume_knob.set_value(v)
+            
+            self.mini_volume_knob.connect("value-changed", on_mini_vol_changed)
+            volume_box.append(self.mini_volume_knob)
             
             controls_bar.append(volume_box)
             main_box.append(controls_bar)
@@ -715,6 +762,45 @@ class MainWindow(Adw.ApplicationWindow):
             self.play_btn.set_icon_name("media-playback-start-symbolic")
         return True  # Keep timer running
     
+    def play_next(self, *args):
+        """Play the next track in the library."""
+        tracks = self.lib_manager.get_all_tracks()
+        if not tracks: return
+        
+        current_id = self.engine.current_track.id if self.engine.current_track else None
+        next_index = 0
+        
+        if current_id:
+            for i, track in enumerate(tracks):
+                if track.id == current_id:
+                    next_index = (i + 1) % len(tracks)
+                    break
+        
+        print(f"Playing next track: {tracks[next_index].title}")
+        self.play_track(tracks[next_index])
+
+    def play_previous(self, *args):
+        """Play previous track or restart current if played long enough."""
+        # Standard behavior: if > 3s played, restart song. Else go to prev.
+        if self.engine.get_time() > 3:
+            self.engine.seek(0)
+            return
+
+        tracks = self.lib_manager.get_all_tracks()
+        if not tracks: return
+        
+        current_id = self.engine.current_track.id if self.engine.current_track else None
+        prev_index = 0
+        
+        if current_id:
+            for i, track in enumerate(tracks):
+                if track.id == current_id:
+                    prev_index = (i - 1) % len(tracks)
+                    break
+        
+        print(f"Playing previous track: {tracks[prev_index].title}")
+        self.play_track(tracks[prev_index])
+
     def play_first_track(self):
         """Play the first track in the library (used by MPRIS when no track is loaded)."""
         tracks = self.lib_manager.get_all_tracks()
@@ -753,7 +839,7 @@ class MainWindow(Adw.ApplicationWindow):
         search_box.append(search_label)
         
         self.search_entry = Gtk.SearchEntry()
-        self.search_entry.set_placeholder_text("Search by title, artist, or album...")
+        self.search_entry.set_placeholder_text("Search by title or artist...")
         self.search_entry.set_hexpand(True)
         
         # ESC key to unfocus and clear

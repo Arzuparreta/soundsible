@@ -77,7 +77,26 @@ class VolumeKnob(Gtk.DrawingArea):
         center_x = width / 2
         center_y = height / 2
         
-        # Calculate current angle based on value
+        # Dynamic sizing
+        min_side = min(width, height)
+        
+        # Calculate scaling factor relative to default size (56) purely for stroke widths
+        scale_factor = min_side / 56.0
+        
+        # Adjust track width for smaller sizes
+        self._track_width = max(2, 4 * scale_factor)
+        
+        # Radius Calculation:
+        # Drawing extends to: radius + padding_ring(6) + stroke_width/2
+        # Max radius = (min_side / 2) - padding_ring(6) - (stroke_width/2) - safe_margin(1)
+        
+        safe_margin = 1
+        ring_padding = 6
+        stroke_half = self._track_width / 2
+        
+        self._knob_radius = (min_side / 2) - ring_padding - stroke_half - safe_margin
+        
+        if self._knob_radius < 4: self._knob_radius = 4 # Safety floor
         value_ratio = (self._value - self._min_value) / (self._max_value - self._min_value)
         current_angle = self._angle_min + value_ratio * (self._angle_max - self._angle_min)
         

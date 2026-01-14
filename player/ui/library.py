@@ -64,9 +64,9 @@ class EditTrackDialog(Gtk.Window):
         grid.attach(self.artist_entry, 1, 1, 1, 1)
         
         # Album
-        grid.attach(Gtk.Label(label="Album:", xalign=1), 0, 2, 1, 1)
-        self.album_entry = Gtk.Entry(text=track.album)
-        grid.attach(self.album_entry, 1, 2, 1, 1)
+        # grid.attach(Gtk.Label(label="Album:", xalign=1), 0, 2, 1, 1)
+        # self.album_entry = Gtk.Entry(text=track.album)
+        # grid.attach(self.album_entry, 1, 2, 1, 1)
         
         # Cover Art Section
         box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
@@ -214,7 +214,7 @@ class LibraryView(Gtk.Box):
         self._add_cover_column()
         self._add_text_column("Title", "title", expand=True)
         self._add_text_column("Artist", "artist")
-        self._add_text_column("Album", "album")
+        # self._add_text_column("Album", "album")
         self._add_text_column("Length", "duration", fixed_width=80) 
 
         # Scroll Window
