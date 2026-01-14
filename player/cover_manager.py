@@ -156,8 +156,4 @@ class CoverFetchManager:
             pass
         return False
 
-    def _fetch_online(self, track, dest_path):
-        try:
-             # ... existing fetch logic ...
-             pass
-        except: pass
+
