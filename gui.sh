@@ -78,11 +78,23 @@ if [ $EXIT_CODE -ne 0 ]; then
     if ! "$PYTHON" -c "import gi" &> /dev/null; then
         echo "❌ MISSING DEPENDENCY: GTK/PyGObject"
         echo "   Your system is missing the GTK libraries required for the GUI."
-        echo "   👉 Try running: sudo apt install libcairo2-dev libgirepository1.0-dev pkg-config python3-dev"
+        echo "   👉 Debian/Ubuntu: sudo apt install libcairo2-dev libgirepository1.0-dev pkg-config python3-dev"
+        echo "   👉 Fedora:        sudo dnf install cairo-gobject-devel gobject-introspection-devel cairo-devel pkg-config python3-devel"
+        echo "   👉 Arch Linux:    sudo pacman -S python-gobject gtk3"
+
     elif ! "$PYTHON" -c "import mpv" &> /dev/null; then
         echo "❌ MISSING DEPENDENCY: MPV"
         echo "   Your system is missing the MPV library required for playback."
-        echo "   👉 Try running: sudo apt install libmpv1"
+        echo "   👉 Debian/Ubuntu: sudo apt install libmpv1"
+        echo "   👉 Fedora:        sudo dnf install mpv-libs"
+        echo "   👉 Arch Linux:    sudo pacman -S mpv"
+
+    elif ! "$PYTHON" -c "import gi; gi.require_version('Adw', '1')" &> /dev/null; then
+        echo "❌ MISSING DEPENDENCY: LibAdwaita"
+        echo "   Your system is missing LibAdwaita (Adw 1), required for the UI."
+        echo "   👉 Debian/Ubuntu: sudo apt install gir1.2-adw-1"
+        echo "   👉 Fedora:        sudo dnf install libadwaita"
+        echo "   👉 Arch Linux:    sudo pacman -S libadwaita"
     else
         echo "   Please check the error output above for details."
     fi
