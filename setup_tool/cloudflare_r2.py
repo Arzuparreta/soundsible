@@ -70,6 +70,15 @@ class CloudflareR2Provider(S3StorageProvider):
         except (ClientError, NoCredentialsError, KeyError) as e:
             print(f"R2 authentication failed: {e}")
             return False
+
+    def list_buckets(self) -> List[Dict[str, Any]]:
+        """List all buckets in account."""
+        try:
+            response = self.s3_client.list_buckets()
+            return [{'name': b['Name'], 'creation_date': b['CreationDate']} for b in response.get('Buckets', [])]
+        except ClientError as e:
+            print(f"Failed to list buckets: {e}")
+            return []
     
     def create_bucket(self, bucket_name: str, public: bool = False,
                      region: Optional[str] = None) -> Dict[str, Any]:
