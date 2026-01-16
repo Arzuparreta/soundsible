@@ -51,7 +51,20 @@ class CloudflareR2Provider(S3StorageProvider):
             )
             
             # Test connection by listing buckets
-            self.s3_client.list_buckets()
+            # Test connection
+            try:
+                self.s3_client.list_buckets()
+            except AttributeError:
+                # Fallback if client wasn't created properly
+                print(f"DEBUG: s3_client type is {type(self.s3_client)}")
+                raise
+            except Exception:
+                # If list_buckets fails (permissions?), we try to continue if we have a bucket name
+                if self.bucket_name:
+                    print("Warning: Could not list buckets. Verifying specific bucket access...")
+                    self.s3_client.head_bucket(Bucket=self.bucket_name)
+                else:
+                    raise
             return True
             
         except (ClientError, NoCredentialsError, KeyError) as e:
