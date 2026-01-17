@@ -56,7 +56,33 @@ class MusicApp(Adw.Application):
             
             config = self.win._load_config()
             if not config:
-                print("⚠ Please run setup wizard first")
+                # Show dialog to prompt setup
+                dialog = Gtk.MessageDialog(
+                    transient_for=self.win,
+                    modal=True,
+                    message_type=Gtk.MessageType.WARNING,
+                    buttons=Gtk.ButtonsType.NONE,
+                    text="Setup Required"
+                )
+                dialog.format_secondary_text(
+                    "You need to configure your cloud storage before you can upload music.\n"
+                    "Would you like to run the setup wizard now?"
+                )
+                dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+                dialog.add_button("Run Setup", Gtk.ResponseType.ACCEPT)
+                
+                # Style the setup button
+                setup_btn = dialog.get_widget_for_response(Gtk.ResponseType.ACCEPT)
+                if setup_btn:
+                    setup_btn.add_css_class("suggested-action")
+                
+                def on_response(d, response):
+                    d.destroy()
+                    if response == Gtk.ResponseType.ACCEPT:
+                        self.on_setup_wizard(action, param)
+
+                dialog.connect('response', on_response)
+                dialog.present()
                 return
             
             dialog = UploadDialog(config=config, transient_for=self.win)
