@@ -220,7 +220,6 @@ class MainWindow(Adw.ApplicationWindow):
         # Setup section
         setup_section = Gio.Menu()
         setup_section.append("Setup Wizard", "app.setup-wizard")
-        setup_section.append("Setup Wizard", "app.setup-wizard")
         setup_section.append("Upload Local Files to Cloud", "app.upload-music")
         setup_section.append("Download & Push (Smart)", "app.download-music")
         menu.append_section(None, setup_section)
