@@ -17,6 +17,8 @@ import json
 class MusicApp(Adw.Application):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        import sys
+        print(f"DEBUG: sys.path: {sys.path}")
         self.connect('activate', self.on_activate)
         
         # Register actions
@@ -93,6 +95,37 @@ class MusicApp(Adw.Application):
         if hasattr(self, 'win'):
             from player.ui.download_dialog import DownloadDialog
             
+            config = self.win._load_config()
+            if not config:
+                # Show dialog to prompt setup
+                dialog = Gtk.MessageDialog(
+                    transient_for=self.win,
+                    modal=True,
+                    message_type=Gtk.MessageType.WARNING,
+                    buttons=Gtk.ButtonsType.NONE,
+                    text="Setup Required"
+                )
+                dialog.format_secondary_text(
+                    "You need to configure your cloud storage before you can download & push music.\n"
+                    "Would you like to run the setup wizard now?"
+                )
+                dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+                dialog.add_button("Run Setup", Gtk.ResponseType.ACCEPT)
+                
+                # Style the setup button
+                setup_btn = dialog.get_widget_for_response(Gtk.ResponseType.ACCEPT)
+                if setup_btn:
+                    setup_btn.add_css_class("suggested-action")
+                
+                def on_response(d, response):
+                    d.destroy()
+                    if response == Gtk.ResponseType.ACCEPT:
+                        self.on_setup_wizard(action, param)
+
+                dialog.connect('response', on_response)
+                dialog.present()
+                return
+
             dialog = DownloadDialog(transient_for=self.win)
             dialog.present()
     
@@ -187,8 +220,9 @@ class MainWindow(Adw.ApplicationWindow):
         # Setup section
         setup_section = Gio.Menu()
         setup_section.append("Setup Wizard", "app.setup-wizard")
-        setup_section.append("Upload Local Music", "app.upload-music")
-        setup_section.append("Upload to Bucket", "app.download-music")
+        setup_section.append("Setup Wizard", "app.setup-wizard")
+        setup_section.append("Upload Local Files to Cloud", "app.upload-music")
+        setup_section.append("Download & Push (Smart)", "app.download-music")
         menu.append_section(None, setup_section)
         
         # Settings section

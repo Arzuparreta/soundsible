@@ -5,7 +5,78 @@ gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, GLib, Gio
 
 import threading
-from odst_tool.smart_downloader import SmartDownloader
+import sys
+import os
+from pathlib import Path
+
+# Try to import odst_tool, looking in parent/adjacent dirs if needed
+try:
+    from odst_tool.smart_downloader import SmartDownloader
+except ImportError:
+    # Fallback: Check for adjacent 'ods-tool' or 'odst-tool' folders
+    current_dir = Path(__file__).resolve().parent
+    root_dir = current_dir.parent.parent # sh-music-hub/player/ui -> sh-music-hub
+    
+    potential_names = ['odst_tool', 'ods-tool', 'ods_tool']
+    found = False
+    
+    # Check inside root first (normal case)
+    for name in potential_names:
+        p = root_dir / name
+        if p.exists() and p.is_dir():
+             if str(root_dir) not in sys.path:
+                 sys.path.append(str(root_dir))
+             # Map package name if needed (e.g. ods-tool -> odst_tool)
+             # But we can't easily rename package in python without symlinks or tricks.
+             # Simplest: Add the PARENT of ods-tool to path? No, that exposes everything.
+             # If user cloned 'ods-tool', the package name is 'ods-tool'.
+             # But code expects 'odst_tool'. 
+             # We might need to alias it or just fail gracefully.
+             pass
+
+    # Check ADJACENT to root (user case: cloned side-by-side)
+    # ../sh-music-hub -> ../ods-tool
+    parent_of_root = root_dir.parent
+    for name in potential_names:
+        p = parent_of_root / name
+        if p.exists() and p.is_dir():
+            print(f"DEBUG: Found external tool at {p}")
+            # Add PARENT of the tool to sys.path so 'import ods-tool' works
+            # But we need 'import odst_tool'. 
+            # If folder is named 'ods-tool', we can't import it as 'odst_tool'.
+            # We will try to mock it or just import what is there.
+            
+            sys.path.append(str(parent_of_root))
+            
+            # If the folder is 'ods-tool', we need to alias it?
+            # Hack: blindly try importing it.
+            try:
+                if name == 'odst_tool':
+                    from odst_tool.smart_downloader import SmartDownloader
+                    found = True
+                    break
+                elif name == 'ods-tool':
+                    # Can't simple import with dash.
+                    # We can use importlib or just rely on the user having valid name.
+                    # But wait, user said "ods-tool".
+                    # Let's try to add the folder ITSELF to sys.path?
+                    # No, then we import 'smart_downloader' directly.
+                    sys.path.append(str(p))
+                    try:
+                        from smart_downloader import SmartDownloader
+                        found = True
+                        break
+                    except ImportError:
+                        pass
+            except ImportError:
+                continue
+    
+    if not found:
+        # One last desperate try: maybe it IS in path but named differently?
+        # Just fail gracefully for the class definition helper
+        print("Warning: odst_tool module not found. Download features disabled.")
+        SmartDownloader = None
+
 
 class DownloadDialog(Adw.Window):
     """Dialog for downloading music via odst-tool."""
