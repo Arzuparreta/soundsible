@@ -23,7 +23,7 @@ class PlaybackEngine:
         )
         
         # Callbacks
-        self._on_track_end: Optional[Callable[[], None]] = None
+        self._track_end_callbacks: List[Callable[[], None]] = []
         self._on_time_update: Optional[Callable[[float], None]] = None
         self._on_state_change: Optional[Callable[[str], None]] = None
         
@@ -37,6 +37,8 @@ class PlaybackEngine:
         # Bind events
         self.player.observe_property('time-pos', self._handle_time_update)
         self.player.observe_property('eof-reached', self._handle_eof)
+        self.player.observe_property('idle-active', self._handle_idle)
+        
         # Pause observer disabled - using explicit state updates in play()/pause()
         # self.player.observe_property('pause', self._handle_pause_change)
         
@@ -75,7 +77,10 @@ class PlaybackEngine:
     def seek(self, position: float):
         """Seek to absolute position in seconds."""
         if self.current_track:
-            self.player.seek(position, reference='absolute')
+            try:
+                self.player.seek(position, reference='absolute')
+            except Exception as e:
+                print(f"Error seeking: {e}")
             
     def set_volume(self, level: int):
         """Set volume (0-100)."""
@@ -100,9 +105,28 @@ class PlaybackEngine:
                 self._last_time_update = current_time
                 self._on_time_update(value)
             
+            
     def _handle_eof(self, name, value):
-        if value and self._on_track_end:
-            self._on_track_end()
+        print(f"DEBUG: MPV eof-reached: {value}")
+        if value:
+            self._trigger_track_end()
+            
+    def _handle_idle(self, name, value):
+        """Handle idle state (player stopped/finished)."""
+        print(f"DEBUG: MPV idle-active: {value}")
+        if value and self.is_playing:
+            print("DEBUG: Player went idle while supposedly playing. Triggering track end.")
+            self._trigger_track_end()
+
+    def _trigger_track_end(self):
+        """Execute all registered track end callbacks safely."""
+        print(f"DEBUG: Triggering {len(self._track_end_callbacks)} track end callbacks")
+        for callback in self._track_end_callbacks:
+            try:
+                print(f"DEBUG: Executing callback: {callback}")
+                callback()
+            except Exception as e:
+                print(f"ERROR executing track_end callback {callback}: {e}")
             
     def _handle_pause_change(self, name, value):
         """Handle pause state changes from MPV."""
@@ -119,8 +143,14 @@ class PlaybackEngine:
             self._on_state_change(state)
 
     # Callback setters
-    def set_track_end_callback(self, callback: Callable[[], None]):
-        self._on_track_end = callback
+    def add_track_end_callback(self, callback: Callable[[], None]):
+        """Register a callback for when a track ends."""
+        print(f"DEBUG: Adding track_end_callback check: {callback}")
+        if callback not in self._track_end_callbacks:
+            self._track_end_callbacks.append(callback)
+            print(f"DEBUG: Callback added. Total callbacks: {len(self._track_end_callbacks)}")
+        else:
+            print("DEBUG: Callback already registered.")
         
     def set_time_update_callback(self, callback: Callable[[float], None]):
         self._on_time_update = callback

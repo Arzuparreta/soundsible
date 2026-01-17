@@ -199,7 +199,7 @@ class BatchCoverFixer:
                                     self.provider.delete_file(remote_key)
                                 
                                 updated_count += 1
-                                print("  ✓ Track updated successfully.")
+                                print("  [OK] Track updated successfully.")
                                 
                                 # Add to cache!
                                 if self.cache:

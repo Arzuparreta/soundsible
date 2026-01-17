@@ -118,6 +118,61 @@ def run_upload_process(path):
     except Exception as e:
         socketio.emit('upload_error', {'msg': str(e)})
 
+@socketio.on('wipe_bucket')
+def handle_wipe(data):
+    """Handle secure wipe request."""
+    confirmation = data.get('confirmation')
+    
+    if not current_config:
+         emit('wipe_error', {'msg': 'Configuration not loaded'})
+         return
+
+    if confirmation != current_config.bucket:
+        emit('wipe_error', {'msg': 'Confirmation name does not match bucket name'})
+        return
+
+    # Run wipe in background
+    threading.Thread(target=run_wipe_process, args=(current_config,)).start()
+    emit('wipe_started', {'bucket': current_config.bucket})
+
+def run_wipe_process(config):
+    """Background process to wipe bucket."""
+    try:
+        from setup_tool.provider_factory import StorageProviderFactory
+        
+        provider = StorageProviderFactory.create(config.provider)
+        # Auth
+        creds = config.to_dict()
+        if config.provider.name == 'CLOUDFLARE_R2' and config.endpoint:
+             try:
+                 creds['account_id'] = config.endpoint.split('//')[1].split('.')[0]
+             except IndexError:
+                 pass
+        
+        if not provider.authenticate(creds):
+             socketio.emit('wipe_error', {'msg': 'Authentication failed during wipe'})
+             return
+
+        socketio.emit('wipe_progress', {'msg': 'Listing files...'})
+        files = provider.list_files()
+        total = len(files)
+        
+        socketio.emit('wipe_progress', {'msg': f'Found {total} files. Deleting...'})
+        
+        for i, file in enumerate(files):
+            provider.delete_file(file['key'])
+            # Emit progress every 5 files or so to avoid spamming
+            if i % 5 == 0 or i == total - 1:
+                socketio.emit('wipe_progress', {
+                    'msg': f"Deleted {i+1}/{total} files...",
+                    'percent': int(((i+1) / total) * 100)
+                })
+        
+        socketio.emit('wipe_complete', {'count': total})
+        
+    except Exception as e:
+        socketio.emit('wipe_error', {'msg': str(e)})
+
 def start_server(debug=False, port=5000):
     load_config()
     socketio.run(app, debug=debug, port=port)

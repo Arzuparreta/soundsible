@@ -115,7 +115,9 @@ class UploadEngine:
             progress.update(sync_task, completed=100, visible=False)
 
         # 3. Process and Upload
-        updated_tracks = []
+        # Create a map of existing tracks to merge updates into
+        track_map = {t.id: t for t in existing_library.tracks}
+        
         if progress:
             main_task = progress.add_task(f"[green]Processing {len(audio_files)} files...", total=len(audio_files))
 
@@ -137,7 +139,8 @@ class UploadEngine:
                 try:
                     result_track, uploaded = future.result()
                     if result_track:
-                        updated_tracks.append(result_track)
+                        # Add or update the track in the map
+                        track_map[result_track.id] = result_track
                     
                     if progress:
                         progress.advance(main_task)
@@ -146,10 +149,12 @@ class UploadEngine:
 
         # 4. Update Library Manifest
         new_version = existing_library.version + 1
+        updated_tracks = list(track_map.values())
         updated_library = LibraryMetadata(
             version=new_version,
-            last_updated=0, # Will be set by models default or server
-            tracks=updated_tracks
+            tracks=updated_tracks,
+            playlists=existing_library.playlists,
+            settings=existing_library.settings
         )
         
         # Save library to cloud

@@ -92,7 +92,7 @@ class CloudflareR2Provider(S3StorageProvider):
             # The PutBucketPolicy operation is not supported by R2
             # Users can make buckets public via: R2 Dashboard > Bucket > Settings > Public Access
             if public:
-                print("\n⚠️  Note: R2 buckets must be made public via Cloudflare dashboard")
+                print("\n[WARNING] Note: R2 buckets must be made public via Cloudflare dashboard")
                 print("   Go to: R2 > Your Bucket > Settings > Enable Public Access")
             
             bucket_url = f"{self.endpoint_url}/{bucket_name}"
@@ -264,5 +264,12 @@ class CloudflareR2Provider(S3StorageProvider):
             response = self.s3_client.get_object(Bucket=self.bucket_name, Key=remote_key)
             return response['Body'].read().decode('utf-8')
         except ClientError as e:
-            print(f"JSON download failed: {e}")
-            return None
+            error_code = e.response.get('Error', {}).get('Code')
+            # 404 Not Found error codes
+            if error_code in ['NoSuchKey', '404']:
+                return None
+            
+            # For other errors (permissions, network, etc), raise them!
+            # We do NOT want to mistakenly wipe the library because of a network glitch.
+            print(f"JSON download failed with error {error_code}: {e}")
+            raise

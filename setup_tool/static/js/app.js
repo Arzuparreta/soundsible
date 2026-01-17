@@ -52,7 +52,7 @@ socket.on('upload_complete', (data) => {
     dropZone.classList.remove('uploading-active');
     mainProgressBar.style.width = '100%';
     totalPercent.textContent = '100%';
-    logMessage(`✅ Upload Complete! ${data.tracks} tracks processed.`, 'text-green-400 font-bold');
+    logMessage(`[COMPLETE] Upload Complete! ${data.tracks} tracks processed.`, 'text-green-400 font-bold');
 });
 
 // User Interactions
@@ -182,3 +182,85 @@ function logMessage(msg, classes = '') {
     activityLog.appendChild(p);
     activityLog.scrollTop = activityLog.scrollHeight;
 }
+
+// --- Safe Wipe Logic ---
+
+const wipeBtnTrigger = document.getElementById('wipe-btn-trigger');
+const wipeModal = document.getElementById('wipe-modal');
+const wipeConfirmInput = document.getElementById('wipe-confirm-input');
+const wipeConfirmBtn = document.getElementById('wipe-confirm-btn');
+const wipeCancelBtn = document.getElementById('wipe-cancel-btn');
+
+// We need to know the bucket name to validate client-side or we rely on server check.
+// Ideally, we grab it from the DOM or inject it. 
+// In index.html we used {{ config.bucket }} to show it.
+// Let's grab it from the text content of the span we added.
+const bucketNameSpan = document.querySelector('.select-all');
+const targetBucketName = bucketNameSpan ? bucketNameSpan.textContent.trim() : '';
+
+if (wipeBtnTrigger) {
+    wipeBtnTrigger.addEventListener('click', () => {
+        wipeModal.classList.remove('hidden');
+        wipeConfirmInput.value = '';
+        wipeConfirmBtn.disabled = true;
+        wipeConfirmInput.focus();
+    });
+}
+
+if (wipeCancelBtn) {
+    wipeCancelBtn.addEventListener('click', () => {
+        wipeModal.classList.add('hidden');
+    });
+}
+
+if (wipeConfirmInput) {
+    wipeConfirmInput.addEventListener('input', (e) => {
+        if (e.target.value === targetBucketName) {
+            wipeConfirmBtn.disabled = false;
+            wipeConfirmBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        } else {
+            wipeConfirmBtn.disabled = true;
+            wipeConfirmBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+    });
+}
+
+if (wipeConfirmBtn) {
+    wipeConfirmBtn.addEventListener('click', () => {
+        if (wipeConfirmInput.value === targetBucketName) {
+            socket.emit('wipe_bucket', {
+                confirmation: wipeConfirmInput.value
+            });
+            wipeModal.classList.add('hidden');
+            // Show progress
+            progressSection.classList.remove('hidden');
+            logMessage('Initiating Safe Wipe...', 'text-red-400');
+        }
+    });
+}
+
+socket.on('wipe_error', (data) => {
+    alert(`Wipe Error: ${data.msg}`);
+    logMessage(`Wipe Failed: ${data.msg}`, 'text-red-500');
+});
+
+socket.on('wipe_started', (data) => {
+    logMessage(`[WARNING] Wiping bucket '${data.bucket}'...`, 'text-red-500 font-bold');
+    dropZone.classList.add('opacity-50', 'pointer-events-none');
+});
+
+socket.on('wipe_progress', (data) => {
+    if (data.msg) logMessage(data.msg);
+    if (data.percent) {
+        mainProgressBar.style.width = `${data.percent}%`;
+        totalPercent.textContent = `${data.percent}%`;
+    }
+});
+
+socket.on('wipe_complete', (data) => {
+    mainProgressBar.style.width = '100%';
+    totalPercent.textContent = '100%';
+    logMessage(`[COMPLETE] Bucket Wiped. ${data.count} files deleted.`, 'text-red-500 font-bold');
+    dropZone.classList.remove('opacity-50', 'pointer-events-none');
+    alert(`Bucket Wipe Complete.\nDeleted ${data.count} files.`);
+});

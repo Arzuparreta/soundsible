@@ -14,7 +14,7 @@ class MusicHubMpris(MprisAdapter):
         
         # Connect to engine signals
         self.engine.set_state_change_callback(self.on_state_change)
-        self.engine.set_track_end_callback(self.on_track_end_relay)
+        self.engine.add_track_end_callback(self.on_track_end_relay)
         # Note: Time update is too frequent for generic event relay, usually handled by query
 
     def get_current_track_info(self):

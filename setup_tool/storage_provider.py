@@ -198,6 +198,36 @@ class S3StorageProvider(ABC):
         """
         pass
 
+    def get_library(self) -> Any:
+        """
+        Retrieve library metadata from storage.
+        
+        Returns:
+            LibraryMetadata object
+            
+        Raises:
+            Exception: If library cannot be retrieved due to network/auth errors
+        """
+        # Do NO try/except here. We want to fail if the download fails.
+        # The only allowed failure is "File Not Found" which returns None from download_json.
+        
+        from shared.constants import LIBRARY_METADATA_FILENAME
+        from shared.models import LibraryMetadata
+        
+        json_str = self.download_json(LIBRARY_METADATA_FILENAME)
+        
+        if json_str:
+            try:
+                return LibraryMetadata.from_json(json_str)
+            except Exception as e:
+                # Corrupt JSON? We should probably stop too, to avoid overwriting a potentially valid file
+                # that we just failed to parse.
+                raise ValueError(f"Corrupt library.json file: {e}")
+        
+        # Only return new library if file was explicitly not found (None)
+        print("Library not found (new install?), creating fresh one.")
+        return LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+
     def save_library(self, metadata: Any) -> bool:
         """
         Save library metadata to storage.

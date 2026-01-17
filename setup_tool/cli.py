@@ -49,7 +49,7 @@ def init(guided, provider):
     """
     console.print("\n")
     console.print(Panel.fit(
-        "[bold cyan]🎵 Music Platform Setup[/bold cyan]\n\n"
+        "[bold cyan]Music Platform Setup[/bold cyan]\n\n"
         "This wizard will help you set up cloud storage for your music library.",
         border_style="cyan"
     ))
@@ -80,19 +80,19 @@ def _guided_setup():
         "[1]",
         "Cloudflare R2",
         "10GB",
-        "✨ Streaming (zero bandwidth costs)"
+        "Streaming (zero bandwidth costs)"
     )
     table.add_row(
         "[2]",
         "Backblaze B2",
         "10GB",
-        "💳 Simple (no credit card needed)"
+        "Simple (no credit card needed)"
     )
     table.add_row(
         "[3]",
         "Generic S3",
         "Varies",
-        "🔧 Advanced users"
+        "Advanced users"
     )
     
     console.print(table)
@@ -113,7 +113,7 @@ def _guided_setup():
     provider_code, provider_enum = provider_map[choice]
     provider_name = StorageProviderFactory.get_provider_name(provider_enum)
     
-    console.print(f"\n[green]✓[/green] Selected: {provider_name}\n")
+    console.print(f"\n[green][OK][/green] Selected: {provider_name}\n")
     
     # Step 2: Provider-specific setup
     if provider_code == "r2":
@@ -161,14 +161,14 @@ def _guided_setup():
             
             bucket_info = provider.create_bucket(bucket_name, is_public)
             
-            progress.update(task, description="✓ Complete!")
+            progress.update(task, description="[OK] Complete!")
         
         except Exception as e:
-            console.print(f"[red]❌ Error: {e}[/red]")
+            console.print(f"[red][ERROR] Error: {e}[/red]")
             return
     
-    console.print(f"\n[green]✓[/green] Bucket created: [cyan]{bucket_name}[/cyan]")
-    console.print(f"[green]✓[/green] Endpoint: [cyan]{bucket_info.get('endpoint', 'N/A')}[/cyan]")
+    console.print(f"\n[green][OK][/green] Bucket created: [cyan]{bucket_name}[/cyan]")
+    console.print(f"[green][OK][/green] Endpoint: [cyan]{bucket_info.get('endpoint', 'N/A')}[/cyan]")
     
     # Step 5: Save configuration
     config = PlayerConfig(
@@ -189,12 +189,12 @@ def _guided_setup():
     with open(config_file, 'w') as f:
         f.write(config.to_json())
     
-    console.print(f"\n[green]✓[/green] Configuration saved to: {config_file}")
+    console.print(f"\n[green][OK][/green] Configuration saved to: {config_file}")
     
     # Success summary
     console.print("\n")
     console.print(Panel.fit(
-        "[bold green]✅ Setup Complete![/bold green]\n\n"
+        "[bold green][SUCCESS] Setup Complete![/bold green]\n\n"
         f"Provider: {provider_name}\n"
         f"Bucket: {bucket_name}\n"
         f"Config: {config_file}\n\n"
@@ -316,14 +316,14 @@ def upload(music_path, compress, parallel, bitrate, auto_fetch):
                                  auto_fetch=auto_fetch, progress=progress)
             
         if library:
-            console.print(f"\n[green]✅ Upload Complete![/green]")
+            console.print(f"\n[green][COMPLETE] Upload Complete![/green]")
             console.print(f"Total tracks in library: [bold]{len(library.tracks)}[/bold]")
             console.print(f"Metadata synced to: [cyan]{LIBRARY_METADATA_FILENAME}[/cyan]")
         else:
             console.print("\n[yellow]No tracks found or uploaded.[/yellow]")
             
     except Exception as e:
-        console.print(f"\n[red]❌ Upload failed: {e}[/red]")
+        console.print(f"\n[red][FAILED] Upload failed: {e}[/red]")
 
 
 @cli.command()
@@ -356,7 +356,7 @@ def export_config(format):
             
         # Security Note: This exports creds! Warning needed.
         console.print(Panel.fit(
-            "[bold red]⚠️  SECURITY WARNING ⚠️[/bold red]\n\n"
+            "[bold red][WARNING] SECURITY WARNING [WARNING][/bold red]\n\n"
             "This export contains your Storage Credentials.\n"
             "Do not share this QR code or Token publicly.",
             border_style="red"
@@ -419,7 +419,7 @@ def import_config(token):
     with open(config_file, 'w') as f:
         json.dump(config_data, f, indent=4)
         
-    console.print(f"\n[green]✅ Configuration imported successfully![/green]")
+    console.print(f"\n[green][OK] Configuration imported successfully![/green]")
     console.print(f"Provider: {config_data.get('provider')}")
     console.print(f"Bucket: {config_data.get('bucket')}")
 

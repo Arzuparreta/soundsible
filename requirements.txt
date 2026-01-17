@@ -35,3 +35,9 @@ pytest>=7.4.0              # Testing framework
 pytest-asyncio>=0.21.0     # Async test support
 black>=23.0.0              # Code formatting
 mypy>=1.5.0                # Type checking
+
+# ODST-Tool Dependencies (Spotify/YouTube Downloader)
+spotipy>=2.23.0            # Spotify Web API
+yt-dlp>=2023.0.0           # YouTube Downloader
+python-dotenv>=1.0.0       # Environment variables
+eventlet>=0.30.0           # Async networking for SocketIO

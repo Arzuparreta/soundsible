@@ -33,6 +33,11 @@ class MusicApp(Adw.Application):
         upload_action = Gio.SimpleAction.new("upload-music", None)
         upload_action.connect("activate", self.on_upload_music)
         self.add_action(upload_action)
+
+        # Download music action
+        download_action = Gio.SimpleAction.new("download-music", None)
+        download_action.connect("activate", self.on_download_music)
+        self.add_action(download_action)
         
         # About action
         about_action = Gio.SimpleAction.new("about", None)
@@ -55,6 +60,14 @@ class MusicApp(Adw.Application):
                 return
             
             dialog = UploadDialog(config=config, transient_for=self.win)
+            dialog.present()
+    
+    def on_download_music(self, action, param):
+        """Show music download dialog."""
+        if hasattr(self, 'win'):
+            from player.ui.download_dialog import DownloadDialog
+            
+            dialog = DownloadDialog(transient_for=self.win)
             dialog.present()
     
     def on_about(self, action, param):
@@ -103,6 +116,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.engine = PlaybackEngine()
         print("DEBUG: PlaybackEngine initialized.")
         self.engine.set_state_change_callback(self.on_player_state_change)
+        self.engine.add_track_end_callback(self.on_track_ended)
         
         
         # MPRIS Integration (optional - requires mpris_server package)
@@ -147,7 +161,8 @@ class MainWindow(Adw.ApplicationWindow):
         # Setup section
         setup_section = Gio.Menu()
         setup_section.append("Setup Wizard", "app.setup-wizard")
-        setup_section.append("Upload Music", "app.upload-music")
+        setup_section.append("Upload Local Music", "app.upload-music")
+        setup_section.append("Upload to Bucket", "app.download-music")
         menu.append_section(None, setup_section)
         
         # Settings section
@@ -293,6 +308,17 @@ class MainWindow(Adw.ApplicationWindow):
     def on_player_state_change(self, state):
         """Callback from engine (thread safe wrapper)."""
         GLib.idle_add(self._update_ui_state, state)
+
+    def on_track_ended(self):
+        """Callback from engine when track finishes."""
+        # Stop engine to reset state and update UI (run on main thread)
+        def _stop_safe():
+            print("DEBUG: Executing engine.stop() on main thread")
+            self.engine.stop()
+            return False
+            
+        print("DEBUG: Scheduling engine.stop() via GLib.idle_add")
+        GLib.idle_add(_stop_safe)
 
     def on_play_toggle(self, button):
         if self.engine.is_playing:
@@ -900,6 +926,12 @@ class MainWindow(Adw.ApplicationWindow):
         
         wizard = SetupWizard(transient_for=self)
         wizard.present()
+
+    def refresh_library(self):
+        """Reload the library from the provider (called by other dialogs)."""
+        print("External request to refresh library...")
+        if hasattr(self, 'library_ui'):
+            self.library_ui.refresh()
 
     def _load_config(self):
         """Load player configuration from file."""
