@@ -157,7 +157,14 @@ class SettingsDialog(Adw.PreferencesWindow):
         scheme_combo.append("default", "System")
         scheme_combo.append("light", "Light")
         scheme_combo.append("dark", "Dark")
-        scheme_combo.set_active_id("default")
+        scheme_combo.append("odst", "odst")
+        
+        # Determine current selection logic could be complex (requires syncing back state)
+        # For now, we defaulting UI to "odst" since we set it in main.py
+        # Ideally we pass current theme in init.
+        # Let's assume odst for now, or default.
+        scheme_combo.set_active_id("odst")
+        
         scheme_combo.connect("changed", self._on_color_scheme_changed)
         scheme_row.add_suffix(scheme_combo)
         
@@ -268,11 +275,5 @@ class SettingsDialog(Adw.PreferencesWindow):
     def _on_color_scheme_changed(self, combo):
         """Handle color scheme change."""
         scheme_id = combo.get_active_id()
-        style_manager = Adw.StyleManager.get_default()
-        
-        if scheme_id == "light":
-            style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
-        elif scheme_id == "dark":
-            style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
-        else:
-            style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
+        if self.on_theme_change:
+            self.on_theme_change(scheme_id)

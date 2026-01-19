@@ -1,0 +1,19 @@
+@define-color window_bg_color #1F1E28;
+@define-color window_fg_color white;
+
+@define-color view_bg_color #1F1E28;
+@define-color view_fg_color white;
+
+@define-color headerbar_bg_color #1F1E28;
+@define-color headerbar_fg_color white;
+@define-color headerbar_border_color #000000;
+@define-color headerbar_backdrop_color @window_bg_color;
+
+@define-color card_bg_color #2D2C38;
+@define-color card_fg_color white;
+
+@define-color popover_bg_color #2D2C38;
+@define-color popover_fg_color white;
+
+@define-color shade_color rgba(0, 0, 0, 0.3);
+@define-color borders rgba(255, 255, 255, 0.1);

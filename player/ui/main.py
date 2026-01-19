@@ -21,6 +21,8 @@ class MusicApp(Adw.Application):
         print(f"DEBUG: sys.path: {sys.path}")
         self.connect('activate', self.on_activate)
         
+        self.theme_provider = None
+        
         # Register actions
         self.create_actions()
     
@@ -155,12 +157,46 @@ class MusicApp(Adw.Application):
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
         
-        # Force Dark Mode
-        style_manager = Adw.StyleManager.get_default()
-        style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
-
+        # Default to Dark (or load from config later) but let's default to ODST as requested
+        # Actually user wants "The theme we had before" (Adwaita Dark) as "Dark", and "odst" as new.
+        # So default to "odst" initially? Request implies "new one we just added".
+        # Let's start with ODST to show it off.
+        self.set_theme("odst")
+        
         self.win = MainWindow(application=app)
         self.win.present()
+    
+    def set_theme(self, theme_name):
+        """Set application theme."""
+        style_manager = Adw.StyleManager.get_default()
+        display = Gdk.Display.get_default()
+        
+        print(f"DEBUG: Setting theme to {theme_name}")
+
+        # Remove existing theme provider if any
+        if self.theme_provider:
+             Gtk.StyleContext.remove_provider_for_display(display, self.theme_provider)
+             self.theme_provider = None
+
+        if theme_name == "light":
+             style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
+        elif theme_name == "dark":
+             style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+        elif theme_name == "odst":
+             style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+             # Load custom colors
+             self.theme_provider = Gtk.CssProvider()
+             css_path = os.path.join(os.path.dirname(__file__), 'theme_odst.css')
+             self.theme_provider.load_from_path(css_path)
+             Gtk.StyleContext.add_provider_for_display(
+                 display, 
+                 self.theme_provider, 
+                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
+             )
+        else:
+             style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
+
+
 
 class MainWindow(Adw.ApplicationWindow):
     def __init__(self, *args, **kwargs):
@@ -201,8 +237,6 @@ class MainWindow(Adw.ApplicationWindow):
         
         # Header Bar
         header = Adw.HeaderBar()
-        
-        # Title widget (create before setting)
         self.title_widget = Adw.WindowTitle(title="Music Hub", subtitle="Local Library")
         header.set_title_widget(self.title_widget)
         main_box.append(header)
@@ -211,6 +245,7 @@ class MainWindow(Adw.ApplicationWindow):
         settings_action = Gio.SimpleAction.new("settings", None)
         settings_action.connect("activate", self._on_settings_clicked)
         self.add_action(settings_action)
+        
         
         # Settings menu button (right side)
         menu_button = Gtk.MenuButton()
@@ -237,11 +272,7 @@ class MainWindow(Adw.ApplicationWindow):
         menu_button.set_menu_model(menu)
         header.pack_end(menu_button)
 
-        # Player Control Bar (Top)
-        player_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        player_container.add_css_class("toolbar")
-        player_container.set_spacing(8)
-        # Add some padding to the container itself if needed, usually css handles it via toolbar class
+
         
         # Playback controls container (Bottom bar)
         # We need to restructure this to have: [Cover] [Title/Artist] [Controls] [Volume]
@@ -259,15 +290,12 @@ class MainWindow(Adw.ApplicationWindow):
         
         # Let's rebuild the container content carefully.
         
-        # 1. Cover Art (clickable)
+        # Player Control Bar (Top)
         player_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         player_container.add_css_class("toolbar")
         player_container.set_spacing(8)
-        # Add some padding to the container itself if needed, usually css handles it via toolbar class
         
-        # Playback controls container (Bottom bar)
-        # We need to restructure this to have: [Cover] [Title/Artist] [Controls] [Volume]
-        # Current structure seems to be just buttons. Let's        # 1. Cover Art (clickable)
+        # 1. Cover Art (clickable)
         self.cover_art = Gtk.Image()
         self.cover_art.set_pixel_size(48)
         self.cover_art.set_size_request(48, 48)
@@ -288,11 +316,19 @@ class MainWindow(Adw.ApplicationWindow):
         info_box.set_valign(Gtk.Align.CENTER)
         info_box.set_margin_end(12)
         
+        # ScrolledWindow for Title (Marquee)
+        self.title_scroll = Gtk.ScrolledWindow()
+        self.title_scroll.set_policy(Gtk.PolicyType.EXTERNAL, Gtk.PolicyType.NEVER)
+        self.title_scroll.set_min_content_width(50) # Allow shrinking significantly
+        self.title_scroll.set_max_content_width(200) # Cap growth
+        self.title_scroll.set_propagate_natural_width(True)
+        
         self.title_label = Gtk.Label(label="")
-        self.title_label.add_css_class("title-4")
+        self.title_label.add_css_class("player-title")
         self.title_label.set_halign(Gtk.Align.START)
-        self.title_label.set_ellipsize(3) # END
-        self.title_label.set_max_width_chars(25)
+        # No ellipsize, allow full width for scrolling
+        
+        self.title_scroll.set_child(self.title_label)
         
         self.artist_label = Gtk.Label(label="")
         self.artist_label.add_css_class("caption")
@@ -300,20 +336,34 @@ class MainWindow(Adw.ApplicationWindow):
         self.artist_label.set_ellipsize(3)
         self.artist_label.set_max_width_chars(25)
         
-        info_box.append(self.title_label)
+        info_box.append(self.title_scroll)
         info_box.append(self.artist_label)
         player_container.append(info_box)
 
+        self._marquee_source = None
+        self._marquee_pos = 0
+        self._marquee_pause = 0
+
         # 3. Progress Bar (Scale) - Moved Left
         self.progress_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL)
+        self.progress_scale.set_size_request(150, -1) # Ensure minimum usable width matches user request
         self.progress_scale.set_draw_value(False)
         self.progress_scale.set_range(0, 100) # Default, updated on play
         self.progress_scale.set_hexpand(True) # Fill remaining space
         self.progress_scale.set_valign(Gtk.Align.CENTER)
         self.progress_scale.set_margin_start(12)
         self.progress_scale.set_margin_end(5)
+        self.progress_scale.add_css_class("seek-bar")
         self.progress_scale.connect('value-changed', self.on_seek)
         player_container.append(self.progress_scale)
+
+        # Time Label
+        self.time_label = Gtk.Label(label="0:00 / 0:00")
+        self.time_label.add_css_class("numeric")
+        self.time_label.set_margin_start(5)
+        self.time_label.set_margin_end(5)
+        self.time_label.set_valign(Gtk.Align.CENTER)
+        player_container.append(self.time_label)
 
         # 4. Playback Controls - Moved Right
         
@@ -348,7 +398,7 @@ class MainWindow(Adw.ApplicationWindow):
         
         main_box.append(player_container)
 
-       # Content Area (Split View)
+        # Content Area (Split View)
         # Check for config and show wizard if needed
         config = self._load_config()
         if config:
@@ -363,6 +413,11 @@ class MainWindow(Adw.ApplicationWindow):
         
         # Poll engine state to update button icon (simple fix)
         GLib.timeout_add(250, self._poll_engine_state)
+
+    def _on_settings_clicked(self, action, param):
+        """Show settings dialog."""
+        dialog = SettingsDialog(parent=self, library_manager=self.lib_manager, on_theme_change=self.application.set_theme)
+        dialog.present()
 
     def on_player_state_change(self, state):
         """Callback from engine (thread safe wrapper)."""
@@ -382,7 +437,10 @@ class MainWindow(Adw.ApplicationWindow):
     def on_play_toggle(self, button):
         if self.engine.is_playing:
             self.engine.pause()
+            self.play_btn.set_icon_name("media-playback-start-symbolic")
         else:
+            self.play_btn.set_icon_name("media-playback-pause-symbolic")
+
             if self.engine.current_track:
                  self.engine.pause() # Resume
             else:
@@ -409,11 +467,6 @@ class MainWindow(Adw.ApplicationWindow):
     def on_volume_changed(self, knob, value):
         """Handle volume knob changes."""
         self.engine.set_volume(int(value))
-        # Sync to mini-player if active
-        if hasattr(self, 'mini_volume_knob') and self.mini_volume_knob:
-            # Sync only if difference ensures no infinite loop (though knob handles exact match)
-            if abs(self.mini_volume_knob.get_value() - value) > 0.1:
-                self.mini_volume_knob.set_value(value)
 
 
     def on_time_update(self, time):
@@ -421,10 +474,52 @@ class MainWindow(Adw.ApplicationWindow):
         # Schedule UI update on main thread
         GLib.idle_add(self._update_scale_safe, time)
 
+    def _format_time(self, seconds):
+        if seconds is None:
+            return "0:00"
+        seconds = int(seconds)
+        m = seconds // 60
+        s = seconds % 60
+        return f"{m}:{s:02d}"
+
+    def _marquee_tick(self):
+        """Handle text scrolling for long titles."""
+        adj = self.title_scroll.get_hadjustment()
+        upper = adj.get_upper()
+        page_size = adj.get_page_size()
+        
+        if upper <= page_size:
+            # No scrolling needed
+            return True # Keep running to check if resized
+            
+        if self._marquee_pause > 0:
+            self._marquee_pause -= 1
+            return True
+            
+        # Scroll
+        self._marquee_pos += 2 # px per tick
+        
+        if self._marquee_pos > (upper - page_size):
+            # Reached end
+            self._marquee_pause = 20 # Pause at end
+            self._marquee_pos = 0 # Reset to start (or could implement bounce/loop)
+            adj.set_value(0) # Snap back for now (looping is cleaner but harder with adj)
+        else:
+            adj.set_value(self._marquee_pos)
+            
+        return True
+
     def _update_scale_safe(self, time):
         """Update progress scale on main thread (thread-safe)."""
         self._seeking = True
         self.progress_scale.set_value(time)
+        
+        # Update time label
+        total = self.progress_scale.get_adjustment().get_upper()
+        
+        t_str = f"{self._format_time(time)} / {self._format_time(total)}"
+        self.time_label.set_text(t_str)
+        
         self._seeking = False
         return False  # Remove callback from idle queue to prevent memory leak
 
@@ -441,6 +536,14 @@ class MainWindow(Adw.ApplicationWindow):
              self.artist_label.set_text(track.artist)
              
              self.title_widget.set_subtitle(f"Playing: {track.title}")
+             
+             # Start/Reset Marquee
+             if self._marquee_source:
+                 GLib.source_remove(self._marquee_source)
+             
+             self._marquee_pos = 0
+             self._marquee_pause = 20 # Initial pause (2s at 100ms)
+             self._marquee_source = GLib.timeout_add(100, self._marquee_tick)
              # Wait for MPV to load and get actual duration
              GLib.timeout_add(100, self._update_duration_range, track)
              # Start background download to cache for cover art
@@ -497,6 +600,12 @@ class MainWindow(Adw.ApplicationWindow):
             self.progress_scale.set_range(0, track.duration)
         else:
             self.progress_scale.set_range(0, 300)  # Fallback
+            
+        # Update time label with new duration
+        total = self.progress_scale.get_adjustment().get_upper()
+        current = self.progress_scale.get_value()
+        self.time_label.set_text(f"{self._format_time(current)} / {self._format_time(total)}")
+        
         return False  # Remove from timeout queue
     
     def update_cover_art(self, track, retry_count=0):
@@ -565,6 +674,7 @@ class MainWindow(Adw.ApplicationWindow):
                         tmp_path, 48, 48, True
                     )
                     self.cover_art.set_from_pixbuf(pixbuf)
+
                     print("DEBUG: Cover art displayed successfully!")
                 finally:
                     os.remove(tmp_path)
@@ -610,11 +720,12 @@ class MainWindow(Adw.ApplicationWindow):
             import os
             
             # Create dialog immediately so user sees something happening
-            dialog = Gtk.Window()
+            # Create dialog
+            dialog = Adw.Window()
             dialog.set_transient_for(self)
             dialog.set_modal(True)
-            dialog.set_title(f"{track.title} - Cover Art")
-            dialog.set_default_size(350, 385)
+            dialog.set_title(f"{track.title}")
+            dialog.set_default_size(350, 420) # Increased height slightly for header
             
             # Add ESC key handler
             key_controller = Gtk.EventControllerKey()
@@ -624,16 +735,25 @@ class MainWindow(Adw.ApplicationWindow):
             
             # Cleanup sync ref on close
             def on_dialog_close(d):
-                self.mini_volume_knob = None
+                pass
             dialog.connect("close-request", on_dialog_close)
+            
+            # Wrapper for HeaderBar + Content
+            window_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            dialog.set_content(window_content)
+            
+            # Header Bar (Provides Title + Close Button on Top Right)
+            header = Adw.HeaderBar()
+            header.set_show_end_title_buttons(True)
+            window_content.append(header)
             
             # Create content with proper layout
             main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
             main_box.set_margin_start(12)
             main_box.set_margin_end(12)
-            main_box.set_margin_top(12)
+            main_box.set_margin_top(0) # Header handles top spacing
             main_box.set_margin_bottom(12)
-            dialog.set_child(main_box)
+            window_content.append(main_box)
             
             # Image container
             image = Gtk.Picture()
@@ -652,24 +772,20 @@ class MainWindow(Adw.ApplicationWindow):
             info.set_vexpand(False)
             main_box.append(info)
             
-            # Bottom controls bar
-            controls_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            # Bottom controls bar - Use CenterBox to center playback controls
+            controls_bar = Gtk.CenterBox()
             controls_bar.set_vexpand(False)
             
-            # Close button (left side)
-            close_btn = Gtk.Button(label="Close")
-            close_btn.connect("clicked", lambda btn: dialog.close())
-            close_btn.set_halign(Gtk.Align.START)
-            close_btn.add_css_class("flat") # Make it smaller/cleaner
-            controls_bar.append(close_btn)
+            # Close button (Start Widget) - REMOVED (Moved to HeaderBar)
+            # close_btn = Gtk.Button(label="Close") ...
             
-            # Spacer
-            spacer = Gtk.Box()
-            spacer.set_hexpand(True)
-            controls_bar.append(spacer)
-            
-            # Playback controls (center)
+            # Playback controls (Center Widget)
             playback_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+            # ... (playback buttons added to playback_box below) ...
+            
+            # Note: We need to reconstruct playback_box here to append it correctly
+            # But wait, looking at the code flow, playback_box is filled line by line.
+            # I will define it here.
             
             # Prev Button
             prev_btn = Gtk.Button(icon_name="media-skip-backward-symbolic")
@@ -677,19 +793,36 @@ class MainWindow(Adw.ApplicationWindow):
             prev_btn.connect("clicked", self.play_previous)
             playback_box.append(prev_btn)
             
-            # Play/Pause button
+            # Play/Pause Button (Logic simplified)
             play_pause_btn = Gtk.Button()
+            play_pause_btn.add_css_class("flat")
+            play_pause_btn.add_css_class("large-button")
+            
+            # Initial icon
             if self.engine.is_playing:
                 play_pause_btn.set_icon_name("media-playback-pause-symbolic")
             else:
                 play_pause_btn.set_icon_name("media-playback-start-symbolic")
-            
-            play_pause_btn.add_css_class("flat")
-            dialog.play_pause_btn = play_pause_btn
-            
+                
             def toggle_with_update(btn):
-                self._toggle_playback()
-                GLib.timeout_add(100, lambda: self._update_mini_player_button(dialog))
+                self.on_play_toggle(btn)
+                # Update icon immediately based on resulting state
+                if self.engine.is_playing:
+                     play_pause_btn.set_icon_name("media-playback-pause-symbolic")
+                else:
+                     play_pause_btn.set_icon_name("media-playback-start-symbolic")
+            
+            # Also poll/update periodically
+            def _update_mini_player_button(dlg):
+                if not dlg.is_visible(): return False
+                if self.engine.is_playing:
+                     play_pause_btn.set_icon_name("media-playback-pause-symbolic")
+                else:
+                     play_pause_btn.set_icon_name("media-playback-start-symbolic")
+                return True
+            
+            if self.engine.is_playing:
+                GLib.timeout_add(100, lambda: _update_mini_player_button(dialog))
             
             play_pause_btn.connect("clicked", toggle_with_update)
             playback_box.append(play_pause_btn)
@@ -700,11 +833,10 @@ class MainWindow(Adw.ApplicationWindow):
             next_btn.connect("clicked", self.play_next)
             playback_box.append(next_btn)
             
-            controls_bar.append(playback_box)
+            controls_bar.set_center_widget(playback_box)
             
-            # Volume control (right side)
+            # Volume control (End Widget)
             volume_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-            # volume_icon removed as per request
             
             # Use VolumeKnob instead of Scale
             self.mini_volume_knob = VolumeKnob(initial_value=self.volume_knob.get_value())
@@ -721,7 +853,8 @@ class MainWindow(Adw.ApplicationWindow):
             self.mini_volume_knob.connect("value-changed", on_mini_vol_changed)
             volume_box.append(self.mini_volume_knob)
             
-            controls_bar.append(volume_box)
+            controls_bar.set_end_widget(volume_box)
+            
             main_box.append(controls_bar)
             
             # Now try to load the cover art asynchronously
@@ -895,6 +1028,7 @@ class MainWindow(Adw.ApplicationWindow):
         else:
             print("Cannot play: library is empty.")
     
+
     def _init_player_ui(self, main_box, config):
         """Initialize the main player interface once config exists."""
         # Initialize Library Manager
@@ -1006,3 +1140,5 @@ class MainWindow(Adw.ApplicationWindow):
 if __name__ == "__main__":
     app = MusicApp(application_id="com.shmusichub.player")
     app.run(None)
+
+
