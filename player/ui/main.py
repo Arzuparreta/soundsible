@@ -167,13 +167,22 @@ class MusicApp(Adw.Application):
     def _load_theme_preference(self):
         """Load saved theme preference from preferences file."""
         prefs_file = Path(DEFAULT_CONFIG_DIR).expanduser() / "preferences.json"
+        print(f"DEBUG: _load_theme_preference() - checking file: {prefs_file}")
         try:
             if prefs_file.exists():
+                print(f"DEBUG: Preferences file exists, reading...")
                 with open(prefs_file, 'r') as f:
                     prefs = json.load(f)
-                    return prefs.get('theme', 'default')
+                    theme = prefs.get('theme', 'default')
+                    print(f"DEBUG: Loaded theme from file: '{theme}'")
+                    return theme
+            else:
+                print(f"DEBUG: Preferences file does not exist")
         except Exception as e:
-            print(f"Error loading theme preference: {e}")
+            print(f"ERROR loading theme preference: {e}")
+            import traceback
+            traceback.print_exc()
+        print(f"DEBUG: Returning default theme")
         return 'default'  # Default to system theme
     
     def _save_theme_preference(self, theme_name):

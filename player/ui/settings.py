@@ -274,5 +274,10 @@ class SettingsDialog(Adw.PreferencesWindow):
     def _on_color_scheme_changed(self, combo):
         """Handle color scheme change."""
         scheme_id = combo.get_active_id()
+        print(f"DEBUG: Settings._on_color_scheme_changed() called with scheme_id='{scheme_id}'")
+        print(f"DEBUG: on_theme_change callback exists: {self.on_theme_change is not None}")
         if self.on_theme_change:
+            print(f"DEBUG: Calling on_theme_change callback with '{scheme_id}'")
             self.on_theme_change(scheme_id)
+        else:
+            print(f"ERROR: on_theme_change callback is None!")
