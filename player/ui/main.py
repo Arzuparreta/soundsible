@@ -354,13 +354,6 @@ class MainWindow(Adw.ApplicationWindow):
         self.title_widget = Adw.WindowTitle(title="Music Hub", subtitle="Local Library")
         header.set_title_widget(self.title_widget)
         main_box.append(header)
-
-        # Favourites Button (Top Left)
-        fav_btn = Gtk.Button(icon_name="emblem-favorite-symbolic")
-        fav_btn.set_tooltip_text("Favourites")
-        fav_btn.add_css_class("flat")
-        fav_btn.connect('clicked', lambda b: self.tab_view.set_visible_child_name("favourites"))
-        header.pack_start(fav_btn)
         
         # Settings action
         settings_action = Gio.SimpleAction.new("settings", None)
@@ -1165,8 +1158,15 @@ class MainWindow(Adw.ApplicationWindow):
         # Initialize Library Manager
         self.lib_manager = LibraryManager()
         
-        # Create Tab View
+        # Create Main Content Box (Horizontal split)
+        content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        content_box.set_vexpand(True)
+        main_box.append(content_box)
+
+        # Create Tab View (Left side, expansive via hexpand)
         self.tab_view = TabView()
+        self.tab_view.set_hexpand(True)
+        content_box.append(self.tab_view)
         
         # Create All Songs tab (main library view)
         self.library_ui = LibraryView(
@@ -1182,9 +1182,6 @@ class MainWindow(Adw.ApplicationWindow):
         library_click.connect("pressed", lambda g, n, x, y: self._unfocus_search())
         self.library_ui.add_controller(library_click)
         
-        # Create Queue tab
-        self.queue_view = QueueView(self.queue_manager)
-        
         # Create Favourites tab (filtered library view)
         self.favourites_ui = LibraryView(
             self.lib_manager,
@@ -1196,13 +1193,27 @@ class MainWindow(Adw.ApplicationWindow):
         
         # Add pages to tab view
         self.tab_view.add_page(self.library_ui, "all_songs", "All Songs", visible=True)
-        self.tab_view.add_page(self.queue_view, "queue", "Queue", visible=not self.queue_manager.is_empty())
         self.tab_view.add_page(self.favourites_ui, "favourites", "Favourites", visible=True)
+
+        # Create Queue Sidebar (Right side)
+        # We wrap it in a box to include a separator
+        self.sidebar_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.sidebar_box.set_vexpand(True) # Ensure it fills height
+        self.sidebar_box.set_visible(False) # Hidden by default
+        content_box.append(self.sidebar_box)
+
+        # Separator
+        separator = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        self.sidebar_box.append(separator)
+
+        # Sidebar content
+        self.queue_view = QueueView(self.queue_manager)
+        self.queue_view.set_size_request(300, -1) # Set fixed width for sidebar
+        self.queue_view.set_hexpand(False)
+        self.sidebar_box.append(self.queue_view)
         
-        # Register queue change callback for tab visibility
-        self.queue_manager.add_change_callback(self._update_queue_tab_visibility)
-        
-        main_box.append(self.tab_view)
+        # Register queue change callback for sidebar visibility
+        self.queue_manager.add_change_callback(self._update_queue_sidebar_visibility)
         
         # Search Bar (at bottom)
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -1240,15 +1251,16 @@ class MainWindow(Adw.ApplicationWindow):
         elif current_tab == "favourites":
             self.favourites_ui._on_search_changed(entry)
     
-    def _update_queue_tab_visibility(self):
-        """Update queue tab visibility based on queue state."""
-        GLib.idle_add(self._sync_queue_tab_visibility)
+    def _update_queue_sidebar_visibility(self):
+        """Update queue sidebar visibility based on queue state."""
+        GLib.idle_add(self._sync_queue_sidebar_visibility)
     
-    def _sync_queue_tab_visibility(self):
-        """Sync queue tab visibility (main thread)."""
+    def _sync_queue_sidebar_visibility(self):
+        """Sync queue sidebar visibility (main thread)."""
         is_empty = self.queue_manager.is_empty()
-        print(f"DEBUG: sync_queue_tab_visibility - is_empty={is_empty}")
-        self.tab_view.set_tab_visible("queue", not is_empty)
+        print(f"DEBUG: sync_queue_sidebar_visibility - is_empty={is_empty}")
+        if hasattr(self, 'sidebar_box'):
+            self.sidebar_box.set_visible(not is_empty)
         return False  # Remove from idle queue
     
     def _on_search_key_pressed(self, controller, keyval, keycode, state):
