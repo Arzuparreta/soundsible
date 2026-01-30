@@ -515,13 +515,18 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_settings_clicked(self, action, param):
         """Show settings dialog."""
+        print(f"DEBUG: _on_settings_clicked - self.application = {self.application}")
+        print(f"DEBUG: _on_settings_clicked - self.application.set_theme = {self.application.set_theme}")
+        print(f"DEBUG: _on_settings_clicked - self.application.current_theme = {self.application.current_theme}")
         dialog = SettingsDialog(
             parent=self, 
             library_manager=self.lib_manager, 
             on_theme_change=self.application.set_theme,
             current_theme=self.application.current_theme
         )
+        print(f"DEBUG: Created SettingsDialog, on_theme_change = {dialog.on_theme_change}")
         dialog.present()
+
 
     def on_player_state_change(self, state):
         """Callback from engine (thread safe wrapper)."""

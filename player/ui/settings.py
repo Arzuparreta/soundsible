@@ -18,9 +18,15 @@ class SettingsDialog(Adw.PreferencesWindow):
     def __init__(self, parent, library_manager, on_theme_change=None, current_theme="default"):
         super().__init__()
         
+        print(f"DEBUG: SettingsDialog.__init__ - on_theme_change parameter = {on_theme_change}")
+        print(f"DEBUG: SettingsDialog.__init__ - current_theme parameter = {current_theme}")
+        
         self.library_manager = library_manager
         self.on_theme_change = on_theme_change
         self.current_theme = current_theme
+        
+        print(f"DEBUG: SettingsDialog.__init__ - self.on_theme_change set to = {self.on_theme_change}")
+        
         self.set_transient_for(parent)
         self.set_modal(True)
         self.set_default_size(600, 500)
@@ -29,6 +35,7 @@ class SettingsDialog(Adw.PreferencesWindow):
         self._create_storage_page()
         self._create_playback_page()
         self._create_appearance_page()
+
     
     def _create_storage_page(self):
         """Create storage settings page."""
