@@ -649,10 +649,10 @@ class LibraryView(Gtk.Box):
         
         track = selected_obj.track
         if self.favourites_manager.is_favourite(track.id):
-            self.favourites_manager.remove_favourite(track.id)
+            self.favourites_manager.remove(track.id)
             print(f"Removed '{track.title}' from favourites")
         else:
-            self.favourites_manager.add_favourite(track.id)
+            self.favourites_manager.add(track.id)
             print(f"Added '{track.title}' to favourites")
     
     def _on_favourites_changed(self):
