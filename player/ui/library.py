@@ -451,6 +451,34 @@ class LibraryView(Gtk.Box):
         if self.queue_manager:
             self.queue_manager.clear()
         
+    def _add_favourite_dot_column(self):
+        """Add a column showing a golden dot for favourite tracks."""
+        factory = Gtk.SignalListItemFactory()
+        
+        def on_setup(factory, list_item):
+            label = Gtk.Label()
+            label.set_xalign(0.5)
+            list_item.set_child(label)
+        
+        def on_bind(factory, list_item):
+            label = list_item.get_child()
+            track_obj = list_item.get_item()
+            
+            # Show ★ for favourites, empty otherwise
+            if self.favourites_manager and self.favourites_manager.is_favourite(track_obj.track.id):
+                label.set_text("★")
+                label.add_css_class("favourite-star")
+            else:
+                label.set_text("")
+                label.remove_css_class("favourite-star")
+        
+        factory.connect("setup", on_setup)
+        factory.connect("bind", on_bind)
+        
+        column = Gtk.ColumnViewColumn(title="", factory=factory)
+        column.set_fixed_width(30)
+        self.column_view.append_column(column)
+    
     def _add_cover_column(self):
         """Add cover art thumbnail column."""
         factory = Gtk.SignalListItemFactory()
@@ -612,3 +640,22 @@ class LibraryView(Gtk.Box):
             print(f"Playing: {selected_obj.title}")
             if self.on_track_activated:
                 self.on_track_activated(selected_obj.track)
+    
+    def on_middle_click(self, gesture, n_press, x, y):
+        """Toggle favourite status on middle-click."""
+        selected_obj = self.selection_model.get_selected_item()
+        if not selected_obj or not self.favourites_manager:
+            return
+        
+        track = selected_obj.track
+        if self.favourites_manager.is_favourite(track.id):
+            self.favourites_manager.remove_favourite(track.id)
+            print(f"Removed '{track.title}' from favourites")
+        else:
+            self.favourites_manager.add_favourite(track.id)
+            print(f"Added '{track.title}' to favourites")
+    
+    def _on_favourites_changed(self):
+        """Handle favourites changes by refreshing the filter."""
+        # Refresh the view to update the star column
+        self.filter.changed(Gtk.FilterChange.DIFFERENT)
