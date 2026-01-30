@@ -22,7 +22,7 @@ class MusicApp(Adw.Application):
         self.connect('activate', self.on_activate)
         
         self.theme_provider = None
-        self.current_theme = "odst"  # Default theme
+        self.current_theme = self._load_theme_preference()  # Load saved theme or default
         
         # Register actions
         self.create_actions()
@@ -158,14 +158,47 @@ class MusicApp(Adw.Application):
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
         
-        # Default to Dark (or load from config later) but let's default to ODST as requested
-        # Actually user wants "The theme we had before" (Adwaita Dark) as "Dark", and "odst" as new.
-        # So default to "odst" initially? Request implies "new one we just added".
-        # Let's start with ODST to show it off.
-        self.set_theme("odst")
+        # Load and apply saved theme preference
+        self.set_theme(self.current_theme)
         
         self.win = MainWindow(application=app)
         self.win.present()
+    
+    def _load_theme_preference(self):
+        """Load saved theme preference from preferences file."""
+        prefs_file = Path(DEFAULT_CONFIG_DIR).expanduser() / "preferences.json"
+        try:
+            if prefs_file.exists():
+                with open(prefs_file, 'r') as f:
+                    prefs = json.load(f)
+                    return prefs.get('theme', 'default')
+        except Exception as e:
+            print(f"Error loading theme preference: {e}")
+        return 'default'  # Default to system theme
+    
+    def _save_theme_preference(self, theme_name):
+        """Save theme preference to preferences file."""
+        prefs_file = Path(DEFAULT_CONFIG_DIR).expanduser() / "preferences.json"
+        try:
+            # Ensure config directory exists
+            prefs_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Load existing preferences or create new
+            prefs = {}
+            if prefs_file.exists():
+                with open(prefs_file, 'r') as f:
+                    prefs = json.load(f)
+            
+            # Update theme preference
+            prefs['theme'] = theme_name
+            
+            # Save preferences
+            with open(prefs_file, 'w') as f:
+                json.dump(prefs, f, indent=2)
+            
+            print(f"DEBUG: Saved theme preference: {theme_name}")
+        except Exception as e:
+            print(f"Error saving theme preference: {e}")
     
     def set_theme(self, theme_name):
         """Set application theme."""
@@ -215,6 +248,9 @@ class MusicApp(Adw.Application):
              )
         else:
              style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
+        
+        # Save theme preference
+        self._save_theme_preference(theme_name)
 
 
 
