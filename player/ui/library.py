@@ -26,6 +26,19 @@ class TrackObject(GObject.Object):
     def album(self):
         return self.track.album
 
+    @GObject.Property(type=bool, default=False)
+    def is_fav(self):
+        return self._is_fav
+    
+    @is_fav.setter
+    def is_fav(self, value):
+        self._is_fav = value
+
+    def __init__(self, track):
+        super().__init__()
+        self.track = track
+        self._is_fav = False
+
 from setup_tool.metadata import search_itunes, download_image
 import threading
 
@@ -460,20 +473,36 @@ class LibraryView(Gtk.Box):
             label.set_xalign(0.5)
             list_item.set_child(label)
         
+        def update_dot(label, is_fav):
+            if is_fav:
+                label.set_text("●")
+                label.add_css_class("favourite-star")
+                label.set_tooltip_text("Favourite")
+            else:
+                label.set_text("")
+                label.remove_css_class("favourite-star")
+                label.set_tooltip_text("")
+        
         def on_bind(factory, list_item):
             label = list_item.get_child()
             track_obj = list_item.get_item()
             
-            # Show ★ for favourites, empty otherwise
-            if self.favourites_manager and self.favourites_manager.is_favourite(track_obj.track.id):
-                label.set_text("★")
-                label.add_css_class("favourite-star")
-            else:
-                label.set_text("")
-                label.remove_css_class("favourite-star")
+            # Initial set
+            update_dot(label, track_obj.props.is_fav)
+            
+            # Bind to property change
+            handler_id = track_obj.connect('notify::is-fav', lambda obj, pspec: update_dot(label, obj.props.is_fav))
+            list_item.set_data("handler_id", handler_id)
+
+        def on_unbind(factory, list_item):
+            track_obj = list_item.get_item()
+            handler_id = list_item.get_data("handler_id")
+            if track_obj and handler_id:
+                track_obj.disconnect(handler_id)
         
         factory.connect("setup", on_setup)
         factory.connect("bind", on_bind)
+        factory.connect("unbind", on_unbind)
         
         column = Gtk.ColumnViewColumn(title="", factory=factory)
         column.set_fixed_width(30)
@@ -606,7 +635,10 @@ class LibraryView(Gtk.Box):
         self.store.freeze_notify()
         try:
             for track in tracks:
-                self.store.append(TrackObject(track))
+                obj = TrackObject(track)
+                if self.favourites_manager:
+                    obj.props.is_fav = self.favourites_manager.is_favourite(track.id)
+                self.store.append(obj)
         finally:
             self.store.thaw_notify()
         
@@ -656,6 +688,20 @@ class LibraryView(Gtk.Box):
             print(f"Added '{track.title}' to favourites")
     
     def _on_favourites_changed(self):
-        """Handle favourites changes by refreshing the filter."""
-        # Refresh the view to update the star column
+        """Handle favourites changes by refreshing the filter and visible icons."""
+        if not self.favourites_manager: return
+        
+        # Update is_fav property on all track objects
+        # This will trigger UI updates for bound columns via notify::is-fav
+        n = self.store.get_n_items()
+        favs = set(self.favourites_manager.get_all())
+        
+        for i in range(n):
+            item = self.store.get_item(i)
+            # Efficient update: only write if changed to minimize signals
+            new_state = (item.track.id in favs)
+            if item.props.is_fav != new_state:
+                item.props.is_fav = new_state
+
+        # Refresh the filter to update "Favourites" tab list
         self.filter.changed(Gtk.FilterChange.DIFFERENT)

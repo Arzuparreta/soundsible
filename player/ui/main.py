@@ -354,6 +354,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.title_widget = Adw.WindowTitle(title="Music Hub", subtitle="Local Library")
         header.set_title_widget(self.title_widget)
         main_box.append(header)
+
+        # Favourites Button (Top Left)
+        fav_btn = Gtk.Button(icon_name="emblem-favorite-symbolic")
+        fav_btn.set_tooltip_text("Favourites")
+        fav_btn.add_css_class("flat")
+        fav_btn.connect('clicked', lambda b: self.tab_view.set_visible_child_name("favourites"))
+        header.pack_start(fav_btn)
         
         # Settings action
         settings_action = Gio.SimpleAction.new("settings", None)
@@ -1240,6 +1247,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _sync_queue_tab_visibility(self):
         """Sync queue tab visibility (main thread)."""
         is_empty = self.queue_manager.is_empty()
+        print(f"DEBUG: sync_queue_tab_visibility - is_empty={is_empty}")
         self.tab_view.set_tab_visible("queue", not is_empty)
         return False  # Remove from idle queue
     

@@ -93,9 +93,8 @@
 }
 
 /* Golden dot for favourites */
-.favourite-dot {
-    color: #FFD700;
-    /* Gold */
-    font-size: 12px;
-    font-weight: bold;
+.favourite-star {
+    color: #FFD700; /* Gold */
+    font-size: 10px; /* Small size */
+    opacity: 0.8; /* Not very visible */
 }
