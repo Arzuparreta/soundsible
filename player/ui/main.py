@@ -22,6 +22,7 @@ class MusicApp(Adw.Application):
         self.connect('activate', self.on_activate)
         
         self.theme_provider = None
+        self.current_theme = "odst"  # Default theme
         
         # Register actions
         self.create_actions()
@@ -168,6 +169,7 @@ class MusicApp(Adw.Application):
     
     def set_theme(self, theme_name):
         """Set application theme."""
+        self.current_theme = theme_name  # Track current theme
         style_manager = Adw.StyleManager.get_default()
         display = Gdk.Display.get_default()
         
@@ -180,11 +182,29 @@ class MusicApp(Adw.Application):
 
         if theme_name == "light":
              style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
+             # Load light theme CSS
+             self.theme_provider = Gtk.CssProvider()
+             css_path = os.path.join(os.path.dirname(__file__), 'theme_light.css')
+             self.theme_provider.load_from_path(css_path)
+             Gtk.StyleContext.add_provider_for_display(
+                 display, 
+                 self.theme_provider, 
+                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
+             )
         elif theme_name == "dark":
              style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+             # Load dark theme CSS
+             self.theme_provider = Gtk.CssProvider()
+             css_path = os.path.join(os.path.dirname(__file__), 'theme_dark.css')
+             self.theme_provider.load_from_path(css_path)
+             Gtk.StyleContext.add_provider_for_display(
+                 display, 
+                 self.theme_provider, 
+                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
+             )
         elif theme_name == "odst":
              style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
-             # Load custom colors
+             # Load ODST theme CSS
              self.theme_provider = Gtk.CssProvider()
              css_path = os.path.join(os.path.dirname(__file__), 'theme_odst.css')
              self.theme_provider.load_from_path(css_path)
@@ -416,7 +436,12 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_settings_clicked(self, action, param):
         """Show settings dialog."""
-        dialog = SettingsDialog(parent=self, library_manager=self.lib_manager, on_theme_change=self.application.set_theme)
+        dialog = SettingsDialog(
+            parent=self, 
+            library_manager=self.lib_manager, 
+            on_theme_change=self.application.set_theme,
+            current_theme=self.application.current_theme
+        )
         dialog.present()
 
     def on_player_state_change(self, state):

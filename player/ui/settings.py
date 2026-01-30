@@ -15,10 +15,12 @@ from pathlib import Path
 class SettingsDialog(Adw.PreferencesWindow):
     """Settings dialog using Adwaita preferences window."""
     
-    def __init__(self, parent, library_manager):
+    def __init__(self, parent, library_manager, on_theme_change=None, current_theme="default"):
         super().__init__()
         
         self.library_manager = library_manager
+        self.on_theme_change = on_theme_change
+        self.current_theme = current_theme
         self.set_transient_for(parent)
         self.set_modal(True)
         self.set_default_size(600, 500)
@@ -157,13 +159,10 @@ class SettingsDialog(Adw.PreferencesWindow):
         scheme_combo.append("default", "System")
         scheme_combo.append("light", "Light")
         scheme_combo.append("dark", "Dark")
-        scheme_combo.append("odst", "odst")
+        scheme_combo.append("odst", "ODST")
         
-        # Determine current selection logic could be complex (requires syncing back state)
-        # For now, we defaulting UI to "odst" since we set it in main.py
-        # Ideally we pass current theme in init.
-        # Let's assume odst for now, or default.
-        scheme_combo.set_active_id("odst")
+        # Set to current theme (passed from main window)
+        scheme_combo.set_active_id(self.current_theme)
         
         scheme_combo.connect("changed", self._on_color_scheme_changed)
         scheme_row.add_suffix(scheme_combo)

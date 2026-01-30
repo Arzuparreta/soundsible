@@ -1,13 +1,13 @@
-# Spotify to YouTube Downloader 🎵
+# Spotify to YouTube Downloader 
 
-A powerful tool to download your Spotify library by finding the best matches on YouTube. Fully compatible with `sh-music-hub`.
+A powerful to download your Spotify library by finding the best matches on YouTube. Fully compatible with `sh-music-hub`.
 
 ## Features
-- 📥 **Flexible Selection**: Download everything, specific playlists, or liked songs.
-- 🔍 **Smart Search**: Uses YouTube "Topic" channels for highest quality audio.
-- 💾 **Storage**: Stores files as `tracks/{hash}.mp3` with `library.json` metadata (sh-music-hub compatible).
-- 🏷️ **Metadata**: Embeds ID3 tags and Album Art from Spotify.
-- 🚀 **Parallel Downloads**: Fast multi-threaded processing.
+- Flexible Selection: Download everything, specific playlists, or liked songs.
+- Smart Search: Uses YouTube "Topic" channels for highest quality audio.
+- Storage: Stores files as `tracks/{hash}.mp3` with `library.json` metadata (sh-music-hub compatible).
+- Metadata: Embeds ID3 tags and Album Art from Spotify.
+- Parallel Downloads: Fast multi-threaded processing.
 
 ## Setup
 

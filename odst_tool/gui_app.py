@@ -202,11 +202,11 @@ class DownloaderGUI:
                 
                 if track:
                     self.app.library.add_track(track)
-                    self.log(f"✅ Downloaded: {track.artist} - {track.title}")
+                    self.log(f"Downloaded: {track.artist} - {track.title}")
                     # Remove from UI list
                     self._remove_from_listbox(song_str)
                 else:
-                    self.log(f"❌ Failed: {song_str}")
+                    self.log(f"Failed: {song_str}")
                     
             except Exception as e:
                 self.log(f"Error: {e}")
@@ -227,11 +227,11 @@ class DownloaderGUI:
                 )
                 
                 if "error" in stats:
-                     self.log(f"❌ Sync Error: {stats['error']}")
+                     self.log(f"Sync Error: {stats['error']}")
                 else:
-                    self.log(f"✅ Sync Done: Uploaded {stats['uploaded']}, Deleted {stats['deleted']} local files.")
+                    self.log(f"Sync Done: Uploaded {stats['uploaded']}, Deleted {stats['deleted']} local files.")
             except Exception as e:
-                self.log(f"❌ Sync Exception: {e}")
+                self.log(f"Sync Exception: {e}")
         
         self.root.after(0, lambda: self.btn_download.config(state="normal"))
 
