@@ -186,10 +186,11 @@ class EditTrackDialog(Gtk.Window):
             self.save_btn.set_sensitive(True)
 
 class LibraryView(Gtk.Box):
-    def __init__(self, library_manager, on_track_activated=None):
+    def __init__(self, library_manager, on_track_activated=None, queue_manager=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.library_manager = library_manager
         self.on_track_activated = on_track_activated
+        self.queue_manager = queue_manager
 
         # Setup List Model
         self.store = Gio.ListStore(item_type=TrackObject)
@@ -280,16 +281,38 @@ class LibraryView(Gtk.Box):
         p.set_pointing_to(rect)
         
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        
+        # Add to Queue button
+        if self.queue_manager:
+            queue_btn = Gtk.Button(label="Add to Queue")
+            queue_btn.add_css_class("flat")
+            queue_btn.set_halign(Gtk.Align.START)
+            queue_btn.connect('clicked', lambda b: self._add_to_queue(p, selected_obj.track))
+            box.append(queue_btn)
+        
+        # Edit Metadata button
         btn = Gtk.Button(label="Edit Metadata / Fix Cover")
         btn.add_css_class("flat")
         btn.set_halign(Gtk.Align.START)
         btn.connect('clicked', lambda b: self._open_edit_dialog(p, selected_obj.track))
         box.append(btn)
         
-        # Delete Button
+        # Separator before destructive actions
+        box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        
+        # Clear Queue button (only show if queue has items)
+        if self.queue_manager and not self.queue_manager.is_empty():
+            clear_queue_btn = Gtk.Button(label=f"Clear Queue ({self.queue_manager.size()})")
+            clear_queue_btn.add_css_class("flat")
+            clear_queue_btn.add_css_class("clear-queue-action")
+            clear_queue_btn.set_halign(Gtk.Align.START)
+            clear_queue_btn.connect('clicked', lambda b: self._clear_queue(p))
+            box.append(clear_queue_btn)
+        
+        # Delete Button - Make it red
         del_btn = Gtk.Button(label="Delete Song")
         del_btn.add_css_class("flat")
-        del_btn.add_css_class("destructive-action") # If available, or just error color
+        del_btn.add_css_class("delete-action")  # Custom red styling
         del_btn.set_halign(Gtk.Align.START)
         del_btn.connect('clicked', lambda b: self._confirm_delete(p, selected_obj.track))
         box.append(del_btn)
@@ -392,6 +415,19 @@ class LibraryView(Gtk.Box):
         popover.popdown()
         dialog = EditTrackDialog(self.get_root(), track, self.library_manager)
         dialog.present()
+    
+    def _add_to_queue(self, popover, track):
+        """Add track to the playback queue."""
+        popover.popdown()
+        if self.queue_manager:
+            self.queue_manager.add(track)
+            # Could show a toast notification here in the future
+    
+    def _clear_queue(self, popover):
+        """Clear all tracks from the queue."""
+        popover.popdown()
+        if self.queue_manager:
+            self.queue_manager.clear()
         
     def _add_cover_column(self):
         """Add cover art thumbnail column."""

@@ -71,3 +71,23 @@
     font-size: 0.9rem;
     opacity: 0.8;
 }
+
+/* Delete button - darker red */
+.delete-action {
+    color: #e01b24;
+}
+
+.delete-action:hover {
+    color: #ff4444;
+    background-color: rgba(224, 27, 36, 0.1);
+}
+
+/* Clear queue - lighter red */
+.clear-queue-action {
+    color: #ff6b6b;
+}
+
+.clear-queue-action:hover {
+    color: #ff8888;
+    background-color: rgba(255, 107, 107, 0.1);
+}

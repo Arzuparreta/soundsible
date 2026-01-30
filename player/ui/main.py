@@ -9,6 +9,8 @@ from player.library import LibraryManager
 from player.ui.library import LibraryView
 from player.ui.settings import SettingsDialog
 from player.engine import PlaybackEngine
+from player.queue_manager import QueueManager
+from player.ui.queue_view import QueueView
 from .volume_knob import VolumeKnob
 from pathlib import Path
 import os
@@ -305,12 +307,18 @@ class MainWindow(Adw.ApplicationWindow):
         self.set_title("Music Hub")
         self.set_default_size(1000, 700)
         
+        # Queue Manager
+        print("DEBUG: Initializing QueueManager...")
+        self.queue_manager = QueueManager()
+        print("DEBUG: QueueManager initialized.")
+        
         # Audio Engine
         print("DEBUG: Initializing PlaybackEngine...")
-        self.engine = PlaybackEngine()
+        self.engine = PlaybackEngine(queue_manager=self.queue_manager)
         print("DEBUG: PlaybackEngine initialized.")
         self.engine.set_state_change_callback(self.on_player_state_change)
         self.engine.add_track_end_callback(self.on_track_ended)
+        self.engine.set_track_load_callback(self.play_track)  # For auto-play from queue
         
         
         # MPRIS Integration (optional - requires mpris_server package)
@@ -1143,18 +1151,36 @@ class MainWindow(Adw.ApplicationWindow):
         # Initialize Library Manager
         self.lib_manager = LibraryManager()
         
-        # Library View
-        self.library_ui = LibraryView(self.lib_manager, on_track_activated=self.play_track)
+        # Create Paned layout for library + queue
+        paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        paned.set_resize_start_child(True)
+        paned.set_resize_end_child(False)
+        paned.set_shrink_start_child(False)
+        paned.set_shrink_end_child(False)
+        
+        # Library View (left side)
+        self.library_ui = LibraryView(
+            self.lib_manager, 
+            on_track_activated=self.play_track,
+            queue_manager=self.queue_manager
+        )
         
         # Click on library to unfocus search
         library_click = Gtk.GestureClick()
         library_click.connect("pressed", lambda g, n, x, y: self._unfocus_search())
         self.library_ui.add_controller(library_click)
         
-        main_box.append(self.library_ui)
+        paned.set_start_child(self.library_ui)
+        
+        # Queue View (right sidebar)
+        self.queue_view = QueueView(self.queue_manager)
+        self.queue_view.set_size_request(250, -1)  # Fixed width sidebar
+        paned.set_end_child(self.queue_view)
+        
+        main_box.append(paned)
         
         # Need to set expand so it fills space
-        self.library_ui.set_vexpand(True)
+        paned.set_vexpand(True)
         
         # Search Bar (at bottom)
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)

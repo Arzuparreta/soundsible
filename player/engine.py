@@ -7,11 +7,12 @@ import mpv
 import os
 from typing import Optional, Callable, Dict, Any, List
 from shared.models import Track
+from player.queue_manager import QueueManager
 
 class PlaybackEngine:
     """Wrapper around MPV for music playback."""
     
-    def __init__(self):
+    def __init__(self, queue_manager: Optional[QueueManager] = None):
         # Initialize MPV with options optimized for streaming
         # vo='null' because we are audio-only
         self.player = mpv.MPV(
@@ -22,10 +23,14 @@ class PlaybackEngine:
             ytdl=False  # We provide direct URLs
         )
         
+        # Queue Manager
+        self.queue_manager = queue_manager
+        
         # Callbacks
         self._track_end_callbacks: List[Callable[[], None]] = []
         self._on_time_update: Optional[Callable[[float], None]] = None
         self._on_state_change: Optional[Callable[[str], None]] = None
+        self._on_track_load: Optional[Callable[[Track], None]] = None  # For UI to load next track
         
         # State
         self.current_track: Optional[Track] = None
@@ -121,12 +126,24 @@ class PlaybackEngine:
     def _trigger_track_end(self):
         """Execute all registered track end callbacks safely."""
         print(f"DEBUG: Triggering {len(self._track_end_callbacks)} track end callbacks")
+        
+        # First, execute custom callbacks
         for callback in self._track_end_callbacks:
             try:
                 print(f"DEBUG: Executing callback: {callback}")
                 callback()
             except Exception as e:
                 print(f"ERROR executing track_end callback {callback}: {e}")
+        
+        # Then, check queue for auto-play
+        if self.queue_manager and not self.queue_manager.is_empty():
+            next_track = self.queue_manager.get_next()
+            if next_track and self._on_track_load:
+                print(f"DEBUG: Auto-playing next queued track: {next_track.title}")
+                try:
+                    self._on_track_load(next_track)
+                except Exception as e:
+                    print(f"ERROR auto-playing queued track: {e}")
             
     def _handle_pause_change(self, name, value):
         """Handle pause state changes from MPV."""
@@ -157,3 +174,7 @@ class PlaybackEngine:
         
     def set_state_change_callback(self, callback: Callable[[str], None]):
         self._on_state_change = callback
+    
+    def set_track_load_callback(self, callback: Callable[[Track], None]):
+        """Set callback for when a new track should be loaded (e.g., from queue)."""
+        self._on_track_load = callback
