@@ -202,54 +202,88 @@ class MusicApp(Adw.Application):
     
     def set_theme(self, theme_name):
         """Set application theme."""
+        print(f"DEBUG: set_theme() called with theme_name='{theme_name}'")
+        
         self.current_theme = theme_name  # Track current theme
         style_manager = Adw.StyleManager.get_default()
         display = Gdk.Display.get_default()
         
-        print(f"DEBUG: Setting theme to {theme_name}")
+        # Defensive check: ensure display is valid
+        if display is None:
+            print(f"ERROR: Display is None! Cannot set theme. This shouldn't happen.")
+            return
+        
+        print(f"DEBUG: Display is valid, proceeding with theme '{theme_name}'")
 
         # Remove existing theme provider if any
         if self.theme_provider:
-             Gtk.StyleContext.remove_provider_for_display(display, self.theme_provider)
-             self.theme_provider = None
+            try:
+                Gtk.StyleContext.remove_provider_for_display(display, self.theme_provider)
+                print(f"DEBUG: Removed previous theme provider")
+            except Exception as e:
+                print(f"WARNING: Failed to remove previous theme provider: {e}")
+            self.theme_provider = None
 
-        if theme_name == "light":
-             style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
-             # Load light theme CSS
-             self.theme_provider = Gtk.CssProvider()
-             css_path = os.path.join(os.path.dirname(__file__), 'theme_light.css')
-             self.theme_provider.load_from_path(css_path)
-             Gtk.StyleContext.add_provider_for_display(
-                 display, 
-                 self.theme_provider, 
-                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
-             )
-        elif theme_name == "dark":
-             style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
-             # Load dark theme CSS
-             self.theme_provider = Gtk.CssProvider()
-             css_path = os.path.join(os.path.dirname(__file__), 'theme_dark.css')
-             self.theme_provider.load_from_path(css_path)
-             Gtk.StyleContext.add_provider_for_display(
-                 display, 
-                 self.theme_provider, 
-                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
-             )
-        elif theme_name == "odst":
-             style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
-             # Load ODST theme CSS
-             self.theme_provider = Gtk.CssProvider()
-             css_path = os.path.join(os.path.dirname(__file__), 'theme_odst.css')
-             self.theme_provider.load_from_path(css_path)
-             Gtk.StyleContext.add_provider_for_display(
-                 display, 
-                 self.theme_provider, 
-                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
-             )
-        else:
-             style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
+        # Apply theme based on selection
+        try:
+            if theme_name == "light":
+                print(f"DEBUG: Applying LIGHT theme")
+                style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
+                # Load light theme CSS
+                self.theme_provider = Gtk.CssProvider()
+                css_path = os.path.join(os.path.dirname(__file__), 'theme_light.css')
+                print(f"DEBUG: Loading CSS from: {css_path}")
+                self.theme_provider.load_from_path(css_path)
+                Gtk.StyleContext.add_provider_for_display(
+                    display, 
+                    self.theme_provider, 
+                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
+                )
+                print(f"DEBUG: Light theme CSS loaded and applied successfully")
+                
+            elif theme_name == "dark":
+                print(f"DEBUG: Applying DARK theme")
+                style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+                # Load dark theme CSS
+                self.theme_provider = Gtk.CssProvider()
+                css_path = os.path.join(os.path.dirname(__file__), 'theme_dark.css')
+                print(f"DEBUG: Loading CSS from: {css_path}")
+                self.theme_provider.load_from_path(css_path)
+                Gtk.StyleContext.add_provider_for_display(
+                    display, 
+                    self.theme_provider, 
+                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
+                )
+                print(f"DEBUG: Dark theme CSS loaded and applied successfully")
+                
+            elif theme_name == "odst":
+                print(f"DEBUG: Applying ODST theme")
+                style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+                # Load ODST theme CSS
+                self.theme_provider = Gtk.CssProvider()
+                css_path = os.path.join(os.path.dirname(__file__), 'theme_odst.css')
+                print(f"DEBUG: Loading CSS from: {css_path}")
+                self.theme_provider.load_from_path(css_path)
+                Gtk.StyleContext.add_provider_for_display(
+                    display, 
+                    self.theme_provider, 
+                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
+                )
+                print(f"DEBUG: ODST theme CSS loaded and applied successfully")
+                
+            else:  # "default" or any other value
+                print(f"DEBUG: Applying DEFAULT (system) theme")
+                style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
+                print(f"DEBUG: System theme applied successfully")
+                
+        except Exception as e:
+            print(f"ERROR: Failed to apply theme '{theme_name}': {e}")
+            import traceback
+            traceback.print_exc()
+            return
         
         # Save theme preference
+        print(f"DEBUG: Calling _save_theme_preference('{theme_name}')")
         self._save_theme_preference(theme_name)
 
 
