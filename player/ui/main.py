@@ -1196,17 +1196,19 @@ class MainWindow(Adw.ApplicationWindow):
     
     def _on_settings_clicked(self, action, param):
         """Open settings dialog."""
-        print(f"DEBUG: MainWindow._on_settings_clicked - self.application = {self.application}")
-        print(f"DEBUG: MainWindow._on_settings_clicked - self.application.set_theme = {self.application.set_theme}")
-        print(f"DEBUG: MainWindow._on_settings_clicked - self.application.current_theme = {self.application.current_theme}")
+        app = self.get_application()
+        print(f"DEBUG: MainWindow._on_settings_clicked - app = {app}")
+        print(f"DEBUG: MainWindow._on_settings_clicked - app.set_theme = {app.set_theme}")
+        print(f"DEBUG: MainWindow._on_settings_clicked - app.current_theme = {app.current_theme}")
         settings_dialog = SettingsDialog(
             parent=self,
             library_manager=self.lib_manager,
-            on_theme_change=self.application.set_theme,
-            current_theme=self.application.current_theme
+            on_theme_change=app.set_theme,
+            current_theme=app.current_theme
         )
         print(f"DEBUG: Created SettingsDialog, on_theme_change = {settings_dialog.on_theme_change}")
         settings_dialog.present()
+
 
     
     def _show_first_run_wizard(self):
