@@ -11,6 +11,8 @@ from player.ui.settings import SettingsDialog
 from player.engine import PlaybackEngine
 from player.queue_manager import QueueManager
 from player.ui.queue_view import QueueView
+from player.favourites_manager import FavouritesManager
+from player.ui.tab_view import TabView
 from .volume_knob import VolumeKnob
 from pathlib import Path
 import os
@@ -311,6 +313,11 @@ class MainWindow(Adw.ApplicationWindow):
         print("DEBUG: Initializing QueueManager...")
         self.queue_manager = QueueManager()
         print("DEBUG: QueueManager initialized.")
+        
+        # Favourites Manager
+        print("DEBUG: Initializing FavouritesManager...")
+        self.favourites_manager = FavouritesManager()
+        print("DEBUG: FavouritesManager initialized.")
         
         # Audio Engine
         print("DEBUG: Initializing PlaybackEngine...")
@@ -1151,18 +1158,16 @@ class MainWindow(Adw.ApplicationWindow):
         # Initialize Library Manager
         self.lib_manager = LibraryManager()
         
-        # Create Paned layout for library + queue
-        paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        paned.set_resize_start_child(True)
-        paned.set_resize_end_child(False)
-        paned.set_shrink_start_child(False)
-        paned.set_shrink_end_child(False)
+        # Create Tab View
+        self.tab_view = TabView()
         
-        # Library View (left side)
+        # Create All Songs tab (main library view)
         self.library_ui = LibraryView(
-            self.lib_manager, 
+            self.lib_manager,
             on_track_activated=self.play_track,
-            queue_manager=self.queue_manager
+            queue_manager=self.queue_manager,
+            favourites_manager=self.favourites_manager,
+            show_favourites_only=False
         )
         
         # Click on library to unfocus search
@@ -1170,17 +1175,27 @@ class MainWindow(Adw.ApplicationWindow):
         library_click.connect("pressed", lambda g, n, x, y: self._unfocus_search())
         self.library_ui.add_controller(library_click)
         
-        paned.set_start_child(self.library_ui)
-        
-        # Queue View (right sidebar)
+        # Create Queue tab
         self.queue_view = QueueView(self.queue_manager)
-        self.queue_view.set_size_request(250, -1)  # Fixed width sidebar
-        paned.set_end_child(self.queue_view)
         
-        main_box.append(paned)
+        # Create Favourites tab (filtered library view)
+        self.favourites_ui = LibraryView(
+            self.lib_manager,
+            on_track_activated=self.play_track,
+            queue_manager=self.queue_manager,
+            favourites_manager=self.favourites_manager,
+            show_favourites_only=True
+        )
         
-        # Need to set expand so it fills space
-        paned.set_vexpand(True)
+        # Add pages to tab view
+        self.tab_view.add_page(self.library_ui, "all_songs", "All Songs", visible=True)
+        self.tab_view.add_page(self.queue_view, "queue", "Queue", visible=not self.queue_manager.is_empty())
+        self.tab_view.add_page(self.favourites_ui, "favourites", "Favourites", visible=True)
+        
+        # Register queue change callback for tab visibility
+        self.queue_manager.add_change_callback(self._update_queue_tab_visibility)
+        
+        main_box.append(self.tab_view)
         
         # Search Bar (at bottom)
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -1205,8 +1220,28 @@ class MainWindow(Adw.ApplicationWindow):
         
         main_box.append(search_box)
         
-        # Connect search entry to library filter
-        self.search_entry.connect("search-changed", self.library_ui._on_search_changed)
+        # Connect search entry to active library view filter
+        self.search_entry.connect("search-changed", self._on_search_changed)
+    
+    def _on_search_changed(self, entry):
+        """Handle search changes - apply to current active tab."""
+        current_tab = self.tab_view.get_visible_child_name()
+        
+        # Apply search to appropriate library view
+        if current_tab == "all_songs":
+            self.library_ui._on_search_changed(entry)
+        elif current_tab == "favourites":
+            self.favourites_ui._on_search_changed(entry)
+    
+    def _update_queue_tab_visibility(self):
+        """Update queue tab visibility based on queue state."""
+        GLib.idle_add(self._sync_queue_tab_visibility)
+    
+    def _sync_queue_tab_visibility(self):
+        """Sync queue tab visibility (main thread)."""
+        is_empty = self.queue_manager.is_empty()
+        self.tab_view.set_tab_visible("queue", not is_empty)
+        return False  # Remove from idle queue
     
     def _on_search_key_pressed(self, controller, keyval, keycode, state):
         """Handle ESC key in search entry."""

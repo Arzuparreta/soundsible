@@ -91,3 +91,11 @@
     color: #ff8888;
     background-color: rgba(255, 107, 107, 0.1);
 }
+
+/* Golden dot for favourites */
+.favourite-dot {
+    color: #FFD700;
+    /* Gold */
+    font-size: 12px;
+    font-weight: bold;
+}

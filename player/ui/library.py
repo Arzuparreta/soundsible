@@ -186,11 +186,13 @@ class EditTrackDialog(Gtk.Window):
             self.save_btn.set_sensitive(True)
 
 class LibraryView(Gtk.Box):
-    def __init__(self, library_manager, on_track_activated=None, queue_manager=None):
+    def __init__(self, library_manager, on_track_activated=None, queue_manager=None, favourites_manager=None, show_favourites_only=False):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.library_manager = library_manager
         self.on_track_activated = on_track_activated
         self.queue_manager = queue_manager
+        self.favourites_manager = favourites_manager
+        self.show_favourites_only = show_favourites_only
 
         # Setup List Model
         self.store = Gio.ListStore(item_type=TrackObject)
@@ -211,8 +213,10 @@ class LibraryView(Gtk.Box):
         self.column_view = Gtk.ColumnView(model=self.selection_model)
         self.column_view.add_css_class("rich-list") # Adwaita style class
         
-        # Columns - Add cover art first
+        # Columns - Add cover art first, then golden dot for favourites
         self._add_cover_column()
+        if self.favourites_manager:
+            self._add_favourite_dot_column()
         self._add_text_column("Title", "title", expand=True)
         self._add_text_column("Artist", "artist")
         # self._add_text_column("Album", "album")
@@ -232,10 +236,21 @@ class LibraryView(Gtk.Box):
         click_gesture.set_button(3) # Right mouse button
         click_gesture.connect("pressed", self.on_right_click)
         self.column_view.add_controller(click_gesture)
+        
+        # Middle Click for Favourites
+        if self.favourites_manager:
+            middle_click = Gtk.GestureClick()
+            middle_click.set_button(2)  # Middle mouse button
+            middle_click.connect("pressed", self.on_middle_click)
+            self.column_view.add_controller(middle_click)
 
         # Register callback for refreshing
         # This is a bit hacky, attaching to manager, but works for this scope
         self.library_manager.refresh_callback = self.refresh
+        
+        # Register favourites callback to refresh UI when favourites change
+        if self.favourites_manager:
+            self.favourites_manager.add_change_callback(self._on_favourites_changed)
 
     def refresh(self):
         """Reload the library from the manager (re-sync optional)."""
@@ -327,11 +342,18 @@ class LibraryView(Gtk.Box):
         self.filter.changed(Gtk.FilterChange.DIFFERENT)
     
     def _filter_func(self, track_obj):
-        """Filter function to match tracks against search query."""
+        """Filter function to match tracks against search query and favourites."""
+        track = track_obj.track
+        
+        # Filter by favourites if in favourites-only mode
+        if self.show_favourites_only:
+            if not self.favourites_manager or not self.favourites_manager.is_favourite(track.id):
+                return False
+        
+        # Then filter by search query
         if not self.search_query:
             return True  # Show all when no search
         
-        track = track_obj.track
         # Search in title, artist, and album (case-insensitive)
         return (self.search_query in track.title.lower() or
                 self.search_query in track.artist.lower() or
