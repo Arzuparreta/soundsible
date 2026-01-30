@@ -19,7 +19,7 @@ class FavouritesManager:
     
     def __init__(self):
         self._favourites: Set[str] = set()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # Use reentrant lock to prevent deadlocks with callbacks
         self._on_change_callbacks: List[Callable[[], None]] = []
         self._favourites_file = Path(DEFAULT_CONFIG_DIR).expanduser() / "favourites.json"
         
