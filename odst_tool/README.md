@@ -1,13 +1,14 @@
-# Spotify to YouTube Downloader 
+# Music Downloader (ODST Tool)
 
-A powerful to download your Spotify library by finding the best matches on YouTube. Fully compatible with `sh-music-hub`.
+A powerful tool to download music from YouTube Music, YouTube, or Spotify links. Fully compatible with `sh-music-hub`.
 
 ## Features
-- Flexible Selection: Download everything, specific playlists, or liked songs.
-- Smart Search: Uses YouTube "Topic" channels for highest quality audio.
-- Storage: Stores files as `tracks/{hash}.mp3` with `library.json` metadata (sh-music-hub compatible).
-- Metadata: Embeds ID3 tags and Album Art from Spotify.
-- Parallel Downloads: Fast multi-threaded processing.
+- **Flexible Selection**: Download everything, specific playlists, or liked songs
+- **Smart Search**: Uses YouTube "Topic" channels for highest quality audio
+- **Multi-Platform Links**: Paste links from Spotify, YouTube, or YouTube Music (can mix sources!)
+- **Storage**: Stores files as `tracks/{hash}.mp3` with `library.json` metadata (sh-music-hub compatible)
+- **Metadata**: Embeds ID3 tags and Album Art from Spotify
+- **Parallel Downloads**: Fast multi-threaded processing
 
 ## Setup
 
@@ -27,6 +28,27 @@ A powerful to download your Spotify library by finding the best matches on YouTu
    *Get credentials at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)*
 
 ## Usage
+
+### Web App (Recommended)
+
+The easiest way to download music is through the web interface:
+
+```bash
+./downloader_web.sh
+```
+
+Then open the displayed URL in your browser. Paste music links (one per line) from:
+- Spotify
+- YouTube  
+- YouTube Music
+
+You can mix links from different platforms in the same batch!
+
+> **Note:** Spotify API credentials are **only needed** if you want to auto-download your entire Spotify library/playlists. For simply pasting links, no credentials are required.
+
+---
+
+### CLI Helper Script
 
 **Run via Helper Script:**
 ```bash

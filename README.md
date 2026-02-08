@@ -124,9 +124,9 @@ pip install mpris-server
 
 ---
 
-## ODST Tool: Spotify Library Downloader
+## ODST Tool: Music Downloader
 
-The **ODST Tool** is a dedicated web interface for downloading your Spotify library by finding matching tracks on YouTube. It downloads music in sh-music-hub compatible format and can sync directly to your cloud storage.
+The **ODST Tool** is a dedicated web interface for downloading music from Spotify, YouTube, or YouTube Music links. It downloads music in sh-music-hub compatible format and can sync directly to your cloud storage.
 
 To use the ODST Tool:
 
@@ -137,9 +137,9 @@ cd odst_tool
 
 Then open the displayed URL in your browser to access the download interface.
 
-> **Note:** This is different from the GUI's "Download & Push" feature. ODST provides more advanced Spotify integration with playlist selection, smart matching, and batch downloads.
+> **Note:** This is different from the GUI's "Download & Push" feature. ODST provides more advanced features including multi-platform link support, playlist selection, smart matching, and batch downloads.
 
-For detailed setup instructions (Spotify API credentials, etc.), see the **[ODST Tool Repository](https://github.com/Arzuparreta/odst-tool)**.
+For detailed setup instructions (Spotify API credentials for auto-downloading playlists, etc.), see **[odst_tool/README.md](odst_tool/README.md)**.
 
 ---
 
