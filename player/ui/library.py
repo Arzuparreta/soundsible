@@ -481,13 +481,16 @@ class LibraryView(Gtk.Box):
             
             # Bind to property change
             handler_id = track_obj.connect('notify::is-fav', lambda obj, pspec: update_dot(label, obj.props.is_fav))
-            list_item.set_data("handler_id", handler_id)
+            # Store handler_id on the label widget as a Python attribute (set_data is unsupported in Python 3.14+)
+            label._handler_id = handler_id
 
         def on_unbind(factory, list_item):
+            label = list_item.get_child()
             track_obj = list_item.get_item()
-            handler_id = list_item.get_data("handler_id")
+            handler_id = getattr(label, '_handler_id', None)
             if track_obj and handler_id:
                 track_obj.disconnect(handler_id)
+                label._handler_id = None
         
         factory.connect("setup", on_setup)
         factory.connect("bind", on_bind)

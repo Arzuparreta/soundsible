@@ -100,7 +100,7 @@ class UploadDialog(Adw.Window):
 
         # GROUP 2: Metadata & Art (Moved UP for visibility)
         meta_group = Adw.PreferencesGroup()
-        meta_group.set_title("2. Metadata & Cover Art")
+        meta_group.set_title("2. Metadata &amp; Cover Art")
         
         # Search Entry (Safe Gtk.SearchEntry implementation)
         self.search_row = Adw.ActionRow()

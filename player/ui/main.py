@@ -537,20 +537,86 @@ class MainWindow(Adw.ApplicationWindow):
         
         # Poll engine state to update button icon (simple fix)
         GLib.timeout_add(250, self._poll_engine_state)
+        
+        
+        # Keyboard shortcuts for playback control
+        # Use CAPTURE phase to intercept keys before child widgets
+        key_controller = Gtk.EventControllerKey()
+        key_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        key_controller.connect("key-pressed", self._on_key_pressed)
+        self.add_controller(key_controller)
 
     def _on_settings_clicked(self, action, param):
         """Show settings dialog."""
-        print(f"DEBUG: _on_settings_clicked - self.application = {self.application}")
-        print(f"DEBUG: _on_settings_clicked - self.application.set_theme = {self.application.set_theme}")
-        print(f"DEBUG: _on_settings_clicked - self.application.current_theme = {self.application.current_theme}")
+        app = self.get_application()
         dialog = SettingsDialog(
             parent=self, 
             library_manager=self.lib_manager, 
-            on_theme_change=self.application.set_theme,
-            current_theme=self.application.current_theme
+            on_theme_change=app.set_theme,
+            current_theme=app.current_theme
         )
-        print(f"DEBUG: Created SettingsDialog, on_theme_change = {dialog.on_theme_change}")
         dialog.present()
+
+    def _on_key_pressed(self, controller, keyval, keycode, state):
+        """Handle keyboard shortcuts for playback control."""
+        # Don't intercept keys when typing in text entry widgets
+        focus_widget = self.get_focus()
+        if isinstance(focus_widget, (Gtk.Entry, Gtk.SearchEntry, Gtk.Text, Gtk.TextView)):
+            return False  # Let text input work normally
+        
+        # Space: Play/Pause toggle
+        if keyval == Gdk.KEY_space:
+            self.on_play_toggle(None)
+            return True
+        
+        # Left arrow: Seek backward 10 seconds
+        elif keyval == Gdk.KEY_Left:
+            if self.engine.current_track:
+                current = self.engine.get_time() or 0
+                self.engine.seek(max(0, current - 10))
+            return True
+        
+        # Right arrow: Seek forward 10 seconds
+        elif keyval == Gdk.KEY_Right:
+            if self.engine.current_track:
+                current = self.engine.get_time() or 0
+                duration = self.engine.get_duration() or 300
+                self.engine.seek(min(duration, current + 10))
+            return True
+        
+        # N: Next track
+        elif keyval == Gdk.KEY_n or keyval == Gdk.KEY_N:
+            self.play_next(None)
+            return True
+        
+        # P: Previous track 
+        elif keyval == Gdk.KEY_p or keyval == Gdk.KEY_P:
+            self.play_previous(None)
+            return True
+        
+        # M: Mute toggle
+        elif keyval == Gdk.KEY_m or keyval == Gdk.KEY_M:
+            current_vol = self.volume_knob.get_value()
+            if current_vol > 0:
+                self._saved_volume = current_vol
+                self.volume_knob.set_value(0)
+            else:
+                self.volume_knob.set_value(getattr(self, '_saved_volume', 100))
+            return True
+        
+        # Up arrow: Volume up 5%
+        elif keyval == Gdk.KEY_Up:
+            current_vol = self.volume_knob.get_value()
+            self.volume_knob.set_value(min(100, current_vol + 5))
+            return True
+        
+        # Down arrow: Volume down 5%
+        elif keyval == Gdk.KEY_Down:
+            current_vol = self.volume_knob.get_value()
+            self.volume_knob.set_value(max(0, current_vol - 5))
+            return True
+        
+        return False  # Let other handlers process the key
 
 
     def on_player_state_change(self, state):

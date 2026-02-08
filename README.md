@@ -48,13 +48,13 @@ Install required system dependencies:
 
 ```bash
 # Ubuntu/Debian
-sudo apt install python3-pip python3-venv ffmpeg libmpv1 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
+sudo apt install python3-pip python3-venv ffmpeg libmpv1 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 playerctl
 
 # Fedora
-sudo dnf install python3-pip ffmpeg mpv-libs python3-gobject gtk4 libadwaita
+sudo dnf install python3-pip ffmpeg mpv-libs python3-gobject gtk4 libadwaita playerctl
 
 # Arch
-sudo pacman -S python-pip ffmpeg mpv python-gobject gtk4 libadwaita
+sudo pacman -S python-pip ffmpeg mpv python-gobject gtk4 libadwaita playerctl
 ```
 
 ---
@@ -70,11 +70,17 @@ sudo pacman -S python-pip ffmpeg mpv python-gobject gtk4 libadwaita
 2. Create and activate virtual environment:
    ```bash
    python3 -m venv venv
+   ```
    
-   # Bash/Zsh users:
+   Then activate it:
+   
+   **Bash/Zsh:**
+   ```bash
    source venv/bin/activate
+   ```
    
-   # Fish shell users:
+   **Fish shell:**
+   ```fish
    source venv/bin/activate.fish
    ```
    
@@ -110,17 +116,24 @@ On first launch, you'll be prompted to run the **Setup Wizard** to configure you
 
 For keyboard media control (play/pause/next/previous keys):
 
+Activate your virtual environment first:
+
+**Bash/Zsh:**
 ```bash
-# Activate virtual environment first
-source venv/bin/activate       # Bash/Zsh
-source venv/bin/activate.fish  # Fish shell
-
-# Then install MPRIS support
-pip install mpris-server
-
-# Or check AUR for system package (Arch users)
-# yay -S python-mpris-server
+source venv/bin/activate
 ```
+
+**Fish shell:**
+```fish
+source venv/bin/activate.fish
+```
+
+Then install MPRIS support:
+```bash
+pip install mpris-server
+```
+
+> **Arch users:** You can alternatively install from AUR: `yay -S python-mpris-server`
 
 ---
 

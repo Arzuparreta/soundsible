@@ -17,8 +17,8 @@ class TabView(Gtk.Box):
         
         # Create stack for content
         self.stack = Gtk.Stack()
-        self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-        self.stack.set_transition_duration(150)
+        self.stack.set_transition_type(Gtk.StackTransitionType.NONE)
+        self.stack.set_transition_duration(0)
         self.stack.set_vexpand(True)
         
         # Tab metadata
