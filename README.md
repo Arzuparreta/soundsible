@@ -229,7 +229,7 @@ Scan the QR code on your other device to automatically configure the player.
 
 | Provider | Free Tier | Bandwidth Cost | Credit Card Required | Best For |
 |----------|-----------|----------------|---------------------|----------|
-| **Cloudflare R2** | 10GB | **$0** (zero egress) | Yes | Streaming (recommended) |
+| **Cloudflare R2** | 10GB | **FREE** (zero egress) | Yes | Streaming (recommended) |
 | **Backblaze B2** | 10GB | $0.01/GB | No | Simple setup, backups |
 | **AWS S3** | 5GB (12 months) | $0.09/GB | Yes | AWS ecosystem users |
 
