@@ -13,7 +13,7 @@ sudo apt install libmpv1
 python -m setup_tool init --guided
 ```
 
-### 2. Manage Library
+### 2. Upload music (You don't need to use this, you can use the built-in uploader in the app settings, but this one iterface is a bit better to upload high )
 ```bash
 # Web Interface (Easiest Method)
 ./start_web.sh
