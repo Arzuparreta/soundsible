@@ -1,9 +1,9 @@
-# Music Hub - MVP Feature Set
+# Soundsible - MVP Feature Set
 
 ## Version: MVP v1.0
 **Date:** 2026-01-13
 
-This document captures the complete feature set of the Music Hub MVP.
+This document captures the complete feature set of the Soundsible MVP.
 
 ---
 

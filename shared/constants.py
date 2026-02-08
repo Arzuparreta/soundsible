@@ -39,9 +39,9 @@ BACKBLAZE_B2_ENDPOINT_TEMPLATE = "https://s3.{region}.backblazeb2.com"
 AWS_S3_ENDPOINT_TEMPLATE = "https://s3.{region}.amazonaws.com"
 
 # Configuration paths
-DEFAULT_CONFIG_DIR = "~/.config/sh-music-hub"
-DEFAULT_CACHE_DIR = "~/.cache/sh-music-hub"
-DEFAULT_DATA_DIR = "~/.local/share/sh-music-hub"
+DEFAULT_CONFIG_DIR = "~/.config/soundsible"
+DEFAULT_CACHE_DIR = "~/.cache/soundsible"
+DEFAULT_DATA_DIR = "~/.local/share/soundsible"
 DEFAULT_LIBRARY_PATH = DEFAULT_CONFIG_DIR + "/" + LIBRARY_METADATA_FILENAME
 
 # Network Settings

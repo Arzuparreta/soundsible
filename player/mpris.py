@@ -2,7 +2,7 @@ import logging
 from mpris_server.adapters import MprisAdapter
 from mpris_server.events import EventAdapter
 
-class MusicHubMpris(MprisAdapter):
+class SoundsibleMpris(MprisAdapter):
     """
     MPRIS Interface for internal PlaybackEngine.
     """

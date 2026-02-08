@@ -16,7 +16,7 @@ from shared.constants import DEFAULT_CACHE_SIZE_GB
 class CacheManager:
     """Manages local music file cache with LRU eviction."""
     
-    def __init__(self, cache_dir: str = "~/.cache/sh-music-hub/media", 
+    def __init__(self, cache_dir: str = "~/.cache/soundsible/media", 
                  max_size_gb: int = DEFAULT_CACHE_SIZE_GB):
         self.cache_dir = Path(cache_dir).expanduser()
         self.max_size_bytes = max_size_gb * 1024 * 1024 * 1024

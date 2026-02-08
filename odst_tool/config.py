@@ -24,11 +24,11 @@ CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
-# Fallback to sh-music-hub env if not found
+# Fallback to soundsible env if not found
 if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
     try:
         # Check sibling directory
-        sibling_env = BASE_DIR.parent / "sh-music-hub" / ".env"
+        sibling_env = BASE_DIR.parent / "soundsible" / ".env"
         if sibling_env.exists():
             from dotenv import dotenv_values
             env_vars = dotenv_values(sibling_env)
@@ -57,6 +57,6 @@ DEFAULT_COOKIE_BROWSER = "firefox"
 DOWNLOAD_DELAY_RANGE = (1, 5) # Seconds to wait between downloads to avoid throttling
 
 # Storage Settings
-# Compatible with sh-music-hub
+# Compatible with Soundsible
 LIBRARY_FILENAME = "library.json"
 TRACKS_DIR = "tracks"

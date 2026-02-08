@@ -20,7 +20,7 @@
         info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         info_box.set_halign(Gtk.Align.CENTER)
         
-        self.mini_title = Gtk.Label(label="Music Hub")
+        self.mini_title = Gtk.Label(label="Soundsible")
         self.mini_title.add_css_class("title-2") # Large title
         self.mini_title.set_ellipsize(3)
         self.mini_title.set_max_width_chars(20)

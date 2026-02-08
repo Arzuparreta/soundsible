@@ -1,12 +1,12 @@
 # Music Downloader (ODST Tool)
 
-A powerful tool to download music from YouTube Music, YouTube, or Spotify links. Fully compatible with `sh-music-hub`.
+A powerful tool to download music from YouTube Music, YouTube, or Spotify links. Fully compatible with `Soundsible`.
 
 ## Features
 - **Flexible Selection**: Download everything, specific playlists, or liked songs
 - **Smart Search**: Uses YouTube "Topic" channels for highest quality audio
 - **Multi-Platform Links**: Paste links from Spotify, YouTube, or YouTube Music (can mix sources!)
-- **Storage**: Stores files as `tracks/{hash}.mp3` with `library.json` metadata (sh-music-hub compatible)
+- **Storage**: Stores files as `tracks/{hash}.mp3` with `library.json` metadata (Soundsible compatible)
 - **Metadata**: Embeds ID3 tags and Album Art from Spotify
 - **Parallel Downloads**: Fast multi-threaded processing
 

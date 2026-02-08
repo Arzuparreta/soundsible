@@ -1,4 +1,4 @@
-# Self-Hosted Music Hub
+# Soundsible
 
 A cloud-first, self-hosted music platform that streams your own library from Cloudflare R2 / Backblaze B2 to any Linux device.
 
@@ -63,8 +63,8 @@ sudo pacman -S python-pip ffmpeg mpv python-gobject gtk4 libadwaita
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Arzuparreta/sh-music-hub.git
-   cd sh-music-hub
+   git clone https://github.com/Arzuparreta/soundsible.git
+   cd soundsible
    ```
 
 2. Create and activate virtual environment:
@@ -89,7 +89,7 @@ sudo pacman -S python-pip ffmpeg mpv python-gobject gtk4 libadwaita
 
 ## Using the GUI App (Recommended)
 
-The easiest way to use Music Hub is through the **GTK graphical application**:
+The easiest way to use Soundsible is through the **GTK graphical application**:
 
 ```bash
 ./gui.sh
@@ -126,7 +126,7 @@ pip install mpris-server
 
 ## ODST Tool: Music Downloader
 
-The **ODST Tool** is a dedicated web interface for downloading music from Spotify, YouTube, or YouTube Music links. It downloads music in sh-music-hub compatible format and can sync directly to your cloud storage.
+The **ODST Tool** is a dedicated web interface for downloading music from Spotify, YouTube, or YouTube Music links. It downloads music in Soundsible compatible format and can sync directly to your cloud storage.
 
 To use the ODST Tool:
 
@@ -240,7 +240,7 @@ Scan the QR code on your other device to automatically configure the player.
 ## Project Structure
 
 ```
-sh-music-hub/
+soundsible/
 ├── odst_tool/          # Spotify-to-YouTube downloader CLI
 ├── setup_tool/         # Upload and management CLI
 │   ├── cli.py          # Command-line interface
@@ -355,4 +355,4 @@ Contributions are welcome! Please:
 
 ## Support
 
-For issues and questions, please use [GitHub Issues](https://github.com/Arzuparreta/sh-music-hub/issues).
+For issues and questions, please use [GitHub Issues](https://github.com/Arzuparreta/soundsible/issues).

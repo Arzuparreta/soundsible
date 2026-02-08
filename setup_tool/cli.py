@@ -28,7 +28,7 @@ console = Console()
 @click.version_option(version="1.0.0")
 def cli():
     """
-    🎵 Self-Hosted Music Platform Setup Tool
+    🎵 Soundsible Setup Tool
     
     Upload and manage your music library on cloud storage
     (Cloudflare R2 / Backblaze B2 / Generic S3)
@@ -481,10 +481,10 @@ def fetch_missing_covers(force):
     [Recommended] Download missing covers to local cache.
     
     This command DOES NOT modify your audio files. It simply scans your library and
-    downloads missing cover art to your local computer's cache (~/.cache/sh-music-hub/covers/).
+    downloads missing cover art to your local computer's cache (~/.cache/soundsible/covers/).
     This is fast and safe.
     Downloads cover art for all tracks in the library and saves them
-    locally to ~/.cache/sh-music-hub/covers/.
+    locally to ~/.cache/soundsible/covers/.
     """
     from .cache_populate import CachePopulator
     

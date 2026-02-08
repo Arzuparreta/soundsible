@@ -1,5 +1,5 @@
 """
-Self-Hosted Music Platform
+Soundsible
 
 A cloud-first music platform enabling users to upload their own audio files 
 to S3-compatible storage (Cloudflare R2, Backblaze B2, or generic S3) and 

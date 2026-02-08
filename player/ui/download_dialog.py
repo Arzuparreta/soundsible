@@ -15,7 +15,7 @@ try:
 except ImportError:
     # Fallback: Check for adjacent 'ods-tool' or 'odst-tool' folders
     current_dir = Path(__file__).resolve().parent
-    root_dir = current_dir.parent.parent # sh-music-hub/player/ui -> sh-music-hub
+    root_dir = current_dir.parent.parent # soundsible/player/ui -> soundsible
     
     potential_names = ['odst_tool', 'ods-tool', 'ods_tool']
     found = False
@@ -35,7 +35,7 @@ except ImportError:
              pass
 
     # Check ADJACENT to root (user case: cloned side-by-side)
-    # ../sh-music-hub -> ../ods-tool
+    # ../soundsible -> ../ods-tool
     parent_of_root = root_dir.parent
     for name in potential_names:
         p = parent_of_root / name

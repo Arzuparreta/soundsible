@@ -1,5 +1,5 @@
 """
-Data models compatible with sh-music-hub.
+Data models compatible with Soundsible.
 """
 
 from dataclasses import dataclass, asdict, field
@@ -12,7 +12,7 @@ from datetime import datetime
 class Track:
     """
     Represents a single music track with metadata.
-    Compatible with sh-music-hub Track model.
+    Compatible with Soundsible Track model.
     """
     id: str
     title: str
@@ -48,7 +48,7 @@ class Track:
 class LibraryMetadata:
     """
     Represents the entire music library metadata.
-    Compatible with sh-music-hub LibraryMetadata model.
+    Compatible with Soundsible LibraryMetadata model.
     """
     version: int
     tracks: List[Track]

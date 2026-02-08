@@ -18,7 +18,7 @@ class CloudSync:
         """
         Load cloud credentials. 
         Prioritizes environment variables (set by Settings UI).
-        Fallbacks to reading sh-music-hub/.env if available.
+        Fallbacks to reading soundsible/.env if available.
         """
         config = {
             'account_id': os.getenv('R2_ACCOUNT_ID'),
@@ -29,12 +29,12 @@ class CloudSync:
         
         # If missing, try to find neighbor project .env
         if not all(config.values()):
-            possible_path = Path('../sh-music-hub/.env')
+            possible_path = Path('../soundsible/.env')
             if possible_path.exists():
                 from dotenv import dotenv_values
                 env_vals = dotenv_values(possible_path)
                 
-                # sh-music-hub naming might be slightly different or same.
+                # soundsible naming might be slightly different or same.
                 # Usually: REPOSITORY_R2_ACCOUNT_ID etc.
                 # Based on user context, we might guess or just look for standard R2 keys.
                 # For now let's check standard keys.

@@ -16,7 +16,7 @@ else
     exit 1
 fi
 
-echo "🚀 Starting Music Hub Web Interface..."
+echo "🚀 Starting Soundsible Web Interface..."
 echo "📂 Loading from: $(pwd)"
 echo "----------------------------------------"
 

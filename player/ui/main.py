@@ -151,12 +151,12 @@ class MusicApp(Adw.Application):
         if hasattr(self, 'win'):
             about = Adw.AboutWindow(
                 transient_for=self.win,
-                application_name="Music Hub",
+                application_name="Soundsible",
                 application_icon="folder-music-symbolic",
-                developer_name="Music Hub Team",
+                developer_name="Soundsible Team",
                 version="1.0.0",
-                website="https://github.com/Arzuparreta/sh-music-hub",
-                issue_url="https://github.com/Arzuparreta/sh-music-hub/issues",
+                website="https://github.com/Arzuparreta/soundsible",
+                issue_url="https://github.com/Arzuparreta/soundsible/issues",
                 license_type=Gtk.License.MIT_X11
             )
             about.present()
@@ -316,7 +316,7 @@ class MainWindow(Adw.ApplicationWindow):
         super().__init__(*args, **kwargs)
         
         print("DEBUG: MainWindow initializing...")
-        self.set_title("Music Hub")
+        self.set_title("Soundsible")
         self.set_default_size(1000, 700)
         
         # Queue Manager
@@ -341,11 +341,11 @@ class MainWindow(Adw.ApplicationWindow):
         # MPRIS Integration (optional - requires mpris_server package)
         try:
             print("DEBUG: Initializing MPRIS...")
-            from player.mpris import MusicHubMpris
+            from player.mpris import SoundsibleMpris
             from mpris_server import Server
             
-            self.mpris = MusicHubMpris(self.engine, self)
-            self.mpris_server = Server('MusicHub', adapter=self.mpris)
+            self.mpris = SoundsibleMpris(self.engine, self)
+            self.mpris_server = Server('Soundsible', adapter=self.mpris)
             self.mpris_server.publish()
             print("✓ MPRIS integration enabled (media keys available)")
         except ImportError as e:
@@ -361,7 +361,7 @@ class MainWindow(Adw.ApplicationWindow):
         
         # Header Bar
         header = Adw.HeaderBar()
-        self.title_widget = Adw.WindowTitle(title="Music Hub", subtitle="Local Library")
+        self.title_widget = Adw.WindowTitle(title="Soundsible", subtitle="Local Library")
         header.set_title_widget(self.title_widget)
         main_box.append(header)
         
@@ -1305,7 +1305,7 @@ class MainWindow(Adw.ApplicationWindow):
             print("✓ Setup complete! Reloading player...")
             # TODO: Reload the main UI without restarting
             # For now, just show a message
-            self.set_title("Music Hub - Please restart the app")
+            self.set_title("Soundsible - Please restart the app")
         else:
             # Wizard was cancelled - close app
             print("Setup cancelled. Exiting...")
@@ -1336,7 +1336,7 @@ class MainWindow(Adw.ApplicationWindow):
         return None
 
 if __name__ == "__main__":
-    app = MusicApp(application_id="com.shmusichub.player")
+    app = MusicApp(application_id="com.soundsible.player")
     app.run(None)
 
 

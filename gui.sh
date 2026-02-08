@@ -153,7 +153,7 @@ install_dependencies() {
 
 # --- Function: Run Application ---
 PYTHON="$VENV_DIR/bin/python"
-echo "[LAUNCHING] Starting Music Hub GUI..."
+echo "[LAUNCHING] Starting Soundsible..."
 
 # Run the app and capture exit code
 "$PYTHON" -c "from player.ui import run; run()"

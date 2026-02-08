@@ -20,7 +20,7 @@ class SetupWizard(Adw.Window):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
-        self.set_title("Music Hub Setup")
+        self.set_title("Soundsible Setup")
         self.set_default_size(700, 550)
         self.set_modal(True)
         
@@ -62,7 +62,7 @@ class SetupWizard(Adw.Window):
         header.set_margin_start(24)
         header.set_margin_end(24)
         
-        title = Gtk.Label(label="Music Hub Setup")
+        title = Gtk.Label(label="Soundsible Setup")
         title.add_css_class("title-1")
         header.append(title)
         
@@ -130,7 +130,7 @@ class SetupWizard(Adw.Window):
         icon.add_css_class("accent")
         box.append(icon)
         
-        title = Gtk.Label(label="Welcome to Music Hub!")
+        title = Gtk.Label(label="Welcome to Soundsible!")
         title.add_css_class("title-1")
         box.append(title)
         
@@ -417,7 +417,7 @@ class SetupWizard(Adw.Window):
         title.add_css_class("title-1")
         box.append(title)
         
-        desc = Gtk.Label(label="Your cloud storage is configured.\nClick Finish to start using Music Hub!")
+        desc = Gtk.Label(label="Your cloud storage is configured.\nClick Finish to start using Soundsible!")
         desc.set_justify(Gtk.Justification.CENTER)
         box.append(desc)
         

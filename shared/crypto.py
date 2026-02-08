@@ -63,7 +63,7 @@ class CredentialManager:
         password = f"{machine_id}-{username}"
         
         # Use fixed salt (less secure but allows consistent key generation)
-        salt = b'sh-music-hub-salt-v1'
+        salt = b'soundsible-salt-v1'
         
         return CredentialManager.generate_key_from_password(password, salt)
     
