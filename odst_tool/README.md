@@ -50,29 +50,36 @@ You can mix links from different platforms in the same batch!
 
 ### CLI Helper Script
 
-**Run via Helper Script:**
+For command-line usage with your full Spotify library:
+
 ```bash
-./run.sh --help
+./downloader_cli.sh --help
 ```
 
 ### Examples
 
 **Download Everything (Liked + Playlists + Albums):**
 ```bash
-./run.sh --source all
+./downloader_cli.sh --source all
 ```
 
 **Interactive Playlist Selection:**
 ```bash
-./run.sh --source playlists --interactive
+./downloader_cli.sh --source playlists --interactive
 ```
 
 **Download Specific Playlist:**
 ```bash
-./run.sh --source playlist --playlist-name "My Workout Mix"
+./downloader_cli.sh --source playlist --playlist-name "My Workout Mix"
 ```
 
-**Advanced Usage:**
+**Download a Direct URL (YouTube or Spotify):**
 ```bash
-./run.sh --output ~/Music/MyLibrary --workers 8
+./downloader_cli.sh --url "https://open.spotify.com/track/..."
 ```
+
+**Advanced Usage (Custom output, more workers):**
+```bash
+./downloader_cli.sh --output ~/Music/MyLibrary --workers 8 --source all
+```
+

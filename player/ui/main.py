@@ -155,8 +155,8 @@ class MusicApp(Adw.Application):
                 application_icon="folder-music-symbolic",
                 developer_name="Music Hub Team",
                 version="1.0.0",
-                website="https://github.com/yourusername/sh-music-hub",
-                issue_url="https://github.com/yourusername/sh-music-hub/issues",
+                website="https://github.com/Arzuparreta/sh-music-hub",
+                issue_url="https://github.com/Arzuparreta/sh-music-hub/issues",
                 license_type=Gtk.License.MIT_X11
             )
             about.present()

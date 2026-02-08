@@ -63,7 +63,7 @@ sudo pacman -S python-pip ffmpeg mpv python-gobject gtk4 libadwaita
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/sh-music-hub.git
+   git clone https://github.com/Arzuparreta/sh-music-hub.git
    cd sh-music-hub
    ```
 
