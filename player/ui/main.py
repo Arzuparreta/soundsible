@@ -15,8 +15,18 @@ from player.favourites_manager import FavouritesManager
 from player.ui.tab_view import TabView
 from .volume_knob import VolumeKnob
 from pathlib import Path
-import os
 import json
+import os
+
+
+class UIConstants:
+    """UI dimension constants for consistent sizing."""
+    COVER_ART_SIZE = 48
+    SIDEBAR_WIDTH = 300
+    PROGRESS_BAR_MIN_WIDTH = 200  # Increased from 150 for better usability
+    TITLE_MIN_WIDTH = 50
+    TITLE_MAX_WIDTH = 250  # Increased for better readability
+
 
 class MusicApp(Adw.Application):
     def __init__(self, **kwargs):
@@ -411,8 +421,8 @@ class MainWindow(Adw.ApplicationWindow):
         
         # 1. Cover Art (clickable)
         self.cover_art = Gtk.Image()
-        self.cover_art.set_pixel_size(48)
-        self.cover_art.set_size_request(48, 48)
+        self.cover_art.set_pixel_size(UIConstants.COVER_ART_SIZE)
+        self.cover_art.set_size_request(UIConstants.COVER_ART_SIZE, UIConstants.COVER_ART_SIZE)
         self.cover_art.add_css_class("card")
         self.cover_art.set_from_icon_name("emblem-music-symbolic")
         self.cover_art.set_margin_end(12)
@@ -433,8 +443,8 @@ class MainWindow(Adw.ApplicationWindow):
         # ScrolledWindow for Title (Marquee)
         self.title_scroll = Gtk.ScrolledWindow()
         self.title_scroll.set_policy(Gtk.PolicyType.EXTERNAL, Gtk.PolicyType.NEVER)
-        self.title_scroll.set_min_content_width(50) # Allow shrinking significantly
-        self.title_scroll.set_max_content_width(200) # Cap growth
+        self.title_scroll.set_min_content_width(UIConstants.TITLE_MIN_WIDTH)
+        self.title_scroll.set_max_content_width(UIConstants.TITLE_MAX_WIDTH)
         self.title_scroll.set_propagate_natural_width(True)
         
         self.title_label = Gtk.Label(label="")
@@ -460,7 +470,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # 3. Progress Bar (Scale) - Moved Left
         self.progress_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL)
-        self.progress_scale.set_size_request(150, -1) # Ensure minimum usable width matches user request
+        self.progress_scale.set_size_request(UIConstants.PROGRESS_BAR_MIN_WIDTH, -1)
         self.progress_scale.set_draw_value(False)
         self.progress_scale.set_range(0, 100) # Default, updated on play
         self.progress_scale.set_hexpand(True) # Fill remaining space
@@ -1208,7 +1218,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Sidebar content
         self.queue_view = QueueView(self.queue_manager)
-        self.queue_view.set_size_request(300, -1) # Set fixed width for sidebar
+        self.queue_view.set_size_request(UIConstants.SIDEBAR_WIDTH, -1)
         self.queue_view.set_hexpand(False)
         self.sidebar_box.append(self.queue_view)
         
@@ -1275,20 +1285,6 @@ class MainWindow(Adw.ApplicationWindow):
         # Set focus to main window (removes focus from search)
         self.set_focus(None)
     
-    def _on_settings_clicked(self, action, param):
-        """Open settings dialog."""
-        app = self.get_application()
-        print(f"DEBUG: MainWindow._on_settings_clicked - app = {app}")
-        print(f"DEBUG: MainWindow._on_settings_clicked - app.set_theme = {app.set_theme}")
-        print(f"DEBUG: MainWindow._on_settings_clicked - app.current_theme = {app.current_theme}")
-        settings_dialog = SettingsDialog(
-            parent=self,
-            library_manager=self.lib_manager,
-            on_theme_change=app.set_theme,
-            current_theme=app.current_theme
-        )
-        print(f"DEBUG: Created SettingsDialog, on_theme_change = {settings_dialog.on_theme_change}")
-        settings_dialog.present()
 
 
     

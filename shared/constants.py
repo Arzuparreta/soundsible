@@ -43,3 +43,14 @@ DEFAULT_CONFIG_DIR = "~/.config/sh-music-hub"
 DEFAULT_CACHE_DIR = "~/.cache/sh-music-hub"
 DEFAULT_DATA_DIR = "~/.local/share/sh-music-hub"
 DEFAULT_LIBRARY_PATH = DEFAULT_CONFIG_DIR + "/" + LIBRARY_METADATA_FILENAME
+
+# Network Settings
+DEFAULT_NETWORK_TIMEOUT = 30  # seconds
+DEFAULT_DOWNLOAD_CHUNK_SIZE = 8192  # bytes
+
+# UI Constants
+DEFAULT_COVER_ART_SIZE = 48  # pixels
+DEFAULT_SIDEBAR_WIDTH = 300  # pixels
+DEFAULT_PROGRESS_BAR_MIN_WIDTH = 200  # pixels
+DEFAULT_TITLE_MIN_WIDTH = 50  # pixels
+DEFAULT_TITLE_MAX_WIDTH = 250  # pixels

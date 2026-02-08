@@ -151,7 +151,8 @@ class CacheManager:
                     if current_size + new_bytes <= self.max_size_bytes:
                         break
                 self.conn.commit()
-            except Exception: pass
+            except Exception as e:
+                print(f"DEBUG: Error during cache space management: {e}")
 
     def get_current_usage(self) -> int:
         """Get total bytes used by cache."""
@@ -160,13 +161,16 @@ class CacheManager:
                 cursor = self.conn.execute("SELECT SUM(file_size) FROM cache_entries")
                 result = cursor.fetchone()[0]
                 return result if result else 0
-            except: return 0
+            except Exception as e:
+                print(f"DEBUG: Error calculating cache usage: {e}")
+                return 0
 
     def clear_cache(self):
         """Delete all cached files and reset DB."""
         try:
              shutil.rmtree(self.cache_dir)
-        except: pass
+        except Exception as e:
+            print(f"DEBUG: Error removing cache directory: {e}")
         self._init_cache()
         
         with self.lock:
@@ -190,7 +194,8 @@ class CacheManager:
                     try:
                         if os.path.exists(file_path):
                             os.remove(file_path)
-                    except OSError: pass
+                    except OSError as e:
+                        print(f"DEBUG: Failed to remove cache file: {e}")
                 
                 self.conn.execute("DELETE FROM cache_entries WHERE track_id = ?", (track_id,))
                 self.conn.commit()

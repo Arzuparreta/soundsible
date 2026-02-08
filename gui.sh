@@ -10,7 +10,7 @@ MARKER_FILE="$VENV_DIR/.installed_requirements_hash"
 
 # --- Function: Check for Python 3 ---
 if ! command -v python3 &> /dev/null; then
-    echo "❌ Error: Python 3 could not be found."
+    echo "[ERROR] Error: Python 3 could not be found."
     echo "   Please install Python 3 (e.g., 'sudo apt install python3' on Ubuntu/Debian)"
     exit 1
 fi
@@ -21,9 +21,9 @@ setup_env() {
 
     # 1. Create venv if missing
     if [ ! -d "$VENV_DIR" ]; then
-        echo "✨ First-time setup detected. Initializing..."
-        echo "📦 Creating virtual environment in '$VENV_DIR'..."
-        python3 -m venv "$VENV_DIR" || { echo "❌ Failed to create virtual environment."; exit 1; }
+        echo "· First-time setup detected. Initializing..."
+        echo "· Creating virtual environment in '$VENV_DIR'..."
+        python3 -m venv "$VENV_DIR" || { echo "[ERROR] Failed to create virtual environment."; exit 1; }
         NEEDS_INSTALL=true
     fi
 
@@ -40,12 +40,12 @@ setup_env() {
             NEEDS_INSTALL=true
         fi
     else
-        echo "⚠️  Warning: $REQUIREMENTS not found."
+        echo "⚠️[WARNING] Warning: $REQUIREMENTS not found."
     fi
 
     # 3. Install dependencies if needed
     if [ "$NEEDS_INSTALL" = true ]; then
-        echo "⬇️  Installing/Updating dependencies from $REQUIREMENTS..."
+        echo "⬇️[DOWNLOADING] Installing/Updating dependencies from $REQUIREMENTS..."
         "$VENV_DIR/bin/pip" install --upgrade pip
         "$VENV_DIR/bin/pip" install -r "$REQUIREMENTS" || { echo "❌ Failed to install dependencies."; exit 1; }
         
@@ -53,7 +53,7 @@ setup_env() {
         if [ -f "$REQUIREMENTS" ]; then
              md5sum "$REQUIREMENTS" | cut -d ' ' -f 1 > "$MARKER_FILE"
         fi
-        echo "✅ Setup complete."
+        echo "[DONE] Setup complete."
     fi
 }
 
@@ -131,7 +131,7 @@ install_dependencies() {
     
     # Prompt user for installation
     echo ""
-    echo "📦 Would you like to automatically install these dependencies?"
+    echo "[?] Would you like to automatically install these dependencies?"
     echo "   Command: $install_cmd"
     read -p "   Install now? [Y/n] " -n 1 -r
     echo ""
@@ -139,21 +139,21 @@ install_dependencies() {
     if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
         echo "⬇️  Installing dependencies..."
         if eval "$install_cmd"; then
-            echo "✅ Dependencies installed successfully!"
+            echo "[DONE] Dependencies installed successfully!"
             return 0
         else
-            echo "❌ Failed to install dependencies."
+            echo "[ERROR] Failed to install dependencies."
             return 1
         fi
     else
-        echo "⏭️  Skipping automatic installation."
+        echo "⏭️[SKIP] Skipping automatic installation."
         return 1
     fi
 }
 
 # --- Function: Run Application ---
 PYTHON="$VENV_DIR/bin/python"
-echo "🚀 Starting Music Hub GUI..."
+echo "[LAUNCHING] Starting Music Hub GUI..."
 
 # Run the app and capture exit code
 "$PYTHON" -c "from player.ui import run; run()"
@@ -162,7 +162,7 @@ EXIT_CODE=$?
 # --- Function: Error Diagnostics ---
 if [ $EXIT_CODE -ne 0 ]; then
     echo ""
-    echo "⚠️  Application crashed (Exit Code: $EXIT_CODE)"
+    echo "[WARNING] Application crashed (Exit Code: $EXIT_CODE)"
     
     # Detect the distribution
     DISTRO=$(detect_distro)
@@ -172,7 +172,7 @@ if [ $EXIT_CODE -ne 0 ]; then
     # We supress stderr to keep output clean, we just want the exit code
     
     if ! "$PYTHON" -c "import gi" &> /dev/null; then
-        echo "❌ MISSING DEPENDENCY: GTK/PyGObject"
+        echo "[ERROR] MISSING DEPENDENCY: GTK/PyGObject"
         echo "   Your system is missing the GTK libraries required for the GUI."
         
         # Try automated installation
@@ -182,13 +182,13 @@ if [ $EXIT_CODE -ne 0 ]; then
             # Show manual instructions as fallback
             echo ""
             echo "   Manual installation instructions:"
-            echo "   👉 Debian/Ubuntu: sudo apt install libcairo2-dev libgirepository1.0-dev pkg-config python3-dev"
-            echo "   👉 Fedora:        sudo dnf install cairo-devel gobject-introspection-devel cairo-gobject-devel python3-devel pkg-config gcc"
-            echo "   👉 Arch Linux:    sudo pacman -S python-gobject gtk3"
+            echo "   · Debian/Ubuntu: sudo apt install libcairo2-dev libgirepository1.0-dev pkg-config python3-dev"
+            echo "   · Fedora:        sudo dnf install cairo-devel gobject-introspection-devel cairo-gobject-devel python3-devel pkg-config gcc"
+            echo "   · Arch Linux:    sudo pacman -S python-gobject gtk3"
         fi
 
     elif ! "$PYTHON" -c "import mpv" &> /dev/null; then
-        echo "❌ MISSING DEPENDENCY: MPV"
+        echo "[ERROR] MISSING DEPENDENCY: MPV"
         echo "   Your system is missing the MPV library required for playback."
         
         # Try automated installation
@@ -198,13 +198,13 @@ if [ $EXIT_CODE -ne 0 ]; then
             # Show manual instructions as fallback
             echo ""
             echo "   Manual installation instructions:"
-            echo "   👉 Debian/Ubuntu: sudo apt install libmpv1"
-            echo "   👉 Fedora:        sudo dnf install mpv-libs"
-            echo "   👉 Arch Linux:    sudo pacman -S mpv"
+            echo "   · Debian/Ubuntu: sudo apt install libmpv1"
+            echo "   · Fedora:        sudo dnf install mpv-libs"
+            echo "   · Arch Linux:    sudo pacman -S mpv"
         fi
 
     elif ! "$PYTHON" -c "import gi; gi.require_version('Adw', '1')" &> /dev/null; then
-        echo "❌ MISSING DEPENDENCY: LibAdwaita"
+        echo "[ERROR] MISSING DEPENDENCY: LibAdwaita"
         echo "   Your system is missing LibAdwaita (Adw 1), required for the UI."
         
         # Try automated installation
@@ -214,9 +214,9 @@ if [ $EXIT_CODE -ne 0 ]; then
             # Show manual instructions as fallback
             echo ""
             echo "   Manual installation instructions:"
-            echo "   👉 Debian/Ubuntu: sudo apt install gir1.2-adw-1"
-            echo "   👉 Fedora:        sudo dnf install libadwaita"
-            echo "   👉 Arch Linux:    sudo pacman -S libadwaita"
+            echo "   · Debian/Ubuntu: sudo apt install gir1.2-adw-1"
+            echo "   · Fedora:        sudo dnf install libadwaita"
+            echo "   · Arch Linux:    sudo pacman -S libadwaita"
         fi
     else
         echo "   Please check the error output above for details."
@@ -225,7 +225,7 @@ if [ $EXIT_CODE -ne 0 ]; then
     # If dependencies were installed, try running the GUI again
     if [ "$INSTALLED" = true ]; then
         echo ""
-        echo "🔄 Retrying GUI startup..."
+        echo "[RETRY] Retrying GUI startup..."
         exec "$0"  # Re-run this script
     fi
     

@@ -8,12 +8,6 @@ class TrackObject(GObject.Object):
     """
     __gtype_name__ = 'TrackObject'
     
-    def __init__(self, track):
-        super().__init__()
-        self.track = track
-        # Expose properties for binding if needed, 
-        # but for simple CellFactories we can access .track directly
-
     @GObject.Property(type=str)
     def title(self):
         return self.track.title
@@ -418,11 +412,6 @@ class LibraryView(Gtk.Box):
                 if item.track.id == track.id:
                     found_idx = i
                     break
-            
-            if found_idx >= 0:
-                self.store.remove(found_idx)
-                print(f"Removed '{track.title}' from UI list.")
-            
             
             if found_idx >= 0:
                 self.store.remove(found_idx)

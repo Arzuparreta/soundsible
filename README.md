@@ -2,78 +2,7 @@
 
 A cloud-first, self-hosted music platform that streams your own library from Cloudflare R2 / Backblaze B2 to any Linux device.
 
-## Quick Start Cheatsheet
-
-### 1. Setup (Run once)
-```bash
-# Install system dependency
-sudo apt install libmpv1
-
-# Setup credentials & create bucket
-python -m setup_tool init --guided
-```
-
-### 2. Upload music (You don't need to use this, you can use the built-in uploader in the app settings, but this one iterface is a bit better to upload high )
-```bash
-# Web Interface (Easiest Method)
-./start_web.sh
-
-# CLI Upload (Advanced)
-python -m setup_tool upload ~/Music --parallel 4
-```
-
-### 3. Play Music
-
-```bash
-# GUI Player (Recommended)
-./gui.sh
-
-# List all tracks (CLI)
-./player.sh list
-
-# Start Player (CLI/TUI)
-./player.sh play
-
-# Play match
-./player.sh play "Daft Punk"
-```
-
-### 4. Optional: Enable Media Keys
-
-For keyboard media control support in the GUI:
-
-```bash
-# Activate virtual environment first (choose your shell)
-source venv/bin/activate       # Bash/Zsh
-source venv/bin/activate.fish  # Fish shell
-
-# Then install MPRIS support
-pip install mpris-server
-
-# Or check AUR for system package (Arch users)
-# yay -S python-mpris-server
-```
-
-### 5. Offline / Downloads
-```bash
-# Download tracks for offline use
-./player.sh download "Jazz"
-
-# Check cache usage
-./player.sh cache-status
-```
-
----
-
 ## Features
-
-### Setup Tool
-- **Multi-provider support**: Choose between Cloudflare R2, Backblaze B2, or other S3-compatible services
-- **Guided setup wizard**: Step-by-step account configuration and bucket creation
-- **Automatic compression**: Convert lossless formats (FLAC/WAV) to MP3/OGG for efficient streaming
-- **Deduplication**: Hash-based duplicate detection saves storage space
-- **Parallel uploads**: Fast multi-threaded file uploads with progress tracking
-- **QR code pairing**: Easy multi-device setup
 
 ### Music Player 
 - **Streaming playback**: Stream music directly from cloud storage 
@@ -84,6 +13,14 @@ pip install mpris-server
 - **MPRIS integration**: Media key support (optional) 
 - **Queue management**: Playlist features (coming soon)
 - **Search/Filter**: In-app library search (coming soon)
+
+### Setup Tool
+- **Multi-provider support**: Choose between Cloudflare R2, Backblaze B2, or other S3-compatible services
+- **Guided setup wizard**: Step-by-step account configuration and bucket creation
+- **Automatic compression**: Convert lossless formats (FLAC/WAV) to MP3/OGG for efficient streaming
+- **Deduplication**: Hash-based duplicate detection saves storage space
+- **Parallel uploads**: Fast multi-threaded file uploads with progress tracking
+- **QR code pairing**: Easy multi-device setup
 
 ## Architecture
 
@@ -96,16 +33,16 @@ pip install mpris-server
 └──────────────────┘      └────────────────────┘      └─────────────────┘
 ```
 
-## Installation
+---
 
-### Prerequisites
+## Prerequisites
 
 - Python 3.8 or higher
 - ffmpeg (for audio conversion)
 - **libmpv1** (required for music playback)
 - **python-mpris-server** (optional, for media key support)
 
-#### System Packages
+### System Packages
 
 Install required system dependencies:
 
@@ -120,13 +57,13 @@ sudo dnf install python3-pip ffmpeg mpv-libs python3-gobject gtk4 libadwaita
 sudo pacman -S python-pip ffmpeg mpv python-gobject gtk4 libadwaita
 ```
 
-**Note:** The player requires GTK 4 and libadwaita for the GUI.
+---
 
-### Setup
+## Installation
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Arzuparreta/sh-music-hub.git
+   git clone https://github.com/yourusername/sh-music-hub.git
    cd sh-music-hub
    ```
 
@@ -139,9 +76,6 @@ sudo pacman -S python-pip ffmpeg mpv python-gobject gtk4 libadwaita
    
    # Fish shell users:
    source venv/bin/activate.fish
-   
-   # Windows:
-   venv\Scripts\activate
    ```
    
    > **Note for Arch users:** Due to PEP 668, you must use a virtual environment for pip installations. Always activate the venv before installing Python packages.
@@ -151,7 +85,113 @@ sudo pacman -S python-pip ffmpeg mpv python-gobject gtk4 libadwaita
    pip install -r requirements.txt
    ```
 
-## Usage
+---
+
+## Using the GUI App (Recommended)
+
+The easiest way to use Music Hub is through the **GTK graphical application**:
+
+```bash
+./gui.sh
+```
+
+The GUI includes everything you need:
+- 🎵 **Music Player** — Stream and play your library
+- ⬇️ **Download & Push (Smart)** — Download music from Spotify/YouTube and upload to cloud *(Menu → Download & Push)*
+- ⬆️ **Upload Local Files** — Upload local music files to cloud *(Menu → Upload Local Files)*
+- ⚙️ **Setup Wizard** — Configure cloud storage credentials *(Menu → Setup Wizard)*
+- 🎨 **Themes** — Choose between System, Light, Dark, or ODST themes
+
+### First-Time Setup
+
+On first launch, you'll be prompted to run the **Setup Wizard** to configure your cloud storage. This only needs to be done once.
+
+### Optional: Enable Media Keys
+
+For keyboard media control (play/pause/next/previous keys):
+
+```bash
+# Activate virtual environment first
+source venv/bin/activate       # Bash/Zsh
+source venv/bin/activate.fish  # Fish shell
+
+# Then install MPRIS support
+pip install mpris-server
+
+# Or check AUR for system package (Arch users)
+# yay -S python-mpris-server
+```
+
+---
+
+## ODST Tool: Spotify Library Downloader
+
+The **odst_tool** is a standalone CLI for downloading your Spotify library by finding matching tracks on YouTube. It's sh-music-hub compatible and downloads directly to the correct format.
+
+> **Note:** This is different from the GUI's "Download & Push" feature, which provides a simpler graphical interface with the same functionality.
+
+See [odst_tool/README.md](odst_tool/README.md) for detailed usage instructions.
+
+### Quick Example
+
+```bash
+cd odst_tool
+
+# Setup (one-time)
+./setup_env.sh
+cp .env.example .env
+# Edit .env with your Spotify credentials
+
+# Download your entire library
+./run.sh --source all
+
+# Interactive playlist selection
+./run.sh --source playlists --interactive
+
+# Download specific playlist
+./run.sh --source playlist --playlist-name "My Workout Mix"
+```
+
+---
+
+## Alternative: Upload via Web Interface
+
+For uploading local files to your cloud library through a web browser:
+
+```bash
+./start_web.sh
+```
+
+Then open the displayed URL (usually `http://localhost:5000`) in your browser.
+
+---
+
+## Advanced: CLI/Terminal Player
+
+For terminal-based playback:
+
+```bash
+# List all tracks
+./player.sh list
+
+# Start interactive player (TUI)
+./player.sh play
+
+# Play matching tracks
+./player.sh play "Daft Punk"
+
+# Download tracks for offline use
+./player.sh download "Jazz"
+
+# Check cache usage
+./player.sh cache-status
+```
+
+---
+
+## Advanced: Setup Tool CLI
+
+For advanced configuration and batch uploads via command line:
 
 ### Initial Setup
 
@@ -194,6 +234,8 @@ python -m setup_tool.cli export-config --format qr
 
 Scan the QR code on your other device to automatically configure the player.
 
+---
+
 ## Storage Provider Comparison
 
 | Provider | Free Tier | Bandwidth Cost | Credit Card Required | Best For |
@@ -204,17 +246,20 @@ Scan the QR code on your other device to automatically configure the player.
 
 **Recommendation**: Use Cloudflare R2 for zero bandwidth costs when streaming music.
 
+---
+
 ## Project Structure
 
 ```
 sh-music-hub/
-├── setup-tool/          # Upload and management CLI
+├── odst_tool/          # Spotify-to-YouTube downloader CLI
+├── setup_tool/         # Upload and management CLI
 │   ├── cli.py          # Command-line interface
 │   ├── audio.py        # Audio processing
 │   ├── storage_provider.py  # Abstract provider interface
 │   ├── cloudflare_r2.py     # R2 implementation
 │   └── backblaze_b2.py      # B2 implementation
-├── player/             # GTK music player (Phase 4-6)
+├── player/             # GTK music player
 ├── shared/             # Shared utilities
 │   ├── models.py       # Data models
 │   ├── constants.py    # Constants
@@ -222,23 +267,27 @@ sh-music-hub/
 └── tests/              # Unit and integration tests
 ```
 
+---
+
 ## Development Status
 
- **Phase 0: Foundation** (Complete)
+✅ **Phase 0: Foundation** (Complete)
 - Project structure and virtual environment
 - Data models and shared utilities
 - S3 storage provider abstraction
 - Cloudflare R2 and Backblaze B2 implementations
 - Audio metadata extraction and compression
 
- **Phase 1: Setup Tool Core** (In Progress)
+✅ **Phase 1: Setup Tool Core** (Complete)
 - CLI interface with guided setup
 - Parallel upload engine
 - Configuration management
 
- **Phase 2-3: Upload Engine & Web Interface** (Planned)
+✅ **Phase 2-3: Upload Engine & Web Interface** (Complete)
 
- **Phase 4-6: Music Player** (Planned)
+✅ **Phase 4-6: Music Player** (Complete)
+
+---
 
 ## Legal & Security
 
