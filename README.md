@@ -278,21 +278,81 @@ sh-music-hub/
 
 ---
 
-## Legal & Security
+## Legal & Disclaimer
 
-- **Content-agnostic**: This platform does not distribute copyrighted material
-- **User responsibility**: Users must have rights to upload and stream their content
-- **Credential security**: Cloud storage credentials are encrypted locally
-- **Privacy**: No telemetry or data collection
+> **⚠️ IMPORTANT: This software is provided for personal, educational, and research purposes only.**
+
+### Copyright & Fair Use
+
+- **No copyrighted content is distributed** — This software does not host, distribute, or provide access to any copyrighted material
+- **User responsibility** — Users are solely responsible for ensuring they have the legal right to download, upload, and stream any content they access through this software
+- **Personal use** — This tool is intended for personal music library management, similar to how a web browser accesses publicly available content
+- **No DRM circumvention** — This software does not bypass, decrypt, or circumvent any Digital Rights Management (DRM) or technical protection measures
+
+### Terms of Service
+
+Using this software to download content may violate the Terms of Service of third-party platforms (YouTube, Spotify, etc.). While ToS violations are generally contractual matters (not criminal), users should review and understand the terms of any service they interact with.
+
+### Security
+
+- **Credential security** — Cloud storage credentials are encrypted locally using industry-standard cryptography
+- **Privacy** — No telemetry, analytics, or data collection of any kind
+
+### Liability
+
+THE AUTHORS AND COPYRIGHT HOLDERS SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF THIS SOFTWARE. Users assume all risk and responsibility for their usage.
+
+### DMCA Notice
+
+If you are a copyright holder and believe this software facilitates infringement of your rights, please open a GitHub issue with details. We are committed to addressing legitimate concerns.
+
+---
+
+## Acknowledgements & Credits
+
+This project is built upon the incredible work of open-source communities. We gratefully acknowledge:
+
+### Core Dependencies
+
+| Library | License | Description |
+|---------|---------|-------------|
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Unlicense | YouTube video/audio downloader |
+| [spotipy](https://github.com/spotipy-dev/spotipy) | MIT | Spotify Web API client |
+| [mutagen](https://github.com/quodlibet/mutagen) | GPL-2.0 | Audio metadata handling |
+| [Flask](https://github.com/pallets/flask) | BSD-3-Clause | Web framework |
+| [boto3](https://github.com/boto/boto3) | Apache-2.0 | AWS/S3 SDK |
+| [PyGObject](https://pygobject.readthedocs.io/) | LGPL-2.1 | GTK Python bindings |
+| [python-mpv](https://github.com/jaseg/python-mpv) | AGPL-3.0 | mpv media player bindings |
+| [Rich](https://github.com/Textualize/rich) | MIT | Terminal formatting |
+| [Pillow](https://github.com/python-pillow/Pillow) | HPND | Image processing |
+
+### Special Thanks
+
+- **[yt-dlp Team](https://github.com/yt-dlp/yt-dlp)** — For maintaining an exceptional download tool
+- **[mpv](https://mpv.io/)** — For the powerful media player engine
+- **[GTK](https://gtk.org/)** / **[GNOME](https://www.gnome.org/)** — For the Adwaita UI framework
+- **[Cloudflare](https://www.cloudflare.com/)** & **[Backblaze](https://www.backblaze.com/)** — For affordable cloud storage
+
+---
 
 ## License
 
-MIT License - See LICENSE file for details
+MIT License — See [LICENSE](LICENSE) file for full text.
+
+---
 
 ## Contributing
 
-Contributions welcome! Please read CONTRIBUTING.md first.
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
 
 ## Support
 
-For issues and questions, please use GitHub Issues.
+For issues and questions, please use [GitHub Issues](https://github.com/Arzuparreta/sh-music-hub/issues).
