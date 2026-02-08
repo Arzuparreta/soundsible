@@ -11,8 +11,8 @@ A cloud-first, self-hosted music platform that streams your own library from Clo
 - **Multi-device sync**: Automatic library synchronization across devices 
 - **GTK interface**: Native Linux desktop integration (GTK4/Adwaita) 
 - **MPRIS integration**: Media key support (optional) 
-- **Queue management**: Playlist features (coming soon)
-- **Search/Filter**: In-app library search (coming soon)
+- **Queue management**: Create and manage playback queues
+- **Search/Filter**: In-app library search
 
 ### Setup Tool
 - **Multi-provider support**: Choose between Cloudflare R2, Backblaze B2, or other S3-compatible services
@@ -126,31 +126,20 @@ pip install mpris-server
 
 ## ODST Tool: Spotify Library Downloader
 
-The **odst_tool** is a standalone CLI for downloading your Spotify library by finding matching tracks on YouTube. It's sh-music-hub compatible and downloads directly to the correct format.
+The **ODST Tool** is a dedicated web interface for downloading your Spotify library by finding matching tracks on YouTube. It downloads music in sh-music-hub compatible format and can sync directly to your cloud storage.
 
-> **Note:** This is different from the GUI's "Download & Push" feature, which provides a simpler graphical interface with the same functionality.
-
-See [odst_tool/README.md](odst_tool/README.md) for detailed usage instructions.
-
-### Quick Example
+To use the ODST Tool:
 
 ```bash
 cd odst_tool
-
-# Setup (one-time)
-./setup_env.sh
-cp .env.example .env
-# Edit .env with your Spotify credentials
-
-# Download your entire library
-./run.sh --source all
-
-# Interactive playlist selection
-./run.sh --source playlists --interactive
-
-# Download specific playlist
-./run.sh --source playlist --playlist-name "My Workout Mix"
+./downloader_web.sh
 ```
+
+Then open the displayed URL in your browser to access the download interface.
+
+> **Note:** This is different from the GUI's "Download & Push" feature. ODST provides more advanced Spotify integration with playlist selection, smart matching, and batch downloads.
+
+For detailed setup instructions (Spotify API credentials, etc.), see the **[ODST Tool Repository](https://github.com/Arzuparreta/odst-tool)**.
 
 ---
 
