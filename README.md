@@ -42,9 +42,9 @@ A cloud-first, self-hosted music platform that streams your own library from Clo
 - **libmpv1** (required for music playback)
 - **python-mpris-server** (optional, for media key support)
 
-### System Packages
+### System Depencies
 
-Install required system dependencies:
+Install required system packages:
 
 ```bash
 # Ubuntu/Debian
