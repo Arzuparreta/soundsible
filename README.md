@@ -102,11 +102,11 @@ The easiest way to use Soundsible is through the **GTK graphical application**:
 ```
 
 The GUI includes everything you need:
-- 🎵 **Music Player** — Stream and play your library
-- ⬇️ **Download & Push (Smart)** — Download music from Spotify/YouTube and upload to cloud *(Menu → Download & Push)*
-- ⬆️ **Upload Local Files** — Upload local music files to cloud *(Menu → Upload Local Files)*
-- ⚙️ **Setup Wizard** — Configure cloud storage credentials *(Menu → Setup Wizard)*
-- 🎨 **Themes** — Choose between System, Light, Dark, or ODST themes
+- **Music Player** — Stream and play your library
+- **Download & Push (Smart)** — Download music from Spotify/YouTube and upload to cloud *(Menu → Download & Push)*
+- **Upload Local Files** — Upload local music files to cloud *(Menu → Upload Local Files)*
+- **Setup Wizard** — Configure cloud storage credentials *(Menu → Setup Wizard)*
+- **Themes** — Choose between System, Light, Dark, or ODST themes
 
 ### First-Time Setup
 
@@ -153,6 +153,26 @@ Then open the displayed URL in your browser to access the download interface.
 > **Note:** This is different from the GUI's "Download & Push" feature. ODST provides more advanced features including multi-platform link support, playlist selection, smart matching, and batch downloads.
 
 For detailed setup instructions (Spotify API credentials for auto-downloading playlists, etc.), see **[odst_tool/README.md](odst_tool/README.md)**.
+
+### Web Uploader & Cloud Sync
+
+The ODST Tool features a powerful Web UI that can manage your cloud library directly.
+
+> **Tip:** You can use this interface to upload your entire library to Cloudflare R2 / Backblaze B2 without using the command line!
+
+**How to use:**
+
+1.  Click **Settings** in the top right corner.
+2.  Under the **Cloud Sync (R2)** section, enter your storage credentials:
+    *   Account ID
+    *   Access Key ID
+    *   Secret Access Key
+    *   Bucket Name
+    *   *(Note: If you already ran the Setup Wizard in the main app, these might be pre-filled!)*
+3.  Click **Save Cloud Config**.
+4.  Once configured, click the **Cloud Icon** (next to Settings) to start the sync.
+    *   This will automatically upload all downloaded tracks to your bucket.
+    *   It also updates the `library.json` database so your other devices stay in sync.
 
 ---
 
@@ -273,27 +293,27 @@ soundsible/
 
 ## Development Status
 
-✅ **Phase 0: Foundation** (Complete)
+**Phase 0: Foundation** (Complete)
 - Project structure and virtual environment
 - Data models and shared utilities
 - S3 storage provider abstraction
 - Cloudflare R2 and Backblaze B2 implementations
 - Audio metadata extraction and compression
 
-✅ **Phase 1: Setup Tool Core** (Complete)
+**Phase 1: Setup Tool Core** (Complete)
 - CLI interface with guided setup
 - Parallel upload engine
 - Configuration management
 
-✅ **Phase 2-3: Upload Engine & Web Interface** (Complete)
+**Phase 2-3: Upload Engine & Web Interface** (Complete)
 
-✅ **Phase 4-6: Music Player** (Complete)
+**Phase 4-6: Music Player** (Complete)
 
 ---
 
 ## Legal & Disclaimer
 
-> **⚠️ IMPORTANT: This software is provided for personal, educational, and research purposes only.**
+> **IMPORTANT: This software is provided for personal, educational, and research purposes only.**
 
 ### Copyright & Fair Use
 

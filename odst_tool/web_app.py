@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from dotenv import set_key
 from .config import DEFAULT_OUTPUT_DIR, DEFAULT_WORKERS, DEFAULT_BITRATE, DEFAULT_COOKIE_BROWSER
-from spotify_youtube_dl import SpotifyYouTubeDL
+from .spotify_youtube_dl import SpotifyYouTubeDL
 from .spotify_library import SpotifyLibrary
 import spotipy
 
@@ -15,7 +15,7 @@ app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, async_mode='threading')
 
 from .cloud_sync import CloudSync
-from optimize_library import optimize_library
+from .optimize_library import optimize_library
 
 # Global State
 current_output_dir = DEFAULT_OUTPUT_DIR
