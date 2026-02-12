@@ -198,6 +198,15 @@ class SetupWizard(Adw.Window):
             StorageProvider.BACKBLAZE_B2
         )
         cards_box.append(b2_card)
+
+        # Local Storage / NAS
+        local_card = self.create_provider_card(
+            "Local Storage / NAS",
+            "Use your own hard drive or a mounted network folder",
+            "Unlimited",
+            StorageProvider.LOCAL
+        )
+        cards_box.append(local_card)
         
         # Generic S3
         s3_card = self.create_provider_card(
@@ -270,11 +279,55 @@ class SetupWizard(Adw.Window):
         
         self.creds_stack.add_named(self.create_r2_form(), "r2")
         self.creds_stack.add_named(self.create_b2_form(), "b2")
+        self.creds_stack.add_named(self.create_local_form(), "local")
         self.creds_stack.add_named(self.create_s3_form(), "s3")
         
         box.append(self.creds_stack)
         return box
     
+    def create_local_form(self):
+        """Create local storage configuration form."""
+        form = Adw.PreferencesGroup()
+        form.set_title("Local Storage - Configuration")
+        form.set_description("Select a folder on your computer or a mounted NAS share")
+        
+        row = Adw.ActionRow()
+        row.set_title("Storage Root Path")
+        row.set_subtitle("The directory where your library will be stored")
+        
+        self.local_path_entry = Gtk.Entry()
+        self.local_path_entry.set_text(str(Path.home() / "Music" / "Soundsible"))
+        self.local_path_entry.set_valign(Gtk.Align.CENTER)
+        self.local_path_entry.set_hexpand(True)
+        
+        browse_btn = Gtk.Button(icon_name="folder-open-symbolic")
+        browse_btn.set_valign(Gtk.Align.CENTER)
+        browse_btn.connect('clicked', self.on_browse_local_path)
+        
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        box.append(self.local_path_entry)
+        box.append(browse_btn)
+        
+        row.add_suffix(box)
+        form.add(row)
+        
+        return form
+
+    def on_browse_local_path(self, btn):
+        """Open a folder chooser dialog."""
+        dialog = Gtk.FileDialog.new()
+        dialog.set_title("Select Storage Root")
+        
+        def on_open_response(d, result):
+            try:
+                file = d.select_folder_finish(result)
+                if file:
+                    self.local_path_entry.set_text(file.get_path())
+            except Exception as e:
+                print(f"Error selecting folder: {e}")
+
+        dialog.select_folder(self, None, on_open_response)
+
     def create_r2_form(self):
         """Create Cloudflare R2 credentials form."""
         form = Adw.PreferencesGroup()
@@ -445,6 +498,8 @@ class SetupWizard(Adw.Window):
                 self.creds_stack.set_visible_child_name("r2")
             elif self.selected_provider == StorageProvider.BACKBLAZE_B2:
                 self.creds_stack.set_visible_child_name("b2")
+            elif self.selected_provider == StorageProvider.LOCAL:
+                self.creds_stack.set_visible_child_name("local")
             elif self.selected_provider == StorageProvider.GENERIC_S3:
                 self.creds_stack.set_visible_child_name("s3")
     
@@ -502,6 +557,15 @@ class SetupWizard(Adw.Window):
                     'application_key_id': key_id,
                     'application_key': key
                 }
+            
+            elif self.selected_provider == StorageProvider.LOCAL:
+                path = self.local_path_entry.get_text().strip()
+                if not path:
+                    print("Please select a path")
+                    return False
+                self.credentials = {
+                    'base_path': path
+                }
         
         elif self.current_page_index == 3:  # Bucket page
             # Get selected or new bucket
@@ -527,7 +591,9 @@ class SetupWizard(Adw.Window):
         if self.selected_provider == StorageProvider.CLOUDFLARE_R2:
             endpoint = f"https://{self.credentials['account_id']}.r2.cloudflarestorage.com"
         elif self.selected_provider == StorageProvider.BACKBLAZE_B2:
-            endpoint = "s3.us-west-004.backblazeb2.com"  # Default, may need region selection
+            endpoint = "s3.us-west-004.backbl2.com"  # Default, may need region selection
+        elif self.selected_provider == StorageProvider.LOCAL:
+            endpoint = self.credentials.get('base_path', '')
         else:
             endpoint = ""
         

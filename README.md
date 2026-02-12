@@ -1,24 +1,23 @@
 # Soundsible: Universal Media Ecosystem
 
-Soundsible is a professional-grade, cloud-native music platform designed for Linux. It enables users to stream their personal music collections from high-performance cloud storage (Cloudflare R2, Backblaze B2, or Generic S3) while maintaining a local-first experience through intelligent caching and native desktop integration.
+Soundsible is a professional-grade, cloud-native music platform designed for Linux. It provides a unified interface to stream your entire music collection from **cloud storage** (Cloudflare R2, Backblaze B2, S3) or **local servers (NAS)**, while maintaining a lightning-fast, local-first experience through intelligent LRU caching.
 
-## Core Components
+## Key Features
 
-The ecosystem consists of three primary modules integrated into a single unified launcher:
-
-1.  **Music Player**: A high-fidelity GTK4/Adwaita application featuring gapless playback via the MPV engine, smart LRU caching, and MPRIS desktop integration.
-2.  **ODST Downloader**: An Omni-Directional Search & Transfer tool capable of pulling high-quality audio from YouTube and Spotify, with automated metadata enrichment and cloud synchronization.
-3.  **Setup & Maintenance Tool**: A comprehensive CLI suite for library management, cloud configuration, metadata harmonization, and multi-device synchronization via encrypted tokens or QR codes.
+*   **Hybrid Streaming**: Seamlessly switch between streaming from the cloud and playing local files. It treats your NAS, local folders, and S3 buckets as a single, cohesive library.
+*   **Intelligent Caching**: Automatically caches tracks as you listen. If your internet goes down, your recently played music stays available.
+*   **Zero-Cost Cloud Support**: Optimized for Cloudflare R2 (zero egress fees) and Backblaze B2.
+*   **Omni-Directional Downloader**: Integrated tools to pull music from YouTube and Spotify with automated "Gold Standard" metadata enrichment.
+*   **Native Linux Experience**: Built with GTK4 and Adwaita for a modern GNOME-native feel, featuring MPRIS support, media keys, and gapless playback.
+*   **Encrypted Sync**: Synchronize your library across multiple devices instantly using encrypted tokens or QR codes.
 
 ---
 
 ## Getting Started
 
-This section provides a simplified installation path for users who want to get up and running quickly.
-
 ### 1. System Requirements
 
-Ensure your Linux distribution has the following dependencies installed:
+Ensure your Linux distribution has the necessary dependencies:
 
 ```bash
 # Ubuntu / Debian / Pop!_OS
@@ -33,7 +32,7 @@ sudo pacman -S ffmpeg mpv python-gobject gtk4 libadwaita playerctl
 
 ### 2. Installation
 
-Clone the repository and run the automated launcher. The launcher will automatically handle virtual environment creation and dependency installation.
+Clone the repository and run the automated launcher. The launcher will handle virtual environment creation and dependency installation.
 
 ```bash
 git clone https://github.com/Arzuparreta/soundsible.git
@@ -43,73 +42,58 @@ python3 run.py
 
 ### 3. Initial Configuration
 
-Upon the first execution, the **Setup Wizard** will appear. 
-1.  Select **Run Setup / Settings** (Option 4).
-2.  Follow the guided prompts to connect your cloud storage.
-    *   **Recommended**: Cloudflare R2 for zero bandwidth egress fees.
-    *   **Alternative**: Backblaze B2 for ease of setup without a credit card.
-3.  Once configured, you can begin adding music to your library.
+Soundsible is designed to be configured visually. Upon the first execution:
+
+1.  The **Launcher** will detect a new installation and automatically start the **Music Player (GUI)**.
+2.  The **Setup Wizard** will appear to guide you through:
+    *   **Local Storage**: Pointing to your existing music folders or NAS.
+    *   **Cloud Storage**: Connecting to Cloudflare R2, Backblaze B2, or S3 (Optional).
+    *   **Library Sync**: Importing an existing library if you're setting up a second device.
 
 ---
 
-## Component Documentation
+## Ecosystem Modules
 
-### The Music Player (GUI)
+### 1. The Music Player (GUI)
+The primary interface for high-fidelity listening.
+*   **Gapless Playback**: Powered by the MPV engine.
+*   **Dynamic UI**: Beautiful Light, Dark, and "ODST" (Cyberpunk) themes.
+*   **Cover Art**: High-resolution art extraction and intelligent background fetching.
 
-The primary interface for daily listening. Built with modern GNOME design principles.
+### 2. ODST Downloader (Web UI)
+A specialized tool for library expansion, accessible via `run.py`.
+*   **Smart Matching**: Automatically finds the highest quality audio from YouTube "Topic" channels.
+*   **Auto-Cloud Push**: Downloaded tracks can be automatically uploaded to your cloud storage and indexed into your library manifest.
 
-*   **Streaming & Caching**: Streams directly from the cloud while simultaneously populating a local cache. This ensures that recently played tracks remain available during internet outages.
-*   **Universal Sync**: Implements a 3-way merge algorithm to synchronize library manifests across all your devices.
-*   **Dynamic UI**: Supports Light, Dark, and specialized ODST themes. Features a marquee-style scrolling title for long track names and high-resolution cover art extraction.
-*   **Media Keys**: Supports standard keyboard playback controls and desktop-wide media widgets via MPRIS.
-
-### ODST Music Downloader
-
-A specialized tool for expanding your library from external sources.
-
-*   **Web Interface**: Access via `run.py` (Option 2) to manage downloads through a clean browser UI.
-*   **Multi-Source Support**: Accepts direct links from Spotify, YouTube, and YouTube Music.
-*   **Smart Matching**: Prioritizes YouTube "Topic" channels to ensure the highest available audio quality and official metadata.
-*   **Auto-Cloud Sync**: Can be configured to automatically push downloaded tracks to your cloud storage and update the global library manifest.
-
-### Setup & Maintenance CLI
-
-A powerful toolset for advanced library operations. Accessible via `python -m setup_tool.cli`.
-
-*   **Library Janitor**: `cleanup` — Prunes orphaned entries and verifies the integrity of both local and cloud files.
-*   **The Surgeon**: `refresh-metadata` — Retroactively fixes metadata by identifying tracks via MusicBrainz and ISRC codes to pull "Gold Standard" tags (Album, Year, Track Number).
-*   **Deep Scanner**: `scan` — Indexes large local directories (e.g., a NAS) without uploading them, allowing local files to be treated as part of the unified library.
-*   **Batch Fixer**: `fix-library-covers` — Downloads missing artwork, embeds it directly into audio tags, and re-uploads files to ensure permanent cover art persistence.
-*   **Service Integration**: `install-service` — Installs Soundsible as a systemd user service to enable background folder watching and API availability.
+### 3. Setup & Maintenance (CLI)
+For power users who need advanced library operations:
+*   **Library Janitor**: Verifies file integrity and prunes orphaned entries.
+*   **The Surgeon**: Retroactively fixes metadata using MusicBrainz and ISRC lookups.
+*   **Deep Scanner**: Indexes massive local directories without the need for uploading.
 
 ---
 
 ## Technical Architecture
 
-Soundsible is designed for robustness and privacy:
-
-*   **Database**: Utilizes SQLite for high-speed local searching and metadata indexing.
-*   **Security**: All cloud credentials are encrypted on-disk using industry-standard cryptography.
-*   **Privacy**: Zero telemetry or external data collection. Your library metadata remains in your controlled cloud bucket.
-*   **Storage Efficiency**: Implements hash-based deduplication to prevent duplicate uploads and save storage costs.
+*   **Database**: SQLite for high-speed indexing and instant search.
+*   **Security**: All cloud credentials and sync tokens are encrypted on-disk.
+*   **Privacy**: Zero telemetry. You own your data, and your metadata stays in your controlled cloud bucket.
+*   **Efficiency**: Hash-based deduplication ensures you never store or upload the same track twice.
 
 ---
 
 ## Multi-Device Synchronization
 
-To sync your library to a new device:
-1.  On the primary device, run `setup-tool export-config`.
-2.  Scan the generated **QR Code** or copy the **Encrypted Token**.
-3.  On the new device, use `setup-tool import-config <token>` to instantly mirror your entire ecosystem.
+To mirror your library on a new device:
+1.  On your primary device, go to **Manage Storage > Config Management > Export Config**.
+2.  On the new device, run `python3 run.py`, go to **Advanced**, and select **Import Config** using the generated token.
 
 ---
 
 ## Legal Disclaimer
 
-Soundsible is provided for personal, educational, and research purposes only. Users are solely responsible for ensuring they have the legal right to download, upload, or stream any content accessed through this software. The authors assume no liability for misuse of this tool or violations of third-party Terms of Service.
-
----
+Soundsible is for personal use only. Users are responsible for complying with local copyright laws and third-party Terms of Service.
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+MIT License. See [LICENSE](LICENSE) for details.

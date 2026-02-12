@@ -138,11 +138,11 @@ class SoundsibleLauncher:
         table.add_column("Key", style="bold magenta")
         table.add_column("Option", style="white")
 
-        table.add_row("1", "Launch Music Player (GUI)")
+        table.add_row("1", "Launch Music Player (GUI) [bold green](Recommended)[/bold green]")
         table.add_row("2", "Launch Music Downloader (ODST Web UI)")
         table.add_row("3", "Search Library (Quick Discover)")
-        table.add_row("4", "Run Setup / Settings")
-        table.add_row("5", "Manage Storage / Sync")
+        table.add_row("4", "Manage Storage / Sync")
+        table.add_row("5", "Advanced Options")
         table.add_row("q", "Quit")
 
         console.print(Panel(table, title="Main Menu", border_style="dim"))
@@ -156,13 +156,37 @@ class SoundsibleLauncher:
         elif choice == "3":
             self.search_ui()
         elif choice == "4":
-            self.launch_setup()
-        elif choice == "5":
             self.manage_storage()
+        elif choice == "5":
+            self.show_advanced_menu()
         elif choice == "q":
             console.print("[italic]Happy listening![/italic]")
             sys.exit(0)
 
+    def show_advanced_menu(self):
+        """Advanced tools and CLI configuration."""
+        console.clear()
+        console.print(Panel("[bold red]Advanced Options[/bold red]\n[dim]Use these tools for deep maintenance or CLI-based setup.[/dim]", border_style="red"))
+        
+        table = Table(show_header=False, box=None)
+        table.add_column("Key", style="bold magenta")
+        table.add_column("Option", style="white")
+        table.add_row("1", "Run CLI Setup Wizard (Guided)")
+        table.add_row("2", "Launch Core API Server")
+        table.add_row("3", "System Integrity Check")
+        table.add_row("b", "Back to Main Menu")
+        
+        console.print(Panel(table, border_style="dim"))
+        choice = Prompt.ask("Select an option", choices=["1", "2", "3", "b"], default="b")
+        
+        if choice == "1":
+            self.launch_setup()
+        elif choice == "2":
+            self.launch_api()
+        elif choice == "3":
+            subprocess.run([str(self.python_exe), "-m", "setup_tool.cli", "cleanup"])
+            Prompt.ask("Press Enter to continue")
+        
     def search_ui(self):
         """Interactive search TUI using high-speed SQLite."""
         query = Prompt.ask("[bold magenta]Search Library[/bold magenta]")
@@ -350,8 +374,8 @@ class SoundsibleLauncher:
             if "--daemon" in sys.argv:
                 print("Daemon: Configuration missing. Please run 'run.py' manually first.")
                 return
-            console.print(Panel("[bold yellow]First Run Detected![/bold yellow]\nLet's get your music library configured.", border_style="yellow"))
-            self.launch_setup()
+            console.print(Panel("[bold yellow]First Run Detected![/bold yellow]\nWelcome to Soundsible! Launching the setup wizard...", border_style="yellow"))
+            self.launch_player()
         
         # 2. Background Sync
         self.start_background_sync()
