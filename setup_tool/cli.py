@@ -185,7 +185,7 @@ def _guided_setup():
     config_dir.mkdir(parents=True, exist_ok=True)
     config_file = config_dir / "config.json"
     
-    # TODO: Encrypt credentials before saving
+    # Save configuration (automatically encrypted by to_json -> to_dict)
     with open(config_file, 'w') as f:
         f.write(config.to_json())
     
@@ -324,6 +324,127 @@ def upload(music_path, compress, parallel, bitrate, auto_fetch):
             
     except Exception as e:
         console.print(f"\n[red][FAILED] Upload failed: {e}[/red]")
+
+
+@cli.command()
+@click.argument('path', type=click.Path(exists=True))
+@click.option('--parallel', default=4, type=click.IntRange(1, 16),
+              help='Number of parallel scanning threads')
+def scan(path, parallel):
+    """
+    Deep Scan a local directory into the library.
+    
+    This does NOT upload files. It indexes them in place, allowing you to play
+    local files through the Soundsible interface. Ideal for large NAS libraries.
+    """
+    from .scanner import LibraryScanner
+    
+    try:
+        # Load config implicitly via Scanner
+        scanner = LibraryScanner()
+        scanner.scan(path, parallel=parallel)
+        
+    except Exception as e:
+        console.print(f"[red]Scan failed: {e}[/red]")
+
+
+@cli.command()
+@click.option('--dry-run', is_flag=True, help='Show what would be removed without actually doing it')
+def cleanup(dry_run):
+    """
+    Library Janitor: Prune orphans and verify integrity.
+    
+    Checks if tracks in your library still exist locally or in the cloud.
+    Removes entries for files that have been deleted from all sources.
+    """
+    from .maintenance import LibraryJanitor
+    
+    # Load config
+    config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
+    if not config_path.exists():
+        console.print("[red]Error: Run 'init' first.[/red]")
+        return
+        
+    try:
+        with open(config_path, 'r') as f:
+            config = PlayerConfig.from_dict(json.load(f))
+        
+        janitor = LibraryJanitor(config)
+        janitor.run_full_maintenance(dry_run=dry_run)
+        janitor.health_report()
+        
+    except Exception as e:
+        console.print(f"[red]Maintenance failed: {e}[/red]")
+
+
+@cli.command()
+@click.option('--force', is_flag=True, help='Re-identify already matched tracks')
+def refresh_metadata(force):
+    """
+    The Surgeon: Retroactively fix metadata for existing tracks.
+    
+    1. Identifies tracks via MusicBrainz/ISRC.
+    2. Pulls 'Gold Standard' metadata (Album, Year, Track #).
+    3. Updates the manifest and database.
+    """
+    from .maintenance import LibraryJanitor
+    
+    # Load config
+    config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
+    if not config_path.exists():
+        console.print("[red]Error: Configuration not found.[/red]")
+        return
+        
+    try:
+        with open(config_path, 'r') as f:
+            config = PlayerConfig.from_dict(json.load(f))
+        
+        janitor = LibraryJanitor(config)
+        janitor.identify_tracks(force=force)
+        janitor.refresh_metadata()
+        
+    except Exception as e:
+        console.print(f"[red]Refresh failed: {e}[/red]")
+
+
+@cli.command()
+def install_service():
+    """
+    Install Soundsible as a background service (Systemd).
+    
+    This allows the Core API and Folder Watcher to run automatically 
+    when you log in, even without the launcher open.
+    """
+    import platform
+    if platform.system() != "Linux":
+        console.print("[red]Systemd is only available on Linux.[/red]")
+        return
+
+    root_dir = Path(__file__).parent.parent.absolute()
+    venv_python = root_dir / "venv" / "bin" / "python"
+    template_path = root_dir / "soundsible.service.template"
+    
+    if not template_path.exists():
+        console.print("[red]Service template not found.[/red]")
+        return
+
+    # Read template
+    content = template_path.read_text()
+    content = content.replace("{{ROOT_DIR}}", str(root_dir))
+    content = content.replace("{{PYTHON_EXE}}", str(venv_python))
+
+    # Install
+    user_systemd_dir = Path("~/.config/systemd/user").expanduser()
+    user_systemd_dir.mkdir(parents=True, exist_ok=True)
+    
+    service_file = user_systemd_dir / "soundsible.service"
+    service_file.write_text(content)
+    
+    console.print(f"[green]Service file created at: {service_file}[/green]")
+    console.print("\n[bold]Run these commands to enable and start:[/bold]")
+    console.print(f"  [yellow]systemctl --user daemon-reload[/yellow]")
+    console.print(f"  [yellow]systemctl --user enable soundsible[/yellow]")
+    console.print(f"  [yellow]systemctl --user start soundsible[/yellow]")
 
 
 @cli.command()

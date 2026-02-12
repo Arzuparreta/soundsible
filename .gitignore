@@ -41,3 +41,6 @@ tmp/
 *.ogg
 *.m4a
 *.wav
+
+.gemini/
+gha-creds-*.json

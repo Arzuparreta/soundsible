@@ -29,6 +29,7 @@ class Track:
     year: Optional[int] = None
     genre: Optional[str] = None
     track_number: Optional[int] = None
+    is_local: bool = False
     
     @staticmethod
     def generate_id() -> str:

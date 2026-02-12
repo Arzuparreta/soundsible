@@ -7,21 +7,24 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, List, Optional
-from shared.models import LibraryMetadata, Track, PlayerConfig
+from shared.models import LibraryMetadata, Track, PlayerConfig, StorageProvider
 from shared.constants import LIBRARY_METADATA_FILENAME, DEFAULT_CONFIG_DIR
 from setup_tool.provider_factory import StorageProviderFactory
 from setup_tool.audio import AudioProcessor
 from setup_tool.uploader import UploadEngine
+from shared.database import DatabaseManager
 import shutil
 import tempfile
 
 class LibraryManager:
     """Manages the music library and stream URLs."""
     
-    def __init__(self):
+    def __init__(self, silent: bool = False):
+        self.silent = silent
         self.metadata: Optional[LibraryMetadata] = None
         self.config: Optional[PlayerConfig] = None
         self.provider = None
+        self.db = DatabaseManager()
         
         # Initialize Cache
         try:
@@ -34,53 +37,50 @@ class LibraryManager:
         if self.config:
             self._init_network()
 
-    # ... (skipping unchanged methods)
+    def _log(self, msg: str):
+        if not self.silent:
+            print(msg)
 
-    def get_track_url(self, track: Track) -> str:
-        """
-        Get streamable URL for a track.
-        Checks local cache first, returns remote URL if not cached.
-        """
-        # 1. Check Cache
-        if self.cache:
-            cached_path = self.cache.get_cached_path(track.id)
-            if cached_path:
-                return cached_path
-
-        # 2. Return Remote URL
-        if not self.provider:
-            return ""
-            
-        remote_key = f"tracks/{track.id}.{track.format}"
-        # Start background download to cache? (For next time)
-        # For now, just stream remote.
-        
-        return self.provider.get_file_url(remote_key, expires_in=3600*2)
-            
     def _load_config(self):
-        """Load player configuration."""
+        """Load player configuration and ensure it's encrypted on disk."""
         try:
             config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
             if config_path.exists():
                 with open(config_path, 'r') as f:
-                    self.config = PlayerConfig.from_dict(json.load(f))
+                    data = json.load(f)
+                    
+                self.config = PlayerConfig.from_dict(data)
+                
+                # Migration: If it was plain text on disk, save it back encrypted
+                if not data.get('is_encrypted', False):
+                    self._log("Migrating config to encrypted format...")
+                    with open(config_path, 'w') as f:
+                        f.write(self.config.to_json())
         except Exception as e:
-            print(f"Error loading config: {e}")
+            self._log(f"Error loading config: {e}")
             
     def _init_network(self):
         """Initialize storage provider."""
         if self.config:
             # Reconstruct credentials from config
-            # Note: In real app, decrypt access_key here
-            creds = {}
-            if self.config.provider.name == 'CLOUDFLARE_R2':
-                # Attempt to extract account ID from endpoint if needed
-                creds = {
-                    'access_key_id': self.config.access_key_id,
-                    'secret_access_key': self.config.secret_access_key,
-                    'account_id': self.config.endpoint.split('//')[1].split('.')[0] if self.config.endpoint else '' 
-                }
-            else:
+            creds = {
+                'access_key_id': self.config.access_key_id,
+                'secret_access_key': self.config.secret_access_key,
+                'region': self.config.region,
+                'endpoint': self.config.endpoint,
+                'application_key_id': self.config.access_key_id,
+                'application_key': self.config.secret_access_key
+            }
+            
+            # Provider-specific credential adjustments
+            if self.config.provider == StorageProvider.CLOUDFLARE_R2 and self.config.endpoint:
+                try:
+                    creds['account_id'] = self.config.endpoint.split('//')[1].split('.')[0]
+                except: pass
+            elif self.config.provider == StorageProvider.LOCAL:
+                creds = {'base_path': self.config.endpoint}
+            elif self.config.provider == StorageProvider.BACKBLAZE_B2:
+                # B2 uses application_key_id/application_key
                 creds = {
                     'application_key_id': self.config.access_key_id,
                     'application_key': self.config.secret_access_key,
@@ -88,6 +88,7 @@ class LibraryManager:
                 
             self.provider = StorageProviderFactory.create(self.config.provider)
             self.provider.authenticate(creds)
+            
             # Ensure we know the bucket name
             self.provider.bucket_name = self.config.bucket
             if hasattr(self.provider, 'bucket') and self.provider.bucket is None:
@@ -96,38 +97,119 @@ class LibraryManager:
                     self.provider.bucket = self.provider.api.get_bucket_by_name(self.config.bucket)
                  except: pass
 
-    def sync_library(self) -> bool:
+    def sync_library(self, silent: bool = None) -> bool:
         """
-        Download latest library.json from cloud storage.
-        Falls back to local cache if network fails.
+        Perform a Universal Sync:
+        1. Download remote library.json
+        2. Merge with any local deep-scanned tracks
+        3. Save unified manifest to cloud and local cache
         """
+        # Allow override or use class default
+        is_silent = silent if silent is not None else self.silent
+        def _log_local(msg):
+            if not is_silent: print(msg)
+
         cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
         
         if not self.provider:
-            print("No storage provider configured. Attempting to load from cache...")
+            _log_local("No storage provider configured. Using local cache only.")
             return self._load_from_cache(cache_path)
             
         try:
-            print("Syncing library from cloud storage...")
-            json_str = self.provider.download_json(LIBRARY_METADATA_FILENAME)
-            if json_str:
-                self.metadata = LibraryMetadata.from_json(json_str)
-                # Cache locally for offline use
-                cache_path.parent.mkdir(parents=True, exist_ok=True)
-                cache_path.write_text(json_str)
-                print("Library synced successfully and cached locally.")
-                return True
-        except (ConnectionError, TimeoutError) as e:
-            print(f"Network error during sync: {e}")
-            print("Attempting to use cached library (offline mode)...")
-            return self._load_from_cache(cache_path)
-        except Exception as e:
-            print(f"Sync failed: {e}")
-            print("Attempting to use cached library...")
-            return self._load_from_cache(cache_path)
+            _log_local("Syncing library (Universal 3-way merge)...")
             
-        return False
+            # 1. Get Remote
+            remote_json = self.provider.download_json(LIBRARY_METADATA_FILENAME)
+            remote_lib = None
+            if remote_json:
+                remote_lib = LibraryMetadata.from_json(remote_json)
+            
+            # 2. Get Local (from cache/previous sync)
+            local_lib = None
+            if cache_path.exists():
+                local_content = cache_path.read_text().strip()
+                if local_content:
+                    try:
+                        local_lib = LibraryMetadata.from_json(local_content)
+                    except Exception as e:
+                        _log_local(f"Warning: Cached library corrupted: {e}")
+            
+            # 3. Merge Logic
+            if not remote_lib and not local_lib:
+                _log_local("No library manifest found anywhere.")
+                return False
+                
+            if not remote_lib:
+                self.metadata = local_lib
+            elif not local_lib:
+                self.metadata = remote_lib
+            else:
+                # Merge: Combine tracks by ID, keeping newest metadata
+                # We prioritize remote version but preserve local_path for this machine
+                track_map = {t.id: t for t in remote_lib.tracks}
+                
+                for lt in local_lib.tracks:
+                    if lt.id in track_map:
+                        # Preserve local_path if this machine has it
+                        if lt.local_path:
+                            track_map[lt.id].local_path = lt.local_path
+                            track_map[lt.id].is_local = True
+                    else:
+                        # This is a new locally scanned track not yet in cloud
+                        track_map[lt.id] = lt
+                
+                remote_lib.tracks = list(track_map.values())
+                remote_lib.version = max(remote_lib.version, local_lib.version) + 1
+                self.metadata = remote_lib
+
+            # 4. Save Back
+            json_str = self.metadata.to_json()
+            
+            # Local Cache
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json_str)
+            
+            # Cloud
+            self.provider.save_library(self.metadata)
+            
+            # 5. Update Local SQLite for fast searching
+            self.db.sync_from_metadata(self.metadata)
+            
+            _log_local(f"✓ Sync complete: {len(self.metadata.tracks)} tracks unified.")
+            return True
+
+        except Exception as e:
+            if not is_silent:
+                print(f"Sync failed: {e}")
+                import traceback
+                traceback.print_exc()
+            return self._load_from_cache(cache_path)
     
+    def get_track_url(self, track: Track) -> Optional[str]:
+        """
+        Get a playable URL for a track.
+        Resolution Order:
+        1. Local path (if verified exists)
+        2. Cache path (if exists)
+        3. Cloud URL (signed/presigned)
+        """
+        # 1. Local path
+        if track.local_path and os.path.exists(track.local_path):
+            return track.local_path
+            
+        # 2. Cache
+        if self.cache:
+            cached_path = self.cache.get_cached_path(track.id)
+            if cached_path and os.path.exists(cached_path):
+                return cached_path
+                
+        # 3. Cloud Provider
+        if self.provider:
+            remote_key = f"tracks/{track.id}.{track.format}"
+            return self.provider.get_file_url(remote_key)
+            
+        return None
+
     def _load_from_cache(self, cache_path: Path) -> bool:
         """
         Load library metadata from local cache.
@@ -151,8 +233,15 @@ class LibraryManager:
         return False
         
     def get_all_tracks(self) -> List[Track]:
-        """Return all tracks from library metadata."""
+        """Return all tracks, prioritized by speed (DB first)."""
+        db_tracks = self.db.get_all_tracks()
+        if db_tracks:
+            return db_tracks
         return self.metadata.tracks if self.metadata else []
+
+    def search(self, query: str) -> List[Track]:
+        """Perform a fast search using the local database."""
+        return self.db.search_tracks(query)
 
     def update_track(self, track: Track, new_metadata: Dict[str, str], cover_path: Optional[str] = None) -> bool:
         """

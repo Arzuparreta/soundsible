@@ -53,9 +53,14 @@ class AudioProcessor:
             audio.tags.add(TALB(encoding=3, text=metadata['album']))
             
         # Year
-        if metadata.get('release_date'):
-            year = metadata['release_date'][:4]
-            audio.tags.add(TDRC(encoding=3, text=year))
+        year = metadata.get('year') or (metadata['release_date'][:4] if metadata.get('release_date') else None)
+        if year:
+            audio.tags.add(TDRC(encoding=3, text=str(year)))
+            
+        # Track Number
+        if metadata.get('track_number'):
+            from mutagen.id3 import TRCK
+            audio.tags.add(TRCK(encoding=3, text=str(metadata['track_number'])))
             
         # ISRC
         if metadata.get('isrc'):
@@ -93,10 +98,17 @@ class AudioProcessor:
         bitrate = 0
         
         try:
-            audio = MP3(file_path)
-            duration = int(audio.info.length)
-            bitrate = int(audio.info.bitrate / 1000)
-        except Exception:
-            pass
+            audio = mutagen.File(file_path)
+            if audio is not None:
+                duration = int(audio.info.length)
+                # Bitrate might not be available for all formats (e.g. lossless)
+                if hasattr(audio.info, 'bitrate') and audio.info.bitrate:
+                    bitrate = int(audio.info.bitrate / 1000)
+                else:
+                    # For lossless, we can calculate 'nominal' bitrate or leave as 0
+                    # For now, let's try to estimate if possible or just use 0 (which means 'variable/highest')
+                    bitrate = 0
+        except Exception as e:
+            print(f"Error reading audio details: {e}")
             
         return duration, bitrate, size

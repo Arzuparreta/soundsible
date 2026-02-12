@@ -14,6 +14,7 @@ rich>=13.5.0               # Progress bars and rich UI
 # Web Interface
 flask>=2.3.0               # Web server
 flask-socketio>=5.3.0      # Real-time progress updates
+flask-cors>=4.0.0          # Cross-Origin Resource Sharing
 
 # HTTP Client
 aiohttp>=3.9.0             # Async HTTP requests
@@ -29,6 +30,8 @@ cryptography>=41.0.0       # Encrypt stored credentials
 qrcode>=7.4.2              # Multi-device pairing
 pillow>=10.0.0             # Image processing
 segno>=1.6.0               # Better QR codes
+watchdog>=3.0.0            # Folder monitoring
+pyacoustid>=1.2.2          # Audio fingerprinting
 
 # Development
 pytest>=7.4.0              # Testing framework
@@ -41,3 +44,4 @@ spotipy>=2.23.0            # Spotify Web API
 yt-dlp>=2023.0.0           # YouTube Downloader
 python-dotenv>=1.0.0       # Environment variables
 eventlet>=0.30.0           # Async networking for SocketIO
+musicbrainzngs>=0.7.1      # High-fidelity metadata resolver

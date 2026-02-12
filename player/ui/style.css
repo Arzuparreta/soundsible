@@ -130,3 +130,35 @@
     font-family: monospace;
     font-size: 0.9rem;
 }
+
+/* Album Grid & Cards */
+.album-grid {
+    padding: 12px;
+}
+
+.album-card {
+    background-color: alpha(@window_fg_color, 0.03);
+    border-radius: 12px;
+    padding: 12px;
+    transition: all 200ms ease-in-out;
+}
+
+.album-card:hover {
+    background-color: alpha(@window_fg_color, 0.08);
+}
+
+.album-cover {
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.album-card .heading {
+    margin-top: 8px;
+    font-weight: bold;
+    font-size: 1.0rem;
+}
+
+.album-card .caption {
+    opacity: 0.7;
+    font-size: 0.85rem;
+}

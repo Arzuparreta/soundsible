@@ -20,7 +20,11 @@ class PlaybackEngine:
             input_vo_keyboard=True, 
             osc=True,
             vo='null',
-            ytdl=False  # We provide direct URLs
+            audio_display='no',
+            ytdl=False,
+            gapless_audio='yes',
+            cache='yes',
+            cache_secs=10
         )
         
         # Queue Manager
@@ -52,10 +56,15 @@ class PlaybackEngine:
 
     def play(self, url: str, track: Track):
         """Start playing a track from a URL (local or remote)."""
+        print(f"DEBUG: PlaybackEngine.play called with URL: {url}")
         self.current_track = track
-        self.player.play(url)
-        self.player.pause = False
-        self.is_playing = True
+        try:
+            self.player.play(url)
+            self.player.pause = False
+            self.is_playing = True
+            print(f"DEBUG: mpv.play({url}) called successfully")
+        except Exception as e:
+            print(f"ERROR: mpv failed to play {url}: {e}")
         
         # Notify UI of state change
         if self._on_state_change:

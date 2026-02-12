@@ -118,25 +118,24 @@ class CacheManager:
             
         return str(target_path)
 
-    def _ensure_space(self, new_bytes: int):
-        """Free up space if needed using LRU policy."""
-        # Simple recursion check or just lock
+    def prune_to_size(self, target_bytes: int):
+        """Manually prune cache to a specific size (LRU)."""
         with self.lock:
-            # Check current size
             try:
                 cursor = self.conn.execute("SELECT SUM(file_size) FROM cache_entries")
                 result = cursor.fetchone()[0]
                 current_size = result if result else 0
                 
-                if current_size + new_bytes <= self.max_size_bytes:
+                if current_size <= target_bytes:
                     return
 
-                # Get candidates
+                # Get candidates (oldest first)
                 cursor = self.conn.execute(
                     "SELECT track_id, file_path, file_size FROM cache_entries ORDER BY last_accessed ASC"
                 )
                 
                 rows = cursor.fetchall()
+                pruned_count = 0
                 for row in rows:
                     track_id, file_path, size = row
                     
@@ -148,11 +147,17 @@ class CacheManager:
                     self.conn.execute("DELETE FROM cache_entries WHERE track_id = ?", (track_id,))
                     
                     current_size -= size
-                    if current_size + new_bytes <= self.max_size_bytes:
+                    pruned_count += 1
+                    if current_size <= target_bytes:
                         break
                 self.conn.commit()
+                # print(f"Cache: Pruned {pruned_count} files to reach target size.")
             except Exception as e:
-                print(f"DEBUG: Error during cache space management: {e}")
+                print(f"DEBUG: Error during cache pruning: {e}")
+
+    def _ensure_space(self, new_bytes: int):
+        """Free up space if needed using LRU policy."""
+        self.prune_to_size(self.max_size_bytes - new_bytes)
 
     def get_current_usage(self) -> int:
         """Get total bytes used by cache."""

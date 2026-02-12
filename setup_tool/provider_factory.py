@@ -9,6 +9,7 @@ from shared.models import StorageProvider
 from .storage_provider import S3StorageProvider
 from .cloudflare_r2 import CloudflareR2Provider
 from .backblaze_b2 import BackblazeB2Provider
+from .local_provider import LocalStorageProvider
 
 
 class StorageProviderFactory:
@@ -34,6 +35,9 @@ class StorageProviderFactory:
         elif provider_type == StorageProvider.BACKBLAZE_B2:
             return BackblazeB2Provider()
         
+        elif provider_type == StorageProvider.LOCAL:
+            return LocalStorageProvider()
+        
         elif provider_type == StorageProvider.AWS_S3:
             # Could implement AWS S3 provider here
             raise NotImplementedError("AWS S3 provider not yet implemented")
@@ -51,6 +55,7 @@ class StorageProviderFactory:
         names = {
             StorageProvider.CLOUDFLARE_R2: "Cloudflare R2",
             StorageProvider.BACKBLAZE_B2: "Backblaze B2",
+            StorageProvider.LOCAL: "Local Storage (NAS/Folder)",
             StorageProvider.AWS_S3: "Amazon S3",
             StorageProvider.GENERIC_S3: "Generic S3-Compatible"
         }
@@ -64,6 +69,8 @@ class StorageProviderFactory:
                 "Cloudflare R2 - Zero egress fees, 10GB free storage, ideal for streaming",
             StorageProvider.BACKBLAZE_B2:
                 "Backblaze B2 - 10GB free storage, no credit card required for free tier",
+            StorageProvider.LOCAL:
+                "Local Storage - Use your own hard drive or a mounted NAS folder",
             StorageProvider.AWS_S3:
                 "Amazon S3 - Industry standard, pay-as-you-go pricing",
             StorageProvider.GENERIC_S3:

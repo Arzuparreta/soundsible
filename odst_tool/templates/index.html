@@ -103,31 +103,22 @@
             </div>
 
             <div class="mt-4 pt-4 border-t border-gray-700">
-                <h3 class="text-sm font-bold text-gray-400 uppercase mb-2">Maintenance</h3>
+                <h3 class="text-sm font-bold text-gray-400 uppercase mb-2">Download Quality 🎵</h3>
                 <div class="flex items-center gap-4">
-                    <button onclick="startOptimization()"
-                        class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-sm font-medium flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                        </svg>
-                        Optimize Library (128kbps)
-                    </button>
-                    <label class="flex items-center text-xs text-gray-400 cursor-pointer">
-                        <input type="checkbox" id="dryRun" checked
-                            class="mr-1 form-checkbox bg-gray-700 border-gray-600 rounded text-purple-500">
-                        Dry Run (Test Only)
-                    </label>
+                    <select id="downloadQuality" class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white text-sm">
+                        {% for key, profile in quality_profiles.items() %}
+                        <option value="{{ key }}" {{ 'selected' if key == quality else '' }}>
+                            {{ profile.label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <p class="text-xs text-gray-500">Affects file size and audio fidelity.</p>
                 </div>
-                <p class="text-xs text-gray-500 mt-2">Reduces file size by converting all tracks to 128kbps (~60%
-                    savings).</p>
             </div>
 
             <div class="mt-4 pt-4 border-t border-gray-700">
                 <button onclick="saveSettings()"
-                    class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded text-sm font-medium">Save General
-                    Settings</button>
+                    class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded text-sm font-medium">Save Settings</button>
             </div>
         </div>
 
@@ -374,6 +365,7 @@
         function saveSettings() {
             const data = {
                 output_dir: document.getElementById('outputDir').value,
+                quality: document.getElementById('downloadQuality').value,
                 client_id: document.getElementById('clientId').value,
                 client_secret: document.getElementById('clientSecret').value
             };

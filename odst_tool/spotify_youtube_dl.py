@@ -11,7 +11,7 @@ from rich.prompt import Prompt, Confirm
 from rich.table import Table
 from rich.panel import Panel
 
-from .config import DEFAULT_OUTPUT_DIR, DEFAULT_WORKERS, LIBRARY_FILENAME, DEFAULT_COOKIE_BROWSER
+from .config import DEFAULT_OUTPUT_DIR, DEFAULT_WORKERS, LIBRARY_FILENAME, DEFAULT_COOKIE_BROWSER, DEFAULT_QUALITY
 from .models import LibraryMetadata, Track
 from .spotify_auth import SpotifyAuth
 from .spotify_library import SpotifyLibrary
@@ -24,7 +24,7 @@ console = Console()
 import signal
 
 class SpotifyYouTubeDL:
-    def __init__(self, output_dir: Path, workers: int = DEFAULT_WORKERS, skip_auth: bool = False, access_token: str = None, cookie_browser: str = None):
+    def __init__(self, output_dir: Path, workers: int = DEFAULT_WORKERS, skip_auth: bool = False, access_token: str = None, cookie_browser: str = None, quality: str = DEFAULT_QUALITY):
         self.output_dir = Path(output_dir)
         self.workers = workers
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -36,7 +36,7 @@ class SpotifyYouTubeDL:
         
         # Components
         self.spotify = SpotifyLibrary(skip_auth=skip_auth, access_token=access_token)
-        self.downloader = YouTubeDownloader(self.output_dir, cookie_browser=cookie_browser)
+        self.downloader = YouTubeDownloader(self.output_dir, cookie_browser=cookie_browser, quality=quality)
         
         # Register Cleanup
         signal.signal(signal.SIGINT, self._handle_interrupt)

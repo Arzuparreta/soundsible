@@ -44,8 +44,17 @@ SPOTIFY_SCOPE = "user-library-read playlist-read-private playlist-read-collabora
 
 # Download Settings
 DEFAULT_FORMAT = "mp3"
-DEFAULT_BITRATE = 192
+DEFAULT_BITRATE = 320
 DEFAULT_WORKERS = 4
+
+# Quality Profiles
+# 0 bitrate means 'best' / no forced re-encoding
+QUALITY_PROFILES = {
+    "standard": {"bitrate": 128, "format": "mp3", "label": "Standard (128k)"},
+    "high": {"bitrate": 320, "format": "mp3", "label": "High Quality (320k)"},
+    "ultra": {"bitrate": 0, "format": "best", "label": "Ultra (Best Source Audio)"}
+}
+DEFAULT_QUALITY = "high"
 
 # Search Settings
 SEARCH_STRATEGY_PRIMARY = "{artist} - {title} official audio"

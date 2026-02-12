@@ -1,391 +1,115 @@
-# Soundsible
+# Soundsible: Universal Media Ecosystem
 
-A cloud-first, self-hosted music platform that streams your own library from Cloudflare R2 / Backblaze B2 to any Linux device.
+Soundsible is a professional-grade, cloud-native music platform designed for Linux. It enables users to stream their personal music collections from high-performance cloud storage (Cloudflare R2, Backblaze B2, or Generic S3) while maintaining a local-first experience through intelligent caching and native desktop integration.
 
-## Features
+## Core Components
 
-### Music Player 
-- **Streaming playback**: Stream music directly from cloud storage 
-- **Smart caching**: LRU cache with configurable size (default 50GB) 
-- **Offline mode**: Play cached tracks without internet 
-- **Multi-device sync**: Automatic library synchronization across devices 
-- **GTK interface**: Native Linux desktop integration (GTK4/Adwaita) 
-- **MPRIS integration**: Media key support (optional) 
-- **Queue management**: Create and manage playback queues
-- **Search/Filter**: In-app library search
+The ecosystem consists of three primary modules integrated into a single unified launcher:
 
-### Setup Tool
-- **Multi-provider support**: Choose between Cloudflare R2, Backblaze B2, or other S3-compatible services
-- **Guided setup wizard**: Step-by-step account configuration and bucket creation
-- **Automatic compression**: Convert lossless formats (FLAC/WAV) to MP3/OGG for efficient streaming
-- **Deduplication**: Hash-based duplicate detection saves storage space
-- **Parallel uploads**: Fast multi-threaded file uploads with progress tracking
-- **QR code pairing**: Easy multi-device setup
-
-## Architecture
-
-```
-┌──────────────────┐      ┌────────────────────┐      ┌─────────────────┐
-│  Setup Tool CLI  │─────▶│  Cloud Storage     │◀─────│  Music Player   │
-│  • Upload music  │      │  • Cloudflare R2   │      │  • Stream       │
-│  • Auto-compress │      │  • Backblaze B2    │      │  • Cache        │
-│  • Generate QR   │      │  • Generic S3      │      │  • Sync         │
-└──────────────────┘      └────────────────────┘      └─────────────────┘
-```
+1.  **Music Player**: A high-fidelity GTK4/Adwaita application featuring gapless playback via the MPV engine, smart LRU caching, and MPRIS desktop integration.
+2.  **ODST Downloader**: An Omni-Directional Search & Transfer tool capable of pulling high-quality audio from YouTube and Spotify, with automated metadata enrichment and cloud synchronization.
+3.  **Setup & Maintenance Tool**: A comprehensive CLI suite for library management, cloud configuration, metadata harmonization, and multi-device synchronization via encrypted tokens or QR codes.
 
 ---
 
-## Prerequisites
+## Getting Started
 
-- Python 3.8 or higher
-- ffmpeg (for audio conversion)
-- **libmpv1** (required for music playback)
-- **python-mpris-server** (optional, for media key support)
+This section provides a simplified installation path for users who want to get up and running quickly.
 
-### System Depencies
+### 1. System Requirements
 
-Install required system packages:
+Ensure your Linux distribution has the following dependencies installed:
 
 ```bash
-# Ubuntu/Debian
-sudo apt install python3-pip python3-venv ffmpeg libmpv1 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 playerctl
+# Ubuntu / Debian / Pop!_OS
+sudo apt install ffmpeg libmpv1 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 playerctl
 
 # Fedora
-sudo dnf install python3-pip ffmpeg mpv-libs python3-gobject gtk4 libadwaita playerctl
+sudo dnf install ffmpeg mpv-libs python3-gobject gtk4 libadwaita playerctl
 
-# Arch
-sudo pacman -S python-pip ffmpeg mpv python-gobject gtk4 libadwaita playerctl
+# Arch Linux
+sudo pacman -S ffmpeg mpv python-gobject gtk4 libadwaita playerctl
 ```
 
----
+### 2. Installation
 
-## Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/Arzuparreta/soundsible.git
-   cd soundsible
-   ```
-
-2. Create and activate virtual environment:
-   ```bash
-   python3 -m venv venv
-   ```
-   
-   Then activate it:
-   
-   **Bash/Zsh:**
-   ```bash
-   source venv/bin/activate
-   ```
-   
-   **Fish shell:**
-   ```fish
-   source venv/bin/activate.fish
-   ```
-   
-   > **Note for Arch users:** Due to PEP 668, you must use a virtual environment for pip installations. Always activate the venv before installing Python packages.
-
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
----
-
-## Using the GUI App (Recommended)
-
-The easiest way to use Soundsible is through the **GTK graphical application**:
+Clone the repository and run the automated launcher. The launcher will automatically handle virtual environment creation and dependency installation.
 
 ```bash
-./gui.sh
+git clone https://github.com/Arzuparreta/soundsible.git
+cd soundsible
+python3 run.py
 ```
 
-The GUI includes everything you need:
-- **Music Player** — Stream and play your library
-- **Download & Push (Smart)** — Download music from Spotify/YouTube and upload to cloud *(Menu → Download & Push)*
-- **Upload Local Files** — Upload local music files to cloud *(Menu → Upload Local Files)*
-- **Setup Wizard** — Configure cloud storage credentials *(Menu → Setup Wizard)*
-- **Themes** — Choose between System, Light, Dark, or ODST themes
+### 3. Initial Configuration
 
-### First-Time Setup
-
-On first launch, you'll be prompted to run the **Setup Wizard** to configure your cloud storage. This only needs to be done once.
-
-### Optional: Enable Media Keys
-
-For keyboard media control (play/pause/next/previous keys):
-
-Activate your virtual environment first:
-
-**Bash/Zsh:**
-```bash
-source venv/bin/activate
-```
-
-**Fish shell:**
-```fish
-source venv/bin/activate.fish
-```
-
-Then install MPRIS support:
-```bash
-pip install mpris-server
-```
-
-> **Arch users:** You can alternatively install from AUR: `yay -S python-mpris-server`
+Upon the first execution, the **Setup Wizard** will appear. 
+1.  Select **Run Setup / Settings** (Option 4).
+2.  Follow the guided prompts to connect your cloud storage.
+    *   **Recommended**: Cloudflare R2 for zero bandwidth egress fees.
+    *   **Alternative**: Backblaze B2 for ease of setup without a credit card.
+3.  Once configured, you can begin adding music to your library.
 
 ---
 
-## ODST Tool: Music Downloader
+## Component Documentation
 
-The **ODST Tool** is a dedicated web interface for downloading music from Spotify, YouTube, or YouTube Music links. It downloads music in Soundsible compatible format and can sync directly to your cloud storage.
+### The Music Player (GUI)
 
-To use the ODST Tool:
+The primary interface for daily listening. Built with modern GNOME design principles.
 
-```bash
-cd odst_tool
-./downloader_web.sh
-```
+*   **Streaming & Caching**: Streams directly from the cloud while simultaneously populating a local cache. This ensures that recently played tracks remain available during internet outages.
+*   **Universal Sync**: Implements a 3-way merge algorithm to synchronize library manifests across all your devices.
+*   **Dynamic UI**: Supports Light, Dark, and specialized ODST themes. Features a marquee-style scrolling title for long track names and high-resolution cover art extraction.
+*   **Media Keys**: Supports standard keyboard playback controls and desktop-wide media widgets via MPRIS.
 
-Then open the displayed URL in your browser to access the download interface.
+### ODST Music Downloader
 
-> **Note:** This is different from the GUI's "Download & Push" feature. ODST provides more advanced features including multi-platform link support, playlist selection, smart matching, and batch downloads.
+A specialized tool for expanding your library from external sources.
 
-For detailed setup instructions (Spotify API credentials for auto-downloading playlists, etc.), see **[odst_tool/README.md](odst_tool/README.md)**.
+*   **Web Interface**: Access via `run.py` (Option 2) to manage downloads through a clean browser UI.
+*   **Multi-Source Support**: Accepts direct links from Spotify, YouTube, and YouTube Music.
+*   **Smart Matching**: Prioritizes YouTube "Topic" channels to ensure the highest available audio quality and official metadata.
+*   **Auto-Cloud Sync**: Can be configured to automatically push downloaded tracks to your cloud storage and update the global library manifest.
 
-### Web Uploader & Cloud Sync
+### Setup & Maintenance CLI
 
-The ODST Tool features a powerful Web UI that can manage your cloud library directly.
+A powerful toolset for advanced library operations. Accessible via `python -m setup_tool.cli`.
 
-> **Tip:** You can use this interface to upload your entire library to Cloudflare R2 / Backblaze B2 without using the command line!
-
-**How to use:**
-
-1.  Click **Settings** in the top right corner.
-2.  Under the **Cloud Sync (R2)** section, enter your storage credentials:
-    *   Account ID
-    *   Access Key ID
-    *   Secret Access Key
-    *   Bucket Name
-    *   *(Note: If you already ran the Setup Wizard in the main app, these might be pre-filled!)*
-3.  Click **Save Cloud Config**.
-4.  Once configured, click the **Cloud Icon** (next to Settings) to start the sync.
-    *   This will automatically upload all downloaded tracks to your bucket.
-    *   It also updates the `library.json` database so your other devices stay in sync.
+*   **Library Janitor**: `cleanup` — Prunes orphaned entries and verifies the integrity of both local and cloud files.
+*   **The Surgeon**: `refresh-metadata` — Retroactively fixes metadata by identifying tracks via MusicBrainz and ISRC codes to pull "Gold Standard" tags (Album, Year, Track Number).
+*   **Deep Scanner**: `scan` — Indexes large local directories (e.g., a NAS) without uploading them, allowing local files to be treated as part of the unified library.
+*   **Batch Fixer**: `fix-library-covers` — Downloads missing artwork, embeds it directly into audio tags, and re-uploads files to ensure permanent cover art persistence.
+*   **Service Integration**: `install-service` — Installs Soundsible as a systemd user service to enable background folder watching and API availability.
 
 ---
 
-## Alternative: Upload via Web Interface
+## Technical Architecture
 
-For uploading local files to your cloud library through a web browser:
+Soundsible is designed for robustness and privacy:
 
-```bash
-./start_web.sh
-```
-
-Then open the displayed URL (usually `http://localhost:5000`) in your browser.
-
----
-
-## Advanced: CLI/Terminal Player
-
-For terminal-based playback:
-
-```bash
-# List all tracks
-./player.sh list
-
-# Start interactive player (TUI)
-./player.sh play
-
-# Play matching tracks
-./player.sh play "Daft Punk"
-
-# Download tracks for offline use
-./player.sh download "Jazz"
-
-# Check cache usage
-./player.sh cache-status
-```
+*   **Database**: Utilizes SQLite for high-speed local searching and metadata indexing.
+*   **Security**: All cloud credentials are encrypted on-disk using industry-standard cryptography.
+*   **Privacy**: Zero telemetry or external data collection. Your library metadata remains in your controlled cloud bucket.
+*   **Storage Efficiency**: Implements hash-based deduplication to prevent duplicate uploads and save storage costs.
 
 ---
 
-## Advanced: Setup Tool CLI
+## Multi-Device Synchronization
 
-For advanced configuration and batch uploads via command line:
-
-### Initial Setup
-
-Run the guided setup wizard:
-```bash
-python -m setup_tool.cli init --guided
-```
-
-The wizard will:
-1. Help you choose a storage provider (Cloudflare R2 or Backblaze B2)
-2. Guide you through account creation
-3. Configure API credentials
-4. Create your music bucket
-5. Generate player configuration
-
-### Upload Music
-
-Upload your music library:
-```bash
-python -m setup_tool.cli upload /path/to/your/music --compress --parallel 4
-```
-
-Options:
-- `--compress`: Automatically convert FLAC/WAV to MP3 (320kbps)
-- `--parallel N`: Number of concurrent uploads (default: 4)
-
-### Check Status
-
-View your library status:
-```bash
-python -m setup_tool.cli status
-```
-
-### Multi-Device Setup
-
-Export configuration for other devices:
-```bash
-python -m setup_tool.cli export-config --format qr
-```
-
-Scan the QR code on your other device to automatically configure the player.
+To sync your library to a new device:
+1.  On the primary device, run `setup-tool export-config`.
+2.  Scan the generated **QR Code** or copy the **Encrypted Token**.
+3.  On the new device, use `setup-tool import-config <token>` to instantly mirror your entire ecosystem.
 
 ---
 
-## Storage Provider Comparison
+## Legal Disclaimer
 
-| Provider | Free Tier | Bandwidth Cost | Credit Card Required | Best For |
-|----------|-----------|----------------|---------------------|----------|
-| **Cloudflare R2** | 10GB | **FREE** (zero egress) | Yes | Streaming (recommended) |
-| **Backblaze B2** | 10GB | $0.01/GB | No | Simple setup, backups |
-| **AWS S3** | 5GB (12 months) | $0.09/GB | Yes | AWS ecosystem users |
-
-**Recommendation**: Use Cloudflare R2 for zero bandwidth costs when streaming music.
-
----
-
-## Project Structure
-
-```
-soundsible/
-├── odst_tool/          # Spotify-to-YouTube downloader CLI
-├── setup_tool/         # Upload and management CLI
-│   ├── cli.py          # Command-line interface
-│   ├── audio.py        # Audio processing
-│   ├── storage_provider.py  # Abstract provider interface
-│   ├── cloudflare_r2.py     # R2 implementation
-│   └── backblaze_b2.py      # B2 implementation
-├── player/             # GTK music player
-├── shared/             # Shared utilities
-│   ├── models.py       # Data models
-│   ├── constants.py    # Constants
-│   └── crypto.py       # Credential encryption
-└── tests/              # Unit and integration tests
-```
-
----
-
-## Development Status
-
-**Phase 0: Foundation** (Complete)
-- Project structure and virtual environment
-- Data models and shared utilities
-- S3 storage provider abstraction
-- Cloudflare R2 and Backblaze B2 implementations
-- Audio metadata extraction and compression
-
-**Phase 1: Setup Tool Core** (Complete)
-- CLI interface with guided setup
-- Parallel upload engine
-- Configuration management
-
-**Phase 2-3: Upload Engine & Web Interface** (Complete)
-
-**Phase 4-6: Music Player** (Complete)
-
----
-
-## Legal & Disclaimer
-
-> **IMPORTANT: This software is provided for personal, educational, and research purposes only.**
-
-### Copyright & Fair Use
-
-- **No copyrighted content is distributed** — This software does not host, distribute, or provide access to any copyrighted material
-- **User responsibility** — Users are solely responsible for ensuring they have the legal right to download, upload, and stream any content they access through this software
-- **Personal use** — This tool is intended for personal music library management, similar to how a web browser accesses publicly available content
-- **No DRM circumvention** — This software does not bypass, decrypt, or circumvent any Digital Rights Management (DRM) or technical protection measures
-
-### Terms of Service
-
-Using this software to download content may violate the Terms of Service of third-party platforms (YouTube, Spotify, etc.). While ToS violations are generally contractual matters (not criminal), users should review and understand the terms of any service they interact with.
-
-### Security
-
-- **Credential security** — Cloud storage credentials are encrypted locally using industry-standard cryptography
-- **Privacy** — No telemetry, analytics, or data collection of any kind
-
-### Liability
-
-THE AUTHORS AND COPYRIGHT HOLDERS SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF THIS SOFTWARE. Users assume all risk and responsibility for their usage.
-
-### DMCA Notice
-
-If you are a copyright holder and believe this software facilitates infringement of your rights, please open a GitHub issue with details. We are committed to addressing legitimate concerns.
-
----
-
-## Acknowledgements & Credits
-
-This project is built upon the incredible work of open-source communities. We gratefully acknowledge:
-
-### Core Dependencies
-
-| Library | License | Description |
-|---------|---------|-------------|
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Unlicense | YouTube video/audio downloader |
-| [spotipy](https://github.com/spotipy-dev/spotipy) | MIT | Spotify Web API client |
-| [mutagen](https://github.com/quodlibet/mutagen) | GPL-2.0 | Audio metadata handling |
-| [Flask](https://github.com/pallets/flask) | BSD-3-Clause | Web framework |
-| [boto3](https://github.com/boto/boto3) | Apache-2.0 | AWS/S3 SDK |
-| [PyGObject](https://pygobject.readthedocs.io/) | LGPL-2.1 | GTK Python bindings |
-| [python-mpv](https://github.com/jaseg/python-mpv) | AGPL-3.0 | mpv media player bindings |
-| [Rich](https://github.com/Textualize/rich) | MIT | Terminal formatting |
-| [Pillow](https://github.com/python-pillow/Pillow) | HPND | Image processing |
-
-### Special Thanks
-
-- **[yt-dlp Team](https://github.com/yt-dlp/yt-dlp)** — For maintaining an exceptional download tool
-- **[mpv](https://mpv.io/)** — For the powerful media player engine
-- **[GTK](https://gtk.org/)** / **[GNOME](https://www.gnome.org/)** — For the Adwaita UI framework
-- **[Cloudflare](https://www.cloudflare.com/)** & **[Backblaze](https://www.backblaze.com/)** — For affordable cloud storage
+Soundsible is provided for personal, educational, and research purposes only. Users are solely responsible for ensuring they have the legal right to download, upload, or stream any content accessed through this software. The authors assume no liability for misuse of this tool or violations of third-party Terms of Service.
 
 ---
 
 ## License
 
-MIT License — See [LICENSE](LICENSE) file for full text.
-
----
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## Support
-
-For issues and questions, please use [GitHub Issues](https://github.com/Arzuparreta/soundsible/issues).
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

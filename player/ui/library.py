@@ -21,6 +21,10 @@ class TrackObject(GObject.Object):
         return self.track.album
 
     @GObject.Property(type=bool, default=False)
+    def is_local(self):
+        return self.track.is_local
+
+    @GObject.Property(type=bool, default=False)
     def is_fav(self):
         return self._is_fav
     
@@ -224,9 +228,12 @@ class LibraryView(Gtk.Box):
         self._add_cover_column()
         if self.favourites_manager:
             self._add_favourite_dot_column()
+            
+        self._add_source_column()
+        
         self._add_text_column("Title", "title", expand=True)
         self._add_text_column("Artist", "artist")
-        # self._add_text_column("Album", "album")
+        self._add_text_column("Album", "album")
         self._add_text_column("Length", "duration", fixed_width=80) 
 
         # Scroll Window
@@ -500,6 +507,34 @@ class LibraryView(Gtk.Box):
         column.set_fixed_width(30)
         self.column_view.append_column(column)
     
+    def _add_source_column(self):
+        """Add a column showing source (Local vs Cloud)."""
+        factory = Gtk.SignalListItemFactory()
+        
+        def on_setup(factory, list_item):
+            image = Gtk.Image()
+            list_item.set_child(image)
+        
+        def on_bind(factory, list_item):
+            image = list_item.get_child()
+            track_obj = list_item.get_item()
+            
+            if track_obj.is_local:
+                image.set_from_icon_name("drive-harddisk-symbolic")
+                image.set_tooltip_text("Local (High Quality)")
+                image.add_css_class("dim-label")
+            else:
+                image.set_from_icon_name("network-idle-symbolic")
+                image.set_tooltip_text("Cloud (Stream)")
+                image.add_css_class("dim-label")
+        
+        factory.connect("setup", on_setup)
+        factory.connect("bind", on_bind)
+        
+        column = Gtk.ColumnViewColumn(title="", factory=factory)
+        column.set_fixed_width(30)
+        self.column_view.append_column(column)
+
     def _add_cover_column(self):
         """Add cover art thumbnail column."""
         factory = Gtk.SignalListItemFactory()
@@ -612,6 +647,14 @@ class LibraryView(Gtk.Box):
                 
                 # Update UI on main thread
                 GLib.idle_add(self._populate_ui, tracks)
+                
+                # Also refresh album grid if we are the main library view
+                if not self.show_favourites_only:
+                    def _refresh_grid():
+                        root = self.get_root()
+                        if root and hasattr(root, 'album_grid'):
+                            root.album_grid.refresh()
+                    GLib.idle_add(_refresh_grid)
             else:
                 GLib.idle_add(self._show_error, "Failed to sync library or library is empty.")
         except Exception as e:

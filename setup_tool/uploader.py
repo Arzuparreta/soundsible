@@ -345,7 +345,8 @@ class UploadEngine:
                 file_hash=file_hash,
                 original_filename=orig_name,
                 compressed=is_compressed_copy,
-                cover_art_key=None
+                cover_art_key=None,
+                is_local=(self.config.provider.value == 'local')
             )
             
             return track, True

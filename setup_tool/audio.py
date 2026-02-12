@@ -283,16 +283,12 @@ class AudioProcessor:
         """
         ext = Path(file_path).suffix.lower()
         
-        # Already compressed formats
-        if ext in ['.mp3', '.ogg', '.opus', '.aac']:
-            return False, f"Already compressed ({ext})"
+        # We now support streaming lossless formats directly
+        if ext in ['.mp3', '.ogg', '.opus', '.aac', '.flac', '.wav', '.alac', '.m4a']:
+            return False, f"Format supported for direct streaming ({ext})"
         
-        # Lossless formats that should be compressed for streaming
-        if ext in ['.flac', '.wav', '.alac']:
-            return True, f"Lossless format ({ext}) - compressing for streaming"
-        
-        # Default: don't compress unknown formats
-        return False, "Format not recognized for compression"
+        # Default: don't compress unknown formats, let the user decide
+        return False, "Format not recognized for auto-compression"
 
     @staticmethod
     def update_tags(file_path: str, tags: Dict[str, str]) -> bool:

@@ -19,6 +19,7 @@ class StorageProvider(Enum):
     BACKBLAZE_B2 = "b2"
     AWS_S3 = "s3"
     GENERIC_S3 = "generic"
+    LOCAL = "local"
 
 
 @dataclass
@@ -27,7 +28,7 @@ class Track:
     Represents a single music track with metadata.
     
     Attributes:
-        id: Unique identifier (UUID)
+        id: Unique identifier (UUID or Hash)
         title: Song title
         artist: Artist name
         album: Album name
@@ -36,12 +37,16 @@ class Track:
         original_filename: Original file name before upload
         compressed: Whether the file was compressed during upload
         file_size: Size in bytes
-        bitrate: Bitrate in kbps
-        format: Audio format (mp3, flac, ogg, etc.)
-        cover_art_key: Optional S3 key for cover art image
+        bitrate: Bitrate in kbps (e.g., 320, 1411 for lossless)
+        format: Audio format (mp3, flac, ogg, wav, etc.)
+        cover_art_key: Optional S3 key or local path for cover art
         year: Release year (optional)
         genre: Music genre (optional)
         track_number: Track number in album (optional)
+        is_local: Whether the track is stored locally (optional, defaults to False)
+        local_path: Absolute path to the file if scanned locally (optional)
+        musicbrainz_id: Unique MusicBrainz Recording ID (optional)
+        isrc: International Standard Recording Code (optional)
     """
     id: str
     title: str
@@ -58,6 +63,10 @@ class Track:
     year: Optional[int] = None
     genre: Optional[str] = None
     track_number: Optional[int] = None
+    is_local: bool = False
+    local_path: Optional[str] = None
+    musicbrainz_id: Optional[str] = None
+    isrc: Optional[str] = None
     
     @staticmethod
     def generate_id() -> str:
@@ -195,25 +204,51 @@ class PlayerConfig:
     provider: StorageProvider
     endpoint: str
     bucket: str
-    access_key_id: str  # Should be encrypted when stored
-    secret_access_key: str  # Should be encrypted when stored
+    access_key_id: str
+    secret_access_key: str
     region: Optional[str] = None
     public: bool = False
     cache_max_size_gb: int = 50
     cache_location: str = "~/.cache/musicplayer/"
     sync_interval_minutes: int = 18
     last_sync: Optional[str] = None
+    quality_preference: str = "high"  # standard, high, ultra
+    watch_folders: List[str] = field(default_factory=list)
+    is_encrypted: bool = False
     
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert config to dictionary."""
+    def to_dict(self, encrypt: bool = True) -> Dict[str, Any]:
+        """Convert config to dictionary, optionally encrypting credentials."""
+        from shared.crypto import CredentialManager
+        
         data = asdict(self)
         data['provider'] = self.provider.value
+        
+        if encrypt and not self.is_encrypted:
+            data['access_key_id'] = CredentialManager.encrypt(self.access_key_id)
+            data['secret_access_key'] = CredentialManager.encrypt(self.secret_access_key)
+            data['is_encrypted'] = True
+            
         return data
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'PlayerConfig':
-        """Create PlayerConfig from dictionary."""
+        """Create PlayerConfig from dictionary, decrypting if necessary."""
+        from shared.crypto import CredentialManager
+        
         data['provider'] = StorageProvider(data['provider'])
+        
+        if data.get('is_encrypted', False):
+            # Decrypt for in-memory use
+            dec_id = CredentialManager.decrypt(data['access_key_id'])
+            dec_key = CredentialManager.decrypt(data['secret_access_key'])
+            
+            # If decryption works, update data. If not (e.g. wrong machine), 
+            # we keep encrypted strings (which will fail auth, but not crash)
+            if dec_id is not None and dec_key is not None:
+                data['access_key_id'] = dec_id
+                data['secret_access_key'] = dec_key
+                data['is_encrypted'] = False # Marked as raw in memory
+        
         return cls(**data)
     
     def to_json(self, indent: int = 2) -> str:

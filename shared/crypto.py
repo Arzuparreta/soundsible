@@ -7,7 +7,7 @@ like cloud storage credentials.
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 import base64
 import os
@@ -21,23 +21,15 @@ class CredentialManager:
     def generate_key_from_password(password: str, salt: bytes) -> bytes:
         """
         Derive encryption key from password using PBKDF2.
-        
-        Args:
-            password: User password
-            salt: Salt bytes for key derivation
-            
-        Returns:
-            Derived encryption key
         """
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             iterations=100000,
             backend=default_backend()
         )
-        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
-        return key
+        return base64.urlsafe_b64encode(kdf.derive(password.encode()))
     
     @staticmethod
     def generate_machine_key() -> bytes:
@@ -71,42 +63,29 @@ class CredentialManager:
     def encrypt(data: str, key: Optional[bytes] = None) -> str:
         """
         Encrypt string data.
-        
-        Args:
-            data: String to encrypt
-            key: Encryption key (generates machine key if None)
-            
-        Returns:
-            Base64-encoded encrypted string
         """
+        if not data:
+            return ""
         if key is None:
             key = CredentialManager.generate_machine_key()
         
         f = Fernet(key)
-        encrypted = f.encrypt(data.encode())
-        return base64.urlsafe_b64encode(encrypted).decode()
+        return f.encrypt(data.encode()).decode()
     
     @staticmethod
     def decrypt(encrypted_data: str, key: Optional[bytes] = None) -> Optional[str]:
         """
         Decrypt encrypted string data.
-        
-        Args:
-            encrypted_data: Base64-encoded encrypted string
-            key: Encryption key (generates machine key if None)
-            
-        Returns:
-            Decrypted string, or None if decryption fails
         """
+        if not encrypted_data:
+            return ""
         try:
             if key is None:
                 key = CredentialManager.generate_machine_key()
             
             f = Fernet(key)
-            encrypted_bytes = base64.urlsafe_b64decode(encrypted_data.encode())
-            decrypted = f.decrypt(encrypted_bytes)
-            return decrypted.decode()
+            return f.decrypt(encrypted_data.encode()).decode()
             
         except Exception as e:
-            print(f"Decryption failed: {e}")
+            # print(f"Decryption failed: {e}")
             return None

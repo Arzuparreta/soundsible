@@ -9,6 +9,8 @@ from .config import (
     SEARCH_STRATEGY_FALLBACK,
     DURATION_TOLERANCE_SEC,
     DEFAULT_BITRATE,
+    DEFAULT_QUALITY,
+    QUALITY_PROFILES,
     TRACKS_DIR,
     MATCH_THRESHOLD_TITLE,
     FORBIDDEN_KEYWORDS
@@ -16,11 +18,12 @@ from .config import (
 import difflib
 from .audio_utils import AudioProcessor
 from .models import Track
+from .metadata_harmonizer import MetadataHarmonizer
 
 class YouTubeDownloader:
     """Handles searching and downloading from YouTube."""
     
-    def __init__(self, output_dir: Path = DEFAULT_OUTPUT_DIR, cookie_browser: Optional[str] = None, cookie_file: Optional[str] = None):
+    def __init__(self, output_dir: Path = DEFAULT_OUTPUT_DIR, cookie_browser: Optional[str] = None, cookie_file: Optional[str] = None, quality: str = DEFAULT_QUALITY):
         self.output_dir = output_dir
         self.tracks_dir = output_dir / TRACKS_DIR
         self.tracks_dir.mkdir(parents=True, exist_ok=True)
@@ -28,13 +31,17 @@ class YouTubeDownloader:
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.cookie_browser = cookie_browser
         self.cookie_file = cookie_file
+        self.quality = quality
 
     def process_track(self, spotify_metadata: Dict[str, Any]) -> Optional[Track]:
         """
         Full workflow for a single track: Search -> Download -> Process -> Return Track
         """
-        # 1. Search for video
-        video_info = self._search_youtube(spotify_metadata)
+        # 1. Harmonize Spotify metadata (Standardize source)
+        clean_metadata = MetadataHarmonizer.harmonize(spotify_metadata, source="spotify")
+        
+        # 2. Search for video
+        video_info = self._search_youtube(clean_metadata)
         
         if not video_info:
             return None
@@ -45,7 +52,7 @@ class YouTubeDownloader:
         from .config import DOWNLOAD_DELAY_RANGE
         time.sleep(random.uniform(*DOWNLOAD_DELAY_RANGE))
             
-        # 2. Download audio
+        # 3. Download audio
         url = video_info.get('webpage_url') or video_info.get('url')
         temp_file = self._download_audio(url)
         
@@ -53,15 +60,16 @@ class YouTubeDownloader:
             return None
             
         try:
-            # 3. Process file (Hash, Metadata, Move)
+            # 4. Process file (Hash, Metadata, Move)
             file_hash = AudioProcessor.calculate_hash(str(temp_file))
-            final_path = self.tracks_dir / f"{file_hash}.mp3"
+            extension = temp_file.suffix[1:]
+            final_path = self.tracks_dir / f"{file_hash}.{extension}"
             
-            # Embed metadata
+            # Embed metadata (using clean version)
             AudioProcessor.embed_metadata(
                 str(temp_file), 
-                spotify_metadata, 
-                spotify_metadata.get('album_art_url')
+                clean_metadata, 
+                clean_metadata.get('album_art_url')
             )
             
             # Verify audio details
@@ -70,22 +78,23 @@ class YouTubeDownloader:
             # Move to final location (renaming to hash)
             shutil.move(str(temp_file), str(final_path))
             
-            # 4. Create Track Object
+            # 5. Create Track Object
             track = Track(
-                id=file_hash, # ID is hash in this system
-                title=spotify_metadata['title'],
-                artist=spotify_metadata['artist'],
-                album=spotify_metadata['album'],
-                duration=duration if duration > 0 else spotify_metadata['duration_sec'],
+                id=file_hash,
+                title=clean_metadata['title'],
+                artist=clean_metadata['artist'],
+                album=clean_metadata['album'],
+                duration=duration if duration > 0 else clean_metadata['duration_sec'],
                 file_hash=file_hash,
-                original_filename=f"{spotify_metadata['artist']} - {spotify_metadata['title']}.mp3",
-                compressed=True,
+                original_filename=f"{clean_metadata['artist']} - {clean_metadata['title']}.{extension}",
+                compressed=(self.quality != 'ultra'),
                 file_size=size,
                 bitrate=bitrate,
-                format='mp3',
-                year=int(spotify_metadata['release_date'][:4]) if spotify_metadata.get('release_date') else None,
+                format=extension,
+                year=clean_metadata.get('year'),
                 genre=None,
-                track_number=spotify_metadata.get('track_number')
+                track_number=clean_metadata.get('track_number'),
+                is_local=True
             )
             
             return track
@@ -123,36 +132,29 @@ class YouTubeDownloader:
                 return None
 
             # Parse Metadata
-            # Ideally we want Artist - Title. 
-            # If video title is "Artist - Title", split it.
-            # Else fallback to Uploader as Artist, Title as Title.
-            
+            video_id = info.get('id')
             video_title = info.get('title', 'Unknown Title')
             uploader = info.get('uploader', 'Unknown Artist')
             duration = info.get('duration', 0)
             
-            artist = uploader
-            title = video_title
+            # Use YT-DLP's specific fields if available (YouTube Music)
+            artist = info.get('artist') or uploader
+            title = info.get('track') or video_title
+            album = info.get('album')
             
-            # Try to split "Artist - Title"
-            if " - " in video_title:
-                parts = video_title.split(" - ", 1)
-                artist = parts[0].strip()
-                title = parts[1].strip()
-            
-            # Clean up title (remove (Official Video), annotations)
-            # Simple cleanup for now, maybe expand later
-            
-            # Construct partial metadata dict for embedding
-            meta = {
+            # Initial raw dict
+            raw_meta = {
                 'title': title,
                 'artist': artist,
-                'album': 'YouTube Download',
-                'album_art_url': info.get('thumbnail'),
+                'album': album,
+                'album_art_url': MetadataHarmonizer.get_best_yt_thumbnail(video_id) if video_id else info.get('thumbnail'),
                 'duration_sec': duration,
-                'release_date': info.get('upload_date'), # YYYYMMDD
-                'track_number': 1
+                'release_date': info.get('upload_date'),
+                'track_number': info.get('track_number', 1)
             }
+            
+            # Harmonize (Standardize + MusicBrainz lookup)
+            clean_meta = MetadataHarmonizer.harmonize(raw_meta, source="youtube")
             
             # 2. Download
             temp_file = self._download_audio(url)
@@ -165,13 +167,14 @@ class YouTubeDownloader:
             # Actually we can just manually do the processing here to avoid 'process_track's search logic.
             
             file_hash = AudioProcessor.calculate_hash(str(temp_file))
-            final_path = self.tracks_dir / f"{file_hash}.mp3"
+            extension = temp_file.suffix[1:]
+            final_path = self.tracks_dir / f"{file_hash}.{extension}"
             
             # Embed metadata
             AudioProcessor.embed_metadata(
                 str(temp_file), 
-                meta, 
-                meta.get('album_art_url')
+                clean_meta, 
+                clean_meta.get('album_art_url')
             )
             
             # Verify audio details
@@ -183,19 +186,20 @@ class YouTubeDownloader:
             # Create Track
             track = Track(
                 id=file_hash, 
-                title=meta['title'],
-                artist=meta['artist'],
-                album=meta['album'],
-                duration=duration if duration > 0 else meta['duration_sec'],
+                title=clean_meta['title'],
+                artist=clean_meta['artist'],
+                album=clean_meta['album'],
+                duration=duration if duration > 0 else clean_meta['duration_sec'],
                 file_hash=file_hash,
-                original_filename=f"{meta['artist']} - {meta['title']}.mp3",
-                compressed=True,
+                original_filename=f"{clean_meta['artist']} - {clean_meta['title']}.{extension}",
+                compressed=(self.quality != 'ultra'),
                 file_size=size,
                 bitrate=bitrate,
-                format='mp3',
-                year=int(meta['release_date'][:4]) if meta.get('release_date') else None,
+                format=extension,
+                year=clean_meta.get('year'),
                 genre=None,
-                track_number=1
+                track_number=clean_meta.get('track_number'),
+                is_local=True
             )
             
             return track
@@ -336,32 +340,39 @@ class YouTubeDownloader:
         return difflib.SequenceMatcher(None, a, b).ratio()
 
     def _download_audio(self, url: str) -> Optional[Path]:
-        """Download audio from URL and convert to MP3."""
+        """Download audio from URL and convert/remux based on quality."""
         temp_filename = f"temp_{os.getpid()}_{int(os.times().system)}"
         output_template = str(self.temp_dir / f"{temp_filename}.%(ext)s")
         
+        profile = QUALITY_PROFILES.get(self.quality, QUALITY_PROFILES[DEFAULT_QUALITY])
+        
         ydl_opts = {
-            'format': 'best',
-             # Fix for "Did not get any data blocks": avoid dashboard manifests if possible or retry
+            'format': 'bestaudio/best',
             'retries': 10,
             'fragment_retries': 10,
-            'skip_unavailable_fragments': False,
-            'keep_fragments': False,
-            
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': str(DEFAULT_BITRATE),
-            }],
             'outtmpl': output_template,
             'quiet': True,
             'no_warnings': True,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'ios', 'web'],
-                }
-            }
         }
+        
+        if profile['bitrate'] > 0:
+            # Force conversion to MP3 with specific bitrate
+            ydl_opts['postprocessors'] = [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': profile['format'],
+                'preferredquality': str(profile['bitrate']),
+            }]
+        else:
+            # Ultra quality: get best audio and just remux to a standard container if needed
+            # or just leave it as is. ffmpeg will ensure it's playable.
+            ydl_opts['postprocessors'] = [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'flac', # Default for 'ultra' if we want lossless
+            }]
+            # Alternatively, if we want TRULY best source without conversion:
+            # ydl_opts['format'] = 'bestaudio'
+            # (No FFmpegExtractAudio post-processor)
+            # But FLAC is a safe bet for 'ultra' to ensure compatibility with metadata embedding.
         
         if self.cookie_file and os.path.exists(self.cookie_file):
             ydl_opts['cookiefile'] = self.cookie_file

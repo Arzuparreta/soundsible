@@ -4,7 +4,14 @@ import threading
 import os
 from pathlib import Path
 from dotenv import set_key
-from .config import DEFAULT_OUTPUT_DIR, DEFAULT_WORKERS, DEFAULT_BITRATE, DEFAULT_COOKIE_BROWSER
+from .config import (
+    DEFAULT_OUTPUT_DIR, 
+    DEFAULT_WORKERS, 
+    DEFAULT_BITRATE, 
+    DEFAULT_COOKIE_BROWSER,
+    QUALITY_PROFILES,
+    DEFAULT_QUALITY
+)
 from .spotify_youtube_dl import SpotifyYouTubeDL
 from .spotify_library import SpotifyLibrary
 import spotipy
@@ -19,6 +26,7 @@ from .optimize_library import optimize_library
 
 # Global State
 current_output_dir = DEFAULT_OUTPUT_DIR
+current_quality = DEFAULT_QUALITY
 optimization_thread = None
 
 def init_downloader():
@@ -29,11 +37,11 @@ def init_downloader():
     
     # Priority: Token > Client ID/Secret > None
     if token:
-        return SpotifyYouTubeDL(current_output_dir, DEFAULT_WORKERS, access_token=token, cookie_browser=DEFAULT_COOKIE_BROWSER)
+        return SpotifyYouTubeDL(current_output_dir, DEFAULT_WORKERS, access_token=token, cookie_browser=DEFAULT_COOKIE_BROWSER, quality=current_quality)
     elif client_id and client_secret:
-        return SpotifyYouTubeDL(current_output_dir, DEFAULT_WORKERS, skip_auth=False, cookie_browser=DEFAULT_COOKIE_BROWSER)
+        return SpotifyYouTubeDL(current_output_dir, DEFAULT_WORKERS, skip_auth=False, cookie_browser=DEFAULT_COOKIE_BROWSER, quality=current_quality)
     else:
-        return SpotifyYouTubeDL(current_output_dir, DEFAULT_WORKERS, skip_auth=True, cookie_browser=DEFAULT_COOKIE_BROWSER)
+        return SpotifyYouTubeDL(current_output_dir, DEFAULT_WORKERS, skip_auth=True, cookie_browser=DEFAULT_COOKIE_BROWSER, quality=current_quality)
 
 downloader_app = init_downloader()
 cloud_sync = CloudSync(current_output_dir)
@@ -46,17 +54,24 @@ def index():
     return render_template('index.html', 
                          output_dir=str(current_output_dir), 
                          has_creds=has_creds,
-                         has_cloud=has_cloud)
+                         has_cloud=has_cloud,
+                         quality=current_quality,
+                         quality_profiles=QUALITY_PROFILES)
 
 @app.route('/settings', methods=['POST'])
 def update_settings():
-    global current_output_dir, downloader_app, cloud_sync
+    global current_output_dir, current_quality, downloader_app, cloud_sync
     data = request.json
     
     # Update Output Directory
     new_dir = data.get('output_dir')
     if new_dir:
         current_output_dir = Path(new_dir)
+    
+    # Update Quality
+    new_quality = data.get('quality')
+    if new_quality and new_quality in QUALITY_PROFILES:
+        current_quality = new_quality
     
     # Update Credentials
     client_id = data.get('client_id')
@@ -223,8 +238,9 @@ def fetch_spotify_tracks(source_type, playlist_id):
             song_str = f"{artist} - {name}"
             
             # Estimate Size: (Duration (s) * Bitrate) / 8 / 1024
+            bitrate = QUALITY_PROFILES[current_quality]['bitrate'] or 320
             duration_sec = t['duration_ms'] / 1000
-            estimated_mb = (duration_sec * DEFAULT_BITRATE) / 8192 # 8 * 1024
+            estimated_mb = (duration_sec * bitrate) / 8192 # 8 * 1024
             
             # Send metadata needed for download
             # We construct a task object
@@ -246,8 +262,9 @@ def add_to_queue():
     song = data.get('song')
     if song:
         socketio.emit('log', {'data': f"Added to queue: {song}"})
-        # Approx 3.5 mins (210s) @ DEFAULT_BITRATE
-        est_mb = (210 * DEFAULT_BITRATE) / 8192
+        # Approx 3.5 mins (210s) @ Quality Bitrate
+        bitrate = QUALITY_PROFILES[current_quality]['bitrate'] or 320
+        est_mb = (210 * bitrate) / 8192
         return jsonify({"status": "ok", "song": song, "estimated_mb": round(est_mb, 2)})
     return jsonify({"status": "error"}), 400
 
@@ -261,7 +278,8 @@ def add_bulk_queue():
     for song in songs:
         if song.strip():
             # Approx 3.5 mins (210s)
-            est_mb = (210 * DEFAULT_BITRATE) / 8192
+            bitrate = QUALITY_PROFILES[current_quality]['bitrate'] or 320
+            est_mb = (210 * bitrate) / 8192
             response_data.append({
                 "song_str": song.strip(), 
                 "estimated_mb": round(est_mb, 2)

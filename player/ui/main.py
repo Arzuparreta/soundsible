@@ -13,6 +13,7 @@ from player.queue_manager import QueueManager
 from player.ui.queue_view import QueueView
 from player.favourites_manager import FavouritesManager
 from player.ui.tab_view import TabView
+from player.ui.album_grid import AlbumGridView
 from .volume_knob import VolumeKnob
 from pathlib import Path
 import json
@@ -621,6 +622,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def on_player_state_change(self, state):
         """Callback from engine (thread safe wrapper)."""
+        print(f"DEBUG: UI on_player_state_change: {state}")
         GLib.idle_add(self._update_ui_state, state)
 
     def on_track_ended(self):
@@ -1269,6 +1271,13 @@ class MainWindow(Adw.ApplicationWindow):
         
         # Add pages to tab view
         self.tab_view.add_page(self.library_ui, "all_songs", "All Songs", visible=True)
+        
+        self.album_grid = AlbumGridView(
+            self.lib_manager,
+            on_album_activated=self._on_album_activated
+        )
+        self.tab_view.add_page(self.album_grid, "albums", "Albums", visible=True)
+        
         self.tab_view.add_page(self.favourites_ui, "favourites", "Favourites", visible=True)
 
         # Create Queue Sidebar (Right side)
@@ -1346,6 +1355,13 @@ class MainWindow(Adw.ApplicationWindow):
             return True
         return False
     
+    def _on_album_activated(self, album_obj, tracks):
+        """When an album is clicked in grid, switch to list view and filter."""
+        self.tab_view.set_visible_child_name("all_songs")
+        self.search_entry.set_text(album_obj.album)
+        # Force filter refresh
+        self.library_ui._on_search_changed(self.search_entry)
+
     def _unfocus_search(self):
         """Remove focus from search entry."""
         # Set focus to main window (removes focus from search)
@@ -1389,6 +1405,8 @@ class MainWindow(Adw.ApplicationWindow):
         print("External request to refresh library...")
         if hasattr(self, 'library_ui'):
             self.library_ui.refresh()
+        if hasattr(self, 'album_grid'):
+            self.album_grid.refresh()
 
     def _load_config(self):
         """Load player configuration from file."""
