@@ -269,6 +269,10 @@ class LibraryView(Gtk.Box):
     def refresh(self):
         """Reload the library from the manager (re-sync optional)."""
         print("Refreshing library view...")
+        # Force manager to reload metadata from local cache/DB
+        cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+        self.library_manager._load_from_cache(cache_path)
+        
         # Clear store
         self.store.remove_all()
         # Repopulate
@@ -308,6 +312,7 @@ class LibraryView(Gtk.Box):
         p = Gtk.Popover()
         p.set_parent(self.column_view)
         p.set_pointing_to(rect)
+        p.set_has_arrow(False)
         
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         

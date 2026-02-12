@@ -209,7 +209,10 @@ class LibraryManager:
                 print(f"DEBUG: Sync - Unified library has {len(self.metadata.tracks)} tracks.")
 
             # 4. Save Back using unified method
-            return self._save_metadata()
+            success = self._save_metadata()
+            if success:
+                _log_local(f"✓ Sync complete: {len(self.metadata.tracks)} tracks unified.")
+            return success
 
         except Exception as e:
             if not is_silent:

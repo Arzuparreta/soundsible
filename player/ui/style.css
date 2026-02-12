@@ -159,6 +159,65 @@
 }
 
 .album-card .caption {
+
     opacity: 0.7;
+
     font-size: 0.85rem;
+
+}
+
+
+
+/* X11 Non-composited Fixes: Disable shadows/blur which cause black borders */
+
+popover {
+
+    box-shadow: none;
+
+    border-radius: 0;
+
+    border: 1px solid @borders;
+
+    background-color: @window_bg_color;
+
+}
+
+
+
+popover contents {
+
+    box-shadow: none;
+
+    border-radius: 0;
+
+    padding: 0;
+
+}
+
+
+
+/* Fix for dialogs/windows as well */
+
+window.dialog, window.modal {
+
+    box-shadow: none;
+
+    border-radius: 0;
+
+    border: 1px solid @borders;
+
+}
+
+
+
+/* Remove arrow/tail from popovers as they require transparency/compositor */
+
+popover > arrow, popover > contents > arrow {
+
+    background: none;
+
+    border: none;
+
+    box-shadow: none;
+
 }
