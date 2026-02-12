@@ -97,6 +97,36 @@ class LibraryManager:
                     self.provider.bucket = self.provider.api.get_bucket_by_name(self.config.bucket)
                  except: pass
 
+    def _save_metadata(self) -> bool:
+        """
+        Consistently save current metadata to:
+        1. Local library.json (cache)
+        2. Remote storage provider (cloud)
+        3. Local SQLite database (for fast search)
+        """
+        if not self.metadata:
+            return False
+            
+        try:
+            json_str = self.metadata.to_json()
+            
+            # 1. Local Cache file
+            cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json_str)
+            
+            # 2. Remote Cloud Storage
+            if self.provider:
+                self.provider.save_library(self.metadata)
+                
+            # 3. Local SQLite DB
+            self.db.sync_from_metadata(self.metadata)
+            
+            return True
+        except Exception as e:
+            self._log(f"Error saving metadata: {e}")
+            return False
+
     def sync_library(self, silent: bool = None) -> bool:
         """
         Perform a Universal Sync:
@@ -119,10 +149,14 @@ class LibraryManager:
             _log_local("Syncing library (Universal 3-way merge)...")
             
             # 1. Get Remote
+            print(f"DEBUG: Sync - Attempting to download remote {LIBRARY_METADATA_FILENAME}...")
             remote_json = self.provider.download_json(LIBRARY_METADATA_FILENAME)
             remote_lib = None
             if remote_json:
                 remote_lib = LibraryMetadata.from_json(remote_json)
+                print(f"DEBUG: Sync - Downloaded remote library. Tracks: {len(remote_lib.tracks)}")
+            else:
+                print("DEBUG: Sync - No remote library found.")
             
             # 2. Get Local (from cache/previous sync)
             local_lib = None
@@ -131,13 +165,17 @@ class LibraryManager:
                 if local_content:
                     try:
                         local_lib = LibraryMetadata.from_json(local_content)
+                        print(f"DEBUG: Sync - Loaded local cache. Tracks: {len(local_lib.tracks)}")
                     except Exception as e:
                         _log_local(f"Warning: Cached library corrupted: {e}")
             
             # 3. Merge Logic
             if not remote_lib and not local_lib:
-                _log_local("No library manifest found anywhere.")
-                return False
+                _log_local("Initializing fresh library metadata...")
+                self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+                # Save immediately to initialize the remote/local files
+                self._save_metadata()
+                return True
                 
             if not remote_lib:
                 self.metadata = local_lib
@@ -146,37 +184,32 @@ class LibraryManager:
             else:
                 # Merge: Combine tracks by ID, keeping newest metadata
                 # We prioritize remote version but preserve local_path for this machine
-                track_map = {t.id: t for t in remote_lib.tracks}
                 
+                # START WITH REMOTE - This is the source of truth for library content
+                track_map = {t.id: t for t in remote_lib.tracks}
+                print(f"DEBUG: Sync - Remote library has {len(track_map)} tracks.")
+                
+                # Now layer on local metadata (specifically paths)
                 for lt in local_lib.tracks:
                     if lt.id in track_map:
-                        # Preserve local_path if this machine has it
-                        if lt.local_path:
+                        # If we have a local path for a known track, use it (if valid)
+                        if lt.local_path and os.path.exists(lt.local_path):
                             track_map[lt.id].local_path = lt.local_path
                             track_map[lt.id].is_local = True
                     else:
-                        # This is a new locally scanned track not yet in cloud
-                        track_map[lt.id] = lt
+                        # This track is ONLY in local.
+                        # It's likely a new local scan that hasn't been uploaded yet.
+                        if lt.local_path and os.path.exists(lt.local_path):
+                            track_map[lt.id] = lt
+                            print(f"DEBUG: Sync - Adding new local-only track: {lt.title}")
                 
                 remote_lib.tracks = list(track_map.values())
                 remote_lib.version = max(remote_lib.version, local_lib.version) + 1
                 self.metadata = remote_lib
+                print(f"DEBUG: Sync - Unified library has {len(self.metadata.tracks)} tracks.")
 
-            # 4. Save Back
-            json_str = self.metadata.to_json()
-            
-            # Local Cache
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(json_str)
-            
-            # Cloud
-            self.provider.save_library(self.metadata)
-            
-            # 5. Update Local SQLite for fast searching
-            self.db.sync_from_metadata(self.metadata)
-            
-            _log_local(f"✓ Sync complete: {len(self.metadata.tracks)} tracks unified.")
-            return True
+            # 4. Save Back using unified method
+            return self._save_metadata()
 
         except Exception as e:
             if not is_silent:
@@ -340,9 +373,8 @@ class LibraryManager:
                 self.metadata.tracks.append(new_track)
                 self.metadata.version += 1
                 
-                # Save Library
-                # Use uploader storage to save library
-                uploader.storage.save_library(self.metadata)
+                # Save changes everywhere
+                self._save_metadata()
                 
                 # 5. Cleanup Old Remote File (if hash changed)
                 if new_track.id != track.id:
@@ -414,19 +446,13 @@ class LibraryManager:
                     if track.id in playlist:
                         self.metadata.playlists[name] = [pid for pid in playlist if pid != track.id]
 
-                # Save Library
-                # We need a way to save. LibraryManager doesn't perfectly expose save, 
-                # but update_track used: uploader.storage.save_library(self.metadata)
-                # We can try to reuse the provider's save_library if available or instantiate UploadEngine logic.
-                
-                if self.provider:
-                    success = self.provider.save_library(self.metadata)
-                    if success:
-                        print("Library metadata updated and saved.")
-                        return True
-                    else:
-                        print("Failed to save library metadata.")
-                        return False
+                # Save changes everywhere
+                if self._save_metadata():
+                    print("Track deleted successfully.")
+                    return True
+                else:
+                    print("Failed to save deletion metadata.")
+                    return False
             else:
                 print("Track not found in metadata.")
                 return False
@@ -436,4 +462,80 @@ class LibraryManager:
             return False
         
         return True
+
+    def nuke_library(self) -> bool:
+        """
+        The 'Nuclear Option': Permanently delete ALL tracks and metadata.
+        Deletes from cloud storage, local cache, and local database.
+        """
+        self._log("!!! NUKE INITIATED !!!")
+        try:
+            # 1. Clear Cloud Storage
+            if self.provider:
+                self._log("Deleting all files from cloud storage...")
+                files = self.provider.list_files()
+                for file_info in files:
+                    self._log(f"  Deleting: {file_info['key']}")
+                    self.provider.delete_file(file_info['key'])
+            
+            # 2. Clear Local Cache
+            if self.cache:
+                self._log("Clearing local media cache...")
+                self.cache.clear_cache()
+            
+            # 3. Clear Local SQLite Database
+            self._log("Clearing local database...")
+            self.db.clear_all()
+            
+            # 4. Reset Memory Metadata
+            self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+            
+            # 5. Remove local metadata file (library.json)
+            cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+            if cache_path.exists():
+                os.remove(cache_path)
+            
+            self._log("✓ Library nuked successfully.")
+            return True
+        except Exception as e:
+            self._log(f"Nuke failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def disconnect_storage(self, wipe_local: bool = False) -> bool:
+        """
+        Disconnect from the current storage provider.
+        Removes the local config.json file.
+        If wipe_local is True, also clears the local database and cache.
+        """
+        try:
+            config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
+            
+            # 1. Clear local metadata if requested
+            if wipe_local:
+                self._log("Wiping local database and cache as requested...")
+                self.db.clear_all()
+                if self.cache:
+                    self.cache.clear_cache()
+                
+                # Remove local library.json
+                metadata_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+                if metadata_path.exists():
+                    os.remove(metadata_path)
+
+            # 2. Remove configuration file
+            if config_path.exists():
+                os.remove(config_path)
+                self._log("Configuration file removed. You are now disconnected.")
+            
+            # 3. Reset internal state
+            self.config = None
+            self.provider = None
+            self.metadata = None
+            
+            return True
+        except Exception as e:
+            self._log(f"Failed to disconnect: {e}")
+            return False
 

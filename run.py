@@ -297,10 +297,12 @@ class SoundsibleLauncher:
         table.add_row("3", "Cleanup/Janitor")
         table.add_row("4", "Config Management")
         table.add_row("5", "Watch Folders (Auto-Scan)")
+        table.add_row("6", "[bold yellow]Disconnect Storage (Reset)[/bold yellow]")
+        table.add_row("9", "[bold red]DELETE ALL CONTENT (Nuke)[/bold red]")
         table.add_row("b", "Back")
         
         console.print(Panel(table, border_style="dim"))
-        choice = Prompt.ask("Choose an action", choices=["1", "2", "3", "4", "5", "b"], default="b")
+        choice = Prompt.ask("Choose an action", choices=["1", "2", "3", "4", "5", "6", "9", "b"], default="b")
         
         if choice == "1":
             from player.library import LibraryManager
@@ -328,6 +330,31 @@ class SoundsibleLauncher:
              Prompt.ask("Press Enter")
         elif choice == "5":
             self.manage_watch_folders()
+        elif choice == "6":
+             from rich.prompt import Confirm
+             if Confirm.ask("Disconnect from current cloud service? (Your files in the cloud will be safe)"):
+                 wipe = Confirm.ask("Also wipe local library metadata and cache? (Clean start)")
+                 from player.library import LibraryManager
+                 lib = LibraryManager()
+                 if lib.disconnect_storage(wipe_local=wipe):
+                     self._load_stats()
+                     console.print("[green]Disconnected. Restart the app to run setup again.[/green]")
+                 else:
+                     console.print("[red]Failed to disconnect.[/red]")
+             Prompt.ask("Press Enter")
+        elif choice == "9":
+            from rich.prompt import Confirm
+            if Confirm.ask("[bold red]ARE YOU SURE?[/bold red] This will permanently delete ALL tracks from cloud and local cache!"):
+                from player.library import LibraryManager
+                lib = LibraryManager()
+                if lib.nuke_library():
+                    self._load_stats()
+                    console.print("[bold green]Library has been wiped clean.[/bold green]")
+                else:
+                    console.print("[bold red]Failed to fully wipe library.[/bold red]")
+                Prompt.ask("Press Enter")
+        elif choice == "b":
+            pass
 
     def manage_watch_folders(self):
         """Configure which folders are monitored for changes."""

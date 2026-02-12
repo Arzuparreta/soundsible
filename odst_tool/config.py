@@ -12,7 +12,7 @@ VERSION = "1.0.0"
 
 # Paths
 BASE_DIR = Path(__file__).parent.absolute()
-DEFAULT_OUTPUT_DIR = Path.home() / "Music" / "Spotify"
+DEFAULT_OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(Path.home() / "Music" / "Spotify")))
 CACHE_DIR = Path.home() / ".cache" / "spotify-youtube-dl"
 CREDENTIALS_DIR = Path.home() / ".config" / "spotify-youtube-dl"
 
@@ -54,7 +54,7 @@ QUALITY_PROFILES = {
     "high": {"bitrate": 320, "format": "mp3", "label": "High Quality (320k)"},
     "ultra": {"bitrate": 0, "format": "best", "label": "Ultra (Best Source Audio)"}
 }
-DEFAULT_QUALITY = "high"
+DEFAULT_QUALITY = os.getenv("DEFAULT_QUALITY", "high")
 
 # Search Settings
 SEARCH_STRATEGY_PRIMARY = "{artist} - {title} official audio"

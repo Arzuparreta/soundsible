@@ -35,13 +35,17 @@ def init_downloader():
     client_id = os.getenv("SPOTIFY_CLIENT_ID")
     client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
     
+    # Use cookies.txt by default (handled by YouTubeDownloader auto-detect)
+    # We pass None for browser to allow auto-detect to work
+    cookie_browser = None
+    
     # Priority: Token > Client ID/Secret > None
     if token:
-        return SpotifyYouTubeDL(current_output_dir, DEFAULT_WORKERS, access_token=token, cookie_browser=DEFAULT_COOKIE_BROWSER, quality=current_quality)
+        return SpotifyYouTubeDL(current_output_dir, DEFAULT_WORKERS, access_token=token, cookie_browser=cookie_browser, quality=current_quality)
     elif client_id and client_secret:
-        return SpotifyYouTubeDL(current_output_dir, DEFAULT_WORKERS, skip_auth=False, cookie_browser=DEFAULT_COOKIE_BROWSER, quality=current_quality)
+        return SpotifyYouTubeDL(current_output_dir, DEFAULT_WORKERS, skip_auth=False, cookie_browser=cookie_browser, quality=current_quality)
     else:
-        return SpotifyYouTubeDL(current_output_dir, DEFAULT_WORKERS, skip_auth=True, cookie_browser=DEFAULT_COOKIE_BROWSER, quality=current_quality)
+        return SpotifyYouTubeDL(current_output_dir, DEFAULT_WORKERS, skip_auth=True, cookie_browser=cookie_browser, quality=current_quality)
 
 downloader_app = init_downloader()
 cloud_sync = CloudSync(current_output_dir)
@@ -61,63 +65,83 @@ def index():
 @app.route('/settings', methods=['POST'])
 def update_settings():
     global current_output_dir, current_quality, downloader_app, cloud_sync
-    data = request.json
-    
-    # Update Output Directory
-    new_dir = data.get('output_dir')
-    if new_dir:
-        current_output_dir = Path(new_dir)
-    
-    # Update Quality
-    new_quality = data.get('quality')
-    if new_quality and new_quality in QUALITY_PROFILES:
-        current_quality = new_quality
-    
-    # Update Credentials
-    client_id = data.get('client_id')
-    client_secret = data.get('client_secret')
-    access_token = data.get('access_token')
-    
-    env_path = Path('.env')
-    if not env_path.exists(): env_path.touch()
-    
-    if access_token:
-        # Token overrides everything for this session
-        set_key(str(env_path), "SPOTIFY_ACCESS_TOKEN", access_token)
-        os.environ["SPOTIFY_ACCESS_TOKEN"] = access_token
-    
-    if client_id and client_secret:
-        set_key(str(env_path), "SPOTIFY_CLIENT_ID", client_id)
-        set_key(str(env_path), "SPOTIFY_CLIENT_SECRET", client_secret)
-        os.environ["SPOTIFY_CLIENT_ID"] = client_id
-        os.environ["SPOTIFY_CLIENT_SECRET"] = client_secret
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"status": "error", "msg": "No data received"}), 400
         
-    # Re-init downloader
-    downloader_app = init_downloader()
+        env_path = Path('.env')
+        if not env_path.exists(): 
+            env_path.touch()
 
-    return jsonify({"status": "ok", "msg": "Settings updated!"})
+        # Update Credentials & Settings
+        client_id = data.get('client_id')
+        client_secret = data.get('client_secret')
+        access_token = data.get('access_token')
+        new_dir = data.get('output_dir')
+        new_quality = data.get('quality')
+
+        # Update Output Directory
+        if new_dir:
+            current_output_dir = Path(new_dir)
+            set_key(str(env_path), "OUTPUT_DIR", str(new_dir))
+            os.environ["OUTPUT_DIR"] = str(new_dir)
+        
+        # Update Quality
+        if new_quality and new_quality in QUALITY_PROFILES:
+            current_quality = new_quality
+            set_key(str(env_path), "DEFAULT_QUALITY", new_quality)
+            os.environ["DEFAULT_QUALITY"] = new_quality
+        
+        if access_token:
+            # Token overrides everything for this session
+            set_key(str(env_path), "SPOTIFY_ACCESS_TOKEN", access_token)
+            os.environ["SPOTIFY_ACCESS_TOKEN"] = access_token
+        
+        if client_id and client_secret:
+            set_key(str(env_path), "SPOTIFY_CLIENT_ID", client_id)
+            set_key(str(env_path), "SPOTIFY_CLIENT_SECRET", client_secret)
+            os.environ["SPOTIFY_CLIENT_ID"] = client_id
+            os.environ["SPOTIFY_CLIENT_SECRET"] = client_secret
+            
+        # Re-init downloader
+        downloader_app = init_downloader()
+
+        return jsonify({"status": "ok", "msg": "Settings updated!"})
+    except Exception as e:
+        print(f"Error in update_settings: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "msg": str(e)}), 500
 
 @app.route('/settings/cloud', methods=['POST'])
 def update_cloud_settings():
     global cloud_sync
-    data = request.json
-    
-    env_path = Path('.env')
-    if not env_path.exists(): env_path.touch()
-    
-    set_key(str(env_path), "R2_ACCOUNT_ID", data.get('account_id', ''))
-    set_key(str(env_path), "R2_ACCESS_KEY_ID", data.get('access_key', ''))
-    set_key(str(env_path), "R2_SECRET_ACCESS_KEY", data.get('secret_key', ''))
-    set_key(str(env_path), "R2_BUCKET_NAME", data.get('bucket', ''))
-    
-    # Reload vars
-    os.environ["R2_ACCOUNT_ID"] = data.get('account_id', '')
-    os.environ["R2_ACCESS_KEY_ID"] = data.get('access_key', '')
-    os.environ["R2_SECRET_ACCESS_KEY"] = data.get('secret_key', '')
-    os.environ["R2_BUCKET_NAME"] = data.get('bucket', '')
-    
-    cloud_sync = CloudSync(current_output_dir)
-    return jsonify({"status": "ok", "msg": "Cloud config saved"})
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"status": "error", "msg": "No data received"}), 400
+        
+        env_path = Path('.env')
+        if not env_path.exists(): 
+            env_path.touch()
+        
+        set_key(str(env_path), "R2_ACCOUNT_ID", data.get('account_id', ''))
+        set_key(str(env_path), "R2_ACCESS_KEY_ID", data.get('access_key', ''))
+        set_key(str(env_path), "R2_SECRET_ACCESS_KEY", data.get('secret_key', ''))
+        set_key(str(env_path), "R2_BUCKET_NAME", data.get('bucket', ''))
+        
+        # Reload vars
+        os.environ["R2_ACCOUNT_ID"] = data.get('account_id', '')
+        os.environ["R2_ACCESS_KEY_ID"] = data.get('access_key', '')
+        os.environ["R2_SECRET_ACCESS_KEY"] = data.get('secret_key', '')
+        os.environ["R2_BUCKET_NAME"] = data.get('bucket', '')
+        
+        cloud_sync = CloudSync(current_output_dir)
+        return jsonify({"status": "ok", "msg": "Cloud config saved"})
+    except Exception as e:
+        print(f"Error in update_cloud_settings: {e}")
+        return jsonify({"status": "error", "msg": str(e)}), 500
 
 @app.route('/optimize', methods=['POST'])
 def trigger_optimize():
@@ -371,10 +395,10 @@ def process_queue(queue, auto_sync=False):
                             socketio.emit('log', {'data': f"✅ Downloaded: {track.artist} - {track.title}"})
                             socketio.emit('item_done', {'id': song_str})
                         else:
-                            socketio.emit('log', {'data': f"❌ Failed to download video."})
+                            socketio.emit('log', {'data': f"❌ Failed: Could not create track object."})
                             socketio.emit('item_error', {'id': song_str})
                     except Exception as e:
-                        socketio.emit('log', {'data': f"❌ Error: {e}"})
+                        socketio.emit('log', {'data': f"❌ Error: {str(e)}"})
                         socketio.emit('item_error', {'id': song_str})
                     continue # Skip the rest of loop for this item
 

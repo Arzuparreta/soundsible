@@ -18,9 +18,7 @@ from .spotify_library import SpotifyLibrary
 from .youtube_downloader import YouTubeDownloader
 from .cloud_sync import CloudSync
 import shutil
-
-console = Console()
-
+import threading
 import signal
 
 class SpotifyYouTubeDL:
@@ -38,9 +36,14 @@ class SpotifyYouTubeDL:
         self.spotify = SpotifyLibrary(skip_auth=skip_auth, access_token=access_token)
         self.downloader = YouTubeDownloader(self.output_dir, cookie_browser=cookie_browser, quality=quality)
         
-        # Register Cleanup
-        signal.signal(signal.SIGINT, self._handle_interrupt)
-        signal.signal(signal.SIGTERM, self._handle_interrupt)
+        # Register Cleanup (Main thread only)
+        if threading.current_thread() is threading.main_thread():
+            try:
+                signal.signal(signal.SIGINT, self._handle_interrupt)
+                signal.signal(signal.SIGTERM, self._handle_interrupt)
+            except ValueError:
+                # signal.signal can still fail in some environments even in main thread
+                pass
 
     def _handle_interrupt(self, signum, frame):
         console.print("\n[bold red]Interrupted! Cleaning up temporary files...[/bold red]")

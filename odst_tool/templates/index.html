@@ -77,7 +77,7 @@
                 </div>
 
                 <div>
-                    <h3 class="text-sm font-bold text-gray-400 uppercase mb-2">Cloud Syncy ☁️ (R2)</h3>
+                    <h3 class="text-sm font-bold text-gray-400 uppercase mb-2">Cloud Sync ☁️ (R2)</h3>
                     <div class="mb-2">
                         <input type="text" id="r2Account" placeholder="Account ID"
                             class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white">
@@ -94,8 +94,8 @@
                         <input type="text" id="r2Bucket" placeholder="Bucket Name"
                             class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white">
                     </div>
-                    <button onclick="saveCloudSettings()"
-                        class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-xs mt-1">Save Cloud Config</button>
+                    <button onclick="saveCloudSettings(this)"
+                        class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-xs mt-1 transition-colors">Save Cloud Config</button>
                     <p class="text-xs text-gray-500 mt-1">Status: <span
                             class="{{ 'text-green-500' if has_cloud else 'text-red-500' }}">{{ 'Configured' if has_cloud
                             else 'Disabled' }}</span></p>
@@ -117,8 +117,8 @@
             </div>
 
             <div class="mt-4 pt-4 border-t border-gray-700">
-                <button onclick="saveSettings()"
-                    class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded text-sm font-medium">Save Settings</button>
+                <button onclick="saveSettings(this)"
+                    class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded text-sm font-medium transition-colors">Save Settings</button>
             </div>
         </div>
 
@@ -362,7 +362,11 @@
             panel.classList.toggle('hidden');
         }
 
-        function saveSettings() {
+        function saveSettings(btn) {
+            const originalText = btn.textContent;
+            btn.textContent = "Saving...";
+            btn.disabled = true;
+
             const data = {
                 output_dir: document.getElementById('outputDir').value,
                 quality: document.getElementById('downloadQuality').value,
@@ -375,14 +379,31 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             })
-                .then(r => r.json())
+                .then(async r => {
+                    const d = await r.json();
+                    if (!r.ok) throw new Error(d.msg || 'Server Error');
+                    return d;
+                })
                 .then(d => {
-                    alert(d.msg);
-                    location.reload(); // Reload to refresh auth state
+                    btn.textContent = "Saved!";
+                    btn.classList.remove('bg-blue-600');
+                    btn.classList.add('bg-green-600');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                })
+                .catch(err => {
+                    btn.textContent = "Error";
+                    btn.disabled = false;
+                    alert("Failed to save settings: " + err.message);
                 });
         }
 
-        function saveCloudSettings() {
+        function saveCloudSettings(btn) {
+            const originalText = btn.textContent;
+            btn.textContent = "Saving...";
+            btn.disabled = true;
+
             const data = {
                 account_id: document.getElementById('r2Account').value,
                 access_key: document.getElementById('r2Key').value,
@@ -395,10 +416,22 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             })
-                .then(r => r.json())
+                .then(async r => {
+                    const d = await r.json();
+                    if (!r.ok) throw new Error(d.msg || 'Server Error');
+                    return d;
+                })
                 .then(d => {
-                    alert(d.msg);
-                    location.reload();
+                    btn.textContent = "Saved!";
+                    btn.classList.add('text-green-500');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                })
+                .catch(err => {
+                    btn.textContent = "Error";
+                    btn.disabled = false;
+                    alert("Failed to save cloud settings: " + err.message);
                 });
         }
 

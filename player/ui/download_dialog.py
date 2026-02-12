@@ -81,8 +81,9 @@ except ImportError:
 class DownloadDialog(Adw.Window):
     """Dialog for downloading music via odst-tool."""
     
-    def __init__(self, **kwargs):
+    def __init__(self, library_manager=None, **kwargs):
         super().__init__(**kwargs)
+        self.library_manager = library_manager
         
         self.set_title("Download Music")
         self.set_default_size(500, 400)
@@ -143,6 +144,27 @@ class DownloadDialog(Adw.Window):
         input_frame.set_child(input_scrolled)
         input_group.add(input_frame) # Takes widget? No, adds to list_box usually.
         # Adw.PreferencesGroup.add() adds a child widget to the box. Yes.
+        
+        # Quality Selector
+        self.quality_row = Adw.ComboRow()
+        self.quality_row.set_title("Download Quality")
+        self.quality_row.set_subtitle("Affects file size and audio fidelity")
+        
+        # Add options (Standard, High, Ultra)
+        model = Gtk.StringList.new(["Standard (128k)", "High Quality (320k)", "Ultra (Best Source)"])
+        self.quality_row.set_model(model)
+        
+        # Set initial quality from config
+        self.quality_map = {0: "standard", 1: "high", 2: "ultra"}
+        self.quality_map_inv = {"standard": 0, "high": 1, "ultra": 2}
+        
+        default_quality = "high"
+        if self.library_manager and self.library_manager.config:
+            default_quality = getattr(self.library_manager.config, 'quality_preference', 'high')
+            
+        self.quality_row.set_selected(self.quality_map_inv.get(default_quality, 1))
+        
+        input_group.add(self.quality_row)
         
         # Action Button
         self.download_btn = Gtk.Button(label="Start Download")
@@ -206,8 +228,16 @@ class DownloadDialog(Adw.Window):
         # Clear log
         self.log_buffer.set_text("")
         
+        # Get selected quality
+        selected_idx = self.quality_row.get_selected()
+        selected_quality = self.quality_map.get(selected_idx, "high")
+        
         # Start thread
-        self.download_thread = threading.Thread(target=self._run_process, args=(lines,), daemon=True)
+        self.download_thread = threading.Thread(
+            target=self._run_process, 
+            args=(lines, selected_quality), 
+            daemon=True
+        )
         self.download_thread.start()
         
     def _log_ui(self, msg, level="info"):
@@ -232,7 +262,7 @@ class DownloadDialog(Adw.Window):
             
         GLib.idle_add(_update)
         
-    def _run_process(self, queries):
+    def _run_process(self, queries, quality):
         downloader = SmartDownloader()
         downloader.set_log_callback(self._log_ui)
         
@@ -241,7 +271,7 @@ class DownloadDialog(Adw.Window):
         
         try:
             GLib.idle_add(self.progress_bar.pulse)
-            self._log_ui(f"Processing {total} items...", "info")
+            self._log_ui(f"Processing {total} items (Quality: {quality})...", "info")
             
             any_success = False
             
@@ -250,7 +280,7 @@ class DownloadDialog(Adw.Window):
                 GLib.idle_add(lambda v=i/total: self.progress_bar.set_fraction(v))
                 
                 try:
-                    track = downloader.process_query(query)
+                    track = downloader.process_query(query, quality=quality)
                     
                     if track:
                         self._log_ui(f"Downloaded: {track.title}", "success")

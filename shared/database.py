@@ -240,3 +240,21 @@ class DatabaseManager:
             local = conn.execute("SELECT COUNT(*) FROM tracks WHERE is_local = 1").fetchone()[0]
             cloud = conn.execute("SELECT COUNT(*) FROM tracks WHERE compressed = 1").fetchone()[0] # Approximation
             return {"tracks": total, "local": local, "cloud": cloud}
+
+    def clear_all(self):
+        """Wipe all data from the local database."""
+        with self._get_connection() as conn:
+            conn.execute("BEGIN TRANSACTION")
+            try:
+                conn.execute("DELETE FROM tracks")
+                conn.execute("DELETE FROM library_info")
+                # FTS5 table cleanup
+                try:
+                    conn.execute("DELETE FROM tracks_fts")
+                except sqlite3.OperationalError:
+                    pass
+                conn.execute("COMMIT")
+                conn.execute("VACUUM")
+            except Exception as e:
+                conn.execute("ROLLBACK")
+                raise e

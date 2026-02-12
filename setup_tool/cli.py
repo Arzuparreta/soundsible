@@ -378,6 +378,61 @@ def cleanup(dry_run):
 
 
 @cli.command()
+@click.option('--yes-i-am-sure', is_flag=True, help='Confirm you want to delete EVERYTHING')
+def nuke(yes_i_am_sure):
+    """
+    [DANGEROUS] Delete ALL tracks and metadata from cloud storage.
+    
+    This command wipes your entire cloud library. It cannot be undone.
+    """
+    if not yes_i_am_sure:
+        if not Confirm.ask("[bold red]ARE YOU ABSOLUTELY SURE?[/bold red] This will delete ALL tracks and metadata from cloud storage!"):
+            console.print("Nuke aborted.")
+            return
+
+    # Load config
+    config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
+    if not config_path.exists():
+        console.print("[red]Error: Run 'init' first.[/red]")
+        return
+        
+    try:
+        from player.library import LibraryManager
+        lib = LibraryManager(silent=False)
+        if lib.nuke_library():
+            console.print("[bold green]Library has been wiped clean.[/bold green]")
+        else:
+            console.print("[bold red]Failed to fully wipe library.[/bold red]")
+            
+    except Exception as e:
+        console.print(f"[red]Nuke failed: {e}[/red]")
+
+
+@cli.command()
+@click.option('--wipe-local', is_flag=True, help='Also wipe local metadata and cache')
+def disconnect(wipe_local):
+    """
+    Remove cloud storage configuration and disconnect.
+    
+    This command removes your local config.json, allowing you to re-run
+    the setup wizard or switch providers.
+    """
+    if not Confirm.ask("Are you sure you want to disconnect from the current storage provider?"):
+        return
+
+    try:
+        from player.library import LibraryManager
+        lib = LibraryManager(silent=False)
+        if lib.disconnect_storage(wipe_local=wipe_local):
+            console.print("[green]Disconnected successfully.[/green]")
+        else:
+            console.print("[red]Failed to disconnect.[/red]")
+            
+    except Exception as e:
+        console.print(f"[red]Disconnect failed: {e}[/red]")
+
+
+@cli.command()
 @click.option('--force', is_flag=True, help='Re-identify already matched tracks')
 def refresh_metadata(force):
     """

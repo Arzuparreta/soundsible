@@ -65,7 +65,10 @@ class UploadEngine:
         files = []
         path_obj = Path(path).expanduser().resolve()
         
+        print(f"DEBUG: Scanning directory: {path_obj}")
+        
         if not path_obj.exists():
+            print(f"DEBUG: Path does not exist: {path_obj}")
             return []
             
         if path_obj.is_file():
@@ -78,6 +81,8 @@ class UploadEngine:
                 file_path = Path(root) / filename
                 if AudioProcessor.is_supported_format(str(file_path)):
                     files.append(file_path)
+        
+        print(f"DEBUG: Found {len(files)} audio files.")
         return files
 
     def run(self, source_path: str, compress: bool = True, 
@@ -109,6 +114,7 @@ class UploadEngine:
             sync_task = progress.add_task("[cyan]Syncing library...", total=None)
             
         existing_library = self.storage.get_library()
+        print(f"DEBUG: Fetched remote library. Contains {len(existing_library.tracks)} tracks.")
         existing_tracks = {t.id: t for t in existing_library.tracks}
         
         if progress:
@@ -117,6 +123,7 @@ class UploadEngine:
         # 3. Process and Upload
         # Create a map of existing tracks to merge updates into
         track_map = {t.id: t for t in existing_library.tracks}
+        print(f"DEBUG: Initialized track_map with {len(track_map)} entries.")
         
         if progress:
             main_task = progress.add_task(f"[green]Processing {len(audio_files)} files...", total=len(audio_files))
@@ -139,6 +146,7 @@ class UploadEngine:
                 try:
                     result_track, uploaded = future.result()
                     if result_track:
+                        print(f"DEBUG: Processed track {result_track.title} (Uploaded={uploaded})")
                         # Add or update the track in the map
                         track_map[result_track.id] = result_track
                     
@@ -158,6 +166,10 @@ class UploadEngine:
         )
         
         # Save library to cloud
+        print(f"DEBUG: Uploader - Saving library manifest. Total tracks: {len(updated_library.tracks)}")
+        if hasattr(self.storage, 'base_path'):
+             print(f"DEBUG: Uploader - Local storage base path: {self.storage.base_path}")
+             
         self.storage.save_library(updated_library)
 
         return updated_library
@@ -303,6 +315,12 @@ class UploadEngine:
             uploaded = self.storage.upload_file(str(final_file_path), remote_key)
             print(f"DEBUG: Checkpoint E - Upload result: {uploaded}")
             
+            # For local providers, we want the absolute path to the file in the "bucket"
+            final_local_path = None
+            if self.config.provider.value == 'local':
+                if hasattr(self.storage, '_get_path'):
+                    final_local_path = str(self.storage._get_path(remote_key).absolute())
+            
             # Update metadata with remote URL? No, URL is generated.
             # But we might want size
             metadata['size'] = os.path.getsize(final_file_path)
@@ -346,7 +364,8 @@ class UploadEngine:
                 original_filename=orig_name,
                 compressed=is_compressed_copy,
                 cover_art_key=None,
-                is_local=(self.config.provider.value == 'local')
+                is_local=(self.config.provider.value == 'local'),
+                local_path=final_local_path
             )
             
             return track, True

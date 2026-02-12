@@ -24,12 +24,55 @@ class AudioProcessor:
     def embed_metadata(file_path: str, metadata: Dict[str, Any], cover_url: Optional[str] = None):
         """
         Embed ID3 tags/metadata into the file.
-        Supports MP3 and FLAC (though we prioritize MP3 for this tool).
+        Supports MP3 and FLAC.
         """
         path = Path(file_path)
         if path.suffix.lower() == '.mp3':
             AudioProcessor._embed_mp3(str(path), metadata, cover_url)
-        # Add FLAC support if needed later
+        elif path.suffix.lower() == '.flac':
+            AudioProcessor._embed_flac(str(path), metadata, cover_url)
+
+    @staticmethod
+    def _embed_flac(file_path: str, metadata: Dict[str, Any], cover_url: Optional[str]):
+        """Embed metadata into FLAC file."""
+        try:
+            audio = FLAC(file_path)
+            
+            # Basic tags
+            if metadata.get('title'):
+                audio['title'] = metadata['title']
+            if metadata.get('artist'):
+                audio['artist'] = metadata['artist']
+            if metadata.get('album'):
+                audio['album'] = metadata['album']
+            
+            year = metadata.get('year') or (metadata['release_date'][:4] if metadata.get('release_date') else None)
+            if year:
+                audio['date'] = str(year)
+                
+            if metadata.get('track_number'):
+                audio['tracknumber'] = str(metadata['track_number'])
+            
+            if metadata.get('isrc'):
+                audio['isrc'] = metadata['isrc']
+                
+            # Cover Art
+            if cover_url:
+                try:
+                    response = requests.get(cover_url, timeout=10)
+                    if response.status_code == 200:
+                        image = Picture()
+                        image.type = 3
+                        image.mime = 'image/jpeg'
+                        image.desc = u'Cover'
+                        image.data = response.content
+                        audio.add_picture(image)
+                except Exception as e:
+                    print(f"Failed to embed FLAC cover art: {e}")
+            
+            audio.save()
+        except Exception as e:
+            print(f"Error embedding FLAC metadata: {e}")
 
     @staticmethod
     def _embed_mp3(file_path: str, metadata: Dict[str, Any], cover_url: Optional[str]):

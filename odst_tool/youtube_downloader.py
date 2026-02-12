@@ -1,5 +1,6 @@
 import os
 import shutil
+import time
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 import yt_dlp
@@ -32,6 +33,17 @@ class YouTubeDownloader:
         self.cookie_browser = cookie_browser
         self.cookie_file = cookie_file
         self.quality = quality
+        
+        # Auto-detect cookies.txt if no cookie source provided
+        if not self.cookie_file and not self.cookie_browser:
+            try:
+                from shared.constants import DEFAULT_CONFIG_DIR
+                potential_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "cookies.txt"
+                if potential_path.exists():
+                    self.cookie_file = str(potential_path)
+                    # print(f"DEBUG: Auto-detected cookies at {self.cookie_file}")
+            except ImportError:
+                pass
 
     def process_track(self, spotify_metadata: Dict[str, Any]) -> Optional[Track]:
         """
@@ -112,60 +124,56 @@ class YouTubeDownloader:
         2. Download
         3. Process & Return Track
         """
+        # 1. Fetch Video Info
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False, # Need full info
+        }
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            ydl_opts['cookiefile'] = self.cookie_file
+        elif self.cookie_browser:
+            ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            
+        if not info:
+            raise Exception("Could not fetch video metadata. The URL might be private or invalid.")
+
+        # Parse Metadata
+        video_id = info.get('id')
+        video_title = info.get('title', 'Unknown Title')
+        uploader = info.get('uploader', 'Unknown Artist')
+        duration = info.get('duration', 0)
+        
+        # Use YT-DLP's specific fields if available (YouTube Music)
+        artist = info.get('artist') or uploader
+        title = info.get('track') or video_title
+        album = info.get('album')
+        
+        # Initial raw dict
+        raw_meta = {
+            'title': title,
+            'artist': artist,
+            'album': album,
+            'album_art_url': MetadataHarmonizer.get_best_yt_thumbnail(video_id) if video_id else info.get('thumbnail'),
+            'duration_sec': duration,
+            'release_date': info.get('upload_date'),
+            'track_number': info.get('track_number', 1)
+        }
+        
+        # Harmonize (Standardize + MusicBrainz lookup)
+        clean_meta = MetadataHarmonizer.harmonize(raw_meta, source="youtube")
+        
+        # 2. Download
+        temp_file = self._download_audio(url)
+        
+        if not temp_file or not temp_file.exists():
+            raise Exception("Download failed: Audio file was not created by yt-dlp. Check if ffmpeg is installed.")
+            
         try:
-            # 1. Fetch Video Info
-            ydl_opts = {
-                'quiet': True,
-                'no_warnings': True,
-                'extract_flat': False, # Need full info
-            }
-            if self.cookie_file and os.path.exists(self.cookie_file):
-                ydl_opts['cookiefile'] = self.cookie_file
-            elif self.cookie_browser:
-                ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
-
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                
-            if not info:
-                print("Could not fetch video info.")
-                return None
-
-            # Parse Metadata
-            video_id = info.get('id')
-            video_title = info.get('title', 'Unknown Title')
-            uploader = info.get('uploader', 'Unknown Artist')
-            duration = info.get('duration', 0)
-            
-            # Use YT-DLP's specific fields if available (YouTube Music)
-            artist = info.get('artist') or uploader
-            title = info.get('track') or video_title
-            album = info.get('album')
-            
-            # Initial raw dict
-            raw_meta = {
-                'title': title,
-                'artist': artist,
-                'album': album,
-                'album_art_url': MetadataHarmonizer.get_best_yt_thumbnail(video_id) if video_id else info.get('thumbnail'),
-                'duration_sec': duration,
-                'release_date': info.get('upload_date'),
-                'track_number': info.get('track_number', 1)
-            }
-            
-            # Harmonize (Standardize + MusicBrainz lookup)
-            clean_meta = MetadataHarmonizer.harmonize(raw_meta, source="youtube")
-            
-            # 2. Download
-            temp_file = self._download_audio(url)
-            
-            if not temp_file:
-                return None
-                
             # 3. Process
-            # Reuse logic from process_track but without strict spotify match checks?
-            # Actually we can just manually do the processing here to avoid 'process_track's search logic.
-            
             file_hash = AudioProcessor.calculate_hash(str(temp_file))
             extension = temp_file.suffix[1:]
             final_path = self.tracks_dir / f"{file_hash}.{extension}"
@@ -205,8 +213,9 @@ class YouTubeDownloader:
             return track
 
         except Exception as e:
-            print(f"Error processing video {url}: {e}")
-            return None
+            if temp_file and temp_file.exists():
+                os.remove(temp_file)
+            raise Exception(f"Post-processing error: {e}")
 
     def _search_youtube(self, metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
@@ -341,38 +350,39 @@ class YouTubeDownloader:
 
     def _download_audio(self, url: str) -> Optional[Path]:
         """Download audio from URL and convert/remux based on quality."""
-        temp_filename = f"temp_{os.getpid()}_{int(os.times().system)}"
+        import time
+        temp_filename = f"temp_{os.getpid()}_{int(time.time())}"
         output_template = str(self.temp_dir / f"{temp_filename}.%(ext)s")
         
         profile = QUALITY_PROFILES.get(self.quality, QUALITY_PROFILES[DEFAULT_QUALITY])
         
+        # Base options
         ydl_opts = {
-            'format': 'bestaudio/best',
+            'format': 'ba/b',
             'retries': 10,
             'fragment_retries': 10,
             'outtmpl': output_template,
             'quiet': True,
             'no_warnings': True,
+            'js_runtimes': ['node'],
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['web', 'android', 'mweb'],
+                }
+            }
         }
         
         if profile['bitrate'] > 0:
-            # Force conversion to MP3 with specific bitrate
             ydl_opts['postprocessors'] = [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': profile['format'],
                 'preferredquality': str(profile['bitrate']),
             }]
         else:
-            # Ultra quality: get best audio and just remux to a standard container if needed
-            # or just leave it as is. ffmpeg will ensure it's playable.
             ydl_opts['postprocessors'] = [{
                 'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'flac', # Default for 'ultra' if we want lossless
+                'preferredcodec': 'flac',
             }]
-            # Alternatively, if we want TRULY best source without conversion:
-            # ydl_opts['format'] = 'bestaudio'
-            # (No FFmpegExtractAudio post-processor)
-            # But FLAC is a safe bet for 'ultra' to ensure compatibility with metadata embedding.
         
         if self.cookie_file and os.path.exists(self.cookie_file):
             ydl_opts['cookiefile'] = self.cookie_file
@@ -382,17 +392,34 @@ class YouTubeDownloader:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
-                
-            # Find the generated mp3 file
-            expected_path = self.temp_dir / f"{temp_filename}.mp3"
-            
-            # Clean up potential leftovers immediately if failed?
-            # yt-dlp usually cleans up partials unless keep_fragments is True
-            
-            if expected_path.exists():
-                return expected_path
-            
         except Exception as e:
-            print(f"Download error: {e}")
+            # Retry with even simpler options if first attempt fails
+            try:
+                print(f"Primary download failed, retrying with simplified options: {e}")
+                simple_opts = {
+                    'format': 'bestaudio/best',
+                    'outtmpl': output_template,
+                    'quiet': True,
+                    'no_warnings': True,
+                }
+                # Keep postprocessors
+                if 'postprocessors' in ydl_opts:
+                    simple_opts['postprocessors'] = ydl_opts['postprocessors']
+                
+                with yt_dlp.YoutubeDL(simple_opts) as ydl:
+                    ydl.download([url])
+            except Exception as e2:
+                raise Exception(f"yt-dlp error: {e2}")
+                
+        # Find the generated file (might be .mp3 or .flac)
+        ext = profile['format']
+        if ext == 'best': ext = 'flac'
+        
+        expected_path = self.temp_dir / f"{temp_filename}.{ext}"
+        if expected_path.exists():
+            return expected_path
+        
+        for f in self.temp_dir.glob(f"{temp_filename}.*"):
+            return f
             
         return None

@@ -3,6 +3,7 @@ import sys
 import shutil
 import time
 import os
+import tempfile
 from pathlib import Path
 
 # Add project root to path if needed (for GUI usage it might be already there)
@@ -10,12 +11,14 @@ from pathlib import Path
 
 class SmartDownloader:
     def __init__(self, output_dir=None):
-        if output_dir:
-            self.output_dir = Path(output_dir)
-        else:
-            self.output_dir = Path("staging_downloads")
+        # We ALWAYS use a temporary directory for staging to prevent 
+        # accidental deletion of the user's actual music library.
+        self.staging_dir = Path(tempfile.mkdtemp(prefix="soundsible_staging_"))
+        
+        # Reference to the final library root if provided
+        self.library_root = Path(output_dir) if output_dir else None
             
-        self.output_dir.mkdir(exist_ok=True)
+        self.staging_dir.mkdir(parents=True, exist_ok=True)
         self.downloader = None
         self.spotify = None
         self._log_callback = print # Default to print
@@ -41,6 +44,7 @@ class SmartDownloader:
             from odst_tool.spotify_auth import SpotifyAuth
             from odst_tool.spotify_library import SpotifyLibrary
             from shared.constants import DEFAULT_CONFIG_DIR
+            from odst_tool.config import DEFAULT_QUALITY
             
             # Cookie logic
             cookie_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "cookies.txt"
@@ -51,9 +55,10 @@ class SmartDownloader:
             browser = None 
             
             self.downloader = YouTubeDownloader(
-                self.output_dir, 
+                self.staging_dir, 
                 cookie_file=cookie_file,
-                cookie_browser=browser
+                cookie_browser=browser,
+                quality=DEFAULT_QUALITY
             )
             self.spotify = SpotifyLibrary(skip_auth=False) 
         except ImportError as e:
@@ -70,9 +75,14 @@ class SmartDownloader:
             except:
                 pass
 
-    def process_query(self, query):
+    def process_query(self, query, quality=None):
         self._lazy_load()
-        self.log(f"Processing query: {query}", "info")
+        
+        # Override quality if provided
+        if quality:
+            self.downloader.quality = quality
+            
+        self.log(f"Processing query: {query} (Quality: {self.downloader.quality})", "info")
         
         track = None
         
@@ -150,20 +160,36 @@ class SmartDownloader:
         config = PlayerConfig.from_dict(config_data)
         
         uploader = UploadEngine(config)
-        tracks_dir = self.output_dir / "tracks"
+        tracks_dir = self.staging_dir / "tracks"
+        
+        self.log(f"Looking for tracks to upload in: {tracks_dir}", "info")
         
         if not tracks_dir.exists():
-             self.log("No tracks found in staging area to upload.", "warning")
+             self.log(f"No tracks directory found at {tracks_dir}", "warning")
              return
+             
+        # List files for debugging
+        staged_files = list(tracks_dir.glob("*"))
+        self.log(f"Found {len(staged_files)} files in staging area.", "info")
+        for f in staged_files:
+            self.log(f"  - {f.name}", "info")
              
         # Create a proxy progress object or capture logs?
         # UploadEngine uses rich.progress usually. 
         # We can pass None for progress if we don't handle it, or we handle logging differently.
         
         try:
-            uploader.run(tracks_dir, compress=False, parallel=1, auto_fetch=False)
-            self.log("Upload sequence finished.", "success")
-            return True
+            # We don't compress here since it's already been handled by YouTubeDownloader's quality setting
+            updated_lib = uploader.run(str(tracks_dir), compress=False, parallel=1, auto_fetch=False)
+            
+            if updated_lib:
+                self.log(f"Upload sequence finished. Library now has {len(updated_lib.tracks)} tracks.", "success")
+                return True
+            else:
+                self.log("Upload finished but returned no library update (maybe no new files found?).", "warning")
+                return False
         except Exception as e:
-            self.log(f"Upload failed: {e}", "error")
+            self.log(f"Upload failed with error: {str(e)}", "error")
+            import traceback
+            self.log(traceback.format_exc(), "error")
             return False

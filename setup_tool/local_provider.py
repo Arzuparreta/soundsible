@@ -51,6 +51,10 @@ class LocalStorageProvider(S3StorageProvider):
         """Get absolute local path for a remote key."""
         if not self.bucket_name:
             raise ValueError("Bucket not set")
+        
+        if self.bucket_name in [".", "", "default"]:
+            return self.base_path / remote_key
+            
         return self.base_path / self.bucket_name / remote_key
 
     def upload_file(self, local_path: str, remote_key: str,
@@ -58,6 +62,11 @@ class LocalStorageProvider(S3StorageProvider):
                    progress_callback: Optional[Callable[[UploadProgress], None]] = None) -> bool:
         try:
             dest_path = self._get_path(remote_key)
+            
+            # Skip if same file
+            if Path(local_path).resolve() == dest_path.resolve():
+                return True
+
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             
             # Simple copy
@@ -78,6 +87,10 @@ class LocalStorageProvider(S3StorageProvider):
             src_path = self._get_path(remote_key)
             if not src_path.exists():
                 return False
+            
+            # Skip if same
+            if src_path.resolve() == Path(local_path).resolve():
+                return True
                 
             shutil.copy2(src_path, local_path)
             return True
@@ -99,7 +112,11 @@ class LocalStorageProvider(S3StorageProvider):
         return self._get_path(remote_key).exists()
 
     def list_files(self, prefix: Optional[str] = None) -> List[Dict[str, Any]]:
-        bucket_root = self.base_path / self.bucket_name
+        if self.bucket_name in [".", "", "default"]:
+            bucket_root = self.base_path
+        else:
+            bucket_root = self.base_path / self.bucket_name
+            
         files = []
         
         search_path = bucket_root
@@ -112,12 +129,15 @@ class LocalStorageProvider(S3StorageProvider):
         for root, _, filenames in os.walk(search_path):
             for filename in filenames:
                 full_path = Path(root) / filename
-                rel_path = full_path.relative_to(bucket_root)
-                files.append({
-                    'Key': str(rel_path),
-                    'Size': full_path.stat().st_size,
-                    'LastModified': full_path.stat().st_mtime
-                })
+                try:
+                    rel_path = full_path.relative_to(bucket_root)
+                    files.append({
+                        'Key': str(rel_path),
+                        'Size': full_path.stat().st_size,
+                        'LastModified': full_path.stat().st_mtime
+                    })
+                except ValueError:
+                    continue
         return files
 
     def get_file_url(self, remote_key: str, expires_in: int = 3600) -> str:
@@ -126,8 +146,13 @@ class LocalStorageProvider(S3StorageProvider):
         return f"file://{path.absolute()}"
 
     def get_bucket_size(self) -> int:
-        bucket_root = self.base_path / self.bucket_name
+        if self.bucket_name in [".", "", "default"]:
+            bucket_root = self.base_path
+        else:
+            bucket_root = self.base_path / self.bucket_name
+            
         total = 0
+        if not bucket_root.exists(): return 0
         for root, _, filenames in os.walk(bucket_root):
             for filename in filenames:
                 total += (Path(root) / filename).stat().st_size
@@ -136,6 +161,7 @@ class LocalStorageProvider(S3StorageProvider):
     def upload_json(self, data: str, remote_key: str) -> bool:
         try:
             path = self._get_path(remote_key)
+            print(f"DEBUG: Local - Writing JSON to {path}")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(data)
             return True
@@ -146,8 +172,10 @@ class LocalStorageProvider(S3StorageProvider):
     def download_json(self, remote_key: str) -> Optional[str]:
         try:
             path = self._get_path(remote_key)
+            print(f"DEBUG: Local - Reading JSON from {path}")
             if path.exists():
                 return path.read_text()
+            print(f"DEBUG: Local - File not found: {path}")
             return None
         except Exception as e:
             print(f"Local download_json error: {e}")

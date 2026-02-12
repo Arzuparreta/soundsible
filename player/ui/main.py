@@ -144,7 +144,7 @@ class MusicApp(Adw.Application):
                 dialog.present()
                 return
 
-            dialog = DownloadDialog(transient_for=self.win)
+            dialog = DownloadDialog(library_manager=getattr(self.win, 'library_manager', None), transient_for=self.win)
             dialog.present()
     
     def on_about(self, action, param):
@@ -1403,10 +1403,23 @@ class MainWindow(Adw.ApplicationWindow):
     def refresh_library(self):
         """Reload the library from the provider (called by other dialogs)."""
         print("External request to refresh library...")
-        if hasattr(self, 'library_ui'):
-            self.library_ui.refresh()
-        if hasattr(self, 'album_grid'):
-            self.album_grid.refresh()
+        
+        def _sync_then_refresh():
+            if hasattr(self, 'library_manager'):
+                # Force a sync from provider
+                self.library_manager.sync_library()
+                
+                # Update UI on main thread
+                def _do_ui_refresh():
+                    if hasattr(self, 'library_ui'):
+                        self.library_ui.refresh()
+                    if hasattr(self, 'album_grid'):
+                        self.album_grid.refresh()
+                    return False
+                GLib.idle_add(_do_ui_refresh)
+        
+        import threading
+        threading.Thread(target=_sync_then_refresh, daemon=True).start()
 
     def _load_config(self):
         """Load player configuration from file."""
