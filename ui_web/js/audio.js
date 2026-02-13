@@ -1,30 +1,33 @@
 /**
- * Web Audio Engine
+ * Web Audio Engine - Resilience & Hot-Swap Support
  */
 import { store } from './store.js';
 import { Resolver } from './resolver.js';
+import { connectionManager } from './connection.js';
 
 class AudioEngine {
     constructor() {
         this.audio = new Audio();
-        this.audio.crossOrigin = 'anonymous'; // Important for cross-device streaming
+        this.audio.crossOrigin = 'anonymous';
+        this.currentPosition = 0;
         this.init();
     }
 
     init() {
         this.audio.addEventListener('ended', () => this.next());
-        this.audio.addEventListener('timeupdate', () => this.onTimeUpdate());
+        this.audio.addEventListener('timeupdate', () => {
+            this.currentPosition = this.audio.currentTime;
+            this.onTimeUpdate();
+        });
+        
         this.audio.addEventListener('play', () => store.update({ isPlaying: true }));
         this.audio.addEventListener('pause', () => store.update({ isPlaying: false }));
         
         this.audio.addEventListener('error', (e) => {
-            const error = this.audio.error;
-            console.error("Audio Element Error:", error);
-            const msg = error ? `Code ${error.code}: ${error.message}` : "Unknown audio error";
-            alert(`Playback failed: ${msg}`);
+            console.error("Playback error:", this.audio.error);
+            store.update({ isPlaying: false });
         });
 
-        // Handle Media Session API
         if ('mediaSession' in navigator) {
             navigator.mediaSession.setActionHandler('play', () => this.play());
             navigator.mediaSession.setActionHandler('pause', () => this.pause());
@@ -39,11 +42,10 @@ class AudioEngine {
         
         try {
             this.audio.src = url;
-            this.audio.load(); // Force reload for new source
+            this.audio.load();
             await this.audio.play();
             store.update({ currentTrack: track, isPlaying: true });
 
-            // Update Media Session Metadata
             if ('mediaSession' in navigator) {
                 navigator.mediaSession.metadata = new MediaMetadata({
                     title: track.title,
@@ -72,13 +74,8 @@ class AudioEngine {
     play() { this.audio.play(); }
     pause() { this.audio.pause(); }
 
-    next() {
-        console.log("Next track (Not implemented yet)");
-    }
-
-    prev() {
-        console.log("Prev track (Not implemented yet)");
-    }
+    next() { console.log("Next track (Pending queue implementation)"); }
+    prev() { console.log("Prev track (Pending queue implementation)"); }
 
     onTimeUpdate() {
         const progress = (this.audio.currentTime / this.audio.duration) * 100;

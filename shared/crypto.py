@@ -35,26 +35,21 @@ class CredentialManager:
     def generate_machine_key() -> bytes:
         """
         Generate a machine-specific encryption key.
-        
-        Uses machine-specific data to create a consistent key without
-        requiring user input. Less secure than password-based, but
-        convenient for automatic credential storage.
-        
-        Returns:
-            Encryption key
         """
-        # Use machine ID and username as password
-        try:
-            with open('/etc/machine-id', 'r') as f:
-                machine_id = f.read().strip()
-        except:
-            # Fallback for systems without /etc/machine-id
-            machine_id = os.getenv('HOSTNAME', 'default-machine')
+        if os.name == 'nt':
+            # Windows: Use COMPUTERNAME and USERNAME
+            machine_id = os.getenv('COMPUTERNAME', 'default-windows-machine')
+            username = os.getenv('USERNAME', 'default-windows-user')
+        else:
+            # Linux/Unix
+            try:
+                with open('/etc/machine-id', 'r') as f:
+                    machine_id = f.read().strip()
+            except:
+                machine_id = os.getenv('HOSTNAME', 'default-machine')
+            username = os.getenv('USER', 'default-user')
         
-        username = os.getenv('USER', 'default-user')
         password = f"{machine_id}-{username}"
-        
-        # Use fixed salt (less secure but allows consistent key generation)
         salt = b'soundsible-salt-v1'
         
         return CredentialManager.generate_key_from_password(password, salt)

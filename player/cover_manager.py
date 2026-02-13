@@ -4,6 +4,8 @@ import re
 import os
 import threading
 import time
+import gi
+gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import GLib, GdkPixbuf
 
 from shared.constants import DEFAULT_CACHE_DIR

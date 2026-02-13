@@ -21,8 +21,8 @@
         <!-- Main Content Area -->
         <main id="content" class="flex-1 overflow-y-auto pb-32 px-4 pt-6">
             <div id="view-home" class="view">
-                <h1 class="text-3xl font-bold mb-6">Home</h1>
-                <div id="recent-albums" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+                <h1 class="text-3xl font-bold mb-6">All Songs</h1>
+                <div id="all-songs" class="space-y-2"></div>
             </div>
             <div id="view-albums" class="view hidden">
                 <h1 class="text-3xl font-bold mb-6">Albums</h1>
@@ -50,15 +50,45 @@
                     </button>
 
                     <div class="pt-6 border-t border-gray-700">
+                        <h3 class="text-sm font-bold text-gray-500 uppercase mb-3">Admin Tools</h3>
+                        <a href="http://localhost:5000" target="_blank" class="flex items-center justify-between text-sm hover:text-blue-400 transition-colors mb-4">
+                            <span class="text-gray-400">Open Music Downloader (ODST)</span>
+                            <i class="fas fa-external-link-alt text-xs"></i>
+                        </a>
                         <h3 class="text-sm font-bold text-gray-500 uppercase mb-3">Connection</h3>
-                        <div class="flex justify-between text-sm">
-                            <span class="text-gray-400">Server Status</span>
-                            <span id="server-status" class="text-green-500 font-medium">Connected</span>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-gray-400">Active Host</span>
+                            <span id="active-host-display" class="font-mono text-xs">localhost</span>
                         </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">Status</span>
+                            <div class="flex items-center space-x-2">
+                                <div id="status-led" class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
+                                <span id="server-status" class="text-green-500 font-medium">Connected</span>
+                            </div>
+                        </div>
+                        <button onclick="window.showConnectionRefiner()" class="w-full mt-4 text-xs text-blue-400 hover:text-white transition-colors underline">Manual Connection Refiner</button>
                     </div>
                 </div>
             </div>
         </main>
+
+        <!-- Connection Refiner Overlay -->
+        <div id="connection-overlay" class="fixed inset-0 bg-black bg-opacity-90 z-[100] flex items-center justify-center p-6 hidden">
+            <div class="bg-gray-800 rounded-2xl p-8 max-w-sm w-full border border-red-900/30 shadow-2xl">
+                <div class="w-16 h-16 bg-red-900/20 rounded-full flex items-center justify-center mb-6 mx-auto">
+                    <i class="fas fa-plug-circle-xmark text-red-500 text-2xl"></i>
+                </div>
+                <h2 class="text-xl font-bold text-center mb-2">Station Offline</h2>
+                <p class="text-sm text-gray-400 text-center mb-8">We can't find your Soundsible Station. Please enter its current IP address.</p>
+                
+                <div class="space-y-4">
+                    <input type="text" id="manual-ip-input" placeholder="e.g. 192.168.1.138" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-center text-blue-400 font-mono focus:outline-none focus:border-blue-500">
+                    <button id="reconnect-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all active:scale-95">Connect to Station</button>
+                    <button onclick="window.hideConnectionRefiner()" class="w-full text-xs text-gray-500 hover:text-white">Cancel</button>
+                </div>
+            </div>
+        </div>
 
         <!-- Player Bar (Mobile Fixed / Desktop Bottom) -->
         <div id="player-bar" class="fixed bottom-[72px] md:bottom-0 left-0 right-0 bg-gray-800 bg-opacity-95 backdrop-blur-xl border-t border-gray-700 transition-all duration-500 transform translate-y-[200%] z-40 shadow-[0_-10px_20px_rgba(0,0,0,0.3)]">

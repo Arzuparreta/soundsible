@@ -2,6 +2,7 @@
  * UI Component Manager
  */
 import { store } from './store.js';
+import { Resolver } from './resolver.js';
 
 export class UI {
     static init() {
@@ -17,6 +18,53 @@ export class UI {
         
         // Touch Gestures
         this.initGestures();
+    }
+
+    static updatePlayer(state) {
+        if (state.currentTrack) {
+            this.playerBar.classList.remove('translate-y-[200%]');
+            this.playerTitle.textContent = state.currentTrack.title;
+            this.playerArtist.textContent = state.currentTrack.artist;
+            
+            // Update Cover Art
+            const playerArt = document.getElementById('player-art');
+            if (playerArt) {
+                playerArt.src = Resolver.getCoverUrl(state.currentTrack);
+            }
+            
+            const icon = this.playBtn.querySelector('i');
+            if (state.isPlaying) {
+                icon.className = 'fas fa-pause';
+            } else {
+                icon.className = 'fas fa-play';
+            }
+        }
+
+        this.updateStatus(state);
+    }
+
+    static updateStatus(state) {
+        const hostDisplay = document.getElementById('active-host-display');
+        const statusLed = document.getElementById('status-led');
+        const statusText = document.getElementById('server-status');
+        const overlay = document.getElementById('connection-overlay');
+
+        if (hostDisplay) hostDisplay.textContent = state.activeHost;
+        
+        if (statusLed && statusText) {
+            if (state.isOnline) {
+                statusLed.className = 'w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]';
+                statusText.textContent = 'Connected';
+                statusText.className = 'text-green-500 font-medium';
+                if (overlay) overlay.classList.add('hidden');
+            } else {
+                statusLed.className = 'w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]';
+                statusText.textContent = 'Offline';
+                statusText.className = 'text-red-500 font-medium';
+                // Only show overlay if we have a config but it's offline
+                if (overlay && state.config.syncToken) overlay.classList.remove('hidden');
+            }
+        }
     }
 
     static initNav() {
@@ -49,6 +97,39 @@ export class UI {
             });
         });
 
+        // Global functions for overlay
+        window.showConnectionRefiner = () => {
+            document.getElementById('connection-overlay').classList.remove('hidden');
+        };
+        window.hideConnectionRefiner = () => {
+            document.getElementById('connection-overlay').classList.add('hidden');
+        };
+
+        const reconnectBtn = document.getElementById('reconnect-btn');
+        const manualInput = document.getElementById('manual-ip-input');
+        if (reconnectBtn && manualInput) {
+            reconnectBtn.onclick = async () => {
+                const ip = manualInput.value.trim();
+                if (!ip) return;
+                
+                reconnectBtn.textContent = "Probing...";
+                reconnectBtn.disabled = true;
+                
+                const { connectionManager } = await import('./connection.js');
+                const success = await connectionManager.findActiveHost([ip]);
+                if (success) {
+                    store.update({ priorityList: [ip, ...store.state.priorityList] });
+                    store.save('priority_list', store.state.priorityList);
+                    store.syncLibrary();
+                    window.hideConnectionRefiner();
+                } else {
+                    alert("Station not found at that address.");
+                }
+                reconnectBtn.textContent = "Connect to Station";
+                reconnectBtn.disabled = false;
+            };
+        }
+
         // Token Import Handler
         const importBtn = document.getElementById('import-token-btn');
         const tokenInput = document.getElementById('sync-token-input');
@@ -65,21 +146,6 @@ export class UI {
         }
     }
 
-    static updatePlayer(state) {
-        if (!state.currentTrack) return;
-
-        this.playerBar.classList.remove('translate-y-[200%]');
-        this.playerTitle.textContent = state.currentTrack.title;
-        this.playerArtist.textContent = state.currentTrack.artist;
-        
-        const icon = this.playBtn.querySelector('i');
-        if (state.isPlaying) {
-            icon.className = 'fas fa-pause';
-        } else {
-            icon.className = 'fas fa-play';
-        }
-    }
-
     static initGestures() {
         let touchStartX = 0;
         let touchStartY = 0;
@@ -87,13 +153,13 @@ export class UI {
         document.addEventListener('touchstart', e => {
             touchStartX = e.changedTouches[0].screenX;
             touchStartY = e.changedTouches[0].screenY;
-        }, false);
+        }, { passive: true });
 
         document.addEventListener('touchend', e => {
             const touchEndX = e.changedTouches[0].screenX;
             const touchEndY = e.changedTouches[0].screenY;
             this.handleGesture(touchStartX, touchEndX, touchStartY, touchEndY, e.target);
-        }, false);
+        }, { passive: true });
     }
 
     static handleGesture(startX, endX, startY, endY, target) {

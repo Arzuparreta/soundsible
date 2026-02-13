@@ -32,6 +32,7 @@ pillow>=10.0.0             # Image processing
 segno>=1.6.0               # Better QR codes
 watchdog>=3.0.0            # Folder monitoring
 pyacoustid>=1.2.2          # Audio fingerprinting
+pystray>=0.19.5            # System tray for Windows/macOS
 
 # Development
 pytest>=7.4.0              # Testing framework

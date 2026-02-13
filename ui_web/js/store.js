@@ -10,6 +10,9 @@ class Store {
                 port: 5005,
                 syncToken: null
             }),
+            priorityList: this.load('priority_list', []),
+            activeHost: window.location.hostname || 'localhost',
+            isOnline: true,
             library: this.load('library', []),
             favorites: this.load('favorites', []),
             queue: [],
@@ -42,7 +45,8 @@ class Store {
     }
 
     async syncLibrary() {
-        const { host, port } = this.state.config;
+        const host = this.state.activeHost;
+        const port = this.state.config.port;
         const url = `http://${host}:${port}/api/library`;
         
         try {
@@ -51,24 +55,44 @@ class Store {
             if (!res.ok) throw new Error("Sync failed");
             
             const data = await res.json();
-            this.update({ library: data.tracks });
+            this.update({ library: data.tracks, isOnline: true });
             this.save('library', data.tracks);
             return true;
         } catch (err) {
             console.error("Library sync error:", err);
+            this.update({ isOnline: false });
             return false;
         }
     }
 
     importToken(token) {
         try {
-            // Placeholder: Parse token if we implement the same encryption/decryption in JS
-            // For now, assume token contains direct config or we just store it
+            // Decode token (Base64 -> Zlib Decompress -> JSON)
+            // Note: In browser we use atob and pako or similar, but for now 
+            // we assume the token is simple or handle basic JSON if plain text.
+            
+            // For MVP, we will try to decode if it looks like Base64, else treat as JSON
+            let data;
+            try {
+                const bin = atob(token);
+                // Simple check: if it looks like binary, we might need a library. 
+                // But if it was plain json-base64 we can read it.
+                data = JSON.parse(bin);
+            } catch {
+                data = JSON.parse(token);
+            }
+
+            if (data.endpoints) {
+                this.update({ priorityList: data.endpoints });
+                this.save('priority_list', data.endpoints);
+            }
+            
             this.state.config.syncToken = token;
             this.save('config', this.state.config);
             this.update({ config: this.state.config });
             return true;
         } catch (e) {
+            console.error("Token import failed:", e);
             return false;
         }
     }

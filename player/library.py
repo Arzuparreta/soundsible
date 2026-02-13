@@ -238,6 +238,40 @@ class LibraryManager:
             
         return None
 
+    def get_cover_url(self, track: Track) -> Optional[str]:
+        """
+        Get a local path or URL for cover art using the CoverFetchManager.
+        """
+        from player.cover_manager import CoverFetchManager
+        manager = CoverFetchManager.get_instance()
+        
+        # 1. Check if already cached for THIS track
+        path = manager.get_cached_path(track.id)
+        if path and os.path.exists(path):
+            return path
+            
+        # 2. Fallback: Check if ANY track in the same album has a cached cover
+        # (This handles cases where the user requests a track without embedded art 
+        # but another track in the same album has it cached)
+        try:
+            album_tracks = self.db.get_tracks_by_album(track.album, track.artist)
+            for t in album_tracks:
+                if t.id == track.id: continue
+                path = manager.get_cached_path(t.id)
+                if path and os.path.exists(path):
+                    return path
+        except: pass
+
+        # 3. Trigger async fetch if not found at all
+        # Pass the local track path if available for embedded extraction
+        embedded_path = self.get_track_url(track)
+        if embedded_path and not embedded_path.startswith('http'):
+            manager.request_cover(track, embedded_cache_info=embedded_path)
+        else:
+            manager.request_cover(track)
+            
+        return None
+
     def _load_from_cache(self, cache_path: Path) -> bool:
         """
         Load library metadata from local cache.

@@ -1424,8 +1424,9 @@ class MainWindow(Adw.ApplicationWindow):
             print("DEBUG: [QR] Generating token...")
             config_data = config.to_dict()
             
-            # Use LAN IP as primary host in token
-            config_data['host'] = local_ip
+            # Smart Resolver: Pack all available network endpoints
+            from shared.api import get_active_endpoints
+            config_data['endpoints'] = get_active_endpoints()
             config_data['port'] = 5005
             
             json_bytes = json.dumps(config_data).encode('utf-8')
@@ -1445,18 +1446,32 @@ class MainWindow(Adw.ApplicationWindow):
             content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
             
             # URL Display
-            url_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            url_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
             
+            if ts_url:
+                ts_label = Gtk.Label()
+                ts_label.set_markup(f"<b>Universal (Tailscale - Recommended):</b>\n<span color='#10b981' weight='bold' size='large'>{ts_url}</span>")
+                ts_label.set_selectable(True)
+                url_box.append(ts_label)
+                
+                desc_ts = Gtk.Label()
+                desc_ts.set_markup("<span size='small' weight='bold'>Use this link ALWAYS if you have Tailscale.</span>\n<span size='x-small' alpha='70%'>It works both at home and away seamlessly.</span>")
+                url_box.append(desc_ts)
+                
+                # Add a separator or extra spacing
+                spacer = Gtk.Box(margin_top=5, margin_bottom=5)
+                url_box.append(spacer)
+
             lan_label = Gtk.Label()
-            lan_label.set_markup(f"<b>At Home (Wi-Fi):</b>\n<span color='#3b82f6' weight='bold'>{lan_url}</span>")
+            label_prefix = "<b>Local (Wi-Fi Only - Legacy):</b>" if ts_url else "<b>At Home (Wi-Fi):</b>"
+            lan_label.set_markup(f"{label_prefix}\n<span color='#3b82f6' weight='bold'>{lan_url}</span>")
             lan_label.set_selectable(True)
             url_box.append(lan_label)
             
             if ts_url:
-                ts_label = Gtk.Label()
-                ts_label.set_markup(f"<b>Away (Tailscale):</b>\n<span color='#10b981' weight='bold'>{ts_url}</span>")
-                ts_label.set_selectable(True)
-                url_box.append(ts_label)
+                desc_lan = Gtk.Label()
+                desc_lan.set_markup("<span size='x-small' alpha='70%'>Only use this if you don't have Tailscale.</span>")
+                url_box.append(desc_lan)
                 
             content_box.append(url_box)
 

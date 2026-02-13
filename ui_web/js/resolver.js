@@ -5,10 +5,11 @@ import { store } from './store.js';
 
 export class Resolver {
     static getTrackUrl(track) {
-        const { host, port } = store.state.config;
+        const host = store.state.activeHost;
+        const port = store.state.config.port;
         const protocol = window.location.protocol;
         
-        // Use the current origin if host matches, otherwise build absolute URL
+        // Use the current activeHost determined by the ConnectionManager
         const baseUrl = `${protocol}//${host}:${port}`;
         const localStreamUrl = `${baseUrl}/api/static/stream/${track.id}`;
         
@@ -16,10 +17,11 @@ export class Resolver {
     }
 
     static getCoverUrl(track) {
-        const { host, port } = store.state.config;
-        // Placeholder for cover art endpoint if we add one to API
-        // For now, use a generic placeholder or the track ID
-        return `http://${host}:${port}/api/static/stream/${track.id}`; // This will return audio, not image. 
-        // Need to add cover streamer to API or use online fetcher
+        const host = store.state.activeHost;
+        const port = store.state.config.port;
+        const protocol = window.location.protocol;
+        
+        const baseUrl = `${protocol}//${host}:${port}`;
+        return `${baseUrl}/api/static/cover/${track.id}`;
     }
 }

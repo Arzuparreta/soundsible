@@ -437,6 +437,17 @@ class SoundsibleLauncher:
 
     def run(self):
         self._install_requirements_if_needed()
+        
+        # Windows-specific entry point
+        if os.name == 'nt':
+            try:
+                from player.ui.windows_ui import WindowsControlCenter
+                app = WindowsControlCenter(self)
+                app.run()
+                return
+            except ImportError:
+                print("Windows Control Center not found. Falling back to CLI.")
+
         if not self.is_configured():
             if "--daemon" in sys.argv:
                 print("Daemon: Configuration missing. Please run 'run.py' manually first.")

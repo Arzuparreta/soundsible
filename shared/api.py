@@ -21,6 +21,41 @@ from odst_tool.spotify_youtube_dl import SpotifyYouTubeDL
 from setup_tool.uploader import UploadEngine
 from setup_tool.provider_factory import StorageProviderFactory
 
+import socket
+
+def get_active_endpoints():
+    """Gather all network-accessible IPv4 addresses for this machine."""
+    endpoints = []
+    try:
+        # Standard socket-based discovery
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        if local_ip and not local_ip.startswith('127.'):
+            endpoints.append(local_ip)
+            
+        # More robust discovery using all interfaces
+        import psutil
+        for interface, addrs in psutil.net_if_addrs().items():
+            # Skip common bridge/virtual interfaces that aren't useful for mobile sync
+            if any(skip in interface.lower() for skip in ['docker', 'br-', 'veth', 'lo']):
+                continue
+            for addr in addrs:
+                if addr.family == socket.AF_INET:
+                    ip = addr.address
+                    if ip not in endpoints and not ip.startswith('127.'):
+                        endpoints.append(ip)
+    except:
+        # Fallback to a simple socket test if psutil fails or isn't installed
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            if ip not in endpoints: endpoints.append(ip)
+            s.close()
+        except: pass
+        
+    return endpoints
+
 app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -158,6 +193,41 @@ def stream_local_track(track_id):
     except Exception as e:
         print(f"DEBUG: [Stream] ❌ Error: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/static/cover/<track_id>', methods=['GET'])
+def get_track_cover(track_id):
+    """Serve album cover art, fetching it if missing."""
+    print(f"DEBUG: [Cover] Request for ID: {track_id}")
+    lib, _, _ = get_core()
+    
+    # Resolve track
+    track = None
+    if lib.metadata:
+        track = lib.metadata.get_track_by_id(track_id)
+    if not track:
+        db_tracks = lib.db.get_all_tracks()
+        track = next((t for t in db_tracks if t.id == track_id), None)
+        
+    if not track:
+        print(f"DEBUG: [Cover] ❌ Track {track_id} not found")
+        return jsonify({"error": "Track not found"}), 404
+        
+    # Use unified resolver
+    path = lib.get_cover_url(track)
+    print(f"DEBUG: [Cover] Resolved path: {path}")
+    
+    if path and os.path.exists(path):
+        print(f"DEBUG: [Cover] ✅ Serving file: {path}")
+        return send_file(path, mimetype='image/jpeg')
+    
+    # Return placeholder while fetching
+    placeholder = os.path.join(WEB_UI_PATH, 'assets/icons/icon-192.png')
+    if os.path.exists(placeholder):
+        print(f"DEBUG: [Cover] ⏳ Returning placeholder for {track_id}")
+        return send_file(placeholder, mimetype='image/png')
+        
+    print(f"DEBUG: [Cover] ❌ No cover or placeholder found")
+    return jsonify({"error": "Cover not ready"}), 404
 
 @app.route('/api/playback/play', methods=['POST'])
 def play_track():

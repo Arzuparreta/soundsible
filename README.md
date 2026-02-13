@@ -1,6 +1,6 @@
 # Soundsible: Technical Specification and System Documentation
 
-Soundsible is a modular, high-fidelity media ecosystem designed for distributed audio management and hybrid streaming. It provides a unified interface for accessing music libraries across local filesystems (NAS), cloud object storage (S3, Cloudflare R2, Backblaze B2), and remote web clients.
+Soundsible is a modular, high-fidelity media ecosystem designed for distributed audio management and hybrid streaming. It provides a unified interface for accessing music libraries across local filesystems (NAS), cloud object storage (S3, Cloudflare R2, Backblaze B2), and remote web clients with advanced network resilience.
 
 ## System Architecture
 
@@ -8,61 +8,63 @@ The project is built on an API-first methodology, decoupling the core logic and 
 
 ### 1. Soundsible Core (Backend)
 The central intelligence of the system, implemented in Python.
-- **Core API (`shared/api.py`)**: A Flask-based REST service that facilitates library synchronization, database queries, and static file streaming via HTTP 206 (Partial Content) for seeking support.
+- **Core API (`shared/api.py`)**: A Flask-based REST service that facilitates library synchronization, database queries, and static file streaming via HTTP 206 (Partial Content).
+- **Smart Resolver Backend**: Automatically identifies all valid network interfaces (LAN, Tailscale) to broadcast to clients for seamless connectivity.
 - **Library Manager (`player/library.py`)**: Handles the tri-fold resolution of audio sources (Local -> Cache -> Cloud) and manages the library manifest.
-- **Database Engine (`shared/database.py`)**: Utilizes SQLite for high-performance metadata indexing and full-text search capabilities.
-- **Security Layer (`shared/crypto.py`)**: Implements machine-specific Fernet encryption for cloud credentials and synchronization tokens.
+- **Security Layer (`shared/crypto.py`)**: Implements machine-specific Fernet encryption for cloud credentials and synchronization tokens, supporting both Linux and Windows environments.
 
-### 2. Native Desktop Interface (Linux)
-The reference implementation for high-fidelity desktop playback.
-- **Technology Stack**: GTK4, Libadwaita, and Python-GObject.
-- **Playback Engine**: Integration with `libmpv` for gapless, low-latency audio processing.
-- **Feature Set**: Tabbed album browsing, dynamic search, and an integrated QR generator for mobile device hand-off.
+### 2. Native Desktop Interfaces
+- **Linux (GTK4/Adwaita)**: The reference implementation featuring tabbed album browsing and a dedicated QR hand-off generator.
+- **Windows (Control Center)**: A dedicated Tkinter-based management dashboard for non-technical users. It provides visual configuration for NAS/Cloud storage and persists in the system tray.
 
-### 3. Web Player (PWA)
+### 3. Web Player (PWA) & Smart Resolver
 A portable, touch-optimized frontend for Android, iOS, and Windows.
 - **Technology Stack**: Vanilla JavaScript (ES6+), Tailwind CSS, and Service Workers.
-- **Offline Capability**: Implementation of a persistent caching layer via the Service Worker API, mirroring the desktop LRU caching logic.
-- **Responsive UX**: A unified interaction layer supporting swipe gestures, long-press context menus, and adaptive layouts for mobile and desktop browsers.
-
-### 4. Operations & Maintenance Tools
-- **ODST Tool**: A specialized web-based utility for library expansion, supporting Spotify and YouTube metadata resolution and automated cloud ingestion.
-- **Setup Tool**: A multi-mode interface (CLI and Web) for initial cloud configuration, massive library scanning, and metadata harmonization.
+- **Smart Resolver Engine**: Implements a "Connection Race" logic that pings multiple host addresses (LAN, Tailscale, Localhost) in parallel to lock onto the fastest available path.
+- **Universal Connectivity**: Prioritizes Tailscale for seamless Wi-Fi-to-LTE transitions without session interruption.
+- **Connection Refiner**: A manual fallback interface for updating the host IP without re-importing the full sync token.
 
 ## Key Features
 
-- **Hybrid Streaming Model**: Direct streaming from cloud providers with automatic fallback to local NAS paths if the client is within the local area network (LAN).
-- **Intelligent LRU Caching**: Tracks are cached locally upon playback. The system manages storage quotas automatically to ensure offline availability without exhausting device storage.
-- **Encrypted Synchronization**: Devices are linked via Zlib-compressed, base64-encoded tokens that transmit library configurations securely over LAN or Tailscale networks.
-- **Pro-Grade Metadata**: Automated enrichment of track data using MusicBrainz and ISRC identification.
+- **Hybrid Streaming Model**: Direct cloud streaming with automatic LAN fallback.
+- **Intelligent LRU Caching**: Automatic local caching of tracks with managed storage quotas.
+- **Encrypted Synchronization**: Base64-encoded, compressed tokens for secure multi-device pairing.
+- **Pro-Grade Metadata**: Automated enrichment using MusicBrainz and ISRC identification.
+- **Integrated Downloader**: Direct access to the ODST tool for library expansion via YouTube and Spotify.
 
 ## Installation and Deployment
 
-### System Dependencies
-The system requires the following runtime environments:
+### System Requirements
 - Python 3.10+
-- FFMPEG (for format normalization)
+- FFMPEG
 - libmpv (for native Linux playback)
-- GTK4 and Libadwaita (for desktop UI)
 
-### Environment Setup
-The system utilizes a self-bootstrapping launcher:
+### Quick Start
 ```bash
 python3 run.py
 ```
-The launcher manages virtual environment creation, dependency installation, and background service lifecycle.
+- **Windows**: Automatically launches the visual **Control Center**.
+- **Linux**: Launches the **Interactive CLI Launcher**.
+
+### Deployment Modes
+- **Interactive**: Standard execution for local desktop use.
+- **Daemon**: Run `python3 run.py --daemon` to host the Station as a background service for mobile access.
+- **Automatic Cleanup**: The launcher includes a robust process-tracking system that ensures all background API and player services are terminated upon exit.
 
 ## Connectivity and Networking
 
-Soundsible is designed to operate in complex network environments, supporting:
-- **Local Area Network (LAN)**: Direct device-to-device communication over standard Wi-Fi.
-- **Tailscale Integration**: Automatic detection and support for Tailscale IPs, allowing secure remote access without port forwarding.
-- **Firewall Configuration**: The system operates primarily on port 5005 (Core API/Web Player) and port 5000 (Operations Tools).
+Soundsible operates primarily on:
+- **Port 5005**: Core API & Web Player.
+- **Port 5000**: ODST Operations Tools.
 
-## Deployment Modes
+### Mobile Connectivity & Tailscale
+For the most stable experience, it is **strongly recommended** to use the **Tailscale IP** for mobile synchronization. 
 
-- **Interactive Mode**: Standard execution for local desktop use.
-- **Daemon Mode**: Run `python3 run.py --daemon` to host the Core API and Web Player as a background service, ideal for dedicated media servers or NAS installations.
+- **Universal Access**: The Tailscale IP works both on your home Wi-Fi and on cellular data without any configuration changes.
+- **Seamless Handoff**: Soundsible's "Smart Resolver" automatically detects and switches to the fastest path, but pinning the Tailscale IP ensures you never lose connection when leaving the house.
+- **Security**: All traffic over Tailscale is end-to-end encrypted and requires no port forwarding.
+
+If you are not using Tailscale, use the **Local IP** only when your mobile device is on the same Wi-Fi network as the host Station.
 
 ## Legal Information
 
