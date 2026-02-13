@@ -31,8 +31,16 @@ def bootstrap():
     # Check if we are already running from the venv using prefix
     if Path(sys.prefix).resolve() != VENV_DIR.resolve():
         # Install basic deps in venv if not present
-        subprocess.check_call([str(PYTHON_EXE), "-m", "pip", "install", "rich", "requests"], 
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        result = subprocess.run([str(PYTHON_EXE), "-m", "pip", "install", "rich", "requests"], 
+                              capture_output=True, text=True)
+        if result.returncode != 0:
+            print("\n" + "="*60)
+            print("FATAL ERROR: Failed to bootstrap core dependencies.")
+            print(f"Command: {' '.join(result.args)}")
+            print("-" * 60)
+            print(result.stderr)
+            print("="*60 + "\n")
+            sys.exit(1)
         
         # Re-run this script using the venv python
         os.execv(str(PYTHON_EXE), [str(PYTHON_EXE)] + sys.argv)
@@ -474,8 +482,21 @@ class SoundsibleLauncher:
             import hashlib
             current_hash = hashlib.md5(req_file.read_bytes()).hexdigest()
             if not marker.exists() or marker.read_text() != current_hash:
-                subprocess.check_call([str(self.python_exe), "-m", "pip", "install", "-r", str(req_file)],
-                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                console.print("[cyan]Installing/Updating requirements...[/cyan]")
+                result = subprocess.run([str(self.python_exe), "-m", "pip", "install", "-r", str(req_file)],
+                                      capture_output=True, text=True)
+                
+                if result.returncode != 0:
+                    error_panel = Panel(
+                        Text.from_markup(f"[bold red]Requirement Installation Failed![/bold red]\n\n"
+                                         f"[yellow]Command:[/yellow] {' '.join(result.args)}\n\n"
+                                         f"[bold white]Error Output:[/bold white]\n{result.stderr}"),
+                        title="Bootstrap Error",
+                        border_style="red"
+                    )
+                    console.print(error_panel)
+                    sys.exit(1)
+                    
                 marker.write_text(current_hash)
 
 if __name__ == "__main__":
