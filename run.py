@@ -234,18 +234,21 @@ class SoundsibleLauncher:
             env = os.environ.copy()
             env["PYTHONPATH"] = str(self.root_dir)
             
-            popen_args = {
-                "stdout": log_file,
-                "stderr": log_file,
-                "env": env,
-                "cwd": str(self.root_dir)
-            }
-            
+            # On Windows, we want the output in the new console window for visibility
             if platform.system() == "Windows":
-                # CREATE_NEW_CONSOLE (0x00000010) is more reliable on Windows for background servers
-                popen_args["creationflags"] = 0x00000010
+                popen_args = {
+                    "env": env,
+                    "cwd": str(self.root_dir),
+                    "creationflags": 0x00000010 # CREATE_NEW_CONSOLE
+                }
             else:
-                popen_args["start_new_session"] = True
+                popen_args = {
+                    "stdout": log_file,
+                    "stderr": log_file,
+                    "env": env,
+                    "cwd": str(self.root_dir),
+                    "start_new_session": True
+                }
 
             proc = subprocess.Popen([str(self.python_exe), "-m", "shared.api"], **popen_args)
             self.child_processes.append(proc)
