@@ -329,6 +329,17 @@ def start_api(port=5005, debug=False):
         import traceback
         traceback.print_exc()
 
+    # Access Summary
+    print("\n" + "="*40)
+    print("       SOUNDSIBLE ONLINE")
+    print("="*40)
+    print(f"Local:  http://localhost:{port}/player/")
+    
+    endpoints = get_active_endpoints()
+    for ip in endpoints:
+        print(f"Remote: http://{ip}:{port}/player/")
+    print("="*40 + "\n")
+
     print(f"API: Starting SocketIO server on 0.0.0.0:{port}...")
     socketio.run(app, host='0.0.0.0', port=port, debug=debug)
 
