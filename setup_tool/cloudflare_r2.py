@@ -56,7 +56,6 @@ class CloudflareR2Provider(S3StorageProvider):
                 self.s3_client.list_buckets()
             except AttributeError:
                 # Fallback if client wasn't created properly
-                print(f"DEBUG: s3_client type is {type(self.s3_client)}")
                 raise
             except Exception:
                 # If list_buckets fails (permissions?), we try to continue if we have a bucket name

@@ -21,6 +21,8 @@ import shutil
 import threading
 import signal
 
+console = Console()
+
 class SpotifyYouTubeDL:
     def __init__(self, output_dir: Path, workers: int = DEFAULT_WORKERS, skip_auth: bool = False, access_token: str = None, cookie_browser: str = None, quality: str = DEFAULT_QUALITY):
         self.output_dir = Path(output_dir)

@@ -161,7 +161,6 @@ class LocalStorageProvider(S3StorageProvider):
     def upload_json(self, data: str, remote_key: str) -> bool:
         try:
             path = self._get_path(remote_key)
-            print(f"DEBUG: Local - Writing JSON to {path}")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(data)
             return True
@@ -172,10 +171,8 @@ class LocalStorageProvider(S3StorageProvider):
     def download_json(self, remote_key: str) -> Optional[str]:
         try:
             path = self._get_path(remote_key)
-            print(f"DEBUG: Local - Reading JSON from {path}")
             if path.exists():
                 return path.read_text()
-            print(f"DEBUG: Local - File not found: {path}")
             return None
         except Exception as e:
             print(f"Local download_json error: {e}")

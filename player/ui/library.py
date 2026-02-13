@@ -386,7 +386,7 @@ class LibraryView(Gtk.Box):
         # Also dismiss if the main window loses focus (crucial for i3 workspace switching)
         if root:
             # notify::is-active triggers when window gains/loses focus
-            handler_id = root.connect("notify::is-active", lambda w, pspec: p.popdown() if not w.get_is_active() else None)
+            handler_id = root.connect("notify::is-active", lambda w, pspec: p.popdown() if not w.get_active() else None)
             # Cleanup handler on popover close
             p.connect("closed", lambda _: root.disconnect(handler_id))
 

@@ -149,14 +149,10 @@ class LibraryManager:
             _log_local("Syncing library (Universal 3-way merge)...")
             
             # 1. Get Remote
-            print(f"DEBUG: Sync - Attempting to download remote {LIBRARY_METADATA_FILENAME}...")
             remote_json = self.provider.download_json(LIBRARY_METADATA_FILENAME)
             remote_lib = None
             if remote_json:
                 remote_lib = LibraryMetadata.from_json(remote_json)
-                print(f"DEBUG: Sync - Downloaded remote library. Tracks: {len(remote_lib.tracks)}")
-            else:
-                print("DEBUG: Sync - No remote library found.")
             
             # 2. Get Local (from cache/previous sync)
             local_lib = None
@@ -165,7 +161,6 @@ class LibraryManager:
                 if local_content:
                     try:
                         local_lib = LibraryMetadata.from_json(local_content)
-                        print(f"DEBUG: Sync - Loaded local cache. Tracks: {len(local_lib.tracks)}")
                     except Exception as e:
                         _log_local(f"Warning: Cached library corrupted: {e}")
             
@@ -187,7 +182,6 @@ class LibraryManager:
                 
                 # START WITH REMOTE - This is the source of truth for library content
                 track_map = {t.id: t for t in remote_lib.tracks}
-                print(f"DEBUG: Sync - Remote library has {len(track_map)} tracks.")
                 
                 # Now layer on local metadata (specifically paths)
                 for lt in local_lib.tracks:
@@ -201,12 +195,10 @@ class LibraryManager:
                         # It's likely a new local scan that hasn't been uploaded yet.
                         if lt.local_path and os.path.exists(lt.local_path):
                             track_map[lt.id] = lt
-                            print(f"DEBUG: Sync - Adding new local-only track: {lt.title}")
                 
                 remote_lib.tracks = list(track_map.values())
                 remote_lib.version = max(remote_lib.version, local_lib.version) + 1
                 self.metadata = remote_lib
-                print(f"DEBUG: Sync - Unified library has {len(self.metadata.tracks)} tracks.")
 
             # 4. Save Back using unified method
             success = self._save_metadata()
@@ -216,7 +208,7 @@ class LibraryManager:
 
         except Exception as e:
             if not is_silent:
-                print(f"Sync failed: {e}")
+                self._log(f"Sync failed: {e}")
                 import traceback
                 traceback.print_exc()
             return self._load_from_cache(cache_path)
@@ -260,12 +252,12 @@ class LibraryManager:
             if cache_path.exists():
                 json_str = cache_path.read_text()
                 self.metadata = LibraryMetadata.from_json(json_str)
-                print(f"✓ Loaded library from cache (offline mode) - {len(self.metadata.tracks)} tracks")
+                self._log(f"✓ Loaded library from cache (offline mode) - {len(self.metadata.tracks)} tracks")
                 return True
             else:
-                print("No cached library found.")
+                self._log("No cached library found.")
         except Exception as e:
-            print(f"Failed to load cached library: {e}")
+            self._log(f"Failed to load cached library: {e}")
         return False
         
     def get_all_tracks(self) -> List[Track]:
@@ -289,7 +281,7 @@ class LibraryManager:
         4. Updating library.json.
         """
         try:
-            print(f"Updating track: {track.title}")
+            self._log(f"Updating track: {track.title}")
             
             # 1. Get local file
             local_path = None
@@ -309,11 +301,11 @@ class LibraryManager:
                 remote_key = f"tracks/{track.id}.{track.format}"
                 fd, temp_path = tempfile.mkstemp(suffix=f".{track.format}")
                 os.close(fd)
-                print("Downloading track for update...")
+                self._log("Downloading track for update...")
                 if self.provider.download_file(remote_key, temp_path):
                     local_path = temp_path
                 else:
-                    print("Failed to download track.")
+                    self._log("Failed to download track.")
                     return False
             
             if not local_path:
@@ -329,18 +321,18 @@ class LibraryManager:
             
             # Embed Art
             if cover_path:
-                print(f"Embedding artwork from {cover_path}...")
+                self._log(f"Embedding artwork from {cover_path}...")
                 if AudioProcessor.embed_artwork(local_path, cover_path):
                     changes_made = True
             
             if not changes_made:
-                print("No changes applied.")
+                self._log("No changes applied.")
                 os.remove(local_path)
                 return True # Success but nothing to do
                 
             # 3. Process as "New" Upload
             # We use UploadEngine logic to re-hash and upload
-            print("Re-processing file...")
+            self._log("Re-processing file...")
             uploader = UploadEngine(self.config)
             
             # Hack: We use _process_single_file but we need to pass a valid source_root
@@ -359,14 +351,14 @@ class LibraryManager:
             
             if new_track:
                 # 4. Update Library
-                print("Updating library registry...")
+                self._log("Updating library registry...")
                 
                 # Clear cache for this track so new version with cover will be downloaded
                 if self.cache:
                     old_cache_key = f"tracks/{track.id}.{track.format}"
                     cache_file = self.cache.cache_dir / old_cache_key.replace('/', '_')
                     if cache_file.exists():
-                        print(f"Clearing cache for updated track...")
+                        self._log(f"Clearing cache for updated track...")
                         os.remove(cache_file)
                 
                 # Remove old track
@@ -381,27 +373,27 @@ class LibraryManager:
                 
                 # 5. Cleanup Old Remote File (if hash changed)
                 if new_track.id != track.id:
-                    print("Removing old file from storage...")
+                    self._log("Removing old file from storage...")
                     old_key = f"tracks/{track.id}.{track.format}"
                     self.provider.delete_file(old_key)
 
                 # Update Cache Identically
                 if self.cache:
-                    print("Updating cache with new version...")
+                    self._log("Updating cache with new version...")
                     # We move the local_path to cache, so we don't need to delete it later
                     # cache.add_to_cache(id, path, move=True/False)
                     # We used a temp path, let's copy it to cache to be safe
                     self.cache.add_to_cache(new_track.id, local_path, move=False)
 
                 os.remove(local_path)
-                print("Update complete!")
+                self._log("Update complete!")
                 return True
                 
             os.remove(local_path)
             return False
             
         except Exception as e:
-            print(f"Update failed: {e}")
+            self._log(f"Update failed: {e}")
             if 'local_path' in locals() and local_path and os.path.exists(local_path):
                 os.remove(local_path)
             return False
@@ -413,7 +405,7 @@ class LibraryManager:
         2. Cloud storage (R2/S3)
         3. Library metadata
         """
-        print(f"Deleting track: {track.title} ({track.id})...")
+        self._log(f"Deleting track: {track.title} ({track.id})...")
         
         try:
             # 1. Remove from Cache
@@ -424,15 +416,15 @@ class LibraryManager:
             if self.provider:
                 remote_key = f"tracks/{track.id}.{track.format}"
                 if self.provider.file_exists(remote_key):
-                    print(f"Deleting remote file: {remote_key}")
+                    self._log(f"Deleting remote file: {remote_key}")
                     if not self.provider.delete_file(remote_key):
-                        print("Failed to delete remote file. Proceeding anyway.")
+                        self._log("Failed to delete remote file. Proceeding anyway.")
                 
                 # Check for cover art if stored separately? 
                 # Currently cover art seems embedded or fetched from URL, but if we stored it in S3 we should delete it too.
                 # The Track model has cover_art_key.
                 if track.cover_art_key:
-                    print(f"Deleting cover art: {track.cover_art_key}")
+                    self._log(f"Deleting cover art: {track.cover_art_key}")
                     self.provider.delete_file(track.cover_art_key)
 
             # 3. Update Library Metadata
@@ -441,7 +433,7 @@ class LibraryManager:
             self.metadata.tracks = [t for t in self.metadata.tracks if t.id != track.id]
             
             if len(self.metadata.tracks) < original_count:
-                print("Removed track from metadata.")
+                self._log("Removed track from metadata.")
                 self.metadata.version += 1
                 
                 # Remove from playlists
@@ -451,17 +443,17 @@ class LibraryManager:
 
                 # Save changes everywhere
                 if self._save_metadata():
-                    print("Track deleted successfully.")
+                    self._log("Track deleted successfully.")
                     return True
                 else:
-                    print("Failed to save deletion metadata.")
+                    self._log("Failed to save deletion metadata.")
                     return False
             else:
-                print("Track not found in metadata.")
+                self._log("Track not found in metadata.")
                 return False
                 
         except Exception as e:
-            print(f"Error deleting track: {e}")
+            self._log(f"Error deleting track: {e}")
             return False
         
         return True

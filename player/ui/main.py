@@ -33,7 +33,6 @@ class MusicApp(Adw.Application):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         import sys
-        print(f"DEBUG: sys.path: {sys.path}")
         self.connect('activate', self.on_activate)
         
         self.theme_provider = None
@@ -182,22 +181,16 @@ class MusicApp(Adw.Application):
     def _load_theme_preference(self):
         """Load saved theme preference from preferences file."""
         prefs_file = Path(DEFAULT_CONFIG_DIR).expanduser() / "preferences.json"
-        print(f"DEBUG: _load_theme_preference() - checking file: {prefs_file}")
         try:
             if prefs_file.exists():
-                print(f"DEBUG: Preferences file exists, reading...")
                 with open(prefs_file, 'r') as f:
                     prefs = json.load(f)
                     theme = prefs.get('theme', 'default')
-                    print(f"DEBUG: Loaded theme from file: '{theme}'")
                     return theme
-            else:
-                print(f"DEBUG: Preferences file does not exist")
         except Exception as e:
             print(f"ERROR loading theme preference: {e}")
             import traceback
             traceback.print_exc()
-        print(f"DEBUG: Returning default theme")
         return 'default'  # Default to system theme
     
     def _save_theme_preference(self, theme_name):
@@ -220,13 +213,11 @@ class MusicApp(Adw.Application):
             with open(prefs_file, 'w') as f:
                 json.dump(prefs, f, indent=2)
             
-            print(f"DEBUG: Saved theme preference: {theme_name}")
         except Exception as e:
             print(f"Error saving theme preference: {e}")
     
     def set_theme(self, theme_name):
         """Set application theme."""
-        print(f"DEBUG: set_theme() called with theme_name='{theme_name}'")
         
         self.current_theme = theme_name  # Track current theme
         style_manager = Adw.StyleManager.get_default()
@@ -237,13 +228,11 @@ class MusicApp(Adw.Application):
             print(f"ERROR: Display is None! Cannot set theme. This shouldn't happen.")
             return
         
-        print(f"DEBUG: Display is valid, proceeding with theme '{theme_name}'")
 
         # Remove existing theme provider if any
         if self.theme_provider:
             try:
                 Gtk.StyleContext.remove_provider_for_display(display, self.theme_provider)
-                print(f"DEBUG: Removed previous theme provider")
             except Exception as e:
                 print(f"WARNING: Failed to remove previous theme provider: {e}")
             self.theme_provider = None
@@ -251,54 +240,43 @@ class MusicApp(Adw.Application):
         # Apply theme based on selection
         try:
             if theme_name == "light":
-                print(f"DEBUG: Applying LIGHT theme")
                 style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
                 # Load light theme CSS
                 self.theme_provider = Gtk.CssProvider()
                 css_path = os.path.join(os.path.dirname(__file__), 'theme_light.css')
-                print(f"DEBUG: Loading CSS from: {css_path}")
                 self.theme_provider.load_from_path(css_path)
                 Gtk.StyleContext.add_provider_for_display(
                     display, 
                     self.theme_provider, 
                     Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
                 )
-                print(f"DEBUG: Light theme CSS loaded and applied successfully")
                 
             elif theme_name == "dark":
-                print(f"DEBUG: Applying DARK theme")
                 style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
                 # Load dark theme CSS
                 self.theme_provider = Gtk.CssProvider()
                 css_path = os.path.join(os.path.dirname(__file__), 'theme_dark.css')
-                print(f"DEBUG: Loading CSS from: {css_path}")
                 self.theme_provider.load_from_path(css_path)
                 Gtk.StyleContext.add_provider_for_display(
                     display, 
                     self.theme_provider, 
                     Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
                 )
-                print(f"DEBUG: Dark theme CSS loaded and applied successfully")
                 
             elif theme_name == "odst":
-                print(f"DEBUG: Applying ODST theme")
                 style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
                 # Load ODST theme CSS
                 self.theme_provider = Gtk.CssProvider()
                 css_path = os.path.join(os.path.dirname(__file__), 'theme_odst.css')
-                print(f"DEBUG: Loading CSS from: {css_path}")
                 self.theme_provider.load_from_path(css_path)
                 Gtk.StyleContext.add_provider_for_display(
                     display, 
                     self.theme_provider, 
                     Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
                 )
-                print(f"DEBUG: ODST theme CSS loaded and applied successfully")
                 
             else:  # "default" or any other value
-                print(f"DEBUG: Applying DEFAULT (system) theme")
                 style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
-                print(f"DEBUG: System theme applied successfully")
                 
         except Exception as e:
             print(f"ERROR: Failed to apply theme '{theme_name}': {e}")
@@ -307,7 +285,6 @@ class MusicApp(Adw.Application):
             return
         
         # Save theme preference
-        print(f"DEBUG: Calling _save_theme_preference('{theme_name}')")
         self._save_theme_preference(theme_name)
 
 
@@ -316,24 +293,17 @@ class MainWindow(Adw.ApplicationWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        print("DEBUG: MainWindow initializing...")
         self.set_title("Soundsible")
         self.set_default_size(1000, 700)
         
         # Queue Manager
-        print("DEBUG: Initializing QueueManager...")
         self.queue_manager = QueueManager()
-        print("DEBUG: QueueManager initialized.")
         
         # Favourites Manager
-        print("DEBUG: Initializing FavouritesManager...")
         self.favourites_manager = FavouritesManager()
-        print("DEBUG: FavouritesManager initialized.")
         
         # Audio Engine
-        print("DEBUG: Initializing PlaybackEngine...")
         self.engine = PlaybackEngine(queue_manager=self.queue_manager)
-        print("DEBUG: PlaybackEngine initialized.")
         self.engine.set_state_change_callback(self.on_player_state_change)
         self.engine.add_track_end_callback(self.on_track_ended)
         self.engine.set_track_load_callback(self.play_track)  # For auto-play from queue
@@ -341,7 +311,6 @@ class MainWindow(Adw.ApplicationWindow):
         
         # MPRIS Integration (optional - requires mpris_server package)
         try:
-            print("DEBUG: Initializing MPRIS...")
             from player.mpris import SoundsibleMpris
             from mpris_server import Server
             
@@ -622,18 +591,15 @@ class MainWindow(Adw.ApplicationWindow):
 
     def on_player_state_change(self, state):
         """Callback from engine (thread safe wrapper)."""
-        print(f"DEBUG: UI on_player_state_change: {state}")
         GLib.idle_add(self._update_ui_state, state)
 
     def on_track_ended(self):
         """Callback from engine when track finishes."""
         # Stop engine to reset state and update UI (run on main thread)
         def _stop_safe():
-            print("DEBUG: Executing engine.stop() on main thread")
             self.engine.stop()
             return False
             
-        print("DEBUG: Scheduling engine.stop() via GLib.idle_add")
         GLib.idle_add(_stop_safe)
 
     def on_play_toggle(self, button):
@@ -764,11 +730,9 @@ class MainWindow(Adw.ApplicationWindow):
                 if self.lib_manager.cache:
                     cached = self.lib_manager.cache.get_cached_path(track.id)
                     if cached:
-                        print(f"DEBUG: Track already cached at {cached}")
                         return
                     
                     # Download to cache
-                    print(f"DEBUG: Starting background download to cache for: {track.title}")
                     remote_key = f"tracks/{track.id}.{track.format}"
                     
                     import tempfile
@@ -780,14 +744,11 @@ class MainWindow(Adw.ApplicationWindow):
                     if self.lib_manager.provider.download_file(remote_key, temp_path):
                         # Add to cache
                         cached_path = self.lib_manager.cache.add_to_cache(track.id, temp_path, move=True)
-                        print(f"DEBUG: Track cached successfully at {cached_path}")
                         # Trigger cover update now that file is cached
                         GLib.idle_add(self.update_cover_art, track, 0)
                     else:
-                        print(f"DEBUG: Failed to download track for caching")
                         os.remove(temp_path)
             except Exception as e:
-                print(f"DEBUG: Cache download failed: {e}")
                 import traceback
                 traceback.print_exc()
         
@@ -818,7 +779,6 @@ class MainWindow(Adw.ApplicationWindow):
             import tempfile
             import os
             
-            print(f"DEBUG: update_cover_art called for: {track.title} (attempt {retry_count + 1})")
             
             # Get local file path (from cache or download)
             local_path = None
@@ -826,18 +786,14 @@ class MainWindow(Adw.ApplicationWindow):
             # Try cache first
             if self.lib_manager.cache:
                 cached = self.lib_manager.cache.get_cached_path(track.id)
-                print(f"DEBUG: Cached path result: {cached}")
                 if cached and os.path.exists(cached):
                     local_path = cached
-                    print(f"DEBUG: Using cached file: {local_path}")
             
             if not local_path:
                 # File not cached yet, retry after a delay (max 3 attempts)
                 if retry_count < 3:
-                    print(f"DEBUG: File not cached yet, will retry in 2 seconds... (attempt {retry_count + 1}/3)")
                     GLib.timeout_add(2000, self._retry_cover_update, track, retry_count + 1)
                 else:
-                    print("DEBUG: Max retries reached, cache not working. Showing default icon.")
                     # Fallback: Trigger online fetch
                     self._fetch_online_cover(track)
                     
@@ -849,7 +805,6 @@ class MainWindow(Adw.ApplicationWindow):
             local_cover_path = os.path.join(covers_dir, f"{track.id}.jpg")
             
             if os.path.exists(local_cover_path):
-                print(f"DEBUG: Found locally cached cover: {local_cover_path}")
                 try:
                     pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
                         local_cover_path, 48, 48, True
@@ -857,14 +812,12 @@ class MainWindow(Adw.ApplicationWindow):
                     self.cover_art.set_from_pixbuf(pixbuf)
                     return # Done!
                 except Exception as e:
-                    print(f"DEBUG: Failed to load cached cover: {e}")
+                    pass
 
             # Extract cover art from file
-            print(f"DEBUG: Extracting cover from: {local_path}")
             cover_data = AudioProcessor.extract_cover_art(local_path)
             
             if cover_data:
-                print(f"DEBUG: Cover data extracted, size: {len(cover_data)} bytes")
                 # Save to temp file and load into GdkPixbuf
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
                     tmp.write(cover_data)
@@ -877,12 +830,10 @@ class MainWindow(Adw.ApplicationWindow):
                     )
                     self.cover_art.set_from_pixbuf(pixbuf)
 
-                    print("DEBUG: Cover art displayed successfully!")
                 finally:
                     os.remove(tmp_path)
             else:
                 # No cover found, use default
-                print("DEBUG: No cover data found in file")
                 self.cover_art.set_from_icon_name("emblem-music-symbolic")
                 
                 # Fallback: Trigger online fetch
@@ -890,7 +841,6 @@ class MainWindow(Adw.ApplicationWindow):
                 
                 
         except Exception as e:
-            print(f"DEBUG: Failed to update cover art: {e}")
             if "No cover data" not in str(e):
                 import traceback
                 traceback.print_exc()
@@ -1160,7 +1110,6 @@ class MainWindow(Adw.ApplicationWindow):
     
     def _retry_cover_update(self, track, retry_count):
         """Retry cover art update after file is cached."""
-        print(f"DEBUG: Retrying cover update... (attempt {retry_count + 1})")
         self.update_cover_art(track, retry_count)
         return False  # Don't repeat timeout
 
@@ -1343,7 +1292,6 @@ class MainWindow(Adw.ApplicationWindow):
     def _sync_queue_sidebar_visibility(self):
         """Sync queue sidebar visibility (main thread)."""
         is_empty = self.queue_manager.is_empty()
-        print(f"DEBUG: sync_queue_sidebar_visibility - is_empty={is_empty}")
         if hasattr(self, 'sidebar_box'):
             self.sidebar_box.set_visible(not is_empty)
         return False  # Remove from idle queue

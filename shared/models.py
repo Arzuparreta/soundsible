@@ -79,8 +79,11 @@ class Track:
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Track':
-        """Create Track from dictionary."""
-        return cls(**data)
+        """Create Track from dictionary, filtering unknown keys."""
+        import dataclasses
+        field_names = {f.name for f in dataclasses.fields(cls)}
+        filtered_data = {k: v for k, v in data.items() if k in field_names}
+        return cls(**filtered_data)
 
 
 @dataclass
@@ -117,17 +120,10 @@ class LibraryMetadata:
         return json.dumps(data, indent=indent)
     
     @classmethod
-    def from_json(cls, json_str: str) -> 'LibraryMetadata':
+    def from_dict(cls, data: Dict[str, Any]) -> 'LibraryMetadata':
         """
-        Deserialize library metadata from JSON string.
-        
-        Args:
-            json_str: JSON string to parse
-            
-        Returns:
-            LibraryMetadata instance
+        Deserialize library metadata from dictionary.
         """
-        data = json.loads(json_str)
         tracks = [Track.from_dict(t) for t in data["tracks"]]
         
         # Handle migration from library_version (str) to version (int)
@@ -147,6 +143,20 @@ class LibraryMetadata:
             settings=data.get("settings", {}),
             last_updated=data.get("last_updated", datetime.utcnow().isoformat())
         )
+    
+    @classmethod
+    def from_json(cls, json_str: str) -> 'LibraryMetadata':
+        """
+        Deserialize library metadata from JSON string.
+        
+        Args:
+            json_str: JSON string to parse
+            
+        Returns:
+            LibraryMetadata instance
+        """
+        data = json.loads(json_str)
+        return cls.from_dict(data)
     
     def get_track_by_id(self, track_id: str) -> Optional[Track]:
         """Find track by ID."""

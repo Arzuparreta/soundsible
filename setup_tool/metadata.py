@@ -45,14 +45,12 @@ def search_itunes(query: str, limit: int = 5) -> List[Dict[str, Any]]:
             
             if response.status_code == 429:
                 wait = 2 ** (attempt + 1)
-                print(f"DEBUG: API Rate Limited (429). Waiting {wait}s...")
                 time.sleep(wait)
                 continue
                 
             response.raise_for_status()
             break
         else:
-            print(f"DEBUG: Failed to search iTunes after {retries} attempts.")
             return []
             
         data = response.json()

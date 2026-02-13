@@ -65,10 +65,8 @@ class UploadEngine:
         files = []
         path_obj = Path(path).expanduser().resolve()
         
-        print(f"DEBUG: Scanning directory: {path_obj}")
         
         if not path_obj.exists():
-            print(f"DEBUG: Path does not exist: {path_obj}")
             return []
             
         if path_obj.is_file():
@@ -82,7 +80,6 @@ class UploadEngine:
                 if AudioProcessor.is_supported_format(str(file_path)):
                     files.append(file_path)
         
-        print(f"DEBUG: Found {len(files)} audio files.")
         return files
 
     def run(self, source_path: str, compress: bool = True, 
@@ -114,7 +111,6 @@ class UploadEngine:
             sync_task = progress.add_task("[cyan]Syncing library...", total=None)
             
         existing_library = self.storage.get_library()
-        print(f"DEBUG: Fetched remote library. Contains {len(existing_library.tracks)} tracks.")
         existing_tracks = {t.id: t for t in existing_library.tracks}
         
         if progress:
@@ -123,7 +119,6 @@ class UploadEngine:
         # 3. Process and Upload
         # Create a map of existing tracks to merge updates into
         track_map = {t.id: t for t in existing_library.tracks}
-        print(f"DEBUG: Initialized track_map with {len(track_map)} entries.")
         
         if progress:
             main_task = progress.add_task(f"[green]Processing {len(audio_files)} files...", total=len(audio_files))
@@ -146,7 +141,6 @@ class UploadEngine:
                 try:
                     result_track, uploaded = future.result()
                     if result_track:
-                        print(f"DEBUG: Processed track {result_track.title} (Uploaded={uploaded})")
                         # Add or update the track in the map
                         track_map[result_track.id] = result_track
                     
@@ -166,10 +160,6 @@ class UploadEngine:
         )
         
         # Save library to cloud
-        print(f"DEBUG: Uploader - Saving library manifest. Total tracks: {len(updated_library.tracks)}")
-        if hasattr(self.storage, 'base_path'):
-             print(f"DEBUG: Uploader - Local storage base path: {self.storage.base_path}")
-             
         self.storage.save_library(updated_library)
 
         return updated_library
@@ -193,9 +183,6 @@ class UploadEngine:
 
             # Extract metadata
             metadata = AudioProcessor.extract_metadata(str(file_path))
-            print(f"DEBUG: Processing {file_path}")
-            print(f"DEBUG: Metadata: {metadata}")
-            print(f"DEBUG: Cover Path: {cover_image_path}")
             
             # Auto-Fetch / Cover Logic
             fetched_cover_path = None
@@ -263,13 +250,11 @@ class UploadEngine:
             working_file_path = file_path
             is_temp_copy = False
             
-            print(f"DEBUG: Checking compression for {file_path}")
             compression_needed, _ = AudioProcessor.should_compress(str(file_path))
             will_compress = compress and compression_needed
             
             # Case 1: Embedding into original format (no compression)
             if active_cover_path and not will_compress:
-                print("DEBUG: Checkpoint A - Embedding art")
                 import shutil
                 import tempfile
                 fd, temp_path = tempfile.mkstemp(suffix=file_path.suffix)
@@ -281,13 +266,11 @@ class UploadEngine:
                 AudioProcessor.embed_artwork(str(working_file_path), active_cover_path)
             
             # Compression decision
-            print("DEBUG: Checkpoint B - Compression check 2")
             should_compress, reason = AudioProcessor.should_compress(str(working_file_path))
             final_file_path = working_file_path
             is_compressed_copy = False
             
             if compress and should_compress:
-                print("DEBUG: Checkpoint C - Compressing")
                 import tempfile
                 fd, temp_path = tempfile.mkstemp(suffix=".mp3")
                 os.close(fd)
@@ -308,12 +291,10 @@ class UploadEngine:
                  final_file_path = working_file_path
 
             # Upload
-            print("DEBUG: Checkpoint D - Uploading")
             track_id = file_hash
             remote_key = f"tracks/{track_id}.{metadata['format']}"
             
             uploaded = self.storage.upload_file(str(final_file_path), remote_key)
-            print(f"DEBUG: Checkpoint E - Upload result: {uploaded}")
             
             # For local providers, we want the absolute path to the file in the "bucket"
             final_local_path = None

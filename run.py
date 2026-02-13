@@ -24,13 +24,13 @@ CONFIG_PATH = Path("~/.config/soundsible/config.json").expanduser()
 def bootstrap():
     """Ensure we are running inside the virtual environment."""
     if not VENV_DIR.exists():
-        print(f"Creating virtual environment in {VENV_DIR}...")
         subprocess.check_call([sys.executable, "-m", "venv", str(VENV_DIR)])
         
-    # Check if we are already running from the venv
-    if sys.executable != str(PYTHON_EXE.resolve()):
+    # Check if we are already running from the venv using prefix
+    if Path(sys.prefix).resolve() != VENV_DIR.resolve():
         # Install basic deps in venv if not present
-        subprocess.check_call([str(PYTHON_EXE), "-m", "pip", "install", "rich", "requests"])
+        subprocess.check_call([str(PYTHON_EXE), "-m", "pip", "install", "rich", "requests"], 
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
         # Re-run this script using the venv python
         os.execv(str(PYTHON_EXE), [str(PYTHON_EXE)] + sys.argv)
@@ -225,18 +225,15 @@ class SoundsibleLauncher:
         if self.os_name == "Linux":
             # Check for GTK dependencies on Linux
             try:
-                log_dir = self.root_dir / "logs"
-                log_dir.mkdir(exist_ok=True)
-                log_file = open(log_dir / "player.log", "a")
-                
                 subprocess.Popen(
                     [str(self.python_exe), "-c", "from player.ui import run; run()"],
-                    stdout=log_file,
-                    stderr=log_file
+                    cwd=str(self.root_dir)
                 )
+                time.sleep(2.0)
             except Exception as e:
                 console.print(f"[red]Failed to launch GTK player: {e}[/red]")
                 console.print("[yellow]Hint: Ensure libadwaita and python-gobject are installed.[/yellow]")
+                time.sleep(2.0)
         else:
             console.print("[yellow]GTK Player is currently Linux-only. We are working on the Tauri port for Windows![/yellow]")
             Prompt.ask("Press Enter to return to menu")
@@ -245,20 +242,17 @@ class SoundsibleLauncher:
         """Launch the ODST Web Downloader."""
         console.print("[green]Starting ODST Web Interface...[/green]")
         try:
-            log_dir = self.root_dir / "logs"
-            log_dir.mkdir(exist_ok=True)
-            log_file = open(log_dir / "downloader.log", "a")
-            
             # Run as module from root to support relative imports
             subprocess.Popen(
                 [str(self.python_exe), "-m", "odst_tool.web_app"],
-                stdout=log_file,
-                stderr=log_file
+                cwd=str(self.root_dir)
             )
             console.print("[bold green]ODST Web UI is running at http://localhost:5000[/bold green]")
+            time.sleep(2.0)
             Prompt.ask("Press Enter to return to menu (this will NOT stop the server)")
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
+            time.sleep(2.0)
 
     def launch_setup(self):
         """Run the setup wizard."""
@@ -431,7 +425,6 @@ class SoundsibleLauncher:
             current_hash = hashlib.md5(req_file.read_bytes()).hexdigest()
             
             if not marker.exists() or marker.read_text() != current_hash:
-                console.print("[cyan]Verifying dependencies...[/cyan]")
                 self._install_requirements()
                 marker.write_text(current_hash)
 
@@ -439,7 +432,8 @@ class SoundsibleLauncher:
         """Install requirements into the venv."""
         req_file = self.root_dir / "requirements.txt"
         if req_file.exists():
-            subprocess.check_call([str(self.python_exe), "-m", "pip", "install", "-r", str(req_file)])
+            subprocess.check_call([str(self.python_exe), "-m", "pip", "install", "-r", str(req_file)],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 if __name__ == "__main__":
     launcher = SoundsibleLauncher()

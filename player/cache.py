@@ -153,7 +153,7 @@ class CacheManager:
                 self.conn.commit()
                 # print(f"Cache: Pruned {pruned_count} files to reach target size.")
             except Exception as e:
-                print(f"DEBUG: Error during cache pruning: {e}")
+                pass
 
     def _ensure_space(self, new_bytes: int):
         """Free up space if needed using LRU policy."""
@@ -167,7 +167,6 @@ class CacheManager:
                 result = cursor.fetchone()[0]
                 return result if result else 0
             except Exception as e:
-                print(f"DEBUG: Error calculating cache usage: {e}")
                 return 0
 
     def clear_cache(self):
@@ -175,7 +174,7 @@ class CacheManager:
         try:
              shutil.rmtree(self.cache_dir)
         except Exception as e:
-            print(f"DEBUG: Error removing cache directory: {e}")
+            pass
         self._init_cache()
         
         with self.lock:
@@ -200,7 +199,7 @@ class CacheManager:
                         if os.path.exists(file_path):
                             os.remove(file_path)
                     except OSError as e:
-                        print(f"DEBUG: Failed to remove cache file: {e}")
+                        pass
                 
                 self.conn.execute("DELETE FROM cache_entries WHERE track_id = ?", (track_id,))
                 self.conn.commit()

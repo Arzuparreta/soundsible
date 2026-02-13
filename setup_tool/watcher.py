@@ -35,7 +35,6 @@ class MusicFolderHandler(FileSystemEventHandler):
             self.debounce_timer.cancel()
         
         def run_scan():
-            print(f"Watcher: Changes detected in {path}. Scanning...")
             self.scanner.scan(str(path))
             
         self.debounce_timer = threading.Timer(self.debounce_delay, run_scan)
@@ -58,10 +57,9 @@ class LibraryWatcher:
                 watched_count += 1
         
         if watched_count > 0:
-            print(f"Watcher: Monitoring {watched_count} directories.")
             self.observer.start()
         else:
-            print("Watcher: No valid directories to monitor.")
+            pass
 
     def stop(self):
         self.observer.stop()

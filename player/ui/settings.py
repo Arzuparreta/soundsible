@@ -18,14 +18,11 @@ class SettingsDialog(Adw.PreferencesWindow):
     def __init__(self, parent, library_manager, on_theme_change=None, current_theme="default"):
         super().__init__()
         
-        print(f"DEBUG: SettingsDialog.__init__ - on_theme_change parameter = {on_theme_change}")
-        print(f"DEBUG: SettingsDialog.__init__ - current_theme parameter = {current_theme}")
         
         self.library_manager = library_manager
         self.on_theme_change = on_theme_change
         self.current_theme = current_theme
         
-        print(f"DEBUG: SettingsDialog.__init__ - self.on_theme_change set to = {self.on_theme_change}")
         
         self.set_transient_for(parent)
         self.set_modal(True)
@@ -441,10 +438,7 @@ class SettingsDialog(Adw.PreferencesWindow):
     def _on_color_scheme_changed(self, combo):
         """Handle color scheme change."""
         scheme_id = combo.get_active_id()
-        print(f"DEBUG: Settings._on_color_scheme_changed() called with scheme_id='{scheme_id}'")
-        print(f"DEBUG: on_theme_change callback exists: {self.on_theme_change is not None}")
         if self.on_theme_change:
-            print(f"DEBUG: Calling on_theme_change callback with '{scheme_id}'")
             self.on_theme_change(scheme_id)
         else:
             print(f"ERROR: on_theme_change callback is None!")
@@ -460,7 +454,6 @@ class SettingsDialog(Adw.PreferencesWindow):
             # Save config to disk
             from shared.constants import DEFAULT_CONFIG_DIR
             config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
-            print(f"DEBUG: Saving updated config to {config_path}")
             with open(config_path, 'w') as f:
                 f.write(self.library_manager.config.to_json())
             print(f"Default download quality updated to: {quality}")

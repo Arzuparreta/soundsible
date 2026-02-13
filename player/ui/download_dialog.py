@@ -40,7 +40,6 @@ except ImportError:
     for name in potential_names:
         p = parent_of_root / name
         if p.exists() and p.is_dir():
-            print(f"DEBUG: Found external tool at {p}")
             # Add PARENT of the tool to sys.path so 'import ods-tool' works
             # But we need 'import odst_tool'. 
             # If folder is named 'ods-tool', we can't import it as 'odst_tool'.

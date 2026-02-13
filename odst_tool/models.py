@@ -3,6 +3,7 @@ Data models compatible with Soundsible.
 """
 
 from dataclasses import dataclass, asdict, field
+import dataclasses
 from typing import List, Dict, Optional, Any
 import json
 import uuid
@@ -30,6 +31,7 @@ class Track:
     genre: Optional[str] = None
     track_number: Optional[int] = None
     is_local: bool = False
+    local_path: Optional[str] = None
     
     @staticmethod
     def generate_id() -> str:
@@ -42,8 +44,10 @@ class Track:
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Track':
-        """Create Track from dictionary."""
-        return cls(**data)
+        """Create Track from dictionary, filtering unknown keys."""
+        field_names = {f.name for f in dataclasses.fields(cls)}
+        filtered_data = {k: v for k, v in data.items() if k in field_names}
+        return cls(**filtered_data)
 
 @dataclass
 class LibraryMetadata:
@@ -69,14 +73,8 @@ class LibraryMetadata:
         return json.dumps(data, indent=indent)
     
     @classmethod
-    def from_json(cls, json_str: str) -> 'LibraryMetadata':
-        """Deserialize library metadata from JSON string."""
-        try:
-            data = json.loads(json_str)
-        except json.JSONDecodeError:
-            # Handle empty/corrupt file gracefully by returning empty library
-            data = {}
-
+    def from_dict(cls, data: Dict[str, Any]) -> 'LibraryMetadata':
+        """Create LibraryMetadata from dictionary."""
         tracks_data = data.get("tracks", [])
         tracks = [Track.from_dict(t) for t in tracks_data]
         
@@ -97,6 +95,17 @@ class LibraryMetadata:
             settings=data.get("settings", {}),
             last_updated=data.get("last_updated", datetime.utcnow().isoformat())
         )
+    
+    @classmethod
+    def from_json(cls, json_str: str) -> 'LibraryMetadata':
+        """Deserialize library metadata from JSON string."""
+        try:
+            data = json.loads(json_str)
+        except json.JSONDecodeError:
+            # Handle empty/corrupt file gracefully by returning empty library
+            data = {}
+
+        return cls.from_dict(data)
     
     def get_track_by_hash(self, file_hash: str) -> Optional[Track]:
         """Find track by file hash."""

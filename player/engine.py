@@ -56,13 +56,11 @@ class PlaybackEngine:
 
     def play(self, url: str, track: Track):
         """Start playing a track from a URL (local or remote)."""
-        print(f"DEBUG: PlaybackEngine.play called with URL: {url}")
         self.current_track = track
         try:
             self.player.play(url)
             self.player.pause = False
             self.is_playing = True
-            print(f"DEBUG: mpv.play({url}) called successfully")
         except Exception as e:
             print(f"ERROR: mpv failed to play {url}: {e}")
         
@@ -121,25 +119,20 @@ class PlaybackEngine:
             
             
     def _handle_eof(self, name, value):
-        print(f"DEBUG: MPV eof-reached: {value}")
         if value:
             self._trigger_track_end()
             
     def _handle_idle(self, name, value):
         """Handle idle state (player stopped/finished)."""
-        print(f"DEBUG: MPV idle-active: {value}")
         if value and self.is_playing:
-            print("DEBUG: Player went idle while supposedly playing. Triggering track end.")
             self._trigger_track_end()
 
     def _trigger_track_end(self):
         """Execute all registered track end callbacks safely."""
-        print(f"DEBUG: Triggering {len(self._track_end_callbacks)} track end callbacks")
         
         # First, execute custom callbacks
         for callback in self._track_end_callbacks:
             try:
-                print(f"DEBUG: Executing callback: {callback}")
                 callback()
             except Exception as e:
                 print(f"ERROR executing track_end callback {callback}: {e}")
@@ -148,7 +141,6 @@ class PlaybackEngine:
         if self.queue_manager and not self.queue_manager.is_empty():
             next_track = self.queue_manager.get_next()
             if next_track and self._on_track_load:
-                print(f"DEBUG: Auto-playing next queued track: {next_track.title}")
                 try:
                     self._on_track_load(next_track)
                 except Exception as e:
@@ -171,12 +163,8 @@ class PlaybackEngine:
     # Callback setters
     def add_track_end_callback(self, callback: Callable[[], None]):
         """Register a callback for when a track ends."""
-        print(f"DEBUG: Adding track_end_callback check: {callback}")
         if callback not in self._track_end_callbacks:
             self._track_end_callbacks.append(callback)
-            print(f"DEBUG: Callback added. Total callbacks: {len(self._track_end_callbacks)}")
-        else:
-            print("DEBUG: Callback already registered.")
         
     def set_time_update_callback(self, callback: Callable[[float], None]):
         self._on_time_update = callback
