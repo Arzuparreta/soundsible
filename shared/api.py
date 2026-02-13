@@ -81,12 +81,15 @@ downloader = None
 def get_core():
     global library_manager, playback_engine, queue_manager
     if not library_manager:
+        print("API: Initializing Library Manager...")
         library_manager = LibraryManager()
         # Ensure we have metadata loaded from local cache at minimum
         if not library_manager.metadata:
+            print("API: No metadata in memory, checking cache...")
             cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
             library_manager._load_from_cache(cache_path)
             
+        print("API: Initializing Queue and Playback Engine...")
         queue_manager = QueueManager()
         # Note: PlaybackEngine requires an active MPV instance which might need a display.
         # For headless/server mode, we might need to handle this carefully.
@@ -314,7 +317,19 @@ def update_config():
 # --- Server Management ---
 
 def start_api(port=5005, debug=False):
-    print(f"Starting Soundsible Core API on port {port}...")
+    print(f"--- Soundsible API Boot Sequence ---")
+    print(f"Target Port: {port}")
+    print(f"CWD: {os.getcwd()}")
+    
+    try:
+        get_core()
+        print("API: Core services initialized successfully.")
+    except Exception as e:
+        print(f"FATAL: Core initialization failed: {e}")
+        import traceback
+        traceback.print_exc()
+
+    print(f"API: Starting SocketIO server on 0.0.0.0:{port}...")
     socketio.run(app, host='0.0.0.0', port=port, debug=debug)
 
 if __name__ == '__main__':
