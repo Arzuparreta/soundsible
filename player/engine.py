@@ -3,7 +3,12 @@ Core playback engine using python-mpv.
 Handles the low-level details of audio playback, events, and state.
 """
 
-import mpv
+try:
+    import mpv
+    MPV_AVAILABLE = True
+except (ImportError, OSError):
+    MPV_AVAILABLE = False
+
 import os
 from typing import Optional, Callable, Dict, Any, List
 from shared.models import Track
@@ -13,19 +18,28 @@ class PlaybackEngine:
     """Wrapper around MPV for music playback."""
     
     def __init__(self, queue_manager: Optional[QueueManager] = None):
-        # Initialize MPV with options optimized for streaming
-        # vo='null' because we are audio-only
-        self.player = mpv.MPV(
-            input_default_bindings=True, 
-            input_vo_keyboard=True, 
-            osc=True,
-            vo='null',
-            audio_display='no',
-            ytdl=False,
-            gapless_audio='yes',
-            cache='yes',
-            cache_secs=10
-        )
+        self.player = None
+        if MPV_AVAILABLE:
+            try:
+                # Initialize MPV with options optimized for streaming
+                # vo='null' because we are audio-only
+                self.player = mpv.MPV(
+                    input_default_bindings=True, 
+                    input_vo_keyboard=True, 
+                    osc=True,
+                    vo='null',
+                    audio_display='no',
+                    ytdl=False,
+                    gapless_audio='yes',
+                    cache='yes',
+                    cache_secs=10
+                )
+            except (ImportError, OSError) as e:
+                print(f"Warning: mpv library found but failed to load: {e}")
+                self.player = None
+        
+        if not self.player:
+            print("PlaybackEngine: Local playback is DISABLED (mpv not found). Streaming still works.")
         
         # Queue Manager
         self.queue_manager = queue_manager
@@ -44,19 +58,20 @@ class PlaybackEngine:
         self._last_time_update = 0.0
         
         # Bind events
-        self.player.observe_property('time-pos', self._handle_time_update)
-        self.player.observe_property('eof-reached', self._handle_eof)
-        self.player.observe_property('idle-active', self._handle_idle)
-        
-        # Pause observer disabled - using explicit state updates in play()/pause()
-        # self.player.observe_property('pause', self._handle_pause_change)
-        
-        # Set initial volume
-        self.player.volume = 100
+        if self.player:
+            self.player.observe_property('time-pos', self._handle_time_update)
+            self.player.observe_property('eof-reached', self._handle_eof)
+            self.player.observe_property('idle-active', self._handle_idle)
+            # Set initial volume
+            self.player.volume = 100
 
     def play(self, url: str, track: Track):
         """Start playing a track from a URL (local or remote)."""
         self.current_track = track
+        if not self.player:
+            print(f"Cannot play {track.title} locally: mpv is missing.")
+            return
+
         try:
             self.player.play(url)
             self.player.pause = False
@@ -70,6 +85,7 @@ class PlaybackEngine:
             
     def pause(self):
         """Toggle pause."""
+        if not self.player: return
         self.player.pause = not self.player.pause
         self.is_playing = not self.player.pause
         
@@ -80,7 +96,8 @@ class PlaybackEngine:
             
     def stop(self):
         """Stop playback."""
-        self.player.stop()
+        if self.player:
+            self.player.stop()
         self.is_playing = False
         self.current_track = None
         if self._on_state_change:
@@ -88,7 +105,7 @@ class PlaybackEngine:
 
     def seek(self, position: float):
         """Seek to absolute position in seconds."""
-        if self.current_track:
+        if self.current_track and self.player:
             try:
                 self.player.seek(position, reference='absolute')
             except Exception as e:
@@ -96,15 +113,16 @@ class PlaybackEngine:
             
     def set_volume(self, level: int):
         """Set volume (0-100)."""
-        self.player.volume = max(0, min(100, level))
+        if self.player:
+            self.player.volume = max(0, min(100, level))
         
     def get_time(self) -> float:
         """Get current playback time in seconds."""
-        return self.player.time_pos or 0
+        return self.player.time_pos if self.player else 0
         
     def get_duration(self) -> float:
         """Get track duration in seconds."""
-        return self.player.duration or 0
+        return self.player.duration if self.player else 0
 
     # Event handlers
     def _handle_time_update(self, name, value):

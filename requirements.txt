@@ -22,7 +22,7 @@ requests>=2.31.0           # Sync HTTP requests
 
 # Player Dependencies (GTK)
 PyGObject>=3.42.0; sys_platform == 'linux'          # GTK bindings
-python-mpv>=1.0.1          # mpv media player integration
+python-mpv>=1.0.1; sys_platform == 'linux'          # mpv media player integration
 mpris-server>=0.9.0; sys_platform == 'linux'        # MPRIS D-Bus server for media keys (optional)
 
 # Utilities
