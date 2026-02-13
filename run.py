@@ -12,6 +12,8 @@ import shutil
 import threading
 import time
 import json
+import atexit
+import signal
 from datetime import datetime
 from pathlib import Path
 
@@ -36,14 +38,8 @@ def bootstrap():
         os.execv(str(PYTHON_EXE), [str(PYTHON_EXE)] + sys.argv)
 
 if __name__ == "__main__" and "BOOTSTRAPPED" not in os.environ:
-    # Check for daemon flag before bootstrapping to avoid recursion loops if not careful
-    # But usually we WANT the venv python for the daemon too.
-    if "--daemon" in sys.argv:
-        os.environ["BOOTSTRAPPED"] = "1"
-        bootstrap()
-    else:
-        os.environ["BOOTSTRAPPED"] = "1"
-        bootstrap()
+    os.environ["BOOTSTRAPPED"] = "1"
+    bootstrap()
 
 # --- ACTUAL LAUNCHER CODE ---
 try:
@@ -54,7 +50,6 @@ try:
     from rich.live import Live
     from rich.text import Text
 except ImportError:
-    # This should not happen after bootstrap
     print("Error: 'rich' library not found even after bootstrap.")
     sys.exit(1)
 
@@ -66,6 +61,13 @@ class SoundsibleLauncher:
         self.root_dir = ROOT_DIR
         self.venv_dir = VENV_DIR
         self.python_exe = PYTHON_EXE
+        self.child_processes = []
+        
+        # Register cleanup handler
+        atexit.register(self.cleanup)
+        signal.signal(signal.SIGINT, lambda s, f: sys.exit(0))
+        signal.signal(signal.SIGTERM, lambda s, f: sys.exit(0))
+
         from shared.database import DatabaseManager
         self.db = DatabaseManager()
         self.stats = {"tracks": 0, "local": 0, "cloud": 0}
@@ -74,6 +76,28 @@ class SoundsibleLauncher:
         self.watcher = None
         self._start_watcher()
         
+    def cleanup(self):
+        """Force kill all child processes on exit."""
+        if not self.child_processes:
+            return
+            
+        console.print("\n[dim]Cleaning up background services...[/dim]")
+        for proc in self.child_processes:
+            try:
+                if platform.system() != "Windows":
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                else:
+                    proc.terminate()
+            except:
+                try: proc.kill()
+                except: pass
+        
+        # Final safety check: kill anything on port 5005
+        try:
+            if self.os_name == "Linux":
+                subprocess.run(["fuser", "-k", "5005/tcp"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        except: pass
+
     def _start_watcher(self):
         """Initialize and start the background file watcher."""
         if not CONFIG_PATH.exists(): return
@@ -105,7 +129,6 @@ class SoundsibleLauncher:
             return
             
         def _sync():
-            # Wait for TUI to render first frame
             time.sleep(1.0)
             self.sync_status = "Syncing..."
             try:
@@ -140,28 +163,131 @@ class SoundsibleLauncher:
 
         table.add_row("1", "Launch Music Player (GUI) [bold green](Recommended)[/bold green]")
         table.add_row("2", "Launch Music Downloader (ODST Web UI)")
-        table.add_row("3", "Search Library (Quick Discover)")
-        table.add_row("4", "Manage Storage / Sync")
-        table.add_row("5", "Advanced Options")
+        table.add_row("3", "Launch Web Player (PWA) [bold cyan](Android/Windows)[/bold cyan]")
+        table.add_row("4", "Search Library (Quick Discover)")
+        table.add_row("5", "Manage Storage / Sync")
+        table.add_row("6", "Advanced Options")
         table.add_row("q", "Quit")
 
         console.print(Panel(table, title="Main Menu", border_style="dim"))
 
-        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "5", "q"], default="1")
+        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "5", "6", "q"], default="1")
         
         if choice == "1":
             self.launch_player()
         elif choice == "2":
             self.launch_downloader()
         elif choice == "3":
-            self.search_ui()
+            self.launch_web_player()
         elif choice == "4":
-            self.manage_storage()
+            self.search_ui()
         elif choice == "5":
+            self.manage_storage()
+        elif choice == "6":
             self.show_advanced_menu()
         elif choice == "q":
             console.print("[italic]Happy listening![/italic]")
             sys.exit(0)
+
+    def launch_player(self):
+        """Launch the Music Player component with logging."""
+        console.print("[green]Launching Soundsible Player...[/green]")
+        if self.os_name == "Linux":
+            try:
+                log_dir = self.root_dir / "logs"
+                log_dir.mkdir(exist_ok=True)
+                player_log = open(log_dir / "player.log", "a")
+                
+                proc = subprocess.Popen(
+                    [str(self.python_exe), "-c", "from player.ui import run; run()"],
+                    cwd=str(self.root_dir),
+                    stdout=player_log,
+                    stderr=player_log,
+                    start_new_session=True 
+                )
+                self.child_processes.append(proc)
+                console.print("[dim]Player is starting. Logs: logs/player.log[/dim]")
+                time.sleep(1.0)
+            except Exception as e:
+                console.print(f"[red]Failed to launch: {e}[/red]")
+        else:
+            console.print("[yellow]GTK Player is Linux-only. Use Option 3 for Windows.[/yellow]")
+            Prompt.ask("Press Enter to return")
+
+    def launch_web_player(self):
+        """Launch the Web Player (PWA) interface in background."""
+        console.print("[cyan]Starting Web Player Host...[/cyan]")
+        try:
+            log_dir = self.root_dir / "logs"
+            log_dir.mkdir(exist_ok=True)
+            log_file = open(log_dir / "api.log", "a")
+            
+            proc = subprocess.Popen([str(self.python_exe), "-m", "shared.api"],
+                             stdout=log_file,
+                             stderr=log_file,
+                             start_new_session=True)
+            self.child_processes.append(proc)
+            
+            import socket
+            hostname = socket.gethostname()
+            local_ip = "localhost"
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                local_ip = s.getsockname()[0]
+                s.close()
+            except: pass
+            
+            console.print(Panel.fit(
+                f"[bold green]Web Player is ONLINE![/bold green]\n\n"
+                f"Local: [bold cyan]http://localhost:5005/player/[/bold cyan]\n"
+                f"Mobile: [bold cyan]http://{local_ip}:5005/player/[/bold cyan]\n\n"
+                "[dim]Server is running in background. You can now use other menu options.[/dim]",
+                border_style="green"
+            ))
+            time.sleep(2.0)
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+    def launch_downloader(self):
+        """Launch the ODST Web Downloader."""
+        console.print("[green]Starting ODST Web Interface...[/green]")
+        try:
+            proc = subprocess.Popen(
+                [str(self.python_exe), "-m", "odst_tool.web_app"],
+                cwd=str(self.root_dir),
+                start_new_session=True
+            )
+            self.child_processes.append(proc)
+            console.print("[bold green]ODST Web UI is running at http://localhost:5000[/bold green]")
+            time.sleep(2.0)
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            time.sleep(2.0)
+
+    def launch_setup(self):
+        """Run the setup wizard."""
+        console.print("[cyan]Starting Setup Wizard...[/cyan]")
+        subprocess.run([str(self.python_exe), "-m", "setup_tool.cli", "init", "--guided"])
+        self._load_stats()
+
+    def launch_api(self):
+        """Launch the Core API Server."""
+        console.print("[bold green]Starting Soundsible Core API...[/bold green]")
+        try:
+            log_dir = self.root_dir / "logs"
+            log_dir.mkdir(exist_ok=True)
+            log_file = open(log_dir / "api.log", "a")
+            
+            proc = subprocess.Popen([str(self.python_exe), "-m", "shared.api"],
+                             stdout=log_file,
+                             stderr=log_file,
+                             start_new_session=True)
+            self.child_processes.append(proc)
+            console.print("[bold green]API Server is running on http://localhost:5005[/bold green]")
+            time.sleep(2.0)
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
 
     def show_advanced_menu(self):
         """Advanced tools and CLI configuration."""
@@ -186,99 +312,6 @@ class SoundsibleLauncher:
         elif choice == "3":
             subprocess.run([str(self.python_exe), "-m", "setup_tool.cli", "cleanup"])
             Prompt.ask("Press Enter to continue")
-        
-    def search_ui(self):
-        """Interactive search TUI using high-speed SQLite."""
-        query = Prompt.ask("[bold magenta]Search Library[/bold magenta]")
-        if not query: return
-        
-        console.print(f"[cyan]Searching for: {query}...[/cyan]")
-        
-        try:
-            results = self.db.search_tracks(query)
-            
-            if not results:
-                console.print("[yellow]No tracks found.[/yellow]")
-            else:
-                table = Table(title=f"Results for '{query}'")
-                table.add_column("#", style="dim")
-                table.add_column("Title", style="green")
-                table.add_column("Artist", style="cyan")
-                table.add_column("Album", style="yellow")
-                table.add_column("Source", style="dim")
-                
-                for i, t in enumerate(results[:20]):
-                    source = "Local" if t.is_local else "Cloud"
-                    table.add_row(str(i+1), t.title, t.artist, t.album, source)
-                
-                console.print(table)
-                if len(results) > 20:
-                    console.print(f"[dim]... and {len(results)-20} more.[/dim]")
-        except Exception as e:
-            console.print(f"[red]Search failed: {e}[/red]")
-            
-        Prompt.ask("Press Enter to return to menu")
-
-    def launch_player(self):
-        """Launch the Music Player component."""
-        console.print("[green]Launching Soundsible Player...[/green]")
-        if self.os_name == "Linux":
-            # Check for GTK dependencies on Linux
-            try:
-                subprocess.Popen(
-                    [str(self.python_exe), "-c", "from player.ui import run; run()"],
-                    cwd=str(self.root_dir)
-                )
-                time.sleep(2.0)
-            except Exception as e:
-                console.print(f"[red]Failed to launch GTK player: {e}[/red]")
-                console.print("[yellow]Hint: Ensure libadwaita and python-gobject are installed.[/yellow]")
-                time.sleep(2.0)
-        else:
-            console.print("[yellow]GTK Player is currently Linux-only. We are working on the Tauri port for Windows![/yellow]")
-            Prompt.ask("Press Enter to return to menu")
-
-    def launch_downloader(self):
-        """Launch the ODST Web Downloader."""
-        console.print("[green]Starting ODST Web Interface...[/green]")
-        try:
-            # Run as module from root to support relative imports
-            subprocess.Popen(
-                [str(self.python_exe), "-m", "odst_tool.web_app"],
-                cwd=str(self.root_dir)
-            )
-            console.print("[bold green]ODST Web UI is running at http://localhost:5000[/bold green]")
-            time.sleep(2.0)
-            Prompt.ask("Press Enter to return to menu (this will NOT stop the server)")
-        except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            time.sleep(2.0)
-
-    def launch_setup(self):
-        """Run the setup wizard."""
-        console.print("[cyan]Starting Setup Wizard...[/cyan]")
-        subprocess.run([str(self.python_exe), "-m", "setup_tool.cli", "init", "--guided"])
-        # Reload stats after setup
-        self._load_stats()
-        if not "BOOTSTRAPPED" in os.environ: # If called from run() onboarding
-             Prompt.ask("Setup complete. Press Enter to enter Main Menu")
-
-    def launch_api(self):
-        """Launch the Core API Server."""
-        console.print("[bold green]Starting Soundsible Core API...[/bold green]")
-        try:
-            log_dir = self.root_dir / "logs"
-            log_dir.mkdir(exist_ok=True)
-            log_file = open(log_dir / "api.log", "a")
-            
-            # Run as module from root
-            subprocess.Popen([str(self.python_exe), "-m", "shared.api"],
-                             stdout=log_file,
-                             stderr=log_file)
-            console.print("[bold green]API Server is running on http://localhost:5005[/bold green]")
-            Prompt.ask("Press Enter to return to menu")
-        except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
 
     def manage_storage(self):
         """Storage management submenu."""
@@ -326,19 +359,19 @@ class SoundsibleLauncher:
             self.manage_watch_folders()
         elif choice == "6":
              from rich.prompt import Confirm
-             if Confirm.ask("Disconnect from current cloud service? (Your files in the cloud will be safe)"):
-                 wipe = Confirm.ask("Also wipe local library metadata and cache? (Clean start)")
+             if Confirm.ask("Disconnect from current cloud service?"):
+                 wipe = Confirm.ask("Also wipe local library metadata and cache?")
                  from player.library import LibraryManager
                  lib = LibraryManager()
                  if lib.disconnect_storage(wipe_local=wipe):
                      self._load_stats()
-                     console.print("[green]Disconnected. Restart the app to run setup again.[/green]")
+                     console.print("[green]Disconnected. Restart app to setup again.[/green]")
                  else:
                      console.print("[red]Failed to disconnect.[/red]")
              Prompt.ask("Press Enter")
         elif choice == "9":
             from rich.prompt import Confirm
-            if Confirm.ask("[bold red]ARE YOU SURE?[/bold red] This will permanently delete ALL tracks from cloud and local cache!"):
+            if Confirm.ask("[bold red]ARE YOU SURE?[/bold red] This will permanently delete ALL tracks!"):
                 from player.library import LibraryManager
                 lib = LibraryManager()
                 if lib.nuke_library():
@@ -347,8 +380,6 @@ class SoundsibleLauncher:
                 else:
                     console.print("[bold red]Failed to fully wipe library.[/bold red]")
                 Prompt.ask("Press Enter")
-        elif choice == "b":
-            pass
 
     def manage_watch_folders(self):
         """Configure which folders are monitored for changes."""
@@ -363,8 +394,7 @@ class SoundsibleLauncher:
             for f in lib.config.watch_folders:
                 console.print(f"  - {f}")
         
-        action = Prompt.ask("\n[bold]Action[/bold]", choices=["a", "c", "b"], default="b", 
-                            show_choices=False) # a=Add, c=Clear, b=Back
+        action = Prompt.ask("\n[bold]Action[/bold]", choices=["a", "c", "b"], default="b", show_choices=False)
         console.print("(a) Add Folder  (c) Clear All  (b) Back")
         
         if action == "a":
@@ -372,10 +402,9 @@ class SoundsibleLauncher:
             if os.path.exists(path):
                 if path not in lib.config.watch_folders:
                     lib.config.watch_folders.append(path)
-                    # Save config
                     with open(CONFIG_PATH, 'w') as f:
                         f.write(lib.config.to_json())
-                    console.print("[green]Folder added. Restart launcher to start watching.[/green]")
+                    console.print("[green]Folder added.[/green]")
             else:
                 console.print("[red]Path does not exist.[/red]")
         elif action == "c":
@@ -383,31 +412,43 @@ class SoundsibleLauncher:
             with open(CONFIG_PATH, 'w') as f:
                 f.write(lib.config.to_json())
             console.print("[yellow]Watch folders cleared.[/yellow]")
-            
         Prompt.ask("Press Enter")
 
+    def search_ui(self):
+        """Interactive search TUI using high-speed SQLite."""
+        query = Prompt.ask("[bold magenta]Search Library[/bold magenta]")
+        if not query: return
+        try:
+            results = self.db.search_tracks(query)
+            if not results:
+                console.print("[yellow]No tracks found.[/yellow]")
+            else:
+                table = Table(title=f"Results for '{query}'")
+                table.add_column("#", style="dim")
+                table.add_column("Title", style="green")
+                table.add_column("Artist", style="cyan")
+                table.add_column("Album", style="yellow")
+                for i, t in enumerate(results[:20]):
+                    table.add_row(str(i+1), t.title, t.artist, t.album)
+                console.print(table)
+        except Exception as e:
+            console.print(f"[red]Search failed: {e}[/red]")
+        Prompt.ask("Press Enter to return")
 
     def run(self):
         self._install_requirements_if_needed()
-        
-        # 1. Onboarding
         if not self.is_configured():
             if "--daemon" in sys.argv:
                 print("Daemon: Configuration missing. Please run 'run.py' manually first.")
                 return
-            console.print(Panel("[bold yellow]First Run Detected![/bold yellow]\nWelcome to Soundsible! Launching the setup wizard...", border_style="yellow"))
+            console.print(Panel("[bold yellow]First Run Detected![/bold yellow]\nWelcome! Launching setup...", border_style="yellow"))
             self.launch_player()
         
-        # 2. Background Sync
         self.start_background_sync()
-        
-        # 3. Background Watcher
         self._start_watcher()
         
-        # 4. Handle Daemon Mode
         if "--daemon" in sys.argv:
             console.print("[bold green]Soundsible Daemon is running.[/bold green]")
-            # Start API in same process (blocking)
             from shared.api import start_api
             start_api()
             return
@@ -416,24 +457,15 @@ class SoundsibleLauncher:
             self.show_menu()
 
     def _install_requirements_if_needed(self):
-        """Check and update dependencies."""
         req_file = self.root_dir / "requirements.txt"
         marker = self.venv_dir / ".installed_requirements_hash"
-        
         if req_file.exists():
             import hashlib
             current_hash = hashlib.md5(req_file.read_bytes()).hexdigest()
-            
             if not marker.exists() or marker.read_text() != current_hash:
-                self._install_requirements()
+                subprocess.check_call([str(self.python_exe), "-m", "pip", "install", "-r", str(req_file)],
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 marker.write_text(current_hash)
-
-    def _install_requirements(self):
-        """Install requirements into the venv."""
-        req_file = self.root_dir / "requirements.txt"
-        if req_file.exists():
-            subprocess.check_call([str(self.python_exe), "-m", "pip", "install", "-r", str(req_file)],
-                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 if __name__ == "__main__":
     launcher = SoundsibleLauncher()

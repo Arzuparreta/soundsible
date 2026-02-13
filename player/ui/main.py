@@ -2,8 +2,8 @@ import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Gio, GObject, GLib, Gdk
-from shared.constants import DEFAULT_CONFIG_DIR, DEFAULT_LIBRARY_PATH, DEFAULT_CACHE_DIR
-from shared.models import PlayerConfig
+from shared.constants import DEFAULT_CONFIG_DIR, DEFAULT_LIBRARY_PATH, DEFAULT_CACHE_DIR, LIBRARY_METADATA_FILENAME
+from shared.models import PlayerConfig, LibraryMetadata
 from player.cover_manager import CoverFetchManager
 from player.library import LibraryManager
 from player.ui.library import LibraryView
@@ -48,6 +48,11 @@ class MusicApp(Adw.Application):
         setup_action.connect("activate", self.on_setup_wizard)
         self.add_action(setup_action)
         
+        # Sync QR action (App level)
+        sync_qr_action = Gio.SimpleAction.new("show-sync-qr", None)
+        sync_qr_action.connect("activate", self.on_show_sync_qr)
+        self.add_action(sync_qr_action)
+        
         # Upload music action
         upload_action = Gio.SimpleAction.new("upload-music", None)
         upload_action.connect("activate", self.on_upload_music)
@@ -62,6 +67,11 @@ class MusicApp(Adw.Application):
         about_action = Gio.SimpleAction.new("about", None)
         about_action.connect("activate", self.on_about)
         self.add_action(about_action)
+    
+    def on_show_sync_qr(self, action, param):
+        """Show sync QR code."""
+        if hasattr(self, 'win'):
+            self.win.show_sync_qr()
     
     def on_setup_wizard(self, action, param):
         """Show setup wizard."""
@@ -349,6 +359,7 @@ class MainWindow(Adw.ApplicationWindow):
         # Setup section
         setup_section = Gio.Menu()
         setup_section.append("Setup Wizard", "app.setup-wizard")
+        setup_section.append("Sync to Mobile (QR)", "app.show-sync-qr")
         setup_section.append("Upload Local Files to Cloud", "app.upload-music")
         setup_section.append("Download & Push (Smart)", "app.download-music")
         menu.append_section(None, setup_section)
@@ -1372,6 +1383,113 @@ class MainWindow(Adw.ApplicationWindow):
         wizard = SetupWizard(transient_for=self)
         wizard.present()
 
+    def show_sync_qr(self):
+        """Generate and show sync QR code with dual URLs for LAN and Tailscale."""
+        print("DEBUG: [QR] Method triggered")
+        import json
+        import zlib
+        import base64
+        import segno
+        import io
+        import socket
+        from gi.repository import GdkPixbuf
+        
+        # Detect IPs
+        tailscale_ip = None
+        local_ip = "localhost"
+        try:
+            # 1. Try to find Tailscale IP
+            import subprocess
+            ts_out = subprocess.check_output(["tailscale", "ip", "-4"]).decode().strip()
+            if ts_out: tailscale_ip = ts_out
+        except: pass
+
+        try:
+            # 2. Find local Wi-Fi IP
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+        except: pass
+            
+        lan_url = f"http://{local_ip}:5005/player/"
+        ts_url = f"http://{tailscale_ip}:5005/player/" if tailscale_ip else None
+        
+        config = self._load_config()
+        if not config:
+            print("DEBUG: [QR] ❌ No config found")
+            return
+
+        try:
+            print("DEBUG: [QR] Generating token...")
+            config_data = config.to_dict()
+            
+            # Use LAN IP as primary host in token
+            config_data['host'] = local_ip
+            config_data['port'] = 5005
+            
+            json_bytes = json.dumps(config_data).encode('utf-8')
+            compressed = zlib.compress(json_bytes)
+            token = base64.urlsafe_b64encode(compressed).decode('utf-8')
+            
+            # Create MessageDialog
+            dialog = Adw.MessageDialog(
+                transient_for=self,
+                heading="Sync to Mobile",
+            )
+            dialog.add_response("close", "Close")
+            dialog.set_default_response("close")
+            dialog.set_close_response("close")
+            
+            # Add content
+            content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+            
+            # URL Display
+            url_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            
+            lan_label = Gtk.Label()
+            lan_label.set_markup(f"<b>At Home (Wi-Fi):</b>\n<span color='#3b82f6' weight='bold'>{lan_url}</span>")
+            lan_label.set_selectable(True)
+            url_box.append(lan_label)
+            
+            if ts_url:
+                ts_label = Gtk.Label()
+                ts_label.set_markup(f"<b>Away (Tailscale):</b>\n<span color='#10b981' weight='bold'>{ts_url}</span>")
+                ts_label.set_selectable(True)
+                url_box.append(ts_label)
+                
+            content_box.append(url_box)
+
+            # QR Image
+            loader = GdkPixbuf.PixbufLoader.new_with_type("png")
+            qr = segno.make(token)
+            out = io.BytesIO()
+            qr.save(out, kind='png', scale=5)
+            loader.write(out.getvalue())
+            loader.close()
+            
+            qr_image = Gtk.Image.new_from_pixbuf(loader.get_pixbuf())
+            qr_image.set_pixel_size(250)
+            qr_image.set_margin_top(10)
+            qr_image.set_margin_bottom(10)
+            content_box.append(qr_image)
+            
+            # Manual token
+            expander = Gtk.Expander(label="Show manual token")
+            token_entry = Gtk.Entry(text=token)
+            token_entry.set_editable(False)
+            token_entry.add_css_class("flat")
+            expander.set_child(token_entry)
+            content_box.append(expander)
+            
+            dialog.set_extra_child(content_box)
+            dialog.present()
+            
+        except Exception as e:
+            print(f"DEBUG: [QR] ❌ ERROR: {e}")
+            import traceback
+            traceback.print_exc()
+
     def refresh_library(self):
         """Reload the library from the provider (called by other dialogs)."""
         print("External request to refresh library...")
@@ -1407,5 +1525,3 @@ class MainWindow(Adw.ApplicationWindow):
 if __name__ == "__main__":
     app = MusicApp(application_id="com.soundsible.player")
     app.run(None)
-
-
