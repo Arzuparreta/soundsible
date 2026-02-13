@@ -66,8 +66,58 @@ class AlbumCard(Gtk.Box):
         click.connect("released", self._on_clicked)
         self.add_controller(click)
         
+        # Right click handler
+        right_click = Gtk.GestureClick()
+        right_click.set_button(3) # Right mouse button
+        right_click.connect("pressed", self._on_right_click)
+        self.add_controller(right_click)
+        
         # Load Cover
         GLib.idle_add(self._load_cover)
+
+    def _on_right_click(self, gesture, n_press, x, y):
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+        
+        p = Gtk.Popover()
+        p.set_parent(self)
+        p.set_has_arrow(False)
+        p.set_autohide(True)
+        p.add_css_class("context-menu")
+
+        rect = Gdk.Rectangle()
+        rect.x, rect.y, rect.width, rect.height = int(x), int(y), 1, 1
+        p.set_pointing_to(rect)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        
+        def add_item(label, callback):
+            btn = Gtk.Button(label=label)
+            btn.add_css_class("flat")
+            btn.set_halign(Gtk.Align.START)
+            btn.connect("clicked", lambda b: (p.popdown(), callback()))
+            box.append(btn)
+
+        def play_album():
+            tracks = self.library_manager.db.get_tracks_by_album(self.album_obj.album, self.album_obj.artist)
+            if tracks:
+                root = self.get_root()
+                if root and hasattr(root, 'play_track'):
+                    if hasattr(root, 'queue_manager'):
+                        root.queue_manager.clear()
+                        for t in tracks[1:]: root.queue_manager.add(t)
+                    root.play_track(tracks[0])
+
+        def queue_album():
+            tracks = self.library_manager.db.get_tracks_by_album(self.album_obj.album, self.album_obj.artist)
+            root = self.get_root()
+            if root and hasattr(root, 'queue_manager'):
+                for t in tracks: root.queue_manager.add(t)
+
+        add_item("Play Album", play_album)
+        add_item("Add Album to Queue", queue_album)
+
+        p.set_child(box)
+        p.popup()
 
     def _on_clicked(self, gesture, n_press, x, y):
         if self.on_click_callback:

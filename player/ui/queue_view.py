@@ -2,7 +2,7 @@
 Queue View Widget - Displays the current playback queue.
 """
 
-from gi.repository import Gtk, GLib
+from gi.repository import Gtk, GLib, Gdk
 from player.queue_manager import QueueManager
 from typing import Optional
 
@@ -142,8 +142,38 @@ class QueueView(Gtk.Box):
         box.append(remove_btn)
         
         row.set_child(box)
+
+        # Right-click gesture for the row
+        right_click = Gtk.GestureClick()
+        right_click.set_button(3)
+        right_click.connect("pressed", lambda g, n, x, y: self._on_row_right_click(g, x, y, index))
+        row.add_controller(right_click)
+
         return row
     
+    def _on_row_right_click(self, gesture, x, y, index):
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+        
+        p = Gtk.Popover()
+        p.set_parent(gesture.get_widget())
+        p.set_has_arrow(False)
+        p.set_autohide(True)
+        p.add_css_class("context-menu")
+
+        rect = Gdk.Rectangle()
+        rect.x, rect.y, rect.width, rect.height = int(x), int(y), 1, 1
+        p.set_pointing_to(rect)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        btn = Gtk.Button(label="Remove from Queue")
+        btn.add_css_class("flat")
+        btn.set_halign(Gtk.Align.START)
+        btn.connect("clicked", lambda b: (p.popdown(), self._on_remove_clicked(index)))
+        box.append(btn)
+        
+        p.set_child(box)
+        p.popup()
+
     def _on_remove_clicked(self, index: int):
         """Handle remove button click."""
         self.queue_manager.remove(index)

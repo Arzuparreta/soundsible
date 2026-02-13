@@ -235,21 +235,26 @@ class PlayerConfig:
         """Create PlayerConfig from dictionary, decrypting if necessary."""
         from shared.crypto import CredentialManager
         
-        data['provider'] = StorageProvider(data['provider'])
+        # Filter out keys that are not in the dataclass
+        import dataclasses
+        field_names = {f.name for f in dataclasses.fields(cls)}
+        filtered_data = {k: v for k, v in data.items() if k in field_names}
         
-        if data.get('is_encrypted', False):
+        filtered_data['provider'] = StorageProvider(filtered_data['provider'])
+        
+        if filtered_data.get('is_encrypted', False):
             # Decrypt for in-memory use
-            dec_id = CredentialManager.decrypt(data['access_key_id'])
-            dec_key = CredentialManager.decrypt(data['secret_access_key'])
+            dec_id = CredentialManager.decrypt(filtered_data['access_key_id'])
+            dec_key = CredentialManager.decrypt(filtered_data['secret_access_key'])
             
             # If decryption works, update data. If not (e.g. wrong machine), 
             # we keep encrypted strings (which will fail auth, but not crash)
             if dec_id is not None and dec_key is not None:
-                data['access_key_id'] = dec_id
-                data['secret_access_key'] = dec_key
-                data['is_encrypted'] = False # Marked as raw in memory
+                filtered_data['access_key_id'] = dec_id
+                filtered_data['secret_access_key'] = dec_key
+                filtered_data['is_encrypted'] = False # Marked as raw in memory
         
-        return cls(**data)
+        return cls(**filtered_data)
     
     def to_json(self, indent: int = 2) -> str:
         """Serialize to JSON."""

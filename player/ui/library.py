@@ -223,6 +223,14 @@ class LibraryView(Gtk.Box):
         # 5. Create Column View
         self.column_view = Gtk.ColumnView(model=self.selection_model)
         self.column_view.add_css_class("rich-list") # Adwaita style class
+
+        self._active_popover = None
+
+        # Capture clicks at window level when popover is open to block controls
+        # but MAINTAIN single-click selection logic.
+        self.dismiss_gesture = Gtk.GestureClick()
+        self.dismiss_gesture.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        self.dismiss_gesture.connect("pressed", self._on_dismiss_click)
         
         # Columns - Add cover art first, then golden dot for favourites
         self._add_cover_column()
@@ -246,10 +254,10 @@ class LibraryView(Gtk.Box):
         self.column_view.connect("activate", self.on_row_activated)
         
         # Right Click Menu
-        click_gesture = Gtk.GestureClick()
-        click_gesture.set_button(3) # Right mouse button
-        click_gesture.connect("pressed", self.on_right_click)
-        self.column_view.add_controller(click_gesture)
+        self.ctx_gesture = Gtk.GestureClick()
+        self.ctx_gesture.set_button(3)
+        self.ctx_gesture.connect("pressed", self.on_right_click)
+        self.column_view.add_controller(self.ctx_gesture)
         
         # Middle Click for Favourites
         if self.favourites_manager:
@@ -266,6 +274,47 @@ class LibraryView(Gtk.Box):
         if self.favourites_manager:
             self.favourites_manager.add_change_callback(self._on_favourites_changed)
 
+    def _on_dismiss_click(self, gesture, n_press, x, y):
+        """Dismiss active popover on any click elsewhere and handle selection while blocking controls."""
+        if not self._active_popover:
+            return
+
+        # Coordinates are relative to the root window
+        root = self.get_root()
+        if not root: return
+        
+        target = root.pick(x, y, Gtk.PickFlags.DEFAULT)
+        
+        is_inside_popover = False
+        clicked_track_obj = None
+        
+        curr = target
+        while curr:
+            if curr == self._active_popover:
+                is_inside_popover = True
+                break
+            # Robust check for track object on the widget or its parents
+            track_obj = getattr(curr, '_track_obj', None)
+            if track_obj and isinstance(track_obj, TrackObject):
+                clicked_track_obj = track_obj
+            curr = curr.get_parent()
+            
+        if not is_inside_popover:
+            # We clicked outside the menu. 
+            # ALWAYS claim the event to "lock controls" (block other app/system interactions)
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+            
+            # Close the menu
+            self._active_popover.popdown()
+            
+            # MAINTAIN SINGLE CLICK SELECTION: If it was a song, manually select it
+            if clicked_track_obj:
+                n = self.filter_model.get_n_items()
+                for i in range(n):
+                    if self.filter_model.get_item(i) == clicked_track_obj:
+                        self.selection_model.set_selected(i)
+                        break
+
     def refresh(self):
         """Reload the library from the manager (re-sync optional)."""
         print("Refreshing library view...")
@@ -279,81 +328,93 @@ class LibraryView(Gtk.Box):
         self._populate_library()
 
     def on_right_click(self, gesture, n_press, x, y):
-        # We need to find which item was clicked. 
-        # ColumnView is tricky for hit testing in GTK4 without extensive boilerplate.
-        # Strategy: Use the currently SELECTED item (assuming right click also selects or user selected first)
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
         
-        selected_obj = self.selection_model.get_selected_item()
-        if not selected_obj:
-            return
+        # If there's an active popover, close it first
+        if self._active_popover:
+            self._active_popover.popdown()
+
+        # Update selection to the item under cursor (using local coordinates)
+        target = gesture.get_widget().pick(x, y, Gtk.PickFlags.DEFAULT)
+        curr = target
+        while curr:
+            track_obj = getattr(curr, '_track_obj', None)
+            if track_obj and isinstance(track_obj, TrackObject):
+                n = self.filter_model.get_n_items()
+                for i in range(n):
+                    if self.filter_model.get_item(i) == track_obj:
+                        self.selection_model.set_selected(i)
+                        break
+                break
+            curr = curr.get_parent()
             
-        # Create Popover
-        menu = Gio.Menu()
-        menu.append("Edit Metadata / Fix Cover", "edit")
-        
-        popover = Gtk.PopoverMenu.new_from_model(menu)
-        popover.set_parent(self.column_view)
-        
-        # We can't easily position at x,y content on ColumnView without more work.
-        # Position at the mouse for now? Gtk.Popover allows set_pointing_to
-        
-        rect = Gdk.Rectangle()
-        rect.x = int(x)
-        rect.y = int(y)
-        rect.width = 1
-        rect.height = 1
-        popover.set_pointing_to(rect)
-        popover.set_has_arrow(False)
-        
-        # Action handler
-        # Since we can't easily bind GActionGroup to a ephemeral popover manually 
-        # (needs to be on widget), we'll cheat and use a custom box popover instead of Menu
-        
+        self._show_menu_final(x, y)
+
+    def _show_menu_final(self, x, y):
+        selected_obj = self.selection_model.get_selected_item()
+        if not selected_obj: return
+
         p = Gtk.Popover()
         p.set_parent(self.column_view)
-        p.set_pointing_to(rect)
         p.set_has_arrow(False)
+        p.set_autohide(False) # Disable autohide so it doesn't consume the first click
+        p.add_css_class("context-menu")
+
+        rect = Gdk.Rectangle()
+        rect.x, rect.y, rect.width, rect.height = int(x), int(y), 1, 1
+        p.set_pointing_to(rect)
+
+        self._active_popover = p
         
+        # Attach dismissal gesture to root window to block controls
+        root = self.get_root()
+        if root:
+            root.add_controller(self.dismiss_gesture)
+            self._gesture_root = root
+        
+        def on_closed(popover):
+            if self._active_popover == popover:
+                self._active_popover = None
+            popover.unparent()
+            # Remove dismissal gesture from window
+            if hasattr(self, '_gesture_root') and self._gesture_root:
+                self._gesture_root.remove_controller(self.dismiss_gesture)
+                self._gesture_root = None
+            
+        p.connect("closed", on_closed)
+        
+        # Also dismiss if the main window loses focus (crucial for i3 workspace switching)
+        if root:
+            # notify::is-active triggers when window gains/loses focus
+            handler_id = root.connect("notify::is-active", lambda w, pspec: p.popdown() if not w.get_is_active() else None)
+            # Cleanup handler on popover close
+            p.connect("closed", lambda _: root.disconnect(handler_id))
+
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        box.set_size_request(180, -1)
         
-        # Add to Queue button
-        if self.queue_manager:
-            queue_btn = Gtk.Button(label="Add to Queue")
-            queue_btn.add_css_class("flat")
-            queue_btn.set_halign(Gtk.Align.START)
-            queue_btn.connect('clicked', lambda b: self._add_to_queue(p, selected_obj.track))
-            box.append(queue_btn)
+        def add_item(label, callback, is_destructive=False):
+            btn = Gtk.Button(label=label)
+            btn.add_css_class("flat")
+            btn.set_halign(Gtk.Align.START)
+            if is_destructive:
+                btn.add_css_class("delete-action")
+            btn.connect("clicked", lambda b: (p.popdown(), callback()))
+            box.append(btn)
+
+        add_item("Add to Queue", lambda: self.queue_manager.add(selected_obj.track) if self.queue_manager else None)
+        add_item("Edit Metadata / Fix Cover", lambda: EditTrackDialog(self.get_root(), selected_obj.track, self.library_manager).present())
         
-        # Edit Metadata button
-        btn = Gtk.Button(label="Edit Metadata / Fix Cover")
-        btn.add_css_class("flat")
-        btn.set_halign(Gtk.Align.START)
-        btn.connect('clicked', lambda b: self._open_edit_dialog(p, selected_obj.track))
-        box.append(btn)
-        
-        # Separator before destructive actions
-        box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-        
-        # Clear Queue button (only show if queue has items)
         if self.queue_manager and not self.queue_manager.is_empty():
-            clear_queue_btn = Gtk.Button(label=f"Clear Queue ({self.queue_manager.size()})")
-            clear_queue_btn.add_css_class("flat")
-            clear_queue_btn.add_css_class("clear-queue-action")
-            clear_queue_btn.set_halign(Gtk.Align.START)
-            clear_queue_btn.connect('clicked', lambda b: self._clear_queue(p))
-            box.append(clear_queue_btn)
-        
-        # Delete Button - Make it red
-        del_btn = Gtk.Button(label="Delete Song")
-        del_btn.add_css_class("flat")
-        del_btn.add_css_class("delete-action")  # Custom red styling
-        del_btn.set_halign(Gtk.Align.START)
-        del_btn.connect('clicked', lambda b: self._confirm_delete(p, selected_obj.track))
-        box.append(del_btn)
-        
+            box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+            add_item(f"Clear Queue ({self.queue_manager.size()})", lambda: self.queue_manager.clear())
+            
+        box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        add_item("Delete Song", lambda: self._confirm_delete(p, selected_obj.track), is_destructive=True)
+
         p.set_child(box)
         p.popup()
-    
+
     def _on_search_changed(self, entry):
         """Handle search query changes."""
         self.search_query = entry.get_text().lower().strip()
@@ -472,6 +533,8 @@ class LibraryView(Gtk.Box):
         def on_setup(factory, list_item):
             label = Gtk.Label()
             label.set_xalign(0.5)
+            label.set_hexpand(True)
+            label.set_halign(Gtk.Align.FILL)
             list_item.set_child(label)
         
         def update_dot(label, is_fav):
@@ -487,6 +550,9 @@ class LibraryView(Gtk.Box):
         def on_bind(factory, list_item):
             label = list_item.get_child()
             track_obj = list_item.get_item()
+            
+            # Store track_obj on label for right-click hit testing
+            label._track_obj = track_obj
             
             # Initial set
             update_dot(label, track_obj.props.is_fav)
@@ -518,11 +584,16 @@ class LibraryView(Gtk.Box):
         
         def on_setup(factory, list_item):
             image = Gtk.Image()
+            image.set_hexpand(True)
+            image.set_halign(Gtk.Align.FILL)
             list_item.set_child(image)
         
         def on_bind(factory, list_item):
             image = list_item.get_child()
             track_obj = list_item.get_item()
+            
+            # Store track_obj on image for right-click hit testing
+            image._track_obj = track_obj
             
             if track_obj.is_local:
                 image.set_from_icon_name("drive-harddisk-symbolic")
@@ -548,11 +619,16 @@ class LibraryView(Gtk.Box):
             image = Gtk.Image()
             image.set_pixel_size(32)
             image.set_size_request(32, 32)
+            image.set_hexpand(True)
+            image.set_halign(Gtk.Align.FILL)
             list_item.set_child(image)
         
         def on_bind(factory, list_item):
             image = list_item.get_child()
             track_obj = list_item.get_item()
+            
+            # Store track_obj on image for right-click hit testing
+            image._track_obj = track_obj
             
             # Try to load cover art
             self._load_cover_thumbnail(image, track_obj.track)
@@ -596,19 +672,24 @@ class LibraryView(Gtk.Box):
         if getattr(image, 'track_id', None) == track_id:
             image.set_from_pixbuf(pixbuf)
     
-    def _add_text_column(self, title, property_name, expand=False, fixed_width=0):
+    def _add_text_column(self, title, property_name, expand=False, fixed_width=None):
         factory = Gtk.SignalListItemFactory()
         
         # Create Label
         def on_setup(factory, list_item):
             label = Gtk.Label(xalign=0)
             label.set_ellipsize(Pango.EllipsizeMode.END)
+            label.set_hexpand(True)
+            label.set_halign(Gtk.Align.FILL)
             list_item.set_child(label)
             
         # Bind Data
         def on_bind(factory, list_item):
             label = list_item.get_child()
             track_obj = list_item.get_item() # This is our TrackObject
+            
+            # Store track_obj on label for right-click hit testing
+            label._track_obj = track_obj
             
             # Helper to format duration if that's the property
             if property_name == "duration":
@@ -624,7 +705,7 @@ class LibraryView(Gtk.Box):
         column = Gtk.ColumnViewColumn(title=title, factory=factory)
         if expand:
             column.set_expand(True)
-        if fixed_width > 0:
+        if fixed_width:
             column.set_fixed_width(fixed_width)
             
         self.column_view.append_column(column)

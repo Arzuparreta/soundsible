@@ -460,6 +460,7 @@ class SettingsDialog(Adw.PreferencesWindow):
             # Save config to disk
             from shared.constants import DEFAULT_CONFIG_DIR
             config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
+            print(f"DEBUG: Saving updated config to {config_path}")
             with open(config_path, 'w') as f:
                 f.write(self.library_manager.config.to_json())
             print(f"Default download quality updated to: {quality}")

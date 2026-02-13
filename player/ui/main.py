@@ -144,7 +144,7 @@ class MusicApp(Adw.Application):
                 dialog.present()
                 return
 
-            dialog = DownloadDialog(library_manager=getattr(self.win, 'library_manager', None), transient_for=self.win)
+            dialog = DownloadDialog(library_manager=getattr(self.win, 'lib_manager', None), transient_for=self.win)
             dialog.present()
     
     def on_about(self, action, param):

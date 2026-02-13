@@ -168,56 +168,34 @@
 
 
 
-/* X11 Non-composited Fixes: Disable shadows/blur which cause black borders */
+/* X11 Non-composited Context Menu Fixes */
+.context-menu {
+    background-color: #2d2d2d;
+    border: 1px solid #444444;
+    box-shadow: none;
+    border-radius: 0;
+}
 
 popover {
-
+    background-color: #2d2d2d;
+    border: 1px solid #444444;
     box-shadow: none;
-
     border-radius: 0;
-
-    border: 1px solid @borders;
-
-    background-color: @window_bg_color;
-
 }
-
-
 
 popover contents {
-
-    box-shadow: none;
-
-    border-radius: 0;
-
-    padding: 0;
-
+    padding: 4px;
+    background-color: #2d2d2d;
+    color: white;
 }
 
-
-
-/* Fix for dialogs/windows as well */
-
-window.dialog, window.modal {
-
-    box-shadow: none;
-
+/* Ensure menu buttons look like menu items */
+.context-menu button {
+    padding: 8px 16px;
     border-radius: 0;
-
-    border: 1px solid @borders;
-
+    font-size: 0.95rem;
 }
 
-
-
-/* Remove arrow/tail from popovers as they require transparency/compositor */
-
-popover > arrow, popover > contents > arrow {
-
-    background: none;
-
-    border: none;
-
-    box-shadow: none;
-
+.context-menu button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
 }
