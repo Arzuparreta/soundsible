@@ -43,7 +43,16 @@ def bootstrap():
             sys.exit(1)
         
         # Re-run this script using the venv python
-        os.execv(str(PYTHON_EXE), [str(PYTHON_EXE)] + sys.argv)
+        if platform.system() == "Windows":
+            # On Windows, os.execv doesn't replace the process in a way that CMD/PowerShell waits for.
+            # We use subprocess.run and sys.exit to ensure the parent process stays alive.
+            try:
+                sys.exit(subprocess.run([str(PYTHON_EXE)] + sys.argv).returncode)
+            except Exception as e:
+                print(f"Failed to restart in venv: {e}")
+                sys.exit(1)
+        else:
+            os.execv(str(PYTHON_EXE), [str(PYTHON_EXE)] + sys.argv)
 
 if __name__ == "__main__" and "BOOTSTRAPPED" not in os.environ:
     os.environ["BOOTSTRAPPED"] = "1"
@@ -453,8 +462,8 @@ class SoundsibleLauncher:
                 app = WindowsControlCenter(self)
                 app.run()
                 return
-            except ImportError:
-                print("Windows Control Center not found. Falling back to CLI.")
+            except Exception as e:
+                console.print(f"[yellow]Note: Windows Control Center could not start ({e}). Falling back to CLI.[/yellow]")
 
         if not self.is_configured():
             if "--daemon" in sys.argv:
