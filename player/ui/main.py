@@ -1277,13 +1277,18 @@ class MainWindow(Adw.ApplicationWindow):
     
     def _on_search_changed(self, entry):
         """Handle search changes - apply to current active tab."""
-        current_tab = self.tab_view.get_visible_child_name()
+        current_tab_name = self.tab_view.get_visible_child_name()
         
         # Apply search to appropriate library view
-        if current_tab == "all_songs":
+        if current_tab_name == "all_songs":
             self.library_ui._on_search_changed(entry)
-        elif current_tab == "favourites":
+        elif current_tab_name == "favourites":
             self.favourites_ui._on_search_changed(entry)
+        elif current_tab_name.startswith("album_"):
+            # Dynamic album tab
+            page = self.tab_view.get_page(current_tab_name)
+            if page and hasattr(page, '_on_search_changed'):
+                page._on_search_changed(entry)
     
     def _update_queue_sidebar_visibility(self):
         """Update queue sidebar visibility based on queue state."""
@@ -1304,11 +1309,30 @@ class MainWindow(Adw.ApplicationWindow):
         return False
     
     def _on_album_activated(self, album_obj, tracks):
-        """When an album is clicked in grid, switch to list view and filter."""
-        self.tab_view.set_visible_child_name("all_songs")
-        self.search_entry.set_text(album_obj.album)
-        # Force filter refresh
-        self.library_ui._on_search_changed(self.search_entry)
+        """When an album is clicked in grid, open a dedicated tab."""
+        album_name = album_obj.album
+        tab_id = f"album_{album_name}"
+        
+        # Check if tab already exists
+        existing_page = self.tab_view.get_page(tab_id)
+        if existing_page:
+            self.tab_view.set_visible_child_name(tab_id)
+            return
+
+        # Create new album-specific view
+        album_view = LibraryView(
+            self.lib_manager,
+            on_track_activated=self.play_track,
+            queue_manager=self.queue_manager,
+            favourites_manager=self.favourites_manager,
+            show_favourites_only=False,
+            album_filter=album_name
+        )
+        
+        # Add as a closable page
+        # Position it next to Favorites
+        self.tab_view.add_page(album_view, tab_id, album_name, visible=True, closable=True, insert_before="favourites")
+        self.tab_view.set_visible_child_name(tab_id)
 
     def _unfocus_search(self):
         """Remove focus from search entry."""

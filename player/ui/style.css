@@ -117,6 +117,35 @@
     font-weight: 600;
 }
 
+/* Tab Container (holds button + optional close) */
+.tab-container {
+    margin: 4px 2px;
+    border-radius: 4px;
+    transition: all 200ms ease;
+}
+
+.tab-container:hover {
+    background-color: alpha(currentColor, 0.05);
+}
+
+.tab-container .tab-button {
+    margin: 0;
+}
+
+.tab-close-button {
+    padding: 0 4px;
+    min-width: 20px;
+    min-height: 20px;
+    opacity: 0.5;
+    border-radius: 4px;
+}
+
+.tab-close-button:hover {
+    opacity: 1.0;
+    background-color: alpha(@error_color, 0.2);
+    color: @error_color;
+}
+
 /* Tabs bar */
 .tabs-bar {
     padding: 4px 8px;

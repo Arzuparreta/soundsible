@@ -197,13 +197,14 @@ class EditTrackDialog(Gtk.Window):
             self.save_btn.set_sensitive(True)
 
 class LibraryView(Gtk.Box):
-    def __init__(self, library_manager, on_track_activated=None, queue_manager=None, favourites_manager=None, show_favourites_only=False):
+    def __init__(self, library_manager, on_track_activated=None, queue_manager=None, favourites_manager=None, show_favourites_only=False, album_filter=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.library_manager = library_manager
         self.on_track_activated = on_track_activated
         self.queue_manager = queue_manager
         self.favourites_manager = favourites_manager
         self.show_favourites_only = show_favourites_only
+        self.album_filter = album_filter
 
         # Setup List Model
         self.store = Gio.ListStore(item_type=TrackObject)
@@ -422,9 +423,13 @@ class LibraryView(Gtk.Box):
         self.filter.changed(Gtk.FilterChange.DIFFERENT)
     
     def _filter_func(self, track_obj):
-        """Filter function to match tracks against search query and favourites."""
+        """Filter function to match tracks against search query, favourites, and album filter."""
         track = track_obj.track
         
+        # Filter by album if requested
+        if self.album_filter and track.album != self.album_filter:
+            return False
+            
         # Filter by favourites if in favourites-only mode
         if self.show_favourites_only:
             if not self.favourites_manager or not self.favourites_manager.is_favourite(track.id):
