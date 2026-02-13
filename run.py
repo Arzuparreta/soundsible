@@ -26,37 +26,28 @@ CONFIG_PATH = Path("~/.config/soundsible/config.json").expanduser()
 def bootstrap():
     """Ensure we are running inside the virtual environment."""
     if not VENV_DIR.exists():
+        print("Creating virtual environment...")
         subprocess.check_call([sys.executable, "-m", "venv", str(VENV_DIR)])
         
-    # Check if we are already running from the venv using prefix
-    if Path(sys.prefix).resolve() != VENV_DIR.resolve():
-        # Install basic deps in venv if not present
-        result = subprocess.run([str(PYTHON_EXE), "-m", "pip", "install", "rich", "requests"], 
-                              capture_output=True, text=True)
-        if result.returncode != 0:
-            print("\n" + "="*60)
-            print("FATAL ERROR: Failed to bootstrap core dependencies.")
-            print(f"Command: {' '.join(result.args)}")
-            print("-" * 60)
-            print(result.stderr)
-            print("="*60 + "\n")
-            sys.exit(1)
+    # Instead of re-executing, we can "activate" the venv in-process for the initial setup
+    venv_site_packages = VENV_DIR / ("Lib/site-packages" if platform.system() == "Windows" else f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages")
+    
+    if str(venv_site_packages) not in sys.path:
+        import site
+        site.addsitedir(str(venv_site_packages))
         
-        # Re-run this script using the venv python
-        if platform.system() == "Windows":
-            # On Windows, os.execv doesn't replace the process in a way that CMD/PowerShell waits for.
-            # We use subprocess.run and sys.exit to ensure the parent process stays alive.
-            try:
-                sys.exit(subprocess.run([str(PYTHON_EXE)] + sys.argv).returncode)
-            except Exception as e:
-                print(f"Failed to restart in venv: {e}")
-                sys.exit(1)
-        else:
-            os.execv(str(PYTHON_EXE), [str(PYTHON_EXE)] + sys.argv)
+    # Install basic deps if missing
+    try:
+        import rich
+        import requests
+    except ImportError:
+        print("Installing core dependencies (rich, requests)...")
+        subprocess.check_call([str(PYTHON_EXE), "-m", "pip", "install", "rich", "requests"], 
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-if __name__ == "__main__" and "BOOTSTRAPPED" not in os.environ:
-    os.environ["BOOTSTRAPPED"] = "1"
+if __name__ == "__main__":
     bootstrap()
+    # Now we can safely import rich and start the launcher logic in the same process
 
 # --- ACTUAL LAUNCHER CODE ---
 try:
