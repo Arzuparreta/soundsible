@@ -230,27 +230,36 @@ class SoundsibleLauncher:
             log_dir.mkdir(exist_ok=True)
             log_file = open(log_dir / "api.log", "a")
             
-            proc = subprocess.Popen([str(self.python_exe), "-m", "shared.api"],
-                             stdout=log_file,
-                             stderr=log_file,
-                             start_new_session=True)
+            # Prepare environment to ensure venv and root are in path
+            env = os.environ.copy()
+            env["PYTHONPATH"] = str(self.root_dir)
+            
+            popen_args = {
+                "stdout": log_file,
+                "stderr": log_file,
+                "env": env,
+                "cwd": str(self.root_dir)
+            }
+            
+            if platform.system() == "Windows":
+                # CREATE_NEW_CONSOLE (0x00000010) is more reliable on Windows for background servers
+                popen_args["creationflags"] = 0x00000010
+            else:
+                popen_args["start_new_session"] = True
+
+            proc = subprocess.Popen([str(self.python_exe), "-m", "shared.api"], **popen_args)
             self.child_processes.append(proc)
             
-            import socket
-            hostname = socket.gethostname()
-            local_ip = "localhost"
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.connect(("8.8.8.8", 80))
-                local_ip = s.getsockname()[0]
-                s.close()
-            except: pass
+            # Detect IPs for display
+            from shared.api import get_active_endpoints
+            endpoints = get_active_endpoints()
+            local_ip = endpoints[0] if endpoints else "localhost"
             
             console.print(Panel.fit(
                 f"[bold green]Web Player is ONLINE![/bold green]\n\n"
                 f"Local: [bold cyan]http://localhost:5005/player/[/bold cyan]\n"
                 f"Mobile: [bold cyan]http://{local_ip}:5005/player/[/bold cyan]\n\n"
-                "[dim]Server is running in background. You can now use other menu options.[/dim]",
+                "[dim]Server is running in a new window. You can minimize it.[/dim]",
                 border_style="green"
             ))
             time.sleep(2.0)
