@@ -52,6 +52,7 @@ export class ConnectionManager {
         this.socket.on('disconnect', () => {
             console.log("❌ Socket Disconnected");
             store.update({ isOnline: false });
+            this.startReconnectionLoop();
         });
 
         // Forward downloader events to the window
@@ -66,6 +67,31 @@ export class ConnectionManager {
         this.socket.on('library_updated', () => {
             store.syncLibrary();
         });
+    }
+
+    startReconnectionLoop() {
+        if (this.reconnectInterval) return;
+        
+        console.log("🔄 Starting Reconnection Loop...");
+        this.reconnectInterval = setInterval(async () => {
+            if (store.state.isOnline) {
+                clearInterval(this.reconnectInterval);
+                this.reconnectInterval = null;
+                return;
+            }
+
+            console.log("📡 Probing for Station recovery...");
+            const endpoints = [...store.state.priorityList, window.location.hostname];
+            const uniqueEndpoints = [...new Set(endpoints)].filter(e => e);
+            
+            const success = await this.findActiveHost(uniqueEndpoints);
+            if (success) {
+                console.log("✨ Station Recovered!");
+                store.syncLibrary();
+                clearInterval(this.reconnectInterval);
+                this.reconnectInterval = null;
+            }
+        }, 5000); // Try every 5 seconds
     }
 
     async probe(host) {

@@ -138,10 +138,12 @@ class AlbumCard(Gtk.Box):
         
         def on_fetched(pixbuf):
             if pixbuf:
+                # Manager returns high-res, we scale to match the card exactly
                 scaled = pixbuf.scale_simple(164, 164, GdkPixbuf.InterpType.BILINEAR)
                 GLib.idle_add(self.img.set_from_pixbuf, scaled)
                 
-        manager.request_cover(stub_track, callback=on_fetched)
+        # Request high-res (300px) for the album grid
+        manager.request_cover(stub_track, callback=on_fetched, size=300)
 
 class AlbumGridView(Gtk.Box):
     def __init__(self, library_manager, on_album_activated=None):
@@ -161,8 +163,22 @@ class AlbumGridView(Gtk.Box):
         self.append(scroller)
         
         self.refresh()
+        
+        # Periodic "Truth" Check: Refresh grid every 30 seconds 
+        # to ensure it matches the latest disk/db state.
+        GLib.timeout_add_seconds(30, self._periodic_refresh)
+
+    def _periodic_refresh(self):
+        """Timer callback to check for stale data."""
+        if self.get_mapped(): # Only refresh if the view is actually visible to user
+            self.refresh()
+        return True # Keep timer running
 
     def refresh(self):
+        # Auto-refresh manager memory if disk manifest changed
+        if hasattr(self.library_manager, 'refresh_if_stale'):
+            self.library_manager.refresh_if_stale()
+
         # Clear
         while child := self.flow_box.get_first_child():
             self.flow_box.remove(child)
@@ -203,11 +219,12 @@ class AlbumGridView(Gtk.Box):
         
         def on_fetched(pixbuf):
             if pixbuf:
-                # Scale for grid
+                # Scale for grid with high-quality filter
                 scaled = pixbuf.scale_simple(160, 160, GdkPixbuf.InterpType.BILINEAR)
                 GLib.idle_add(image.set_from_pixbuf, scaled)
                 
-        manager.request_cover(stub_track, callback=on_fetched)
+        # Request high-res (300px)
+        manager.request_cover(stub_track, callback=on_fetched, size=300)
 
     def _on_activated(self, grid_view, position):
         album_obj = self.store.get_item(position)

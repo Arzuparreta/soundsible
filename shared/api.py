@@ -25,10 +25,13 @@ from odst_tool.cloud_sync import CloudSync
 from odst_tool.optimize_library import optimize_library
 from setup_tool.uploader import UploadEngine
 from setup_tool.provider_factory import StorageProviderFactory
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
 import socket
 import requests
 import re
+import time
 
 def resolve_spotify_url(url):
     """
@@ -50,6 +53,26 @@ def resolve_spotify_url(url):
     except Exception as e:
         print(f"Error resolving URL: {e}")
     return None
+
+class LibraryFileWatcher(FileSystemEventHandler):
+    """Watches library.json for changes and triggers SocketIO updates."""
+    def __init__(self, lib_manager):
+        self.lib_manager = lib_manager
+        self.last_sync = 0
+
+    def on_modified(self, event):
+        if event.src_path.endswith(LIBRARY_METADATA_FILENAME):
+            # Debounce: avoid double-triggering
+            now = time.time()
+            if now - self.last_sync < 2:
+                return
+            self.last_sync = now
+            
+            print(f"API: Detected external change to {LIBRARY_METADATA_FILENAME}. Refreshing...")
+            # Refresh memory
+            self.lib_manager.refresh_if_stale()
+            # Broadcast to all clients
+            socketio.emit('library_updated')
 
 class DownloadQueueManager:
     """Manages the download queue for the Station."""
@@ -825,8 +848,19 @@ def start_api(port=5005, debug=False):
     print(f"CWD: {os.getcwd()}")
     
     try:
-        get_core()
+        lib, _, _ = get_core()
         print("API: Core services initialized successfully.")
+        
+        # Start Library File Watcher
+        config_dir = Path(DEFAULT_CONFIG_DIR).expanduser()
+        config_dir.mkdir(parents=True, exist_ok=True)
+        
+        event_handler = LibraryFileWatcher(lib)
+        observer = Observer()
+        observer.schedule(event_handler, str(config_dir), recursive=False)
+        observer.start()
+        print(f"API: Library File Watcher started on {config_dir}")
+        
     except Exception as e:
         print(f"FATAL: Core initialization failed: {e}")
         import traceback

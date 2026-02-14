@@ -11,6 +11,11 @@ import { Downloader } from './downloader.js';
 
 console.log("🚀 Soundsible Web Player Initializing...");
 
+function renderFavourites(state) {
+    const favTracks = state.favorites.map(id => state.library.find(t => t.id === id)).filter(t => t);
+    renderSongList(favTracks, 'fav-tracks');
+}
+
 async function init() {
     console.log("App Ready");
     
@@ -30,13 +35,13 @@ async function init() {
     store.subscribe((state) => {
         renderHomeSongs(state.library);
         renderAlbumGrid(state.library);
-        renderSongList(state.favorites, 'fav-tracks');
+        renderFavourites(state);
     });
 
     // 4. Initial Render
     renderHomeSongs(store.state.library);
     renderAlbumGrid(store.state.library);
-    renderSongList(store.state.favorites, 'fav-tracks');
+    renderFavourites(store.state);
 
     // 5. Global Control Handlers
     const playBtn = document.getElementById('play-btn');
@@ -46,6 +51,15 @@ async function init() {
             audioEngine.toggle();
         };
     }
+
+    // 6. Periodic 'Truth' Sync (every 30 seconds)
+    // Mirrored logic from GTK app to ensure mobile stays in sync even without tab switching
+    setInterval(() => {
+        if (store.state.isOnline) {
+            console.log("Periodic Sync: Verifying library truth...");
+            store.syncLibrary();
+        }
+    }, 30000);
 }
 
 function renderSongList(tracks, containerId) {

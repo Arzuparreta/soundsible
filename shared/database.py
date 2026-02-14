@@ -131,7 +131,17 @@ class DatabaseManager:
                 # Update version
                 conn.execute("INSERT OR REPLACE INTO library_info (key, value) VALUES ('version', ?)", (str(metadata.version),))
                 
-                # Batch update tracks
+                # 1. Get IDs of tracks we are about to sync
+                incoming_ids = [t.id for t in metadata.tracks]
+                
+                # 2. Prune tracks that are no longer in the manifest
+                if incoming_ids:
+                    placeholders = ','.join(['?'] * len(incoming_ids))
+                    conn.execute(f"DELETE FROM tracks WHERE id NOT IN ({placeholders})", incoming_ids)
+                else:
+                    conn.execute("DELETE FROM tracks")
+
+                # 3. Batch update tracks
                 for track in metadata.tracks:
                     conn.execute("""
                         INSERT INTO tracks (

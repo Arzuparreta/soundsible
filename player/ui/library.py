@@ -500,10 +500,10 @@ class LibraryView(Gtk.Box):
                 self.store.remove(found_idx)
                 print(f"Removed '{track.title}' from UI list.")
             
-            # Additional cleanup if needed (e.g. selection)
-            
-            # Trigger full refresh to be safe?
-            # self.refresh()
+            # Refresh related UI components (like album grid)
+            root = self.get_root()
+            if root and hasattr(root, 'album_grid'):
+                GLib.idle_add(root.album_grid.refresh)
             
         else:
             # Show error

@@ -39,7 +39,7 @@ class CoverFetchManager:
             return path
         return None
 
-    def request_cover(self, track, embedded_cache_info=None, callback=None):
+    def request_cover(self, track, embedded_cache_info=None, callback=None, size=64):
         """
         Request a cover for a track.
         Callback receives: (pixbuf)
@@ -48,14 +48,13 @@ class CoverFetchManager:
         path = self.get_cached_path(track.id)
         if path:
              # Even if cached, decode in background to save UI thread
-             # We can use the executor for this too
              if callback:
                  with self.lock:
                     if track.id not in self.callbacks:
                         self.callbacks[track.id] = []
                     self.callbacks[track.id].append(callback)
                  
-                 self.executor.submit(self._load_and_notify, track.id, path)
+                 self.executor.submit(self._load_and_notify, track.id, path, size)
              return
 
         # 2. Register callback
@@ -69,15 +68,15 @@ class CoverFetchManager:
         with self.lock:
             if track.id not in self.submitted_tracks:
                 self.submitted_tracks.add(track.id)
-                self.executor.submit(self._process_track, track, embedded_cache_info)
+                self.executor.submit(self._process_track, track, embedded_cache_info, size)
 
-    def _process_track(self, track, embedded_path):
+    def _process_track(self, track, embedded_path, size=64):
         try:
             dest_path = os.path.join(self.covers_dir, f"{track.id}.jpg")
             
             # Double check if appeared while waiting
             if os.path.exists(dest_path):
-                self._notify_success(track.id, dest_path)
+                self._load_and_notify(track.id, dest_path, size)
                 return
 
             found = False
@@ -100,10 +99,10 @@ class CoverFetchManager:
                  found = self._fetch_online(track, dest_path)
 
             if found:
-                self._load_and_notify(track.id, dest_path)
+                self._load_and_notify(track.id, dest_path, size)
             elif os.path.exists(dest_path):
                  # Fallback if found earlier but logic skipped
-                 self._load_and_notify(track.id, dest_path)
+                 self._load_and_notify(track.id, dest_path, size)
 
         except Exception as e:
             print(f"Error processing cover for {track.title}: {e}")
@@ -111,10 +110,10 @@ class CoverFetchManager:
             with self.lock:
                 self.submitted_tracks.discard(track.id)
 
-    def _load_and_notify(self, track_id, path):
+    def _load_and_notify(self, track_id, path, size=64):
         try:
-            # Decode in worker thread
-            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 32, 32, True)
+            # Decode in worker thread at requested scale
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, size, size, True)
             self._notify_success(track_id, pixbuf)
         except Exception as e:
             print(f"Failed to decode cached cover {path}: {e}")

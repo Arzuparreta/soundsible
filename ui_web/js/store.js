@@ -70,6 +70,12 @@ class Store {
         } catch (err) {
             console.error("Library sync error:", err);
             this.update({ isOnline: false });
+            
+            // Trigger reconnection race if we're not explicitly offline
+            import('./connection.js').then(({ connectionManager }) => {
+                connectionManager.startReconnectionLoop();
+            });
+            
             return false;
         }
     }
