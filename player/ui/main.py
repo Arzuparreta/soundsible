@@ -1505,26 +1505,54 @@ class MainWindow(Adw.ApplicationWindow):
             import traceback
             traceback.print_exc()
 
-    def refresh_library(self):
-        """Reload the library from the provider (called by other dialogs)."""
+    def refresh_library(self, new_metadata=None):
+        """Reload the library and update UI instantly."""
         print("External request to refresh library...")
         
-        def _sync_then_refresh():
-            if hasattr(self, 'library_manager'):
-                # Force a sync from provider
-                self.library_manager.sync_library()
+        if new_metadata:
+            # 1. Update Managers Synchronously
+            self.lib_manager.metadata = new_metadata
+            self.lib_manager.db.sync_from_metadata(new_metadata)
+            
+            # Save to local library.json only (bypass cloud sync since uploader already did it)
+            cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+            cache_path.write_text(new_metadata.to_json())
+            
+            # 2. Force Synchronous UI Update on Main Thread
+            def _do_instant_refresh():
+                # Update Song List
+                if hasattr(self, 'library_ui'):
+                    self.library_ui.set_tracks(new_metadata.tracks)
                 
-                # Update UI on main thread
-                def _do_ui_refresh():
-                    if hasattr(self, 'library_ui'):
-                        self.library_ui.refresh()
-                    if hasattr(self, 'album_grid'):
-                        self.album_grid.refresh()
-                    return False
-                GLib.idle_add(_do_ui_refresh)
-        
-        import threading
-        threading.Thread(target=_sync_then_refresh, daemon=True).start()
+                # Update Favourites List
+                if hasattr(self, 'favourites_ui'):
+                    fav_ids = set(self.favourites_manager.get_all())
+                    fav_tracks = [t for t in new_metadata.tracks if t.id in fav_ids]
+                    self.favourites_ui.set_tracks(fav_tracks)
+                
+                # Update Album Grid
+                if hasattr(self, 'album_grid'):
+                    albums = self.lib_manager.db.get_albums()
+                    self.album_grid.set_albums(albums)
+                
+                print("DEBUG: Synchronous UI refresh complete.")
+                return False
+            
+            GLib.idle_add(_do_instant_refresh)
+            
+        else:
+            # Fallback to standard background sync for non-immediate updates
+            def _sync_then_refresh():
+                if hasattr(self, 'lib_manager'):
+                    self.lib_manager.sync_library()
+                    def _do_ui_refresh():
+                        if hasattr(self, 'library_ui'): self.library_ui.refresh()
+                        if hasattr(self, 'album_grid'): self.album_grid.refresh()
+                        return False
+                    GLib.idle_add(_do_ui_refresh)
+            
+            import threading
+            threading.Thread(target=_sync_then_refresh, daemon=True).start()
 
     def _load_config(self):
         """Load player configuration from file."""

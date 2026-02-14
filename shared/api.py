@@ -370,18 +370,9 @@ def process_queue_background():
                     lib, _, _ = get_core()
                     if lib.metadata:
                         lib.metadata.add_track(track)
-                        # CRITICAL: Persist to DB and library.json IMMEDIATELY
+                        # Persist to DB and library.json
                         lib._save_metadata()
                         
-                        # Proactively extract cover art
-                        try:
-                            from player.cover_manager import CoverFetchManager
-                            cm = CoverFetchManager.get_instance()
-                            cm.request_cover(track, embedded_cache_info=track.local_path)
-                            queue_manager_dl.add_log("🎨 Cover art extraction ready.")
-                        except Exception as ce:
-                            print(f"API: Cover extraction failed: {ce}")
-
                         # Signal all clients to refresh
                         socketio.emit('library_updated')
                     

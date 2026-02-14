@@ -328,6 +328,11 @@ class LibraryView(Gtk.Box):
         # Repopulate
         self._populate_library()
 
+    def set_tracks(self, tracks):
+        """Update the UI with a specific list of tracks instantly (no sync)."""
+        self.store.remove_all()
+        self._populate_ui(tracks)
+
     def on_right_click(self, gesture, n_press, x, y):
         gesture.set_state(Gtk.EventSequenceState.CLAIMED)
         

@@ -174,6 +174,16 @@ class AlbumGridView(Gtk.Box):
             card = AlbumCard(album_obj, self.on_album_activated, self.library_manager)
             self.flow_box.append(card)
 
+    def set_albums(self, album_data):
+        """Update the UI with a specific list of albums instantly."""
+        while child := self.flow_box.get_first_child():
+            self.flow_box.remove(child)
+            
+        for a in album_data:
+            album_obj = AlbumObject(a)
+            card = AlbumCard(album_obj, self.on_album_activated, self.library_manager)
+            self.flow_box.append(card)
+
     def _load_album_cover(self, image, album_obj):
         image.set_from_icon_name("emblem-music-symbolic")
         

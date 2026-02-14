@@ -69,9 +69,9 @@ class SmartDownloader:
             raise e
 
     def cleanup(self):
-        if self.output_dir.exists():
+        if self.staging_dir.exists():
             try:
-                shutil.rmtree(self.output_dir)
+                shutil.rmtree(self.staging_dir)
             except:
                 pass
 
@@ -147,13 +147,13 @@ class SmartDownloader:
             import json
         except ImportError:
              self.log("Could not import setup_tool. Is the project structure correct?", "error")
-             return
+             return None
 
         config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
         
         if not config_path.exists():
              self.log("Cloud config not found. Run setup wizard first.", "error")
-             return
+             return None
 
         with open(config_path, 'r') as f:
             config_data = json.load(f)
@@ -166,7 +166,7 @@ class SmartDownloader:
         
         if not tracks_dir.exists():
              self.log(f"No tracks directory found at {tracks_dir}", "warning")
-             return
+             return None
              
         # List files for debugging
         staged_files = list(tracks_dir.glob("*"))
@@ -184,12 +184,12 @@ class SmartDownloader:
             
             if updated_lib:
                 self.log(f"Upload sequence finished. Library now has {len(updated_lib.tracks)} tracks.", "success")
-                return True
+                return updated_lib
             else:
                 self.log("Upload finished but returned no library update (maybe no new files found?).", "warning")
-                return False
+                return None
         except Exception as e:
             self.log(f"Upload failed with error: {str(e)}", "error")
             import traceback
             self.log(traceback.format_exc(), "error")
-            return False
+            return None

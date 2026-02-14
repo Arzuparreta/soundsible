@@ -267,6 +267,7 @@ class DownloadDialog(Adw.Window):
         
         success_count = 0
         total = len(queries)
+        downloaded_tracks = [] # Keep track of actual track objects
         
         try:
             GLib.idle_add(self.progress_bar.pulse)
@@ -283,6 +284,7 @@ class DownloadDialog(Adw.Window):
                     
                     if track:
                         self._log_ui(f"Downloaded: {track.title}", "success")
+                        downloaded_tracks.append(track)
                         success_count += 1
                         any_success = True
                     else:
@@ -295,17 +297,41 @@ class DownloadDialog(Adw.Window):
                 self._log_ui("Starting batch upload...", "info")
                 GLib.idle_add(self.progress_bar.pulse)
                 
-                upload_success = downloader.upload_to_cloud()
+                updated_library = downloader.upload_to_cloud()
                 
-                if upload_success:
+                if updated_library:
+                     # CRITICAL FIX: Integrate tracks and covers BEFORE cleaning staging
+                     if self.library_manager:
+                         self._log_ui("Proactively caching tracks and covers...", "info")
+                         
+                         from setup_tool.audio import AudioProcessor
+                         from shared.constants import DEFAULT_CACHE_DIR
+                         covers_dir = os.path.join(os.path.expanduser(DEFAULT_CACHE_DIR), "covers")
+                         os.makedirs(covers_dir, exist_ok=True)
+
+                         for t in downloaded_tracks:
+                             # 1. Seed Audio Cache
+                             if self.library_manager.cache and hasattr(t, 'local_path') and t.local_path:
+                                 self.library_manager.cache.add_to_cache(t.id, t.local_path, move=False)
+                             
+                             # 2. Extract and Cache Cover Art
+                             try:
+                                 if hasattr(t, 'local_path') and t.local_path:
+                                     cover_data = AudioProcessor.extract_cover_art(t.local_path)
+                                     if cover_data:
+                                         with open(os.path.join(covers_dir, f"{t.id}.jpg"), 'wb') as f:
+                                             f.write(cover_data)
+                             except Exception as ce:
+                                 print(f"DEBUG: Proactive cover extraction failed for {t.title}: {ce}")
+                     
                      GLib.idle_add(lambda: self.progress_bar.set_fraction(1.0))
                      self._log_ui("All operations completed successfully!", "success")
                      
-                     # Trigger Library Refresh
+                     # Trigger Library Refresh with injected metadata
                      parent = self.get_transient_for()
                      if parent and hasattr(parent, 'refresh_library'):
-                         GLib.idle_add(parent.refresh_library)
-                         self._log_ui("Library refresh requested.", "info")
+                         GLib.idle_add(parent.refresh_library, updated_library)
+                         self._log_ui("Library updated instantly.", "info")
                 else:
                      self._log_ui("Upload failed.", "error")
             else:
