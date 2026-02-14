@@ -37,6 +37,15 @@ Run the guided setup to link your storage:
 
 Launch the **Web Station (Option 3)** and open the provided URL on your device.
 
+> **Tip**: To keep the server running in the background (headless mode), use the daemon command:
+> ```bash
+> python3 run.py --daemon &
+> ```
+> On Linux, you can also install it as a permanent systemd service:
+> ```bash
+> python3 -m setup_tool install-service
+> ```
+
 ### Core Interactions
 - **Smart Playback**: Tap any song to stream. The "Smart Resolver" automatically finds the fastest path (Local -> Cache -> Cloud).
 - **Manage Favourites**: **Swipe Right** on any song row to toggle the yellow favourite indicator (synced with your PC).
