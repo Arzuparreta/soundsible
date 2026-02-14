@@ -1,46 +1,53 @@
-# Soundsible: Advanced Technical Specifications
+# Soundsible: Advanced Technical Documentation
 
-This document provides detailed architectural and system documentation for the Soundsible media ecosystem.
+This document details the internal architecture, data flow, and service specifications of the Soundsible media ecosystem.
 
-## System Architecture
+## 🏗 System Architecture
 
-Soundsible is built on an API-first methodology, decoupling the core logic and playback engine from the presentation layers.
+Soundsible is built on an **API-First, Hybrid-Storage** model.
 
-### 1. Soundsible Core & Station API
-The central intelligence of the system, implemented in Python.
-- **Unified Station API (`shared/api.py`)**: A Flask-based REST service operating on **Port 5005**. It facilitates library synchronization, database queries, and static file streaming via HTTP 206 (Partial Content).
-- **Socket.IO Integration**: Provides real-time bidirectional communication for background download logs and cross-client library updates.
-- **Smart Resolver Backend**: Automatically identifies all valid network interfaces (LAN, Tailscale) to broadcast to clients for seamless connectivity.
-- **Library Manager (`player/library.py`)**: Handles the tri-fold resolution of audio sources (Local -> Cache -> Cloud) and manages the library manifest with automatic disk-to-memory synchronization.
-- **Security Layer (`shared/crypto.py`)**: Implements machine-specific Fernet encryption for cloud credentials and synchronization tokens.
+### 1. Unified Station API (`shared/api.py`)
+The central hub of the ecosystem, running on **Flask** and **Socket.IO**.
+- **Port**: 5005
+- **Streaming**: Implements HTTP Range headers (206 Partial Content) for efficient seeking and mobile data conservation.
+- **Real-time Engine**: Uses WebSockets to stream background download logs and broadcast library updates across all connected clients.
+- **Smart Discovery**: Automatically probes all host network interfaces to provide valid endpoints to clients.
 
-### 2. Integrated Downloader (ODST Engine)
-A headless, multi-threaded processor integrated directly into the Core API.
-- **Persistent Queue**: Maintains an active task list that continues processing on the main machine even if remote clients disconnect.
-- **Auth Logic**: Dynamic credential priority (Access Token > Client ID > Skip) ensuring non-blocking initialization in headless environments.
-- **NAS Optimization**: Passive storage access logic designed to prevent uninterruptible kernel waits on Samba/network mounts.
+### 2. Storage & Resolution Logic
+Soundsible uses a **Tri-Fold Resolution** strategy for every track:
+1.  **Local**: Checks if the file exists on the local machine's filesystem (indexed via Deep Scan).
+2.  **Cache**: Checks the local LRU cache (`~/.cache/soundsible/`).
+3.  **Cloud**: Requests a signed URL from the configured provider (R2, B2, S3).
 
-### 3. Web Player (PWA) Architecture
-A portable, touch-optimized frontend built with vanilla ES6+ JavaScript and Tailwind CSS.
-- **Smart Resolver Engine**: Implements a "Connection Race" logic that pings multiple host addresses in parallel to lock onto the fastest available path.
-- **State Management**: Lightweight local storage synchronization with proactive "Refresh on Switch" tab logic to ensure zero-lag synchronization.
+### 3. Integrated Downloader (ODST Core)
+The background processing engine for library expansion.
+- **Threaded Execution**: Managed by a dedicated background thread in the API to prevent blocking user requests.
+- **Queue Management**: Non-persistent, memory-buffered task list.
+- **Metadata Harmonization**: Automatically standardizes metadata using **MusicBrainz** and **ISRC** lookups to ensure library consistency.
+- **NAS-Friendly I/O**: Designed with non-blocking checks to avoid kernel-level stalls on stale Samba mounts.
 
-## Deployment and Operations
+### 4. Database & Indexing (`shared/database.py`)
+- **Engine**: SQLite 3 with **FTS5** (Full-Text Search) enabled.
+- **Synchronization**: Automatically reloads memory metadata if the `library.json` manifest on disk is modified by external processes (e.g., the GTK app).
+- **Schema**: Atomically tracks file hashes, metadata, local paths, and cloud keys.
 
-### Deployment Modes
-- **Standard**: Launched via `python3 run.py`. Automatically detects the host OS to launch the appropriate UI (GTK on Linux, Control Center on Windows).
-- **Daemon Mode**: Run `python3 run.py --daemon` to host the Station as a background service. This mode is optimized for dedicated "Home Station" servers.
-- **Process Management**: The launcher includes a robust tracking system that ensures all background services on port 5005 are terminated cleanly upon exit.
+## 🔒 Security & Encryption
+- **Credential Management**: Uses machine-specific **Fernet symmetric encryption**. Credentials stored in `config.json` are unreadable without the unique machine key.
+- **Sync Tokens**: Multi-device pairing is handled via compressed, base64-encoded JSON blobs containing encrypted endpoints.
 
-### Network Specifications
-- **API Port**: 5005 (Fixed)
-- **Streaming**: Supports HTTP Range headers for efficient mobile data usage and seeking.
-- **Discovery**: Relies on host-level interface reporting and Tailscale API integration.
+## 🛠 Operations & CLI
+The `setup_tool` provides low-level maintenance commands:
+- `upload`: Parallel upload with optional MP3 compression.
+- `cleanup`: Prunes orphans from the database where files no longer exist in any source.
+- `fix_library_covers`: Retroactively embeds high-resolution artwork into file tags and re-uploads to the cloud.
+- `refresh_metadata`: Forces a re-identification of the entire library against global metadata standards.
 
-## Legal Information
+## 📱 Web Station (PWA)
+- **Tech Stack**: Vanilla ES6+ JS, Tailwind CSS, Service Workers.
+- **State Management**: Reactive state store with proactive "Refresh on Switch" tab logic to ensure zero-lag synchronization across devices.
+- **PWA Capabilities**: Fully installable on iOS and Android with offline-ready manifest support.
 
+---
+
+## ⚖️ Legal Disclaimer
 Soundsible is a technical framework for personal media management. Users are responsible for ensuring that their use of the software complies with local copyright regulations and the Terms of Service of third-party data providers.
-
-## License
-
-This project is licensed under the MIT License.
