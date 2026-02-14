@@ -7,6 +7,8 @@ import os
 import sys
 import threading
 import json
+import uuid
+from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, Response, send_from_directory
 from flask_socketio import SocketIO, emit
@@ -18,10 +20,118 @@ from player.library import LibraryManager
 from player.engine import PlaybackEngine
 from player.queue_manager import QueueManager
 from odst_tool.spotify_youtube_dl import SpotifyYouTubeDL
+from odst_tool.cloud_sync import CloudSync
+from odst_tool.optimize_library import optimize_library
 from setup_tool.uploader import UploadEngine
 from setup_tool.provider_factory import StorageProviderFactory
 
 import socket
+import requests
+import re
+
+def resolve_spotify_url(url):
+    """
+    Scrapes the public Spotify page title to get 'Song - Artist'.
+    Fallback since API is restricted.
+    """
+    try:
+        # User-Agent is required to get the real page
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        r = requests.get(url, headers=headers, timeout=5)
+        if r.status_code == 200:
+            # Extract title: <title>Song - Artist | Spotify</title>
+            match = re.search(r'<title>(.*?)</title>', r.text)
+            if match:
+                title_text = match.group(1)
+                # Remove suffix
+                title_text = title_text.replace(" | Spotify", "").replace(" - song and lyrics by ", " - ")
+                return title_text
+    except Exception as e:
+        print(f"Error resolving URL: {e}")
+    return None
+
+class DownloadQueueManager:
+    """Manages the persistent download queue for the Station."""
+    def __init__(self, storage_path=None):
+        if storage_path is None:
+            storage_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "download_queue.json"
+        self.storage_path = Path(storage_path)
+        self.queue = self._load()
+        self.lock = threading.RLock() # Use Re-entrant lock to prevent deadlocks
+        self.is_processing = False
+        self.log_buffer = [] # Memory buffer for logs
+        self.max_logs = 50
+
+    def add_log(self, msg):
+        log_entry = f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
+        with self.lock:
+            self.log_buffer.append(log_entry)
+            if len(self.log_buffer) > self.max_logs:
+                self.log_buffer.pop(0)
+        # Still emit for real-time if socket is alive
+        socketio.emit('downloader_log', {'data': msg})
+
+    def _load(self):
+        if self.storage_path.exists():
+            try:
+                with open(self.storage_path, 'r') as f:
+                    data = json.load(f)
+                    return data if isinstance(data, list) else []
+            except Exception as e:
+                print(f"API: Error loading download queue: {e}")
+        return []
+
+    def save(self):
+        try:
+            # Ensure directory exists
+            self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.lock:
+                with open(self.storage_path, 'w') as f:
+                    json.dump(self.queue, f, indent=2)
+        except Exception as e:
+            print(f"API: Error saving download queue: {e}")
+
+    def add(self, item):
+        with self.lock:
+            # Ensure item is a dict
+            if not isinstance(item, dict):
+                item = {"song_str": str(item)}
+                
+            item['id'] = item.get('id', str(uuid.uuid4()))
+            item['status'] = 'pending'
+            # Robust UTC ISO format for compatibility across Python versions
+            item['added_at'] = datetime.utcnow().isoformat() + "Z"
+            self.queue.append(item)
+            
+        self.save()
+        return item
+
+    def get_pending(self):
+        with self.lock:
+            return [i for i in self.queue if i['status'] == 'pending']
+
+    def update_status(self, item_id, status, error=None):
+        do_save = False
+        with self.lock:
+            for item in self.queue:
+                if item['id'] == item_id:
+                    item['status'] = status
+                    if error: item['error'] = error
+                    do_save = True
+                    break
+        if do_save:
+            self.save()
+
+    def remove_item(self, item_id):
+        with self.lock:
+            self.queue = [i for i in self.queue if i['id'] != item_id]
+        self.save()
+
+    def clear_queue(self):
+        with self.lock:
+            # Clear everything except currently downloading
+            self.queue = [i for i in self.queue if i['status'] == 'downloading']
+        self.save()
 
 def get_active_endpoints():
     """Gather all network-accessible IPv4 addresses for this machine."""
@@ -76,7 +186,8 @@ def serve_web_player_assets(path):
 library_manager = None
 playback_engine = None
 queue_manager = None
-downloader = None
+downloader_service = None
+queue_manager_dl = DownloadQueueManager()
 
 def get_core():
     global library_manager, playback_engine, queue_manager
@@ -98,6 +209,183 @@ def get_core():
         except Exception as e:
             print(f"Warning: Could not initialize playback engine: {e}")
     return library_manager, playback_engine, queue_manager
+
+def get_downloader(output_dir=None, open_browser=False, log_callback=None):
+    global downloader_service
+    
+    def _log(msg):
+        print(f"API: {msg}")
+        if log_callback:
+            log_callback(msg)
+
+    _log("Downloader: Entering setup...")
+
+    # 1. Determine the target output directory
+    from dotenv import dotenv_values
+    env_path = Path('odst_tool/.env')
+    env_vars = dotenv_values(env_path) if env_path.exists() else {}
+    
+    target_dir = output_dir or env_vars.get("OUTPUT_DIR") or os.getenv("OUTPUT_DIR")
+    if not target_dir:
+        from odst_tool.config import DEFAULT_OUTPUT_DIR
+        target_dir = str(DEFAULT_OUTPUT_DIR)
+    
+    target_path = Path(target_dir).expanduser().absolute()
+
+    # 2. Check if we need to (re)initialize
+    should_init = False
+    if not downloader_service:
+        should_init = True
+    elif downloader_service.output_dir != target_path:
+        _log(f"Path changed to {target_path}. Re-initializing...")
+        should_init = True
+
+    if should_init:
+        _log(f"Step 1/3: Accessing storage at {target_path}...")
+        try:
+            target_path.mkdir(parents=True, exist_ok=True)
+            _log("Step 1.1: Path is accessible.")
+        except Exception as e:
+            _log(f"⚠️ Step 1 Warning: NAS/Path issue: {e}")
+
+        _log("Step 2/3: Loading Soundsible core...")
+        lib_core, _, _ = get_core()
+        
+        _log("Step 3/3: Loading credentials & Starting Engine...")
+        token = env_vars.get("SPOTIFY_ACCESS_TOKEN") or os.getenv("SPOTIFY_ACCESS_TOKEN")
+        client_id = env_vars.get("SPOTIFY_CLIENT_ID") or os.getenv("SPOTIFY_CLIENT_ID")
+        client_secret = env_vars.get("SPOTIFY_CLIENT_SECRET") or os.getenv("SPOTIFY_CLIENT_SECRET")
+        quality = env_vars.get("DEFAULT_QUALITY", lib_core.config.quality_preference if lib_core.config else "high")
+        from odst_tool.config import DEFAULT_WORKERS
+        
+        _log(f"Initializing Downloader (Quality: {quality})...")
+        if token:
+            _log("   - Mode: Spotify Token")
+            downloader_service = SpotifyYouTubeDL(target_path, DEFAULT_WORKERS, access_token=token, quality=quality, open_browser=open_browser)
+        elif client_id and client_secret:
+            _log("   - Mode: Spotify API Keys")
+            downloader_service = SpotifyYouTubeDL(target_path, DEFAULT_WORKERS, skip_auth=False, quality=quality, client_id=client_id, client_secret=client_secret, open_browser=open_browser)
+        else:
+            _log("   - Mode: Direct Download Only")
+            downloader_service = SpotifyYouTubeDL(target_path, DEFAULT_WORKERS, skip_auth=True, quality=quality, open_browser=open_browser)
+            
+        _log("✅ Downloader Engine Ready.")
+        
+    return downloader_service
+
+def process_queue_background():
+    global downloader_service, queue_manager_dl
+    if queue_manager_dl.is_processing:
+        return
+        
+    queue_manager_dl.is_processing = True
+    queue_manager_dl.add_log("Station: Background processor started.")
+    
+    try:
+        while True:
+            pending = queue_manager_dl.get_pending()
+            if not pending:
+                queue_manager_dl.add_log("Station: Queue empty, idling.")
+                break
+                
+            item = pending[0]
+            item_id = item['id']
+            song_str = item.get('song_str')
+            spotify_data = item.get('spotify_data')
+            output_dir = item.get('output_dir')
+            
+            queue_manager_dl.add_log(f"Preparing: {song_str or item_id}...")
+            queue_manager_dl.update_status(item_id, 'downloading')
+            socketio.emit('downloader_update', {'id': item_id, 'status': 'downloading'})
+            
+            try:
+                dl = get_downloader(output_dir, log_callback=queue_manager_dl.add_log)
+                queue_manager_dl.add_log(f"Processing: {song_str or item_id}...")
+                
+                # Resolve Spotify URL if needed
+                if song_str and "spotify.com" in song_str:
+                    queue_manager_dl.add_log(f"🔎 Resolving Spotify Link...")
+                    resolved_name = resolve_spotify_url(song_str)
+                    if resolved_name:
+                        queue_manager_dl.add_log(f"   Identified as: {resolved_name}")
+                        song_str = resolved_name
+                    else:
+                        queue_manager_dl.add_log(f"⚠️ Could not resolve Spotify link. Trying direct download.")
+
+                # Handle Playlist Fetching
+                if spotify_data and spotify_data.get('type') == 'playlist':
+                    queue_manager_dl.add_log(f"Fetching tracks for playlist {spotify_data['id']}...")
+                    tracks = dl.spotify.get_playlist_tracks(spotify_data['id'])
+                    
+                    # Add all tracks as new pending items
+                    for t in tracks:
+                        name = t['name']
+                        artist = t['artists'][0]['name']
+                        queue_manager_dl.add({
+                            'song_str': f"{artist} - {name}",
+                            'spotify_data': t,
+                            'output_dir': output_dir
+                        })
+                    
+                    queue_manager_dl.update_status(item_id, 'completed')
+                    socketio.emit('downloader_update', {'id': item_id, 'status': 'completed'})
+                    queue_manager_dl.add_log(f"✅ Queued {len(tracks)} tracks from playlist.")
+                    continue # Move to next item in while loop
+                
+                track = None
+                if spotify_data:
+                    meta = dl.spotify.extract_track_metadata(spotify_data)
+                    track = dl.downloader.process_track(meta)
+                elif song_str:
+                    # Direct URL or simple string
+                    if "youtube.com" in song_str or "youtu.be" in song_str:
+                        queue_manager_dl.add_log(f"Downloading direct YouTube: {song_str}...")
+                        track = dl.downloader.process_video(song_str)
+                    else:
+                        # Manual search
+                        fake_meta = {
+                            'title': song_str,
+                            'artist': 'Unknown',
+                            'album': 'Manual',
+                            'duration_sec': 0,
+                            'id': f"manual_{uuid.uuid4().hex[:8]}"
+                        }
+                        track = dl.downloader.process_track(fake_meta)
+                
+                if track:
+                    dl.library.add_track(track)
+                    dl.save_library()
+                    
+                    # Update main library too
+                    lib, _, _ = get_core()
+                    if lib.metadata:
+                        lib.metadata.add_track(track)
+                        socketio.emit('library_updated')
+                    
+                    queue_manager_dl.update_status(item_id, 'completed')
+                    socketio.emit('downloader_update', {'id': item_id, 'status': 'completed', 'track': track.to_dict()})
+                    queue_manager_dl.add_log(f"✅ Finished: {track.artist} - {track.title}")
+                else:
+                    raise Exception("Downloader returned no track. Check logs for details.")
+                    
+            except Exception as e:
+                print(f"API Downloader Error: {e}")
+                import traceback
+                traceback.print_exc()
+                queue_manager_dl.update_status(item_id, 'failed', error=str(e))
+                socketio.emit('downloader_update', {'id': item_id, 'status': 'failed', 'error': str(e)})
+                queue_manager_dl.add_log(f"❌ Failed: {song_str or item_id} - {e}")
+
+    except Exception as e:
+        print(f"CRITICAL: Downloader background thread crashed: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        queue_manager_dl.is_processing = False
+
+@app.route('/api/health')
+def health_check():
+    return jsonify({"status": "healthy"})
 
 @app.route('/')
 def home():
@@ -256,40 +544,191 @@ def toggle_playback():
 
 # --- Downloader Endpoints ---
 
-@app.route('/api/download', methods=['POST'])
-def start_download():
-    global downloader
-    data = request.json
-    url = data.get('url') # YouTube or Spotify URL
-    
-    if not downloader:
-        # Init downloader with quality preference from config
-        lib, _, _ = get_core()
-        quality = lib.config.quality_preference if lib.config else "high"
+@app.route('/api/downloader/queue', methods=['POST'])
+def add_to_downloader_queue():
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"status": "error", "message": "No JSON data received"}), 400
+            
+        items = data.get('items', [])
+        added_ids = []
         
-        from odst_tool.config import DEFAULT_OUTPUT_DIR, DEFAULT_WORKERS
-        downloader = SpotifyYouTubeDL(DEFAULT_OUTPUT_DIR, DEFAULT_WORKERS, skip_auth=True, quality=quality)
-    
-    def download_task():
-        track = downloader.downloader.process_video(url)
-        if track:
-            # Add to ODST internal library
-            downloader.library.add_track(track)
-            downloader.save_library()
+        for item in items:
+            new_item = queue_manager_dl.add(item)
+            added_ids.append(new_item['id'])
             
-            # ALSO update the live library manager in Core API
-            lib, _, _ = get_core()
-            if lib.metadata:
-                lib.metadata.add_track(track)
-            
-            socketio.emit('download_complete', {'track': track.title, 'id': track.id})
-        else:
-            socketio.emit('download_failed', {'url': url})
+        return jsonify({"status": "queued", "ids": added_ids})
+    except Exception as e:
+        print(f"API: Queue Add Error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-    threading.Thread(target=download_task).start()
+@app.route('/api/downloader/queue/status', methods=['GET'])
+def get_downloader_status():
+    return jsonify({
+        "is_processing": queue_manager_dl.is_processing,
+        "queue": queue_manager_dl.queue,
+        "logs": queue_manager_dl.log_buffer
+    })
+
+@app.route('/api/downloader/queue/<item_id>', methods=['DELETE'])
+def remove_from_downloader_queue(item_id):
+    queue_manager_dl.remove_item(item_id)
+    return jsonify({"status": "removed"})
+
+@app.route('/api/downloader/queue', methods=['DELETE'])
+def clear_downloader_queue():
+    queue_manager_dl.clear_queue()
+    return jsonify({"status": "cleared"})
+
+@app.route('/api/downloader/start', methods=['POST'])
+def trigger_downloader():
+    if not queue_manager_dl.is_processing:
+        threading.Thread(target=process_queue_background, daemon=True).start()
+        return jsonify({"status": "started"})
+    return jsonify({"status": "already_running"})
+
+@app.route('/api/downloader/spotify/playlists', methods=['GET'])
+def get_spotify_playlists():
+    dl = get_downloader(open_browser=False)
+    if not dl.spotify.client:
+        return jsonify({"error": "Spotify not authenticated"}), 401
+    
+    try:
+        playlists = dl.spotify.get_user_playlists()
+        return jsonify({"playlists": playlists})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# --- Station Admin Endpoints (Parity with Original ODST) ---
+
+@app.route('/api/downloader/optimize', methods=['POST'])
+def trigger_downloader_optimize():
+    dry_run = request.json.get('dry_run', True)
+    threading.Thread(target=run_optimization_task, args=(dry_run,), daemon=True).start()
     return jsonify({"status": "started"})
 
+def run_optimization_task(dry_run):
+    try:
+        dl = get_downloader(log_callback=queue_manager_dl.add_log)
+        mode = "DRY RUN" if dry_run else "LIVE"
+        queue_manager_dl.add_log(f"--- Starting Library Optimization ({mode}) ---")
+        
+        def cb(msg): queue_manager_dl.add_log(f"🔧 {msg}")
+        optimize_library(dl.output_dir, dry_run=dry_run, progress_callback=cb)
+        
+        queue_manager_dl.add_log("--- Optimization Finished ---")
+    except Exception as e:
+        queue_manager_dl.add_log(f"❌ Optimization Error: {e}")
+
+@app.route('/api/downloader/sync', methods=['POST'])
+def trigger_downloader_sync():
+    threading.Thread(target=run_sync_task, daemon=True).start()
+    return jsonify({"status": "started"})
+
+def run_sync_task():
+    try:
+        dl = get_downloader(log_callback=queue_manager_dl.add_log)
+        if not dl.cloud.is_configured():
+            queue_manager_dl.add_log("❌ Cloud Sync not configured. Add R2/S3 keys in Settings.")
+            return
+            
+        queue_manager_dl.add_log("--- Starting Cloud Sync ---")
+        def cb(msg): queue_manager_dl.add_log(f"☁️ {msg}")
+        
+        # Ensure library is current
+        dl.library = dl._load_library()
+        result = dl.cloud.sync_library(dl.library, progress_callback=cb)
+        
+        if 'error' in result:
+            queue_manager_dl.add_log(f"❌ Sync Error: {result['error']}")
+        else:
+            queue_manager_dl.add_log(f"✅ Sync Complete!")
+            queue_manager_dl.add_log(f"   Uploaded: {result.get('uploaded', 0)}, Merged: {result.get('merged', 0)}")
+            queue_manager_dl.add_log(f"   Total Remote: {result.get('total_remote', 0)}")
+    except Exception as e:
+        queue_manager_dl.add_log(f"❌ Critical Sync Error: {e}")
+
+# Legacy fallback (to be removed once UI is updated)
+@app.route('/api/download', methods=['POST'])
+def start_download_legacy():
+    data = request.json
+    url = data.get('url')
+    if url:
+        queue_manager_dl.add({'song_str': url})
+        if not queue_manager_dl.is_processing:
+            threading.Thread(target=process_queue_background, daemon=True).start()
+        return jsonify({"status": "started"})
+    return jsonify({"error": "No URL provided"}), 400
+
 # --- Config Endpoints ---
+
+@app.route('/api/downloader/config', methods=['GET'])
+def get_downloader_config():
+    # Read from environment / .env
+    # For a real implementation, we should read the .env file directly to be sure
+    from dotenv import dotenv_values
+    env_path = Path('odst_tool/.env')
+    env_vars = {}
+    if env_path.exists():
+        env_vars = dotenv_values(env_path)
+    
+    # Masking secrets
+    def mask(s):
+        if not s: return ""
+        if len(s) <= 8: return "****"
+        return f"{s[:4]}...{s[-4:]}****"
+
+    config = {
+        "spotify_client_id": env_vars.get("SPOTIFY_CLIENT_ID", os.getenv("SPOTIFY_CLIENT_ID", "")),
+        "spotify_client_secret": mask(env_vars.get("SPOTIFY_CLIENT_SECRET", os.getenv("SPOTIFY_CLIENT_SECRET", ""))),
+        "output_dir": env_vars.get("OUTPUT_DIR", os.getenv("OUTPUT_DIR", str(Path.home() / "Music" / "Spotify"))),
+        "quality": env_vars.get("DEFAULT_QUALITY", os.getenv("DEFAULT_QUALITY", "high")),
+        "r2_account_id": env_vars.get("R2_ACCOUNT_ID", os.getenv("R2_ACCOUNT_ID", "")),
+        "r2_access_key": mask(env_vars.get("R2_ACCESS_KEY_ID", os.getenv("R2_ACCESS_KEY_ID", ""))),
+        "r2_secret_key": mask(env_vars.get("R2_SECRET_ACCESS_KEY", os.getenv("R2_SECRET_ACCESS_KEY", ""))),
+        "r2_bucket": env_vars.get("R2_BUCKET_NAME", os.getenv("R2_BUCKET_NAME", ""))
+    }
+    return jsonify(config)
+
+@app.route('/api/downloader/config', methods=['POST'])
+def update_downloader_config():
+    data = request.json
+    env_path = Path('odst_tool/.env')
+    
+    from dotenv import set_key, dotenv_values
+    if not env_path.exists():
+        env_path.touch()
+        
+    current_vars = dotenv_values(env_path)
+    
+    # Mapping keys
+    key_map = {
+        "spotify_client_id": "SPOTIFY_CLIENT_ID",
+        "spotify_client_secret": "SPOTIFY_CLIENT_SECRET",
+        "output_dir": "OUTPUT_DIR",
+        "quality": "DEFAULT_QUALITY",
+        "r2_account_id": "R2_ACCOUNT_ID",
+        "r2_access_key": "R2_ACCESS_KEY_ID",
+        "r2_secret_key": "R2_SECRET_ACCESS_KEY",
+        "r2_bucket": "R2_BUCKET_NAME"
+    }
+    
+    for key, env_key in key_map.items():
+        val = data.get(key)
+        if val is not None:
+            # Check if it's a masked value
+            if isinstance(val, str) and val.endswith("****"):
+                continue # Skip updating this one
+            
+            set_key(str(env_path), env_key, val)
+            os.environ[env_key] = val
+            
+    # Restart downloader to pick up changes
+    global downloader_service
+    downloader_service = None
+    
+    return jsonify({"status": "updated"})
 
 @app.route('/api/config', methods=['GET'])
 def get_config():

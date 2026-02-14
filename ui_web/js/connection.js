@@ -27,6 +27,7 @@ export class ConnectionManager {
             
             // Update store
             store.update({ activeHost: fastestHost, isOnline: true });
+            this.initSocket(fastestHost);
             return fastestHost;
         } catch (err) {
             console.error("❌ All connection paths failed.");
@@ -35,15 +36,47 @@ export class ConnectionManager {
         }
     }
 
+    initSocket(host) {
+        if (this.socket) {
+            this.socket.disconnect();
+        }
+
+        console.log("🔌 Initializing SocketIO at:", host);
+        this.socket = io(`http://${host}:5005`);
+
+        this.socket.on('connect', () => {
+            console.log("✅ Socket Connected");
+            store.update({ isOnline: true });
+        });
+
+        this.socket.on('disconnect', () => {
+            console.log("❌ Socket Disconnected");
+            store.update({ isOnline: false });
+        });
+
+        // Forward downloader events to the window
+        this.socket.on('downloader_log', (data) => {
+            window.dispatchEvent(new CustomEvent('downloader_log', { detail: data }));
+        });
+
+        this.socket.on('downloader_update', (data) => {
+            window.dispatchEvent(new CustomEvent('downloader_update', { detail: data }));
+        });
+        
+        this.socket.on('library_updated', () => {
+            store.syncLibrary();
+        });
+    }
+
     async probe(host) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
         
-        const url = `http://${host}:5005/`; // Check root API
+        const url = `http://${host}:5005/api/health`; // Check health endpoint
         
         try {
             const res = await fetch(url, { 
-                method: 'HEAD', 
+                method: 'GET', 
                 signal: controller.signal,
                 mode: 'cors'
             });

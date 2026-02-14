@@ -9,6 +9,7 @@
     <title>Soundsible Web Player</title>
     <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -36,6 +37,111 @@
             <div id="view-favourites" class="view hidden">
                 <h1 class="text-3xl font-bold mb-6">Favourites</h1>
                 <div id="fav-tracks" class="space-y-2"></div>
+            </div>
+            <div id="view-downloader" class="view hidden">
+                <h1 class="text-3xl font-bold mb-6">Downloader</h1>
+                <div class="space-y-6">
+                    <!-- Search / URL Input -->
+                    <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700 shadow-xl">
+                        <h2 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Add to Station</h2>
+                        <div class="flex flex-col space-y-4">
+                            <textarea id="dl-input" rows="3" placeholder="Paste Spotify/YouTube URLs (one per line) or song names..." class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 text-sm font-mono"></textarea>
+                            <button id="dl-add-btn" class="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-xl font-bold transition-all active:scale-95">Add to Queue</button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Active Queue -->
+                        <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700 shadow-xl flex flex-col h-[400px]">
+                            <h2 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex justify-between items-center">
+                                Station Queue
+                                <div class="flex space-x-2">
+                                    <button id="dl-clear-btn" class="text-[10px] text-red-400 hover:text-red-300">Clear All</button>
+                                    <button id="dl-start-btn" class="text-[10px] bg-green-600 hover:bg-green-700 px-3 py-1 rounded-full text-white">Start Processing</button>
+                                </div>
+                            </h2>
+                            <div id="dl-queue-list" class="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                <div class="text-center text-gray-500 mt-10 italic text-sm">Queue is empty</div>
+                            </div>
+                        </div>
+
+                        <!-- Live Logs -->
+                        <div class="bg-black/40 rounded-2xl p-6 border border-gray-700 shadow-xl flex flex-col h-[400px]">
+                            <h2 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Station Logs</h2>
+                            <div id="dl-logs" class="flex-1 overflow-y-auto font-mono text-[10px] text-green-500/80 space-y-1 pr-2 custom-scrollbar">
+                                <div>[SYS] Station Ready...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Spotify Browser -->
+                    <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700 shadow-xl">
+                        <h2 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex justify-between items-center">
+                            Spotify Library
+                            <button id="dl-refresh-spotify-btn" class="text-[10px] text-blue-400 hover:text-white">Refresh</button>
+                        </h2>
+                        <div id="dl-spotify-playlists" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div class="col-span-full text-center py-10">
+                                <button id="dl-spotify-connect-btn" class="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-full font-bold text-sm">Connect to Spotify</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Downloader Settings -->
+                    <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700 shadow-xl">
+                        <h2 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Downloader Settings</h2>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Spotify Client ID</label>
+                                <input type="text" id="dl-conf-client-id" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Spotify Client Secret</label>
+                                <input type="password" id="dl-conf-client-secret" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Download Path (Local/NAS)</label>
+                                <input type="text" id="dl-conf-path" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+                            </div>
+                            <hr class="border-gray-700">
+                            <h3 class="text-xs font-bold text-gray-500 uppercase">Cloud Storage (R2/S3)</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Account ID</label>
+                                    <input type="text" id="dl-conf-r2-acc" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Bucket Name</label>
+                                    <input type="text" id="dl-conf-r2-bucket" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Access Key</label>
+                                    <input type="password" id="dl-conf-r2-key" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Secret Key</label>
+                                    <input type="password" id="dl-conf-r2-secret" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+                                </div>
+                            </div>
+                            <button id="dl-save-conf-btn" class="w-full bg-blue-600 hover:bg-blue-500 py-2 rounded-lg text-xs font-bold transition-colors">Save All Settings</button>
+                        </div>
+                    </div>
+
+                    <!-- Station Admin Tools -->
+                    <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700 shadow-xl">
+                        <h2 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Station Admin</h2>
+                        <div class="grid grid-cols-2 gap-4">
+                            <button id="dl-optimize-btn" class="bg-gray-700 hover:bg-blue-600 py-3 rounded-xl text-xs font-bold transition-all active:scale-95 flex flex-col items-center space-y-1">
+                                <i class="fas fa-wand-magic-sparkles"></i>
+                                <span>Optimize Library</span>
+                            </button>
+                            <button id="dl-sync-btn" class="bg-gray-700 hover:bg-green-600 py-3 rounded-xl text-xs font-bold transition-all active:scale-95 flex flex-col items-center space-y-1">
+                                <i class="fas fa-cloud-arrow-up"></i>
+                                <span>Sync to Cloud</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div id="view-settings" class="view hidden">
                 <h1 class="text-3xl font-bold mb-6">Settings</h1>
@@ -125,6 +231,10 @@
             <button class="flex flex-col items-center space-y-1 text-gray-500 transition-colors">
                 <i class="fas fa-record-vinyl text-lg"></i>
                 <span class="text-[10px] font-medium">Albums</span>
+            </button>
+            <button class="flex flex-col items-center space-y-1 text-gray-500 transition-colors">
+                <i class="fas fa-cloud-arrow-down text-lg"></i>
+                <span class="text-[10px] font-medium">Downloads</span>
             </button>
             <button class="flex flex-col items-center space-y-1 text-gray-500 transition-colors">
                 <i class="fas fa-heart text-lg"></i>

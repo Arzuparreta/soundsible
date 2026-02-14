@@ -7,6 +7,7 @@ import { Resolver } from './resolver.js';
 import { UI } from './ui.js';
 import { audioEngine } from './audio.js';
 import { connectionManager } from './connection.js';
+import { Downloader } from './downloader.js';
 
 console.log("🚀 Soundsible Web Player Initializing...");
 

@@ -7,14 +7,14 @@ from .spotify_auth import SpotifyAuth
 class SpotifyLibrary:
     """Handles retrieval of music from Spotify."""
     
-    def __init__(self, client: Optional[spotipy.Spotify] = None, skip_auth: bool = False, access_token: str = None):
+    def __init__(self, client: Optional[spotipy.Spotify] = None, skip_auth: bool = False, access_token: str = None, client_id=None, client_secret=None, open_browser=None):
         if client:
             self.client = client
         elif access_token:
             self.client = spotipy.Spotify(auth=access_token)
         elif not skip_auth:
             # Can return None now
-            self.client = SpotifyAuth().get_client()
+            self.client = SpotifyAuth(client_id=client_id, client_secret=client_secret).get_client(open_browser=open_browser)
         else:
             self.client = None
             

@@ -68,7 +68,7 @@ export class UI {
     }
 
     static initNav() {
-        const views = ['home', 'search', 'albums', 'favourites', 'settings'];
+        const views = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
         console.log("Initializing Nav with buttons:", this.navButtons.length);
         
         this.navButtons.forEach((btn, idx) => {
@@ -93,6 +93,13 @@ export class UI {
                 const targetView = document.getElementById(`view-${viewId}`);
                 if (targetView) {
                     targetView.classList.remove('hidden');
+                    
+                    // Lazy init downloader if switching to downloader view
+                    if (viewId === 'downloader') {
+                        import('./downloader.js').then(({ Downloader }) => {
+                            Downloader.init();
+                        });
+                    }
                 }
             });
         });

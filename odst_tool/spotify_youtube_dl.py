@@ -24,33 +24,28 @@ import signal
 console = Console()
 
 class SpotifyYouTubeDL:
-    def __init__(self, output_dir: Path, workers: int = DEFAULT_WORKERS, skip_auth: bool = False, access_token: str = None, cookie_browser: str = None, quality: str = DEFAULT_QUALITY):
+    def __init__(self, output_dir: Path, workers: int = DEFAULT_WORKERS, skip_auth: bool = False, access_token: str = None, cookie_browser: str = None, quality: str = DEFAULT_QUALITY, client_id=None, client_secret=None, open_browser=None):
         self.output_dir = Path(output_dir)
         self.workers = workers
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Verbose internal init logging for API bridge debugging
+        print(f"DEBUG: ODST init start at {output_dir}")
+        
         self.cloud = CloudSync(self.output_dir)
+        print("DEBUG: CloudSync ready")
         
         # Load or Init Library
         self.library_path = self.output_dir / LIBRARY_FILENAME
         self.library = self._load_library()
+        print("DEBUG: Library loaded")
         
         # Components
-        self.spotify = SpotifyLibrary(skip_auth=skip_auth, access_token=access_token)
-        self.downloader = YouTubeDownloader(self.output_dir, cookie_browser=cookie_browser, quality=quality)
+        self.spotify = SpotifyLibrary(skip_auth=skip_auth, access_token=access_token, client_id=client_id, client_secret=client_secret, open_browser=open_browser)
+        print("DEBUG: Spotify component ready")
         
-        # Register Cleanup (Main thread only)
-        if threading.current_thread() is threading.main_thread():
-            try:
-                signal.signal(signal.SIGINT, self._handle_interrupt)
-                signal.signal(signal.SIGTERM, self._handle_interrupt)
-            except ValueError:
-                # signal.signal can still fail in some environments even in main thread
-                pass
-
-    def _handle_interrupt(self, signum, frame):
-        console.print("\n[bold red]Interrupted! Cleaning up temporary files...[/bold red]")
-        self.cleanup_temp()
-        sys.exit(1)
+        self.downloader = YouTubeDownloader(self.output_dir, cookie_browser=cookie_browser, quality=quality)
+        print("DEBUG: Downloader component ready")
 
     def cleanup_temp(self):
         """Cleanup temp directory."""

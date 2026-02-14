@@ -32,6 +32,16 @@ class Store {
     }
 
     update(patch) {
+        let changed = false;
+        for (const key in patch) {
+            if (JSON.stringify(this.state[key]) !== JSON.stringify(patch[key])) {
+                changed = true;
+                break;
+            }
+        }
+        
+        if (!changed) return;
+
         this.state = { ...this.state, ...patch };
         console.log("State Update:", patch);
         this.subscribers.forEach(cb => cb(this.state));
@@ -42,6 +52,10 @@ class Store {
         return () => {
             this.subscribers = this.subscribers.filter(s => s !== cb);
         };
+    }
+
+    get apiBase() {
+        return `http://${this.state.activeHost}:5005`;
     }
 
     async syncLibrary() {

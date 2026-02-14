@@ -106,7 +106,8 @@ class YouTubeDownloader:
                 year=clean_metadata.get('year'),
                 genre=None,
                 track_number=clean_metadata.get('track_number'),
-                is_local=True
+                is_local=True,
+                local_path=str(final_path.absolute())
             )
             
             return track
@@ -207,7 +208,8 @@ class YouTubeDownloader:
                 year=clean_meta.get('year'),
                 genre=None,
                 track_number=clean_meta.get('track_number'),
-                is_local=True
+                is_local=True,
+                local_path=str(final_path.absolute())
             )
             
             return track
