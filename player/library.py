@@ -25,6 +25,7 @@ class LibraryManager:
         self.config: Optional[PlayerConfig] = None
         self.provider = None
         self.db = DatabaseManager()
+        self._manifest_mtime = 0
         
         # Initialize Cache
         try:
@@ -272,6 +273,17 @@ class LibraryManager:
             
         return None
 
+    def refresh_if_stale(self):
+        """Reload metadata from disk if the file has changed."""
+        cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+        if cache_path.exists():
+            mtime = cache_path.stat().st_mtime
+            if mtime > self._manifest_mtime:
+                self._log("Library manifest changed on disk. Reloading...")
+                self._load_from_cache(cache_path)
+                return True
+        return False
+
     def _load_from_cache(self, cache_path: Path) -> bool:
         """
         Load library metadata from local cache.
@@ -286,6 +298,7 @@ class LibraryManager:
             if cache_path.exists():
                 json_str = cache_path.read_text()
                 self.metadata = LibraryMetadata.from_json(json_str)
+                self._manifest_mtime = cache_path.stat().st_mtime
                 self._log(f"✓ Loaded library from cache (offline mode) - {len(self.metadata.tracks)} tracks")
                 return True
             else:

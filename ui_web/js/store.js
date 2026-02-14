@@ -32,18 +32,9 @@ class Store {
     }
 
     update(patch) {
-        let changed = false;
-        for (const key in patch) {
-            if (JSON.stringify(this.state[key]) !== JSON.stringify(patch[key])) {
-                changed = true;
-                break;
-            }
-        }
-        
-        if (!changed) return;
-
+        // Direct update - avoiding heavy JSON.stringify on large library datasets
         this.state = { ...this.state, ...patch };
-        console.log("State Update:", patch);
+        console.log("State Update:", Object.keys(patch));
         this.subscribers.forEach(cb => cb(this.state));
     }
 
@@ -61,7 +52,7 @@ class Store {
     async syncLibrary() {
         const host = this.state.activeHost;
         const port = this.state.config.port;
-        const url = `http://${host}:${port}/api/library`;
+        const url = `http://${host}:${port}/api/library?t=${Date.now()}`;
         
         try {
             console.log(`Syncing with ${url}...`);
@@ -69,12 +60,64 @@ class Store {
             if (!res.ok) throw new Error("Sync failed");
             
             const data = await res.json();
+            
+            // Also sync favourites
+            await this.syncFavourites();
+            
             this.update({ library: data.tracks, isOnline: true });
             this.save('library', data.tracks);
             return true;
         } catch (err) {
             console.error("Library sync error:", err);
             this.update({ isOnline: false });
+            return false;
+        }
+    }
+
+    async syncFavourites() {
+        try {
+            const res = await fetch(`${this.apiBase}/api/library/favourites?t=${Date.now()}`);
+            if (res.ok) {
+                const favIds = await res.json();
+                this.update({ favorites: favIds });
+                this.save('favorites', favIds);
+            }
+        } catch (err) {
+            console.error("Favourites sync error:", err);
+        }
+    }
+
+    async toggleFavourite(trackId) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/library/favourites/toggle`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ track_id: trackId })
+            });
+            if (res.ok) {
+                await this.syncFavourites();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Toggle favourite error:", err);
+            return false;
+        }
+    }
+
+    async deleteTrack(trackId) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/library/tracks/${trackId}`, {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                console.log("✓ Track deleted from Station");
+                await this.syncLibrary();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Deletion error:", err);
             return false;
         }
     }

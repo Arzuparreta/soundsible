@@ -94,6 +94,11 @@ export class UI {
                 if (targetView) {
                     targetView.classList.remove('hidden');
                     
+                    // Background Sync: Proactively fetch latest data without blocking UI transition
+                    if (['home', 'search', 'albums', 'favourites'].includes(viewId)) {
+                        setTimeout(() => store.syncLibrary(), 50);
+                    }
+
                     // Lazy init downloader if switching to downloader view
                     if (viewId === 'downloader') {
                         import('./downloader.js').then(({ Downloader }) => {
@@ -103,6 +108,10 @@ export class UI {
                 }
             });
         });
+
+        // Add overscroll-behavior-x: none to the body to prevent Safari bounce
+        document.body.style.overscrollBehaviorX = 'none';
+        document.getElementById('content').style.overscrollBehaviorX = 'none';
 
         // Global functions for overlay
         window.showConnectionRefiner = () => {
@@ -156,33 +165,89 @@ export class UI {
     static initGestures() {
         let touchStartX = 0;
         let touchStartY = 0;
+        let activeRow = null;
 
         document.addEventListener('touchstart', e => {
-            touchStartX = e.changedTouches[0].screenX;
-            touchStartY = e.changedTouches[0].screenY;
+            const row = e.target.closest('.song-row');
+            if (row) {
+                activeRow = row;
+                touchStartX = e.changedTouches[0].screenX;
+                touchStartY = e.changedTouches[0].screenY;
+                row.style.transition = 'none';
+            }
+        }, { passive: true });
+
+        document.addEventListener('touchmove', e => {
+            if (!activeRow) return;
+            const currentX = e.changedTouches[0].screenX;
+            const currentY = e.changedTouches[0].screenY;
+            const diffX = currentX - touchStartX;
+            const diffY = Math.abs(currentY - touchStartY);
+            
+            // If swiping horizontally, prevent browser from moving the page (back/forward)
+            if (Math.abs(diffX) > diffY) {
+                if (e.cancelable) e.preventDefault();
+            } else if (diffY > 10) {
+                // If moving vertically, cancel the horizontal swipe logic
+                activeRow.style.transform = 'translateX(0)';
+                activeRow = null;
+                return;
+            }
+            
+            // Allow swiping both ways
+            const move = Math.max(Math.min(diffX, 100), -100);
+            activeRow.style.transform = `translateX(${move}px)`;
+            
+            // Show visual hints if far enough
+            if (move < -70) {
+                activeRow.classList.add('border-red-500/50');
+                activeRow.classList.remove('border-yellow-500/50');
+            } else if (move > 70) {
+                activeRow.classList.add('border-yellow-500/50');
+                activeRow.classList.remove('border-red-500/50');
+            } else {
+                activeRow.classList.remove('border-red-500/50', 'border-yellow-500/50');
+            }
         }, { passive: true });
 
         document.addEventListener('touchend', e => {
+            if (!activeRow) return;
             const touchEndX = e.changedTouches[0].screenX;
-            const touchEndY = e.changedTouches[0].screenY;
-            this.handleGesture(touchStartX, touchEndX, touchStartY, touchEndY, e.target);
-        }, { passive: true });
-    }
-
-    static handleGesture(startX, endX, startY, endY, target) {
-        const diffX = endX - startX;
-        const diffY = endY - startY;
-
-        // Thresholds
-        if (Math.abs(diffX) > 100) {
-            if (diffX > 0) {
-                console.log("Swipe Right (Queue)");
+            const diffX = touchEndX - touchStartX;
+            
+            activeRow.style.transition = 'transform 0.3s ease';
+            
+            if (diffX < -70) {
+                // DELETE (Left Swipe)
+                const trackId = activeRow.getAttribute('data-id');
+                const title = activeRow.querySelector('.song-title').textContent;
+                
+                if (confirm(`Delete "${title}" permanently from Station?`)) {
+                    this.vibrate(100);
+                    store.deleteTrack(trackId).then(success => {
+                        if (!success) {
+                            activeRow.style.transform = 'translateX(0)';
+                            alert("Deletion failed.");
+                        }
+                    });
+                } else {
+                    activeRow.style.transform = 'translateX(0)';
+                }
+            } else if (diffX > 70) {
+                // FAVOURITE (Right Swipe)
+                const trackId = activeRow.getAttribute('data-id');
                 this.vibrate(50);
+                store.toggleFavourite(trackId).then(success => {
+                    activeRow.style.transform = 'translateX(0)';
+                    if (!success) alert("Favourite toggle failed.");
+                });
             } else {
-                console.log("Swipe Left (Favorite)");
-                this.vibrate(50);
+                activeRow.style.transform = 'translateX(0)';
             }
-        }
+            
+            activeRow.classList.remove('border-red-500/50', 'border-yellow-500/50');
+            activeRow = null;
+        }, { passive: true });
     }
 
     static vibrate(ms) {

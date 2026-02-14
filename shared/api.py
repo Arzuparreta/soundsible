@@ -19,6 +19,7 @@ from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME
 from player.library import LibraryManager
 from player.engine import PlaybackEngine
 from player.queue_manager import QueueManager
+from player.favourites_manager import FavouritesManager
 from odst_tool.spotify_youtube_dl import SpotifyYouTubeDL
 from odst_tool.cloud_sync import CloudSync
 from odst_tool.optimize_library import optimize_library
@@ -51,12 +52,18 @@ def resolve_spotify_url(url):
     return None
 
 class DownloadQueueManager:
-    """Manages the persistent download queue for the Station."""
+    """Manages the download queue for the Station."""
     def __init__(self, storage_path=None):
         if storage_path is None:
             storage_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "download_queue.json"
         self.storage_path = Path(storage_path)
-        self.queue = self._load()
+        
+        # Non-persistence: Wipe previous queue on reboot
+        if self.storage_path.exists():
+            try: self.storage_path.unlink()
+            except: pass
+            
+        self.queue = []
         self.lock = threading.RLock() # Use Re-entrant lock to prevent deadlocks
         self.is_processing = False
         self.log_buffer = [] # Memory buffer for logs
@@ -186,11 +193,12 @@ def serve_web_player_assets(path):
 library_manager = None
 playback_engine = None
 queue_manager = None
+favourites_manager = None
 downloader_service = None
 queue_manager_dl = DownloadQueueManager()
 
 def get_core():
-    global library_manager, playback_engine, queue_manager
+    global library_manager, playback_engine, queue_manager, favourites_manager
     if not library_manager:
         print("API: Initializing Library Manager...")
         library_manager = LibraryManager()
@@ -200,8 +208,9 @@ def get_core():
             cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
             library_manager._load_from_cache(cache_path)
             
-        print("API: Initializing Queue and Playback Engine...")
+        print("API: Initializing Queue, Playback Engine and Favourites...")
         queue_manager = QueueManager()
+        favourites_manager = FavouritesManager()
         # Note: PlaybackEngine requires an active MPV instance which might need a display.
         # For headless/server mode, we might need to handle this carefully.
         try:
@@ -353,18 +362,33 @@ def process_queue_background():
                         track = dl.downloader.process_track(fake_meta)
                 
                 if track:
+                    # Update ODST internal record
                     dl.library.add_track(track)
                     dl.save_library()
                     
-                    # Update main library too
+                    # Update main Soundsible library core
                     lib, _, _ = get_core()
                     if lib.metadata:
                         lib.metadata.add_track(track)
+                        # CRITICAL: Persist to DB and library.json IMMEDIATELY
+                        lib._save_metadata()
+                        
+                        # Proactively extract cover art
+                        try:
+                            from player.cover_manager import CoverFetchManager
+                            cm = CoverFetchManager.get_instance()
+                            cm.request_cover(track, embedded_cache_info=track.local_path)
+                            queue_manager_dl.add_log("🎨 Cover art extraction ready.")
+                        except Exception as ce:
+                            print(f"API: Cover extraction failed: {ce}")
+
+                        # Signal all clients to refresh
                         socketio.emit('library_updated')
                     
-                    queue_manager_dl.update_status(item_id, 'completed')
+                    # Auto-clear successful items from queue
+                    queue_manager_dl.remove_item(item_id)
                     socketio.emit('downloader_update', {'id': item_id, 'status': 'completed', 'track': track.to_dict()})
-                    queue_manager_dl.add_log(f"✅ Finished: {track.artist} - {track.title}")
+                    queue_manager_dl.add_log(f"✅ Finished & Cleared: {track.artist} - {track.title}")
                 else:
                     raise Exception("Downloader returned no track. Check logs for details.")
                     
@@ -400,6 +424,9 @@ def home():
 @app.route('/api/library', methods=['GET'])
 def get_library():
     lib, _, _ = get_core()
+    # Auto-refresh if disk manifest changed (e.g. by GTK app)
+    lib.refresh_if_stale()
+    
     if not lib.metadata:
         lib.sync_library()
     
@@ -411,7 +438,35 @@ def get_library():
 def sync_library():
     lib, _, _ = get_core()
     success = lib.sync_library()
+    if success:
+        socketio.emit('library_updated')
     return jsonify({"status": "success" if success else "failed"})
+
+@app.route('/api/library/tracks/<track_id>', methods=['DELETE'])
+def delete_track_from_library(track_id):
+    lib, _, _ = get_core()
+    
+    # Resolve track
+    track = None
+    if lib.metadata:
+        track = lib.metadata.get_track_by_id(track_id)
+    
+    if not track:
+        # DB Fallback
+        db_tracks = lib.db.get_all_tracks()
+        track = next((t for t in db_tracks if t.id == track_id), None)
+        
+    if not track:
+        return jsonify({"error": "Track not found"}), 404
+        
+    print(f"API: Deleting track {track.title} ({track_id})...")
+    success = lib.delete_track(track)
+    
+    if success:
+        socketio.emit('library_updated')
+        return jsonify({"status": "success"})
+    else:
+        return jsonify({"error": "Deletion failed"}), 500
 
 @app.route('/api/library/search', methods=['GET'])
 def search_library():
@@ -421,6 +476,24 @@ def search_library():
     # Use high-performance DB search
     results = lib.search(query)
     return jsonify([t.to_dict() for t in results[:50]])
+
+# --- Favourites Endpoints ---
+
+@app.route('/api/library/favourites', methods=['GET'])
+def get_favourites():
+    get_core() # Ensure initialized
+    return jsonify(favourites_manager.get_all())
+
+@app.route('/api/library/favourites/toggle', methods=['POST'])
+def toggle_favourite():
+    get_core() # Ensure initialized
+    data = request.json
+    track_id = data.get('track_id')
+    if not track_id:
+        return jsonify({"error": "No track_id provided"}), 400
+        
+    is_fav = favourites_manager.toggle(track_id)
+    return jsonify({"status": "success", "is_favourite": is_fav})
 
 # --- Playback Endpoints ---
 

@@ -16,6 +16,7 @@ async function init() {
     
     // 1. Initialize UI First (Navigation, Player Bar)
     UI.init();
+    initSearch();
     
     // 2. Perform Connection Race
     const endpoints = [...store.state.priorityList, window.location.hostname];
@@ -29,11 +30,13 @@ async function init() {
     store.subscribe((state) => {
         renderHomeSongs(state.library);
         renderAlbumGrid(state.library);
+        renderSongList(state.favorites, 'fav-tracks');
     });
 
     // 4. Initial Render
     renderHomeSongs(store.state.library);
     renderAlbumGrid(store.state.library);
+    renderSongList(store.state.favorites, 'fav-tracks');
 
     // 5. Global Control Handlers
     const playBtn = document.getElementById('play-btn');
@@ -45,8 +48,8 @@ async function init() {
     }
 }
 
-function renderHomeSongs(tracks) {
-    const container = document.getElementById('all-songs');
+function renderSongList(tracks, containerId) {
+    const container = document.getElementById(containerId);
     if (!container) return;
 
     if (tracks.length === 0) {
@@ -54,23 +57,61 @@ function renderHomeSongs(tracks) {
         return;
     }
 
-    const html = tracks.map(t => `
-        <div class="flex items-center p-3 hover:bg-gray-800 rounded-xl cursor-pointer transition-colors group" onclick="playTrack('${t.id}')">
-            <div class="relative w-12 h-12 flex-shrink-0">
-                <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-lg shadow-md" alt="Cover">
-                <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                    <i class="fas fa-play text-white text-xs"></i>
+    const favIds = store.state.favorites || [];
+
+    const html = tracks.map(t => {
+        const isFav = favIds.includes(t.id);
+        return `
+            <div class="relative overflow-hidden rounded-xl bg-gray-800/50 group">
+                <!-- Swipe Backgrounds -->
+                <div class="absolute inset-0 flex items-center justify-between px-6">
+                    <div class="text-yellow-500 font-bold text-xs">FAVOURITE</div>
+                    <div class="text-red-500 font-bold text-xs">DELETE</div>
+                </div>
+                
+                            <!-- Main Song Row -->
+                
+                            <div class="song-row flex items-center p-3 bg-gray-900 hover:bg-gray-800 cursor-pointer transition-colors relative z-10 border border-transparent touch-pan-y" data-id="${t.id}" onclick="playTrack('${t.id}')">
+                
+                
+                    <div class="relative w-12 h-12 flex-shrink-0">
+                        <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-lg shadow-md" alt="Cover">
+                        <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                            <i class="fas fa-play text-white text-xs"></i>
+                        </div>
+                        <!-- Favourite Indicator -->
+                        ${isFav ? `<div class="absolute -top-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full border-2 border-gray-900 shadow-sm"></div>` : ''}
+                    </div>
+                    <div class="ml-4 flex-1 truncate">
+                        <div class="song-title font-semibold text-sm truncate group-hover:text-blue-400 transition-colors">${t.title}</div>
+                        <div class="text-xs text-gray-400 truncate uppercase tracking-tighter mt-0.5">${t.artist} • ${t.album}</div>
+                    </div>
+                    <div class="text-xs text-gray-500 font-mono ml-4 tabular-nums">${formatTime(t.duration)}</div>
                 </div>
             </div>
-            <div class="ml-4 flex-1 truncate">
-                <div class="font-semibold text-sm truncate group-hover:text-blue-400 transition-colors">${t.title}</div>
-                <div class="text-xs text-gray-400 truncate uppercase tracking-tighter mt-0.5">${t.artist} • ${t.album}</div>
-            </div>
-            <div class="text-xs text-gray-500 font-mono ml-4 tabular-nums">${formatTime(t.duration)}</div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 
     container.innerHTML = html;
+}
+
+function renderHomeSongs(tracks) {
+    renderSongList(tracks, 'all-songs');
+}
+
+async function initSearch() {
+    const input = document.getElementById('search-input');
+    if (!input) return;
+
+    input.oninput = () => {
+        const query = input.value.toLowerCase();
+        const results = store.state.library.filter(t => 
+            t.title.toLowerCase().includes(query) || 
+            t.artist.toLowerCase().includes(query) || 
+            t.album.toLowerCase().includes(query)
+        );
+        renderSongList(results, 'search-results');
+    };
 }
 
 function renderAlbumGrid(tracks) {
