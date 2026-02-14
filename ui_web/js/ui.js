@@ -12,6 +12,10 @@ export class UI {
         this.playBtn = document.getElementById('play-btn');
         this.progressBar = document.getElementById('player-progress');
         this.navButtons = document.querySelectorAll('#mobile-nav button');
+        
+        // Navigation Stack for 'Go Back' logic
+        this.viewStack = [];
+        this.currentView = 'home';
 
         this.initNav();
         store.subscribe((state) => this.updatePlayer(state));
@@ -67,6 +71,70 @@ export class UI {
         }
     }
 
+    static showView(viewId, saveToHistory = true) {
+        if (viewId === this.currentView) return;
+        
+        console.log("Switching to view:", viewId);
+
+        if (saveToHistory) {
+            // Only push to history if it's not a root view or if we're drilling deeper
+            const rootViews = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
+            // If current is root and target is root, we clear stack to prevent infinite back-and-forth
+            if (rootViews.includes(this.currentView) && rootViews.includes(viewId)) {
+                this.viewStack = [];
+            } else {
+                this.viewStack.push(this.currentView);
+            }
+        }
+
+        // Hide all views and show target
+        document.querySelectorAll('.view').forEach(v => {
+            v.classList.add('hidden');
+        });
+        
+        const targetView = document.getElementById(`view-${viewId}`);
+        if (targetView) {
+            targetView.classList.remove('hidden');
+            // Scroll content to top
+            document.getElementById('content').scrollTop = 0;
+            
+            // Background Sync: Proactively fetch latest data without blocking UI transition
+            if (['home', 'search', 'albums', 'favourites'].includes(viewId)) {
+                setTimeout(() => store.syncLibrary(), 50);
+            }
+
+            // Lazy init downloader if switching to downloader view
+            if (viewId === 'downloader') {
+                import('./downloader.js').then(({ Downloader }) => {
+                    Downloader.init();
+                });
+            }
+        }
+
+        this.currentView = viewId;
+
+        // Update active state icons/text for main nav
+        const views = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
+        const idx = views.indexOf(viewId);
+        if (idx !== -1 && this.navButtons[idx]) {
+            this.navButtons.forEach(b => {
+                b.classList.remove('text-blue-500');
+                b.classList.add('text-gray-500');
+            });
+            this.navButtons[idx].classList.add('text-blue-500');
+            this.navButtons[idx].classList.remove('text-gray-500');
+        }
+    }
+
+    static navigateBack() {
+        if (this.viewStack.length === 0) return;
+        
+        const previousView = this.viewStack.pop();
+        console.log("Navigating back to:", previousView);
+        // showView(id, saveToHistory=false) to prevent infinite loops
+        this.showView(previousView, false);
+    }
+
     static initNav() {
         const views = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
         console.log("Initializing Nav with buttons:", this.navButtons.length);
@@ -74,40 +142,11 @@ export class UI {
         this.navButtons.forEach((btn, idx) => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
-                const viewId = views[idx];
-                console.log("Switching to view:", viewId);
-
-                // Update active state icons/text
-                this.navButtons.forEach(b => {
-                    b.classList.remove('text-blue-500');
-                    b.classList.add('text-gray-500');
-                });
-                btn.classList.add('text-blue-500');
-                btn.classList.remove('text-gray-500');
-
-                // Hide all views and show target
-                document.querySelectorAll('.view').forEach(v => {
-                    v.classList.add('hidden');
-                });
-                
-                const targetView = document.getElementById(`view-${viewId}`);
-                if (targetView) {
-                    targetView.classList.remove('hidden');
-                    
-                    // Background Sync: Proactively fetch latest data without blocking UI transition
-                    if (['home', 'search', 'albums', 'favourites'].includes(viewId)) {
-                        setTimeout(() => store.syncLibrary(), 50);
-                    }
-
-                    // Lazy init downloader if switching to downloader view
-                    if (viewId === 'downloader') {
-                        import('./downloader.js').then(({ Downloader }) => {
-                            Downloader.init();
-                        });
-                    }
-                }
+                this.showView(views[idx]);
             });
         });
+
+        window.UI = UI; // Expose for global onclick handlers
 
         // Add overscroll-behavior-x: none to the body to prevent Safari bounce
         document.body.style.overscrollBehaviorX = 'none';
@@ -165,30 +204,61 @@ export class UI {
     static initGestures() {
         let touchStartX = 0;
         let touchStartY = 0;
+        let totalMoveX = 0;
+        let totalMoveY = 0;
         let activeRow = null;
+        let isEdgeSwipe = false;
+        const content = document.getElementById('content');
 
         document.addEventListener('touchstart', e => {
+            const touch = e.changedTouches[0];
             const row = e.target.closest('.song-row');
+            
+            // EDGE SWIPE DETECTION (0-40px from left)
+            // Only active if we have somewhere to go back to (stack not empty)
+            if (touch.clientX < 40 && this.viewStack.length > 0) {
+                isEdgeSwipe = true;
+                touchStartX = touch.clientX;
+                touchStartY = touch.clientY;
+                content.style.transition = 'none';
+                return;
+            }
+
             if (row) {
                 activeRow = row;
-                touchStartX = e.changedTouches[0].screenX;
-                touchStartY = e.changedTouches[0].screenY;
+                touchStartX = touch.clientX;
+                touchStartY = touch.clientY;
+                totalMoveX = 0;
+                totalMoveY = 0;
                 row.style.transition = 'none';
             }
         }, { passive: true });
 
         document.addEventListener('touchmove', e => {
-            if (!activeRow) return;
-            const currentX = e.changedTouches[0].screenX;
-            const currentY = e.changedTouches[0].screenY;
+            const touch = e.changedTouches[0];
+            const currentX = touch.clientX;
+            const currentY = touch.clientY;
             const diffX = currentX - touchStartX;
-            const diffY = Math.abs(currentY - touchStartY);
+            const diffY = currentY - touchStartY;
             
-            // If swiping horizontally, prevent browser from moving the page (back/forward)
-            if (Math.abs(diffX) > diffY) {
+            if (isEdgeSwipe) {
                 if (e.cancelable) e.preventDefault();
-            } else if (diffY > 10) {
-                // If moving vertically, cancel the horizontal swipe logic
+                // Slide the entire content area
+                const move = Math.max(0, diffX);
+                content.style.transform = `translateX(${move}px)`;
+                return;
+            }
+
+            if (!activeRow) return;
+            
+            totalMoveX = Math.max(totalMoveX, Math.abs(diffX));
+            totalMoveY = Math.max(totalMoveY, Math.abs(diffY));
+
+            // If swiping horizontally, prevent browser from moving the page (back/forward)
+            if (Math.abs(diffX) > Math.abs(diffY)) {
+                if (e.cancelable) e.preventDefault();
+            } else if (Math.abs(diffY) > 30) {
+                // If moving vertically significantly, cancel the horizontal swipe logic
                 activeRow.style.transform = 'translateX(0)';
                 activeRow = null;
                 return;
@@ -208,14 +278,41 @@ export class UI {
             } else {
                 activeRow.classList.remove('border-red-500/50', 'border-yellow-500/50');
             }
-        }, { passive: true });
+        }, { passive: false });
 
         document.addEventListener('touchend', e => {
+            if (isEdgeSwipe) {
+                const diffX = e.changedTouches[0].clientX - touchStartX;
+                const threshold = window.innerWidth * 0.3; // 30% Threshold
+
+                content.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+                
+                if (diffX > threshold) {
+                    this.vibrate(50);
+                    this.navigateBack();
+                }
+                
+                content.style.transform = 'translateX(0)';
+                isEdgeSwipe = false;
+                return;
+            }
+
+            // SCROLL PROTECTION: If the user moved their finger significantly, 
+            // it's a scroll, not a click. Block the click event.
+            if (totalMoveY > 10 || totalMoveX > 10) {
+                // Temporarily disable pointer events on the row to swallow the upcoming 'click' event
+                const row = e.target.closest('.song-row');
+                if (row) {
+                    row.style.pointerEvents = 'none';
+                    setTimeout(() => row.style.pointerEvents = '', 50);
+                }
+            }
+
             if (!activeRow) return;
             const touchEndX = e.changedTouches[0].screenX;
             const diffX = touchEndX - touchStartX;
             
-            activeRow.style.transition = 'transform 0.3s ease';
+            activeRow.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
             
             if (diffX < -70) {
                 // DELETE (Left Swipe)

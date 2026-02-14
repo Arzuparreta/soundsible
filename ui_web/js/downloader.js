@@ -3,6 +3,16 @@
  */
 import { store } from './store.js';
 
+/**
+ * Security: Escape HTML characters to prevent XSS.
+ */
+function esc(str) {
+    if (!str) return "";
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 export class Downloader {
     static init() {
         if (this.initialized) return;
@@ -120,7 +130,7 @@ export class Downloader {
         if (!logs || logs.length === 0) return;
         // Map logs to div elements and join
         // Station provides them in chronological order, we reverse to match UI's prepend style
-        this.logs.innerHTML = [...logs].reverse().map(log => `<div>${log}</div>`).join('');
+        this.logs.innerHTML = [...logs].reverse().map(log => `<div>${esc(log)}</div>`).join('');
     }
 
     static async removeItem(id) {
@@ -159,7 +169,7 @@ export class Downloader {
         const html = sortedQueue.map(item => `
             <div class="bg-gray-900/50 p-3 rounded-xl border border-gray-700/50 flex items-center justify-between group">
                 <div class="truncate flex-1 mr-4">
-                    <div class="text-xs font-bold truncate">${item.song_str || 'Spotify Track'}</div>
+                    <div class="text-xs font-bold truncate">${esc(item.song_str) || 'Spotify Track'}</div>
                     <div class="text-[9px] text-gray-500 mt-0.5">${new Date(item.added_at).toLocaleString()}</div>
                 </div>
                 <div class="flex items-center space-x-2">
@@ -287,7 +297,7 @@ export class Downloader {
                 <div class="aspect-square bg-gray-800 rounded-lg mb-2 flex items-center justify-center overflow-hidden">
                     ${p.images && p.images[0] ? `<img src="${p.images[0].url}" class="w-full h-full object-cover">` : '<i class="fas fa-music text-gray-600"></i>'}
                 </div>
-                <div class="text-[10px] font-bold truncate">${p.name}</div>
+                <div class="text-[10px] font-bold truncate">${esc(p.name)}</div>
                 <div class="text-[8px] text-gray-500">${p.tracks.total} tracks</div>
             </div>
         `).join('');

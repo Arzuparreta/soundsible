@@ -32,7 +32,17 @@ class Store {
     }
 
     update(patch) {
-        // Direct update - avoiding heavy JSON.stringify on large library datasets
+        let changed = false;
+        for (const key in patch) {
+            // Shallow equality check for primitive values (status, isPlaying, etc)
+            if (this.state[key] !== patch[key]) {
+                changed = true;
+                break;
+            }
+        }
+        
+        if (!changed) return;
+
         this.state = { ...this.state, ...patch };
         console.log("State Update:", Object.keys(patch));
         this.subscribers.forEach(cb => cb(this.state));

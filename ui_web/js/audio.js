@@ -37,6 +37,12 @@ class AudioEngine {
     }
 
     async playTrack(track) {
+        // Prevent redundant loads if tapping the same track rapidly
+        if (this.audio.src.includes(track.id) && !this.audio.paused) {
+            console.log("Track already playing, ignoring redundant request.");
+            return;
+        }
+
         const url = Resolver.getTrackUrl(track);
         console.log("Playing URL:", url);
         
@@ -58,8 +64,14 @@ class AudioEngine {
                 });
             }
         } catch (err) {
-            console.error("Playback failed:", err);
-            alert("Playback failed. Check if server is running or file is accessible.");
+            // SECURITY & UX: AbortError is normal when switching tracks quickly (e.g. double tap)
+            // We catch it silently. Other errors (404, network) still show alerts.
+            if (err.name === 'AbortError') {
+                console.log("Playback aborted (interrupted by new request).");
+            } else {
+                console.error("Playback failed:", err);
+                alert("Playback failed. Check if server is running or file is accessible.");
+            }
         }
     }
 

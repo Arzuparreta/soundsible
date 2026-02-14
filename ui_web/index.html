@@ -15,12 +15,28 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; }
         .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        .safe-top { padding-top: max(1.5rem, env(safe-area-inset-top)); }
+        
+        /* Security & UI: Disable default tap highlight to prevent flickering reveals of swipe labels */
+        * { -webkit-tap-highlight-color: transparent; }
+        
+        /* Smooth transition for song selection */
+        .song-row {
+            transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Mobile Fix: Disable hover effects on touch devices to prevent sticky highlights while scrolling */
+        @media (hover: hover) {
+            .song-row:hover {
+                background-color: rgb(31 41 55); /* bg-gray-800 */
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white selection:bg-blue-500 selection:text-white overflow-hidden">
     <div id="app" class="h-screen flex flex-col">
         <!-- Main Content Area -->
-        <main id="content" class="flex-1 overflow-y-auto pb-32 px-4 pt-6">
+        <main id="content" class="flex-1 overflow-y-auto pb-40 px-4 safe-top">
             <div id="view-home" class="view">
                 <h1 class="text-3xl font-bold mb-6">All Songs</h1>
                 <div id="all-songs" class="space-y-2"></div>
@@ -28,6 +44,26 @@
             <div id="view-albums" class="view hidden">
                 <h1 class="text-3xl font-bold mb-6">Albums</h1>
                 <div id="all-albums" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+            </div>
+            <div id="view-album-detail" class="view hidden">
+                <!-- Header with Back Button -->
+                <button onclick="UI.showView('albums')" class="flex items-center text-blue-400 hover:text-white transition-colors mb-6 group">
+                    <i class="fas fa-chevron-left mr-2 group-active:-translate-x-1 transition-transform"></i>
+                    <span class="font-bold">Back to Grid</span>
+                </button>
+
+                <!-- Album Profile Header -->
+                <div class="flex flex-col md:flex-row items-center md:items-end space-y-6 md:space-y-0 md:space-x-8 mb-10">
+                    <div class="w-64 h-64 md:w-72 md:h-72 flex-shrink-0 shadow-2xl rounded-2xl overflow-hidden bg-gray-800">
+                        <img id="album-detail-cover" src="assets/icons/icon-512.png" class="w-full h-full object-cover" alt="Album Cover">
+                    </div>
+                    <div class="text-center md:text-left">
+                        <h2 id="album-detail-title" class="text-4xl md:text-6xl font-black mb-2 tracking-tighter">Album Title</h2>
+                        <div id="album-detail-artist" class="text-xl md:text-2xl text-gray-400 font-medium">Artist Name</div>
+                    </div>
+                </div>
+
+                <div id="album-tracks" class="space-y-2"></div>
             </div>
             <div id="view-search" class="view hidden">
                 <h1 class="text-3xl font-bold mb-6">Search</h1>

@@ -11,10 +11,42 @@ import { Downloader } from './downloader.js';
 
 console.log("🚀 Soundsible Web Player Initializing...");
 
+/**
+ * Security: Escape HTML characters to prevent XSS.
+ * This ensures that strings like "<script>" are rendered as text 
+ * and never executed as code by the browser.
+ */
+function esc(str) {
+    if (!str) return "";
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 function renderFavourites(state) {
     const favTracks = state.favorites.map(id => state.library.find(t => t.id === id)).filter(t => t);
     renderSongList(favTracks, 'fav-tracks');
 }
+
+window.showAlbumDetail = (albumName, artistName) => {
+    const state = store.state;
+    const tracks = state.library.filter(t => t.album === albumName && t.artist === artistName);
+    if (tracks.length === 0) return;
+
+    // 1. Populate Header
+    document.getElementById('album-detail-title').textContent = albumName;
+    document.getElementById('album-detail-artist').textContent = artistName;
+    document.getElementById('album-detail-cover').src = Resolver.getCoverUrl(tracks[0]);
+
+    // 2. Render Tracks
+    renderSongList(tracks, 'album-tracks');
+
+    // 3. Switch View
+    UI.showView('album-detail');
+    
+    // Store current view context for periodic sync
+    window._currentAlbum = { name: albumName, artist: artistName };
+};
 
 async function init() {
     console.log("App Ready");
@@ -31,11 +63,51 @@ async function init() {
     // 3. Load Library Data
     await store.syncLibrary();
     
-    // 3. Subscribe to state changes for re-rendering
+    // 3. Subscribe to state changes for re-rendering (Optimized)
+    let lastLibraryJson = JSON.stringify(store.state.library);
+    let lastFavsJson = JSON.stringify(store.state.favorites);
+    let lastTrackId = store.state.currentTrack ? store.state.currentTrack.id : null;
+
     store.subscribe((state) => {
-        renderHomeSongs(state.library);
-        renderAlbumGrid(state.library);
-        renderFavourites(state);
+        const currentLibJson = JSON.stringify(state.library);
+        const currentFavsJson = JSON.stringify(state.favorites);
+        const currentTrackId = state.currentTrack ? state.currentTrack.id : null;
+
+        // Re-render if library, favourites, OR the active track changes
+        if (currentLibJson !== lastLibraryJson || 
+            currentFavsJson !== lastFavsJson || 
+            currentTrackId !== lastTrackId) {
+            
+            console.log("Data changed, refreshing all views...");
+            renderHomeSongs(state.library);
+            renderAlbumGrid(state.library);
+            renderFavourites(state);
+            
+            // Sync current album detail if open
+            if (window._currentAlbum) {
+                const tracks = state.library.filter(t => 
+                    t.album === window._currentAlbum.name && 
+                    t.artist === window._currentAlbum.artist
+                );
+                renderSongList(tracks, 'album-tracks');
+            }
+            
+            // Persist Search results if user is currently searching
+            const searchInput = document.getElementById('search-input');
+            if (searchInput && searchInput.value.trim()) {
+                const query = searchInput.value.toLowerCase();
+                const results = state.library.filter(t => 
+                    t.title.toLowerCase().includes(query) || 
+                    t.artist.toLowerCase().includes(query) || 
+                    t.album.toLowerCase().includes(query)
+                );
+                renderSongList(results, 'search-results');
+            }
+            
+            lastLibraryJson = currentLibJson;
+            lastFavsJson = currentFavsJson;
+            lastTrackId = currentTrackId;
+        }
     });
 
     // 4. Initial Render
@@ -72,33 +144,34 @@ function renderSongList(tracks, containerId) {
     }
 
     const favIds = store.state.favorites || [];
+    const activeId = store.state.currentTrack ? store.state.currentTrack.id : null;
 
     const html = tracks.map(t => {
         const isFav = favIds.includes(t.id);
+        const isActive = t.id === activeId;
+        
         return `
             <div class="relative overflow-hidden rounded-xl bg-gray-800/50 group">
-                <!-- Swipe Backgrounds -->
+                <!-- Swipe Backgrounds (Hidden behind row) -->
                 <div class="absolute inset-0 flex items-center justify-between px-6">
                     <div class="text-yellow-500 font-bold text-xs">FAVOURITE</div>
                     <div class="text-red-500 font-bold text-xs">DELETE</div>
                 </div>
                 
-                            <!-- Main Song Row -->
-                
-                            <div class="song-row flex items-center p-3 bg-gray-900 hover:bg-gray-800 cursor-pointer transition-colors relative z-10 border border-transparent touch-pan-y" data-id="${t.id}" onclick="playTrack('${t.id}')">
-                
-                
+                <!-- Main Song Row -->
+                <div class="song-row flex items-center p-3 ${isActive ? 'bg-black' : 'bg-gray-900'} cursor-pointer relative z-10 border border-transparent touch-pan-y" data-id="${t.id}" onclick="playTrack('${t.id}')">
                     <div class="relative w-12 h-12 flex-shrink-0">
                         <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-lg shadow-md" alt="Cover">
-                        <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                            <i class="fas fa-play text-white text-xs"></i>
+                        <!-- Active Indicator Overlay (No more play icon on hover) -->
+                        <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg ${isActive ? 'opacity-100' : 'opacity-0'} transition-opacity">
+                            ${isActive ? '<i class="fas fa-volume-up text-white text-xs"></i>' : ''}
                         </div>
                         <!-- Favourite Indicator -->
                         ${isFav ? `<div class="absolute -top-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full border-2 border-gray-900 shadow-sm"></div>` : ''}
                     </div>
                     <div class="ml-4 flex-1 truncate">
-                        <div class="song-title font-semibold text-sm truncate group-hover:text-blue-400 transition-colors">${t.title}</div>
-                        <div class="text-xs text-gray-400 truncate uppercase tracking-tighter mt-0.5">${t.artist} • ${t.album}</div>
+                        <div class="song-title font-semibold text-sm truncate ${isActive ? 'text-blue-400' : ''} transition-colors">${esc(t.title)}</div>
+                        <div class="text-xs text-gray-400 truncate uppercase tracking-tighter mt-0.5">${esc(t.artist)} • ${esc(t.album)}</div>
                     </div>
                     <div class="text-xs text-gray-500 font-mono ml-4 tabular-nums">${formatTime(t.duration)}</div>
                 </div>
@@ -147,14 +220,9 @@ function renderAlbumGrid(tracks) {
     });
 
     const albumHtml = Object.values(albums).sort((a, b) => a.album.localeCompare(b.album)).map(t => `
-        <div class="album-card group cursor-pointer" onclick="playAlbum('${t.album}')">
+        <div class="album-card group cursor-pointer" onclick="showAlbumDetail('${t.album.replace(/'/g, "\\'")}', '${t.artist.replace(/'/g, "\\'")}')">
             <div class="relative overflow-hidden rounded-xl shadow-lg transition-transform duration-300 group-hover:scale-105">
                 <img src="${Resolver.getCoverUrl(t)}" class="w-full aspect-square object-cover bg-gray-800" alt="${t.album}">
-                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 flex items-center justify-center transition-all duration-300">
-                    <div class="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center opacity-0 transform translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 shadow-xl">
-                        <i class="fas fa-play text-white ml-1"></i>
-                    </div>
-                </div>
             </div>
             <div class="mt-3">
                 <div class="font-semibold text-sm truncate">${t.album}</div>
@@ -177,6 +245,9 @@ window.playTrack = (trackId) => {
     console.log("Playing track ID:", trackId);
     const track = store.state.library.find(t => t.id === trackId);
     if (track) {
+        // Immediate State Update (Triggers reactive highlight via bg-black)
+        store.update({ currentTrack: track });
+        // Then start audio engine
         audioEngine.playTrack(track);
     }
 };

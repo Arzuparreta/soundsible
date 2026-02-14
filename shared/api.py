@@ -32,6 +32,57 @@ import socket
 import requests
 import re
 import time
+import ipaddress
+import tempfile
+
+def is_trusted_network(remote_addr):
+    """
+    Automatically trusts Local, LAN, and Tailscale networks.
+    Provides 'Zero-Friction' access for friends and family on the network.
+    """
+    try:
+        ip = ipaddress.ip_address(remote_addr)
+        # Trust if it's Private (LAN/WiFi) or Loopback (Localhost)
+        # 100.x.x.x (Tailscale) is explicitly caught by is_private in many versions, 
+        # but we check it specifically for reliability.
+        is_tailscale = remote_addr.startswith('100.')
+        return ip.is_private or ip.is_loopback or is_tailscale
+    except:
+        return False
+
+def is_safe_path(file_path, is_trusted=False):
+    """
+    Ensures the Station only serves files from approved music or cache folders.
+    If is_trusted is True (LAN/Tailscale), all paths are allowed for maximum flexibility.
+    """
+    if is_trusted:
+        return True
+        
+    try:
+        # Lexical normalization for public-facing security check
+        target = os.path.normpath(os.path.abspath(os.path.expanduser(file_path)))
+        
+        # Approved Roots for public access
+        from odst_tool.config import DEFAULT_OUTPUT_DIR
+        allowed_roots = [
+            os.path.normpath(os.path.abspath(os.path.expanduser(DEFAULT_CONFIG_DIR))),
+            os.path.normpath(os.path.abspath(os.path.expanduser(DEFAULT_CACHE_DIR))),
+            os.path.normpath(os.path.abspath(os.path.expanduser(str(DEFAULT_OUTPUT_DIR)))),
+            os.path.normpath(os.path.abspath(tempfile.gettempdir())),
+            os.path.normpath(os.path.abspath(os.path.expanduser("~")))
+        ]
+        
+        for root in allowed_roots:
+            try:
+                # Use commonpath to verify target is within root
+                if os.path.commonpath([target, root]) == root:
+                    return True
+            except: continue
+                
+    except Exception as e:
+        print(f"SECURITY: Error validating path {file_path}: {e}")
+        
+    return False
 
 def resolve_spotify_url(url):
     """
@@ -458,6 +509,10 @@ def sync_library():
 
 @app.route('/api/library/tracks/<track_id>', methods=['DELETE'])
 def delete_track_from_library(track_id):
+    # SECURITY: Only allow deletions from trusted networks
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Deletions restricted to Home Network / Tailscale"}), 403
+
     lib, _, _ = get_core()
     
     # Resolve track
@@ -555,6 +610,12 @@ def stream_local_track(track_id):
         print(f"DEBUG: [Stream] ❌ File NOT found at: {path}")
         return jsonify({"error": f"File not found: {path}"}), 404
         
+    # SECURITY: Path Jail Check with Smart Trust
+    is_trusted = is_trusted_network(request.remote_addr)
+    if not is_safe_path(path, is_trusted=is_trusted):
+        print(f"SECURITY: [Stream] ❌ Blocked unauthorized path access: {path}")
+        return jsonify({"error": "Unauthorized path access"}), 403
+
     print(f"DEBUG: [Stream] ✅ Serving: {path}")
     
     ext = os.path.splitext(path)[1].lower().replace('.', '')
@@ -595,6 +656,12 @@ def get_track_cover(track_id):
     print(f"DEBUG: [Cover] Resolved path: {path}")
     
     if path and os.path.exists(path):
+        # SECURITY: Path Jail Check with Smart Trust
+        is_trusted = is_trusted_network(request.remote_addr)
+        if not is_safe_path(path, is_trusted=is_trusted):
+            print(f"SECURITY: [Cover] ❌ Blocked unauthorized path access: {path}")
+            return jsonify({"error": "Unauthorized path"}), 403
+
         print(f"DEBUG: [Cover] ✅ Serving file: {path}")
         return send_file(path, mimetype='image/jpeg')
     
@@ -752,8 +819,10 @@ def start_download_legacy():
 
 @app.route('/api/downloader/config', methods=['GET'])
 def get_downloader_config():
+    # SECURITY: Only show secrets to trusted local/Tailscale networks
+    is_trusted = is_trusted_network(request.remote_addr)
+    
     # Read from environment / .env
-    # For a real implementation, we should read the .env file directly to be sure
     from dotenv import dotenv_values
     env_path = Path('odst_tool/.env')
     env_vars = {}
@@ -776,10 +845,20 @@ def get_downloader_config():
         "r2_secret_key": mask(env_vars.get("R2_SECRET_ACCESS_KEY", os.getenv("R2_SECRET_ACCESS_KEY", ""))),
         "r2_bucket": env_vars.get("R2_BUCKET_NAME", os.getenv("R2_BUCKET_NAME", ""))
     }
+    
+    # If not on a trusted network, strip ALL sensitive info (even masked ones)
+    if not is_trusted:
+        sensitive_keys = ["spotify_client_id", "spotify_client_secret", "r2_account_id", "r2_access_key", "r2_secret_key", "r2_bucket"]
+        for key in sensitive_keys: config[key] = "HIDDEN (Connect to Tailscale/LAN to view)"
+
     return jsonify(config)
 
 @app.route('/api/downloader/config', methods=['POST'])
 def update_downloader_config():
+    # SECURITY: Only allow changes from trusted local/Tailscale networks
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
+
     data = request.json
     env_path = Path('odst_tool/.env')
     
