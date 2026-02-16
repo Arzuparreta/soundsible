@@ -105,7 +105,7 @@ export class UI {
         this.isIslandActive = true;
         this.vibrate(30);
         
-        this.island.style.width = '320px';
+        this.island.style.width = '380px';
         
         const prev = document.getElementById('omni-prev');
         const next = document.getElementById('omni-next');
