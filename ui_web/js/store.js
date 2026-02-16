@@ -19,9 +19,22 @@ class Store {
             repeatMode: 'off', // off, all, one
             shuffleEnabled: false,
             currentTrack: null,
-            isPlaying: false
+            isPlaying: false,
+            theme: this.load('theme', 'dark')
         };
         this.subscribers = [];
+        this.applyTheme(this.state.theme);
+    }
+
+    applyTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        this.save('theme', theme);
+    }
+
+    toggleTheme() {
+        const newTheme = this.state.theme === 'dark' ? 'light' : 'dark';
+        this.update({ theme: newTheme });
+        this.applyTheme(newTheme);
     }
 
     load(key, fallback) {

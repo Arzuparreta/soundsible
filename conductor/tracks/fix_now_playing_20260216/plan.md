@@ -1,24 +1,48 @@
-# Implementation Plan: WebUI Now Playing & Transport Controls (RESUMED)
+# Implementation Plan: High-End Dual-Mode Theme (JetBrains & TypeScript)
 
-> **Note:** This track was resumed after a failed deployment and subsequent regression caused by another agent's interference. We have re-implemented and verified all changes with robust input handling and premium glassmorphic design.
+Re-implement the high-end UI with dual-mode support, specific color palettes (JetBrains Orange / TypeScript Blue), and premium glassmorphic features as discussed in the planning phase.
 
-## Phase 1: Recovery & Core Fixes
-- [x] Task: Audit current state of `index.html`, `js/app.js`, `js/ui.js`, and `css/style.css` to identify regressions. c6983ec
-- [x] Task: Restore global `audioEngine` and `store` availability to ensure UI event handlers can reach core logic. c6983ec
-- [x] Task: Refactor `showNowPlaying` and `hideNowPlaying` to use CSS class-based orchestration (`active` class) instead of direct `style` manipulation. c6983ec
-- [x] Task: Attach surgical click listener to `#player-info` in `index.html` to reliably trigger the view. c6983ec
-- [x] Task: Fix "no songs" issue - verify `audioEngine` and `store` initialization. c6983ec
-- [x] Task: Fix "unresponsive UI" - check for `pointer-events: none` or blocked event listeners. c6983ec
-- [x] Task: Conductor - User Manual Verification 'Recovery & Core Fixes' (Protocol in workflow.md)
+## Phase 1: Theme Engine & Palette Initialization
+**Objective**: Establish the CSS variable system for Light and Dark modes.
 
-## Phase 2: Transport Control Synchronization
-- [x] Task: Implement `updateTransportControls` logic to surgically sync icons across all player instances. c6983ec
-- [x] Task: Link Shuffle and Repeat buttons in Now Playing to `store` methods. c6983ec
-- [x] Task: Ensure mini-player controls use the same shared logic as full view. c6983ec
-- [x] Task: Conductor - User Manual Verification 'Transport Control Synchronization' (Protocol in workflow.md)
+- **Dark Mode Palette**:
+    - Background: `#0d0d0f` (Deep Charcoal)
+    - Surface: `#1e1f22` (IDE Gray)
+    - Selection: `#2e436e` (IDE Selection Blue)
+    - Accent: `#f97a12` (JetBrains Orange)
+    - Secondary: `#3178c6` (TypeScript Blue)
+    - Text: `#dfe1e5` (Light Gray)
+- **Light Mode Palette**:
+    - Background: `#f5f5f5` (Paper White)
+    - Surface: `#ffffff` (Pure White)
+    - Selection: `#deeaff` (Soft Blue)
+    - Accent: `#3178c6` (TypeScript Blue)
+    - Secondary: `#f97a12` (JetBrains Orange)
+    - Text: `#1c1c1c` (Dark Gray)
 
-## Phase 3: Animation & Gesture Polish
-- [x] Task: Refine "Slime" entrance transition in CSS with `visibility` and `pointer-events` safety. c6983ec
-- [x] Task: Verify drag-to-close gesture does not trigger long-press menu on dismissal. c6983ec
-- [x] Task: Implement Air-Gap cooldown (100ms) to swallow ghost clicks after view transitions. c6983ec
-- [x] Task: Conductor - User Manual Verification 'Animation & Gesture Polish' (Protocol in workflow.md)
+- **Tasks**:
+    - [ ] Define `:root` CSS variables for both modes.
+    - [ ] Implement `[data-theme="light"]` overrides.
+    - [ ] Add theme persistence to `store.js` and a toggle in `Settings`.
+
+## Phase 2: Premium UI Components (JetBrains Style)
+**Objective**: Refactor all views to use the professional, IDE-inspired aesthetic.
+
+- **Tasks**:
+    - [ ] **Song Rows**: Use deep charcoal backgrounds, ultra-thin borders, and clean typography.
+    - [ ] **Active Track**: Highlight with professional selection colors and an Orange pulsing icon.
+    - [ ] **Album Grid**: Implement glossy, high-depth cards with smooth scale animations.
+    - [ ] **Glassmorphism**: Apply consistent `backdrop-filter` and `glass-view` classes across all floating panels.
+
+## Phase 3: High-End Interaction & Animations
+**Objective**: Ensure the UI feels tactile and "Cyber-Premium."
+
+- **Tasks**:
+    - [ ] **"Slime" Entrance**: Refine the Now Playing spring physics (`cubic-bezier(0.19, 1, 0.22, 1)`).
+    - [ ] **Haptics**: Add `vibrate()` pulses to all primary interactions (play, tab switch, swipe).
+    - [ ] **Swipe Actions**: Ensure horizontal swipe gestures for Favourite/Queue are silky smooth.
+
+## Phase 4: Final Polishing & Mobile Optimization
+- [ ] Verify "Smart Next" logic within the new theme.
+- [ ] Ensure perfect "safe-area" handling for iPhone and modern Android devices.
+- [ ] Perform a full UI audit to remove any generic "blue" defaults.

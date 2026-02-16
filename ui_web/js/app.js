@@ -75,13 +75,13 @@ function syncUIState(state) {
         const id = row.getAttribute('data-id');
         const isActive = id === activeId;
 
-        // Surgical update: Active highlight classes (JetBrains Style)
+        // Surgical update: Active highlight classes (Theme Aware)
         if (isActive) {
-            row.classList.remove('bg-[#1e1f22]', 'border-white/5');
-            row.classList.add('bg-[#2e436e]/40', 'border-white/10');
+            row.classList.remove('bg-[var(--bg-card)]', 'border-transparent');
+            row.classList.add('bg-[var(--bg-selection)]', 'border-[var(--glass-border)]');
         } else {
-            row.classList.remove('bg-[#2e436e]/40', 'border-white/10');
-            row.classList.add('bg-[#1e1f22]', 'border-white/5');
+            row.classList.remove('bg-[var(--bg-selection)]', 'border-[var(--glass-border)]');
+            row.classList.add('bg-[var(--bg-card)]', 'border-transparent');
         }
 
         // Surgical update: Active indicator (Volume icon)
@@ -92,7 +92,7 @@ function syncUIState(state) {
         const title = row.querySelector('.song-title');
         if (title) {
             title.classList.toggle('text-white', isActive);
-            title.classList.toggle('text-[#dfe1e5]', !isActive);
+            title.classList.toggle('text-[var(--text-main)]', !isActive);
         }
     });
 }
@@ -279,28 +279,28 @@ function renderSongList(tracks, containerId) {
         const isActive = t.id === activeId;
         
         return `
-            <div class="relative overflow-hidden rounded-2xl mb-2 group bg-[#1e1f22]">
-                <!-- Swipe Backgrounds (Subtle hints) -->
-                <div class="absolute inset-0 flex items-center justify-between px-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div class="text-[#f97a12] font-black text-[9px] uppercase tracking-[0.2em]">Add to Favs</div>
-                    <div class="text-[#3178c6] font-black text-[9px] uppercase tracking-[0.2em]">Add to Queue</div>
+            <div class="relative overflow-hidden rounded-2xl mb-2 group bg-[var(--bg-card)]">
+                <!-- Swipe Hints (Subtle) -->
+                <div class="absolute inset-0 flex items-center justify-between px-6 opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--accent)]/10">
+                    <div class="text-[var(--accent)] font-black text-[9px] uppercase tracking-[0.2em]">Favourite</div>
+                    <div class="text-[var(--secondary)] font-black text-[9px] uppercase tracking-[0.2em]">Queue</div>
                 </div>
 
                 <!-- Main Row -->
-                <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-[#2e436e]/40 border-white/10' : 'bg-[#1e1f22] border-white/5'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}" onclick="playTrack('${t.id}')">
+                <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] border-transparent'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}" onclick="playTrack('${t.id}')">
                     <div class="relative w-12 h-12 flex-shrink-0">
                         <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-xl shadow-lg border border-white/5" alt="Cover">
                         <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl backdrop-blur-[2px] ${isActive ? '' : 'hidden'}">
-                            <i class="fas fa-volume-up text-[#f97a12] text-xs animate-pulse"></i>
+                            <i class="fas fa-volume-up text-[var(--accent)] text-xs animate-pulse"></i>
                         </div>
                     </div>
                     <div class="ml-4 flex-1 truncate">
-                        <div class="song-title font-bold text-sm truncate ${isActive ? 'text-white' : 'text-[#dfe1e5]'}">${esc(t.title)}</div>
-                        <div class="text-[10px] text-[#808080] font-bold truncate uppercase tracking-widest mt-0.5">${esc(t.artist)}</div>
+                        <div class="song-title font-bold text-sm truncate ${isActive ? 'text-white' : 'text-[var(--text-main)]'}">${esc(t.title)}</div>
+                        <div class="text-[10px] text-[var(--text-dim)] font-bold truncate uppercase tracking-widest mt-0.5">${esc(t.artist)}</div>
                     </div>
                     <div class="flex items-center space-x-3 ml-4">
-                        <div class="text-[9px] font-black font-mono text-[#4b4b4b] tracking-tighter">${formatTime(t.duration)}</div>
-                        <button onclick="event.stopPropagation(); UI.showActionMenu('${t.id}')" class="w-10 h-10 flex items-center justify-center text-[#808080] hover:text-white transition-colors rounded-full hover:bg-white/5">
+                        <div class="text-[9px] font-black font-mono text-[var(--text-dim)] opacity-50 tracking-tighter">${formatTime(t.duration)}</div>
+                        <button onclick="event.stopPropagation(); UI.showActionMenu('${t.id}')" class="w-10 h-10 flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text-main)] transition-colors rounded-full hover:bg-white/5">
                             <i class="fas fa-ellipsis-v text-xs"></i>
                         </button>
                     </div>
@@ -363,13 +363,13 @@ function renderAlbumGrid(tracks) {
 
     const albumHtml = Object.values(albums).sort((a, b) => a.album.localeCompare(b.album)).map(t => `
         <div class="album-card group cursor-pointer" onclick="showAlbumDetail('${t.album.replace(/'/g, "\\'")}', '${t.artist.replace(/'/g, "\\'")}')">
-            <div class="relative overflow-hidden rounded-[32px] shadow-2xl transition-all duration-500 group-hover:scale-105 active:scale-95 border border-white/5 bg-white/5">
+            <div class="relative overflow-hidden rounded-[32px] shadow-2xl transition-all duration-500 group-hover:scale-105 active:scale-95 border border-white/5 bg-[var(--bg-card)]">
                 <img src="${Resolver.getCoverUrl(t)}" class="w-full aspect-square object-cover bg-gray-900" alt="${t.album}">
                 <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             </div>
             <div class="mt-4 px-2">
-                <div class="font-bold text-sm truncate text-white/90 group-hover:text-blue-400 transition-colors">${t.album}</div>
-                <div class="text-[10px] text-gray-500 font-bold truncate uppercase tracking-widest mt-0.5">${t.artist}</div>
+                <div class="font-bold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${t.album}</div>
+                <div class="text-[10px] text-[var(--text-dim)] font-bold truncate uppercase tracking-widest mt-0.5">${t.artist}</div>
             </div>
         </div>
     `).join('');

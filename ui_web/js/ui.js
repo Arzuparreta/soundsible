@@ -36,6 +36,8 @@ export class UI {
         // Navigation
         bind('mini-next-btn', () => audioEngine.next());
         bind('mini-prev-btn', () => audioEngine.prev());
+        bind('np-next-btn', () => audioEngine.next());
+        bind('np-prev-btn', () => audioEngine.prev());
         
         // Modes
         bind('mini-shuffle-btn', () => { store.toggleShuffle(); this.showToast('Queue Shuffled'); });
@@ -85,6 +87,14 @@ export class UI {
         }
 
         this.updateStatus(state);
+        this.updateThemeUI(state.theme);
+    }
+
+    static updateThemeUI(theme) {
+        const indicator = document.getElementById('theme-indicator');
+        if (indicator) {
+            indicator.style.transform = theme === 'dark' ? 'translateX(24px)' : 'translateX(0px)';
+        }
     }
 
     static updateStatus(state) {
@@ -197,8 +207,12 @@ export class UI {
         const views = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
         const idx = views.indexOf(viewId);
         if (idx !== -1 && this.navButtons[idx]) {
-            this.navButtons.forEach(b => b.classList.replace('text-blue-500', 'text-gray-500'));
-            this.navButtons[idx].classList.replace('text-gray-500', 'text-blue-500');
+            this.navButtons.forEach(b => {
+                b.classList.remove('text-[var(--accent)]');
+                b.classList.add('text-[var(--text-dim)]');
+            });
+            this.navButtons[idx].classList.add('text-[var(--accent)]');
+            this.navButtons[idx].classList.remove('text-[var(--text-dim)]');
         }
     }
 
@@ -370,12 +384,19 @@ export class UI {
     static updateTransportControls(isPlaying) {
         const mini = document.querySelector('#mini-play-btn i');
         const np = document.querySelector('#np-play-btn i');
-        if (mini) mini.className = isPlaying ? 'fas fa-pause' : 'fas fa-play';
-        if (np) np.className = isPlaying ? 'fas fa-pause' : 'fas fa-play';
+        if (mini) {
+            mini.className = isPlaying ? 'fas fa-pause' : 'fas fa-play ml-0.5';
+        }
+        if (np) {
+            np.className = isPlaying ? 'fas fa-pause' : 'fas fa-play ml-1';
+        }
 
         const mode = store.state.repeatMode;
         const btns = [document.getElementById('np-repeat-btn'), document.getElementById('mini-repeat-btn')].filter(b => b);
-        btns.forEach(b => b.classList.toggle('text-blue-500', mode !== 'off'));
+        btns.forEach(b => {
+            b.classList.toggle('text-[var(--accent)]', mode !== 'off');
+            b.classList.toggle('text-[var(--text-dim)]', mode === 'off');
+        });
         
         const indMini = document.getElementById('mini-repeat-one-indicator');
         const indNP = document.getElementById('np-repeat-one-indicator');

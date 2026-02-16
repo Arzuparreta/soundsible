@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#000000">
+    <meta name="theme-color" content="#0d0d0f">
     <title>Soundsible Web Player</title>
     <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -15,12 +15,31 @@
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         
         :root {
-            --jetbrains-orange: #f97a12;
-            --typescript-blue: #3178c6;
+            /* Dark Mode (Default) - JetBrains Theme */
             --bg-deep: #0d0d0f;
-            --bg-surface: rgba(30, 31, 34, 0.8);
-            --bg-selection: rgba(46, 67, 110, 0.4);
-            --glass-border: rgba(255, 255, 255, 0.06);
+            --bg-surface: rgba(30, 31, 34, 0.85);
+            --bg-card: #1e1f22;
+            --bg-selection: #2e436e;
+            --accent: #f97a12; /* JetBrains Orange */
+            --secondary: #3178c6; /* TypeScript Blue */
+            --text-main: #dfe1e5;
+            --text-dim: #808080;
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --shadow: rgba(0, 0, 0, 0.5);
+        }
+
+        [data-theme="light"] {
+            /* Light Mode - Paper Theme */
+            --bg-deep: #f5f5f5;
+            --bg-surface: rgba(255, 255, 255, 0.85);
+            --bg-card: #ffffff;
+            --bg-selection: #deeaff;
+            --accent: #3178c6; /* TypeScript Blue */
+            --secondary: #f97a12; /* JetBrains Orange */
+            --text-main: #1c1c1c;
+            --text-dim: #606060;
+            --glass-border: rgba(0, 0, 0, 0.08);
+            --shadow: rgba(0, 0, 0, 0.1);
         }
 
         body { 
@@ -28,9 +47,10 @@
             touch-action: pan-y;
             overscroll-behavior-y: contain;
             background-color: var(--bg-deep);
-            color: #dfe1e5;
+            color: var(--text-main);
             letter-spacing: -0.01em;
             overflow: hidden;
+            transition: background-color 0.5s ease, color 0.5s ease;
         }
 
         .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
@@ -51,14 +71,14 @@
             border: 1px solid var(--glass-border);
         }
 
-        /* Now Playing Entrance */
+        /* Now Playing Entrance (Premium Slime Effect) */
         #now-playing-view {
             transition: transform 0.8s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.5s ease, visibility 0.5s;
             will-change: transform, opacity;
             opacity: 0;
             visibility: hidden;
             transform: translateY(100%) scale(0.98);
-            background: rgba(13, 13, 15, 0.9);
+            background: var(--bg-deep);
             backdrop-filter: blur(60px);
             -webkit-backdrop-filter: blur(60px);
         }
@@ -69,11 +89,22 @@
             transform: translateY(0) scale(1);
         }
 
-        /* Action Menu */
+        /* Action Menu Entrance */
+        #action-menu {
+            visibility: hidden;
+            transition: visibility 0.4s;
+        }
+        #action-menu.active {
+            visibility: visible;
+        }
         #action-menu-sheet {
-            background: #1e1f22;
+            background: var(--bg-card);
             border-top: 1px solid var(--glass-border);
             transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+            will-change: transform;
+        }
+        #action-menu.active #action-menu-sheet {
+            transform: translateY(0);
         }
 
         /* Custom Scrollbar */
@@ -88,36 +119,36 @@
         }
     </style>
 </head>
-<body class="bg-black text-white selection:bg-blue-500 selection:text-white">
+<body class="bg-black text-white selection:bg-[var(--accent)] selection:text-white">
     <!-- Initial Loading Overlay -->
     <div id="initial-loader" class="fixed inset-0 z-[1000] bg-black flex flex-col items-center justify-center transition-opacity duration-700">
         <div class="relative w-24 h-24 mb-8">
-            <div class="absolute inset-0 border-4 border-blue-500/10 rounded-full"></div>
-            <div class="absolute inset-0 border-4 border-t-blue-500 rounded-full animate-spin"></div>
+            <div class="absolute inset-0 border-4 border-[var(--accent)]/10 rounded-full"></div>
+            <div class="absolute inset-0 border-4 border-t-[var(--accent)] rounded-full animate-spin"></div>
             <img src="assets/icons/icon-512.png" class="absolute inset-4 w-16 h-16 rounded-2xl opacity-40 grayscale" alt="Logo">
         </div>
-        <div class="text-[10px] font-black uppercase tracking-[0.4em] text-blue-500 animate-pulse">Initializing Station</div>
+        <div class="text-[10px] font-black uppercase tracking-[0.4em] text-[var(--accent)] animate-pulse">Initializing Station</div>
     </div>
 
     <div id="app" class="h-screen flex flex-col relative overflow-hidden bg-black glass-view">
         <!-- Mesh Background -->
         <div class="fixed inset-0 -z-10 opacity-20 pointer-events-none">
-            <div class="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-600/30 blur-[120px] rounded-full"></div>
-            <div class="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-purple-600/20 blur-[120px] rounded-full"></div>
+            <div class="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-[var(--accent)]/20 blur-[120px] rounded-full"></div>
+            <div class="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-[var(--secondary)]/10 blur-[120px] rounded-full"></div>
         </div>
 
         <!-- Floating Queue Button -->
         <div id="queue-container" class="fixed top-6 right-6 z-[90] flex flex-col items-end pointer-events-none">
-            <button id="queue-fab" onclick="UI.toggleQueue()" class="w-12 h-12 bg-white text-black rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-black">
+            <button id="queue-fab" onclick="UI.toggleQueue()" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-black">
                 <i class="fas fa-list-ul"></i>
-                <div id="queue-badge" class="absolute -top-1 -right-1 bg-blue-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-black">0</div>
+                <div id="queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-black">0</div>
             </button>
 
             <!-- Floating Queue Window -->
             <div id="queue-popover" class="mt-4 w-72 glass-view rounded-3xl border border-white/10 shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300">
                 <div class="p-5">
                     <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-[10px] font-black uppercase tracking-widest text-gray-400">Next Up</h3>
+                        <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Next Up</h3>
                         <button onclick="store.clearQueue()" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-1 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
                     </div>
                     <div id="floating-queue-tracks" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
@@ -136,7 +167,7 @@
                 <div id="all-albums" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6"></div>
             </div>
             <div id="view-album-detail" class="view hidden">
-                <button onclick="UI.showView('albums')" class="flex items-center text-blue-400 font-bold mb-8 group">
+                <button onclick="UI.showView('albums')" class="flex items-center text-[var(--secondary)] font-bold mb-8 group">
                     <i class="fas fa-chevron-left mr-2 group-active:-translate-x-1 transition-transform"></i>
                     <span>Back</span>
                 </button>
@@ -144,14 +175,14 @@
                     <img id="album-detail-cover" src="assets/icons/icon-512.png" class="w-64 h-64 shadow-2xl rounded-3xl object-cover bg-gray-900 border border-white/5" alt="Cover">
                     <div class="text-center md:text-left">
                         <h2 id="album-detail-title" class="text-4xl md:text-6xl font-black mb-2 tracking-tighter leading-none">Album Title</h2>
-                        <div id="album-detail-artist" class="text-xl text-gray-400 font-bold uppercase tracking-wider">Artist</div>
+                        <div id="album-detail-artist" class="text-xl text-[var(--text-dim)] font-bold uppercase tracking-wider">Artist</div>
                     </div>
                 </div>
                 <div id="album-tracks" class="space-y-2"></div>
             </div>
             <div id="view-search" class="view hidden">
                 <h1 class="text-3xl font-black mb-8 tracking-tight">Search</h1>
-                <input type="text" id="search-input" placeholder="Search library..." class="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 focus:outline-none focus:border-blue-500 mb-8 transition-colors">
+                <input type="text" id="search-input" placeholder="Search library..." class="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 focus:outline-none focus:border-[var(--accent)] mb-8 transition-colors">
                 <div id="search-results" class="space-y-2"></div>
             </div>
             <div id="view-favourites" class="view hidden">
@@ -162,8 +193,8 @@
                 <h1 class="text-3xl font-black mb-8 tracking-tight">Station</h1>
                 <div class="space-y-6">
                     <div class="glass-view rounded-3xl p-6 border border-white/10">
-                        <textarea id="dl-input" rows="3" placeholder="Spotify/YouTube URLs..." class="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500 text-sm font-mono mb-4"></textarea>
-                        <button id="dl-add-btn" class="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all active:scale-95">Add to Queue</button>
+                        <textarea id="dl-input" rows="3" placeholder="Spotify/YouTube URLs..." class="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-mono mb-4"></textarea>
+                        <button id="dl-add-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all active:scale-95">Add to Queue</button>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="glass-view rounded-3xl p-6 border border-white/10 flex flex-col h-[400px]">
@@ -185,10 +216,20 @@
             </div>
             <div id="view-settings" class="view hidden">
                 <h1 class="text-3xl font-black mb-8 tracking-tight">Settings</h1>
-                <div class="glass-view rounded-3xl p-8 border border-white/10">
+                <div class="glass-view rounded-3xl p-8 border border-white/10 mb-6">
+                    <div class="flex justify-between items-center mb-8">
+                        <div>
+                            <h2 class="text-xl font-bold">Visual Theme</h2>
+                            <p class="text-xs text-[var(--text-dim)]">Switch between Light and Dark modes</p>
+                        </div>
+                        <button onclick="store.toggleTheme()" class="w-14 h-8 bg-[var(--bg-selection)] rounded-full relative p-1 transition-colors">
+                            <div class="w-6 h-6 bg-[var(--accent)] rounded-full shadow-lg transform transition-transform duration-300 translate-x-0" id="theme-indicator"></div>
+                        </button>
+                    </div>
+
                     <h2 class="text-xl font-bold mb-4">Link Library</h2>
-                    <textarea id="sync-token-input" rows="4" class="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-blue-400 font-mono text-xs focus:outline-none focus:border-blue-500 mb-6" placeholder="Paste token..."></textarea>
-                    <button id="import-token-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl transition-all mb-8">Import Token</button>
+                    <textarea id="sync-token-input" rows="4" class="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-[var(--secondary)] font-mono text-xs focus:outline-none focus:border-[var(--accent)] mb-6" placeholder="Paste token..."></textarea>
+                    <button id="import-token-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 text-white font-black py-4 rounded-2xl transition-all mb-8">Import Token</button>
                     
                     <div class="space-y-4 pt-8 border-t border-white/5">
                         <div class="flex justify-between text-sm">
@@ -203,9 +244,9 @@
                         </div>
                         <div class="flex justify-between text-sm">
                             <span class="text-gray-400">Host</span>
-                            <span id="active-host-display" class="font-mono text-xs text-blue-400">localhost</span>
+                            <span id="active-host-display" class="font-mono text-xs text-[var(--secondary)]">localhost</span>
                         </div>
-                        <button onclick="window.showConnectionRefiner()" class="w-full text-xs text-blue-500 font-bold hover:underline py-2">Manual Connection Refiner</button>
+                        <button onclick="window.showConnectionRefiner()" class="w-full text-xs text-[var(--secondary)] font-bold hover:underline py-2">Manual Connection Refiner</button>
                     </div>
                 </div>
             </div>
@@ -216,49 +257,49 @@
             <div class="glass-view rounded-3xl p-8 max-w-sm w-full border border-white/10 shadow-2xl">
                 <h2 class="text-2xl font-black text-center mb-2">Station Offline</h2>
                 <p class="text-sm text-gray-400 text-center mb-8">Enter the IP address of your Soundsible Station.</p>
-                <input type="text" id="manual-ip-input" placeholder="e.g. 192.168.1.138" class="w-full bg-black border border-white/10 rounded-2xl px-4 py-4 text-center text-blue-400 font-mono mb-4">
-                <button id="reconnect-btn" class="w-full bg-blue-600 hover:bg-blue-500 font-black py-4 rounded-2xl mb-4">Connect</button>
+                <input type="text" id="manual-ip-input" placeholder="e.g. 192.168.1.138" class="w-full bg-black border border-white/10 rounded-2xl px-4 py-4 text-center text-[var(--secondary)] font-mono mb-4">
+                <button id="reconnect-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 font-black py-4 rounded-2xl mb-4">Connect</button>
                 <button onclick="window.hideConnectionRefiner()" class="w-full text-xs text-gray-500 font-bold">Cancel</button>
             </div>
         </div>
 
         <!-- Player Bar -->
-        <div id="player-bar" class="fixed bottom-[72px] md:bottom-0 left-0 right-0 bg-black/60 backdrop-blur-3xl border-t border-white/5 z-40 transition-all duration-500 transform translate-y-full hidden">
+        <div id="player-bar" class="fixed bottom-[72px] md:bottom-0 left-0 right-0 glass-view border-t border-white/5 z-40 transition-all duration-500 transform translate-y-full hidden">
             <div class="px-4 py-3 flex items-center justify-between max-w-5xl mx-auto">
                 <div id="player-info" class="flex items-center space-x-4 truncate flex-1 cursor-pointer group" onclick="UI.showNowPlaying()">
                     <div class="relative w-12 h-12 flex-shrink-0">
                         <img id="player-art" src="assets/icons/icon-192.png" class="w-full h-full rounded-xl shadow-2xl object-cover border border-white/5 group-hover:scale-105 transition-transform" alt="Art">
                     </div>
                     <div class="truncate">
-                        <div id="player-title" class="font-black text-sm truncate text-white/90">Not Playing</div>
-                        <div id="player-artist" class="text-[10px] text-blue-400 font-bold uppercase tracking-widest truncate">Select a track</div>
+                        <div id="player-title" class="font-black text-sm truncate text-[var(--text-main)]">Not Playing</div>
+                        <div id="player-artist" class="text-[10px] text-[var(--secondary)] font-bold uppercase tracking-widest truncate">Select a track</div>
                     </div>
                 </div>
                 <div class="flex items-center space-x-4">
-                    <button id="mini-shuffle-btn" class="w-10 h-10 hidden md:flex items-center justify-center text-gray-500 hover:text-white transition-all"><i class="fas fa-shuffle text-sm"></i></button>
-                    <button id="mini-prev-btn" class="w-10 h-10 flex items-center justify-center text-white/80 active:scale-90 transition-all"><i class="fas fa-backward-step text-lg"></i></button>
-                    <button id="mini-play-btn" class="w-12 h-12 flex items-center justify-center bg-white text-black rounded-full shadow-xl hover:scale-105 active:scale-90 transition-all"><i class="fas fa-play text-lg"></i></button>
-                    <button id="mini-next-btn" class="w-10 h-10 flex items-center justify-center text-white/80 active:scale-90 transition-all"><i class="fas fa-forward-step text-lg"></i></button>
-                    <button id="mini-repeat-btn" class="w-10 h-10 hidden md:flex items-center justify-center text-gray-500 hover:text-white transition-all relative">
+                    <button id="mini-shuffle-btn" class="w-10 h-10 hidden md:flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text-main)] transition-all"><i class="fas fa-shuffle text-sm"></i></button>
+                    <button id="mini-prev-btn" class="w-10 h-10 flex items-center justify-center text-[var(--text-main)] active:scale-90 transition-all"><i class="fas fa-backward-step text-lg"></i></button>
+                    <button id="mini-play-btn" class="w-12 h-12 flex items-center justify-center bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-xl hover:scale-105 active:scale-90 transition-all"><i class="fas fa-play text-lg"></i></button>
+                    <button id="mini-next-btn" class="w-10 h-10 flex items-center justify-center text-[var(--text-main)] active:scale-90 transition-all"><i class="fas fa-forward-step text-lg"></i></button>
+                    <button id="mini-repeat-btn" class="w-10 h-10 hidden md:flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text-main)] transition-all relative">
                         <i class="fas fa-repeat text-sm"></i>
                         <div id="mini-repeat-one-indicator" class="absolute top-1 right-1 text-[8px] font-black hidden">1</div>
                     </button>
                 </div>
             </div>
             <div id="player-progress-container" class="w-full bg-white/5 h-1 relative overflow-hidden cursor-pointer group">
-                <div id="player-progress" class="absolute top-0 left-0 bg-blue-500 h-full w-0 transition-all duration-100"></div>
+                <div id="player-progress" class="absolute top-0 left-0 bg-[var(--accent)] h-full w-0 transition-all duration-100"></div>
                 <div class="absolute top-0 left-0 w-full h-full bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
             </div>
         </div>
 
         <!-- Navigation Bar -->
-        <nav id="mobile-nav" class="fixed bottom-0 left-0 right-0 bg-black/60 backdrop-blur-3xl border-t border-white/5 flex items-center justify-around py-3 safe-bottom md:hidden z-50">
-            <button class="flex flex-col items-center space-y-1 text-blue-500 transition-all active:scale-90"><i class="fas fa-home text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Home</span></button>
-            <button class="flex flex-col items-center space-y-1 text-gray-500 transition-all active:scale-90"><i class="fas fa-search text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Search</span></button>
-            <button class="flex flex-col items-center space-y-1 text-gray-500 transition-all active:scale-90"><i class="fas fa-record-vinyl text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Albums</span></button>
-            <button class="flex flex-col items-center space-y-1 text-gray-500 transition-all active:scale-90"><i class="fas fa-cloud-arrow-down text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Station</span></button>
-            <button class="flex flex-col items-center space-y-1 text-gray-500 transition-all active:scale-90"><i class="fas fa-heart text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Likes</span></button>
-            <button class="flex flex-col items-center space-y-1 text-gray-500 transition-all active:scale-90"><i class="fas fa-cog text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Settings</span></button>
+        <nav id="mobile-nav" class="fixed bottom-0 left-0 right-0 glass-view border-t border-white/5 flex items-center justify-around py-3 safe-bottom md:hidden z-50">
+            <button class="flex flex-col items-center space-y-1 text-[var(--accent)] transition-all active:scale-90"><i class="fas fa-home text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Home</span></button>
+            <button class="flex flex-col items-center space-y-1 text-[var(--text-dim)] transition-all active:scale-90"><i class="fas fa-search text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Search</span></button>
+            <button class="flex flex-col items-center space-y-1 text-[var(--text-dim)] transition-all active:scale-90"><i class="fas fa-record-vinyl text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Albums</span></button>
+            <button class="flex flex-col items-center space-y-1 text-[var(--text-dim)] transition-all active:scale-90"><i class="fas fa-cloud-arrow-down text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Station</span></button>
+            <button class="flex flex-col items-center space-y-1 text-[var(--text-dim)] transition-all active:scale-90"><i class="fas fa-heart text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Likes</span></button>
+            <button class="flex flex-col items-center space-y-1 text-[var(--text-dim)] transition-all active:scale-90"><i class="fas fa-cog text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Settings</span></button>
         </nav>
     </div>
 
@@ -266,38 +307,38 @@
     <div id="now-playing-view" class="fixed inset-0 z-[120] hidden flex flex-col touch-none overflow-hidden h-[100dvh]">
         <div class="relative flex-1 flex flex-col p-8 safe-top safe-bottom justify-between">
             <div class="flex justify-between items-center">
-                <button onclick="UI.hideNowPlaying()" class="w-12 h-12 flex items-center justify-center bg-white/10 rounded-full active:scale-90"><i class="fas fa-chevron-down"></i></button>
+                <button onclick="UI.hideNowPlaying()" class="w-12 h-12 flex items-center justify-center bg-white/10 rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-chevron-down"></i></button>
                 <div class="text-center">
-                    <div class="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500 mb-1">Now Playing</div>
-                    <div id="np-album-title" class="text-[11px] font-bold text-gray-400 truncate max-w-[180px]">Album</div>
+                    <div class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)] mb-1">Now Playing</div>
+                    <div id="np-album-title" class="text-[11px] font-bold text-[var(--text-dim)] truncate max-w-[180px]">Album</div>
                 </div>
-                <button onclick="UI.showActionMenu(store.state.currentTrack?.id)" class="w-12 h-12 flex items-center justify-center bg-white/10 rounded-full active:scale-90"><i class="fas fa-ellipsis"></i></button>
+                <button onclick="UI.showActionMenu(store.state.currentTrack?.id)" class="w-12 h-12 flex items-center justify-center bg-white/10 rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-ellipsis"></i></button>
             </div>
             <div class="flex-1 flex items-center justify-center min-h-0 py-8">
-                <img id="np-art" src="assets/icons/icon-512.png" class="w-full aspect-square max-w-[320px] rounded-[40px] shadow-[0_40px_80px_rgba(0,0,0,0.8)] object-cover" alt="Art">
+                <img id="np-art" src="assets/icons/icon-512.png" class="w-full aspect-square max-w-[320px] rounded-[40px] shadow-[0_40px_80px_rgba(0,0,0,0.8)] object-cover border border-white/10" alt="Art">
             </div>
             <div class="space-y-8">
                 <div class="text-center md:text-left">
-                    <div id="np-title" class="text-3xl font-black mb-1 tracking-tight truncate text-white">Song Title</div>
-                    <div id="np-artist" class="text-sm text-blue-400 font-bold uppercase tracking-widest truncate">Artist</div>
+                    <div id="np-title" class="text-3xl font-black mb-1 tracking-tight truncate text-[var(--text-main)]">Song Title</div>
+                    <div id="np-artist" class="text-sm text-[var(--accent)] font-bold uppercase tracking-widest truncate">Artist</div>
                 </div>
                 <div class="space-y-4">
                     <div id="np-seek-container" class="relative w-full h-1.5 bg-white/10 rounded-full cursor-pointer overflow-hidden group">
-                        <div id="np-seek-bar" class="absolute top-0 left-0 h-full bg-blue-500 w-0 transition-all duration-100 shadow-[0_0_15px_rgba(59,130,246,0.8)]"></div>
+                        <div id="np-seek-bar" class="absolute top-0 left-0 h-full bg-[var(--accent)] w-0 transition-all duration-100 shadow-[0_0_15px_var(--accent)]"></div>
                     </div>
-                    <div class="flex justify-between text-[10px] font-bold font-mono text-gray-500 tracking-widest uppercase px-1">
+                    <div class="flex justify-between text-[10px] font-bold font-mono text-[var(--text-dim)] tracking-widest uppercase px-1">
                         <span id="np-time-curr">0:00</span>
                         <span id="np-time-total">0:00</span>
                     </div>
                 </div>
                 <div class="flex items-center justify-between">
-                    <button id="np-shuffle-btn" class="w-12 h-12 text-gray-500 active:scale-90"><i class="fas fa-shuffle text-xl"></i></button>
+                    <button id="np-shuffle-btn" class="w-12 h-12 text-[var(--text-dim)] active:scale-90"><i class="fas fa-shuffle text-xl"></i></button>
                     <div class="flex items-center space-x-6">
-                        <button onclick="audioEngine.prev()" class="w-14 h-14 bg-white/5 rounded-full active:scale-90"><i class="fas fa-backward-step text-2xl"></i></button>
-                        <button id="np-play-btn" class="w-24 h-24 bg-white text-black rounded-full active:scale-90"><i class="fas fa-play text-4xl"></i></button>
-                        <button onclick="audioEngine.next()" class="w-14 h-14 bg-white/5 rounded-full active:scale-90"><i class="fas fa-forward-step text-2xl"></i></button>
+                        <button id="np-prev-btn" class="w-14 h-14 bg-white/5 rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-backward-step text-2xl"></i></button>
+                        <button id="np-play-btn" class="w-24 h-24 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full active:scale-90 shadow-2xl"><i class="fas fa-play text-4xl ml-1"></i></button>
+                        <button id="np-next-btn" class="w-14 h-14 bg-white/5 rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-forward-step text-2xl"></i></button>
                     </div>
-                    <button id="np-repeat-btn" class="w-12 h-12 text-gray-500 active:scale-90 relative">
+                    <button id="np-repeat-btn" class="w-12 h-12 text-[var(--text-dim)] active:scale-90 relative">
                         <i class="fas fa-repeat text-xl"></i>
                         <div id="np-repeat-one-indicator" class="absolute top-1 right-1 text-[10px] font-black hidden">1</div>
                     </button>
@@ -319,9 +360,9 @@
                 </div>
             </div>
             <div class="space-y-2">
-                <button id="action-queue" class="w-full flex items-center space-x-4 p-4 hover:bg-white/5 rounded-2xl transition-colors font-bold"><i class="fas fa-list-ul text-blue-400"></i><span>Add to Queue</span></button>
+                <button id="action-queue" class="w-full flex items-center space-x-4 p-4 hover:bg-white/5 rounded-2xl transition-colors font-bold"><i class="fas fa-list-ul text-[var(--secondary)]"></i><span>Add to Queue</span></button>
                 <button id="action-edit-metadata" class="w-full flex items-center space-x-4 p-4 hover:bg-white/5 rounded-2xl transition-colors font-bold"><i class="fas fa-pen-to-square text-purple-400"></i><span>Edit Metadata</span></button>
-                <button id="action-fav" class="w-full flex items-center space-x-4 p-4 hover:bg-white/5 rounded-2xl transition-colors font-bold"><i class="fas fa-heart text-yellow-400"></i><span id="action-fav-text">Favourite</span></button>
+                <button id="action-fav" class="w-full flex items-center space-x-4 p-4 hover:bg-white/5 rounded-2xl transition-colors font-bold"><i class="fas fa-heart text-[var(--accent)]"></i><span id="action-fav-text">Favourite</span></button>
                 <button id="action-delete" class="w-full flex items-center space-x-4 p-4 hover:bg-red-500/10 text-red-400 rounded-2xl transition-colors font-bold"><i class="fas fa-trash-can"></i><span>Delete Track</span></button>
             </div>
             <button onclick="UI.hideActionMenu()" class="w-full mt-8 py-4 text-gray-500 font-bold">Close</button>
@@ -342,15 +383,15 @@
                     <input type="file" id="edit-file-input" class="hidden" accept="image/*">
                 </div>
                 <div class="space-y-4">
-                    <div><label class="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1 block">Title</label><input type="text" id="edit-title" class="w-full bg-white/5 border border-white/5 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500"></div>
-                    <div><label class="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1 block">Artist</label><input type="text" id="edit-artist" class="w-full bg-white/5 border border-white/5 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500"></div>
-                    <div><label class="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1 block">Album</label><input type="text" id="edit-album" class="w-full bg-white/5 border border-white/5 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500"></div>
+                    <div><label class="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1 block">Title</label><input type="text" id="edit-title" class="w-full bg-white/5 border border-white/5 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--accent)]"></div>
+                    <div><label class="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1 block">Artist</label><input type="text" id="edit-artist" class="w-full bg-white/5 border border-white/5 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--accent)]"></div>
+                    <div><label class="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1 block">Album</label><input type="text" id="edit-album" class="w-full bg-white/5 border border-white/5 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--accent)]"></div>
                 </div>
                 <div id="auto-fetch-results" class="hidden space-y-2 max-h-40 overflow-y-auto custom-scrollbar border-t border-white/5 pt-4"></div>
                 <div id="edit-status" class="text-xs text-center min-h-[1rem]"></div>
                 <div class="flex space-x-4 pt-4">
                     <button onclick="UI.hideMetadataEditor()" class="flex-1 py-4 text-gray-500 font-bold">Cancel</button>
-                    <button id="edit-save-btn" class="flex-[2] bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-black shadow-lg shadow-blue-500/20 transition-all active:scale-95">Save & Sync</button>
+                    <button id="edit-save-btn" class="flex-[2] bg-[var(--secondary)] hover:opacity-90 py-4 rounded-2xl font-black shadow-lg shadow-[var(--secondary)]/20 transition-all active:scale-95">Save & Sync</button>
                 </div>
             </div>
         </div>
