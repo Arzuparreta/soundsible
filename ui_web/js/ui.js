@@ -513,7 +513,7 @@ export class UI {
         const startBloom = () => {
             isHolding = true;
             this.vibrate(20);
-            ring.style.transition = 'transform 0.6s linear, opacity 0.3s ease';
+            ring.style.transition = 'transform 0.4s linear, opacity 0.2s ease';
             ring.style.transform = 'scale(1)';
             ring.style.opacity = '1';
             
@@ -531,7 +531,7 @@ export class UI {
                 ribbon.style.opacity = '1';
                 ribbon.style.transform = 'scale(1)';
                 ribbon.style.filter = 'blur(0px)';
-            }, 600);
+            }, 400);
         };
 
         const endBloom = () => {
@@ -540,6 +540,16 @@ export class UI {
             ring.style.transform = 'scale(0)';
             ring.style.opacity = '0';
             
+            // 1. TACTILE TAP (Trigger if we didn't reach Bloom state)
+            if (isHolding && !this.isBlooming) {
+                this.vibrate(15);
+                if (store.state.currentTrack) {
+                    audioEngine.toggle();
+                } else if (store.state.library.length > 0) {
+                    window.playTrack(store.state.library[0].id);
+                }
+            }
+
             if (this.isBlooming && activeNavView) {
                 this.vibrate(30);
                 this.showView(activeNavView);
