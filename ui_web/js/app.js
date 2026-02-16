@@ -273,40 +273,22 @@ function renderSongList(tracks, containerId) {
         return;
     }
 
-    const favIds = store.state.favorites || [];
     const activeId = store.state.currentTrack ? store.state.currentTrack.id : null;
 
     const html = tracks.map(t => {
-        const isFav = favIds.includes(t.id);
         const isActive = t.id === activeId;
         
         return `
-            <div class="relative overflow-hidden rounded-xl bg-gray-800/50 group" data-track-container="${t.id}">
-                <!-- Swipe Backgrounds (Hidden behind row) -->
-                <div class="absolute inset-0 flex items-center justify-between px-6">
-                    <div class="text-yellow-500 font-bold text-xs">FAVOURITE</div>
-                    <div class="text-blue-500 font-bold text-xs text-right">TOGGLE QUEUE</div>
+            <div class="song-row flex items-center p-4 ${isActive ? 'bg-blue-600/20 border-blue-500/50' : 'bg-white/5 border-white/5'} rounded-2xl border mb-2 active:scale-[0.98] transition-all" data-id="${t.id}" onclick="playTrack('${t.id}')">
+                <div class="relative w-12 h-12 flex-shrink-0">
+                    <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-xl shadow-lg" alt="Cover">
+                    ${isActive ? '<div class="absolute inset-0 flex items-center justify-center bg-blue-600/40 rounded-xl"><i class="fas fa-volume-up text-white text-xs"></i></div>' : ''}
                 </div>
-                
-                <!-- Main Song Row -->
-                <div class="song-row flex items-center p-3 ${isActive ? 'bg-black' : 'bg-gray-900'} cursor-pointer relative z-10 border border-transparent touch-pan-y" data-id="${t.id}" onclick="playTrack('${t.id}')">
-                    <div class="relative w-12 h-12 flex-shrink-0">
-                        <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-lg shadow-md" alt="Cover">
-                        
-                        <!-- Active Indicator Overlay -->
-                        <div class="active-overlay absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg ${isActive ? 'opacity-100' : 'opacity-0'} transition-opacity">
-                            <i class="fas fa-volume-up text-white text-xs ${isActive ? '' : 'hidden'}"></i>
-                        </div>
-
-                        <!-- Favourite Indicator -->
-                        <div class="fav-indicator absolute -top-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full border-2 border-gray-900 shadow-sm ${isFav ? '' : 'hidden'}"></div>
-                    </div>
-                    <div class="ml-4 flex-1 truncate">
-                        <div class="song-title font-semibold text-sm truncate ${isActive ? 'text-blue-400' : ''} transition-colors">${esc(t.title)}</div>
-                        <div class="text-xs text-gray-400 truncate uppercase tracking-tighter mt-0.5">${esc(t.artist)} • ${esc(t.album)}</div>
-                    </div>
-                    <div class="text-xs text-gray-500 font-mono ml-4 tabular-nums">${formatTime(t.duration)}</div>
+                <div class="ml-4 flex-1 truncate">
+                    <div class="font-bold text-sm truncate ${isActive ? 'text-blue-400' : 'text-white'}">${esc(t.title)}</div>
+                    <div class="text-[10px] text-gray-400 truncate uppercase tracking-widest mt-0.5">${esc(t.artist)}</div>
                 </div>
+                <div class="text-[10px] text-gray-500 font-mono ml-4">${formatTime(t.duration)}</div>
             </div>
         `;
     }).join('');
