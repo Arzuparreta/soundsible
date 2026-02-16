@@ -170,6 +170,7 @@ export class UI {
             popover.classList.remove('hidden');
             setTimeout(() => {
                 popover.classList.remove('pointer-events-none');
+                popover.style.pointerEvents = 'auto'; // Ensure interaction
                 popover.classList.replace('scale-95', 'scale-100');
                 popover.classList.replace('opacity-0', 'opacity-100');
             }, 10);
@@ -186,6 +187,7 @@ export class UI {
         popover.classList.replace('scale-100', 'scale-95');
         popover.classList.replace('opacity-100', 'opacity-0');
         popover.classList.add('pointer-events-none');
+        popover.style.pointerEvents = 'none'; // Block interaction
         setTimeout(() => popover.classList.add('hidden'), 300);
     }
 
