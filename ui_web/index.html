@@ -151,6 +151,16 @@
             0% { transform: translateX(0); }
             100% { transform: translateX(-50%); }
         }
+
+        /* Subtle Technical Inflation Feedback */
+        .omni-tap-inflate {
+            animation: omni-inflate 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        @keyframes omni-inflate {
+            0% { transform: scale(1); }
+            30% { transform: scale(1.08); }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body class="bg-black text-white">
@@ -280,6 +290,9 @@
 
         <!-- Omni-Island: Unified Control System -->
         <div id="omni-island-container" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] pointer-events-none">
+            <!-- The Hitbox: A generous invisible touch surface -->
+            <div id="omni-touch-area" class="absolute inset-x-[-30px] inset-y-[-20px] z-[210] pointer-events-auto cursor-pointer"></div>
+            
             <div id="omni-island" class="glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-500 ease-[cubic-bezier(0.19,1,0.22,1)] overflow-hidden" style="width: 56px; height: 56px; border-radius: 28px;">
                 <div id="omni-progress" class="absolute bottom-0 left-0 h-[2px] bg-[var(--accent)] w-0 transition-all duration-100 shadow-[0_0_10px_var(--accent)]"></div>
                 <div id="omni-metadata-container" class="absolute inset-0 flex items-center px-14 opacity-0 transition-opacity duration-300 pointer-events-none overflow-hidden">
@@ -288,19 +301,19 @@
                         <span id="omni-text-2" class="ml-8"></span>
                     </div>
                 </div>
-                <div id="omni-transport" class="relative flex items-center justify-between w-full h-full px-1">
-                    <div id="omni-prev" class="flex-1 h-full flex items-center justify-center opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto cursor-pointer active:bg-white/5">
+                <div id="omni-transport" class="relative flex items-center justify-between w-full h-full px-10">
+                    <div id="omni-prev" class="flex-1 h-full flex items-center justify-start opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto">
                         <i class="fas fa-backward-step text-xs text-white/60"></i>
                     </div>
-                    <div id="omni-anchor" class="w-14 h-14 flex-shrink-0 flex items-center justify-center relative cursor-pointer active:scale-90 transition-transform z-50">
+                    <div id="omni-anchor" class="w-14 h-14 flex-shrink-0 flex items-center justify-center relative pointer-events-none transition-transform z-50">
                         <i id="omni-anchor-icon" class="fas fa-command text-lg text-white"></i>
                         <div id="omni-hold-ring" class="absolute inset-0 border-2 border-[var(--accent)] rounded-full scale-0 opacity-0"></div>
                     </div>
-                    <div id="omni-next" class="flex-1 h-full flex items-center justify-center opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto cursor-pointer active:bg-white/5">
+                    <div id="omni-next" class="flex-1 h-full flex items-center justify-end opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto">
                         <i class="fas fa-forward-step text-xs text-white/60"></i>
                     </div>
                 </div>
-                <div id="omni-nav-ribbon" class="absolute inset-0 flex items-center justify-evenly px-2 opacity-0 scale-95 transition-all duration-400 pointer-events-none">
+                <div id="omni-nav-ribbon" class="absolute inset-0 flex items-center justify-between px-4 opacity-0 scale-95 transition-all duration-400 pointer-events-none">
                     <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="home"><i class="fas fa-home text-sm text-white/40"></i></div>
                     <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="favourites"><i class="fas fa-heart text-sm text-white/40"></i></div>
                     <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="albums"><i class="fas fa-record-vinyl text-sm text-white/40"></i></div>

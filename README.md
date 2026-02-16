@@ -1,12 +1,12 @@
 # Soundsible: The Universal Music Ecosystem
 
-Soundsible is a modular, high-fidelity media platform designed to give you absolute control over your music library. It unifies your local files (NAS), cloud storage (Cloudflare R2, Backblaze B2, S3), and streaming capabilities into a single, resilient ecosystem that works perfectly on your desktop and your phone.
+Soundsible is a high-fidelity, modular media platform designed for absolute data sovereignty and an uncompromised listening experience. It unifies your local files (NAS), cloud storage (Cloudflare R2, Backblaze B2, S3), and streaming capabilities into a single, resilient ecosystem featuring a high-end, mobile-first **Omni-Island** control system.
 
 ## 🌟 The Soundsible Philosophy
-- **Your Music, Everywhere**: Access your entire library from a single "Home Station" API.
-- **Hybrid Streaming**: Seamlessly switch between high-speed local LAN playback and secure cloud streaming when you're away.
-- **Tactile Control**: Optimized for touch devices with modern gestures.
-- **Privacy First**: All credentials and tokens are encrypted locally on your machine.
+- **Omni-Island Control**: A unified, state-driven capsule that anchors the entire experience. It adapts fluidly between playback transport and technical navigation.
+- **Cyber-Premium Design**: A sophisticated blend of high-end glassmorphism (`blur(40px)`), Apple-inspired layouts, and JetBrains-inspired technical accents.
+- **Surgical Intentionality**: Advanced "Safe Release" touch logic and coordinate-based zone detection ensure zero accidental triggers on mobile.
+- **Privacy & Sovereignty**: You own your files, your metadata, and your infrastructure. All credentials remain encrypted on your "Home Station."
 
 ---
 
@@ -27,64 +27,38 @@ Run the guided setup to link your storage:
 - Follow the prompts to link your **Cloudflare R2**, **Backblaze B2**, or **NAS**.
 
 ### 3. Populating Your Library
-- **Upload**: Use the CLI or Web Station to upload your existing music collection.
 - **Deep Scan**: Point Soundsible to your large NAS folders to index them instantly without moving files.
-- **Download**: Use the integrated **ODST Tool** to grow your library directly from Spotify or YouTube URLs.
+- **Metadata Surgeon**: Use the integrated technical editor to auto-fetch high-resolution covers and harmonize tags against global standards.
+- **Grow Your Station**: Use the **ODST Tool** to download directly from Spotify or YouTube URLs with bit-perfect quality.
 
 ---
 
-## 📱 Using the Web Player (Mobile/Windows)
+## 📱 The Mobile Experience (PWA)
 
-Launch the **Web Station (Option 3)** and open the provided URL on your device.
+Soundsible is optimized for a native-app feel on iPhone and Android. Launch the **Web Station (Option 3)** and add it to your home screen.
 
-> **Tip**: To keep the server running in the background (headless mode), use the daemon command:
-> ```bash
-> python3 run.py --daemon &
-> ```
-> On Linux, you can also install it as a permanent systemd service:
-> ```bash
-> python3 -m setup_tool install-service
-> ```
+### The Omni-Island Interface
+The bottom-center capsule is your cockpit:
+- **Playback (Active Mode)**: A sleek 286px capsule with [Prev], [Anchor], and [Next] controls.
+- **Navigation (Bloom Mode)**: Hold the center for 400ms to reveal a symmetrical 7-slot navigation grid.
+- **Adaptive Physics**: The island dynamically expands and retracts based on your interaction state.
+- **Technical Scroller**: A JetBrains Mono marquee runs technical metadata in the background of the island.
 
 ### Core Interactions
-- **Smart Playback**: Tap any song to stream. The "Smart Resolver" automatically finds the fastest path (Local -> Cache -> Cloud).
-- **Manage Favourites**: **Swipe Right** on any song row to toggle the yellow favourite indicator (synced with your PC).
-- **Delete Tracks**: **Swipe Left** to permanently remove a song from your Station and Cloud storage (requires confirmation).
-- **Search**: Real-time searching across your entire library using high-speed database indexing.
-
-### Remote Downloader
-- Go to the **Downloads** tab.
-- Paste multiple Spotify/YouTube links (one per line).
-- Click **Start Processing** to trigger the background engine on your Home Station.
-- **Spotify Integration**: Browse your Spotify playlists and liked songs directly to bulk-add them to your library.
+- **Safe Release**: Taps only trigger if you release inside the zone. Slide your finger away to cancel any action.
+- **Subtle Inflation**: High-end visual feedback where buttons "breathe" ऑर्गेनिकally when touched.
+- **Card Deck Navigation**: Views slide OVER each other with "Premium Slime" physics (`cubic-bezier(0.19, 1, 0.22, 1)`).
+- **Gestures**: 
+    - **Swipe Right**: Add to Queue.
+    - **Swipe Left**: Toggle Favourite.
+    - **Pull Down**: Dismiss Now Playing or Action Menus (14% threshold).
 
 ---
 
-## 💻 Desktop Interfaces
-
-### Linux (GTK4 / Adwaita)
-A high-fidelity native player featuring:
-- Album grid browsing.
-- MPRIS integration (Control playback via system media keys).
-- Automatic cover art extraction and display.
-
-### Windows (Control Center)
-A lightweight management dashboard that lives in your system tray, providing quick access to storage settings and library stats.
-
----
-
-## 🌐 Connectivity & Networking
-
-### The "Smart Resolver"
-Soundsible uses a **Connection Race** logic. When you open the Web Player, it pings your Local IP, your Tailscale IP, and Localhost simultaneously, locking onto the fastest one.
-
-### Tailscale (Recommended)
-For the most stable remote experience, use **Tailscale**. It allows you to access your Home Station from anywhere in the world as if you were on your home Wi-Fi, with zero port forwarding required.
-
----
-
-## 🛠 Advanced Features
-For system architecture, API documentation, and developer tools, see the **[Advanced Documentation](ADVANCED.md)**.
+## 💻 Desktop & Advanced
+- **Linux (GTK4 / Adwaita)**: High-fidelity native player with MPRIS and system-level integration.
+- **Smart Resolver**: Connection Race logic pings Local, Tailscale, and Cloud paths simultaneously to lock onto the fastest streaming route.
+- **Technical Deep-Dive**: See the **[Advanced Documentation](ADVANCED.md)** for architecture and API specs.
 
 ## License
 MIT License. Created for the love of music and technical freedom.

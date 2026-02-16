@@ -1,48 +1,44 @@
-# Implementation Plan: High-End Dual-Mode Theme (JetBrains & TypeScript)
+# Implementation Plan: Unified Omni-Island Control System
 
-Re-implement the high-end UI with dual-mode support, specific color palettes (JetBrains Orange / TypeScript Blue), and premium glassmorphic features as discussed in the planning phase.
+Implement a state-driven, bottom-center control capsule that unifies navigation and playback transport with high-end tactile interaction.
 
-## Phase 1: Theme Engine & Palette Initialization
-**Objective**: Establish the CSS variable system for Light and Dark modes.
-
-- **Dark Mode Palette**:
-    - Background: `#0d0d0f` (Deep Charcoal)
-    - Surface: `#1e1f22` (IDE Gray)
-    - Selection: `#2e436e` (IDE Selection Blue)
-    - Accent: `#f97a12` (JetBrains Orange)
-    - Secondary: `#3178c6` (TypeScript Blue)
-    - Text: `#dfe1e5` (Light Gray)
-- **Light Mode Palette**:
-    - Background: `#f5f5f5` (Paper White)
-    - Surface: `#ffffff` (Pure White)
-    - Selection: `#deeaff` (Soft Blue)
-    - Accent: `#3178c6` (TypeScript Blue)
-    - Secondary: `#f97a12` (JetBrains Orange)
-    - Text: `#1c1c1c` (Dark Gray)
-
+## Phase 1: Structural Foundation & Adaptive Sizing
+- **Objective**: Create the core Omni-Island component with state-driven widths.
+- **Adaptive States**:
+    - **Seed (56px)**: Idle/Closed state.
+    - **Active (286px)**: Playback mode with [Prev][Anchor][Next] controls.
+    - **Bloom (380px)**: Navigation mode with 7-position grid.
 - **Tasks**:
-    - [ ] Define `:root` CSS variables for both modes.
-    - [ ] Implement `[data-theme="light"]` overrides.
-    - [ ] Add theme persistence to `store.js` and a toggle in `Settings`.
+    - [x] Implement glassmorphic capsule with `backdrop-filter`.
+    - [x] Develop `morphToActive()` and `collapseToSeed()` transitions.
+    - [x] Standardize 16px (`px-4`) technical margin across all states.
 
-## Phase 2: Premium UI Components (JetBrains Style)
-**Objective**: Refactor all views to use the professional, IDE-inspired aesthetic.
-
+## Phase 2: Surgical Interaction Engine
+- **Objective**: Establish reliable, intentional touch logic for mobile.
+- **Interaction Models**:
+    - **Safe Release**: Actions trigger on `touchend` only if release is within the zone.
+    - **Coordinate-Based Detection**: Divide the island into technical thirds (Left/Center/Right) using X-coordinate math.
+    - **Hold-to-Bloom**: 400ms hold on center anchor triggers the navigation ribbon.
 - **Tasks**:
-    - [ ] **Song Rows**: Use deep charcoal backgrounds, ultra-thin borders, and clean typography.
-    - [ ] **Active Track**: Highlight with professional selection colors and an Orange pulsing icon.
-    - [ ] **Album Grid**: Implement glossy, high-depth cards with smooth scale animations.
-    - [ ] **Glassmorphism**: Apply consistent `backdrop-filter` and `glass-view` classes across all floating panels.
+    - [x] Implement coordinate-based zone detection.
+    - [x] Add `omni-touch-area` with 20px invisible safety margin.
+    - [x] Develop drag-to-cancel logic for transport taps.
 
-## Phase 3: High-End Interaction & Animations
-**Objective**: Ensure the UI feels tactile and "Cyber-Premium."
-
+## Phase 3: Symmetrical Bloom Navigation
+- **Objective**: Create an intuitive, thumb-friendly navigation grid.
+- **Layout**:
+    - Uniform 7-slot grid with blank center spacer.
+    - Order: `Home` | `Liked` | `Albums` | `[Blank]` | `Search` | `Downloader` | `Settings`.
 - **Tasks**:
-    - [ ] **"Slime" Entrance**: Refine the Now Playing spring physics (`cubic-bezier(0.19, 1, 0.22, 1)`).
-    - [ ] **Haptics**: Add `vibrate()` pulses to all primary interactions (play, tab switch, swipe).
-    - [ ] **Swipe Actions**: Ensure horizontal swipe gestures for Favourite/Queue are silky smooth.
+    - [x] Implement `justify-between` flex model for the ribbon.
+    - [x] Add real-time haptic tracking for menu selection.
+    - [x] Ensure 400ms "Fast Bloom" timing feels responsive.
 
-## Phase 4: Final Polishing & Mobile Optimization
-- [ ] Verify "Smart Next" logic within the new theme.
-- [ ] Ensure perfect "safe-area" handling for iPhone and modern Android devices.
-- [ ] Perform a full UI audit to remove any generic "blue" defaults.
+## Phase 4: Professional Visual Feedback
+- **Objective**: Add tactile confirmation without visual clutter.
+- **Technique**:
+    - **Subtle Inflation**: 300ms "breath" animation (`scale 1.08`) on tap release.
+- **Tasks**:
+    - [x] Implement `omni-tap-inflate` keyframes.
+    - [x] Bind animation triggers to release-event zones.
+    - [x] Standardize 15ms haptic pulses for all taps.

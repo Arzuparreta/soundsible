@@ -1,8 +1,16 @@
 {
   "track_id": "fix_now_playing_20260216",
   "type": "bug",
-  "status": "new",
+  "status": "completed",
   "created_at": "2026-02-16T14:30:00Z",
-  "updated_at": "2026-02-16T14:30:00Z",
-  "description": "Fix and refine the WebUI "Now Playing" view and its transport controls, ensuring robust functionality and consistent high-end animations."
+  "updated_at": "2026-02-16T18:00:00Z",
+  "description": "Implemented the Unified Omni-Island control system with adaptive sizing, Safe Release touch logic, and Symmetrical Bloom navigation.",
+  "achievements": [
+    "Unified navigation and transport into a single bottom-center Omni-Island capsule.",
+    "Implemented adaptive sizing: 56px (Seed), 286px (Playback), 380px (Navigation).",
+    "Developed 'Safe Release' touch engine with coordinate-based zone detection and drag-to-cancel support.",
+    "Established 'Subtle Inflation' professional feedback pattern (breath animation).",
+    "Optimized hitboxes with a 20px invisible safety margin for zero-miss interaction.",
+    "Refined Symmetrical Bloom layout with 7-position uniform grid and empty center anchor."
+  ]
 }

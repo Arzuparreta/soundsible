@@ -105,7 +105,7 @@ export class UI {
         this.isIslandActive = true;
         this.vibrate(30);
         
-        this.island.style.width = '300px';
+        this.island.style.width = '286px';
         
         const prev = document.getElementById('omni-prev');
         const next = document.getElementById('omni-next');
@@ -500,11 +500,12 @@ export class UI {
 
     static initOmniGestures() {
         const island = document.getElementById('omni-island');
+        const touchArea = document.getElementById('omni-touch-area');
         const transport = document.getElementById('omni-transport');
         const ribbon = document.getElementById('omni-nav-ribbon');
         const ring = document.getElementById('omni-hold-ring');
         const items = document.querySelectorAll('.omni-nav-item');
-        if (!island || !transport || !ribbon) return;
+        if (!island || !touchArea || !ribbon) return;
 
         let holdTimer;
         let isHolding = false;
@@ -520,11 +521,8 @@ export class UI {
             holdTimer = setTimeout(() => {
                 this.vibrate(50);
                 this.isBlooming = true;
-                
-                // Adaptive Expansion for Bloom
                 this.island.style.width = '380px';
                 
-                // Blurry Fade Content Switch
                 transport.style.filter = 'blur(12px)';
                 transport.style.opacity = '0';
                 transport.style.transform = 'scale(0.9)';
@@ -539,39 +537,57 @@ export class UI {
 
         const endHold = (e) => {
             const touch = e.changedTouches[0];
-            const target = document.elementFromPoint(touch.clientX, touch.clientY);
-            const isInside = island.contains(target);
+            const rect = island.getBoundingClientRect();
+            
+            // Generous boundary check (Bounding box + 20px)
+            const isInside = (
+                touch.clientX >= rect.left - 20 &&
+                touch.clientX <= rect.right + 20 &&
+                touch.clientY >= rect.top - 20 &&
+                touch.clientY <= rect.bottom + 20
+            );
             
             clearTimeout(holdTimer);
             ring.style.transition = 'none';
             ring.style.transform = 'scale(0)';
             ring.style.opacity = '0';
             
-            // 1. SAFE RELEASE TRANSPORT (Trigger if we didn't reach Bloom state AND released inside)
+            // 1. COORDINATE-BASED TRANSPORT
             if (isHolding && !this.isBlooming && isInside) {
-                const zone = target.closest('#omni-prev') ? 'prev' : 
-                             target.closest('#omni-next') ? 'next' : 
-                             target.closest('#omni-anchor') ? 'anchor' : null;
+                const relX = (touch.clientX - rect.left) / rect.width;
+                let zone = 'anchor'; // Default
+                
+                if (this.isIslandActive) {
+                    if (relX < 0.35) zone = 'prev';
+                    else if (relX > 0.65) zone = 'next';
+                }
 
-                if (zone) {
-                    this.vibrate(15);
-                    if (zone === 'prev') audioEngine.prev();
-                    else if (zone === 'next') audioEngine.next();
-                    else {
-                        if (store.state.currentTrack) audioEngine.toggle();
-                        else if (store.state.library.length > 0) window.playTrack(store.state.library[0].id);
-                    }
+                this.vibrate(15);
+                
+                // Subtle Inflation Feedback
+                const targetId = zone === 'prev' ? 'omni-prev' : zone === 'next' ? 'omni-next' : 'omni-anchor';
+                const visualEl = document.getElementById(targetId);
+                if (visualEl) {
+                    visualEl.classList.add('omni-tap-inflate');
+                    setTimeout(() => visualEl.classList.remove('omni-tap-inflate'), 300);
+                }
+
+                if (zone === 'prev') audioEngine.prev();
+                else if (zone === 'next') audioEngine.next();
+                else {
+                    if (store.state.currentTrack) audioEngine.toggle();
+                    else if (store.state.library.length > 0) window.playTrack(store.state.library[0].id);
                 }
             }
 
-            // 2. NAV COMMIT
+            // 2. NAV COMMIT (Uses elementFromPoint but hides touchArea first)
             if (this.isBlooming && activeNavView) {
                 this.vibrate(30);
                 this.showView(activeNavView);
             }
 
             // 3. RESTORE PLAYBACK UI
-            if (this.isIslandActive) this.island.style.width = '300px';
+            if (this.isIslandActive) this.island.style.width = '286px';
             else this.island.style.width = '56px';
 
             transport.style.filter = 'blur(0px)';
@@ -595,8 +611,8 @@ export class UI {
             activeNavView = null;
         };
 
-        // Bind Touch Events to the entire transport layer
-        transport.addEventListener('touchstart', (e) => {
+        // Bind events to the Hitbox Layer
+        touchArea.addEventListener('touchstart', (e) => {
             e.preventDefault();
             startBloom(e);
         });
@@ -604,11 +620,14 @@ export class UI {
         document.addEventListener('touchmove', (e) => {
             if (!isHolding) return;
             const touch = e.touches[0];
-            const target = document.elementFromPoint(touch.clientX, touch.clientY);
-
+            
             if (this.isBlooming) {
-                // Navigation Highlighting
-                const item = target?.closest('.omni-nav-item');
+                // To detect nav items, we need elementFromPoint. 
+                // Since touchArea is on top, we hide it briefly or use coordinate math.
+                // Plural elementsFromPoint is more efficient.
+                const targets = document.elementsFromPoint(touch.clientX, touch.clientY);
+                const item = targets.find(t => t.classList.contains('omni-nav-item'));
+
                 items.forEach(i => {
                     i.classList.remove('active');
                     i.style.transform = 'scale(1)';
