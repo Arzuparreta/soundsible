@@ -417,7 +417,7 @@
     </div>
 
     <!-- Now Playing Full View -->
-    <div id="now-playing-view" class="fixed inset-0 z-[120] flex flex-col touch-none overflow-hidden h-[100dvh]">
+    <div id="now-playing-view" class="fixed inset-0 z-[120] hidden flex flex-col touch-none overflow-hidden h-[100dvh]">
         <!-- Glass Backdrop -->
         <div class="absolute inset-0 bg-black/60 backdrop-blur-[40px]"></div>
         <div class="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black/60"></div>
@@ -505,7 +505,7 @@
     </div>
 
     <!-- Action Menu (Bottom Sheet) -->
-    <div id="action-menu" class="fixed inset-0 z-[100]">
+    <div id="action-menu" class="fixed inset-0 z-[100] hidden">
         <div id="action-menu-overlay" class="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 transition-opacity"></div>
         <div id="action-menu-sheet" class="absolute bottom-0 left-0 right-0 bg-gray-900 rounded-t-[32px] p-6 pb-10 shadow-[0_-20px_50px_rgba(0,0,0,0.5)] border-t border-gray-800">
             <!-- Handle bar -->

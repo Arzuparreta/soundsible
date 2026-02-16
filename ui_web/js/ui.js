@@ -168,14 +168,19 @@ export class UI {
         const npView = document.getElementById('now-playing-view');
         if (!npView) return;
 
-        // PHYSICAL LOCKOUT
+        // Ensure visible before animation
+        npView.classList.remove('hidden');
+        
+        // PHYSICAL LOCKOUT (Swallow ghost clicks during transition)
         this.isNpInitialTouchActive = true;
-        npView.style.pointerEvents = 'none'; // Air-gap
+        npView.style.pointerEvents = 'none';
         
         this.updateNowPlaying(track, store.state.isPlaying);
         
         // Use class-based animation
-        npView.classList.add('active');
+        setTimeout(() => {
+            npView.classList.add('active');
+        }, 10);
 
         if (!this._npGesturesBound) {
             this.initNowPlayingGestures();
@@ -187,6 +192,9 @@ export class UI {
         const npView = document.getElementById('now-playing-view');
         if (!npView) return;
         npView.classList.remove('active');
+        setTimeout(() => {
+            if (!npView.classList.contains('active')) npView.classList.add('hidden');
+        }, 700); // Wait for transition
     }
 
     static initNowPlayingGestures() {
