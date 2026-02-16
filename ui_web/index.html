@@ -288,13 +288,17 @@
                         <span id="omni-text-2" class="ml-8"></span>
                     </div>
                 </div>
-                <div id="omni-transport" class="relative flex items-center justify-center w-full h-full">
-                    <button id="omni-prev" class="w-12 h-12 flex items-center justify-center opacity-0 scale-75 transition-all duration-300 hidden"><i class="fas fa-backward-step text-xs text-white/60"></i></button>
-                    <div id="omni-anchor" class="w-14 h-14 flex items-center justify-center relative cursor-pointer active:scale-90 transition-transform">
+                <div id="omni-transport" class="relative flex items-center justify-between w-full h-full px-1">
+                    <div id="omni-prev" class="flex-1 h-full flex items-center justify-center opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto cursor-pointer active:bg-white/5">
+                        <i class="fas fa-backward-step text-xs text-white/60"></i>
+                    </div>
+                    <div id="omni-anchor" class="w-14 h-14 flex-shrink-0 flex items-center justify-center relative cursor-pointer active:scale-90 transition-transform z-50">
                         <i id="omni-anchor-icon" class="fas fa-command text-lg text-white"></i>
                         <div id="omni-hold-ring" class="absolute inset-0 border-2 border-[var(--accent)] rounded-full scale-0 opacity-0"></div>
                     </div>
-                    <button id="omni-next" class="w-12 h-12 flex items-center justify-center opacity-0 scale-75 transition-all duration-300 hidden"><i class="fas fa-forward-step text-xs text-white/60"></i></button>
+                    <div id="omni-next" class="flex-1 h-full flex items-center justify-center opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto cursor-pointer active:bg-white/5">
+                        <i class="fas fa-forward-step text-xs text-white/60"></i>
+                    </div>
                 </div>
                 <div id="omni-nav-ribbon" class="absolute inset-0 flex items-center justify-evenly opacity-0 scale-95 transition-all duration-400 pointer-events-none">
                     <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="home"><i class="fas fa-home text-sm text-white/40"></i></div>
