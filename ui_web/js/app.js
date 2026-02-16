@@ -67,35 +67,32 @@ function renderQueue(state) {
  * Surgical UI Sync: Updates indicators (favs, active) without full re-render.
  */
 function syncUIState(state) {
-    const favIds = state.favorites || [];
     const activeId = state.currentTrack ? state.currentTrack.id : null;
 
     // 1. Update all visible song rows across the entire app
     const rows = document.querySelectorAll('.song-row');
     rows.forEach(row => {
         const id = row.getAttribute('data-id');
-        const isFav = favIds.includes(id);
         const isActive = id === activeId;
 
-        // Surgical update: Favourite dot
-        const dot = row.querySelector('.fav-indicator');
-        if (dot) dot.classList.toggle('hidden', !isFav);
-
-        // Surgical update: Active highlight
-        const overlay = row.querySelector('.active-overlay');
-        const icon = overlay ? overlay.querySelector('i') : null;
-        const title = row.querySelector('.song-title');
-
+        // Surgical update: Active highlight classes
         if (isActive) {
-            row.classList.replace('bg-gray-900', 'bg-black');
-            if (overlay) overlay.classList.replace('opacity-0', 'opacity-100');
-            if (icon) icon.classList.remove('hidden');
-            if (title) title.classList.add('text-blue-400');
+            row.classList.remove('bg-white/[0.02]', 'border-white/[0.05]');
+            row.classList.add('bg-white/[0.08]', 'border-white/10');
         } else {
-            row.classList.replace('bg-black', 'bg-gray-900');
-            if (overlay) overlay.classList.replace('opacity-100', 'opacity-0');
-            if (icon) icon.classList.add('hidden');
-            if (title) title.classList.remove('text-blue-400');
+            row.classList.remove('bg-white/[0.08]', 'border-white/10');
+            row.classList.add('bg-white/[0.02]', 'border-white/[0.05]');
+        }
+
+        // Surgical update: Active indicator (Volume icon)
+        const indicator = row.querySelector('.active-indicator-container');
+        if (indicator) indicator.classList.toggle('hidden', !isActive);
+
+        // Surgical update: Title color
+        const title = row.querySelector('.song-title');
+        if (title) {
+            title.classList.toggle('text-white', isActive);
+            title.classList.toggle('text-white/90', !isActive);
         }
     });
 }
@@ -290,13 +287,15 @@ function renderSongList(tracks, containerId) {
                 </div>
 
                 <!-- Main Row -->
-                <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-blue-600/20 border-blue-500/30' : 'bg-[#0a0a0a] border-white/5'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}" onclick="playTrack('${t.id}')">
+                <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-white/[0.08] border-white/10' : 'bg-white/[0.02] border-white/[0.05]'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}" onclick="playTrack('${t.id}')">
                     <div class="relative w-12 h-12 flex-shrink-0">
                         <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-xl shadow-lg" alt="Cover">
-                        ${isActive ? '<div class="absolute inset-0 flex items-center justify-center bg-blue-600/40 rounded-xl backdrop-blur-sm"><i class="fas fa-volume-up text-white text-xs animate-pulse"></i></div>' : ''}
+                        <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl backdrop-blur-sm ${isActive ? '' : 'hidden'}">
+                            <i class="fas fa-volume-up text-white text-xs animate-pulse"></i>
+                        </div>
                     </div>
                     <div class="ml-4 flex-1 truncate">
-                        <div class="font-bold text-sm truncate ${isActive ? 'text-blue-400' : 'text-white/90'}">${esc(t.title)}</div>
+                        <div class="song-title font-bold text-sm truncate ${isActive ? 'text-white' : 'text-white/90'}">${esc(t.title)}</div>
                         <div class="text-[10px] text-gray-500 truncate uppercase tracking-widest mt-0.5">${esc(t.artist)}</div>
                     </div>
                     <div class="flex items-center space-x-3 ml-4">
