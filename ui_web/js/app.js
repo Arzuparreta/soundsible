@@ -313,7 +313,7 @@ function renderSongList(tracks, containerId) {
                     </div>
                     <div class="flex items-center space-x-3 ml-4">
                         <div class="text-[9px] font-black font-mono text-[var(--text-dim)] opacity-50 tracking-tighter">${formatTime(t.duration)}</div>
-                        <button onclick="event.stopPropagation(); UI.showActionMenu('${t.id}')" class="w-10 h-10 flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text-main)] transition-colors rounded-full hover:bg-white/5">
+                        <button onclick="event.stopPropagation(); UI.showActionMenu('${t.id}')" class="w-10 h-10 flex items-center justify-center text-[var(--text-dim)] active:text-[var(--text-main)] transition-colors rounded-full active:bg-white/5 focus:outline-none">
                             <i class="fas fa-ellipsis-v text-xs"></i>
                         </button>
                     </div>

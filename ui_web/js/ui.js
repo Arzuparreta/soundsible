@@ -471,6 +471,8 @@ export class UI {
     }
 
     static hideActionMenu() {
+        if (document.activeElement) document.activeElement.blur();
+        
         const menu = document.getElementById('action-menu');
         const sheet = document.getElementById('action-menu-sheet');
         if (sheet) {
