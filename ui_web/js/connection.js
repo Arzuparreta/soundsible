@@ -21,8 +21,8 @@ export class ConnectionManager {
         const probes = endpoints.map(host => this.probe(host));
 
         try {
-            // Promise.any returns as soon as the first fetch succeeds
-            const fastestHost = await Promise.any(probes);
+            // Robust Promise.any fallback
+            const fastestHost = await (Promise.any ? Promise.any(probes) : this._anyFallback(probes));
             console.log("✅ Fastest Path Locked:", fastestHost);
             
             // Update store
@@ -30,10 +30,25 @@ export class ConnectionManager {
             this.initSocket(fastestHost);
             return fastestHost;
         } catch (err) {
-            console.error("❌ All connection paths failed.");
+            console.error("❌ All connection paths failed.", err);
             store.update({ isOnline: false });
             return null;
         }
+    }
+
+    /**
+     * Promise.any fallback for compatibility
+     */
+    _anyFallback(promises) {
+        return new Promise((resolve, reject) => {
+            let errors = [];
+            promises.forEach(p => {
+                Promise.resolve(p).then(resolve).catch(err => {
+                    errors.push(err);
+                    if (errors.length === promises.length) reject(new Error("All promises failed"));
+                });
+            });
+        });
     }
 
     initSocket(host) {

@@ -25,8 +25,13 @@ class Store {
     }
 
     load(key, fallback) {
-        const data = localStorage.getItem(`soundsible_${key}`);
-        return data ? JSON.parse(data) : fallback;
+        try {
+            const data = localStorage.getItem(`soundsible_${key}`);
+            return data ? JSON.parse(data) : fallback;
+        } catch (e) {
+            console.error(`Failed to load key ${key}:`, e);
+            return fallback;
+        }
     }
 
     save(key, val) {

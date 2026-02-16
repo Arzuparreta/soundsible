@@ -125,114 +125,123 @@ window.showAlbumDetail = (albumName, artistName) => {
 };
 
 async function init() {
-    console.log("App Ready");
+    console.log("🚀 Soundsible App Init Sequence Started...");
     
-    // 1. Initialize UI First (Navigation, Player Bar)
-    UI.init();
-    initSearch();
-    
-    // 2. Perform Connection Race
-    const endpoints = [...store.state.priorityList, window.location.hostname];
-    const uniqueEndpoints = [...new Set(endpoints)].filter(e => e);
-    await connectionManager.findActiveHost(uniqueEndpoints);
-    
-    // 3. Load Library Data
-    await store.syncLibrary();
-    
-    // 3. Subscribe to state changes for re-rendering (Optimized)
-    let lastLibraryJson = null; // Force first render in subscription
-    let lastFavsJson = JSON.stringify(store.state.favorites);
-    let lastQueueJson = JSON.stringify(store.state.queue);
-    let lastTrackId = store.state.currentTrack ? store.state.currentTrack.id : null;
-
-    store.subscribe((state) => {
-        const currentLibJson = JSON.stringify(state.library);
-        const currentFavsJson = JSON.stringify(state.favorites);
-        const currentQueueJson = JSON.stringify(state.queue);
-        const currentTrackId = state.currentTrack ? state.currentTrack.id : null;
-
-        // --- SMART RE-RENDERING LOGIC ---
+    try {
+        // 1. Initialize UI First (Navigation, Player Bar)
+        console.log("UI: Initializing...");
+        UI.init();
+        initSearch();
         
-        // 1. If the entire Library changed (e.g. metadata sync), we must re-render all
-        if (currentLibJson !== lastLibraryJson) {
-            console.log("Library synced, full re-render.");
-            renderHomeSongs(state.library);
-            renderAlbumGrid(state.library);
-            renderFavourites(state);
-            renderQueue(state);
-            lastLibraryJson = currentLibJson;
-        } else {
-            // 2. If ONLY favorites changed, we update the indicators surgically
-            if (currentFavsJson !== lastFavsJson) {
-                syncUIState(state);
-                // If the user is looking at the Favourites view, we still need a full render there
-                if (UI.currentView === 'favourites') renderFavourites(state);
-            }
+        // 2. Perform Connection Race
+        const endpoints = [...store.state.priorityList, window.location.hostname];
+        const uniqueEndpoints = [...new Set(endpoints)].filter(e => e);
+        console.log("NET: Probing endpoints:", uniqueEndpoints);
+        await connectionManager.findActiveHost(uniqueEndpoints);
+        
+        // 3. Load Library Data
+        console.log("DATA: Syncing library...");
+        await store.syncLibrary();
+        
+        // 3. Subscribe to state changes for re-rendering (Optimized)
+        let lastLibraryJson = null; // Force first render in subscription
+        let lastFavsJson = JSON.stringify(store.state.favorites);
+        let lastQueueJson = JSON.stringify(store.state.queue);
+        let lastTrackId = store.state.currentTrack ? store.state.currentTrack.id : null;
 
-            // 3. If ONLY the active track changed, we update highlights surgically
-            if (currentTrackId !== lastTrackId) {
-                syncUIState(state);
-            }
+        store.subscribe((state) => {
+            const currentLibJson = JSON.stringify(state.library);
+            const currentFavsJson = JSON.stringify(state.favorites);
+            const currentQueueJson = JSON.stringify(state.queue);
+            const currentTrackId = state.currentTrack ? state.currentTrack.id : null;
 
-            // 4. If ONLY the queue changed
-            if (currentQueueJson !== lastQueueJson) {
-                // If the user is dragging, do NOT re-render the queue or we'll break the interaction
-                if (!UI.isDraggingQueue) {
-                    renderQueue(state);
+            // --- SMART RE-RENDERING LOGIC ---
+            
+            // 1. If the entire Library changed (e.g. metadata sync), we must re-render all
+            if (currentLibJson !== lastLibraryJson) {
+                console.log("Library synced, full re-render.");
+                renderHomeSongs(state.library);
+                renderAlbumGrid(state.library);
+                renderFavourites(state);
+                renderQueue(state);
+                lastLibraryJson = currentLibJson;
+            } else {
+                // 2. If ONLY favorites changed, we update the indicators surgically
+                if (currentFavsJson !== lastFavsJson) {
+                    syncUIState(state);
+                    // If the user is looking at the Favourites view, we still need a full render there
+                    if (UI.currentView === 'favourites') renderFavourites(state);
+                }
+
+                // 3. If ONLY the active track changed, we update highlights surgically
+                if (currentTrackId !== lastTrackId) {
+                    syncUIState(state);
+                }
+
+                // 4. If ONLY the queue changed
+                if (currentQueueJson !== lastQueueJson) {
+                    // If the user is dragging, do NOT re-render the queue or we'll break the interaction
+                    if (!UI.isDraggingQueue) {
+                        renderQueue(state);
+                    }
                 }
             }
+            
+            // --- End Smart Rendering ---
+
+            // Sync current album detail if open (Always refresh this if open)
+            if (window._currentAlbum && UI.currentView === 'album-detail') {
+                const tracks = state.library.filter(t => 
+                    t.album === window._currentAlbum.name && 
+                    (t.album_artist || t.artist) === window._currentAlbum.artist
+                );
+                renderSongList(tracks, 'album-tracks');
+            }
+            
+            // Persist Search results if user is currently searching
+            const searchInput = document.getElementById('search-input');
+            if (searchInput && searchInput.value.trim() && UI.currentView === 'search') {
+                const query = searchInput.value.toLowerCase();
+                const results = state.library.filter(t => 
+                    t.title.toLowerCase().includes(query) || 
+                    t.artist.toLowerCase().includes(query) || 
+                    t.album.toLowerCase().includes(query)
+                );
+                renderSongList(results, 'search-results');
+            }
+            
+            lastFavsJson = currentFavsJson;
+            lastQueueJson = currentQueueJson;
+            lastTrackId = currentTrackId;
+        });
+
+        // 4. Initial Render (Safety check)
+        if (store.state.library.length > 0) {
+            console.log("DATA: Performing initial render...");
+            renderHomeSongs(store.state.library);
+            renderAlbumGrid(store.state.library);
+            renderFavourites(store.state);
+            renderQueue(store.state);
         }
-        
-        // --- End Smart Rendering ---
 
-        // Sync current album detail if open (Always refresh this if open)
-        if (window._currentAlbum && UI.currentView === 'album-detail') {
-            const tracks = state.library.filter(t => 
-                t.album === window._currentAlbum.name && 
-                (t.album_artist || t.artist) === window._currentAlbum.artist
-            );
-            renderSongList(tracks, 'album-tracks');
+        // 5. Global Control Handlers
+        const playBtn = document.getElementById('mini-play-btn');
+        if (playBtn) {
+            playBtn.onclick = (e) => {
+                e.stopPropagation();
+                audioEngine.toggle();
+            };
         }
-        
-        // Persist Search results if user is currently searching
-        const searchInput = document.getElementById('search-input');
-        if (searchInput && searchInput.value.trim() && UI.currentView === 'search') {
-            const query = searchInput.value.toLowerCase();
-            const results = state.library.filter(t => 
-                t.title.toLowerCase().includes(query) || 
-                t.artist.toLowerCase().includes(query) || 
-                t.album.toLowerCase().includes(query)
-            );
-            renderSongList(results, 'search-results');
+    } catch (err) {
+        console.error("CRITICAL: App initialization failed:", err);
+    } finally {
+        // 6. Dismiss Loader (Always try to dismiss so user isn't stuck)
+        console.log("UI: Sequence finished, dismissing loader.");
+        const loader = document.getElementById('initial-loader');
+        if (loader) {
+            loader.classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => loader.remove(), 1000);
         }
-        
-        lastFavsJson = currentFavsJson;
-        lastQueueJson = currentQueueJson;
-        lastTrackId = currentTrackId;
-    });
-
-    // 4. Initial Render (Safety check)
-    if (store.state.library.length > 0) {
-        renderHomeSongs(store.state.library);
-        renderAlbumGrid(store.state.library);
-        renderFavourites(store.state);
-        renderQueue(store.state);
-    }
-
-    // 5. Global Control Handlers
-    const playBtn = document.getElementById('mini-play-btn');
-    if (playBtn) {
-        playBtn.onclick = (e) => {
-            e.stopPropagation();
-            audioEngine.toggle();
-        };
-    }
-
-    // 6. Dismiss Loader
-    const loader = document.getElementById('initial-loader');
-    if (loader) {
-        loader.classList.add('opacity-0', 'pointer-events-none');
-        setTimeout(() => loader.remove(), 1000);
     }
 
     // 6. Periodic 'Truth' Sync (every 30 seconds)
@@ -384,4 +393,9 @@ window.playAlbum = (albumName) => {
     }
 };
 
-window.addEventListener('DOMContentLoaded', init);
+// RELIABLE INIT: Run immediately if DOM is already ready
+if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
