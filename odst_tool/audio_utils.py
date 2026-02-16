@@ -45,6 +45,8 @@ class AudioProcessor:
                 audio['artist'] = metadata['artist']
             if metadata.get('album'):
                 audio['album'] = metadata['album']
+            if metadata.get('album_artist'):
+                audio['albumartist'] = metadata['album_artist']
             
             year = metadata.get('year') or (metadata['release_date'][:4] if metadata.get('release_date') else None)
             if year:
@@ -94,6 +96,11 @@ class AudioProcessor:
         # Album
         if metadata.get('album'):
             audio.tags.add(TALB(encoding=3, text=metadata['album']))
+            
+        # Album Artist
+        if metadata.get('album_artist'):
+            from mutagen.id3 import TPE2
+            audio.tags.add(TPE2(encoding=3, text=metadata['album_artist']))
             
         # Year
         year = metadata.get('year') or (metadata['release_date'][:4] if metadata.get('release_date') else None)

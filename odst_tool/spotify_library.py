@@ -142,10 +142,15 @@ class SpotifyLibrary:
         if not spotify_track:
             return {}
             
+        album_artist = None
+        if 'album' in spotify_track and 'artists' in spotify_track['album']:
+            album_artist = spotify_track['album']['artists'][0]['name']
+            
         return {
             'title': spotify_track['name'],
             'artist': spotify_track['artists'][0]['name'],
             'album': spotify_track['album']['name'] if 'album' in spotify_track else 'Unknown Album',
+            'album_artist': album_artist,
             'duration_ms': spotify_track['duration_ms'],
             'duration_sec': spotify_track['duration_ms'] // 1000,
             'isrc': spotify_track.get('external_ids', {}).get('isrc'),

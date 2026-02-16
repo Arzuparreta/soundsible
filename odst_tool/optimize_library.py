@@ -102,6 +102,7 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
                             title=track.title,
                             artist=track.artist,
                             album=track.album,
+                            album_artist=track.album_artist,
                             duration=track.duration,
                             file_hash=new_hash,
                             original_filename=track.original_filename,
@@ -112,7 +113,7 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
                             year=track.year,
                             genre=track.genre,
                             track_number=track.track_number,
-                            album_art_url=track.album_art_url
+                            cover_art_key=track.cover_art_key
                         )
                         
                         updated_tracks.append(updated_track)

@@ -96,6 +96,7 @@ class AudioProcessor:
                 'title': 'Unknown Title',
                 'artist': 'Unknown Artist',
                 'album': 'Unknown Album',
+                'album_artist': None,
                 'duration': duration,
                 'bitrate': bitrate,
                 'format': format_ext,
@@ -112,6 +113,10 @@ class AudioProcessor:
                     metadata['title'] = str(tags.get('TIT2', 'Unknown Title'))
                     metadata['artist'] = str(tags.get('TPE1', 'Unknown Artist'))
                     metadata['album'] = str(tags.get('TALB', 'Unknown Album'))
+                    
+                    # Album Artist
+                    if 'TPE2' in tags:
+                        metadata['album_artist'] = str(tags['TPE2'])
                     
                     # Year
                     if 'TDRC' in tags:
@@ -137,6 +142,12 @@ class AudioProcessor:
                     metadata['artist'] = audio.tags.get('artist', ['Unknown Artist'])[0]
                     metadata['album'] = audio.tags.get('album', ['Unknown Album'])[0]
                     
+                    # Album Artist
+                    if 'albumartist' in audio.tags:
+                        metadata['album_artist'] = audio.tags['albumartist'][0]
+                    elif 'album artist' in audio.tags:
+                        metadata['album_artist'] = audio.tags['album artist'][0]
+                    
                     if 'date' in audio.tags:
                         metadata['year'] = int(audio.tags['date'][0].split('-')[0])
                     
@@ -158,6 +169,9 @@ class AudioProcessor:
                     metadata['artist'] = audio.tags.get('artist', ['Unknown Artist'])[0]
                     metadata['album'] = audio.tags.get('album', ['Unknown Album'])[0]
                     
+                    if 'albumartist' in audio.tags:
+                         metadata['album_artist'] = audio.tags['albumartist'][0]
+                    
                     if 'date' in audio.tags:
                         metadata['year'] = int(audio.tags['date'][0])
                     
@@ -173,6 +187,9 @@ class AudioProcessor:
                     metadata['title'] = audio.tags.get('\xa9nam', ['Unknown Title'])[0]
                     metadata['artist'] = audio.tags.get('\xa9ART', ['Unknown Artist'])[0]
                     metadata['album'] = audio.tags.get('\xa9alb', ['Unknown Album'])[0]
+                    
+                    if 'aART' in audio.tags:
+                        metadata['album_artist'] = audio.tags['aART'][0]
                     
                     if '\xa9day' in audio.tags:
                         metadata['year'] = int(audio.tags['\xa9day'][0])
@@ -314,14 +331,28 @@ class AudioProcessor:
                     audio = EasyID3(file_path)
             elif ext == '.flac':
                 audio = FLAC(file_path)
-            elif ext == '.ogg':
+            elif ext == '.ogg' or ext == '.opus':
                 audio = OggVorbis(file_path)
+            elif ext == '.m4a' or ext == '.mp4':
+                from mutagen.mp4 import MP4
+                audio = MP4(file_path)
             else:
                 return False
                 
             if 'title' in tags: audio['title'] = tags['title']
             if 'artist' in tags: audio['artist'] = tags['artist']
             if 'album' in tags: audio['album'] = tags['album']
+            
+            # Handle Album Artist (Key varies by format)
+            album_artist = tags.get('album_artist')
+            if album_artist:
+                if ext == '.mp3':
+                    audio['albumartist'] = album_artist
+                elif ext == '.m4a' or ext == '.mp4':
+                    audio['\xa9ART'] = album_artist # Album Artist in M4A
+                else:
+                    # FLAC/OGG standard
+                    audio['albumartist'] = album_artist
             
             audio.save()
             return True

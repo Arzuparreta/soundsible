@@ -26,6 +26,8 @@ class Track:
     file_size: int
     bitrate: int
     format: str
+    # Fields with default values MUST come last
+    album_artist: Optional[str] = None
     cover_art_key: Optional[str] = None
     year: Optional[int] = None
     genre: Optional[str] = None

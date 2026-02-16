@@ -39,6 +39,7 @@ class Track:
         file_size: Size in bytes
         bitrate: Bitrate in kbps (e.g., 320, 1411 for lossless)
         format: Audio format (mp3, flac, ogg, wav, etc.)
+        album_artist: Common artist for the whole album (optional)
         cover_art_key: Optional S3 key or local path for cover art
         year: Release year (optional)
         genre: Music genre (optional)
@@ -59,6 +60,8 @@ class Track:
     file_size: int
     bitrate: int
     format: str
+    # Fields with default values MUST come last
+    album_artist: Optional[str] = None
     cover_art_key: Optional[str] = None
     year: Optional[int] = None
     genre: Optional[str] = None

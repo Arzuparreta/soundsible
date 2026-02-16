@@ -1,6 +1,7 @@
 import os
 import shutil
 import time
+import re
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 import yt_dlp
@@ -45,12 +46,12 @@ class YouTubeDownloader:
             except ImportError:
                 pass
 
-    def process_track(self, spotify_metadata: Dict[str, Any]) -> Optional[Track]:
+    def process_track(self, metadata: Dict[str, Any], source: str = "spotify") -> Optional[Track]:
         """
         Full workflow for a single track: Search -> Download -> Process -> Return Track
         """
-        # 1. Harmonize Spotify metadata (Standardize source)
-        clean_metadata = MetadataHarmonizer.harmonize(spotify_metadata, source="spotify")
+        # 1. Harmonize metadata (Standardize source)
+        clean_metadata = MetadataHarmonizer.harmonize(metadata, source=source)
         
         # 2. Search for video
         video_info = self._search_youtube(clean_metadata)
@@ -96,6 +97,7 @@ class YouTubeDownloader:
                 title=clean_metadata['title'],
                 artist=clean_metadata['artist'],
                 album=clean_metadata['album'],
+                album_artist=clean_metadata.get('album_artist'),
                 duration=duration if duration > 0 else clean_metadata['duration_sec'],
                 file_hash=file_hash,
                 original_filename=f"{clean_metadata['artist']} - {clean_metadata['title']}.{extension}",
@@ -149,7 +151,7 @@ class YouTubeDownloader:
         duration = info.get('duration', 0)
         
         # Use YT-DLP's specific fields if available (YouTube Music)
-        artist = info.get('artist') or uploader
+        artist = info.get('artist') or info.get('uploader') or uploader
         title = info.get('track') or video_title
         album = info.get('album')
         
@@ -164,7 +166,8 @@ class YouTubeDownloader:
             'track_number': info.get('track_number', 1)
         }
         
-        # Harmonize (Standardize + MusicBrainz lookup)
+        # Harmonize (Standardize + MusicBrainz/iTunes lookup)
+        # Use source="youtube" to trigger resolution if uploader is generic (Topic/collective)
         clean_meta = MetadataHarmonizer.harmonize(raw_meta, source="youtube")
         
         # 2. Download
@@ -198,6 +201,7 @@ class YouTubeDownloader:
                 title=clean_meta['title'],
                 artist=clean_meta['artist'],
                 album=clean_meta['album'],
+                album_artist=clean_meta.get('album_artist'),
                 duration=duration if duration > 0 else clean_meta['duration_sec'],
                 file_hash=file_hash,
                 original_filename=f"{clean_meta['artist']} - {clean_meta['title']}.{extension}",
@@ -289,63 +293,44 @@ class YouTubeDownloader:
 
     def _is_valid_match(self, video_info: Dict[str, Any], metadata: Dict[str, Any]) -> tuple[bool, float]:
         """
-        Check if a video is a valid match for the requested metadata.
-        Returns (is_valid, confidence_score)
+        Check if a video is a valid match using word intersection.
         """
-        title = video_info.get('title', '')
-        channel = video_info.get('channel', '') or video_info.get('uploader', '')
-        duration = video_info.get('duration', 0)
+        title = video_info.get('title', '').lower()
         
-        # 1. Duration Check
-        target_duration = metadata['duration_sec']
+        # 1. Duration Check (Only if duration is known)
+        target_duration = metadata.get('duration_sec', 0)
         if target_duration > 0:
-            diff = abs(duration - target_duration)
+            actual_duration = video_info.get('duration', 0)
+            diff = abs(actual_duration - target_duration)
             if diff > DURATION_TOLERANCE_SEC:
-                # print(f"Skipping '{title}': Duration diff {diff}s > {DURATION_TOLERANCE_SEC}s")
                 return False, 0.0
         
-        # 2. Keyword Exclusion (Strict Filter)
-        title_lower = title.lower()
-        target_title_lower = metadata['title'].lower()
-        
-        # Only check for forbidden keywords if the original title doesn't contain them
-        # (e.g. if I want a "Live" version, don't filter out "Live")
+        # 2. Keyword Exclusion
         for keyword in FORBIDDEN_KEYWORDS:
-            if keyword in title_lower and keyword not in target_title_lower:
-                # print(f"Skipping '{title}': Contains forbidden keyword '{keyword}'")
+            if keyword in title and keyword not in metadata['title'].lower():
                 return False, 0.0
 
-        # 3. Fuzzy Title Matching
-        # We check similarity between Video Title and "Artist - Title" AND "Title"
-        # Often video title is "Artist - Song Name"
+        # 3. Robust Word Matching
+        # We check if most words from our query are present in the video title
+        query_text = f"{metadata['artist']} {metadata['title']}".lower()
+        query_words = set(re.findall(r'\w+', query_text))
+        video_words = set(re.findall(r'\w+', title))
         
-        artist_title = f"{metadata['artist']} - {metadata['title']}"
+        # Remove small generic words from comparison
+        stop_words = {'a', 'the', 'of', 'and', 'official', 'audio', 'video', 'music'}
+        query_words = query_words - stop_words
         
-        sim_full = self._calculate_similarity(title_lower, artist_title.lower())
-        sim_title = self._calculate_similarity(title_lower, target_title_lower)
-        
-        # Take the better match
-        similarity = max(sim_full, sim_title)
-        
-        if similarity < MATCH_THRESHOLD_TITLE:
-            # print(f"Skipping '{title}': Similarity {similarity:.2f} < {MATCH_THRESHOLD_TITLE}")
-            return False, 0.0
+        if not query_words:
+            return True, 1.0 # Should not happen
             
-        # 4. Channel/Artist Check (Bonus Score)
-        score = similarity
+        intersection = query_words.intersection(video_words)
+        match_ratio = len(intersection) / len(query_words)
         
-        # If channel name looks like a topic channel or contains artist name
-        channel_lower = channel.lower()
-        artist_lower = metadata['artist'].lower()
-        
-        if "topic" in channel_lower or artist_lower in channel_lower:
-            score += 0.1
-        
-        # Preference for "Official Audio" or "Official Video"
-        if "official" in title_lower:
-            score += 0.05
+        # Use existing threshold
+        if match_ratio >= 0.5: # Half of the important words match
+            return True, match_ratio
             
-        return True, score
+        return False, 0.0
 
     def _calculate_similarity(self, a: str, b: str) -> float:
         return difflib.SequenceMatcher(None, a, b).ratio()

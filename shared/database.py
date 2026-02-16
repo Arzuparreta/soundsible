@@ -35,6 +35,7 @@ class DatabaseManager:
                 conn.execute("BEGIN TRANSACTION")
                 
                 # 1. Base Tables
+                # Schema order must match the actual columns on disk to avoid confusion
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS tracks (
                         id TEXT PRIMARY KEY,
@@ -54,9 +55,10 @@ class DatabaseManager:
                         track_number INTEGER,
                         is_local BOOLEAN,
                         local_path TEXT,
+                        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         musicbrainz_id TEXT,
                         isrc TEXT,
-                        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        album_artist TEXT
                     )
                 """)
                 
@@ -114,6 +116,8 @@ class DatabaseManager:
                     conn.execute("ALTER TABLE tracks ADD COLUMN musicbrainz_id TEXT")
                 if 'isrc' not in columns:
                     conn.execute("ALTER TABLE tracks ADD COLUMN isrc TEXT")
+                if 'album_artist' not in columns:
+                    conn.execute("ALTER TABLE tracks ADD COLUMN album_artist TEXT")
                 
                 conn.execute("COMMIT")
             except Exception as e:
@@ -143,13 +147,14 @@ class DatabaseManager:
 
                 # 3. Batch update tracks
                 for track in metadata.tracks:
+                    # Column order MUST match the tuple below exactly
                     conn.execute("""
                         INSERT INTO tracks (
                             id, title, artist, album, duration, file_hash, 
                             original_filename, compressed, file_size, bitrate, 
                             format, cover_art_key, year, genre, track_number, 
-                            is_local, local_path, musicbrainz_id, isrc
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            is_local, local_path, musicbrainz_id, isrc, album_artist
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             title=excluded.title,
                             artist=excluded.artist,
@@ -163,13 +168,15 @@ class DatabaseManager:
                             is_local=CASE WHEN excluded.is_local THEN 1 ELSE tracks.is_local END,
                             local_path=COALESCE(excluded.local_path, tracks.local_path),
                             musicbrainz_id=COALESCE(excluded.musicbrainz_id, tracks.musicbrainz_id),
-                            isrc=COALESCE(excluded.isrc, tracks.isrc)
+                            isrc=COALESCE(excluded.isrc, tracks.isrc),
+                            album_artist=excluded.album_artist
                     """, (
-                        track.id, track.title, track.artist, track.album, track.duration,
-                        track.file_hash, track.original_filename, track.compressed,
-                        track.file_size, track.bitrate, track.format, track.cover_art_key,
-                        track.year, track.genre, track.track_number, track.is_local, track.local_path,
-                        track.musicbrainz_id, track.isrc
+                        track.id, track.title, track.artist, track.album,
+                        track.duration, track.file_hash, track.original_filename, 
+                        track.compressed, track.file_size, track.bitrate, track.format, 
+                        track.cover_art_key, track.year, track.genre, track.track_number, 
+                        track.is_local, track.local_path, track.musicbrainz_id, 
+                        track.isrc, track.album_artist
                     ))
                 conn.execute("COMMIT")
             except Exception as e:
@@ -215,26 +222,46 @@ class DatabaseManager:
             return self._row_to_track(row) if row else None
 
     def get_albums(self) -> List[Dict[str, Any]]:
-        """Fetch unique albums with metadata."""
+        """
+        Fetch unique albums with metadata.
+        Groups strictly by album name to prevent splitting when multiple artists are involved.
+        Picks the most representative artist (Album Artist if available).
+        """
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
+            # Use MAX(album_artist) or fallback to artist if NO track in the album has album_artist
             cursor = conn.execute("""
-                SELECT album, artist, MIN(id) as first_track_id, COUNT(*) as track_count, year
+                SELECT 
+                    album, 
+                    COALESCE(MAX(album_artist), artist) as artist, 
+                    MIN(id) as first_track_id, 
+                    COUNT(*) as track_count, 
+                    year
                 FROM tracks 
-                GROUP BY album, artist
+                GROUP BY album
                 ORDER BY artist, album
             """)
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_tracks_by_album(self, album_name: str, artist_name: str) -> List[Track]:
-        """Fetch all tracks for a specific album."""
+    def get_tracks_by_album(self, album_name: str, artist_name: str = None) -> List[Track]:
+        """
+        Fetch all tracks for a specific album.
+        If artist_name is provided, it's used as a secondary filter for identically named albums.
+        """
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.execute("""
-                SELECT * FROM tracks 
-                WHERE album = ? AND artist = ?
-                ORDER BY track_number
-            """, (album_name, artist_name))
+            if artist_name:
+                cursor = conn.execute("""
+                    SELECT * FROM tracks 
+                    WHERE album = ? AND (album_artist = ? OR artist = ?)
+                    ORDER BY track_number
+                """, (album_name, artist_name, artist_name))
+            else:
+                cursor = conn.execute("""
+                    SELECT * FROM tracks 
+                    WHERE album = ?
+                    ORDER BY track_number
+                """, (album_name,))
             return [self._row_to_track(row) for row in cursor.fetchall()]
 
     def _row_to_track(self, row: sqlite3.Row) -> Track:

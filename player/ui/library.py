@@ -169,12 +169,24 @@ class EditTrackDialog(Gtk.Window):
 
     def on_save(self, btn):
         self.save_btn.set_sensitive(False)
-        self.status.set_label("Updating track... This involves uploading.")
+        self.title_entry.set_sensitive(False)
+        self.artist_entry.set_sensitive(False)
+        self.album_entry.set_sensitive(False)
+        self.status.set_label("Updating track... This involves re-uploading to cloud.")
         
+        # Internal logic: If the album name is being changed, we should probably 
+        # clear or re-evaluate the internal album_artist to avoid grouping issues.
+        # Otherwise, we keep the one we had.
+        new_album = self.album_entry.get_text()
+        album_artist = self.track.album_artist
+        if new_album != self.track.album:
+            album_artist = None # Reset so it can be re-harmonized or unified later
+            
         new_meta = {
             'title': self.title_entry.get_text(),
             'artist': self.artist_entry.get_text(),
-            'album': self.album_entry.get_text()
+            'album': new_album,
+            'album_artist': album_artist
         }
         
         threading.Thread(target=self._save_thread, args=(new_meta,), daemon=True).start()
@@ -188,16 +200,29 @@ class EditTrackDialog(Gtk.Window):
         
     def on_save_complete(self, success):
         if success:
-            # Signal parent to refresh
-            if hasattr(self.library_manager, 'refresh_callback') and self.library_manager.refresh_callback:
-                self.library_manager.refresh_callback()
-            self.close()
+            self.status.set_label("✓ Metadata updated successfully!")
+            self.status.add_css_class("success")
+            
+            # Trigger a global library refresh if we can find the main window
+            root = self.get_transient_for()
+            if root and hasattr(root, 'refresh_library'):
+                root.refresh_library(self.library_manager.metadata)
+            
+            # Close dialog after 1 second so user sees success message
+            GLib.timeout_add(1000, lambda: self.close() or False)
         else:
-            self.status.set_label("Update failed. Check logs.")
+            self.status.set_label("❌ Update failed. Check logs.")
+            self.status.add_css_class("error")
             self.save_btn.set_sensitive(True)
+            self.title_entry.set_sensitive(True)
+            self.artist_entry.set_sensitive(True)
+            self.album_entry.set_sensitive(True)
+            # Re-enable fetch buttons if they exist
+            if hasattr(self, 'auto_btn'): self.auto_btn.set_sensitive(True)
+            if hasattr(self, 'select_btn'): self.select_btn.set_sensitive(True)
 
 class LibraryView(Gtk.Box):
-    def __init__(self, library_manager, on_track_activated=None, queue_manager=None, favourites_manager=None, show_favourites_only=False, album_filter=None):
+    def __init__(self, library_manager, on_track_activated=None, queue_manager=None, favourites_manager=None, show_favourites_only=False, album_filter=None, album_artist_filter=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.library_manager = library_manager
         self.on_track_activated = on_track_activated
@@ -205,6 +230,7 @@ class LibraryView(Gtk.Box):
         self.favourites_manager = favourites_manager
         self.show_favourites_only = show_favourites_only
         self.album_filter = album_filter
+        self.album_artist_filter = album_artist_filter
 
         # Setup List Model
         self.store = Gio.ListStore(item_type=TrackObject)
@@ -432,8 +458,12 @@ class LibraryView(Gtk.Box):
         track = track_obj.track
         
         # Filter by album if requested
-        if self.album_filter and track.album != self.album_filter:
-            return False
+        if self.album_filter:
+            if track.album != self.album_filter:
+                return False
+            if self.album_artist_filter:
+                if (track.album_artist or track.artist) != self.album_artist_filter:
+                    return False
             
         # Filter by favourites if in favourites-only mode
         if self.show_favourites_only:

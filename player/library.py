@@ -391,12 +391,20 @@ class LibraryManager:
                 source_root,
                 compress=False, # Don't re-compress if possible, just upload
                 bitrate=track.bitrate or 320,
-                existing_tracks={}, # Force upload
+                existing_tracks={}, # Clear to force new object construction
                 cover_image_path=None, # Already embedded
-                auto_fetch=False
+                auto_fetch=False,
+                force_reprocess=True
             )
             
             if new_track:
+                # Add the manually set album_artist if it was passed in new_metadata
+                if 'album_artist' in new_metadata:
+                    new_track.album_artist = new_metadata['album_artist']
+                elif not new_track.album_artist:
+                    # Fallback to existing if not re-extracted
+                    new_track.album_artist = track.album_artist
+                
                 # 4. Update Library
                 self._log("Updating library registry...")
                 
@@ -441,6 +449,8 @@ class LibraryManager:
             
         except Exception as e:
             self._log(f"Update failed: {e}")
+            import traceback
+            traceback.print_exc()
             if 'local_path' in locals() and local_path and os.path.exists(local_path):
                 os.remove(local_path)
             return False

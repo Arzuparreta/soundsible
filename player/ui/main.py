@@ -1337,7 +1337,8 @@ class MainWindow(Adw.ApplicationWindow):
             queue_manager=self.queue_manager,
             favourites_manager=self.favourites_manager,
             show_favourites_only=False,
-            album_filter=album_name
+            album_filter=album_name,
+            album_artist_filter=album_obj.artist
         )
         
         # Add as a closable page
@@ -1534,6 +1535,22 @@ class MainWindow(Adw.ApplicationWindow):
                 if hasattr(self, 'album_grid'):
                     albums = self.lib_manager.db.get_albums()
                     self.album_grid.set_albums(albums)
+                
+                # Update any open album tabs
+                if hasattr(self, 'tab_view'):
+                    # TabView might have dynamic album pages
+                    # We iterate through all pages and refresh if they are LibraryViews
+                    # This is cleaner than hardcoding tab names
+                    for page_name in self.tab_view.get_page_names():
+                        page = self.tab_view.get_page(page_name)
+                        if isinstance(page, LibraryView):
+                            # Filter tracks if the view has an album filter
+                            if page.album_filter:
+                                album_tracks = [t for t in new_metadata.tracks if t.album == page.album_filter]
+                                page.set_tracks(album_tracks)
+                            elif page == self.library_ui:
+                                # Already handled above, but for consistency:
+                                page.set_tracks(new_metadata.tracks)
                 
                 print("DEBUG: Synchronous UI refresh complete.")
                 return False

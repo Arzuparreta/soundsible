@@ -168,7 +168,8 @@ class UploadEngine:
                              compress: bool, bitrate: int, 
                              existing_tracks: Dict[str, Track],
                              cover_image_path: Optional[str] = None,
-                             auto_fetch: bool = False) -> Tuple[Optional[Track], bool]:
+                             auto_fetch: bool = False,
+                             force_reprocess: bool = False) -> Tuple[Optional[Track], bool]:
         """
         Process a single audio file: hash, compress, embed art, upload.
         """
@@ -176,9 +177,10 @@ class UploadEngine:
             # Calculate hash first to check for duplicates
             file_hash = AudioProcessor.calculate_hash(str(file_path))
             
-            # Check for duplicates, BUT allow overwrite if we are manually setting a cover
-            # (This allows fixing missing covers by re-uploading same file)
-            if file_hash in existing_tracks and not cover_image_path:
+            # Check for duplicates, BUT allow overwrite if:
+            # 1. We are manually setting a cover (Allows fixing missing covers by re-uploading same file)
+            # 2. force_reprocess is True (Explicitly requested update)
+            if file_hash in existing_tracks and not cover_image_path and not force_reprocess:
                 return existing_tracks[file_hash], False
 
             # Extract metadata
@@ -337,6 +339,7 @@ class UploadEngine:
                 title=title,
                 artist=artist,
                 album=album,
+                album_artist=metadata.get('album_artist'),
                 duration=metadata.get('duration', 0) or 0,
                 format=metadata.get('format', 'mp3'),
                 bitrate=metadata.get('bitrate', 0) or 0,

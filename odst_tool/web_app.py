@@ -438,14 +438,14 @@ def process_queue(queue, auto_sync=False):
                 fake_meta = {
                     'title': title,
                     'artist': artist,
-                    'album': 'Manual Download',
+                    'album': 'Manual',
                     'duration_sec': 0, # Skip checks
                     'id': f"manual_{hash(song_str)}",
                     'release_date': None,
                     'track_number': None,
                     'album_art_url': None
                 }
-                track = downloader_app.downloader.process_track(fake_meta)
+                track = downloader_app.downloader.process_track(fake_meta, source="manual")
             
             if track:
                 downloader_app.library.add_track(track)

@@ -16,9 +16,26 @@ class QueueManager:
     
     def __init__(self):
         self._queue: List[Track] = []
+        self._history: List[Track] = [] # Track played songs for "Repeat All"
+        self._repeat_mode = "off" # off, all, one
         self._lock = threading.Lock()
         self._on_change_callbacks: List[Callable[[], None]] = []
     
+    def set_repeat_mode(self, mode: str) -> None:
+        with self._lock:
+            self._repeat_mode = mode
+            self._notify_change()
+
+    def get_repeat_mode(self) -> str:
+        return self._repeat_mode
+
+    def shuffle(self) -> None:
+        """Shuffle the current queue."""
+        import random
+        with self._lock:
+            random.shuffle(self._queue)
+            self._notify_change()
+
     def add(self, track: Track) -> None:
         """Add a track to the end of the queue."""
         with self._lock:
@@ -35,16 +52,27 @@ class QueueManager:
     
     def get_next(self) -> Optional[Track]:
         """
-        Get and remove the next track from the queue.
-        Returns None if queue is empty.
+        Get and remove the next track from the queue based on repeat mode.
         """
         with self._lock:
-            if self._queue:
-                track = self._queue.pop(0)
-                print(f"Dequeued: {track.title}")
-                self._notify_change()
-                return track
-            return None
+            # Handle Repeat One: Just peek the last played if we had one? 
+            # Actually, the engine handles 'Repeat One' usually, but here we can return it.
+            # However, get_next is destructive (pops from queue).
+            
+            if not self._queue:
+                if self._repeat_mode == "all" and self._history:
+                    # Refill queue from history
+                    self._queue = self._history.copy()
+                    self._history.clear()
+                    print("Queue refilled from history (Repeat All)")
+                else:
+                    return None
+
+            track = self._queue.pop(0)
+            self._history.append(track)
+            print(f"Dequeued: {track.title}")
+            self._notify_change()
+            return track
     
     def peek(self) -> Optional[Track]:
         """
@@ -68,6 +96,20 @@ class QueueManager:
             if 0 <= index < len(self._queue):
                 removed = self._queue.pop(index)
                 print(f"Removed from queue: {removed.title}")
+                self._notify_change()
+                return True
+            return False
+    
+    def move(self, from_index: int, to_index: int) -> bool:
+        """
+        Move a track from one position to another in the queue.
+        Returns True if successful, False otherwise.
+        """
+        with self._lock:
+            if 0 <= from_index < len(self._queue) and 0 <= to_index < len(self._queue):
+                track = self._queue.pop(from_index)
+                self._queue.insert(to_index, track)
+                print(f"Moved track from {from_index} to {to_index}")
                 self._notify_change()
                 return True
             return False

@@ -15,7 +15,7 @@ from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 
 from shared.models import PlayerConfig, Track, LibraryMetadata, StorageProvider
-from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME
+from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, DEFAULT_CACHE_DIR
 from player.library import LibraryManager
 from player.engine import PlaybackEngine
 from player.queue_manager import QueueManager
@@ -25,6 +25,7 @@ from odst_tool.cloud_sync import CloudSync
 from odst_tool.optimize_library import optimize_library
 from setup_tool.uploader import UploadEngine
 from setup_tool.provider_factory import StorageProviderFactory
+from setup_tool.metadata import search_itunes, download_image
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -433,7 +434,7 @@ def process_queue_background():
                             'duration_sec': 0,
                             'id': f"manual_{uuid.uuid4().hex[:8]}"
                         }
-                        track = dl.downloader.process_track(fake_meta)
+                        track = dl.downloader.process_track(fake_meta, source="manual")
                 
                 if track:
                     # Update ODST internal record
@@ -545,6 +546,97 @@ def search_library():
     # Use high-performance DB search
     results = lib.search(query)
     return jsonify([t.to_dict() for t in results[:50]])
+
+# --- Metadata Endpoints ---
+
+@app.route('/api/metadata/search', methods=['GET'])
+def search_metadata_external():
+    """Search external services (iTunes) for metadata and covers."""
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify([])
+    
+    results = search_itunes(query, limit=10)
+    return jsonify(results)
+
+@app.route('/api/library/tracks/<track_id>/metadata', methods=['POST'])
+def update_track_metadata(track_id):
+    """Update track metadata and re-upload if needed."""
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
+
+    lib, _, _ = get_core()
+    data = request.json
+    
+    track = lib.metadata.get_track_by_id(track_id)
+    if not track:
+        return jsonify({"error": "Track not found"}), 404
+        
+    # Optional cover art from URL
+    cover_url = data.get('cover_url')
+    cover_path = None
+    
+    if cover_url:
+        print(f"API: Downloading cover from {cover_url}...")
+        img_data = download_image(cover_url)
+        if img_data:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                tmp.write(img_data)
+                cover_path = tmp.name
+                
+    # Prepare metadata dict for LibraryManager.update_track
+    new_meta = {
+        'title': data.get('title', track.title),
+        'artist': data.get('artist', track.artist),
+        'album': data.get('album', track.album),
+        'album_artist': data.get('album_artist', track.album_artist)
+    }
+    
+    success = lib.update_track(track, new_meta, cover_path)
+    
+    if cover_path and os.path.exists(cover_path):
+        os.remove(cover_path)
+        
+    if success:
+        socketio.emit('library_updated')
+        return jsonify({"status": "success"})
+    else:
+        return jsonify({"error": "Failed to update track"}), 500
+
+@app.route('/api/library/tracks/<track_id>/cover', methods=['POST'])
+def upload_track_cover(track_id):
+    """Upload a custom cover art file for a track."""
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+        
+    lib, _, _ = get_core()
+    track = lib.metadata.get_track_by_id(track_id)
+    if not track:
+        return jsonify({"error": "Track not found"}), 404
+        
+    # Save to temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
+        file.save(tmp.name)
+        cover_path = tmp.name
+        
+    # We only update cover, keep other metadata same
+    success = lib.update_track(track, {}, cover_path)
+    
+    if os.path.exists(cover_path):
+        os.remove(cover_path)
+        
+    if success:
+        socketio.emit('library_updated')
+        return jsonify({"status": "success"})
+    else:
+        return jsonify({"error": "Failed to update cover"}), 500
 
 # --- Favourites Endpoints ---
 
@@ -673,6 +765,93 @@ def get_track_cover(track_id):
         
     print(f"DEBUG: [Cover] ❌ No cover or placeholder found")
     return jsonify({"error": "Cover not ready"}), 404
+
+# --- Playback Endpoints ---
+
+@app.route('/api/playback/queue', methods=['GET'])
+def get_playback_queue():
+    _, _, queue = get_core()
+    return jsonify({
+        "tracks": [t.to_dict() for t in queue.get_all()],
+        "repeat_mode": queue.get_repeat_mode()
+    })
+
+@app.route('/api/playback/shuffle', methods=['POST'])
+def shuffle_playback_queue():
+    _, _, queue = get_core()
+    queue.shuffle()
+    return jsonify({"status": "success"})
+
+@app.route('/api/playback/repeat', methods=['POST'])
+def set_playback_repeat():
+    _, _, queue = get_core()
+    data = request.json
+    mode = data.get('mode', 'off') # off, all, one
+    queue.set_repeat_mode(mode)
+    return jsonify({"status": "success", "mode": mode})
+
+@app.route('/api/playback/queue', methods=['POST'])
+def add_to_playback_queue():
+    _, _, queue = get_core()
+    data = request.json
+    track_id = data.get('track_id')
+    
+    lib, _, _ = get_core()
+    track = lib.metadata.get_track_by_id(track_id)
+    if track:
+        queue.add(track)
+        return jsonify({"status": "success", "size": queue.size()})
+    return jsonify({"error": "Track not found"}), 404
+
+@app.route('/api/playback/queue/<int:index>', methods=['DELETE'])
+def remove_from_playback_queue(index):
+    _, _, queue = get_core()
+    if queue.remove(index):
+        return jsonify({"status": "success"})
+    return jsonify({"error": "Index out of range"}), 400
+
+@app.route('/api/playback/queue/track/<track_id>', methods=['DELETE'])
+def remove_track_id_from_playback_queue(track_id):
+    _, _, queue = get_core()
+    # Find all instances of this track in queue and remove them
+    tracks = queue.get_all()
+    indices_to_remove = [i for i, t in enumerate(tracks) if t.id == track_id]
+    
+    if not indices_to_remove:
+        return jsonify({"error": "Track not in queue"}), 404
+        
+    # Remove from back to front to keep indices valid
+    for index in reversed(indices_to_remove):
+        queue.remove(index)
+        
+    return jsonify({"status": "success", "removed_count": len(indices_to_remove)})
+
+@app.route('/api/playback/queue/move', methods=['POST'])
+def move_in_playback_queue():
+    _, _, queue = get_core()
+    data = request.json
+    from_index = data.get('from_index')
+    to_index = data.get('to_index')
+    
+    if from_index is not None and to_index is not None:
+        if queue.move(from_index, to_index):
+            return jsonify({"status": "success"})
+    return jsonify({"error": "Invalid indices"}), 400
+
+@app.route('/api/playback/queue', methods=['DELETE'])
+def clear_playback_queue():
+    _, _, queue = get_core()
+    queue.clear()
+    return jsonify({"status": "success"})
+
+@app.route('/api/playback/next', methods=['GET'])
+def get_next_from_queue():
+    """Pop and return the next track from the queue."""
+    _, _, queue = get_core()
+    track = queue.get_next()
+    if track:
+        return jsonify(track.to_dict())
+    return jsonify(None)
 
 @app.route('/api/playback/play', methods=['POST'])
 def play_track():

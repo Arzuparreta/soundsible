@@ -179,6 +179,7 @@ class LibraryScanner:
                 title=meta.get('title', 'Unknown'),
                 artist=meta.get('artist', 'Unknown'),
                 album=meta.get('album', 'Unknown'),
+                album_artist=meta.get('album_artist'),
                 duration=meta.get('duration', 0),
                 file_hash=file_hash,
                 original_filename=file_path.name,

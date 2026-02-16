@@ -92,13 +92,15 @@ class LibraryJanitor:
                 has_changes = (
                     track.title != mb_info['title'] or
                     track.artist != mb_info['artist'] or
-                    track.album != mb_info['album']
+                    track.album != mb_info['album'] or
+                    track.album_artist != mb_info.get('album_artist')
                 )
                 
                 if has_changes:
                     track.title = mb_info['title']
                     track.artist = mb_info['artist']
                     track.album = mb_info['album']
+                    track.album_artist = mb_info.get('album_artist')
                     track.year = mb_info['year']
                     track.track_number = mb_info['track_number']
                     
@@ -116,6 +118,54 @@ class LibraryJanitor:
             console.print(f"[bold green]Refreshed metadata for {refreshed} tracks.[/bold green]")
         else:
             console.print("[yellow]No metadata changes needed for anchored tracks.[/yellow]")
+
+    def heuristic_album_artist_fix(self, dry_run: bool = False):
+        """
+        Smart Grouping Fix: If an album has multiple 'artists' but NO 'album_artist',
+        this identifies the dominant artist and sets it as the 'album_artist' 
+        to unify the album view.
+        """
+        library = self.storage.get_library()
+        
+        # Group tracks by album
+        albums = {}
+        for track in library.tracks:
+            if track.album not in albums:
+                albums[track.album] = []
+            albums[track.album].append(track)
+            
+        fixed_albums = 0
+        total_fixed_tracks = 0
+        
+        for album_name, tracks in albums.items():
+            # Only process if they don't have album_artist already
+            if any(t.album_artist for t in tracks):
+                continue
+                
+            artists = [t.artist for t in tracks]
+            unique_artists = set(artists)
+            
+            if len(unique_artists) > 1:
+                # Find most frequent artist
+                from collections import Counter
+                dominant_artist = Counter(artists).most_common(1)[0][0]
+                
+                console.print(f"Album '[bold]{album_name}[/bold]': Multiple artists found {unique_artists}. ")
+                console.print(f"  -> Suggesting '[green]{dominant_artist}[/green]' as Album Artist.")
+                
+                if not dry_run:
+                    for t in tracks:
+                        t.album_artist = dominant_artist
+                    fixed_albums += 1
+                    total_fixed_tracks += len(tracks)
+                    
+        if total_fixed_tracks > 0:
+            if not dry_run:
+                library.version += 1
+                self.storage.save_library(library)
+                console.print(f"[bold green]Successfully unified {fixed_albums} albums ({total_fixed_tracks} tracks).[/bold green]")
+        else:
+            console.print("[yellow]No albums needed heuristic unification.[/yellow]")
 
     def _authenticate(self):
         creds = {

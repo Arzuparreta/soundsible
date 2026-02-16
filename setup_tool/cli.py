@@ -433,6 +433,34 @@ def disconnect(wipe_local):
 
 
 @cli.command()
+@click.option('--dry-run', is_flag=True, help='Show suggested unifications without applying them')
+def unify_albums(dry_run):
+    """
+    The Harmonizer: Group tracks with multiple artists into one album.
+    
+    Identifies albums that have different artists for different songs
+    and sets a common 'Album Artist' to unify them in the UI.
+    """
+    from .maintenance import LibraryJanitor
+    
+    # Load config
+    config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
+    if not config_path.exists():
+        console.print("[red]Error: Configuration not found.[/red]")
+        return
+        
+    try:
+        with open(config_path, 'r') as f:
+            config = PlayerConfig.from_dict(json.load(f))
+        
+        janitor = LibraryJanitor(config)
+        janitor.heuristic_album_artist_fix(dry_run=dry_run)
+        
+    except Exception as e:
+        console.print(f"[red]Unification failed: {e}[/red]")
+
+
+@cli.command()
 @click.option('--force', is_flag=True, help='Re-identify already matched tracks')
 def refresh_metadata(force):
     """
