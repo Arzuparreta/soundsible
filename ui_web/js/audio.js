@@ -86,13 +86,52 @@ class AudioEngine {
     play() { this.audio.play(); }
     pause() { this.audio.pause(); }
 
-    next() { console.log("Next track (Pending queue implementation)"); }
-    prev() { console.log("Prev track (Pending queue implementation)"); }
+    async next() {
+        if (store.state.repeatMode === 'one' && store.state.currentTrack) {
+            console.log("Repeat One active, restarting track.");
+            this.playTrack(store.state.currentTrack);
+            return;
+        }
+
+        console.log("Playing next track from queue...");
+        const nextTrack = await store.popNextFromQueue();
+        if (nextTrack) {
+            this.playTrack(nextTrack);
+        } else {
+            console.log("Queue empty.");
+            store.update({ isPlaying: false });
+        }
+    }
+
+    async prev() {
+        // Prev is tricky without a history stack, for now we just restart current track
+        // if we are more than 3 seconds in, otherwise we can't do much without a proper history.
+        if (this.audio.currentTime > 3) {
+            this.audio.currentTime = 0;
+        } else {
+            console.log("Prev track (Not implemented: History stack needed)");
+        }
+    }
+
+    seek(percent) {
+        if (!this.audio.duration) return;
+        const time = (percent / 100) * this.audio.duration;
+        this.audio.currentTime = time;
+    }
 
     onTimeUpdate() {
-        const progress = (this.audio.currentTime / this.audio.duration) * 100;
+        const duration = this.audio.duration || 0;
+        const currentTime = this.audio.currentTime || 0;
+        const progress = (currentTime / duration) * 100 || 0;
+        
+        // Update Mini-bar
         const el = document.getElementById('player-progress');
         if (el) el.style.width = `${progress}%`;
+
+        // Broadcast for Now Playing view
+        window.dispatchEvent(new CustomEvent('audio:timeupdate', { 
+            detail: { progress, currentTime, duration } 
+        }));
     }
 }
 

@@ -28,9 +28,85 @@ function renderFavourites(state) {
     renderSongList(favTracks, 'fav-tracks');
 }
 
+function renderQueue(state) {
+    const containers = [
+        document.getElementById('queue-tracks'),
+        document.getElementById('floating-queue-tracks')
+    ].filter(c => c);
+
+    if (containers.length === 0) return;
+
+    if (!state.queue || state.queue.length === 0) {
+        containers.forEach(c => c.innerHTML = '<div class="text-gray-500 text-center py-10 italic text-xs">Queue is empty.</div>');
+        return;
+    }
+
+    const html = state.queue.map((t, idx) => `
+        <div class="queue-item flex items-center p-2 hover:bg-white/5 rounded-2xl transition-colors group" data-index="${idx}">
+            <img src="${Resolver.getCoverUrl(t)}" class="w-10 h-10 rounded-xl shadow-lg object-cover">
+            <div class="ml-3 flex-1 truncate pointer-events-none">
+                <div class="font-bold text-[13px] truncate text-white/90">${esc(t.title)}</div>
+                <div class="text-[10px] text-gray-500 truncate uppercase tracking-widest">${esc(t.artist)}</div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button onclick="playTrack('${t.id}')" class="w-10 h-10 flex items-center justify-center bg-blue-500/10 text-blue-400 rounded-full hover:bg-blue-500/20 active:scale-90 transition-all">
+                    <i class="fas fa-play text-xs"></i>
+                </button>
+                <button onclick="store.removeFromQueue(${idx})" class="w-10 h-10 flex items-center justify-center bg-white/5 text-gray-500 rounded-full hover:bg-red-500/10 hover:text-red-400 active:scale-90 transition-all">
+                    <i class="fas fa-times text-xs"></i>
+                </button>
+            </div>
+        </div>
+    `).join('');
+
+    containers.forEach(c => c.innerHTML = html);
+}
+
+/**
+ * Surgical UI Sync: Updates indicators (favs, active) without full re-render.
+ */
+function syncUIState(state) {
+    const favIds = state.favorites || [];
+    const activeId = state.currentTrack ? state.currentTrack.id : null;
+
+    // 1. Update all visible song rows across the entire app
+    const rows = document.querySelectorAll('.song-row');
+    rows.forEach(row => {
+        const id = row.getAttribute('data-id');
+        const isFav = favIds.includes(id);
+        const isActive = id === activeId;
+
+        // Surgical update: Favourite dot
+        const dot = row.querySelector('.fav-indicator');
+        if (dot) dot.classList.toggle('hidden', !isFav);
+
+        // Surgical update: Active highlight
+        const overlay = row.querySelector('.active-overlay');
+        const icon = overlay ? overlay.querySelector('i') : null;
+        const title = row.querySelector('.song-title');
+
+        if (isActive) {
+            row.classList.replace('bg-gray-900', 'bg-black');
+            if (overlay) overlay.classList.replace('opacity-0', 'opacity-100');
+            if (icon) icon.classList.remove('hidden');
+            if (title) title.classList.add('text-blue-400');
+        } else {
+            row.classList.replace('bg-black', 'bg-gray-900');
+            if (overlay) overlay.classList.replace('opacity-100', 'opacity-0');
+            if (icon) icon.classList.add('hidden');
+            if (title) title.classList.remove('text-blue-400');
+        }
+    });
+}
+
+window.renderFavourites = renderFavourites;
+window.renderQueue = renderQueue;
+window.store = store;
+window.audioEngine = audioEngine;
+
 window.showAlbumDetail = (albumName, artistName) => {
     const state = store.state;
-    const tracks = state.library.filter(t => t.album === albumName && t.artist === artistName);
+    const tracks = state.library.filter(t => t.album === albumName && (t.album_artist || t.artist) === artistName);
     if (tracks.length === 0) return;
 
     // 1. Populate Header
@@ -64,64 +140,99 @@ async function init() {
     await store.syncLibrary();
     
     // 3. Subscribe to state changes for re-rendering (Optimized)
-    let lastLibraryJson = JSON.stringify(store.state.library);
+    let lastLibraryJson = null; // Force first render in subscription
     let lastFavsJson = JSON.stringify(store.state.favorites);
+    let lastQueueJson = JSON.stringify(store.state.queue);
     let lastTrackId = store.state.currentTrack ? store.state.currentTrack.id : null;
 
     store.subscribe((state) => {
         const currentLibJson = JSON.stringify(state.library);
         const currentFavsJson = JSON.stringify(state.favorites);
+        const currentQueueJson = JSON.stringify(state.queue);
         const currentTrackId = state.currentTrack ? state.currentTrack.id : null;
 
-        // Re-render if library, favourites, OR the active track changes
-        if (currentLibJson !== lastLibraryJson || 
-            currentFavsJson !== lastFavsJson || 
-            currentTrackId !== lastTrackId) {
-            
-            console.log("Data changed, refreshing all views...");
+        // --- SMART RE-RENDERING LOGIC ---
+        
+        // 1. If the entire Library changed (e.g. metadata sync), we must re-render all
+        if (currentLibJson !== lastLibraryJson) {
+            console.log("Library synced, full re-render.");
             renderHomeSongs(state.library);
             renderAlbumGrid(state.library);
             renderFavourites(state);
-            
-            // Sync current album detail if open
-            if (window._currentAlbum) {
-                const tracks = state.library.filter(t => 
-                    t.album === window._currentAlbum.name && 
-                    t.artist === window._currentAlbum.artist
-                );
-                renderSongList(tracks, 'album-tracks');
-            }
-            
-            // Persist Search results if user is currently searching
-            const searchInput = document.getElementById('search-input');
-            if (searchInput && searchInput.value.trim()) {
-                const query = searchInput.value.toLowerCase();
-                const results = state.library.filter(t => 
-                    t.title.toLowerCase().includes(query) || 
-                    t.artist.toLowerCase().includes(query) || 
-                    t.album.toLowerCase().includes(query)
-                );
-                renderSongList(results, 'search-results');
-            }
-            
+            renderQueue(state);
             lastLibraryJson = currentLibJson;
-            lastFavsJson = currentFavsJson;
-            lastTrackId = currentTrackId;
+        } else {
+            // 2. If ONLY favorites changed, we update the indicators surgically
+            if (currentFavsJson !== lastFavsJson) {
+                syncUIState(state);
+                // If the user is looking at the Favourites view, we still need a full render there
+                if (UI.currentView === 'favourites') renderFavourites(state);
+            }
+
+            // 3. If ONLY the active track changed, we update highlights surgically
+            if (currentTrackId !== lastTrackId) {
+                syncUIState(state);
+            }
+
+            // 4. If ONLY the queue changed
+            if (currentQueueJson !== lastQueueJson) {
+                // If the user is dragging, do NOT re-render the queue or we'll break the interaction
+                if (!UI.isDraggingQueue) {
+                    renderQueue(state);
+                }
+            }
         }
+        
+        // --- End Smart Rendering ---
+
+        // Sync current album detail if open (Always refresh this if open)
+        if (window._currentAlbum && UI.currentView === 'album-detail') {
+            const tracks = state.library.filter(t => 
+                t.album === window._currentAlbum.name && 
+                (t.album_artist || t.artist) === window._currentAlbum.artist
+            );
+            renderSongList(tracks, 'album-tracks');
+        }
+        
+        // Persist Search results if user is currently searching
+        const searchInput = document.getElementById('search-input');
+        if (searchInput && searchInput.value.trim() && UI.currentView === 'search') {
+            const query = searchInput.value.toLowerCase();
+            const results = state.library.filter(t => 
+                t.title.toLowerCase().includes(query) || 
+                t.artist.toLowerCase().includes(query) || 
+                t.album.toLowerCase().includes(query)
+            );
+            renderSongList(results, 'search-results');
+        }
+        
+        lastFavsJson = currentFavsJson;
+        lastQueueJson = currentQueueJson;
+        lastTrackId = currentTrackId;
     });
 
-    // 4. Initial Render
-    renderHomeSongs(store.state.library);
-    renderAlbumGrid(store.state.library);
-    renderFavourites(store.state);
+    // 4. Initial Render (Safety check)
+    if (store.state.library.length > 0) {
+        renderHomeSongs(store.state.library);
+        renderAlbumGrid(store.state.library);
+        renderFavourites(store.state);
+        renderQueue(store.state);
+    }
 
     // 5. Global Control Handlers
-    const playBtn = document.getElementById('play-btn');
+    const playBtn = document.getElementById('mini-play-btn');
     if (playBtn) {
         playBtn.onclick = (e) => {
             e.stopPropagation();
             audioEngine.toggle();
         };
+    }
+
+    // 6. Dismiss Loader
+    const loader = document.getElementById('initial-loader');
+    if (loader) {
+        loader.classList.add('opacity-0', 'pointer-events-none');
+        setTimeout(() => loader.remove(), 1000);
     }
 
     // 6. Periodic 'Truth' Sync (every 30 seconds)
@@ -151,23 +262,25 @@ function renderSongList(tracks, containerId) {
         const isActive = t.id === activeId;
         
         return `
-            <div class="relative overflow-hidden rounded-xl bg-gray-800/50 group">
+            <div class="relative overflow-hidden rounded-xl bg-gray-800/50 group" data-track-container="${t.id}">
                 <!-- Swipe Backgrounds (Hidden behind row) -->
                 <div class="absolute inset-0 flex items-center justify-between px-6">
                     <div class="text-yellow-500 font-bold text-xs">FAVOURITE</div>
-                    <div class="text-red-500 font-bold text-xs">DELETE</div>
+                    <div class="text-blue-500 font-bold text-xs text-right">TOGGLE QUEUE</div>
                 </div>
                 
                 <!-- Main Song Row -->
                 <div class="song-row flex items-center p-3 ${isActive ? 'bg-black' : 'bg-gray-900'} cursor-pointer relative z-10 border border-transparent touch-pan-y" data-id="${t.id}" onclick="playTrack('${t.id}')">
                     <div class="relative w-12 h-12 flex-shrink-0">
                         <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-lg shadow-md" alt="Cover">
-                        <!-- Active Indicator Overlay (No more play icon on hover) -->
-                        <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg ${isActive ? 'opacity-100' : 'opacity-0'} transition-opacity">
-                            ${isActive ? '<i class="fas fa-volume-up text-white text-xs"></i>' : ''}
+                        
+                        <!-- Active Indicator Overlay -->
+                        <div class="active-overlay absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg ${isActive ? 'opacity-100' : 'opacity-0'} transition-opacity">
+                            <i class="fas fa-volume-up text-white text-xs ${isActive ? '' : 'hidden'}"></i>
                         </div>
+
                         <!-- Favourite Indicator -->
-                        ${isFav ? `<div class="absolute -top-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full border-2 border-gray-900 shadow-sm"></div>` : ''}
+                        <div class="fav-indicator absolute -top-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full border-2 border-gray-900 shadow-sm ${isFav ? '' : 'hidden'}"></div>
                     </div>
                     <div class="ml-4 flex-1 truncate">
                         <div class="song-title font-semibold text-sm truncate ${isActive ? 'text-blue-400' : ''} transition-colors">${esc(t.title)}</div>
@@ -205,16 +318,27 @@ function renderAlbumGrid(tracks) {
     const container = document.getElementById('all-albums');
     if (!container) return;
     
-    // Group by album + artist (to match GTK logic)
+    // Group strictly by album name to prevent split albums
     const albums = {};
     tracks.forEach(t => {
-        const key = `${t.album} - ${t.artist}`;
+        const key = t.album;
         if (!albums[key]) {
-            albums[key] = t;
+            // First track found for this album name defines the display artist
+            const displayArtist = t.album_artist || t.artist;
+            albums[key] = { ...t, artist: displayArtist };
         } else {
-            // Keep the track with the "minimum" ID to match GTK's SQL MIN(id) logic
+            // If we found a track with a better 'album_artist', update the display artist
+            if (t.album_artist && !albums[key].album_artist) {
+                albums[key].artist = t.album_artist;
+                albums[key].album_artist = t.album_artist;
+            }
+            // Keep the track with the "minimum" ID for the cover image
             if (t.id < albums[key].id) {
-                albums[key] = t;
+                const currentArtist = albums[key].artist;
+                const currentAlbumArtist = albums[key].album_artist;
+                Object.assign(albums[key], t);
+                albums[key].artist = currentArtist;
+                albums[key].album_artist = currentAlbumArtist;
             }
         }
     });

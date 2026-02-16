@@ -16,6 +16,8 @@ class Store {
             library: this.load('library', []),
             favorites: this.load('favorites', []),
             queue: [],
+            repeatMode: 'off', // off, all, one
+            shuffleEnabled: false,
             currentTrack: null,
             isPlaying: false
         };
@@ -71,8 +73,9 @@ class Store {
             
             const data = await res.json();
             
-            // Also sync favourites
+            // Also sync favourites and queue
             await this.syncFavourites();
+            await this.syncQueue();
             
             this.update({ library: data.tracks, isOnline: true });
             this.save('library', data.tracks);
@@ -100,6 +103,57 @@ class Store {
             }
         } catch (err) {
             console.error("Favourites sync error:", err);
+        }
+    }
+
+    async syncQueue() {
+        try {
+            const res = await fetch(`${this.apiBase}/api/playback/queue?t=${Date.now()}`);
+            if (res.ok) {
+                const data = await res.json();
+                this.update({ 
+                    queue: data.tracks,
+                    repeatMode: data.repeat_mode
+                });
+            }
+        } catch (err) {
+            console.error("Queue sync error:", err);
+        }
+    }
+
+    async toggleShuffle() {
+        try {
+            const res = await fetch(`${this.apiBase}/api/playback/shuffle`, { method: 'POST' });
+            if (res.ok) {
+                // Shuffle reorders the actual queue on server, so we just sync
+                await this.syncQueue();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Shuffle error:", err);
+            return false;
+        }
+    }
+
+    async toggleRepeat() {
+        const modes = ['off', 'all', 'one'];
+        const nextMode = modes[(modes.indexOf(this.state.repeatMode) + 1) % modes.length];
+        
+        try {
+            const res = await fetch(`${this.apiBase}/api/playback/repeat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: nextMode })
+            });
+            if (res.ok) {
+                this.update({ repeatMode: nextMode });
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Repeat toggle error:", err);
+            return false;
         }
     }
 
@@ -135,6 +189,170 @@ class Store {
         } catch (err) {
             console.error("Deletion error:", err);
             return false;
+        }
+    }
+
+    async searchMetadata(query) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/metadata/search?q=${encodeURIComponent(query)}`);
+            if (res.ok) {
+                return await res.json();
+            }
+            return [];
+        } catch (err) {
+            console.error("Metadata search error:", err);
+            return [];
+        }
+    }
+
+    async updateMetadata(trackId, metadata, coverUrl = null) {
+        try {
+            const payload = { ...metadata };
+            if (coverUrl) payload.cover_url = coverUrl;
+
+            const res = await fetch(`${this.apiBase}/api/library/tracks/${trackId}/metadata`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            if (res.ok) {
+                await this.syncLibrary();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Metadata update error:", err);
+            return false;
+        }
+    }
+
+    async uploadCover(trackId, file) {
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const res = await fetch(`${this.apiBase}/api/library/tracks/${trackId}/cover`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (res.ok) {
+                await this.syncLibrary();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Cover upload error:", err);
+            return false;
+        }
+    }
+
+    async toggleQueue(trackId) {
+        const isInQueue = this.state.queue.some(t => t.id === trackId);
+        if (isInQueue) {
+            return await this.removeFromQueueById(trackId);
+        } else {
+            return await this.addToQueue(trackId);
+        }
+    }
+
+    async addToQueue(trackId) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/playback/queue`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ track_id: trackId })
+            });
+            if (res.ok) {
+                await this.syncQueue();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Add to queue error:", err);
+            return false;
+        }
+    }
+
+    async removeFromQueueById(trackId) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/playback/queue/track/${trackId}`, {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                await this.syncQueue();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Remove from queue by ID error:", err);
+            return false;
+        }
+    }
+
+    async removeFromQueue(index) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/playback/queue/${index}`, {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                await this.syncQueue();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Remove from queue error:", err);
+            return false;
+        }
+    }
+
+    async reorderQueue(fromIndex, toIndex) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/playback/queue/move`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ from_index: fromIndex, to_index: toIndex })
+            });
+            if (res.ok) {
+                await this.syncQueue();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Reorder queue error:", err);
+            return false;
+        }
+    }
+
+    async clearQueue() {
+        try {
+            const res = await fetch(`${this.apiBase}/api/playback/queue`, {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                await this.syncQueue();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Clear queue error:", err);
+            return false;
+        }
+    }
+
+    async popNextFromQueue() {
+        try {
+            const res = await fetch(`${this.apiBase}/api/playback/next`);
+            if (res.ok) {
+                const track = await res.json();
+                await this.syncQueue();
+                return track;
+            }
+            return null;
+        } catch (err) {
+            console.error("Pop next error:", err);
+            return null;
         }
     }
 

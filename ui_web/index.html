@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#111827">
@@ -12,29 +12,144 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; }
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        
+        :root {
+            --accent: #3b82f6; /* Premium Blue */
+            --accent-glow: rgba(59, 130, 246, 0.4);
+            --bg-deep: #000000;
+            --bg-surface: rgba(15, 15, 15, 0.7);
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-strong: rgba(255, 255, 255, 0.08);
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            touch-action: pan-y;
+            overscroll-behavior-y: contain;
+            background-color: var(--bg-deep);
+            color: white;
+            letter-spacing: -0.01em;
+        }
+
         .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
         .safe-top { padding-top: max(1.5rem, env(safe-area-inset-top)); }
         
-        /* Security & UI: Disable default tap highlight to prevent flickering reveals of swipe labels */
         * { -webkit-tap-highlight-color: transparent; }
         
-        /* Smooth transition for song selection */
-        .song-row {
-            transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        /* Premium Interactive Elements */
+        .song-row, .album-card, nav button, .bottom-sheet button, #queue-popover {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease;
         }
 
-        /* Mobile Fix: Disable hover effects on touch devices to prevent sticky highlights while scrolling */
-        @media (hover: hover) {
-            .song-row:hover {
-                background-color: rgb(31 41 55); /* bg-gray-800 */
-            }
+        .song-row:active, .album-card:active, nav button:active {
+            transform: scale(0.96);
+            opacity: 0.7;
+        }
+
+        .selectable { user-select: text; }
+        
+        /* High-End Glassmorphism */
+        .glass-view {
+            background: var(--bg-surface);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            border: 1px solid var(--glass-border);
+        }
+
+        .glass-card {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+
+        /* Now Playing View: The "Slime" Entrance */
+        #now-playing-view {
+            transition: transform 0.7s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.5s ease;
+            will-change: transform, opacity;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(100%) scale(0.92);
+            z-index: 120;
+        }
+        
+        #now-playing-view.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0) scale(1);
+        }
+
+        /* Animated Progress Handles */
+        #np-seek-handle, #player-progress {
+            transition: width 0.1s linear;
+        }
+
+        /* Custom Scrollbar (Hidden but functional) */
+        .custom-scrollbar::-webkit-scrollbar { width: 0; }
+        .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Status LEDs */
+        .status-pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.5); opacity: 0.4; }
+            100% { transform: scale(1); opacity: 0.8; }
         }
     </style>
 </head>
-<body class="bg-gray-900 text-white selection:bg-blue-500 selection:text-white overflow-hidden">
-    <div id="app" class="h-screen flex flex-col">
+<body class="bg-black text-white selection:bg-blue-500 selection:text-white overflow-hidden">
+    <!-- Initial Loading Overlay -->
+    <div id="initial-loader" class="fixed inset-0 z-[1000] bg-black flex flex-col items-center justify-center transition-opacity duration-700">
+        <div class="relative w-32 h-32 mb-12">
+            <div class="absolute inset-0 border-[6px] border-blue-500/10 rounded-full"></div>
+            <div class="absolute inset-0 border-[6px] border-t-blue-500 rounded-full animate-spin"></div>
+            <div class="absolute inset-0 bg-blue-500/5 blur-3xl rounded-full"></div>
+            <img src="assets/icons/icon-512.png" class="absolute inset-6 w-20 h-20 rounded-[32px] opacity-40 grayscale" alt="Logo">
+        </div>
+        <div class="text-[11px] font-black uppercase tracking-[0.5em] text-blue-500/80 animate-pulse">Initializing Station</div>
+    </div>
+
+    <div id="app" class="h-screen flex flex-col relative overflow-hidden bg-black">
+        <!-- Mesh Gradient Backgrounds -->
+        <div class="fixed inset-0 -z-10 opacity-30 pointer-events-none">
+            <div class="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/20 blur-[120px] rounded-full"></div>
+            <div class="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-600/10 blur-[120px] rounded-full"></div>
+        </div>
+
+        <!-- Floating Queue Button (Top Right) -->
+        <div id="queue-container" class="fixed top-8 right-8 z-[90] flex flex-col items-end pointer-events-none">
+            <button id="queue-fab" onclick="UI.toggleQueue()" class="w-14 h-14 bg-white text-black rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-700 hover:scale-105 active:scale-90 pointer-events-auto border-4 border-black">
+                <i class="fas fa-list-ul text-lg"></i>
+                <div id="queue-badge" class="absolute -top-1 -right-1 bg-blue-500 text-white text-[9px] font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-black">0</div>
+            </button>
+        <!-- Floating Queue Button (Top Right) -->
+        <div id="queue-container" class="fixed top-6 right-6 z-[90] flex flex-col items-end pointer-events-none">
+            <button id="queue-fab" onclick="UI.toggleQueue()" class="w-12 h-12 bg-yellow-500 text-black rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:bg-yellow-400 active:scale-90 pointer-events-auto">
+                <i class="fas fa-list-ul"></i>
+                <div id="queue-badge" class="absolute -top-1 -right-1 bg-white text-black text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-gray-950">0</div>
+            </button>
+
+            <!-- Floating Queue Window -->
+            <div id="queue-popover" class="mt-4 w-72 bg-gray-900/90 backdrop-blur-2xl rounded-3xl border border-gray-800 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transform scale-90 opacity-0 pointer-events-none origin-top-right hidden">
+                <div class="p-5">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xs font-black uppercase tracking-widest text-gray-400">Next Up</h3>
+                        <button onclick="store.clearQueue()" class="text-[10px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-1.5 rounded-full hover:bg-red-500/20 transition-colors active:scale-95">Clear</button>
+                    </div>
+                    <div id="floating-queue-tracks" class="space-y-3 custom-scrollbar">
+                        <!-- Tracks rendered here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Main Content Area -->
         <main id="content" class="flex-1 overflow-y-auto pb-40 px-4 safe-top">
             <div id="view-home" class="view">
@@ -205,8 +320,11 @@
                         <div class="flex justify-between text-sm">
                             <span class="text-gray-400">Status</span>
                             <div class="flex items-center space-x-2">
-                                <div id="status-led" class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
-                                <span id="server-status" class="text-green-500 font-medium">Connected</span>
+                                <div class="relative flex items-center justify-center">
+                                    <div id="status-led-pulse" class="absolute inset-0 w-2 h-2 rounded-full bg-green-500 status-pulse"></div>
+                                    <div id="status-led" class="relative w-2 h-2 rounded-full bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.8)]"></div>
+                                </div>
+                                <span id="server-status" class="text-green-500 font-bold tracking-tight">Connected</span>
                             </div>
                         </div>
                         <button onclick="window.showConnectionRefiner()" class="w-full mt-4 text-xs text-blue-400 hover:text-white transition-colors underline">Manual Connection Refiner</button>
@@ -233,55 +351,270 @@
         </div>
 
         <!-- Player Bar (Mobile Fixed / Desktop Bottom) -->
-        <div id="player-bar" class="fixed bottom-[72px] md:bottom-0 left-0 right-0 bg-gray-800 bg-opacity-95 backdrop-blur-xl border-t border-gray-700 transition-all duration-500 transform translate-y-[200%] z-40 shadow-[0_-10px_20px_rgba(0,0,0,0.3)]">
+        <div id="player-bar" class="fixed bottom-[72px] md:bottom-0 left-0 right-0 bg-black/60 backdrop-blur-2xl border-t border-white/5 transition-all duration-500 transform translate-y-full z-40 shadow-[0_-15px_40px_rgba(0,0,0,0.5)] hidden">
             <div class="px-4 py-3 flex items-center justify-between">
-                <div class="flex items-center space-x-3 truncate">
-                    <img id="player-art" src="assets/icons/icon-192.png" class="w-12 h-12 rounded shadow-lg object-cover" alt="Cover">
+                <div id="player-info" class="flex items-center space-x-4 truncate flex-1 cursor-pointer" onclick="UI.showNowPlaying()">
+                    <div class="relative w-14 h-14 flex-shrink-0">
+                        <img id="player-art" src="assets/icons/icon-192.png" class="w-full h-full rounded-xl shadow-2xl object-cover border border-white/5" alt="Cover">
+                    </div>
                     <div class="truncate">
-                        <div id="player-title" class="font-bold text-sm truncate">Not Playing</div>
-                        <div id="player-artist" class="text-xs text-gray-400 truncate uppercase tracking-wider">Select a track</div>
+                        <div id="player-title" class="font-extrabold text-sm truncate text-white">Not Playing</div>
+                        <div id="player-artist" class="text-[10px] text-blue-400 font-bold truncate uppercase tracking-widest">Select a track</div>
                     </div>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <button id="play-btn" class="w-12 h-12 flex items-center justify-center bg-blue-600 rounded-full hover:bg-blue-500 transition-all active:scale-90 shadow-lg">
+                <div class="flex items-center space-x-3">
+                    <button id="mini-shuffle-btn" onclick="store.toggleShuffle(); UI.showToast('Queue Shuffled');" class="w-10 h-10 hidden md:flex items-center justify-center text-gray-500 hover:text-white transition-all">
+                        <i class="fas fa-shuffle text-sm"></i>
+                    </button>
+                    <button onclick="audioEngine.prev()" class="w-10 h-10 flex items-center justify-center text-white/80 active:scale-90 transition-all">
+                        <i class="fas fa-backward-step text-lg"></i>
+                    </button>
+                    <button id="mini-play-btn" class="w-12 h-12 flex items-center justify-center bg-white text-black rounded-full hover:scale-105 transition-all active:scale-90 shadow-2xl">
                         <i class="fas fa-play text-lg"></i>
+                    </button>
+                    <button onclick="audioEngine.next()" class="w-10 h-10 flex items-center justify-center text-white/80 active:scale-90 transition-all">
+                        <i class="fas fa-forward-step text-lg"></i>
+                    </button>
+                    <button id="mini-repeat-btn" onclick="store.toggleRepeat()" class="w-10 h-10 hidden md:flex items-center justify-center text-gray-500 hover:text-white transition-all relative">
+                        <i class="fas fa-repeat text-sm"></i>
+                        <div id="mini-repeat-one-indicator" class="absolute top-1 right-1 text-[8px] font-black hidden">1</div>
                     </button>
                 </div>
             </div>
             <!-- Progress Mini-bar -->
-            <div class="w-full bg-gray-700 h-1 relative overflow-hidden">
+            <div id="player-progress-container" class="w-full bg-white/5 h-1 relative cursor-pointer group overflow-hidden">
                 <div id="player-progress" class="absolute top-0 left-0 bg-blue-500 h-full w-0 transition-all duration-300"></div>
             </div>
         </div>
 
         <!-- Navigation Bar (Mobile Only) -->
-        <nav id="mobile-nav" class="fixed bottom-0 left-0 right-0 bg-gray-900 bg-opacity-100 border-t border-gray-800 flex items-center justify-around py-3 safe-bottom md:hidden z-50">
+        <nav id="mobile-nav" class="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-3xl border-t border-white/5 flex items-center justify-around py-3 safe-bottom md:hidden z-50">
             <button class="flex flex-col items-center space-y-1 text-blue-500 transition-colors">
-                <i class="fas fa-home text-lg"></i>
-                <span class="text-[10px] font-medium">Home</span>
+                <i class="fas fa-home text-xl"></i>
+                <span class="text-[9px] font-bold uppercase tracking-widest">Home</span>
             </button>
             <button class="flex flex-col items-center space-y-1 text-gray-500 transition-colors">
-                <i class="fas fa-search text-lg"></i>
-                <span class="text-[10px] font-medium">Search</span>
+                <i class="fas fa-search text-xl"></i>
+                <span class="text-[9px] font-bold uppercase tracking-widest">Search</span>
             </button>
             <button class="flex flex-col items-center space-y-1 text-gray-500 transition-colors">
-                <i class="fas fa-record-vinyl text-lg"></i>
-                <span class="text-[10px] font-medium">Albums</span>
+                <i class="fas fa-record-vinyl text-xl"></i>
+                <span class="text-[9px] font-bold uppercase tracking-widest">Albums</span>
             </button>
             <button class="flex flex-col items-center space-y-1 text-gray-500 transition-colors">
-                <i class="fas fa-cloud-arrow-down text-lg"></i>
-                <span class="text-[10px] font-medium">Downloads</span>
+                <i class="fas fa-cloud-arrow-down text-xl"></i>
+                <span class="text-[9px] font-bold uppercase tracking-widest">Station</span>
             </button>
             <button class="flex flex-col items-center space-y-1 text-gray-500 transition-colors">
-                <i class="fas fa-heart text-lg"></i>
-                <span class="text-[10px] font-medium">Likes</span>
+                <i class="fas fa-heart text-xl"></i>
+                <span class="text-[9px] font-bold uppercase tracking-widest">Likes</span>
             </button>
             <button class="flex flex-col items-center space-y-1 text-gray-500 transition-colors">
-                <i class="fas fa-cog text-lg"></i>
-                <span class="text-[10px] font-medium">Settings</span>
+                <i class="fas fa-cog text-xl"></i>
+                <span class="text-[9px] font-bold uppercase tracking-widest">Settings</span>
             </button>
         </nav>
     </div>
+
+    <!-- Now Playing Full View -->
+    <div id="now-playing-view" class="fixed inset-0 z-[120] flex flex-col touch-none overflow-hidden h-[100dvh]">
+        <!-- Glass Backdrop -->
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-[40px]"></div>
+        <div class="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black/60"></div>
+
+        <div class="relative flex-1 flex flex-col p-6 safe-top safe-bottom justify-between h-full max-h-screen overflow-hidden">
+            <!-- Top Header -->
+            <div class="flex justify-between items-center">
+                <button id="np-close-btn" onclick="UI.hideNowPlaying()" class="w-12 h-12 flex items-center justify-center bg-white/5 border border-white/10 backdrop-blur-md rounded-full active:scale-90 transition-all">
+                    <i class="fas fa-chevron-down text-white/80"></i>
+                </button>
+                <div class="text-center">
+                    <div class="text-[10px] font-black uppercase tracking-[0.25em] text-blue-500 mb-1">Now Playing</div>
+                    <div id="np-album-title" class="text-[11px] font-bold text-gray-400 truncate max-w-[180px]">Album Title</div>
+                </div>
+                <button id="np-menu-btn" onclick="UI.showActionMenu(store.state.currentTrack?.id)" class="w-12 h-12 flex items-center justify-center bg-white/5 border border-white/10 backdrop-blur-md rounded-full active:scale-90 transition-all">
+                    <i class="fas fa-ellipsis text-white/80"></i>
+                </button>
+            </div>
+
+            <!-- Hero Art Section -->
+            <div class="flex-1 flex items-center justify-center min-h-0 py-8">
+                <div class="relative w-full aspect-square max-w-[320px] group">
+                    <img id="np-art" src="assets/icons/icon-512.png" class="w-full h-full object-cover rounded-[40px] shadow-[0_40px_80px_rgba(0,0,0,0.8)] transition-transform duration-700 select-none" alt="Cover" draggable="false">
+                    <div id="np-art-glow" class="absolute -inset-10 bg-blue-500/20 blur-[60px] rounded-full -z-10 opacity-40"></div>
+                </div>
+            </div>
+
+            <!-- Bottom Content (Info + Controls) -->
+            <div class="space-y-8">
+                <!-- Song Info -->
+                <div class="px-2 text-center md:text-left">
+                    <div id="np-title" class="text-3xl font-extrabold mb-1 tracking-tight leading-tight selectable truncate text-white">Song Title</div>
+                    <div id="np-artist" class="text-sm text-blue-400 font-bold uppercase tracking-widest selectable truncate">Artist Name</div>
+                </div>
+
+                <!-- Detailed Seek Bar -->
+                <div class="space-y-4">
+                    <div id="np-seek-container" class="relative w-full h-1.5 bg-white/10 rounded-full cursor-pointer group">
+                        <div id="np-seek-bar" class="absolute top-0 left-0 h-full bg-blue-500 rounded-full w-0">
+                            <div id="np-seek-handle" class="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-2xl scale-0 group-active:scale-100 transition-transform"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-[10px] font-bold font-mono text-gray-500 tracking-widest px-1">
+                        <span id="np-time-curr">0:00</span>
+                        <span id="np-time-total">0:00</span>
+                    </div>
+                </div>
+
+                <!-- Main Controls -->
+                <div class="flex items-center justify-between px-2">
+                    <button id="np-shuffle-btn" onclick="store.toggleShuffle(); UI.showToast('Queue Shuffled');" class="w-12 h-12 flex items-center justify-center rounded-full text-gray-500 hover:text-white transition-all">
+                        <i class="fas fa-shuffle text-xl"></i>
+                    </button>
+
+                    <div class="flex items-center space-x-6">
+                        <button onclick="audioEngine.prev()" class="w-14 h-14 flex items-center justify-center rounded-full text-white bg-white/5 border border-white/10 active:scale-90 transition-all">
+                            <i class="fas fa-backward-step text-2xl"></i>
+                        </button>
+                        
+                        <button id="np-play-btn" onclick="audioEngine.toggle()" class="w-24 h-24 flex items-center justify-center bg-white text-black rounded-full shadow-[0_0_50px_rgba(255,255,255,0.2)] active:scale-90 transition-all">
+                            <i class="fas fa-play text-4xl ml-1"></i>
+                        </button>
+
+                        <button onclick="audioEngine.next()" class="w-14 h-14 flex items-center justify-center rounded-full text-white bg-white/5 border border-white/10 active:scale-90 transition-all">
+                            <i class="fas fa-forward-step text-2xl"></i>
+                        </button>
+                    </div>
+
+                    <button id="np-repeat-btn" onclick="store.toggleRepeat()" class="w-12 h-12 flex items-center justify-center rounded-full text-gray-500 hover:text-white transition-all relative">
+                        <i class="fas fa-repeat text-xl"></i>
+                        <div id="np-repeat-one-indicator" class="absolute top-1 right-1 text-[10px] font-black hidden">1</div>
+                    </button>
+                </div>
+
+                <div class="flex justify-around items-center pt-6 border-t border-white/5">
+                    <button onclick="UI.toggleQueue(); UI.hideNowPlaying();" class="text-gray-500 hover:text-blue-400 transition-all p-2">
+                        <i class="fas fa-list-ul text-lg"></i>
+                    </button>
+                    <button class="text-gray-500 hover:text-white transition-all p-2">
+                        <i class="fas fa-quote-right text-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Menu (Bottom Sheet) -->
+    <div id="action-menu" class="fixed inset-0 z-[100]">
+        <div id="action-menu-overlay" class="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 transition-opacity"></div>
+        <div id="action-menu-sheet" class="absolute bottom-0 left-0 right-0 bg-gray-900 rounded-t-[32px] p-6 pb-10 shadow-[0_-20px_50px_rgba(0,0,0,0.5)] border-t border-gray-800">
+            <!-- Handle bar -->
+            <div class="w-12 h-1.5 bg-gray-700 rounded-full mx-auto mb-8"></div>
+            
+            <div id="action-menu-header" class="flex items-center space-x-4 mb-8">
+                <img id="action-track-art" src="assets/icons/icon-192.png" class="w-16 h-16 rounded-xl shadow-2xl object-cover" alt="Art">
+                <div class="flex-1 truncate">
+                    <div id="action-track-title" class="text-xl font-bold truncate">Song Title</div>
+                    <div id="action-track-artist" class="text-sm text-gray-400 truncate uppercase tracking-widest">Artist Name</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-2">
+                <button id="action-queue" class="flex items-center space-x-4 p-4 hover:bg-gray-800 rounded-2xl transition-colors active:scale-95">
+                    <div class="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center">
+                        <i class="fas fa-list-ul text-blue-400"></i>
+                    </div>
+                    <span class="font-bold">Add to Queue</span>
+                </button>
+                <button id="action-edit-metadata" class="flex items-center space-x-4 p-4 hover:bg-gray-800 rounded-2xl transition-colors active:scale-95">
+                    <div class="w-10 h-10 bg-purple-500/10 rounded-full flex items-center justify-center">
+                        <i class="fas fa-pen-to-square text-purple-400"></i>
+                    </div>
+                    <span class="font-bold">Edit Metadata / Fix Cover</span>
+                </button>
+                <button id="action-fav" class="flex items-center space-x-4 p-4 hover:bg-gray-800 rounded-2xl transition-colors active:scale-95">
+                    <div class="w-10 h-10 bg-yellow-500/10 rounded-full flex items-center justify-center">
+                        <i class="fas fa-heart text-yellow-400"></i>
+                    </div>
+                    <span id="action-fav-text" class="font-bold">Add to Favourites</span>
+                </button>
+                <button id="action-delete" class="flex items-center space-x-4 p-4 hover:bg-red-900/20 rounded-2xl transition-colors text-red-400 active:scale-95">
+                    <div class="w-10 h-10 bg-red-500/10 rounded-full flex items-center justify-center">
+                        <i class="fas fa-trash-can"></i>
+                    </div>
+                    <span class="font-bold">Delete Track</span>
+                </button>
+            </div>
+
+            <button onclick="UI.hideActionMenu()" class="w-full mt-6 py-4 text-gray-500 font-bold hover:text-white transition-colors">Close</button>
+        </div>
+    </div>
+
+    <!-- Metadata Editor Modal -->
+    <div id="metadata-editor" class="fixed inset-0 z-[110] hidden flex items-center justify-center p-4">
+        <div id="metadata-editor-overlay" class="absolute inset-0 bg-black/80 backdrop-blur-md opacity-0 transition-opacity duration-300"></div>
+        <div id="metadata-editor-content" class="relative bg-gray-900 rounded-[32px] w-full max-w-lg overflow-hidden transform scale-95 opacity-0 transition-all duration-300 border border-gray-800 shadow-2xl">
+            <div class="p-8">
+                <h2 class="text-2xl font-black mb-8 tracking-tighter">Edit Metadata</h2>
+                
+                <div class="space-y-6">
+                    <!-- Cover Section -->
+                    <div class="flex flex-col items-center space-y-4">
+                        <div class="relative group">
+                            <img id="edit-cover-preview" src="assets/icons/icon-512.png" class="w-40 h-40 rounded-2xl shadow-2xl object-cover border-2 border-gray-800 group-hover:border-blue-500 transition-colors" alt="Preview">
+                            <div id="edit-cover-loading" class="absolute inset-0 bg-black/60 rounded-2xl flex items-center justify-center hidden">
+                                <i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i>
+                            </div>
+                        </div>
+                        <div class="flex space-x-3 w-full">
+                            <button id="edit-auto-fetch-btn" class="flex-1 bg-gray-800 hover:bg-gray-700 py-3 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center space-x-2">
+                                <i class="fas fa-wand-magic-sparkles text-blue-400"></i>
+                                <span>Auto-fetch</span>
+                            </button>
+                            <button id="edit-upload-btn" class="flex-1 bg-gray-800 hover:bg-gray-700 py-3 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center space-x-2">
+                                <i class="fas fa-cloud-arrow-up text-purple-400"></i>
+                                <span>Upload</span>
+                            </button>
+                        </div>
+                        <input type="file" id="edit-file-input" class="hidden" accept="image/*">
+                    </div>
+
+                    <!-- Fields -->
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-1 block">Title</label>
+                            <input type="text" id="edit-title" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 transition-colors">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-1 block">Artist</label>
+                            <input type="text" id="edit-artist" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 transition-colors">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-1 block">Album</label>
+                            <input type="text" id="edit-album" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 transition-colors">
+                        </div>
+                    </div>
+
+                    <!-- Auto-fetch Results (Hidden initially) -->
+                    <div id="auto-fetch-results" class="hidden space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar border-t border-gray-800 pt-4">
+                        <h3 class="text-[10px] text-blue-400 uppercase font-black tracking-widest mb-2">Suggestions</h3>
+                        <div id="auto-fetch-list" class="space-y-2"></div>
+                    </div>
+
+                    <div id="edit-status" class="text-xs text-center min-h-[1rem]"></div>
+
+                    <!-- Actions -->
+                    <div class="flex space-x-4 pt-4 border-t border-gray-800">
+                        <button onclick="UI.hideMetadataEditor()" class="flex-1 py-4 text-gray-500 font-bold active:scale-95 transition-all">Cancel</button>
+                        <button id="edit-save-btn" class="flex-[2] bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all">Save & Sync</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="fixed bottom-32 left-1/2 -translate-x-1/2 z-[200] flex flex-col items-center space-y-4 pointer-events-none w-full max-w-xs"></div>
 
     <!-- PWA Registration -->
     <script>
