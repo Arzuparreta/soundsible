@@ -21,6 +21,7 @@ export class UI {
         // Navigation State
         this.viewStack = [];
         this.currentView = 'home';
+        this._npGesturesBound = false;
 
         this.initNav();
         store.subscribe((state) => this.updatePlayer(state));
@@ -144,12 +145,18 @@ export class UI {
         this.updateNowPlaying(track, store.state.isPlaying);
         
         setTimeout(() => npView.classList.add('active'), 10);
+
+        if (!this._npGesturesBound) {
+            this.initNowPlayingGestures();
+            this._npGesturesBound = true;
+        }
     }
 
     static hideNowPlaying() {
         const npView = document.getElementById('now-playing-view');
         if (!npView) return;
         npView.classList.remove('active');
+        npView.style.transform = ''; // Clear manual drag
         setTimeout(() => {
             if (!npView.classList.contains('active')) npView.classList.add('hidden');
         }, 800);
@@ -380,6 +387,46 @@ export class UI {
         this.initBottomSheetGestures();
     }
 
+    static initNowPlayingGestures() {
+        const npView = document.getElementById('now-playing-view');
+        if (!npView) return;
+        
+        let startY = 0;
+        let isDragging = false;
+
+        npView.addEventListener('touchstart', (e) => {
+            if (e.target.closest('button') || e.target.closest('#np-seek-container')) return;
+            startY = e.touches[0].clientY;
+            isDragging = true;
+            npView.style.transition = 'none';
+        }, { passive: true });
+
+        npView.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            const currentY = e.touches[0].clientY;
+            const deltaY = currentY - startY;
+            if (deltaY > 0) {
+                npView.style.transform = `translateY(${deltaY}px)`;
+            }
+        }, { passive: true });
+
+        npView.addEventListener('touchend', (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+            const deltaY = e.changedTouches[0].clientY - startY;
+            const threshold = window.innerHeight * 0.2;
+
+            npView.style.transition = 'transform 0.6s cubic-bezier(0.19, 1, 0.22, 1)';
+
+            if (deltaY > threshold) {
+                this.vibrate(20);
+                this.hideNowPlaying();
+            } else {
+                npView.style.transform = '';
+            }
+        }, { passive: true });
+    }
+
     static showActionMenu(trackId) {
         const track = store.state.library.find(t => t.id === trackId);
         if (!track) return;
@@ -402,7 +449,10 @@ export class UI {
                 menu.classList.add('active');
                 menu.querySelector('#action-menu-overlay').classList.replace('opacity-0', 'opacity-100');
             }
-            if (sheet) sheet.classList.remove('translate-y-full');
+            if (sheet) {
+                sheet.style.transform = ''; // Clear manual drag
+                sheet.classList.remove('translate-y-full');
+            }
         }, 10);
 
         if (!this._menuBound) {
@@ -418,7 +468,10 @@ export class UI {
     static hideActionMenu() {
         const menu = document.getElementById('action-menu');
         const sheet = document.getElementById('action-menu-sheet');
-        if (sheet) sheet.classList.add('translate-y-full');
+        if (sheet) {
+            sheet.style.transform = ''; // Clear manual drag
+            sheet.classList.add('translate-y-full');
+        }
         if (menu) {
             menu.classList.remove('active');
             menu.querySelector('#action-menu-overlay').classList.replace('opacity-100', 'opacity-0');
