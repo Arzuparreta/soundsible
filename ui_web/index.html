@@ -180,7 +180,7 @@
             </div>
         </div>
 
-        <main id="content" class="safe-top relative">
+        <main id="content" class="flex-1 safe-top relative view-container">
             <div id="view-home" class="view">
                 <h1 class="text-3xl font-black mb-8 tracking-tight">All Songs</h1>
                 <div id="all-songs" class="space-y-2"></div>
@@ -273,60 +273,39 @@
             </div>
         </main>
 
-        <!-- Player Bar -->
-        <div id="player-bar" class="fixed bottom-0 left-0 right-0 glass-view border-t border-white/5 z-40 transition-all duration-500 transform translate-y-full hidden env(safe-area-inset-bottom)">
-            <div class="px-4 py-3 flex items-center justify-between max-w-5xl mx-auto">
-                <div id="player-info" class="flex items-center space-x-4 truncate flex-1 cursor-pointer group" onclick="UI.showNowPlaying()">
-                    <div class="relative w-12 h-12 flex-shrink-0">
-                        <img id="player-art" src="assets/icons/icon-192.png" class="w-full h-full rounded-xl shadow-2xl object-cover border border-white/5 group-hover:scale-105 transition-transform" alt="Art">
-                    </div>
-                    <div class="truncate">
-                        <div id="player-title" class="font-black text-sm truncate text-[var(--text-main)]">Not Playing</div>
-                        <div id="player-artist" class="text-[10px] text-[var(--accent)] font-bold uppercase tracking-widest truncate">Select a track</div>
-                    </div>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <button id="mini-prev-btn" class="w-10 h-10 flex items-center justify-center text-[var(--text-main)] active:scale-90 transition-all"><i class="fas fa-backward-step text-lg"></i></button>
-                    <button id="mini-play-btn" class="w-12 h-12 flex items-center justify-center bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-xl hover:scale-105 active:scale-90 transition-all"><i class="fas fa-play text-lg"></i></button>
-                    <button id="mini-next-btn" class="w-10 h-10 flex items-center justify-center text-[var(--text-main)] active:scale-90 transition-all"><i class="fas fa-forward-step text-lg"></i></button>
-                </div>
-            </div>
-            <div id="player-progress-container" class="w-full bg-white/5 h-1 relative overflow-hidden cursor-pointer group">
-                <div id="player-progress" class="absolute top-0 left-0 bg-[var(--accent)] h-full w-0 transition-all duration-100"></div>
-            </div>
-        </div>
+        <!-- Omni-Island: Unified Control System -->
+        <div id="omni-island-container" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] pointer-events-none">
+            <div id="omni-island" class="glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-500 ease-[cubic-bezier(0.19,1,0.22,1)] overflow-hidden" style="width: 56px; height: 56px; border-radius: 28px;">
+                <!-- Layer 0: Progress Bar (Under-bar) -->
+                <div id="omni-progress" class="absolute bottom-0 left-0 h-[2px] bg-[var(--accent)] w-0 transition-all duration-100 shadow-[0_0_10px_var(--accent)]"></div>
 
-        <!-- Omni-Button Navigation -->
-        <div id="omni-container" class="fixed bottom-24 right-6 z-[200] flex flex-col items-end pointer-events-none">
-            <div id="omni-menu" class="mb-4 flex flex-col items-end space-y-3 transform scale-90 opacity-0 transition-all duration-300 origin-bottom-right pointer-events-none">
-                <div class="omni-item flex items-center justify-end space-x-3 group" data-view="home">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Home</span>
-                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl"><i class="fas fa-home text-sm"></i></div>
+                <!-- Layer 1: Metadata Scroller (Background) -->
+                <div id="omni-metadata-container" class="absolute inset-0 flex items-center px-14 opacity-0 transition-opacity duration-300 pointer-events-none">
+                    <div id="omni-metadata" class="whitespace-nowrap font-mono text-[9px] font-black uppercase tracking-[0.2em] text-white/20"></div>
                 </div>
-                <div class="omni-item flex items-center justify-end space-x-3 group" data-view="search">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Search</span>
-                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl"><i class="fas fa-search text-sm"></i></div>
+
+                <!-- Layer 2: Transport Controls -->
+                <div id="omni-transport" class="relative flex items-center justify-center w-full h-full">
+                    <button id="omni-prev" class="w-12 h-12 items-center justify-center opacity-0 scale-75 transition-all duration-300 hidden"><i class="fas fa-backward-step text-xs text-white/60"></i></button>
+                    
+                    <!-- The Anchor (Center) -->
+                    <div id="omni-anchor" class="w-14 h-14 flex items-center justify-center relative cursor-pointer active:scale-90 transition-transform">
+                        <i id="omni-anchor-icon" class="fas fa-command text-lg text-white"></i>
+                        <div id="omni-hold-ring" class="absolute inset-0 border-2 border-[var(--accent)] rounded-full scale-0 opacity-0"></div>
+                    </div>
+
+                    <button id="omni-next" class="w-12 h-12 items-center justify-center opacity-0 scale-75 transition-all duration-300 hidden"><i class="fas fa-forward-step text-xs text-white/60"></i></button>
                 </div>
-                <div class="omni-item flex items-center justify-end space-x-3 group" data-view="albums">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Library</span>
-                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl"><i class="fas fa-record-vinyl text-sm"></i></div>
+
+                <!-- Layer 3: Navigation Ribbon -->
+                <div id="omni-nav-ribbon" class="absolute inset-0 flex items-center justify-evenly opacity-0 scale-95 transition-all duration-400 pointer-events-none">
+                    <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="home"><i class="fas fa-home text-sm text-white/40"></i></div>
+                    <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="search"><i class="fas fa-search text-sm text-white/40"></i></div>
+                    <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="albums"><i class="fas fa-record-vinyl text-sm text-white/40"></i></div>
+                    <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="downloader"><i class="fas fa-cloud-arrow-down text-sm text-white/40"></i></div>
+                    <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="favourites"><i class="fas fa-heart text-sm text-white/40"></i></div>
+                    <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="settings"><i class="fas fa-cog text-sm text-white/40"></i></div>
                 </div>
-                <div class="omni-item flex items-center justify-end space-x-3 group" data-view="downloader">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Station</span>
-                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl"><i class="fas fa-cloud-arrow-down text-sm"></i></div>
-                </div>
-                <div class="omni-item flex items-center justify-end space-x-3 group" data-view="favourites">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Likes</span>
-                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl"><i class="fas fa-heart text-sm"></i></div>
-                </div>
-                <div class="omni-item flex items-center justify-end space-x-3 group" data-view="settings">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Settings</span>
-                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl"><i class="fas fa-cog text-sm"></i></div>
-                </div>
-            </div>
-            <div id="omni-button" class="w-14 h-14 bg-[var(--accent)] text-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(249,122,18,0.4)] transition-all duration-300 active:scale-90 pointer-events-auto cursor-pointer relative overflow-hidden">
-                <i class="fas fa-command text-xl"></i>
-                <div id="omni-hold-ring" class="absolute inset-0 border-4 border-white/20 rounded-full scale-0 transition-transform"></div>
             </div>
         </div>
     </div>
