@@ -68,12 +68,14 @@ function renderQueue(state) {
  */
 function syncUIState(state) {
     const activeId = state.currentTrack ? state.currentTrack.id : null;
+    const favIds = state.favorites || [];
 
     // 1. Update all visible song rows across the entire app
     const rows = document.querySelectorAll('.song-row');
     rows.forEach(row => {
         const id = row.getAttribute('data-id');
         const isActive = id === activeId;
+        const isFav = favIds.includes(id);
 
         // Surgical update: Active highlight classes (Theme Aware)
         if (isActive) {
@@ -87,6 +89,10 @@ function syncUIState(state) {
         // Surgical update: Active indicator (Volume icon)
         const indicator = row.querySelector('.active-indicator-container');
         if (indicator) indicator.classList.toggle('hidden', !isActive);
+
+        // Surgical update: Favourite indicator (Orange dot)
+        const favIndicator = row.querySelector('.fav-indicator');
+        if (favIndicator) favIndicator.classList.toggle('hidden', !isFav);
 
         // Surgical update: Title color
         const title = row.querySelector('.song-title');
@@ -274,9 +280,11 @@ function renderSongList(tracks, containerId) {
     }
 
     const activeId = store.state.currentTrack ? store.state.currentTrack.id : null;
+    const favIds = store.state.favorites || [];
 
     const html = tracks.map(t => {
         const isActive = t.id === activeId;
+        const isFav = favIds.includes(t.id);
         
         return `
             <div class="relative overflow-hidden rounded-2xl mb-2 group bg-[var(--bg-card)]">
@@ -290,9 +298,14 @@ function renderSongList(tracks, containerId) {
                 <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] border-transparent'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}" onclick="playTrack('${t.id}')">
                     <div class="relative w-12 h-12 flex-shrink-0">
                         <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-xl shadow-lg border border-white/5" alt="Cover">
+                        
+                        <!-- Active Indicator -->
                         <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl backdrop-blur-[2px] ${isActive ? '' : 'hidden'}">
                             <i class="fas fa-volume-up text-[var(--accent)] text-xs animate-pulse"></i>
                         </div>
+
+                        <!-- Favourite Dot -->
+                        <div class="fav-indicator absolute -top-1 -right-1 w-3.5 h-3.5 bg-[var(--accent)] rounded-full border-2 border-[var(--bg-card)] shadow-lg ${isFav ? '' : 'hidden'}"></div>
                     </div>
                     <div class="ml-4 flex-1 truncate">
                         <div class="song-title font-bold text-sm truncate ${isActive ? 'text-white' : 'text-[var(--text-main)]'}">${esc(t.title)}</div>
