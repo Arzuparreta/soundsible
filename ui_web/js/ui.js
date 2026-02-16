@@ -524,6 +524,9 @@ export class UI {
         const isFav = store.state.favorites.includes(trackId);
         if (el('action-fav-text')) el('action-fav-text').textContent = isFav ? 'Remove from Favourites' : 'Add to Favourites';
         
+        const isInQueue = store.state.queue.some(t => t.id === trackId);
+        if (el('action-queue-text')) el('action-queue-text').textContent = isInQueue ? 'Remove from Queue' : 'Add to Queue';
+
         const menu = el('action-menu');
         const sheet = el('action-menu-sheet');
         if (menu) menu.classList.remove('hidden');
