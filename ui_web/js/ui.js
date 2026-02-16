@@ -414,7 +414,7 @@ export class UI {
             if (!isDragging) return;
             isDragging = false;
             const deltaY = e.changedTouches[0].clientY - startY;
-            const threshold = window.innerHeight * 0.2;
+            const threshold = window.innerHeight * 0.14; // Reduced by 30% from 0.2
 
             npView.style.transition = 'transform 0.6s cubic-bezier(0.19, 1, 0.22, 1)';
 
