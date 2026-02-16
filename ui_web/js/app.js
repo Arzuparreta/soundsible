@@ -25,6 +25,7 @@ function esc(str) {
 
 function renderFavourites(state) {
     const favTracks = state.favorites.map(id => state.library.find(t => t.id === id)).filter(t => t);
+    window._currentFavTracks = favTracks;
     renderSongList(favTracks, 'fav-tracks');
 }
 
@@ -108,6 +109,8 @@ window.showAlbumDetail = (albumName, artistName) => {
     const state = store.state;
     const tracks = state.library.filter(t => t.album === albumName && (t.album_artist || t.artist) === artistName);
     if (tracks.length === 0) return;
+
+    window._currentAlbumTracks = tracks;
 
     // 1. Populate Header
     document.getElementById('album-detail-title').textContent = albumName;
@@ -279,16 +282,30 @@ function renderSongList(tracks, containerId) {
         const isActive = t.id === activeId;
         
         return `
-            <div class="song-row flex items-center p-4 ${isActive ? 'bg-blue-600/20 border-blue-500/50' : 'bg-white/5 border-white/5'} rounded-2xl border mb-2 active:scale-[0.98] transition-all" data-id="${t.id}" onclick="playTrack('${t.id}')">
-                <div class="relative w-12 h-12 flex-shrink-0">
-                    <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-xl shadow-lg" alt="Cover">
-                    ${isActive ? '<div class="absolute inset-0 flex items-center justify-center bg-blue-600/40 rounded-xl"><i class="fas fa-volume-up text-white text-xs"></i></div>' : ''}
+            <div class="relative overflow-hidden rounded-2xl mb-2 group">
+                <!-- Swipe Backgrounds -->
+                <div class="absolute inset-0 flex items-center justify-between px-6 bg-blue-600/20">
+                    <div class="text-blue-400 font-black text-[10px] uppercase tracking-widest">Favourite</div>
+                    <div class="text-blue-400 font-black text-[10px] uppercase tracking-widest">Queue</div>
                 </div>
-                <div class="ml-4 flex-1 truncate">
-                    <div class="font-bold text-sm truncate ${isActive ? 'text-blue-400' : 'text-white'}">${esc(t.title)}</div>
-                    <div class="text-[10px] text-gray-400 truncate uppercase tracking-widest mt-0.5">${esc(t.artist)}</div>
+
+                <!-- Main Row -->
+                <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-blue-600/20 border-blue-500/30' : 'bg-[#0a0a0a] border-white/5'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}" onclick="playTrack('${t.id}')">
+                    <div class="relative w-12 h-12 flex-shrink-0">
+                        <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-xl shadow-lg" alt="Cover">
+                        ${isActive ? '<div class="absolute inset-0 flex items-center justify-center bg-blue-600/40 rounded-xl backdrop-blur-sm"><i class="fas fa-volume-up text-white text-xs animate-pulse"></i></div>' : ''}
+                    </div>
+                    <div class="ml-4 flex-1 truncate">
+                        <div class="font-bold text-sm truncate ${isActive ? 'text-blue-400' : 'text-white/90'}">${esc(t.title)}</div>
+                        <div class="text-[10px] text-gray-500 truncate uppercase tracking-widest mt-0.5">${esc(t.artist)}</div>
+                    </div>
+                    <div class="flex items-center space-x-3 ml-4">
+                        <div class="text-[9px] font-black font-mono text-gray-600 tracking-tighter">${formatTime(t.duration)}</div>
+                        <button onclick="event.stopPropagation(); UI.showActionMenu('${t.id}')" class="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-white transition-colors rounded-full hover:bg-white/5">
+                            <i class="fas fa-ellipsis-v text-xs"></i>
+                        </button>
+                    </div>
                 </div>
-                <div class="text-[10px] text-gray-500 font-mono ml-4">${formatTime(t.duration)}</div>
             </div>
         `;
     }).join('');
@@ -311,6 +328,7 @@ async function initSearch() {
             t.artist.toLowerCase().includes(query) || 
             t.album.toLowerCase().includes(query)
         );
+        window._currentSearchTracks = results;
         renderSongList(results, 'search-results');
     };
 }
@@ -346,12 +364,13 @@ function renderAlbumGrid(tracks) {
 
     const albumHtml = Object.values(albums).sort((a, b) => a.album.localeCompare(b.album)).map(t => `
         <div class="album-card group cursor-pointer" onclick="showAlbumDetail('${t.album.replace(/'/g, "\\'")}', '${t.artist.replace(/'/g, "\\'")}')">
-            <div class="relative overflow-hidden rounded-xl shadow-lg transition-transform duration-300 group-hover:scale-105">
-                <img src="${Resolver.getCoverUrl(t)}" class="w-full aspect-square object-cover bg-gray-800" alt="${t.album}">
+            <div class="relative overflow-hidden rounded-[32px] shadow-2xl transition-all duration-500 group-hover:scale-105 active:scale-95 border border-white/5 bg-white/5">
+                <img src="${Resolver.getCoverUrl(t)}" class="w-full aspect-square object-cover bg-gray-900" alt="${t.album}">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             </div>
-            <div class="mt-3">
-                <div class="font-semibold text-sm truncate">${t.album}</div>
-                <div class="text-xs text-gray-400 truncate">${t.artist}</div>
+            <div class="mt-4 px-2">
+                <div class="font-bold text-sm truncate text-white/90 group-hover:text-blue-400 transition-colors">${t.album}</div>
+                <div class="text-[10px] text-gray-500 font-bold truncate uppercase tracking-widest mt-0.5">${t.artist}</div>
             </div>
         </div>
     `).join('');
@@ -368,11 +387,17 @@ function formatTime(seconds) {
 
 window.playTrack = (trackId) => {
     console.log("Playing track ID:", trackId);
-    const track = store.state.library.find(t => t.id === trackId);
+    UI.vibrate(10);
+    
+    let context = store.state.library;
+    if (UI.currentView === 'album-detail') context = window._currentAlbumTracks || context;
+    else if (UI.currentView === 'favourites') context = window._currentFavTracks || context;
+    else if (UI.currentView === 'search') context = window._currentSearchTracks || context;
+
+    const track = context.find(t => t.id === trackId);
     if (track) {
-        // Immediate State Update (Triggers reactive highlight via bg-black)
+        audioEngine.setContext(context);
         store.update({ currentTrack: track });
-        // Then start audio engine
         audioEngine.playTrack(track);
     }
 };

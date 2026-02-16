@@ -37,14 +37,9 @@
         
         * { -webkit-tap-highlight-color: transparent; }
         
-        .song-row, .album-card, nav button {
-            cursor: pointer;
-            transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease;
-        }
-
-        .song-row:active, .album-card:active, nav button:active {
-            transform: scale(0.97);
-            opacity: 0.8;
+        .song-row {
+            transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.3s ease;
+            will-change: transform;
         }
 
         /* Glassmorphism View Base */
@@ -52,22 +47,44 @@
             background: var(--bg-surface);
             backdrop-filter: blur(40px);
             -webkit-backdrop-filter: blur(40px);
+            border: 1px solid var(--glass-border);
         }
 
-        /* Now Playing Entrance */
+        /* Now Playing Entrance (Premium Slime Effect) */
         #now-playing-view {
-            transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+            transition: transform 0.8s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.5s ease, visibility 0.5s;
             will-change: transform, opacity;
             opacity: 0;
-            transform: translateY(100%);
+            visibility: hidden;
+            transform: translateY(100%) scale(0.95);
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(50px);
+            -webkit-backdrop-filter: blur(50px);
         }
         
         #now-playing-view.active {
             opacity: 1;
+            visibility: visible;
+            transform: translateY(0) scale(1);
+        }
+
+        /* Action Menu Entrance */
+        #action-menu {
+            visibility: hidden;
+            transition: visibility 0.4s;
+        }
+        #action-menu.active {
+            visibility: visible;
+        }
+        #action-menu-sheet {
+            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+            will-change: transform;
+        }
+        #action-menu.active #action-menu-sheet {
             transform: translateY(0);
         }
 
-        /* Custom Scrollbar (Hidden) */
+        /* Custom Scrollbar */
         .custom-scrollbar::-webkit-scrollbar { width: 0; }
         .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -90,7 +107,7 @@
         <div class="text-[10px] font-black uppercase tracking-[0.4em] text-blue-500 animate-pulse">Initializing Station</div>
     </div>
 
-    <div id="app" class="h-screen flex flex-col relative overflow-hidden bg-black">
+    <div id="app" class="h-screen flex flex-col relative overflow-hidden bg-black glass-view">
         <!-- Mesh Background -->
         <div class="fixed inset-0 -z-10 opacity-20 pointer-events-none">
             <div class="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-600/30 blur-[120px] rounded-full"></div>
@@ -117,7 +134,7 @@
         </div>
 
         <!-- Main Content -->
-        <main id="content" class="flex-1 overflow-y-auto pb-40 px-4 safe-top">
+        <main id="content" class="flex-1 overflow-y-auto pb-44 px-4 safe-top">
             <div id="view-home" class="view">
                 <h1 class="text-3xl font-black mb-8 tracking-tight">All Songs</h1>
                 <div id="all-songs" class="space-y-2"></div>
@@ -134,7 +151,7 @@
                 <div class="flex flex-col md:flex-row items-center md:items-end space-y-6 md:space-y-0 md:space-x-8 mb-12">
                     <img id="album-detail-cover" src="assets/icons/icon-512.png" class="w-64 h-64 shadow-2xl rounded-3xl object-cover bg-gray-900 border border-white/5" alt="Cover">
                     <div class="text-center md:text-left">
-                        <h2 id="album-detail-title" class="text-4xl md:text-6xl font-black mb-2 tracking-tighter">Album Title</h2>
+                        <h2 id="album-detail-title" class="text-4xl md:text-6xl font-black mb-2 tracking-tighter leading-none">Album Title</h2>
                         <div id="album-detail-artist" class="text-xl text-gray-400 font-bold uppercase tracking-wider">Artist</div>
                     </div>
                 </div>
@@ -214,38 +231,47 @@
         </div>
 
         <!-- Player Bar -->
-        <div id="player-bar" class="fixed bottom-[72px] md:bottom-0 left-0 right-0 bg-black/60 backdrop-blur-2xl border-t border-white/5 z-40 transition-all duration-500 transform translate-y-full hidden">
-            <div class="px-4 py-3 flex items-center justify-between">
-                <div id="player-info" class="flex items-center space-x-4 truncate flex-1" onclick="UI.showNowPlaying()">
-                    <img id="player-art" src="assets/icons/icon-192.png" class="w-12 h-12 rounded-xl shadow-2xl object-cover border border-white/5" alt="Art">
+        <div id="player-bar" class="fixed bottom-[72px] md:bottom-0 left-0 right-0 bg-black/60 backdrop-blur-3xl border-t border-white/5 z-40 transition-all duration-500 transform translate-y-full hidden">
+            <div class="px-4 py-3 flex items-center justify-between max-w-5xl mx-auto">
+                <div id="player-info" class="flex items-center space-x-4 truncate flex-1 cursor-pointer group" onclick="UI.showNowPlaying()">
+                    <div class="relative w-12 h-12 flex-shrink-0">
+                        <img id="player-art" src="assets/icons/icon-192.png" class="w-full h-full rounded-xl shadow-2xl object-cover border border-white/5 group-hover:scale-105 transition-transform" alt="Art">
+                    </div>
                     <div class="truncate">
-                        <div id="player-title" class="font-black text-sm truncate">Not Playing</div>
+                        <div id="player-title" class="font-black text-sm truncate text-white/90">Not Playing</div>
                         <div id="player-artist" class="text-[10px] text-blue-400 font-bold uppercase tracking-widest truncate">Select a track</div>
                     </div>
                 </div>
-                <div class="flex items-center space-x-3">
-                    <button id="mini-play-btn" class="w-12 h-12 flex items-center justify-center bg-white text-black rounded-full active:scale-90 transition-all"><i class="fas fa-play"></i></button>
-                    <button onclick="audioEngine.next()" class="w-10 h-10 flex items-center justify-center text-white/80 active:scale-90"><i class="fas fa-forward-step"></i></button>
+                <div class="flex items-center space-x-4">
+                    <button id="mini-shuffle-btn" class="w-10 h-10 hidden md:flex items-center justify-center text-gray-500 hover:text-white transition-all"><i class="fas fa-shuffle text-sm"></i></button>
+                    <button id="mini-prev-btn" class="w-10 h-10 flex items-center justify-center text-white/80 active:scale-90 transition-all"><i class="fas fa-backward-step text-lg"></i></button>
+                    <button id="mini-play-btn" class="w-12 h-12 flex items-center justify-center bg-white text-black rounded-full shadow-xl hover:scale-105 active:scale-90 transition-all"><i class="fas fa-play text-lg"></i></button>
+                    <button id="mini-next-btn" class="w-10 h-10 flex items-center justify-center text-white/80 active:scale-90 transition-all"><i class="fas fa-forward-step text-lg"></i></button>
+                    <button id="mini-repeat-btn" class="w-10 h-10 hidden md:flex items-center justify-center text-gray-500 hover:text-white transition-all relative">
+                        <i class="fas fa-repeat text-sm"></i>
+                        <div id="mini-repeat-one-indicator" class="absolute top-1 right-1 text-[8px] font-black hidden">1</div>
+                    </button>
                 </div>
             </div>
-            <div id="player-progress-container" class="w-full bg-white/5 h-1 relative overflow-hidden">
-                <div id="player-progress" class="absolute top-0 left-0 bg-blue-500 h-full w-0 transition-all duration-300"></div>
+            <div id="player-progress-container" class="w-full bg-white/5 h-1 relative overflow-hidden cursor-pointer group">
+                <div id="player-progress" class="absolute top-0 left-0 bg-blue-500 h-full w-0 transition-all duration-100"></div>
+                <div class="absolute top-0 left-0 w-full h-full bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
             </div>
         </div>
 
         <!-- Navigation Bar -->
-        <nav id="mobile-nav" class="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-3xl border-t border-white/5 flex items-center justify-around py-3 safe-bottom md:hidden z-50">
-            <button class="flex flex-col items-center space-y-1 text-blue-500"><i class="fas fa-home text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Home</span></button>
-            <button class="flex flex-col items-center space-y-1 text-gray-500"><i class="fas fa-search text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Search</span></button>
-            <button class="flex flex-col items-center space-y-1 text-gray-500"><i class="fas fa-record-vinyl text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Albums</span></button>
-            <button class="flex flex-col items-center space-y-1 text-gray-500"><i class="fas fa-cloud-arrow-down text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Station</span></button>
-            <button class="flex flex-col items-center space-y-1 text-gray-500"><i class="fas fa-heart text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Likes</span></button>
-            <button class="flex flex-col items-center space-y-1 text-gray-500"><i class="fas fa-cog text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Settings</span></button>
+        <nav id="mobile-nav" class="fixed bottom-0 left-0 right-0 bg-black/60 backdrop-blur-3xl border-t border-white/5 flex items-center justify-around py-3 safe-bottom md:hidden z-50">
+            <button class="flex flex-col items-center space-y-1 text-blue-500 transition-all active:scale-90"><i class="fas fa-home text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Home</span></button>
+            <button class="flex flex-col items-center space-y-1 text-gray-500 transition-all active:scale-90"><i class="fas fa-search text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Search</span></button>
+            <button class="flex flex-col items-center space-y-1 text-gray-500 transition-all active:scale-90"><i class="fas fa-record-vinyl text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Albums</span></button>
+            <button class="flex flex-col items-center space-y-1 text-gray-500 transition-all active:scale-90"><i class="fas fa-cloud-arrow-down text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Station</span></button>
+            <button class="flex flex-col items-center space-y-1 text-gray-500 transition-all active:scale-90"><i class="fas fa-heart text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Likes</span></button>
+            <button class="flex flex-col items-center space-y-1 text-gray-500 transition-all active:scale-90"><i class="fas fa-cog text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Settings</span></button>
         </nav>
     </div>
 
     <!-- Now Playing Full View -->
-    <div id="now-playing-view" class="fixed inset-0 z-[120] hidden flex flex-col touch-none overflow-hidden h-[100dvh] bg-black/95 backdrop-blur-[40px]">
+    <div id="now-playing-view" class="fixed inset-0 z-[120] hidden flex flex-col touch-none overflow-hidden h-[100dvh]">
         <div class="relative flex-1 flex flex-col p-8 safe-top safe-bottom justify-between">
             <div class="flex justify-between items-center">
                 <button onclick="UI.hideNowPlaying()" class="w-12 h-12 flex items-center justify-center bg-white/10 rounded-full active:scale-90"><i class="fas fa-chevron-down"></i></button>
@@ -264,10 +290,10 @@
                     <div id="np-artist" class="text-sm text-blue-400 font-bold uppercase tracking-widest truncate">Artist</div>
                 </div>
                 <div class="space-y-4">
-                    <div id="np-seek-container" class="relative w-full h-1.5 bg-white/10 rounded-full cursor-pointer overflow-hidden">
-                        <div id="np-seek-bar" class="absolute top-0 left-0 h-full bg-blue-500 w-0"></div>
+                    <div id="np-seek-container" class="relative w-full h-1.5 bg-white/10 rounded-full cursor-pointer overflow-hidden group">
+                        <div id="np-seek-bar" class="absolute top-0 left-0 h-full bg-blue-500 w-0 transition-all duration-100 shadow-[0_0_15px_rgba(59,130,246,0.8)]"></div>
                     </div>
-                    <div class="flex justify-between text-[10px] font-bold font-mono text-gray-500 tracking-widest">
+                    <div class="flex justify-between text-[10px] font-bold font-mono text-gray-500 tracking-widest uppercase px-1">
                         <span id="np-time-curr">0:00</span>
                         <span id="np-time-total">0:00</span>
                     </div>

@@ -10,7 +10,12 @@ class AudioEngine {
         this.audio = new Audio();
         this.audio.crossOrigin = 'anonymous';
         this.currentPosition = 0;
+        this.currentContext = []; // Sequential fallback
         this.init();
+    }
+
+    setContext(tracks) {
+        this.currentContext = tracks;
     }
 
     init() {
@@ -93,14 +98,32 @@ class AudioEngine {
             return;
         }
 
+        // 1. Try Queue First
         console.log("Playing next track from queue...");
         const nextTrack = await store.popNextFromQueue();
         if (nextTrack) {
             this.playTrack(nextTrack);
-        } else {
-            console.log("Queue empty.");
-            store.update({ isPlaying: false });
+            return;
         }
+
+        // 2. Try Context Fallback (Sequential Play)
+        if (this.currentContext && this.currentContext.length > 0 && store.state.currentTrack) {
+            const currentIndex = this.currentContext.findIndex(t => t.id === store.state.currentTrack.id);
+            
+            if (currentIndex !== -1 && currentIndex < this.currentContext.length - 1) {
+                const nextSeqTrack = this.currentContext[currentIndex + 1];
+                console.log("Queue empty, falling back to context sequence:", nextSeqTrack.title);
+                this.playTrack(nextSeqTrack);
+                return;
+            } else if (store.state.repeatMode === 'all') {
+                console.log("End of context reached, Repeat All active. Looping...");
+                this.playTrack(this.currentContext[0]);
+                return;
+            }
+        }
+
+        console.log("Playback sequence finished.");
+        store.update({ isPlaying: false });
     }
 
     async prev() {

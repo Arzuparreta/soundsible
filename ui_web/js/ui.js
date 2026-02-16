@@ -23,20 +23,27 @@ export class UI {
         this.initNav();
         store.subscribe((state) => this.updatePlayer(state));
 
-        // Global Transport Handlers
+        // Global Transport Handlers (Mini & Full)
         const bind = (id, fn) => {
             const el = document.getElementById(id);
             if (el) el.onclick = (e) => { e.stopPropagation(); fn(); };
         };
 
+        // Play/Pause
         bind('mini-play-btn', () => audioEngine.toggle());
         bind('np-play-btn', () => audioEngine.toggle());
-        bind('mini-shuffle-btn', () => store.toggleShuffle());
-        bind('np-shuffle-btn', () => store.toggleShuffle());
+        
+        // Navigation
+        bind('mini-next-btn', () => audioEngine.next());
+        bind('mini-prev-btn', () => audioEngine.prev());
+        
+        // Modes
+        bind('mini-shuffle-btn', () => { store.toggleShuffle(); this.showToast('Queue Shuffled'); });
+        bind('np-shuffle-btn', () => { store.toggleShuffle(); this.showToast('Queue Shuffled'); });
         bind('mini-repeat-btn', () => store.toggleRepeat());
         bind('np-repeat-btn', () => store.toggleRepeat());
 
-        // Simple Touch Handlers (No complex transforms)
+        // Simple Touch Handlers
         this.initTouch();
     }
 
@@ -137,7 +144,7 @@ export class UI {
         npView.classList.remove('active');
         setTimeout(() => {
             if (!npView.classList.contains('active')) npView.classList.add('hidden');
-        }, 600);
+        }, 800);
     }
 
     static toggleQueue() {
@@ -201,6 +208,7 @@ export class UI {
             this.navButtons.forEach((btn, idx) => {
                 btn.onclick = (e) => {
                     e.preventDefault();
+                    this.vibrate(10);
                     this.showView(views[idx]);
                 };
             });
@@ -242,21 +250,73 @@ export class UI {
             if (e.touches.length > 1 && e.cancelable) e.preventDefault();
         }, { passive: false });
 
-        // Simple long-press for Action Menu on Song Rows
-        let timer = null;
+        let startX = 0;
+        let startY = 0;
+        let currentX = 0;
+        let activeRow = null;
+        let isHorizontal = false;
+        let longPressTimer = null;
+
         document.addEventListener('touchstart', (e) => {
             const row = e.target.closest('.song-row');
             if (row) {
-                const id = row.getAttribute('data-id');
-                timer = setTimeout(() => {
-                    this.vibrate(50);
-                    this.showActionMenu(id);
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                activeRow = row;
+                row.style.transition = 'none';
+                isHorizontal = false;
+                
+                longPressTimer = setTimeout(() => {
+                    if (!isHorizontal) {
+                        this.vibrate(50);
+                        this.showActionMenu(row.getAttribute('data-id'));
+                    }
                 }, 600);
             }
         }, { passive: true });
 
-        document.addEventListener('touchend', () => clearTimeout(timer), { passive: true });
-        document.addEventListener('touchmove', () => clearTimeout(timer), { passive: true });
+        document.addEventListener('touchmove', (e) => {
+            if (!activeRow) return;
+            currentX = e.touches[0].clientX;
+            const diffX = currentX - startX;
+            const diffY = Math.abs(e.touches[0].clientY - startY);
+            
+            if (!isHorizontal && Math.abs(diffX) > diffY && Math.abs(diffX) > 10) {
+                isHorizontal = true;
+                clearTimeout(longPressTimer);
+            }
+            
+            if (isHorizontal) {
+                if (e.cancelable) e.preventDefault();
+                const move = Math.max(Math.min(diffX, 100), -100);
+                activeRow.style.transform = `translateX(${move}px)`;
+            }
+        }, { passive: false });
+
+        document.addEventListener('touchend', (e) => {
+            clearTimeout(longPressTimer);
+            if (!activeRow) return;
+            
+            const diff = currentX - startX;
+            activeRow.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+            activeRow.style.transform = 'translateX(0)';
+            
+            if (isHorizontal) {
+                if (diff > 70) {
+                    store.toggleFavourite(activeRow.getAttribute('data-id'));
+                    this.vibrate(30);
+                    this.showToast('Updated Favourites');
+                } else if (diff < -70) {
+                    store.toggleQueue(activeRow.getAttribute('data-id'));
+                    this.vibrate(30);
+                    this.showToast('Updated Queue');
+                }
+            }
+            
+            activeRow = null;
+            startX = 0;
+            currentX = 0;
+        }, { passive: true });
     }
 
     static showActionMenu(trackId) {
@@ -271,13 +331,16 @@ export class UI {
         if (el('action-track-art')) el('action-track-art').src = Resolver.getCoverUrl(track);
 
         const isFav = store.state.favorites.includes(trackId);
-        if (el('action-fav-text')) el('action-fav-text').textContent = isFav ? 'Remove' : 'Favourite';
+        if (el('action-fav-text')) el('action-fav-text').textContent = isFav ? 'Remove from Favourites' : 'Add to Favourites';
         
         const menu = el('action-menu');
         const sheet = el('action-menu-sheet');
         if (menu) menu.classList.remove('hidden');
         setTimeout(() => {
-            if (menu) menu.querySelector('#action-menu-overlay').classList.replace('opacity-0', 'opacity-100');
+            if (menu) {
+                menu.classList.add('active');
+                menu.querySelector('#action-menu-overlay').classList.replace('opacity-0', 'opacity-100');
+            }
             if (sheet) sheet.classList.remove('translate-y-full');
         }, 10);
 
@@ -295,7 +358,10 @@ export class UI {
         const menu = document.getElementById('action-menu');
         const sheet = document.getElementById('action-menu-sheet');
         if (sheet) sheet.classList.add('translate-y-full');
-        if (menu) menu.querySelector('#action-menu-overlay').classList.replace('opacity-100', 'opacity-0');
+        if (menu) {
+            menu.classList.remove('active');
+            menu.querySelector('#action-menu-overlay').classList.replace('opacity-100', 'opacity-0');
+        }
         setTimeout(() => {
             if (menu) menu.classList.add('hidden');
         }, 400);
@@ -310,8 +376,11 @@ export class UI {
         const mode = store.state.repeatMode;
         const btns = [document.getElementById('np-repeat-btn'), document.getElementById('mini-repeat-btn')].filter(b => b);
         btns.forEach(b => b.classList.toggle('text-blue-500', mode !== 'off'));
-        const ind = document.getElementById('np-repeat-one-indicator');
-        if (ind) ind.classList.toggle('hidden', mode !== 'one');
+        
+        const indMini = document.getElementById('mini-repeat-one-indicator');
+        const indNP = document.getElementById('np-repeat-one-indicator');
+        if (indMini) indMini.classList.toggle('hidden', mode !== 'one');
+        if (indNP) indNP.classList.toggle('hidden', mode !== 'one');
     }
 
     static showMetadataEditor(id) {
