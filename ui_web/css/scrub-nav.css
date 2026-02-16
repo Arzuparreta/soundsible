@@ -1,0 +1,50 @@
+#scrub-pill-container {
+    position: fixed;
+    bottom: 5.5rem; /* Moved above the Player Bar/Safe Area */
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#scrub-pill {
+    width: 120px;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 100px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: width 0.3s cubic-bezier(0.19, 1, 0.22, 1), background 0.3s ease;
+    cursor: pointer;
+    touch-action: none;
+}
+
+#scrub-pill.active {
+    width: 160px;
+    background: var(--accent);
+    box-shadow: 0 0 20px var(--accent);
+}
+
+#scrub-label {
+    margin-bottom: 8px;
+    font-size: 9px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+    text-align: center;
+    pointer-events: none;
+}
+
+#scrub-pill.active + #scrub-label,
+#scrub-pill-container:hover #scrub-label {
+    opacity: 1;
+    transform: translateY(0);
+}

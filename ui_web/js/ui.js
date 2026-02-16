@@ -23,7 +23,8 @@ export class UI {
         this._npGesturesBound = false;
 
         this.initGlobalListeners();
-        this.initOmniButton();
+        this.initScrubNav();
+        this.initQuickJump();
         store.subscribe((state) => this.updatePlayer(state));
 
         // Global Transport Handlers
@@ -282,77 +283,6 @@ export class UI {
         });
     }
 
-    static initOmniButton() {
-        const btn = document.getElementById('omni-button');
-        const menu = document.getElementById('omni-menu');
-        const items = document.querySelectorAll('.omni-item');
-        const ring = document.getElementById('omni-hold-ring');
-        if (!btn || !menu) return;
-
-        let holdTimer;
-        let isHolding = false;
-        let activeView = null;
-
-        const startHold = () => {
-            isHolding = true;
-            this.vibrate(20);
-            ring.style.transition = 'transform 0.6s linear';
-            ring.style.transform = 'scale(1)';
-            
-            holdTimer = setTimeout(() => {
-                this.vibrate(50);
-                menu.classList.remove('hidden', 'opacity-0', 'scale-90');
-                menu.classList.add('opacity-100', 'scale-100');
-                menu.style.pointerEvents = 'auto';
-            }, 600);
-        };
-
-        const stopHold = () => {
-            clearTimeout(holdTimer);
-            ring.style.transition = 'none';
-            ring.style.transform = 'scale(0)';
-            
-            if (isHolding && activeView) {
-                this.vibrate(30);
-                this.showView(activeView);
-            }
-
-            menu.classList.add('opacity-0', 'scale-90');
-            menu.classList.remove('opacity-100', 'scale-100');
-            menu.style.pointerEvents = 'none';
-            items.forEach(i => i.classList.remove('active'));
-            
-            isHolding = false;
-            activeView = null;
-        };
-
-        btn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            startHold();
-        });
-
-        document.addEventListener('touchmove', (e) => {
-            if (!isHolding) return;
-            const touch = e.touches[0];
-            const target = document.elementFromPoint(touch.clientX, touch.clientY);
-            const item = target?.closest('.omni-item');
-
-            items.forEach(i => i.classList.remove('active'));
-            
-            if (item) {
-                if (item.getAttribute('data-view') !== activeView) {
-                    this.vibrate(10);
-                }
-                item.classList.add('active');
-                activeView = item.getAttribute('data-view');
-            } else {
-                activeView = null;
-            }
-        });
-
-        document.addEventListener('touchend', stopHold);
-    }
-
     static initGestures() {
         // Block multi-touch zoom
         document.addEventListener('touchstart', (e) => {
@@ -603,6 +533,93 @@ export class UI {
                 sheet.style.transform = 'translateY(0)';
             }
         }, { passive: true });
+    }
+
+    static initScrubNav() {
+        const pill = document.getElementById('scrub-pill');
+        const label = document.getElementById('scrub-label');
+        if (!pill || !label) return;
+
+        const views = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
+        const labels = ['Home', 'Search', 'Library', 'Station', 'Likes', 'Settings'];
+        
+        let startX = 0;
+        let activeIndex = views.indexOf(this.currentView);
+
+        pill.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+            activeIndex = views.indexOf(this.currentView);
+            pill.classList.add('active');
+            label.textContent = labels[activeIndex];
+            this.vibrate(20);
+        }, { passive: true });
+
+        pill.addEventListener('touchmove', (e) => {
+            const currentX = e.touches[0].clientX;
+            const diffX = currentX - startX;
+            
+            const step = 40;
+            const indexDiff = Math.round(diffX / step);
+            let newIndex = views.indexOf(this.currentView) + indexDiff;
+            
+            newIndex = Math.max(0, Math.min(views.length - 1, newIndex));
+            
+            if (newIndex !== activeIndex) {
+                activeIndex = newIndex;
+                label.textContent = labels[activeIndex];
+                this.vibrate(10);
+            }
+        }, { passive: true });
+
+        pill.addEventListener('touchend', () => {
+            pill.classList.remove('active');
+            if (activeIndex !== views.indexOf(this.currentView)) {
+                this.showView(views[activeIndex]);
+            }
+        }, { passive: true });
+    }
+
+    static initQuickJump() {
+        const bar = document.getElementById('player-bar');
+        if (!bar) return;
+
+        let timer;
+        bar.addEventListener('touchstart', (e) => {
+            if (e.target.closest('button')) return;
+            timer = setTimeout(() => {
+                this.vibrate(50);
+                this.showQuickJump();
+            }, 600);
+        }, { passive: true });
+
+        bar.addEventListener('touchmove', () => clearTimeout(timer), { passive: true });
+        bar.addEventListener('touchend', () => clearTimeout(timer), { passive: true });
+    }
+
+    static showQuickJump() {
+        const hud = document.getElementById('quick-jump-hud');
+        const content = document.getElementById('quick-jump-content');
+        const overlay = document.getElementById('quick-jump-overlay');
+        if (!hud) return;
+
+        hud.classList.remove('hidden');
+        setTimeout(() => {
+            overlay.classList.replace('opacity-0', 'opacity-100');
+            content.classList.replace('scale-90', 'scale-100');
+            content.classList.replace('opacity-0', 'opacity-100');
+        }, 10);
+    }
+
+    static hideQuickJump() {
+        const hud = document.getElementById('quick-jump-hud');
+        const content = document.getElementById('quick-jump-content');
+        const overlay = document.getElementById('quick-jump-overlay');
+        if (!hud) return;
+
+        overlay.classList.replace('opacity-100', 'opacity-0');
+        content.classList.replace('scale-100', 'scale-90');
+        content.classList.replace('opacity-100', 'opacity-0');
+        setTimeout(() => hud.classList.add('hidden'), 500);
     }
 
     static updateTransportControls(isPlaying) {
