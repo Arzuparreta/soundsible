@@ -45,6 +45,7 @@
         body { 
             font-family: 'Plus Jakarta Sans', sans-serif; 
             touch-action: pan-y;
+            overscroll-behavior-x: none;
             overscroll-behavior-y: contain;
             background-color: var(--bg-deep);
             color: var(--text-main);
@@ -62,6 +63,44 @@
             transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.3s ease;
             will-change: transform;
         }
+
+        /* Harmonized View Transitions (Premium Card Stacking) */
+        .view-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .view {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            padding-left: 1rem;
+            padding-right: 1rem;
+            padding-bottom: 12rem; /* Space for Player Bar + Omni */
+            padding-top: max(1.5rem, env(safe-area-inset-top));
+            transition: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, filter 0.5s ease;
+            will-change: transform, opacity, filter;
+            z-index: 10;
+            background-color: var(--bg-deep);
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .view.hidden {
+            display: none;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .view-incoming { z-index: 20 !important; }
+        .view-outgoing { z-index: 10 !important; filter: brightness(0.5) scale(0.96); }
+
+        .view-from-right { transform: translateX(100%); }
+        .view-from-left { transform: translateX(-100%); }
 
         /* High-End Glassmorphism */
         .glass-view {
@@ -156,8 +195,8 @@
             </div>
         </div>
 
-        <!-- Main Content -->
-        <main id="content" class="flex-1 overflow-y-auto pb-44 px-4 safe-top">
+        <!-- Main Content Area -->
+        <main id="content" class="safe-top">
             <div id="view-home" class="view">
                 <h1 class="text-3xl font-black mb-8 tracking-tight">All Songs</h1>
                 <div id="all-songs" class="space-y-2"></div>
@@ -264,7 +303,7 @@
         </div>
 
         <!-- Player Bar -->
-        <div id="player-bar" class="fixed bottom-[72px] md:bottom-0 left-0 right-0 glass-view border-t border-white/5 z-40 transition-all duration-500 transform translate-y-full hidden">
+        <div id="player-bar" class="fixed bottom-0 left-0 right-0 glass-view border-t border-white/5 z-40 transition-all duration-500 transform translate-y-full hidden safe-bottom">
             <div class="px-4 py-3 flex items-center justify-between max-w-5xl mx-auto">
                 <div id="player-info" class="flex items-center space-x-4 truncate flex-1 cursor-pointer group" onclick="UI.showNowPlaying()">
                     <div class="relative w-12 h-12 flex-shrink-0">
@@ -292,15 +331,55 @@
             </div>
         </div>
 
-        <!-- Navigation Bar -->
-        <nav id="mobile-nav" class="fixed bottom-0 left-0 right-0 glass-view border-t border-white/5 flex items-center justify-around py-3 safe-bottom md:hidden z-50">
-            <button class="flex flex-col items-center space-y-1 text-[var(--accent)] transition-all active:scale-90"><i class="fas fa-home text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Home</span></button>
-            <button class="flex flex-col items-center space-y-1 text-[var(--text-dim)] transition-all active:scale-90"><i class="fas fa-search text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Search</span></button>
-            <button class="flex flex-col items-center space-y-1 text-[var(--text-dim)] transition-all active:scale-90"><i class="fas fa-record-vinyl text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Albums</span></button>
-            <button class="flex flex-col items-center space-y-1 text-[var(--text-dim)] transition-all active:scale-90"><i class="fas fa-cloud-arrow-down text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Station</span></button>
-            <button class="flex flex-col items-center space-y-1 text-[var(--text-dim)] transition-all active:scale-90"><i class="fas fa-heart text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Likes</span></button>
-            <button class="flex flex-col items-center space-y-1 text-[var(--text-dim)] transition-all active:scale-90"><i class="fas fa-cog text-xl"></i><span class="text-[9px] font-bold uppercase tracking-widest">Settings</span></button>
-        </nav>
+        <!-- Omni-Button Navigation -->
+        <div id="omni-container" class="fixed bottom-8 right-6 z-[200] flex flex-col items-center pointer-events-none">
+            <!-- Navigation Menu (Appears on Hold) -->
+            <div id="omni-menu" class="mb-4 flex flex-col space-y-3 transform scale-90 opacity-0 transition-all duration-300 origin-bottom pointer-events-none">
+                <div class="omni-item flex items-center justify-end space-x-3 group" data-view="home">
+                    <span class="text-[9px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Home</span>
+                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl">
+                        <i class="fas fa-home text-sm text-white/60 group-[.active]:text-[var(--accent)]"></i>
+                    </div>
+                </div>
+                <div class="omni-item flex items-center justify-end space-x-3 group" data-view="search">
+                    <span class="text-[9px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Search</span>
+                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl">
+                        <i class="fas fa-search text-sm text-white/60 group-[.active]:text-[var(--accent)]"></i>
+                    </div>
+                </div>
+                <div class="omni-item flex items-center justify-end space-x-3 group" data-view="albums">
+                    <span class="text-[9px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Library</span>
+                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl">
+                        <i class="fas fa-record-vinyl text-sm text-white/60 group-[.active]:text-[var(--accent)]"></i>
+                    </div>
+                </div>
+                <div class="omni-item flex items-center justify-end space-x-3 group" data-view="downloader">
+                    <span class="text-[9px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Station</span>
+                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl">
+                        <i class="fas fa-cloud-arrow-down text-sm text-white/60 group-[.active]:text-[var(--accent)]"></i>
+                    </div>
+                </div>
+                <div class="omni-item flex items-center justify-end space-x-3 group" data-view="favourites">
+                    <span class="text-[9px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Likes</span>
+                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl">
+                        <i class="fas fa-heart text-sm text-white/60 group-[.active]:text-[var(--accent)]"></i>
+                    </div>
+                </div>
+                <div class="omni-item flex items-center justify-end space-x-3 group" data-view="settings">
+                    <span class="text-[9px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Settings</span>
+                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl">
+                        <i class="fas fa-cog text-sm text-white/60 group-[.active]:text-[var(--accent)]"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- The Main Button -->
+            <div id="omni-button" class="w-14 h-14 bg-[var(--accent)] text-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(249,122,18,0.4)] transition-all duration-300 active:scale-90 pointer-events-auto cursor-pointer relative overflow-hidden">
+                <i class="fas fa-command text-xl" id="omni-icon"></i>
+                <div id="omni-hold-ring" class="absolute inset-0 border-4 border-white/20 rounded-full scale-0 transition-transform"></div>
+            </div>
+        </div>
+
     </div>
 
     <!-- Now Playing Full View -->

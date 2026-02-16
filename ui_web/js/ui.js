@@ -15,7 +15,6 @@ export class UI {
         this.playerTitle = document.getElementById('player-title');
         this.playerArtist = document.getElementById('player-artist');
         this.progressBar = document.getElementById('player-progress');
-        this.navButtons = document.querySelectorAll('#mobile-nav button');
         this.content = document.getElementById('content');
         
         // Navigation State
@@ -23,7 +22,8 @@ export class UI {
         this.currentView = 'home';
         this._npGesturesBound = false;
 
-        this.initNav();
+        this.initGlobalListeners();
+        this.initOmniButton();
         store.subscribe((state) => this.updatePlayer(state));
 
         // Global Transport Handlers
@@ -191,60 +191,67 @@ export class UI {
         setTimeout(() => popover.classList.add('hidden'), 300);
     }
 
-    static showView(viewId, saveToHistory = true) {
+    static showView(viewId, saveToHistory = true, direction = 'forward') {
         if (viewId === this.currentView) return;
         
+        const oldView = document.getElementById(`view-${this.currentView}`);
+        const targetView = document.getElementById(`view-${viewId}`);
+        if (!targetView) return;
+
         if (saveToHistory) {
             const roots = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
             if (roots.includes(this.currentView) && roots.includes(viewId)) this.viewStack = [];
             else this.viewStack.push(this.currentView);
         }
 
-        document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
-        const target = document.getElementById(`view-${viewId}`);
-        if (target) {
-            target.classList.remove('hidden');
-            document.getElementById('content').scrollTop = 0;
+        // --- PERFORM STACKING TRANSITION ---
+        
+        // 1. Prepare Outgoing (Stays in background)
+        if (oldView) {
+            oldView.classList.add('view-outgoing');
+        }
+
+        // 2. Prepare Incoming (Slides OVER)
+        targetView.classList.remove('hidden');
+        targetView.classList.add('view-incoming');
+        targetView.classList.add(direction === 'forward' ? 'view-from-right' : 'view-from-left');
+        
+        // 3. Trigger Animation (Force Reflow)
+        void targetView.offsetWidth;
+
+        setTimeout(() => {
+            targetView.classList.remove('view-from-right', 'view-from-left');
+            
+            // Background Tasks
+            const content = document.getElementById('content');
+            if (content) content.scrollTop = 0;
             if (viewId === 'favourites' && window.renderFavourites) window.renderFavourites(store.state);
             if (viewId === 'downloader') import('./downloader.js').then(m => m.Downloader.init());
-        }
+        }, 10);
+
+        // 4. Cleanup after transition
+        setTimeout(() => {
+            if (oldView && oldView.id !== `view-${viewId}`) {
+                oldView.classList.add('hidden');
+                oldView.classList.remove('view-outgoing');
+            }
+            targetView.classList.remove('view-incoming');
+        }, 500);
 
         this.currentView = viewId;
-
-        const views = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
-        const idx = views.indexOf(viewId);
-        if (idx !== -1 && this.navButtons[idx]) {
-            this.navButtons.forEach(b => {
-                b.classList.remove('text-[var(--accent)]');
-                b.classList.add('text-[var(--text-dim)]');
-            });
-            this.navButtons[idx].classList.add('text-[var(--accent)]');
-            this.navButtons[idx].classList.remove('text-[var(--text-dim)]');
-        }
     }
 
     static navigateBack() {
         if (this.viewStack.length === 0) {
-            this.showView('home'); // Home fallback
+            this.showView('home', false, 'backward'); // Home fallback
             return;
         }
         
         const previousView = this.viewStack.pop();
-        this.showView(previousView, false);
+        this.showView(previousView, false, 'backward');
     }
 
-    static initNav() {
-        const views = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
-        if (this.navButtons) {
-            this.navButtons.forEach((btn, idx) => {
-                btn.onclick = (e) => {
-                    e.preventDefault();
-                    this.vibrate(10);
-                    this.showView(views[idx]);
-                };
-            });
-        }
-
+    static initGlobalListeners() {
         // Global Clicks
         window.addEventListener('click', (e) => {
             const q = document.getElementById('queue-container');
@@ -273,6 +280,77 @@ export class UI {
             if (curr) curr.textContent = this.formatTime(currentTime);
             if (total) total.textContent = this.formatTime(duration);
         });
+    }
+
+    static initOmniButton() {
+        const btn = document.getElementById('omni-button');
+        const menu = document.getElementById('omni-menu');
+        const items = document.querySelectorAll('.omni-item');
+        const ring = document.getElementById('omni-hold-ring');
+        if (!btn || !menu) return;
+
+        let holdTimer;
+        let isHolding = false;
+        let activeView = null;
+
+        const startHold = () => {
+            isHolding = true;
+            this.vibrate(20);
+            ring.style.transition = 'transform 0.6s linear';
+            ring.style.transform = 'scale(1)';
+            
+            holdTimer = setTimeout(() => {
+                this.vibrate(50);
+                menu.classList.remove('hidden', 'opacity-0', 'scale-90');
+                menu.classList.add('opacity-100', 'scale-100');
+                menu.style.pointerEvents = 'auto';
+            }, 600);
+        };
+
+        const stopHold = () => {
+            clearTimeout(holdTimer);
+            ring.style.transition = 'none';
+            ring.style.transform = 'scale(0)';
+            
+            if (isHolding && activeView) {
+                this.vibrate(30);
+                this.showView(activeView);
+            }
+
+            menu.classList.add('opacity-0', 'scale-90');
+            menu.classList.remove('opacity-100', 'scale-100');
+            menu.style.pointerEvents = 'none';
+            items.forEach(i => i.classList.remove('active'));
+            
+            isHolding = false;
+            activeView = null;
+        };
+
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startHold();
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!isHolding) return;
+            const touch = e.touches[0];
+            const target = document.elementFromPoint(touch.clientX, touch.clientY);
+            const item = target?.closest('.omni-item');
+
+            items.forEach(i => i.classList.remove('active'));
+            
+            if (item) {
+                if (item.getAttribute('data-view') !== activeView) {
+                    this.vibrate(10);
+                }
+                item.classList.add('active');
+                activeView = item.getAttribute('data-view');
+            } else {
+                activeView = null;
+            }
+        });
+
+        document.addEventListener('touchend', stopHold);
     }
 
     static initGestures() {
