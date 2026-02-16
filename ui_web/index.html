@@ -138,7 +138,7 @@
         </div>
 
         <!-- Floating Queue Button -->
-        <div id="queue-container" class="fixed top-6 right-6 z-[90] flex flex-col items-end pointer-events-none">
+        <div id="queue-container" class="fixed top-[calc(max(1.5rem,env(safe-area-inset-top))+4.5rem)] right-6 z-[90] flex flex-col items-end pointer-events-none">
             <button id="queue-fab" onclick="UI.toggleQueue()" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-black">
                 <i class="fas fa-list-ul"></i>
                 <div id="queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-black">0</div>
