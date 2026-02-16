@@ -159,7 +159,7 @@ export class UI {
         npView.style.transform = ''; // Clear manual drag
         setTimeout(() => {
             if (!npView.classList.contains('active')) npView.classList.add('hidden');
-        }, 800);
+        }, 600);
     }
 
     static toggleQueue() {
@@ -252,6 +252,9 @@ export class UI {
     }
 
     static initGlobalListeners() {
+        // Global: Prevent context menu everywhere for a native app feel
+        window.addEventListener('contextmenu', (e) => e.preventDefault());
+
         // Global Clicks
         window.addEventListener('click', (e) => {
             const q = document.getElementById('queue-container');
@@ -293,7 +296,6 @@ export class UI {
         let activeRow = null;
         let isHorizontal = false;
         let isEdgeSwipe = false;
-        let longPressTimer = null;
 
         document.addEventListener('touchstart', (e) => {
             const touch = e.touches[0];
@@ -315,13 +317,6 @@ export class UI {
             if (row) {
                 activeRow = row;
                 row.style.transition = 'none';
-                
-                longPressTimer = setTimeout(() => {
-                    if (!isHorizontal) {
-                        this.vibrate(50);
-                        this.showActionMenu(row.getAttribute('data-id'));
-                    }
-                }, 600);
             }
         }, { passive: true });
 
@@ -342,7 +337,6 @@ export class UI {
             
             if (!isHorizontal && Math.abs(diffX) > diffY && Math.abs(diffX) > 10) {
                 isHorizontal = true;
-                clearTimeout(longPressTimer);
             }
             
             if (isHorizontal) {
@@ -353,8 +347,6 @@ export class UI {
         }, { passive: false });
 
         document.addEventListener('touchend', (e) => {
-            clearTimeout(longPressTimer);
-
             // 1. End Edge Swipe
             if (isEdgeSwipe) {
                 const diffX = e.changedTouches[0].clientX - startX;
@@ -434,6 +426,77 @@ export class UI {
                 npView.style.transform = '';
             }
         }, { passive: true });
+    }
+
+    static initOmniButton() {
+        const btn = document.getElementById('omni-button');
+        const menu = document.getElementById('omni-menu');
+        const items = document.querySelectorAll('.omni-item');
+        const ring = document.getElementById('omni-hold-ring');
+        if (!btn || !menu) return;
+
+        let holdTimer;
+        let isHolding = false;
+        let activeView = null;
+
+        const startHold = () => {
+            isHolding = true;
+            this.vibrate(20);
+            ring.style.transition = 'transform 0.6s linear';
+            ring.style.transform = 'scale(1)';
+            
+            holdTimer = setTimeout(() => {
+                this.vibrate(50);
+                menu.classList.remove('hidden', 'opacity-0', 'scale-90');
+                menu.classList.add('opacity-100', 'scale-100');
+                menu.style.pointerEvents = 'auto';
+            }, 600);
+        };
+
+        const stopHold = () => {
+            clearTimeout(holdTimer);
+            ring.style.transition = 'none';
+            ring.style.transform = 'scale(0)';
+            
+            if (isHolding && activeView) {
+                this.vibrate(30);
+                this.showView(activeView);
+            }
+
+            menu.classList.add('opacity-0', 'scale-90');
+            menu.classList.remove('opacity-100', 'scale-100');
+            menu.style.pointerEvents = 'none';
+            items.forEach(i => i.classList.remove('active'));
+            
+            isHolding = false;
+            activeView = null;
+        };
+
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startHold();
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!isHolding) return;
+            const touch = e.touches[0];
+            const target = document.elementFromPoint(touch.clientX, touch.clientY);
+            const item = target?.closest('.omni-item');
+
+            items.forEach(i => i.classList.remove('active'));
+            
+            if (item) {
+                if (item.getAttribute('data-view') !== activeView) {
+                    this.vibrate(10);
+                }
+                item.classList.add('active');
+                activeView = item.getAttribute('data-view');
+            } else {
+                activeView = null;
+            }
+        });
+
+        document.addEventListener('touchend', stopHold);
     }
 
     static showActionMenu(trackId) {
@@ -534,93 +597,6 @@ export class UI {
         }, { passive: true });
     }
 
-    static initScrubNav() {
-        const pill = document.getElementById('scrub-pill');
-        const label = document.getElementById('scrub-label');
-        if (!pill || !label) return;
-
-        const views = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
-        const labels = ['Home', 'Search', 'Library', 'Station', 'Likes', 'Settings'];
-        
-        let startX = 0;
-        let activeIndex = views.indexOf(this.currentView);
-
-        pill.addEventListener('touchstart', (e) => {
-            startX = e.touches[0].clientX;
-            activeIndex = views.indexOf(this.currentView);
-            pill.classList.add('active');
-            label.textContent = labels[activeIndex];
-            this.vibrate(20);
-        }, { passive: true });
-
-        pill.addEventListener('touchmove', (e) => {
-            const currentX = e.touches[0].clientX;
-            const diffX = currentX - startX;
-            
-            const step = 40;
-            const indexDiff = Math.round(diffX / step);
-            let newIndex = views.indexOf(this.currentView) + indexDiff;
-            
-            newIndex = Math.max(0, Math.min(views.length - 1, newIndex));
-            
-            if (newIndex !== activeIndex) {
-                activeIndex = newIndex;
-                label.textContent = labels[activeIndex];
-                this.vibrate(10);
-            }
-        }, { passive: true });
-
-        pill.addEventListener('touchend', () => {
-            pill.classList.remove('active');
-            if (activeIndex !== views.indexOf(this.currentView)) {
-                this.showView(views[activeIndex]);
-            }
-        }, { passive: true });
-    }
-
-    static initQuickJump() {
-        const bar = document.getElementById('player-bar');
-        if (!bar) return;
-
-        let timer;
-        bar.addEventListener('touchstart', (e) => {
-            if (e.target.closest('button')) return;
-            timer = setTimeout(() => {
-                this.vibrate(50);
-                this.showQuickJump();
-            }, 600);
-        }, { passive: true });
-
-        bar.addEventListener('touchmove', () => clearTimeout(timer), { passive: true });
-        bar.addEventListener('touchend', () => clearTimeout(timer), { passive: true });
-    }
-
-    static showQuickJump() {
-        const hud = document.getElementById('quick-jump-hud');
-        const content = document.getElementById('quick-jump-content');
-        const overlay = document.getElementById('quick-jump-overlay');
-        if (!hud) return;
-
-        hud.classList.remove('hidden');
-        setTimeout(() => {
-            overlay.classList.replace('opacity-0', 'opacity-100');
-            content.classList.replace('scale-90', 'scale-100');
-            content.classList.replace('opacity-0', 'opacity-100');
-        }, 10);
-    }
-
-    static hideQuickJump() {
-        const hud = document.getElementById('quick-jump-hud');
-        const content = document.getElementById('quick-jump-content');
-        const overlay = document.getElementById('quick-jump-overlay');
-        if (!hud) return;
-
-        overlay.classList.replace('opacity-100', 'opacity-0');
-        content.classList.replace('scale-100', 'scale-90');
-        content.classList.replace('opacity-100', 'opacity-0');
-        setTimeout(() => hud.classList.add('hidden'), 500);
-    }
-
     static updateTransportControls(isPlaying) {
         const mini = document.querySelector('#mini-play-btn i');
         const np = document.querySelector('#np-play-btn i');
@@ -668,6 +644,13 @@ export class UI {
         if (!this._edBound) {
             document.getElementById('edit-save-btn').onclick = () => this.saveMetadata();
             document.getElementById('edit-auto-fetch-btn').onclick = () => this.autoFetch();
+            
+            const uploadBtn = document.getElementById('edit-upload-btn');
+            const fileInput = document.getElementById('edit-file-input');
+            if (uploadBtn && fileInput) {
+                uploadBtn.onclick = () => { this.vibrate(10); fileInput.click(); };
+                fileInput.onchange = (e) => this.handleCoverUpload(e);
+            }
             this._edBound = true;
         }
     }
@@ -680,6 +663,86 @@ export class UI {
             content.classList.replace('opacity-100', 'opacity-0');
         }
         setTimeout(() => modal && modal.classList.add('hidden'), 300);
+    }
+
+    static async saveMetadata() {
+        if (!this.editingTrack) return;
+        this.vibrate(30);
+        const status = document.getElementById('edit-status');
+        status.textContent = 'Saving Changes...';
+
+        const metadata = {
+            title: document.getElementById('edit-title').value,
+            artist: document.getElementById('edit-artist').value,
+            album: document.getElementById('edit-album').value
+        };
+
+        const success = await store.updateMetadata(this.editingTrack.id, metadata);
+        if (success) {
+            this.showToast('Metadata Updated');
+            this.hideMetadataEditor();
+        } else {
+            status.textContent = 'Save Failed';
+        }
+    }
+
+    static async autoFetch() {
+        if (!this.editingTrack) return;
+        this.vibrate(20);
+        const status = document.getElementById('edit-status');
+        const resultsContainer = document.getElementById('auto-fetch-results');
+        
+        status.textContent = 'Searching technical data...';
+        resultsContainer.innerHTML = '';
+        resultsContainer.classList.add('hidden');
+
+        const query = `${document.getElementById('edit-title').value} ${document.getElementById('edit-artist').value}`;
+        const results = await store.searchMetadata(query);
+
+        if (!results || results.length === 0) {
+            status.textContent = 'No matches found';
+            return;
+        }
+
+        status.textContent = 'Matches found';
+        resultsContainer.classList.remove('hidden');
+        resultsContainer.innerHTML = results.slice(0, 5).map(r => `
+            <div class="flex items-center p-3 hover:bg-white/5 rounded-xl cursor-pointer transition-colors border border-transparent active:border-[var(--accent)]/30 active:bg-[var(--accent)]/5" onclick="UI.applyFetchedMetadata('${r.title.replace(/'/g, "\\'")}', '${r.artist.replace(/'/g, "\\'")}', '${r.album.replace(/'/g, "\\'")}', '${r.cover}')">
+                <img src="${r.cover}" class="w-10 h-10 rounded-lg object-cover shadow-md">
+                <div class="ml-3 truncate">
+                    <div class="text-xs font-bold truncate text-white/90">${r.title}</div>
+                    <div class="text-[9px] font-bold text-white/40 truncate uppercase tracking-widest">${r.artist}</div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    static applyFetchedMetadata(title, artist, album, cover) {
+        this.vibrate(10);
+        document.getElementById('edit-title').value = title;
+        document.getElementById('edit-artist').value = artist;
+        document.getElementById('edit-album').value = album;
+        document.getElementById('edit-cover-preview').src = cover;
+        document.getElementById('auto-fetch-results').classList.add('hidden');
+        document.getElementById('edit-status').textContent = 'Metadata applied locally';
+    }
+
+    static async handleCoverUpload(e) {
+        const file = e.target.files[0];
+        if (!file || !this.editingTrack) return;
+        
+        this.vibrate(20);
+        const status = document.getElementById('edit-status');
+        status.textContent = 'Uploading Cover Art...';
+
+        const success = await store.uploadCover(this.editingTrack.id, file);
+        if (success) {
+            this.showToast('Cover Art Updated');
+            document.getElementById('edit-cover-preview').src = URL.createObjectURL(file);
+            status.textContent = 'Cover applied';
+        } else {
+            status.textContent = 'Upload Failed';
+        }
     }
 
     static vibrate(ms) { if (navigator.vibrate) navigator.vibrate(ms); }

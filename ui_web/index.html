@@ -2,13 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#0d0d0f">
     <title>Soundsible Web Player</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="css/scrub-nav.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -16,13 +15,12 @@
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         
         :root {
-            /* Dark Mode (Default) - JetBrains Theme */
             --bg-deep: #0d0d0f;
             --bg-surface: rgba(30, 31, 34, 0.85);
             --bg-card: #1e1f22;
-            --bg-selection: #4a2a0a; /* Dark Orange Selection */
-            --accent: #f97a12; /* JetBrains Orange */
-            --secondary: #3178c6; /* TypeScript Blue */
+            --bg-selection: #4a2a0a;
+            --accent: #f97a12;
+            --secondary: #3178c6;
             --text-main: #dfe1e5;
             --text-dim: #808080;
             --glass-border: rgba(255, 255, 255, 0.08);
@@ -30,13 +28,12 @@
         }
 
         [data-theme="light"] {
-            /* Light Mode - Paper Theme */
             --bg-deep: #f5f5f5;
             --bg-surface: rgba(255, 255, 255, 0.85);
             --bg-card: #ffffff;
             --bg-selection: #deeaff;
-            --accent: #3178c6; /* TypeScript Blue */
-            --secondary: #f97a12; /* JetBrains Orange */
+            --accent: #3178c6;
+            --secondary: #f97a12;
             --text-main: #1c1c1c;
             --text-dim: #606060;
             --glass-border: rgba(0, 0, 0, 0.08);
@@ -46,15 +43,17 @@
         body { 
             font-family: 'Plus Jakarta Sans', sans-serif; 
             touch-action: pan-y;
+            overscroll-behavior-x: none;
             overscroll-behavior-y: contain;
             background-color: var(--bg-deep);
             color: var(--text-main);
             letter-spacing: -0.01em;
             overflow: hidden;
-            transition: background-color 0.5s ease, color 0.5s ease;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
         }
 
-        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
         .safe-top { padding-top: max(1.5rem, env(safe-area-inset-top)); }
         
         * { -webkit-tap-highlight-color: transparent; }
@@ -64,29 +63,32 @@
             will-change: transform;
         }
 
-        /* Harmonized View Transitions (Premium Card Stacking) */
-        .view-container {
+        .glass-view {
+            background: var(--bg-surface);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            border: 1px solid var(--glass-border);
+        }
+
+        /* View Stacking Engine */
+        #content {
             position: relative;
+            flex: 1;
             width: 100%;
-            height: 100%;
             overflow: hidden;
         }
 
         .view {
             position: absolute;
-            top: 0;
-            left: 0;
+            inset: 0;
             width: 100%;
             height: 100%;
             overflow-y: auto;
-            padding-left: 1rem;
-            padding-right: 1rem;
-            padding-bottom: 10rem;
-            padding-top: max(1.5rem, env(safe-area-inset-top));
+            padding: 0 1.25rem 14rem 1.25rem;
+            background-color: var(--bg-deep);
             transition: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, filter 0.5s ease;
             will-change: transform, opacity, filter;
             z-index: 10;
-            background-color: var(--bg-deep);
             -webkit-overflow-scrolling: touch;
         }
         
@@ -98,21 +100,11 @@
 
         .view-incoming { z-index: 20 !important; }
         .view-outgoing { z-index: 10 !important; filter: brightness(0.5) scale(0.96); }
-
         .view-from-right { transform: translateX(100%); }
         .view-from-left { transform: translateX(-100%); }
 
-        /* High-End Glassmorphism */
-        .glass-view {
-            background: var(--bg-surface);
-            backdrop-filter: blur(40px);
-            -webkit-backdrop-filter: blur(40px);
-            border: 1px solid var(--glass-border);
-        }
-
-        /* Now Playing Entrance (Premium Slime Effect) */
         #now-playing-view {
-            transition: transform 0.8s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.5s ease, visibility 0.5s;
+            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, visibility 0.4s;
             will-change: transform, opacity;
             opacity: 0;
             visibility: hidden;
@@ -128,7 +120,6 @@
             transform: translateY(0) scale(1);
         }
 
-        /* Action Menu Entrance */
         #action-menu {
             visibility: hidden;
             transition: visibility 0.4s;
@@ -146,7 +137,6 @@
             transform: translateY(0);
         }
 
-        /* Custom Scrollbar */
         .custom-scrollbar::-webkit-scrollbar { width: 0; }
         .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -158,8 +148,7 @@
         }
     </style>
 </head>
-<body class="bg-black text-white selection:bg-[var(--accent)] selection:text-white">
-    <!-- Initial Loading Overlay -->
+<body class="bg-black text-white">
     <div id="initial-loader" class="fixed inset-0 z-[1000] bg-black flex flex-col items-center justify-center transition-opacity duration-700">
         <div class="relative w-24 h-24 mb-8">
             <div class="absolute inset-0 border-4 border-[var(--accent)]/10 rounded-full"></div>
@@ -169,21 +158,17 @@
         <div class="text-[10px] font-black uppercase tracking-[0.4em] text-[var(--accent)] animate-pulse">Initializing Station</div>
     </div>
 
-    <div id="app" class="h-screen flex flex-col relative overflow-hidden bg-black glass-view">
-        <!-- Mesh Background -->
+    <div id="app" class="h-[100dvh] flex flex-col relative overflow-hidden bg-black">
         <div class="fixed inset-0 -z-10 opacity-20 pointer-events-none">
             <div class="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-[var(--accent)]/20 blur-[120px] rounded-full"></div>
             <div class="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-[var(--secondary)]/10 blur-[120px] rounded-full"></div>
         </div>
 
-        <!-- Floating Queue Button -->
         <div id="queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[90] flex flex-col items-end pointer-events-none">
             <button id="queue-fab" onclick="UI.toggleQueue()" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-black">
                 <i class="fas fa-list-ul"></i>
                 <div id="queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-black">0</div>
             </button>
-
-            <!-- Floating Queue Window -->
             <div id="queue-popover" class="mt-4 w-72 glass-view rounded-3xl border border-white/10 shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300">
                 <div class="p-5">
                     <div class="flex justify-between items-center mb-4">
@@ -195,8 +180,7 @@
             </div>
         </div>
 
-        <!-- Main Content -->
-        <main id="content" class="flex-1 overflow-y-auto pb-32 px-4 safe-top">
+        <main id="content" class="safe-top relative">
             <div id="view-home" class="view">
                 <h1 class="text-3xl font-black mb-8 tracking-tight">All Songs</h1>
                 <div id="all-songs" class="space-y-2"></div>
@@ -265,11 +249,9 @@
                             <div class="w-6 h-6 bg-[var(--accent)] rounded-full shadow-lg transform transition-transform duration-300 translate-x-0" id="theme-indicator"></div>
                         </button>
                     </div>
-
                     <h2 class="text-xl font-bold mb-4">Link Library</h2>
                     <textarea id="sync-token-input" rows="4" class="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-[var(--secondary)] font-mono text-xs focus:outline-none focus:border-[var(--accent)] mb-6" placeholder="Paste token..."></textarea>
                     <button id="import-token-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 text-white font-black py-4 rounded-2xl transition-all mb-8">Import Token</button>
-                    
                     <div class="space-y-4 pt-8 border-t border-white/5">
                         <div class="flex justify-between text-sm">
                             <span class="text-gray-400">Station Status</span>
@@ -291,19 +273,8 @@
             </div>
         </main>
 
-        <!-- Connection Refiner -->
-        <div id="connection-overlay" class="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-6 hidden">
-            <div class="glass-view rounded-3xl p-8 max-w-sm w-full border border-white/10 shadow-2xl">
-                <h2 class="text-2xl font-black text-center mb-2">Station Offline</h2>
-                <p class="text-sm text-gray-400 text-center mb-8">Enter the IP address of your Soundsible Station.</p>
-                <input type="text" id="manual-ip-input" placeholder="e.g. 192.168.1.138" class="w-full bg-black border border-white/10 rounded-2xl px-4 py-4 text-center text-[var(--secondary)] font-mono mb-4">
-                <button id="reconnect-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 font-black py-4 rounded-2xl mb-4">Connect</button>
-                <button onclick="window.hideConnectionRefiner()" class="w-full text-xs text-gray-500 font-bold">Cancel</button>
-            </div>
-        </div>
-
         <!-- Player Bar -->
-        <div id="player-bar" class="fixed bottom-0 left-0 right-0 glass-view border-t border-white/5 z-40 transition-all duration-500 transform translate-y-full hidden safe-bottom">
+        <div id="player-bar" class="fixed bottom-0 left-0 right-0 glass-view border-t border-white/5 z-40 transition-all duration-500 transform translate-y-full hidden env(safe-area-inset-bottom)">
             <div class="px-4 py-3 flex items-center justify-between max-w-5xl mx-auto">
                 <div id="player-info" class="flex items-center space-x-4 truncate flex-1 cursor-pointer group" onclick="UI.showNowPlaying()">
                     <div class="relative w-12 h-12 flex-shrink-0">
@@ -315,68 +286,52 @@
                     </div>
                 </div>
                 <div class="flex items-center space-x-4">
-                    <button id="mini-shuffle-btn" class="w-10 h-10 hidden md:flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text-main)] transition-all"><i class="fas fa-shuffle text-sm"></i></button>
                     <button id="mini-prev-btn" class="w-10 h-10 flex items-center justify-center text-[var(--text-main)] active:scale-90 transition-all"><i class="fas fa-backward-step text-lg"></i></button>
                     <button id="mini-play-btn" class="w-12 h-12 flex items-center justify-center bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-xl hover:scale-105 active:scale-90 transition-all"><i class="fas fa-play text-lg"></i></button>
                     <button id="mini-next-btn" class="w-10 h-10 flex items-center justify-center text-[var(--text-main)] active:scale-90 transition-all"><i class="fas fa-forward-step text-lg"></i></button>
-                    <button id="mini-repeat-btn" class="w-10 h-10 hidden md:flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text-main)] transition-all relative">
-                        <i class="fas fa-repeat text-sm"></i>
-                        <div id="mini-repeat-one-indicator" class="absolute top-1 right-1 text-[8px] font-black hidden">1</div>
-                    </button>
                 </div>
             </div>
+            <div id="player-progress-container" class="w-full bg-white/5 h-1 relative overflow-hidden cursor-pointer group">
+                <div id="player-progress" class="absolute top-0 left-0 bg-[var(--accent)] h-full w-0 transition-all duration-100"></div>
+            </div>
+        </div>
+
         <!-- Omni-Button Navigation -->
-        <div id="omni-container" class="fixed bottom-8 right-6 z-[200] flex flex-col items-center pointer-events-none">
-            <!-- Navigation Menu (Appears on Hold) -->
-            <div id="omni-menu" class="mb-4 flex flex-col space-y-3 transform scale-90 opacity-0 transition-all duration-300 origin-bottom pointer-events-none">
+        <div id="omni-container" class="fixed bottom-24 right-6 z-[200] flex flex-col items-end pointer-events-none">
+            <div id="omni-menu" class="mb-4 flex flex-col items-end space-y-3 transform scale-90 opacity-0 transition-all duration-300 origin-bottom-right pointer-events-none">
                 <div class="omni-item flex items-center justify-end space-x-3 group" data-view="home">
-                    <span class="text-[9px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Home</span>
-                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl">
-                        <i class="fas fa-home text-sm text-white/60 group-[.active]:text-[var(--accent)]"></i>
-                    </div>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Home</span>
+                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl"><i class="fas fa-home text-sm"></i></div>
                 </div>
                 <div class="omni-item flex items-center justify-end space-x-3 group" data-view="search">
-                    <span class="text-[9px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Search</span>
-                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl">
-                        <i class="fas fa-search text-sm text-white/60 group-[.active]:text-[var(--accent)]"></i>
-                    </div>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Search</span>
+                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl"><i class="fas fa-search text-sm"></i></div>
                 </div>
                 <div class="omni-item flex items-center justify-end space-x-3 group" data-view="albums">
-                    <span class="text-[9px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Library</span>
-                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl">
-                        <i class="fas fa-record-vinyl text-sm text-white/60 group-[.active]:text-[var(--accent)]"></i>
-                    </div>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Library</span>
+                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl"><i class="fas fa-record-vinyl text-sm"></i></div>
                 </div>
                 <div class="omni-item flex items-center justify-end space-x-3 group" data-view="downloader">
-                    <span class="text-[9px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Station</span>
-                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl">
-                        <i class="fas fa-cloud-arrow-down text-sm text-white/60 group-[.active]:text-[var(--accent)]"></i>
-                    </div>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Station</span>
+                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl"><i class="fas fa-cloud-arrow-down text-sm"></i></div>
                 </div>
                 <div class="omni-item flex items-center justify-end space-x-3 group" data-view="favourites">
-                    <span class="text-[9px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Likes</span>
-                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl">
-                        <i class="fas fa-heart text-sm text-white/60 group-[.active]:text-[var(--accent)]"></i>
-                    </div>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Likes</span>
+                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl"><i class="fas fa-heart text-sm"></i></div>
                 </div>
                 <div class="omni-item flex items-center justify-end space-x-3 group" data-view="settings">
-                    <span class="text-[9px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Settings</span>
-                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl">
-                        <i class="fas fa-cog text-sm text-white/60 group-[.active]:text-[var(--accent)]"></i>
-                    </div>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-white/40 group-[.active]:text-[var(--accent)] transition-colors">Settings</span>
+                    <div class="w-12 h-12 glass-view rounded-full flex items-center justify-center group-[.active]:border-[var(--accent)] group-[.active]:scale-110 transition-all shadow-xl"><i class="fas fa-cog text-sm"></i></div>
                 </div>
             </div>
-
-            <!-- The Main Button -->
             <div id="omni-button" class="w-14 h-14 bg-[var(--accent)] text-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(249,122,18,0.4)] transition-all duration-300 active:scale-90 pointer-events-auto cursor-pointer relative overflow-hidden">
-                <i class="fas fa-command text-xl" id="omni-icon"></i>
+                <i class="fas fa-command text-xl"></i>
                 <div id="omni-hold-ring" class="absolute inset-0 border-4 border-white/20 rounded-full scale-0 transition-transform"></div>
             </div>
         </div>
     </div>
 
     <!-- Now Playing Full View -->
-            
     <div id="now-playing-view" class="fixed inset-0 z-[120] hidden flex flex-col touch-none overflow-hidden h-[100dvh]">
         <div class="relative flex-1 flex flex-col p-8 safe-top safe-bottom justify-between">
             <div class="flex justify-between items-center pt-4">
@@ -442,67 +397,74 @@
         </div>
     </div>
 
-    <!-- Quick Jump HUD -->
-    <div id="quick-jump-hud" class="fixed inset-0 z-[160] hidden flex items-center justify-center p-6">
-        <div id="quick-jump-overlay" class="absolute inset-0 bg-black/80 backdrop-blur-xl transition-opacity opacity-0" onclick="UI.hideQuickJump()"></div>
-        <div id="quick-jump-content" class="relative grid grid-cols-2 gap-4 w-full max-w-sm transform scale-90 opacity-0 transition-all duration-500">
-            <button onclick="UI.showView('home'); UI.hideQuickJump();" class="glass-view p-8 rounded-[40px] flex flex-col items-center space-y-3 active:scale-95 transition-all">
-                <i class="fas fa-home text-2xl text-[var(--accent)]"></i>
-                <span class="text-[10px] font-black uppercase tracking-widest">Home</span>
-            </button>
-            <button onclick="UI.showView('search'); UI.hideQuickJump();" class="glass-view p-8 rounded-[40px] flex flex-col items-center space-y-3 active:scale-95 transition-all">
-                <i class="fas fa-search text-2xl text-[var(--accent)]"></i>
-                <span class="text-[10px] font-black uppercase tracking-widest">Search</span>
-            </button>
-            <button onclick="UI.showView('albums'); UI.hideQuickJump();" class="glass-view p-8 rounded-[40px] flex flex-col items-center space-y-3 active:scale-95 transition-all">
-                <i class="fas fa-record-vinyl text-2xl text-[var(--accent)]"></i>
-                <span class="text-[10px] font-black uppercase tracking-widest">Library</span>
-            </button>
-            <button onclick="UI.showView('downloader'); UI.hideQuickJump();" class="glass-view p-8 rounded-[40px] flex flex-col items-center space-y-3 active:scale-95 transition-all">
-                <i class="fas fa-cloud-arrow-down text-2xl text-[var(--accent)]"></i>
-                <span class="text-[10px] font-black uppercase tracking-widest">Station</span>
-            </button>
-            <button onclick="UI.showView('favourites'); UI.hideQuickJump();" class="glass-view p-8 rounded-[40px] flex flex-col items-center space-y-3 active:scale-95 transition-all">
-                <i class="fas fa-heart text-2xl text-[var(--accent)]"></i>
-                <span class="text-[10px] font-black uppercase tracking-widest">Likes</span>
-            </button>
-            <button onclick="UI.showView('settings'); UI.hideQuickJump();" class="glass-view p-8 rounded-[40px] flex flex-col items-center space-y-3 active:scale-95 transition-all">
-                <i class="fas fa-cog text-2xl text-[var(--accent)]"></i>
-                <span class="text-[10px] font-black uppercase tracking-widest">Settings</span>
-            </button>
-        </div>
-    </div>
-
     <!-- Metadata Editor -->
     <div id="metadata-editor" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-        <div id="metadata-editor-content" class="bg-gray-900 rounded-[40px] w-full max-w-lg p-8 border border-white/10 shadow-2xl transition-all transform scale-95 opacity-0">
-            <h2 class="text-2xl font-black mb-8 tracking-tighter">Edit Metadata</h2>
+        <div id="metadata-editor-content" class="glass-view rounded-[40px] w-full max-w-lg p-8 border border-white/10 shadow-2xl transition-all transform scale-95 opacity-0">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-2xl font-black tracking-tighter">Edit Metadata</h2>
+                <div class="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--accent)] bg-[var(--accent)]/10 px-3 py-1 rounded-full border border-[var(--accent)]/20">Surgical Mode</div>
+            </div>
+            
             <div class="space-y-6">
                 <div class="flex flex-col items-center space-y-4">
-                    <img id="edit-cover-preview" src="assets/icons/icon-512.png" class="w-40 h-40 rounded-3xl shadow-2xl object-cover border border-white/5" alt="Art">
+                    <div class="relative group">
+                        <img id="edit-cover-preview" src="assets/icons/icon-512.png" class="w-40 h-40 rounded-3xl shadow-2xl object-cover border border-white/5" alt="Art">
+                        <div class="absolute inset-0 bg-black/40 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                            <i class="fas fa-camera text-2xl text-white/80"></i>
+                        </div>
+                    </div>
                     <div class="flex space-x-3 w-full">
-                        <button id="edit-auto-fetch-btn" class="flex-1 bg-white/5 active:bg-white/10 py-3 rounded-2xl text-xs font-bold transition-all focus:outline-none">Auto-fetch</button>
-                        <button id="edit-upload-btn" class="flex-1 bg-white/5 active:bg-white/10 py-3 rounded-2xl text-xs font-bold transition-all focus:outline-none">Upload</button>
+                        <button id="edit-auto-fetch-btn" class="flex-1 bg-white/5 active:bg-white/10 py-3 rounded-2xl text-xs font-bold transition-all focus:outline-none border border-white/5 active:scale-95">
+                            <i class="fas fa-magic mr-2 text-[var(--accent)]"></i>Auto-fetch
+                        </button>
+                        <button id="edit-upload-btn" class="flex-1 bg-white/5 active:bg-white/10 py-3 rounded-2xl text-xs font-bold transition-all focus:outline-none border border-white/5 active:scale-95">
+                            <i class="fas fa-upload mr-2 text-[var(--secondary)]"></i>Upload
+                        </button>
                     </div>
                     <input type="file" id="edit-file-input" class="hidden" accept="image/*">
                 </div>
+
                 <div class="space-y-4">
-                    <div><label class="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1 block">Title</label><input type="text" id="edit-title" class="w-full bg-white/5 border border-white/5 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--accent)]"></div>
-                    <div><label class="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1 block">Artist</label><input type="text" id="edit-artist" class="w-full bg-white/5 border border-white/5 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--accent)]"></div>
-                    <div><label class="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1 block">Album</label><input type="text" id="edit-album" class="w-full bg-white/5 border border-white/5 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--accent)]"></div>
+                    <div class="group">
+                        <label class="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors">Track Title</label>
+                        <input type="text" id="edit-title" class="w-full bg-black/40 border border-white/5 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] focus:bg-black/60 transition-all font-medium text-white/90">
+                    </div>
+                    <div class="group">
+                        <label class="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors">Artist Name</label>
+                        <input type="text" id="edit-artist" class="w-full bg-black/40 border border-white/5 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] focus:bg-black/60 transition-all font-medium text-white/90">
+                    </div>
+                    <div class="group">
+                        <label class="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors">Album Title</label>
+                        <input type="text" id="edit-album" class="w-full bg-black/40 border border-white/5 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] focus:bg-black/60 transition-all font-medium text-white/90">
+                    </div>
                 </div>
+
                 <div id="auto-fetch-results" class="hidden space-y-2 max-h-40 overflow-y-auto custom-scrollbar border-t border-white/5 pt-4"></div>
-                <div id="edit-status" class="text-xs text-center min-h-[1rem]"></div>
+                <div id="edit-status" class="text-[10px] font-bold text-center min-h-[1rem] uppercase tracking-widest text-[var(--accent)] opacity-60"></div>
+
                 <div class="flex space-x-4 pt-4">
-                    <button onclick="UI.hideMetadataEditor()" class="flex-1 py-4 text-gray-500 font-bold">Cancel</button>
-                    <button id="edit-save-btn" class="flex-[2] bg-[var(--secondary)] hover:opacity-90 py-4 rounded-2xl font-black shadow-lg shadow-[var(--secondary)]/20 transition-all active:scale-95">Save & Sync</button>
+                    <button onclick="UI.hideMetadataEditor()" class="flex-1 py-4 text-white/40 font-black uppercase tracking-widest text-[10px] active:text-white transition-colors focus:outline-none">Cancel</button>
+                    <button id="edit-save-btn" class="flex-[2] bg-[var(--accent)] text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-[var(--accent)]/20 transition-all active:scale-95 active:brightness-110 focus:outline-none">
+                        Save & Sync
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Connection Refiner -->
+    <div id="connection-overlay" class="fixed inset-0 bg-black/90 z-[300] flex items-center justify-center p-6 hidden">
+        <div class="glass-view rounded-3xl p-8 max-w-sm w-full border border-white/10 shadow-2xl">
+            <h2 class="text-2xl font-black text-center mb-2">Station Offline</h2>
+            <p class="text-sm text-gray-400 text-center mb-8">Enter the IP address of your Soundsible Station.</p>
+            <input type="text" id="manual-ip-input" placeholder="e.g. 192.168.1.138" class="w-full bg-black border border-white/10 rounded-2xl px-4 py-4 text-center text-[var(--secondary)] font-mono mb-4">
+            <button id="reconnect-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 font-black py-4 rounded-2xl mb-4">Connect</button>
+            <button onclick="window.hideConnectionRefiner()" class="w-full text-xs text-gray-500 font-bold">Cancel</button>
+        </div>
+    </div>
+
     <!-- Toasts -->
-    <div id="toast-container" class="fixed bottom-32 left-1/2 -translate-x-1/2 z-[300] flex flex-col items-center space-y-4 pointer-events-none w-full max-w-xs"></div>
+    <div id="toast-container" class="fixed bottom-32 left-1/2 -translate-x-1/2 z-[400] flex flex-col items-center space-y-4 pointer-events-none w-full max-w-xs"></div>
 
     <script type="module" src="js/app.js"></script>
 </body>
