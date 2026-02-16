@@ -499,18 +499,18 @@ export class UI {
     }
 
     static initOmniGestures() {
-        const anchor = document.getElementById('omni-anchor');
+        const island = document.getElementById('omni-island');
         const transport = document.getElementById('omni-transport');
         const ribbon = document.getElementById('omni-nav-ribbon');
         const ring = document.getElementById('omni-hold-ring');
         const items = document.querySelectorAll('.omni-nav-item');
-        if (!anchor || !ribbon) return;
+        if (!island || !transport || !ribbon) return;
 
         let holdTimer;
         let isHolding = false;
         let activeNavView = null;
 
-        const startBloom = () => {
+        const startBloom = (e) => {
             isHolding = true;
             this.vibrate(20);
             ring.style.transition = 'transform 0.4s linear, opacity 0.2s ease';
@@ -537,28 +537,40 @@ export class UI {
             }, 400);
         };
 
-        const endBloom = () => {
+        const endHold = (e) => {
+            const touch = e.changedTouches[0];
+            const target = document.elementFromPoint(touch.clientX, touch.clientY);
+            const isInside = island.contains(target);
+            
             clearTimeout(holdTimer);
             ring.style.transition = 'none';
             ring.style.transform = 'scale(0)';
             ring.style.opacity = '0';
             
-            // 1. TACTILE TAP (Trigger if we didn't reach Bloom state)
-            if (isHolding && !this.isBlooming) {
-                this.vibrate(15);
-                if (store.state.currentTrack) {
-                    audioEngine.toggle();
-                } else if (store.state.library.length > 0) {
-                    window.playTrack(store.state.library[0].id);
+            // 1. SAFE RELEASE TRANSPORT (Trigger if we didn't reach Bloom state AND released inside)
+            if (isHolding && !this.isBlooming && isInside) {
+                const zone = target.closest('#omni-prev') ? 'prev' : 
+                             target.closest('#omni-next') ? 'next' : 
+                             target.closest('#omni-anchor') ? 'anchor' : null;
+
+                if (zone) {
+                    this.vibrate(15);
+                    if (zone === 'prev') audioEngine.prev();
+                    else if (zone === 'next') audioEngine.next();
+                    else {
+                        if (store.state.currentTrack) audioEngine.toggle();
+                        else if (store.state.library.length > 0) window.playTrack(store.state.library[0].id);
+                    }
                 }
             }
 
+            // 2. NAV COMMIT
             if (this.isBlooming && activeNavView) {
                 this.vibrate(30);
                 this.showView(activeNavView);
             }
 
-            // Restore Playback UI
+            // 3. RESTORE PLAYBACK UI
             if (this.isIslandActive) this.island.style.width = '300px';
             else this.island.style.width = '56px';
 
@@ -583,38 +595,42 @@ export class UI {
             activeNavView = null;
         };
 
-        anchor.addEventListener('touchstart', (e) => {
+        // Bind Touch Events to the entire transport layer
+        transport.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            startBloom();
+            startBloom(e);
         });
 
         document.addEventListener('touchmove', (e) => {
-            if (!isHolding || !this.isBlooming) return;
+            if (!isHolding) return;
             const touch = e.touches[0];
             const target = document.elementFromPoint(touch.clientX, touch.clientY);
-            const item = target?.closest('.omni-nav-item');
 
-            items.forEach(i => {
-                i.classList.remove('active');
-                i.style.transform = 'scale(1)';
-                i.querySelector('i').style.color = '';
-            });
-            
-            if (item) {
-                const view = item.getAttribute('data-view');
-                if (view !== activeNavView) {
-                    this.vibrate(10);
-                    activeNavView = view;
+            if (this.isBlooming) {
+                // Navigation Highlighting
+                const item = target?.closest('.omni-nav-item');
+                items.forEach(i => {
+                    i.classList.remove('active');
+                    i.style.transform = 'scale(1)';
+                    i.querySelector('i').style.color = '';
+                });
+                
+                if (item) {
+                    const view = item.getAttribute('data-view');
+                    if (view !== activeNavView) {
+                        this.vibrate(10);
+                        activeNavView = view;
+                    }
+                    item.classList.add('active');
+                    item.style.transform = 'scale(1.3)';
+                    item.querySelector('i').style.color = 'var(--accent)';
+                } else {
+                    activeNavView = null;
                 }
-                item.classList.add('active');
-                item.style.transform = 'scale(1.3)';
-                item.querySelector('i').style.color = 'var(--accent)';
-            } else {
-                activeNavView = null;
             }
         });
 
-        document.addEventListener('touchend', endBloom);
+        document.addEventListener('touchend', endHold);
     }
 
     static showActionMenu(trackId) {
