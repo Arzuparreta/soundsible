@@ -10,43 +10,41 @@ window.audioEngine = audioEngine;
 
 export class UI {
     static init() {
-        console.log("UI: Initializing Static Core...");
+        console.log("UI: Initializing Premium Core...");
         this.playerBar = document.getElementById('player-bar');
         this.playerTitle = document.getElementById('player-title');
         this.playerArtist = document.getElementById('player-artist');
         this.progressBar = document.getElementById('player-progress');
         this.navButtons = document.querySelectorAll('#mobile-nav button');
+        this.content = document.getElementById('content');
         
+        // Navigation State
         this.viewStack = [];
         this.currentView = 'home';
 
         this.initNav();
         store.subscribe((state) => this.updatePlayer(state));
 
-        // Global Transport Handlers (Mini & Full)
+        // Global Transport Handlers
         const bind = (id, fn) => {
             const el = document.getElementById(id);
             if (el) el.onclick = (e) => { e.stopPropagation(); fn(); };
         };
 
-        // Play/Pause
         bind('mini-play-btn', () => audioEngine.toggle());
         bind('np-play-btn', () => audioEngine.toggle());
-        
-        // Navigation
         bind('mini-next-btn', () => audioEngine.next());
         bind('mini-prev-btn', () => audioEngine.prev());
         bind('np-next-btn', () => audioEngine.next());
         bind('np-prev-btn', () => audioEngine.prev());
         
-        // Modes
         bind('mini-shuffle-btn', () => { store.toggleShuffle(); this.showToast('Queue Shuffled'); });
         bind('np-shuffle-btn', () => { store.toggleShuffle(); this.showToast('Queue Shuffled'); });
         bind('mini-repeat-btn', () => store.toggleRepeat());
         bind('np-repeat-btn', () => store.toggleRepeat());
 
-        // Simple Touch Handlers
-        this.initTouch();
+        // Gestures Engine
+        this.initGestures();
     }
 
     static updatePlayer(state) {
@@ -216,6 +214,16 @@ export class UI {
         }
     }
 
+    static navigateBack() {
+        if (this.viewStack.length === 0) {
+            this.showView('home'); // Home fallback
+            return;
+        }
+        
+        const previousView = this.viewStack.pop();
+        this.showView(previousView, false);
+    }
+
     static initNav() {
         const views = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
         if (this.navButtons) {
@@ -258,7 +266,7 @@ export class UI {
         });
     }
 
-    static initTouch() {
+    static initGestures() {
         // Block multi-touch zoom
         document.addEventListener('touchstart', (e) => {
             if (e.touches.length > 1 && e.cancelable) e.preventDefault();
@@ -266,19 +274,31 @@ export class UI {
 
         let startX = 0;
         let startY = 0;
-        let currentX = 0;
         let activeRow = null;
         let isHorizontal = false;
+        let isEdgeSwipe = false;
         let longPressTimer = null;
 
         document.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
             const row = e.target.closest('.song-row');
+            
+            startX = touch.clientX;
+            startY = touch.clientY;
+            isHorizontal = false;
+            isEdgeSwipe = false;
+
+            // 1. Edge Swipe Detection
+            if (startX < 40) {
+                isEdgeSwipe = true;
+                this.content.style.transition = 'none';
+                return;
+            }
+
+            // 2. Song Row Gestures
             if (row) {
-                startX = e.touches[0].clientX;
-                startY = e.touches[0].clientY;
                 activeRow = row;
                 row.style.transition = 'none';
-                isHorizontal = false;
                 
                 longPressTimer = setTimeout(() => {
                     if (!isHorizontal) {
@@ -290,10 +310,19 @@ export class UI {
         }, { passive: true });
 
         document.addEventListener('touchmove', (e) => {
+            const touch = e.touches[0];
+            const diffX = touch.clientX - startX;
+            const diffY = Math.abs(touch.clientY - startY);
+
+            // Edge Swipe Handling
+            if (isEdgeSwipe) {
+                if (e.cancelable) e.preventDefault();
+                const move = Math.max(0, diffX);
+                this.content.style.transform = `translateX(${move}px)`;
+                return;
+            }
+
             if (!activeRow) return;
-            currentX = e.touches[0].clientX;
-            const diffX = currentX - startX;
-            const diffY = Math.abs(e.touches[0].clientY - startY);
             
             if (!isHorizontal && Math.abs(diffX) > diffY && Math.abs(diffX) > 10) {
                 isHorizontal = true;
@@ -309,28 +338,46 @@ export class UI {
 
         document.addEventListener('touchend', (e) => {
             clearTimeout(longPressTimer);
-            if (!activeRow) return;
-            
-            const diff = currentX - startX;
-            activeRow.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
-            activeRow.style.transform = 'translateX(0)';
-            
-            if (isHorizontal) {
-                if (diff > 70) {
-                    store.toggleFavourite(activeRow.getAttribute('data-id'));
-                    this.vibrate(30);
-                    this.showToast('Updated Favourites');
-                } else if (diff < -70) {
-                    store.toggleQueue(activeRow.getAttribute('data-id'));
-                    this.vibrate(30);
-                    this.showToast('Updated Queue');
+
+            // 1. End Edge Swipe
+            if (isEdgeSwipe) {
+                const diffX = e.changedTouches[0].clientX - startX;
+                const threshold = window.innerWidth * 0.3;
+                
+                this.content.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
+                this.content.style.transform = 'translateX(0)';
+                
+                if (diffX > threshold) {
+                    this.vibrate(20);
+                    this.navigateBack();
                 }
+                isEdgeSwipe = false;
+                return;
             }
-            
-            activeRow = null;
-            startX = 0;
-            currentX = 0;
+
+            // 2. End Row Swipe
+            if (activeRow) {
+                const diff = e.changedTouches[0].clientX - startX;
+                activeRow.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+                activeRow.style.transform = 'translateX(0)';
+                
+                if (isHorizontal) {
+                    if (diff > 70) {
+                        store.toggleFavourite(activeRow.getAttribute('data-id'));
+                        this.vibrate(30);
+                        this.showToast('Updated Favourites');
+                    } else if (diff < -70) {
+                        store.toggleQueue(activeRow.getAttribute('data-id'));
+                        this.vibrate(30);
+                        this.showToast('Updated Queue');
+                    }
+                }
+                activeRow = null;
+            }
         }, { passive: true });
+
+        // Action Menu Swipe-to-Dismiss logic
+        this.initBottomSheetGestures();
     }
 
     static showActionMenu(trackId) {
@@ -379,6 +426,42 @@ export class UI {
         setTimeout(() => {
             if (menu) menu.classList.add('hidden');
         }, 400);
+    }
+
+    static initBottomSheetGestures() {
+        const sheet = document.getElementById('action-menu-sheet');
+        if (!sheet) return;
+        
+        let startY = 0;
+        let isDragging = false;
+
+        sheet.addEventListener('touchstart', (e) => {
+            startY = e.touches[0].clientY;
+            isDragging = true;
+            sheet.style.transition = 'none';
+        }, { passive: true });
+
+        sheet.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            const currentY = e.touches[0].clientY;
+            const deltaY = currentY - startY;
+            if (deltaY > 0) sheet.style.transform = `translateY(${deltaY}px)`;
+        }, { passive: true });
+
+        sheet.addEventListener('touchend', (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+            const deltaY = e.changedTouches[0].clientY - startY;
+            const threshold = sheet.offsetHeight * 0.25;
+            
+            sheet.style.transition = 'transform 0.4s cubic-bezier(0.19, 1, 0.22, 1)';
+            
+            if (deltaY > threshold) {
+                this.hideActionMenu();
+            } else {
+                sheet.style.transform = 'translateY(0)';
+            }
+        }, { passive: true });
     }
 
     static updateTransportControls(isPlaying) {
