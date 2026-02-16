@@ -505,7 +505,7 @@ export class UI {
             if (!isDragging) return;
             isDragging = false;
             const deltaY = e.changedTouches[0].clientY - startY;
-            const threshold = sheet.offsetHeight * 0.25;
+            const threshold = sheet.offsetHeight * 0.14; // Reduced to 14% for consistency
             
             sheet.style.transition = 'transform 0.4s cubic-bezier(0.19, 1, 0.22, 1)';
             
