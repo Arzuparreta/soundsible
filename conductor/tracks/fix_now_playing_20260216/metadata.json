@@ -1,0 +1,8 @@
+{
+  "track_id": "fix_now_playing_20260216",
+  "type": "bug",
+  "status": "new",
+  "created_at": "2026-02-16T14:30:00Z",
+  "updated_at": "2026-02-16T14:30:00Z",
+  "description": "Fix and refine the WebUI "Now Playing" view and its transport controls, ensuring robust functionality and consistent high-end animations."
+}
