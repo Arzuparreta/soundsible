@@ -430,6 +430,9 @@ export class UI {
     }
 
     static showActionMenu(trackId) {
+        // CRITICAL: Blur any active element to prevent auto-focus/highlight on mobile
+        if (document.activeElement) document.activeElement.blur();
+
         const track = store.state.library.find(t => t.id === trackId);
         if (!track) return;
 
