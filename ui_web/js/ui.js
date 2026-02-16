@@ -23,8 +23,7 @@ export class UI {
         this._npGesturesBound = false;
 
         this.initGlobalListeners();
-        this.initScrubNav();
-        this.initQuickJump();
+        this.initOmniButton();
         store.subscribe((state) => this.updatePlayer(state));
 
         // Global Transport Handlers
