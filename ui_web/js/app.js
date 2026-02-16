@@ -75,13 +75,13 @@ function syncUIState(state) {
         const id = row.getAttribute('data-id');
         const isActive = id === activeId;
 
-        // Surgical update: Active highlight classes
+        // Surgical update: Active highlight classes (JetBrains Style)
         if (isActive) {
-            row.classList.remove('bg-white/[0.02]', 'border-white/[0.05]');
-            row.classList.add('bg-white/[0.08]', 'border-white/10');
+            row.classList.remove('bg-[#1e1f22]', 'border-white/5');
+            row.classList.add('bg-[#2e436e]/40', 'border-white/10');
         } else {
-            row.classList.remove('bg-white/[0.08]', 'border-white/10');
-            row.classList.add('bg-white/[0.02]', 'border-white/[0.05]');
+            row.classList.remove('bg-[#2e436e]/40', 'border-white/10');
+            row.classList.add('bg-[#1e1f22]', 'border-white/5');
         }
 
         // Surgical update: Active indicator (Volume icon)
@@ -92,7 +92,7 @@ function syncUIState(state) {
         const title = row.querySelector('.song-title');
         if (title) {
             title.classList.toggle('text-white', isActive);
-            title.classList.toggle('text-white/90', !isActive);
+            title.classList.toggle('text-[#dfe1e5]', !isActive);
         }
     });
 }
@@ -279,28 +279,28 @@ function renderSongList(tracks, containerId) {
         const isActive = t.id === activeId;
         
         return `
-            <div class="relative overflow-hidden rounded-2xl mb-2 group">
-                <!-- Swipe Backgrounds -->
-                <div class="absolute inset-0 flex items-center justify-between px-6 bg-blue-600/20">
-                    <div class="text-blue-400 font-black text-[10px] uppercase tracking-widest">Favourite</div>
-                    <div class="text-blue-400 font-black text-[10px] uppercase tracking-widest">Queue</div>
+            <div class="relative overflow-hidden rounded-2xl mb-2 group bg-[#1e1f22]">
+                <!-- Swipe Backgrounds (Subtle hints) -->
+                <div class="absolute inset-0 flex items-center justify-between px-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div class="text-[#f97a12] font-black text-[9px] uppercase tracking-[0.2em]">Add to Favs</div>
+                    <div class="text-[#3178c6] font-black text-[9px] uppercase tracking-[0.2em]">Add to Queue</div>
                 </div>
 
                 <!-- Main Row -->
-                <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-white/[0.08] border-white/10' : 'bg-white/[0.02] border-white/[0.05]'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}" onclick="playTrack('${t.id}')">
+                <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-[#2e436e]/40 border-white/10' : 'bg-[#1e1f22] border-white/5'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}" onclick="playTrack('${t.id}')">
                     <div class="relative w-12 h-12 flex-shrink-0">
-                        <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-xl shadow-lg" alt="Cover">
-                        <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl backdrop-blur-sm ${isActive ? '' : 'hidden'}">
-                            <i class="fas fa-volume-up text-white text-xs animate-pulse"></i>
+                        <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-xl shadow-lg border border-white/5" alt="Cover">
+                        <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl backdrop-blur-[2px] ${isActive ? '' : 'hidden'}">
+                            <i class="fas fa-volume-up text-[#f97a12] text-xs animate-pulse"></i>
                         </div>
                     </div>
                     <div class="ml-4 flex-1 truncate">
-                        <div class="song-title font-bold text-sm truncate ${isActive ? 'text-white' : 'text-white/90'}">${esc(t.title)}</div>
-                        <div class="text-[10px] text-gray-500 truncate uppercase tracking-widest mt-0.5">${esc(t.artist)}</div>
+                        <div class="song-title font-bold text-sm truncate ${isActive ? 'text-white' : 'text-[#dfe1e5]'}">${esc(t.title)}</div>
+                        <div class="text-[10px] text-[#808080] font-bold truncate uppercase tracking-widest mt-0.5">${esc(t.artist)}</div>
                     </div>
                     <div class="flex items-center space-x-3 ml-4">
-                        <div class="text-[9px] font-black font-mono text-gray-600 tracking-tighter">${formatTime(t.duration)}</div>
-                        <button onclick="event.stopPropagation(); UI.showActionMenu('${t.id}')" class="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-white transition-colors rounded-full hover:bg-white/5">
+                        <div class="text-[9px] font-black font-mono text-[#4b4b4b] tracking-tighter">${formatTime(t.duration)}</div>
+                        <button onclick="event.stopPropagation(); UI.showActionMenu('${t.id}')" class="w-10 h-10 flex items-center justify-center text-[#808080] hover:text-white transition-colors rounded-full hover:bg-white/5">
                             <i class="fas fa-ellipsis-v text-xs"></i>
                         </button>
                     </div>

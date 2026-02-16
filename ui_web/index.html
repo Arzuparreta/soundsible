@@ -15,11 +15,12 @@
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         
         :root {
-            --accent: #3b82f6;
-            --bg-deep: #000000;
-            --bg-surface: rgba(15, 15, 15, 0.8);
-            --glass: rgba(255, 255, 255, 0.03);
-            --glass-border: rgba(255, 255, 255, 0.08);
+            --jetbrains-orange: #f97a12;
+            --typescript-blue: #3178c6;
+            --bg-deep: #0d0d0f;
+            --bg-surface: rgba(30, 31, 34, 0.8);
+            --bg-selection: rgba(46, 67, 110, 0.4);
+            --glass-border: rgba(255, 255, 255, 0.06);
         }
 
         body { 
@@ -27,7 +28,7 @@
             touch-action: pan-y;
             overscroll-behavior-y: contain;
             background-color: var(--bg-deep);
-            color: white;
+            color: #dfe1e5;
             letter-spacing: -0.01em;
             overflow: hidden;
         }
@@ -42,7 +43,7 @@
             will-change: transform;
         }
 
-        /* Glassmorphism View Base */
+        /* High-End Glassmorphism */
         .glass-view {
             background: var(--bg-surface);
             backdrop-filter: blur(40px);
@@ -50,16 +51,16 @@
             border: 1px solid var(--glass-border);
         }
 
-        /* Now Playing Entrance (Premium Slime Effect) */
+        /* Now Playing Entrance */
         #now-playing-view {
             transition: transform 0.8s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.5s ease, visibility 0.5s;
             will-change: transform, opacity;
             opacity: 0;
             visibility: hidden;
-            transform: translateY(100%) scale(0.95);
-            background: rgba(0, 0, 0, 0.85);
-            backdrop-filter: blur(50px);
-            -webkit-backdrop-filter: blur(50px);
+            transform: translateY(100%) scale(0.98);
+            background: rgba(13, 13, 15, 0.9);
+            backdrop-filter: blur(60px);
+            -webkit-backdrop-filter: blur(60px);
         }
         
         #now-playing-view.active {
@@ -68,20 +69,11 @@
             transform: translateY(0) scale(1);
         }
 
-        /* Action Menu Entrance */
-        #action-menu {
-            visibility: hidden;
-            transition: visibility 0.4s;
-        }
-        #action-menu.active {
-            visibility: visible;
-        }
+        /* Action Menu */
         #action-menu-sheet {
+            background: #1e1f22;
+            border-top: 1px solid var(--glass-border);
             transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1);
-            will-change: transform;
-        }
-        #action-menu.active #action-menu-sheet {
-            transform: translateY(0);
         }
 
         /* Custom Scrollbar */
