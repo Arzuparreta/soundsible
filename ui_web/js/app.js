@@ -290,8 +290,8 @@ function renderSongList(tracks, containerId) {
             <div class="relative overflow-hidden rounded-2xl mb-2 group bg-[var(--bg-card)]">
                 <!-- Swipe Hints (Subtle) -->
                 <div class="absolute inset-0 flex items-center justify-between px-6 opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--accent)]/10">
-                    <div class="text-[var(--accent)] font-black text-[9px] uppercase tracking-[0.2em]">Favourite</div>
                     <div class="text-[var(--secondary)] font-black text-[9px] uppercase tracking-[0.2em]">Queue</div>
+                    <div class="text-[var(--accent)] font-black text-[9px] uppercase tracking-[0.2em]">Favourite</div>
                 </div>
 
                 <!-- Main Row -->

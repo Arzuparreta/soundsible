@@ -372,13 +372,13 @@ export class UI {
                 
                 if (isHorizontal) {
                     if (diff > 70) {
-                        store.toggleFavourite(activeRow.getAttribute('data-id'));
-                        this.vibrate(30);
-                        this.showToast('Updated Favourites');
-                    } else if (diff < -70) {
                         store.toggleQueue(activeRow.getAttribute('data-id'));
                         this.vibrate(30);
                         this.showToast('Updated Queue');
+                    } else if (diff < -70) {
+                        store.toggleFavourite(activeRow.getAttribute('data-id'));
+                        this.vibrate(30);
+                        this.showToast('Updated Favourites');
                     }
                 }
                 activeRow = null;
