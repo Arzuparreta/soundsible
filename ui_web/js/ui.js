@@ -9,10 +9,7 @@ import { audioEngine } from './audio.js';
 window.audioEngine = audioEngine;
 
 export class UI {
-}
-window.UI = UI; 
-
-UI.init = function() {
+    static init() {
         this.playerBar = document.getElementById('player-bar');
         this.playerTitle = document.getElementById('player-title');
         this.playerArtist = document.getElementById('player-artist');
@@ -57,28 +54,28 @@ UI.init = function() {
         // 1. Block multi-touch pinch-to-zoom (Safe: scrolling is 1 finger)
         document.addEventListener('touchstart', (e) => {
             if (e.touches.length > 1) {
-                e.preventDefault();
+                if (e.cancelable) e.preventDefault();
             }
         }, { passive: false });
 
         // 2. Block Safari-specific gesture scaling
         document.addEventListener('gesturestart', (e) => {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
         });
     }
 
     static updatePlayer(state) {
         if (state.currentTrack) {
             // Restore visibility: Ensure bar slides up when a track is active
-            if (this.playerBar.classList.contains('hidden')) {
+            if (this.playerBar && this.playerBar.classList.contains('hidden')) {
                 this.playerBar.classList.remove('hidden');
                 setTimeout(() => {
                     this.playerBar.classList.replace('translate-y-full', 'translate-y-0');
                 }, 10);
             }
             
-            this.playerTitle.textContent = state.currentTrack.title;
-            this.playerArtist.textContent = state.currentTrack.artist;
+            if (this.playerTitle) this.playerTitle.textContent = state.currentTrack.title;
+            if (this.playerArtist) this.playerArtist.textContent = state.currentTrack.artist;
             
             // Update Cover Art
             const coverUrl = Resolver.getCoverUrl(state.currentTrack);
@@ -150,10 +147,15 @@ UI.init = function() {
 
     static updateNowPlaying(track, isPlaying) {
         const coverUrl = Resolver.getCoverUrl(track);
-        document.getElementById('np-art').src = coverUrl;
-        document.getElementById('np-title').textContent = track.title;
-        document.getElementById('np-artist').textContent = track.artist;
-        document.getElementById('np-album-title').textContent = track.album;
+        const art = document.getElementById('np-art');
+        const title = document.getElementById('np-title');
+        const artist = document.getElementById('np-artist');
+        const album = document.getElementById('np-album-title');
+
+        if (art) art.src = coverUrl;
+        if (title) title.textContent = track.title;
+        if (artist) artist.textContent = track.artist;
+        if (album) album.textContent = track.album;
         
         // Sync ALL Play Buttons & Modes
         this.updateTransportControls(isPlaying);
@@ -166,7 +168,7 @@ UI.init = function() {
         const npView = document.getElementById('now-playing-view');
         if (!npView) return;
 
-        // PHYSICAL LOCKOUT (via CSS class for buttons only)
+        // PHYSICAL LOCKOUT
         this.isNpInitialTouchActive = true;
         npView.style.pointerEvents = 'none'; // Air-gap
         
@@ -189,6 +191,7 @@ UI.init = function() {
 
     static initNowPlayingGestures() {
         const npView = document.getElementById('now-playing-view');
+        if (!npView) return;
         
         let startY = 0;
         let isDragging = false;
@@ -225,7 +228,7 @@ UI.init = function() {
             if (!isDragging) return;
             
             // Critical: Block default browser scroll
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             e.stopPropagation();
 
             const currentY = e.touches[0].clientY;
@@ -257,7 +260,7 @@ UI.init = function() {
             if (deltaY > threshold) {
                 this.hideNowPlaying();
             } else {
-                // Remove the manual drag offset - CSS Spring takes over here!
+                // Remove the manual drag offset
                 npView.style.transform = '';
             }
         }, { passive: false });
@@ -305,9 +308,7 @@ UI.init = function() {
         console.log("Switching to view:", viewId);
 
         if (saveToHistory) {
-            // Only push to history if it's not a root view or if we're drilling deeper
             const rootViews = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
-            // If current is root and target is root, we clear stack to prevent infinite back-and-forth
             if (rootViews.includes(this.currentView) && rootViews.includes(viewId)) {
                 this.viewStack = [];
             } else {
@@ -323,18 +324,15 @@ UI.init = function() {
         const targetView = document.getElementById(`view-${viewId}`);
         if (targetView) {
             targetView.classList.remove('hidden');
-            // Scroll content to top
-            document.getElementById('content').scrollTop = 0;
+            const content = document.getElementById('content');
+            if (content) content.scrollTop = 0;
             
-            // CONTEXTUAL RE-RENDER: Ensure the tab is current with local state before sync
             if (viewId === 'favourites' && window.renderFavourites) window.renderFavourites(store.state);
 
-            // Background Sync: Proactively fetch latest data without blocking UI transition
             if (['home', 'search', 'albums', 'favourites'].includes(viewId)) {
                 setTimeout(() => store.syncLibrary(), 50);
             }
 
-            // Lazy init downloader if switching to downloader view
             if (viewId === 'downloader') {
                 import('./downloader.js').then(({ Downloader }) => {
                     Downloader.init();
@@ -344,10 +342,9 @@ UI.init = function() {
 
         this.currentView = viewId;
 
-        // Update active state icons/text for main nav
         const views = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
         const idx = views.indexOf(viewId);
-        if (idx !== -1 && this.navButtons[idx]) {
+        if (idx !== -1 && this.navButtons && this.navButtons[idx]) {
             this.navButtons.forEach(b => {
                 b.classList.remove('text-blue-500');
                 b.classList.add('text-gray-500');
@@ -361,30 +358,19 @@ UI.init = function() {
         if (this.viewStack.length === 0) return;
         
         const previousView = this.viewStack.pop();
-        console.log("Navigating back to:", previousView);
-        // showView(id, saveToHistory=false) to prevent infinite loops
         this.showView(previousView, false);
     }
 
     static initNav() {
         const views = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
-        console.log("Initializing Nav with buttons:", this.navButtons.length);
         
-        this.navButtons.forEach((btn, idx) => {
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.showView(views[idx]);
+        if (this.navButtons) {
+            this.navButtons.forEach((btn, idx) => {
+                btn.onclick = (e) => {
+                    e.preventDefault();
+                    this.showView(views[idx]);
+                };
             });
-        });
-
-        // Queue Clear Handler
-        const clearBtn = document.getElementById('queue-clear-btn');
-        if (clearBtn) {
-            clearBtn.onclick = () => {
-                if (confirm("Clear all songs from the queue?")) {
-                    store.clearQueue();
-                }
-            };
         }
 
         // --- Seek Listeners ---
@@ -412,27 +398,27 @@ UI.init = function() {
         window.addEventListener('audio:timeupdate', (e) => {
             const { progress, currentTime, duration } = e.detail;
             
-            // Update Full View Seek Bar
             const npBar = document.getElementById('np-seek-bar');
             if (npBar) npBar.style.width = `${progress}%`;
             
-            // Update Time Labels
             const currTimeLabel = document.getElementById('np-time-curr');
             const totalTimeLabel = document.getElementById('np-time-total');
             if (currTimeLabel) currTimeLabel.textContent = this.formatTime(currentTime);
             if (totalTimeLabel) totalTimeLabel.textContent = this.formatTime(duration);
         });
 
-        // Add overscroll-behavior-x: none to the body to prevent Safari bounce
         document.body.style.overscrollBehaviorX = 'none';
-        document.getElementById('content').style.overscrollBehaviorX = 'none';
+        const content = document.getElementById('content');
+        if (content) content.style.overscrollBehaviorX = 'none';
 
         // Global functions for overlay
         window.showConnectionRefiner = () => {
-            document.getElementById('connection-overlay').classList.remove('hidden');
+            const el = document.getElementById('connection-overlay');
+            if (el) el.classList.remove('hidden');
         };
         window.hideConnectionRefiner = () => {
-            document.getElementById('connection-overlay').classList.add('hidden');
+            const el = document.getElementById('connection-overlay');
+            if (el) el.classList.add('hidden');
         };
 
         const reconnectBtn = document.getElementById('reconnect-btn');
@@ -517,7 +503,7 @@ UI.init = function() {
                 isEdgeSwipe = true;
                 touchStartX = touch.clientX;
                 touchStartY = touch.clientY;
-                content.style.transition = 'none';
+                if (content) content.style.transition = 'none';
                 return;
             }
 
@@ -536,21 +522,16 @@ UI.init = function() {
                     return false;
                 };
 
-                // SAFETY TIMEOUT (2s): If held too long without lifting, cancel everything.
                 touchCancelTimer = setTimeout(() => {
                     if (activeRow) {
                         this.vibrate(10);
-                        activeRow.classList.add('opacity-50'); // Visual hint it's cancelled
+                        activeRow.classList.add('opacity-50');
                         setTimeout(() => resetGestureState(), 200);
                     }
                 }, 2000);
 
-                // Long Press Detection
                 longPressTimer = setTimeout(() => {
-                    const currentMoveX = Math.abs(totalMoveX);
-                    const currentMoveY = Math.abs(totalMoveY);
-                    
-                    if (activeRow && currentMoveX < 15 && currentMoveY < 15) {
+                    if (activeRow && Math.abs(totalMoveX) < 15 && Math.abs(totalMoveY) < 15) {
                         if (touchCancelTimer) clearTimeout(touchCancelTimer);
                         const trackId = activeRow.getAttribute('data-id');
                         this.isInitialTouchActive = true;
@@ -562,30 +543,23 @@ UI.init = function() {
             }
         }, { passive: true });
 
-        // Global lift-off detection for Action Menu safety
         window.addEventListener('touchend', () => {
             if (this.isInitialTouchActive) {
                 this.isInitialTouchActive = false;
-                
-                // AIR-GAP PROTECTION for Action Menu
                 const sheet = document.getElementById('action-menu-sheet');
                 if (sheet) {
                     setTimeout(() => {
                         sheet.style.pointerEvents = 'auto';
-                        sheet.classList.remove('menu-protected');
                     }, 100);
                 }
             }
 
             if (this.isNpInitialTouchActive) {
                 this.isNpInitialTouchActive = false;
-                
-                // AIR-GAP PROTECTION for Now Playing View
                 const npView = document.getElementById('now-playing-view');
                 if (npView) {
                     setTimeout(() => {
                         npView.style.pointerEvents = 'auto';
-                        npView.classList.remove('now-playing-protected');
                     }, 100);
                 }
             }
@@ -593,25 +567,21 @@ UI.init = function() {
 
         document.addEventListener('touchmove', e => {
             const touch = e.changedTouches[0];
-            const currentX = touch.clientX;
-            const currentY = touch.clientY;
-            const diffX = currentX - touchStartX;
-            const diffY = currentY - touchStartY;
+            const diffX = touch.clientX - touchStartX;
+            const diffY = touch.clientY - touchStartY;
             
             totalMoveX = Math.max(totalMoveX, Math.abs(diffX));
             totalMoveY = Math.max(totalMoveY, Math.abs(diffY));
 
             if (isEdgeSwipe) {
                 if (e.cancelable) e.preventDefault();
-                // Slide the entire content area
                 const move = Math.max(0, diffX);
-                content.style.transform = `translateX(${move}px)`;
+                if (content) content.style.transform = `translateX(${move}px)`;
                 return;
             }
 
             if (!activeRow) return;
             
-            // If moved, it's not a static hold anymore
             if (totalMoveX > 10 || totalMoveY > 10) {
                 if (longPressTimer) {
                     clearTimeout(longPressTimer);
@@ -619,27 +589,20 @@ UI.init = function() {
                 }
             }
 
-            // --- SMART SCROLL VS SWIPE ---
-            // If we are moving more vertically than horizontally, it's a scroll. 
-            // We should NOT call preventDefault and should cancel our horizontal swipe logic.
             if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 5) {
                 resetGestureState();
                 return;
             }
 
-            // If we are moving horizontally, block browser's back/forward navigation
             if (Math.abs(diffX) > 10) {
                 if (e.cancelable) e.preventDefault();
             } else {
-                // Not enough horizontal movement yet to commit to a swipe
                 return;
             }
             
-            // Allow swiping both ways
             const move = Math.max(Math.min(diffX, 100), -100);
             activeRow.style.transform = `translateX(${move}px)`;
             
-            // Show visual hints if far enough
             if (move < -70) {
                 activeRow.classList.add('border-blue-500/50');
                 activeRow.classList.remove('border-yellow-500/50');
@@ -657,16 +620,16 @@ UI.init = function() {
 
             if (isEdgeSwipe) {
                 const diffX = e.changedTouches[0].clientX - touchStartX;
-                const threshold = window.innerWidth * 0.3; // 30% Threshold
+                const threshold = window.innerWidth * 0.3;
 
-                content.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-                
-                if (diffX > threshold) {
-                    this.vibrate(50);
-                    this.navigateBack();
+                if (content) {
+                    content.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+                    if (diffX > threshold) {
+                        this.vibrate(50);
+                        this.navigateBack();
+                    }
+                    content.style.transform = 'translateX(0)';
                 }
-                
-                content.style.transform = 'translateX(0)';
                 isEdgeSwipe = false;
                 return;
             }
@@ -678,20 +641,14 @@ UI.init = function() {
             activeRow.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
             
             if (Math.abs(diffX) > 70) {
-                // GESTURE ACTION (Swipe)
+                const trackId = activeRow.getAttribute('data-id');
                 if (diffX < -70) {
-                    // ADD TO QUEUE (Left Swipe) - Now Toggles
-                    const trackId = activeRow.getAttribute('data-id');
                     const wasInQueue = store.state.queue.some(t => t.id === trackId);
                     this.vibrate(50);
                     store.toggleQueue(trackId).then(success => {
-                        if (success) {
-                            this.showToast(wasInQueue ? "Removed from Queue" : "Added to Queue");
-                        }
+                        if (success) this.showToast(wasInQueue ? "Removed from Queue" : "Added to Queue");
                     });
-                } else if (diffX > 70) {
-                    // FAVOURITE (Right Swipe)
-                    const trackId = activeRow.getAttribute('data-id');
+                } else {
                     const wasFav = store.state.favorites.includes(trackId);
                     this.vibrate(50);
                     store.toggleFavourite(trackId);
@@ -699,13 +656,10 @@ UI.init = function() {
                 }
                 activeRow.style.transform = 'translateX(0)';
             } else if (totalMoveX < 10 && totalMoveY < 10 && touchDuration < 500) {
-                // CLEAN TAP (Selection)
-                // Only trigger play if it was a quick tap with minimal movement
                 const trackId = activeRow.getAttribute('data-id');
                 window.playTrack(trackId);
                 activeRow.style.transform = 'translateX(0)';
             } else {
-                // Cancelled or insignificant movement
                 activeRow.style.transform = 'translateX(0)';
             }
             
@@ -720,50 +674,55 @@ UI.init = function() {
 
         this.currentActionTrack = track;
 
-        document.getElementById('action-track-title').textContent = track.title;
-        document.getElementById('action-track-artist').textContent = track.artist;
-        document.getElementById('action-track-art').src = Resolver.getCoverUrl(track);
+        const title = document.getElementById('action-track-title');
+        const artist = document.getElementById('action-track-artist');
+        const art = document.getElementById('action-track-art');
+
+        if (title) title.textContent = track.title;
+        if (artist) artist.textContent = track.artist;
+        if (art) art.src = Resolver.getCoverUrl(track);
 
         const isFav = store.state.favorites.includes(trackId);
-        document.getElementById('action-fav-text').textContent = isFav ? 'Remove from Favourites' : 'Add to Favourites';
+        const favText = document.getElementById('action-fav-text');
+        if (favText) favText.textContent = isFav ? 'Remove from Favourites' : 'Add to Favourites';
         const favIcon = document.querySelector('#action-fav i');
-        favIcon.className = isFav ? 'fas fa-heart text-yellow-400' : 'far fa-heart text-yellow-400';
+        if (favIcon) favIcon.className = isFav ? 'fas fa-heart text-yellow-400' : 'far fa-heart text-yellow-400';
 
         const menu = document.getElementById('action-menu');
         const sheet = document.getElementById('action-menu-sheet');
         
-        // AIR-GAP PROTECTION: Disable pointer events for 100ms to swallow ghost clicks
         if (sheet) sheet.style.pointerEvents = 'none';
         this.isInitialTouchActive = true;
         
-        menu.classList.add('active');
+        if (menu) menu.classList.add('active');
 
-        // Setup button listeners (once)
         if (!this._actionMenuBound) {
-            document.getElementById('action-menu-overlay').onclick = () => this.hideActionMenu();
+            const overlay = document.getElementById('action-menu-overlay');
+            if (overlay) overlay.onclick = () => this.hideActionMenu();
             this.initBottomSheetGestures();
             
-            document.getElementById('action-queue').onclick = async () => {
+            const qBtn = document.getElementById('action-queue');
+            if (qBtn) qBtn.onclick = async () => {
                 const wasInQueue = store.state.queue.some(t => t.id === this.currentActionTrack.id);
                 const success = await store.toggleQueue(this.currentActionTrack.id);
-                if (success) {
-                    this.showToast(wasInQueue ? "Removed from Queue" : "Added to Queue");
-                }
+                if (success) this.showToast(wasInQueue ? "Removed from Queue" : "Added to Queue");
                 this.hideActionMenu();
             };
-            document.getElementById('action-edit-metadata').onclick = () => {
+            const eBtn = document.getElementById('action-edit-metadata');
+            if (eBtn) eBtn.onclick = () => {
                 this.hideActionMenu();
                 this.showMetadataEditor(this.currentActionTrack.id);
             };
-            document.getElementById('action-fav').onclick = () => {
+            const fBtn = document.getElementById('action-fav');
+            if (fBtn) fBtn.onclick = () => {
                 const wasFav = store.state.favorites.includes(this.currentActionTrack.id);
                 store.toggleFavourite(this.currentActionTrack.id);
                 this.showToast(wasFav ? "Removed from Favourites" : "Added to Favourites");
                 this.hideActionMenu();
             };
-            document.getElementById('action-delete').onclick = () => {
-                const title = this.currentActionTrack.title;
-                if (confirm(`Delete "${title}" permanently?`)) {
+            const dBtn = document.getElementById('action-delete');
+            if (dBtn) dBtn.onclick = () => {
+                if (confirm(`Delete "${this.currentActionTrack.title}" permanently?`)) {
                     store.deleteTrack(this.currentActionTrack.id);
                 }
                 this.hideActionMenu();
@@ -800,13 +759,11 @@ UI.init = function() {
                 const siblings = [...container.querySelectorAll('.queue-item')];
                 initialIndex = siblings.indexOf(draggingEl);
                 currentIndex = initialIndex;
-                itemHeight = draggingEl.offsetHeight + 12; // Height + spacing
+                itemHeight = draggingEl.offsetHeight + 12;
                 
                 this.vibrate([40, 20, 40]);
                 draggingEl.classList.add('dragging');
                 UI.isDraggingQueue = true;
-                
-                // Block scroll while dragging
                 document.body.style.overflow = 'hidden';
             }, 400); 
         }, { passive: true });
@@ -818,42 +775,25 @@ UI.init = function() {
                 return;
             }
 
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             const currentY = e.touches[0].clientY;
             const deltaY = currentY - startY;
 
-            // 1. Move the dragged item visually
             draggingEl.style.transform = `translateY(${deltaY}px) scale(1.05)`;
 
-            // 2. Calculate virtual index based on deltaY
-            // How many slots have we moved?
             const moveOffset = Math.round(deltaY / itemHeight);
             const siblings = [...container.querySelectorAll('.queue-item')];
             const newIndex = Math.max(0, Math.min(siblings.length - 1, initialIndex + moveOffset));
 
             if (newIndex !== currentIndex) {
                 currentIndex = newIndex;
-                
-                // 3. Shift OTHER items to create a virtual gap
                 siblings.forEach((sib, idx) => {
                     if (sib === draggingEl) return;
-
                     sib.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
-                    
                     if (initialIndex < currentIndex) {
-                        // Dragging DOWN
-                        if (idx > initialIndex && idx <= currentIndex) {
-                            sib.style.transform = `translateY(-${itemHeight}px)`;
-                        } else {
-                            sib.style.transform = '';
-                        }
+                        sib.style.transform = (idx > initialIndex && idx <= currentIndex) ? `translateY(-${itemHeight}px)` : '';
                     } else if (initialIndex > currentIndex) {
-                        // Dragging UP
-                        if (idx < initialIndex && idx >= currentIndex) {
-                            sib.style.transform = `translateY(${itemHeight}px)`;
-                        } else {
-                            sib.style.transform = '';
-                        }
+                        sib.style.transform = (idx < initialIndex && idx >= currentIndex) ? `translateY(${itemHeight}px)` : '';
                     } else {
                         sib.style.transform = '';
                     }
@@ -866,11 +806,7 @@ UI.init = function() {
             if (!draggingEl) return;
 
             document.body.style.overflow = '';
-            
-            // 1. Commit the move in the DOM once
             const siblings = [...container.querySelectorAll('.queue-item')];
-            
-            // Reset all transforms for the final swap
             siblings.forEach(sib => {
                 sib.style.transform = '';
                 sib.style.transition = '';
@@ -880,26 +816,23 @@ UI.init = function() {
             UI.isDraggingQueue = false;
 
             if (initialIndex !== currentIndex) {
-                // Actually move the element in the DOM
                 if (currentIndex >= siblings.length - 1) {
                     container.appendChild(draggingEl);
                 } else {
                     const targetSib = siblings[currentIndex + (currentIndex > initialIndex ? 1 : 0)];
                     container.insertBefore(draggingEl, targetSib);
                 }
-
-                console.log(`Virtual Reorder Commit: ${initialIndex} -> ${currentIndex}`);
                 await store.reorderQueue(initialIndex, currentIndex);
             } else {
                 if (window.renderQueue) window.renderQueue(store.state);
             }
-
             draggingEl = null;
         }, { passive: true });
     }
 
     static initBottomSheetGestures() {
         const sheet = document.getElementById('action-menu-sheet');
+        if (!sheet) return;
         let startY = 0;
         let currentY = 0;
         let isDragging = false;
@@ -914,21 +847,15 @@ UI.init = function() {
             if (!isDragging) return;
             currentY = e.touches[0].clientY;
             const deltaY = currentY - startY;
-            
-            // Only allow dragging down
-            if (deltaY > 0) {
-                sheet.style.transform = `translateY(${deltaY}px)`;
-            }
+            if (deltaY > 0) sheet.style.transform = `translateY(${deltaY}px)`;
         }, { passive: true });
 
         sheet.addEventListener('touchend', (e) => {
             if (!isDragging) return;
             isDragging = false;
             const deltaY = currentY - startY;
-            const threshold = sheet.offsetHeight * 0.2; // 20% of height to close
-
+            const threshold = sheet.offsetHeight * 0.2;
             sheet.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-
             if (deltaY > threshold) {
                 this.hideActionMenu();
             } else {
@@ -939,11 +866,10 @@ UI.init = function() {
 
     static hideActionMenu() {
         const menu = document.getElementById('action-menu');
-        menu.classList.remove('active');
+        if (menu) menu.classList.remove('active');
     }
 
     static updateTransportControls(isPlaying) {
-        // 1. Play/Pause Sync
         const playBtnIcons = [
             document.querySelector('#mini-play-btn i'),
             document.querySelector('#np-play-btn i')
@@ -957,7 +883,6 @@ UI.init = function() {
             }
         });
 
-        // 2. Repeat Mode Sync
         const mode = store.state.repeatMode;
         const repeatBtns = [document.getElementById('np-repeat-btn'), document.getElementById('mini-repeat-btn')].filter(b => b);
         const oneIndicators = [document.getElementById('np-repeat-one-indicator'), document.getElementById('mini-repeat-one-indicator')].filter(i => i);
@@ -973,10 +898,6 @@ UI.init = function() {
         });
 
         oneIndicators.forEach(ind => ind.classList.toggle('hidden', mode !== 'one'));
-
-        // 3. Shuffle Sync (Visual indication if enabled)
-        // Note: Currently server handles shuffle as a one-time reorder, 
-        // but we can highlight the button briefly or if we added a state.
     }
 
     static showMetadataEditor(trackId) {
@@ -986,30 +907,49 @@ UI.init = function() {
         this.editingTrack = track;
         this.selectedCoverUrl = null;
 
-        document.getElementById('edit-title').value = track.title;
-        document.getElementById('edit-artist').value = track.artist;
-        document.getElementById('edit-album').value = track.album;
-        document.getElementById('edit-cover-preview').src = Resolver.getCoverUrl(track);
-        document.getElementById('auto-fetch-results').classList.add('hidden');
-        document.getElementById('edit-status').textContent = '';
-        document.getElementById('edit-status').className = 'text-xs text-center min-h-[1rem]';
+        const title = document.getElementById('edit-title');
+        const artist = document.getElementById('edit-artist');
+        const album = document.getElementById('edit-album');
+        const preview = document.getElementById('edit-cover-preview');
+        const status = document.getElementById('edit-status');
+
+        if (title) title.value = track.title;
+        if (artist) artist.value = track.artist;
+        if (album) album.value = track.album;
+        if (preview) preview.src = Resolver.getCoverUrl(track);
+        
+        const results = document.getElementById('auto-fetch-results');
+        if (results) results.classList.add('hidden');
+        if (status) {
+            status.textContent = '';
+            status.className = 'text-xs text-center min-h-[1rem]';
+        }
 
         const modal = document.getElementById('metadata-editor');
         const overlay = document.getElementById('metadata-editor-overlay');
         const content = document.getElementById('metadata-editor-content');
 
-        modal.classList.remove('hidden');
-        setTimeout(() => {
-            overlay.classList.replace('opacity-0', 'opacity-100');
-            content.classList.replace('scale-95', 'scale-100');
-            content.classList.replace('opacity-0', 'opacity-100');
-        }, 10);
+        if (modal) {
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                if (overlay) overlay.classList.replace('opacity-0', 'opacity-100');
+                if (content) {
+                    content.classList.replace('scale-95', 'scale-100');
+                    content.classList.replace('opacity-0', 'opacity-100');
+                }
+            }, 10);
+        }
 
         if (!this._editorBound) {
-            document.getElementById('edit-auto-fetch-btn').onclick = () => this.performAutoFetch();
-            document.getElementById('edit-upload-btn').onclick = () => document.getElementById('edit-file-input').click();
-            document.getElementById('edit-file-input').onchange = (e) => this.handleCoverUpload(e);
-            document.getElementById('edit-save-btn').onclick = () => this.saveMetadata();
+            const afBtn = document.getElementById('edit-auto-fetch-btn');
+            const upBtn = document.getElementById('edit-upload-btn');
+            const fInp = document.getElementById('edit-file-input');
+            const svBtn = document.getElementById('edit-save-btn');
+
+            if (afBtn) afBtn.onclick = () => this.performAutoFetch();
+            if (upBtn) upBtn.onclick = () => fInp && fInp.click();
+            if (fInp) fInp.onchange = (e) => this.handleCoverUpload(e);
+            if (svBtn) svBtn.onclick = () => this.saveMetadata();
             this._editorBound = true;
         }
     }
@@ -1019,15 +959,17 @@ UI.init = function() {
         const overlay = document.getElementById('metadata-editor-overlay');
         const content = document.getElementById('metadata-editor-content');
 
-        overlay.classList.replace('opacity-100', 'opacity-0');
-        content.classList.replace('scale-100', 'scale-95');
-        content.classList.replace('opacity-100', 'opacity-0');
-        setTimeout(() => modal.classList.add('hidden'), 300);
+        if (overlay) overlay.classList.replace('opacity-100', 'opacity-0');
+        if (content) {
+            content.classList.replace('scale-100', 'scale-95');
+            content.classList.replace('opacity-100', 'opacity-0');
+        }
+        setTimeout(() => modal && modal.classList.add('hidden'), 300);
     }
 
     static async performAutoFetch() {
-        const title = document.getElementById('edit-title').value;
-        const artist = document.getElementById('edit-artist').value;
+        const title = document.getElementById('edit-title')?.value;
+        const artist = document.getElementById('edit-artist')?.value;
         const query = `${artist} ${title}`.trim();
         if (!query) return;
 
@@ -1035,40 +977,48 @@ UI.init = function() {
         const listDiv = document.getElementById('auto-fetch-list');
         const loading = document.getElementById('edit-cover-loading');
 
-        loading.classList.remove('hidden');
+        if (loading) loading.classList.remove('hidden');
         const results = await store.searchMetadata(query);
-        loading.classList.add('hidden');
+        if (loading) loading.classList.add('hidden');
 
         if (results.length === 0) {
             alert("No suggestions found.");
             return;
         }
 
-        listDiv.innerHTML = results.map((res, i) => `
-            <div class="flex items-center space-x-3 p-2 hover:bg-gray-800 rounded-lg cursor-pointer transition-colors" onclick="UI.selectSuggestion(${i})">
-                <img src="${res.artwork_url}" class="w-10 h-10 rounded shadow object-cover">
-                <div class="flex-1 truncate">
-                    <div class="text-xs font-bold truncate">${res.track_name}</div>
-                    <div class="text-[10px] text-gray-500 truncate">${res.artist_name} • ${res.album_name}</div>
+        if (listDiv) {
+            listDiv.innerHTML = results.map((res, i) => `
+                <div class="flex items-center space-x-3 p-2 hover:bg-gray-800 rounded-lg cursor-pointer transition-colors" onclick="UI.selectSuggestion(${i})">
+                    <img src="${res.artwork_url}" class="w-10 h-10 rounded shadow object-cover">
+                    <div class="flex-1 truncate">
+                        <div class="text-xs font-bold truncate">${res.track_name}</div>
+                        <div class="text-[10px] text-gray-500 truncate">${res.artist_name} • ${res.album_name}</div>
+                    </div>
                 </div>
-            </div>
-        `).join('');
+            `).join('');
+        }
 
         this.suggestions = results;
-        resultsDiv.classList.remove('hidden');
+        if (resultsDiv) resultsDiv.classList.remove('hidden');
     }
 
     static selectSuggestion(index) {
         const res = this.suggestions[index];
         if (!res) return;
 
-        document.getElementById('edit-title').value = res.track_name;
-        document.getElementById('edit-artist').value = res.artist_name;
-        document.getElementById('edit-album').value = res.album_name;
-        document.getElementById('edit-cover-preview').src = res.artwork_url;
+        const title = document.getElementById('edit-title');
+        const artist = document.getElementById('edit-artist');
+        const album = document.getElementById('edit-album');
+        const preview = document.getElementById('edit-cover-preview');
+
+        if (title) title.value = res.track_name;
+        if (artist) artist.value = res.artist_name;
+        if (album) album.value = res.album_name;
+        if (preview) preview.src = res.artwork_url;
         this.selectedCoverUrl = res.artwork_url;
         
-        document.getElementById('auto-fetch-results').classList.add('hidden');
+        const results = document.getElementById('auto-fetch-results');
+        if (results) results.classList.add('hidden');
     }
 
     static handleCoverUpload(e) {
@@ -1077,7 +1027,8 @@ UI.init = function() {
 
         const reader = new FileReader();
         reader.onload = (event) => {
-            document.getElementById('edit-cover-preview').src = event.target.result;
+            const preview = document.getElementById('edit-cover-preview');
+            if (preview) preview.src = event.target.result;
             this.selectedFile = file;
             this.selectedCoverUrl = null;
         };
@@ -1088,43 +1039,53 @@ UI.init = function() {
         const saveBtn = document.getElementById('edit-save-btn');
         const status = document.getElementById('edit-status');
         
-        saveBtn.disabled = true;
-        saveBtn.classList.add('opacity-50');
-        status.textContent = "Updating Station library... This takes a moment.";
-        status.className = "text-xs text-center text-blue-400 animate-pulse";
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.classList.add('opacity-50');
+        }
+        if (status) {
+            status.textContent = "Updating Station library... This takes a moment.";
+            status.className = "text-xs text-center text-blue-400 animate-pulse";
+        }
 
         const metadata = {
-            title: document.getElementById('edit-title').value.trim(),
-            artist: document.getElementById('edit-artist').value.trim(),
-            album: document.getElementById('edit-album').value.trim()
+            title: document.getElementById('edit-title')?.value.trim(),
+            artist: document.getElementById('edit-artist')?.value.trim(),
+            album: document.getElementById('edit-album')?.value.trim()
         };
 
         let success = true;
 
-        // 1. If we have a file upload, do that first
         if (this.selectedFile) {
             success = await store.uploadCover(this.editingTrack.id, this.selectedFile);
             this.selectedFile = null;
         }
 
-        // 2. Update text metadata (and optionally cover from URL)
         if (success) {
             success = await store.updateMetadata(this.editingTrack.id, metadata, this.selectedCoverUrl);
         }
 
         if (success) {
-            status.textContent = "✓ Success! Library refreshed.";
-            status.className = "text-xs text-center text-green-500 font-bold";
+            if (status) {
+                status.textContent = "✓ Success! Library refreshed.";
+                status.className = "text-xs text-center text-green-500 font-bold";
+            }
             setTimeout(() => {
                 this.hideMetadataEditor();
-                saveBtn.disabled = false;
-                saveBtn.classList.remove('opacity-50');
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.classList.remove('opacity-50');
+                }
             }, 1000);
         } else {
-            status.textContent = "❌ Update failed. Check Station logs.";
-            status.className = "text-xs text-center text-red-500 font-bold";
-            saveBtn.disabled = false;
-            saveBtn.classList.remove('opacity-50');
+            if (status) {
+                status.textContent = "❌ Update failed. Check Station logs.";
+                status.className = "text-xs text-center text-red-500 font-bold";
+            }
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.classList.remove('opacity-50');
+            }
         }
     }
 
@@ -1157,13 +1118,11 @@ UI.init = function() {
 
         container.appendChild(toast);
 
-        // Animate in
         setTimeout(() => {
             toast.classList.replace('translate-y-10', 'translate-y-0');
             toast.classList.replace('opacity-0', 'opacity-100');
         }, 10);
 
-        // Animate out and remove
         setTimeout(() => {
             toast.classList.replace('translate-y-0', 'translate-y-10');
             toast.classList.replace('opacity-100', 'opacity-0');
@@ -1171,3 +1130,4 @@ UI.init = function() {
         }, 3000);
     }
 }
+window.UI = UI;

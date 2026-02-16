@@ -124,6 +124,16 @@ window.showAlbumDetail = (albumName, artistName) => {
     window._currentAlbum = { name: albumName, artist: artistName };
 };
 
+// INITIALIZATION ERROR HANDLER
+window.addEventListener('error', (e) => {
+    console.error("GLOBAL ERROR:", e.error);
+    const loader = document.getElementById('initial-loader');
+    if (loader) {
+        loader.classList.add('opacity-0', 'pointer-events-none');
+        setTimeout(() => loader.remove(), 1000);
+    }
+});
+
 async function init() {
     console.log("🚀 Soundsible App Init Sequence Started...");
     
