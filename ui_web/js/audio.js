@@ -123,7 +123,7 @@ class AudioEngine {
         }
 
         console.log("Playback sequence finished.");
-        store.update({ isPlaying: false });
+        store.update({ isPlaying: false, currentTrack: null });
     }
 
     async prev() {

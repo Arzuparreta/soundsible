@@ -10,11 +10,7 @@ window.audioEngine = audioEngine;
 
 export class UI {
     static init() {
-        console.log("UI: Initializing Premium Core...");
-        this.playerBar = document.getElementById('player-bar');
-        this.playerTitle = document.getElementById('player-title');
-        this.playerArtist = document.getElementById('player-artist');
-        this.progressBar = document.getElementById('player-progress');
+        console.log("UI: Initializing Omni-Island Core...");
         this.content = document.getElementById('content');
         
         // Navigation State
@@ -23,48 +19,21 @@ export class UI {
         this._npGesturesBound = false;
 
         this.initGlobalListeners();
-        this.initOmniButton();
+        this.initOmniIsland();
         store.subscribe((state) => this.updatePlayer(state));
-
-        // Global Transport Handlers
-        const bind = (id, fn) => {
-            const el = document.getElementById(id);
-            if (el) el.onclick = (e) => { e.stopPropagation(); fn(); };
-        };
-
-        bind('mini-play-btn', () => audioEngine.toggle());
-        bind('np-play-btn', () => audioEngine.toggle());
-        bind('mini-next-btn', () => audioEngine.next());
-        bind('mini-prev-btn', () => audioEngine.prev());
-        bind('np-next-btn', () => audioEngine.next());
-        bind('np-prev-btn', () => audioEngine.prev());
-        
-        bind('mini-shuffle-btn', () => { store.toggleShuffle(); this.showToast('Queue Shuffled'); });
-        bind('np-shuffle-btn', () => { store.toggleShuffle(); this.showToast('Queue Shuffled'); });
-        bind('mini-repeat-btn', () => store.toggleRepeat());
-        bind('np-repeat-btn', () => store.toggleRepeat());
 
         // Gestures Engine
         this.initGestures();
     }
 
     static updatePlayer(state) {
-        if (state.currentTrack) {
-            if (this.playerBar && this.playerBar.classList.contains('hidden')) {
-                this.playerBar.classList.remove('hidden');
-                setTimeout(() => this.playerBar.classList.replace('translate-y-full', 'translate-y-0'), 10);
-            }
-            
-            if (this.playerTitle) this.playerTitle.textContent = state.currentTrack.title;
-            if (this.playerArtist) this.playerArtist.textContent = state.currentTrack.artist;
-            
-            const playerArt = document.getElementById('player-art');
-            if (playerArt) playerArt.src = Resolver.getCoverUrl(state.currentTrack);
+        // Omni-Island State Sync
+        this.syncIsland(state);
 
+        if (state.currentTrack) {
             if (document.getElementById('now-playing-view')?.classList.contains('active')) {
                 this.updateNowPlaying(state.currentTrack, state.isPlaying);
             }
-            
             this.updateTransportControls(state.isPlaying);
         }
 
@@ -87,6 +56,79 @@ export class UI {
 
         this.updateStatus(state);
         this.updateThemeUI(state.theme);
+    }
+
+    static syncIsland(state) {
+        if (!this.island) return;
+        
+        if (state.currentTrack && !this.isIslandActive) {
+            this.morphToActive();
+        } else if (!state.currentTrack && this.isIslandActive) {
+            this.collapseToSeed();
+        }
+
+        // Real-time UI Sync
+        const anchorIcon = document.getElementById('omni-anchor-icon');
+        if (this.isIslandActive && anchorIcon) {
+            anchorIcon.className = state.isPlaying ? 'fas fa-pause text-lg text-white' : 'fas fa-play text-lg text-white ml-1';
+            this.updateMetadataScroller(state.currentTrack);
+        }
+    }
+
+    static updateMetadataScroller(track) {
+        if (!track) return;
+        const container = document.getElementById('omni-metadata-container');
+        const scroller = document.getElementById('omni-metadata');
+        const text1 = document.getElementById('omni-text-1');
+        const text2 = document.getElementById('omni-text-2');
+        if (!container || !scroller || !text1 || !text2) return;
+
+        const content = `${track.title} • ${track.artist} • ${track.album} • `;
+        if (text1.textContent === content) return;
+
+        text1.textContent = content;
+        text2.textContent = content;
+        container.style.opacity = '1';
+
+        // Marquee Logic
+        const containerWidth = container.offsetWidth;
+        const textWidth = text1.offsetWidth;
+
+        if (textWidth > 150) { // If it's more than a small stub
+            scroller.style.animation = `omni-marquee ${content.length * 0.25}s linear infinite`;
+        } else {
+            scroller.style.animation = 'none';
+        }
+    }
+
+    static morphToActive() {
+        this.isIslandActive = true;
+        this.vibrate(30);
+        
+        this.island.style.width = '320px';
+        
+        const prev = document.getElementById('omni-prev');
+        const next = document.getElementById('omni-next');
+        const anchorIcon = document.getElementById('omni-anchor-icon');
+
+        if (prev) { prev.classList.remove('hidden'); setTimeout(() => { prev.classList.replace('opacity-0', 'opacity-100'); prev.classList.replace('scale-75', 'scale-100'); }, 100); }
+        if (next) { next.classList.remove('hidden'); setTimeout(() => { next.classList.replace('opacity-0', 'opacity-100'); next.classList.replace('scale-75', 'scale-100'); }, 100); }
+        
+        if (anchorIcon) anchorIcon.className = store.state.isPlaying ? 'fas fa-pause text-lg text-white' : 'fas fa-play text-lg text-white ml-1';
+    }
+
+    static collapseToSeed() {
+        this.isIslandActive = false;
+        this.island.style.width = '56px';
+        
+        const prev = document.getElementById('omni-prev');
+        const next = document.getElementById('omni-next');
+        const anchorIcon = document.getElementById('omni-anchor-icon');
+
+        if (prev) { prev.classList.replace('opacity-100', 'opacity-0'); prev.classList.replace('scale-100', 'scale-75'); setTimeout(() => prev.classList.add('hidden'), 300); }
+        if (next) { next.classList.replace('opacity-100', 'opacity-0'); next.classList.replace('scale-100', 'scale-75'); setTimeout(() => next.classList.add('hidden'), 300); }
+        
+        if (anchorIcon) anchorIcon.className = 'fas fa-command text-lg text-white';
     }
 
     static updateThemeUI(theme) {
@@ -276,8 +318,13 @@ export class UI {
 
         window.addEventListener('audio:timeupdate', (e) => {
             const { progress, currentTime, duration } = e.detail;
+            
             const bar = document.getElementById('np-seek-bar');
             if (bar) bar.style.width = `${progress}%`;
+            
+            const omniBar = document.getElementById('omni-progress');
+            if (omniBar) omniBar.style.width = `${progress}%`;
+
             const curr = document.getElementById('np-time-curr');
             const total = document.getElementById('np-time-total');
             if (curr) curr.textContent = this.formatTime(currentTime);
@@ -428,75 +475,130 @@ export class UI {
         }, { passive: true });
     }
 
-    static initOmniButton() {
-        const btn = document.getElementById('omni-button');
-        const menu = document.getElementById('omni-menu');
-        const items = document.querySelectorAll('.omni-item');
+    static initOmniIsland() {
+        this.island = document.getElementById('omni-island');
+        this.anchor = document.getElementById('omni-anchor');
+        this.holdRing = document.getElementById('omni-hold-ring');
+        this.omniPrev = document.getElementById('omni-prev');
+        this.omniNext = document.getElementById('omni-next');
+        this.omniProgress = document.getElementById('omni-progress');
+        
+        if (!this.island || !this.anchor) return;
+
+        // Bind Transport Interactions
+        this.anchor.onclick = (e) => {
+            e.stopPropagation();
+            this.vibrate(10);
+            if (this.isIslandActive) audioEngine.toggle();
+        };
+
+        if (this.omniPrev) this.omniPrev.onclick = (e) => { e.stopPropagation(); this.vibrate(10); audioEngine.prev(); };
+        if (this.omniNext) this.omniNext.onclick = (e) => { e.stopPropagation(); this.vibrate(10); audioEngine.next(); };
+
+        this.initOmniGestures();
+    }
+
+    static initOmniGestures() {
+        const anchor = document.getElementById('omni-anchor');
+        const transport = document.getElementById('omni-transport');
+        const ribbon = document.getElementById('omni-nav-ribbon');
         const ring = document.getElementById('omni-hold-ring');
-        if (!btn || !menu) return;
+        const items = document.querySelectorAll('.omni-nav-item');
+        if (!anchor || !ribbon) return;
 
         let holdTimer;
         let isHolding = false;
-        let activeView = null;
+        let activeNavView = null;
 
-        const startHold = () => {
+        const startBloom = () => {
             isHolding = true;
             this.vibrate(20);
-            ring.style.transition = 'transform 0.6s linear';
+            ring.style.transition = 'transform 0.6s linear, opacity 0.3s ease';
             ring.style.transform = 'scale(1)';
+            ring.style.opacity = '1';
             
             holdTimer = setTimeout(() => {
                 this.vibrate(50);
-                menu.classList.remove('hidden', 'opacity-0', 'scale-90');
-                menu.classList.add('opacity-100', 'scale-100');
-                menu.style.pointerEvents = 'auto';
+                this.isBlooming = true;
+                
+                // Blurry Fade Content Switch
+                transport.style.filter = 'blur(12px)';
+                transport.style.opacity = '0';
+                transport.style.transform = 'scale(0.9)';
+                transport.style.pointerEvents = 'none';
+
+                ribbon.classList.remove('pointer-events-none');
+                ribbon.style.opacity = '1';
+                ribbon.style.transform = 'scale(1)';
+                ribbon.style.filter = 'blur(0px)';
             }, 600);
         };
 
-        const stopHold = () => {
+        const endBloom = () => {
             clearTimeout(holdTimer);
             ring.style.transition = 'none';
             ring.style.transform = 'scale(0)';
+            ring.style.opacity = '0';
             
-            if (isHolding && activeView) {
+            if (this.isBlooming && activeNavView) {
                 this.vibrate(30);
-                this.showView(activeView);
+                this.showView(activeNavView);
             }
 
-            menu.classList.add('opacity-0', 'scale-90');
-            menu.classList.remove('opacity-100', 'scale-100');
-            menu.style.pointerEvents = 'none';
-            items.forEach(i => i.classList.remove('active'));
+            // Restore Playback UI
+            transport.style.filter = 'blur(0px)';
+            transport.style.opacity = '1';
+            transport.style.transform = 'scale(1)';
+            transport.style.pointerEvents = 'auto';
+
+            ribbon.classList.add('pointer-events-none');
+            ribbon.style.opacity = '0';
+            ribbon.style.transform = 'scale(0.95)';
+            ribbon.style.filter = 'blur(8px)';
             
+            items.forEach(i => {
+                i.classList.remove('active');
+                i.style.transform = 'scale(1)';
+                i.querySelector('i').style.color = '';
+            });
+
+            this.isBlooming = false;
             isHolding = false;
-            activeView = null;
+            activeNavView = null;
         };
 
-        btn.addEventListener('touchstart', (e) => {
+        anchor.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            startHold();
+            startBloom();
         });
 
         document.addEventListener('touchmove', (e) => {
-            if (!isHolding) return;
+            if (!isHolding || !this.isBlooming) return;
             const touch = e.touches[0];
             const target = document.elementFromPoint(touch.clientX, touch.clientY);
-            const item = target?.closest('.omni-item');
+            const item = target?.closest('.omni-nav-item');
 
-            items.forEach(i => i.classList.remove('active'));
+            items.forEach(i => {
+                i.classList.remove('active');
+                i.style.transform = 'scale(1)';
+                i.querySelector('i').style.color = '';
+            });
             
             if (item) {
-                if (item.getAttribute('data-view') !== activeView) {
+                const view = item.getAttribute('data-view');
+                if (view !== activeNavView) {
                     this.vibrate(10);
+                    activeNavView = view;
                 }
                 item.classList.add('active');
-                activeView = item.getAttribute('data-view');
+                item.style.transform = 'scale(1.3)';
+                item.querySelector('i').style.color = 'var(--accent)';
             } else {
-                activeView = null;
+                activeNavView = null;
             }
         });
 
-        document.addEventListener('touchend', stopHold);
+        document.addEventListener('touchend', endBloom);
     }
 
     static showActionMenu(trackId) {

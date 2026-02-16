@@ -84,7 +84,7 @@
             width: 100%;
             height: 100%;
             overflow-y: auto;
-            padding: 0 1.25rem 14rem 1.25rem;
+            padding: 0 1.25rem 12rem 1.25rem;
             background-color: var(--bg-deep);
             transition: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, filter 0.5s ease;
             will-change: transform, opacity, filter;
@@ -146,6 +146,11 @@
             50% { transform: scale(1.5); opacity: 0.4; }
             100% { transform: scale(1); opacity: 0.8; }
         }
+
+        @keyframes omni-marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
     </style>
 </head>
 <body class="bg-black text-white">
@@ -180,7 +185,7 @@
             </div>
         </div>
 
-        <main id="content" class="flex-1 safe-top relative view-container">
+        <main id="content" class="flex-1 safe-top relative">
             <div id="view-home" class="view">
                 <h1 class="text-3xl font-black mb-8 tracking-tight">All Songs</h1>
                 <div id="all-songs" class="space-y-2"></div>
@@ -276,28 +281,21 @@
         <!-- Omni-Island: Unified Control System -->
         <div id="omni-island-container" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] pointer-events-none">
             <div id="omni-island" class="glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-500 ease-[cubic-bezier(0.19,1,0.22,1)] overflow-hidden" style="width: 56px; height: 56px; border-radius: 28px;">
-                <!-- Layer 0: Progress Bar (Under-bar) -->
                 <div id="omni-progress" class="absolute bottom-0 left-0 h-[2px] bg-[var(--accent)] w-0 transition-all duration-100 shadow-[0_0_10px_var(--accent)]"></div>
-
-                <!-- Layer 1: Metadata Scroller (Background) -->
-                <div id="omni-metadata-container" class="absolute inset-0 flex items-center px-14 opacity-0 transition-opacity duration-300 pointer-events-none">
-                    <div id="omni-metadata" class="whitespace-nowrap font-mono text-[9px] font-black uppercase tracking-[0.2em] text-white/20"></div>
+                <div id="omni-metadata-container" class="absolute inset-0 flex items-center px-14 opacity-0 transition-opacity duration-300 pointer-events-none overflow-hidden">
+                    <div id="omni-metadata" class="flex whitespace-nowrap font-mono text-[9px] font-black uppercase tracking-[0.2em] text-white/20">
+                        <span id="omni-text-1"></span>
+                        <span id="omni-text-2" class="ml-8"></span>
+                    </div>
                 </div>
-
-                <!-- Layer 2: Transport Controls -->
                 <div id="omni-transport" class="relative flex items-center justify-center w-full h-full">
-                    <button id="omni-prev" class="w-12 h-12 items-center justify-center opacity-0 scale-75 transition-all duration-300 hidden"><i class="fas fa-backward-step text-xs text-white/60"></i></button>
-                    
-                    <!-- The Anchor (Center) -->
+                    <button id="omni-prev" class="w-12 h-12 flex items-center justify-center opacity-0 scale-75 transition-all duration-300 hidden"><i class="fas fa-backward-step text-xs text-white/60"></i></button>
                     <div id="omni-anchor" class="w-14 h-14 flex items-center justify-center relative cursor-pointer active:scale-90 transition-transform">
                         <i id="omni-anchor-icon" class="fas fa-command text-lg text-white"></i>
                         <div id="omni-hold-ring" class="absolute inset-0 border-2 border-[var(--accent)] rounded-full scale-0 opacity-0"></div>
                     </div>
-
-                    <button id="omni-next" class="w-12 h-12 items-center justify-center opacity-0 scale-75 transition-all duration-300 hidden"><i class="fas fa-forward-step text-xs text-white/60"></i></button>
+                    <button id="omni-next" class="w-12 h-12 flex items-center justify-center opacity-0 scale-75 transition-all duration-300 hidden"><i class="fas fa-forward-step text-xs text-white/60"></i></button>
                 </div>
-
-                <!-- Layer 3: Navigation Ribbon -->
                 <div id="omni-nav-ribbon" class="absolute inset-0 flex items-center justify-evenly opacity-0 scale-95 transition-all duration-400 pointer-events-none">
                     <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="home"><i class="fas fa-home text-sm text-white/40"></i></div>
                     <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="search"><i class="fas fa-search text-sm text-white/40"></i></div>
