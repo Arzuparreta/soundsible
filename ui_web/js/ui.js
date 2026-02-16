@@ -105,7 +105,7 @@ export class UI {
         this.isIslandActive = true;
         this.vibrate(30);
         
-        this.island.style.width = '380px';
+        this.island.style.width = '300px';
         
         const prev = document.getElementById('omni-prev');
         const next = document.getElementById('omni-next');
@@ -521,6 +521,9 @@ export class UI {
                 this.vibrate(50);
                 this.isBlooming = true;
                 
+                // Adaptive Expansion for Bloom
+                this.island.style.width = '380px';
+                
                 // Blurry Fade Content Switch
                 transport.style.filter = 'blur(12px)';
                 transport.style.opacity = '0';
@@ -556,6 +559,9 @@ export class UI {
             }
 
             // Restore Playback UI
+            if (this.isIslandActive) this.island.style.width = '300px';
+            else this.island.style.width = '56px';
+
             transport.style.filter = 'blur(0px)';
             transport.style.opacity = '1';
             transport.style.transform = 'scale(1)';
