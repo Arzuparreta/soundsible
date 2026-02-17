@@ -55,6 +55,7 @@
         }
 
         .safe-top { padding-top: max(1.5rem, env(safe-area-inset-top)); }
+        .is-ios .safe-top { padding-top: max(3.5rem, env(safe-area-inset-top)); }
         
         * { -webkit-tap-highlight-color: transparent; }
         
@@ -84,12 +85,16 @@
             width: 100%;
             height: 100%;
             overflow-y: auto;
-            padding: 0 1.25rem 12rem 1.25rem;
+            padding: max(1.5rem, env(safe-area-inset-top)) 1.25rem 12rem 1.25rem;
             background-color: var(--bg-deep);
             transition: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, filter 0.5s ease;
             will-change: transform, opacity, filter;
             z-index: 10;
             -webkit-overflow-scrolling: touch;
+        }
+
+        .is-ios .view {
+            padding-top: max(3.5rem, env(safe-area-inset-top));
         }
         
         .view.hidden {
@@ -232,7 +237,7 @@
             </div>
         </div>
 
-        <main id="content" class="flex-1 safe-top relative">
+        <main id="content" class="flex-1 relative">
             <div id="view-home" class="view">
                 <div id="all-songs" class="space-y-2"></div>
             </div>
@@ -338,16 +343,15 @@
                     </div>
                     <div id="omni-anchor" class="w-14 h-14 flex-shrink-0 flex items-center justify-center relative pointer-events-none transition-transform z-50">
                         <i id="omni-anchor-icon" class="fas fa-command text-lg text-white"></i>
-                        <div id="omni-hold-ring" class="absolute inset-0 border-2 border-[var(--accent)] rounded-full scale-0 opacity-0"></div>
                     </div>
                     <div id="omni-next" class="flex-1 h-full flex items-center justify-end opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto">
                         <i class="fas fa-forward-step text-xs text-white/60"></i>
                     </div>
                 </div>
                 <div id="omni-nav-ribbon" class="absolute inset-0 flex items-center justify-between px-4 opacity-0 scale-95 transition-all duration-400 pointer-events-none">
+                    <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="albums"><i class="fas fa-record-vinyl text-sm text-white/40"></i></div>
                     <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="home"><i class="fas fa-home text-sm text-white/40"></i></div>
                     <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="favourites"><i class="fas fa-heart text-sm text-white/40"></i></div>
-                    <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="albums"><i class="fas fa-record-vinyl text-sm text-white/40"></i></div>
                     
                     <!-- Middle Blank Position -->
                     <div class="w-10 h-10"></div>

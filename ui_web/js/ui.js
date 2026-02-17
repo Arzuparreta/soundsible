@@ -23,6 +23,11 @@ export class UI {
         console.log("UI: Initializing Omni-Island Core...");
         this.content = document.getElementById('content');
         
+        // Platform Detection: Notch Safety
+        const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || 
+                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPad Pro
+        if (isIOS) document.body.classList.add('is-ios');
+
         // Navigation State
         this.viewStack = [];
         this.currentView = 'home';
@@ -504,7 +509,6 @@ export class UI {
     static initOmniIsland() {
         this.island = document.getElementById('omni-island');
         this.anchor = document.getElementById('omni-anchor');
-        this.holdRing = document.getElementById('omni-hold-ring');
         this.omniPrev = document.getElementById('omni-prev');
         this.omniNext = document.getElementById('omni-next');
         this.omniProgress = document.getElementById('omni-progress');
@@ -519,7 +523,6 @@ export class UI {
         const touchArea = document.getElementById('omni-touch-area');
         const transport = document.getElementById('omni-transport');
         const ribbon = document.getElementById('omni-nav-ribbon');
-        const ring = document.getElementById('omni-hold-ring');
         const label = document.getElementById('omni-label');
         const items = document.querySelectorAll('.omni-nav-item');
         if (!island || !touchArea || !ribbon || !label) return;
@@ -531,9 +534,6 @@ export class UI {
         const startBloom = (e) => {
             isHolding = true;
             this.vibrate(20);
-            ring.style.transition = 'transform 0.4s linear, opacity 0.2s ease';
-            ring.style.transform = 'scale(1)';
-            ring.style.opacity = '1';
             
             // Set initial label state
             label.classList.remove('docked');
@@ -570,9 +570,6 @@ export class UI {
             );
             
             clearTimeout(holdTimer);
-            ring.style.transition = 'none';
-            ring.style.transform = 'scale(0)';
-            ring.style.opacity = '0';
             
             // 1. COORDINATE-BASED TRANSPORT
             if (isHolding && !this.isBlooming && isInside) {
