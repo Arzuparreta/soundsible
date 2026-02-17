@@ -34,6 +34,7 @@ export class UI {
         this._npGesturesBound = false;
         this.isIslandActive = false;
         this.isBlooming = false;
+        this._activeBuffer = 1;
 
         this.initGlobalListeners();
         this.initOmniIsland();
@@ -528,8 +529,6 @@ export class UI {
         if (!island || !touchArea || !ribbon || !label) return;
 
         let holdTimer;
-        let isHolding = false;
-        let activeNavView = null;
 
         const startBloom = (e) => {
             isHolding = true;
@@ -604,10 +603,7 @@ export class UI {
                 this.vibrate(30);
                 this.showView(activeNavView);
                 
-                // Dock the Label
-                label.classList.remove('hovered');
-                label.classList.add('docked');
-                label.style.transform = 'translateX(0)';
+                // Final Docking handled by showView -> updateLabel
             }
 
             // 3. RESTORE PLAYBACK UI
@@ -647,9 +643,6 @@ export class UI {
             const rect = island.getBoundingClientRect();
             
             if (this.isBlooming) {
-                // To detect nav items, we need elementFromPoint. 
-                // Since touchArea is on top, we hide it briefly or use coordinate math.
-                // Plural elementsFromPoint is more efficient.
                 const targets = document.elementsFromPoint(touch.clientX, touch.clientY);
                 const item = targets.find(t => t.classList.contains('omni-nav-item'));
 
@@ -666,7 +659,7 @@ export class UI {
                         activeNavView = view;
 
                         // Update Label
-                        label.textContent = UI.VIEW_LABELS[view] || '';
+                        label.textContent = this.VIEW_LABELS[view] || '';
                         label.classList.add('hovered');
                         
                         const itemRect = item.getBoundingClientRect();
@@ -757,7 +750,7 @@ export class UI {
 
         sheet.addEventListener('touchstart', (e) => {
             startY = e.touches[0].clientY;
-            isDragging = true;
+            isHolding = true;
             sheet.style.transition = 'none';
         }, { passive: true });
 
