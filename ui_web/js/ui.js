@@ -9,6 +9,16 @@ import { audioEngine } from './audio.js';
 window.audioEngine = audioEngine;
 
 export class UI {
+    static VIEW_LABELS = {
+        'home': 'ALL SONGS',
+        'favourites': 'LIKED TRACKS',
+        'albums': 'ALBUM GRID',
+        'search': 'SEARCH LAB',
+        'downloader': 'DOWNLOAD STATION',
+        'settings': 'STATION CONFIG',
+        'album-detail': 'ALBUM DETAIL'
+    };
+
     static init() {
         console.log("UI: Initializing Omni-Island Core...");
         this.content = document.getElementById('content');
@@ -17,6 +27,8 @@ export class UI {
         this.viewStack = [];
         this.currentView = 'home';
         this._npGesturesBound = false;
+        this.isIslandActive = false;
+        this.isBlooming = false;
 
         this.initGlobalListeners();
         this.initOmniIsland();
@@ -236,6 +248,16 @@ export class UI {
     static showView(viewId, saveToHistory = true, direction = 'forward') {
         if (viewId === this.currentView) return;
         
+        // Update Bottom Label
+        const label = document.getElementById('omni-label');
+        if (label) {
+            label.textContent = this.VIEW_LABELS[viewId] || '';
+            label.classList.remove('hovered');
+            label.classList.add('docked');
+            label.style.transform = 'translateX(0)';
+            label.style.opacity = '1';
+        }
+
         const oldView = document.getElementById(`view-${this.currentView}`);
         const targetView = document.getElementById(`view-${viewId}`);
         if (!targetView) return;
@@ -485,16 +507,6 @@ export class UI {
         
         if (!this.island || !this.anchor) return;
 
-        // Bind Transport Interactions
-        this.anchor.onclick = (e) => {
-            e.stopPropagation();
-            this.vibrate(10);
-            if (this.isIslandActive) audioEngine.toggle();
-        };
-
-        if (this.omniPrev) this.omniPrev.onclick = (e) => { e.stopPropagation(); this.vibrate(10); audioEngine.prev(); };
-        if (this.omniNext) this.omniNext.onclick = (e) => { e.stopPropagation(); this.vibrate(10); audioEngine.next(); };
-
         this.initOmniGestures();
     }
 
@@ -504,8 +516,9 @@ export class UI {
         const transport = document.getElementById('omni-transport');
         const ribbon = document.getElementById('omni-nav-ribbon');
         const ring = document.getElementById('omni-hold-ring');
+        const label = document.getElementById('omni-label');
         const items = document.querySelectorAll('.omni-nav-item');
-        if (!island || !touchArea || !ribbon) return;
+        if (!island || !touchArea || !ribbon || !label) return;
 
         let holdTimer;
         let isHolding = false;
@@ -518,6 +531,11 @@ export class UI {
             ring.style.transform = 'scale(1)';
             ring.style.opacity = '1';
             
+            // Set initial label state
+            label.classList.remove('docked');
+            label.classList.add('hovered');
+            label.style.opacity = '1';
+
             holdTimer = setTimeout(() => {
                 this.vibrate(50);
                 this.isBlooming = true;
@@ -584,6 +602,11 @@ export class UI {
             if (this.isBlooming && activeNavView) {
                 this.vibrate(30);
                 this.showView(activeNavView);
+                
+                // Dock the Label
+                label.classList.remove('hovered');
+                label.classList.add('docked');
+                label.style.transform = 'translateX(0)';
             }
 
             // 3. RESTORE PLAYBACK UI
@@ -620,6 +643,7 @@ export class UI {
         document.addEventListener('touchmove', (e) => {
             if (!isHolding) return;
             const touch = e.touches[0];
+            const rect = island.getBoundingClientRect();
             
             if (this.isBlooming) {
                 // To detect nav items, we need elementFromPoint. 
@@ -639,12 +663,21 @@ export class UI {
                     if (view !== activeNavView) {
                         this.vibrate(10);
                         activeNavView = view;
+
+                        // Update Label
+                        label.textContent = UI.VIEW_LABELS[view] || '';
+                        label.classList.add('hovered');
+                        
+                        const itemRect = item.getBoundingClientRect();
+                        const offset = (itemRect.left + itemRect.width / 2) - (rect.left + rect.width / 2);
+                        label.style.transform = `translateX(${offset}px)`;
                     }
                     item.classList.add('active');
                     item.style.transform = 'scale(1.3)';
                     item.querySelector('i').style.color = 'var(--accent)';
                 } else {
                     activeNavView = null;
+                    label.classList.remove('hovered');
                 }
             }
         });

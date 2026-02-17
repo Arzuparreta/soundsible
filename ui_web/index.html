@@ -161,6 +161,43 @@
             30% { transform: scale(1.08); }
             100% { transform: scale(1); }
         }
+
+        /* Dynamic Docking Labels */
+        #omni-label-container {
+            position: absolute;
+            bottom: calc(100% + 12px);
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 220;
+        }
+
+        #omni-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: rgba(255, 255, 255, 0.2);
+            transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1), 
+                        color 0.3s ease, 
+                        opacity 0.3s ease;
+            will-change: transform, color;
+            white-space: nowrap;
+        }
+
+        #omni-label.hovered {
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: 900;
+        }
+
+        #omni-label.docked {
+            color: var(--accent);
+            font-weight: 900;
+            transform: scale(1.1);
+        }
     </style>
 </head>
 <body class="bg-black text-white">
@@ -197,11 +234,9 @@
 
         <main id="content" class="flex-1 safe-top relative">
             <div id="view-home" class="view">
-                <h1 class="text-3xl font-black mb-8 tracking-tight">All Songs</h1>
                 <div id="all-songs" class="space-y-2"></div>
             </div>
             <div id="view-albums" class="view hidden">
-                <h1 class="text-3xl font-black mb-8 tracking-tight">Albums</h1>
                 <div id="all-albums" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6"></div>
             </div>
             <div id="view-album-detail" class="view hidden">
@@ -219,16 +254,13 @@
                 <div id="album-tracks" class="space-y-2"></div>
             </div>
             <div id="view-search" class="view hidden">
-                <h1 class="text-3xl font-black mb-8 tracking-tight">Search</h1>
                 <input type="text" id="search-input" placeholder="Search library..." class="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 focus:outline-none focus:border-[var(--accent)] mb-8 transition-colors">
                 <div id="search-results" class="space-y-2"></div>
             </div>
             <div id="view-favourites" class="view hidden">
-                <h1 class="text-3xl font-black mb-8 tracking-tight">Favourites</h1>
                 <div id="fav-tracks" class="space-y-2"></div>
             </div>
             <div id="view-downloader" class="view hidden">
-                <h1 class="text-3xl font-black mb-8 tracking-tight">Station</h1>
                 <div class="space-y-6">
                     <div class="glass-view rounded-3xl p-6 border border-white/10">
                         <textarea id="dl-input" rows="3" placeholder="Spotify/YouTube URLs..." class="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-mono mb-4"></textarea>
@@ -253,7 +285,6 @@
                 </div>
             </div>
             <div id="view-settings" class="view hidden">
-                <h1 class="text-3xl font-black mb-8 tracking-tight">Settings</h1>
                 <div class="glass-view rounded-3xl p-8 border border-white/10 mb-6">
                     <div class="flex justify-between items-center mb-8">
                         <div>
@@ -325,6 +356,9 @@
                     <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="downloader"><i class="fas fa-cloud-arrow-down text-sm text-white/40"></i></div>
                     <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="settings"><i class="fas fa-cog text-sm text-white/40"></i></div>
                 </div>
+            </div>
+            <div id="omni-label-container">
+                <div id="omni-label">ALL SONGS</div>
             </div>
         </div>
     </div>
