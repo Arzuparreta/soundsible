@@ -32,10 +32,22 @@ export class UI {
 
         this.initGlobalListeners();
         this.initOmniIsland();
+        this.updateLabel(this.currentView);
         store.subscribe((state) => this.updatePlayer(state));
 
         // Gestures Engine
         this.initGestures();
+    }
+
+    static updateLabel(viewId) {
+        const label = document.getElementById('omni-label');
+        if (label) {
+            label.textContent = this.VIEW_LABELS[viewId] || '';
+            label.classList.remove('hovered');
+            label.classList.add('docked');
+            label.style.transform = 'translateX(0)';
+            label.style.opacity = '1';
+        }
     }
 
     static updatePlayer(state) {
@@ -248,15 +260,7 @@ export class UI {
     static showView(viewId, saveToHistory = true, direction = 'forward') {
         if (viewId === this.currentView) return;
         
-        // Update Bottom Label
-        const label = document.getElementById('omni-label');
-        if (label) {
-            label.textContent = this.VIEW_LABELS[viewId] || '';
-            label.classList.remove('hovered');
-            label.classList.add('docked');
-            label.style.transform = 'translateX(0)';
-            label.style.opacity = '1';
-        }
+        this.updateLabel(viewId);
 
         const oldView = document.getElementById(`view-${this.currentView}`);
         const targetView = document.getElementById(`view-${viewId}`);
