@@ -11,11 +11,11 @@ window.audioEngine = audioEngine;
 export class UI {
     static VIEW_LABELS = {
         'home': 'ALL SONGS',
-        'favourites': 'LIKED TRACKS',
-        'albums': 'ALBUM GRID',
-        'search': 'SEARCH LAB',
-        'downloader': 'DOWNLOAD STATION',
-        'settings': 'STATION CONFIG',
+        'favourites': 'FAVOURITES',
+        'albums': 'ALBUMS',
+        'search': 'SEARCH',
+        'downloader': 'ODST',
+        'settings': 'CONFIG',
         'album-detail': 'ALBUM DETAIL'
     };
 
