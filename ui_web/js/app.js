@@ -124,6 +124,9 @@ const QUEUE_HOLD_MS = 280;
 const QUEUE_MOVE_THRESHOLD_PX = 14;
 const QUEUE_CANCEL_THRESHOLD_PX = 30;
 const QUEUE_DROP_FADE_MS = 170;
+const QUEUE_AUTO_SCROLL_THRESHOLD_PX = 60;
+const QUEUE_AUTO_SCROLL_STEP_PX = 4;
+const QUEUE_AUTO_SCROLL_INTERVAL_MS = 16;
 
 function initQueueDrag() {
     const container = document.getElementById('floating-queue-tracks');
@@ -139,6 +142,8 @@ function initQueueDrag() {
     let currentDropTargetIndex = null;
     let rafDropTarget = 0;
     let hasMoved = false;
+    let autoScrollInterval = null;
+    let lastPointerY = 0;
 
     function clearHoldTimer() {
         if (holdTimer) {
@@ -152,8 +157,16 @@ function initQueueDrag() {
         return { x: e.clientX, y: e.clientY };
     }
 
+    function stopAutoScroll() {
+        if (autoScrollInterval) {
+            clearInterval(autoScrollInterval);
+            autoScrollInterval = null;
+        }
+    }
+
     function cleanupDrag() {
         clearHoldTimer();
+        stopAutoScroll();
         if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
         clone = null;
         if (originalItem && originalItem.parentNode) {
@@ -183,6 +196,64 @@ function initQueueDrag() {
             clone.style.transition = 'none';
             clone.style.left = `${x - w / 2}px`;
             clone.style.top = `${y - h / 2}px`;
+        }
+    }
+
+    function updateAutoScroll(y) {
+        lastPointerY = y;
+        
+        if (!dragStarted || !clone || !container) {
+            stopAutoScroll();
+            return;
+        }
+
+        const containerRect = container.getBoundingClientRect();
+        const distanceFromTop = y - containerRect.top;
+        const distanceFromBottom = containerRect.bottom - y;
+        const scrollThreshold = QUEUE_AUTO_SCROLL_THRESHOLD_PX;
+        const maxScroll = container.scrollHeight - container.clientHeight;
+
+        let shouldScroll = false;
+        if (distanceFromTop < scrollThreshold && container.scrollTop > 0) {
+            shouldScroll = true;
+        } else if (distanceFromBottom < scrollThreshold && container.scrollTop < maxScroll) {
+            shouldScroll = true;
+        }
+
+        if (shouldScroll) {
+            if (!autoScrollInterval) {
+                autoScrollInterval = setInterval(() => {
+                    if (!dragStarted || !container || !clone) {
+                        stopAutoScroll();
+                        return;
+                    }
+                    
+                    const containerRect = container.getBoundingClientRect();
+                    const distanceFromTop = lastPointerY - containerRect.top;
+                    const distanceFromBottom = containerRect.bottom - lastPointerY;
+                    const scrollThreshold = QUEUE_AUTO_SCROLL_THRESHOLD_PX;
+                    const maxScroll = container.scrollHeight - container.clientHeight;
+
+                    let scrollSpeed = 0;
+                    if (distanceFromTop < scrollThreshold && container.scrollTop > 0) {
+                        const factor = 1 - (distanceFromTop / scrollThreshold);
+                        scrollSpeed = -QUEUE_AUTO_SCROLL_STEP_PX * factor;
+                    } else if (distanceFromBottom < scrollThreshold && container.scrollTop < maxScroll) {
+                        const factor = 1 - (distanceFromBottom / scrollThreshold);
+                        scrollSpeed = QUEUE_AUTO_SCROLL_STEP_PX * factor;
+                    }
+
+                    if (scrollSpeed !== 0) {
+                        const newScrollTop = container.scrollTop + scrollSpeed;
+                        container.scrollTop = Math.max(0, Math.min(maxScroll, newScrollTop));
+                        scheduleDropTargetUpdate();
+                    } else {
+                        stopAutoScroll();
+                    }
+                }, QUEUE_AUTO_SCROLL_INTERVAL_MS);
+            }
+        } else {
+            stopAutoScroll();
         }
     }
 
@@ -300,6 +371,7 @@ function initQueueDrag() {
             }
         }
         updateClonePosition(t.clientX, t.clientY);
+        updateAutoScroll(t.clientY);
         scheduleDropTargetUpdate();
     }
 
@@ -337,6 +409,7 @@ function initQueueDrag() {
             }
         }
         updateClonePosition(x, y);
+        updateAutoScroll(y);
         scheduleDropTargetUpdate();
     }
 
