@@ -42,11 +42,25 @@ class AudioEngine {
         });
 
         if ('mediaSession' in navigator) {
-            navigator.mediaSession.setActionHandler('play', () => this.play());
-            navigator.mediaSession.setActionHandler('pause', () => this.pause());
-            navigator.mediaSession.setActionHandler('previoustrack', () => this.prev());
-            navigator.mediaSession.setActionHandler('nexttrack', () => this.next());
+            this.setMediaSessionHandlers();
         }
+    }
+
+    /** Set Media Session action handlers (prev/next work on Android; iOS does not show them). */
+    setMediaSessionHandlers() {
+        if (!('mediaSession' in navigator)) return;
+        navigator.mediaSession.setActionHandler('play', () => this.play());
+        navigator.mediaSession.setActionHandler('pause', () => this.pause());
+        navigator.mediaSession.setActionHandler('previoustrack', () => this.prev());
+        navigator.mediaSession.setActionHandler('nexttrack', () => this.next());
+        const skip = (delta) => {
+            if (!this.audio.duration) return;
+            this.audio.currentTime = Math.max(0, Math.min(this.audio.duration, this.audio.currentTime + delta));
+        };
+        try {
+            navigator.mediaSession.setActionHandler('seekbackward', (e) => skip(-(e?.seekOffset ?? 10)));
+            navigator.mediaSession.setActionHandler('seekforward', (e) => skip(e?.seekOffset ?? 10));
+        } catch (_) { /* seekbackward/seekforward not supported */ }
     }
 
     async playTrack(track) {
@@ -66,15 +80,25 @@ class AudioEngine {
             store.update({ currentTrack: track, isPlaying: true });
 
             if ('mediaSession' in navigator) {
+                const coverUrl = track?.id ? Resolver.getCoverUrl(track) : null;
+                const sizes = ['96x96', '128x128', '192x192', '256x256', '384x384', '512x512'];
+                const artwork = coverUrl
+                    ? [
+                        ...sizes.map(size => ({ src: coverUrl, sizes: size, type: 'image/jpeg' })),
+                        { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+                        { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
+                    ]
+                    : [
+                        { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+                        { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
+                    ];
                 navigator.mediaSession.metadata = new MediaMetadata({
                     title: track.title,
                     artist: track.artist,
                     album: track.album,
-                    artwork: [
-                        { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-                        { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
-                    ]
+                    artwork
                 });
+                this.setMediaSessionHandlers();
             }
         } catch (err) {
             // SECURITY & UX: AbortError is normal when switching tracks quickly (e.g. double tap)
