@@ -337,6 +337,7 @@ class MainWindow(Adw.ApplicationWindow):
         
         # Main Layout
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        main_box.add_css_class("main-window-content")
         self.set_content(main_box)
         
         # Header Bar
@@ -347,12 +348,14 @@ class MainWindow(Adw.ApplicationWindow):
 
         # View Stack for switching between Main and Mini modes
         self.view_stack = Gtk.Stack()
+        self.view_stack.add_css_class("view-stack")
         self.view_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self.view_stack.set_transition_duration(300)
         main_box.append(self.view_stack)
 
         # Main View Container
         self.main_view = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.main_view.add_css_class("main-view")
         self.view_stack.add_named(self.main_view, "main")
         
         # Settings action
@@ -639,6 +642,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _init_mini_player_ui(self):
         """Initialize the Mini Player view for small windows."""
         mini_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        mini_box.add_css_class("mini-player-view")
         mini_box.set_valign(Gtk.Align.CENTER)
         mini_box.set_halign(Gtk.Align.CENTER)
         mini_box.set_spacing(16)
@@ -1336,6 +1340,7 @@ class MainWindow(Adw.ApplicationWindow):
         
         # Create Main Content Box (Horizontal split)
         content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        content_box.add_css_class("content-split")
         content_box.set_vexpand(True)
         container.append(content_box)
 
@@ -1381,6 +1386,7 @@ class MainWindow(Adw.ApplicationWindow):
         # Create Queue Sidebar (Right side)
         # We wrap it in a box to include a separator
         self.sidebar_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.sidebar_box.add_css_class("sidebar-panel")
         self.sidebar_box.set_vexpand(True) # Ensure it fills height
         self.sidebar_box.set_visible(False) # Hidden by default
         content_box.append(self.sidebar_box)
@@ -1400,6 +1406,7 @@ class MainWindow(Adw.ApplicationWindow):
         
         # Search Bar (at bottom)
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        search_box.add_css_class("search-bar")
         search_box.set_margin_start(12)
         search_box.set_margin_end(12)
         search_box.set_margin_top(4)

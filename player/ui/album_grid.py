@@ -3,16 +3,22 @@ import os
 from shared.constants import DEFAULT_CACHE_DIR
 from player.cover_manager import CoverFetchManager
 
+# Fixed column count for equal-width grid cells (webapp-style)
+ALBUM_GRID_COLUMNS = 4
+ALBUM_TILE_SIZE = 160
+ALBUM_GRID_GAP = 24
+
+
 class AlbumObject(GObject.Object):
     """GObject wrapper for Album metadata."""
     __gtype_name__ = 'AlbumObject'
-    
+
     @GObject.Property(type=str)
     def album(self): return self._data['album']
-    
+
     @GObject.Property(type=str)
     def artist(self): return self._data['artist']
-    
+
     @GObject.Property(type=int)
     def track_count(self): return self._data['track_count']
 
@@ -20,76 +26,71 @@ class AlbumObject(GObject.Object):
         super().__init__()
         self._data = data
 
+
 class AlbumCard(Gtk.Box):
+    """Minimal album item: one rounded cover tile + text below. No card container (webapp artist-grid style)."""
     def __init__(self, album_obj, on_click_callback, library_manager):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.album_obj = album_obj
         self.library_manager = library_manager
         self.on_click_callback = on_click_callback
-        
-        self.add_css_class("card")
-        self.add_css_class("album-card")
-        self.set_margin_top(8)
-        self.set_margin_bottom(8)
-        self.set_margin_start(8)
-        self.set_margin_end(8)
-        self.set_size_request(180, 240)
-        
-        # Image
-        self.img = Gtk.Image()
-        self.img.set_pixel_size(164)
-        self.img.set_size_request(164, 164)
-        self.img.add_css_class("album-cover")
-        self.img.set_from_icon_name("emblem-music-symbolic")
+
+        self.set_size_request(ALBUM_TILE_SIZE, -1)
+        self.set_hexpand(False)
+        self.set_vexpand(False)
+
+        # Cover: single Gtk.Picture = the only visible "tile" (rounded, shadow, border via .album-tile)
+        self.img = Gtk.Picture()
+        self.img.set_content_fit(Gtk.ContentFit.COVER)
+        self.img.set_can_shrink(False)
+        self.img.set_size_request(ALBUM_TILE_SIZE, ALBUM_TILE_SIZE)
+        self.img.set_hexpand(False)
+        self.img.set_vexpand(False)
+        self.img.add_css_class("album-tile")
+        theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
+        icon_paintable = theme.lookup_icon("emblem-music-symbolic", None, ALBUM_TILE_SIZE, 1, Gtk.TextDirection.LTR, 0)
+        if icon_paintable:
+            self.img.set_paintable(icon_paintable)
         self.append(self.img)
-        
-        # Title
+
+        # Text below (mt-4 px-2 style): wrapper for margin only
+        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        text_box.add_css_class("album-card-text")
         self.title = Gtk.Label(label=album_obj.album, xalign=0)
-        self.title.add_css_class("heading")
+        self.title.add_css_class("album-card-title")
         self.title.set_ellipsize(Pango.EllipsizeMode.END)
-        
-        # Use Pango attributes for bold weight
         attr_list = Pango.AttrList()
         attr_list.insert(Pango.attr_weight_new(Pango.Weight.BOLD))
         self.title.set_attributes(attr_list)
-        
-        self.append(self.title)
-        
-        # Artist
+        text_box.append(self.title)
         self.artist = Gtk.Label(label=album_obj.artist, xalign=0)
-        self.artist.add_css_class("caption")
+        self.artist.add_css_class("album-card-caption")
         self.artist.set_ellipsize(Pango.EllipsizeMode.END)
-        self.append(self.artist)
-        
-        # Click handler
+        text_box.append(self.artist)
+        self.append(text_box)
+
         click = Gtk.GestureClick()
         click.connect("released", self._on_clicked)
         self.add_controller(click)
-        
-        # Right click handler
         right_click = Gtk.GestureClick()
-        right_click.set_button(3) # Right mouse button
+        right_click.set_button(3)
         right_click.connect("pressed", self._on_right_click)
         self.add_controller(right_click)
-        
-        # Load Cover
+
         GLib.idle_add(self._load_cover)
 
     def _on_right_click(self, gesture, n_press, x, y):
         gesture.set_state(Gtk.EventSequenceState.CLAIMED)
-        
         p = Gtk.Popover()
         p.set_parent(self)
         p.set_has_arrow(False)
         p.set_autohide(True)
         p.add_css_class("context-menu")
-
         rect = Gdk.Rectangle()
         rect.x, rect.y, rect.width, rect.height = int(x), int(y), 1, 1
         p.set_pointing_to(rect)
-
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        
+
         def add_item(label, callback):
             btn = Gtk.Button(label=label)
             btn.add_css_class("flat")
@@ -115,7 +116,6 @@ class AlbumCard(Gtk.Box):
 
         add_item("Play Album", play_album)
         add_item("Add Album to Queue", queue_album)
-
         p.set_child(box)
         p.popup()
 
@@ -127,7 +127,6 @@ class AlbumCard(Gtk.Box):
     def _load_cover(self):
         track_id = self.album_obj._data['first_track_id']
         manager = CoverFetchManager.get_instance()
-        
         from shared.models import Track
         stub_track = Track(
             id=track_id,
@@ -135,99 +134,57 @@ class AlbumCard(Gtk.Box):
             duration=0, file_hash="", original_filename="",
             compressed=False, file_size=0, bitrate=0, format="mp3"
         )
-        
+
         def on_fetched(pixbuf):
             if pixbuf:
-                # Manager returns high-res, we scale to match the card exactly
-                scaled = pixbuf.scale_simple(164, 164, GdkPixbuf.InterpType.BILINEAR)
-                GLib.idle_add(self.img.set_from_pixbuf, scaled)
-                
-        # Request high-res (300px) for the album grid
+                scaled = pixbuf.scale_simple(ALBUM_TILE_SIZE, ALBUM_TILE_SIZE, GdkPixbuf.InterpType.BILINEAR)
+                texture = Gdk.Texture.new_for_pixbuf(scaled)
+                GLib.idle_add(self.img.set_paintable, texture)
+
         manager.request_cover(stub_track, callback=on_fetched, size=300)
+
 
 class AlbumGridView(Gtk.Box):
     def __init__(self, library_manager, on_album_activated=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.library_manager = library_manager
         self.on_album_activated = on_album_activated
-        
-        self.flow_box = Gtk.FlowBox()
-        self.flow_box.set_valign(Gtk.Align.START)
-        self.flow_box.set_max_children_per_line(10)
-        self.flow_box.set_selection_mode(Gtk.SelectionMode.NONE)
-        self.flow_box.add_css_class("album-grid")
-        
+
+        self.grid = Gtk.Grid()
+        self.grid.set_row_spacing(ALBUM_GRID_GAP)
+        self.grid.set_column_spacing(ALBUM_GRID_GAP)
+        self.grid.add_css_class("album-grid")
+
         scroller = Gtk.ScrolledWindow()
-        scroller.set_child(self.flow_box)
+        scroller.set_child(self.grid)
         scroller.set_vexpand(True)
         self.append(scroller)
-        
+
         self.refresh()
-        
-        # Periodic "Truth" Check: Refresh grid every 30 seconds 
-        # to ensure it matches the latest disk/db state.
         GLib.timeout_add_seconds(30, self._periodic_refresh)
 
     def _periodic_refresh(self):
-        """Timer callback to check for stale data."""
-        if self.get_mapped(): # Only refresh if the view is actually visible to user
+        if self.get_mapped():
             self.refresh()
-        return True # Keep timer running
+        return True
 
     def refresh(self):
-        # Auto-refresh manager memory if disk manifest changed
         if hasattr(self.library_manager, 'refresh_if_stale'):
             self.library_manager.refresh_if_stale()
-
-        # Clear
-        while child := self.flow_box.get_first_child():
-            self.flow_box.remove(child)
-            
-        # Repopulate
+        while child := self.grid.get_first_child():
+            self.grid.remove(child)
         albums = self.library_manager.db.get_albums()
-        for a in albums:
+        for i, a in enumerate(albums):
             album_obj = AlbumObject(a)
             card = AlbumCard(album_obj, self.on_album_activated, self.library_manager)
-            self.flow_box.append(card)
+            row, col = divmod(i, ALBUM_GRID_COLUMNS)
+            self.grid.attach(card, col, row, 1, 1)
 
     def set_albums(self, album_data):
-        """Update the UI with a specific list of albums instantly."""
-        while child := self.flow_box.get_first_child():
-            self.flow_box.remove(child)
-            
-        for a in album_data:
+        while child := self.grid.get_first_child():
+            self.grid.remove(child)
+        for i, a in enumerate(album_data):
             album_obj = AlbumObject(a)
             card = AlbumCard(album_obj, self.on_album_activated, self.library_manager)
-            self.flow_box.append(card)
-
-    def _load_album_cover(self, image, album_obj):
-        image.set_from_icon_name("emblem-music-symbolic")
-        
-        # Get a representative track ID for this album
-        track_id = album_obj._data['first_track_id']
-        
-        manager = CoverFetchManager.get_instance()
-        
-        # Prepare track stub for manager
-        from shared.models import Track
-        stub_track = Track(
-            id=track_id,
-            title="", artist=album_obj.artist, album=album_obj.album,
-            duration=0, file_hash="", original_filename="",
-            compressed=False, file_size=0, bitrate=0, format="mp3"
-        )
-        
-        def on_fetched(pixbuf):
-            if pixbuf:
-                # Scale for grid with high-quality filter
-                scaled = pixbuf.scale_simple(160, 160, GdkPixbuf.InterpType.BILINEAR)
-                GLib.idle_add(image.set_from_pixbuf, scaled)
-                
-        # Request high-res (300px)
-        manager.request_cover(stub_track, callback=on_fetched, size=300)
-
-    def _on_activated(self, grid_view, position):
-        album_obj = self.store.get_item(position)
-        if self.on_album_activated:
-            tracks = self.library_manager.db.get_tracks_by_album(album_obj.album, album_obj.artist)
-            self.on_album_activated(album_obj, tracks)
+            row, col = divmod(i, ALBUM_GRID_COLUMNS)
+            self.grid.attach(card, col, row, 1, 1)

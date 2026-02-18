@@ -1,19 +1,25 @@
-@define-color window_bg_color #242424;
-@define-color window_fg_color #FFFFFF;
+/* Webapp-aligned dark palette: bg-deep, bg-card, accent, glass-border */
+@define-color window_bg_color #0d0d0f;
+@define-color window_fg_color #dfe1e5;
 
-@define-color view_bg_color #1E1E1E;
-@define-color view_fg_color #FFFFFF;
+@define-color view_bg_color #1c1c1e;
+@define-color view_fg_color #dfe1e5;
 
-@define-color headerbar_bg_color #242424;
-@define-color headerbar_fg_color #FFFFFF;
-@define-color headerbar_border_color #000000;
+@define-color headerbar_bg_color #0d0d0f;
+@define-color headerbar_fg_color #dfe1e5;
+@define-color headerbar_border_color rgba(255, 255, 255, 0.08);
 @define-color headerbar_backdrop_color @window_bg_color;
 
-@define-color card_bg_color #2D2D2D;
-@define-color card_fg_color #FFFFFF;
+@define-color card_bg_color #1e1f22;
+@define-color card_fg_color #dfe1e5;
 
-@define-color popover_bg_color #2D2D2D;
-@define-color popover_fg_color #FFFFFF;
+@define-color popover_bg_color #1e1f22;
+@define-color popover_fg_color #dfe1e5;
 
 @define-color shade_color rgba(0, 0, 0, 0.3);
-@define-color borders rgba(255, 255, 255, 0.12);
+@define-color borders rgba(255, 255, 255, 0.08);
+
+/* Webapp accent (orange) for buttons, active states, links */
+@define-color accent_color #f97a12;
+@define-color accent_bg_color #f97a12;
+@define-color accent_fg_color #ffffff;

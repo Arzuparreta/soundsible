@@ -14,9 +14,11 @@ class TabView(Gtk.Box):
     
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add_css_class("tab-view")
         
         # Create stack for content
         self.stack = Gtk.Stack()
+        self.stack.add_css_class("tab-view-stack")
         self.stack.set_transition_type(Gtk.StackTransitionType.NONE)
         self.stack.set_transition_duration(0)
         self.stack.set_vexpand(True)

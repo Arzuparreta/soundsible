@@ -1,19 +1,24 @@
+/* ODST theme: same variable set, distinct palette */
 @define-color window_bg_color #1F1E28;
-@define-color window_fg_color white;
+@define-color window_fg_color #e8e6e3;
 
 @define-color view_bg_color #1F1E28;
-@define-color view_fg_color white;
+@define-color view_fg_color #e8e6e3;
 
 @define-color headerbar_bg_color #1F1E28;
-@define-color headerbar_fg_color white;
-@define-color headerbar_border_color #000000;
+@define-color headerbar_fg_color #e8e6e3;
+@define-color headerbar_border_color rgba(255, 255, 255, 0.1);
 @define-color headerbar_backdrop_color @window_bg_color;
 
 @define-color card_bg_color #2D2C38;
-@define-color card_fg_color white;
+@define-color card_fg_color #e8e6e3;
 
 @define-color popover_bg_color #2D2C38;
-@define-color popover_fg_color white;
+@define-color popover_fg_color #e8e6e3;
 
 @define-color shade_color rgba(0, 0, 0, 0.3);
 @define-color borders rgba(255, 255, 255, 0.1);
+
+@define-color accent_color #c9a227;
+@define-color accent_bg_color #c9a227;
+@define-color accent_fg_color #1F1E28;
