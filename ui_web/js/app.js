@@ -30,6 +30,24 @@ function renderFavourites(state) {
     renderSongList(favTracks, 'fav-tracks');
 }
 
+function updateQueueScrollCuePosition() {
+    const floatingQueue = document.getElementById('floating-queue-tracks');
+    if (!floatingQueue) return;
+    const cue = floatingQueue.querySelector('.queue-scroll-cue');
+    const thumb = cue ? cue.querySelector('.queue-scroll-cue-thumb') : null;
+    if (!cue || !thumb) return;
+
+    const cueHeight = cue.getBoundingClientRect().height;
+    const thumbHeight = 10;
+    const maxY = Math.max(0, cueHeight - thumbHeight);
+    const scrollRange = floatingQueue.scrollHeight - floatingQueue.clientHeight;
+    const ratio = scrollRange > 0 ? (floatingQueue.scrollTop / scrollRange) : 0;
+    // Keep motion subtle: informative cue, not a full-range scrollbar.
+    const travelFactor = 0.28;
+    const centeredOffset = (maxY * (1 - travelFactor)) / 2;
+    thumb.style.top = `${Math.round(centeredOffset + (maxY * ratio * travelFactor))}px`;
+}
+
 function renderQueue(state) {
     const containers = [
         document.getElementById('queue-tracks'),
@@ -40,6 +58,12 @@ function renderQueue(state) {
 
     if (!state.queue || state.queue.length === 0) {
         containers.forEach(c => c.innerHTML = '<div class="text-gray-500 text-center py-10 italic text-xs">Queue is empty.</div>');
+        const floatingQueue = document.getElementById('floating-queue-tracks');
+        if (floatingQueue) {
+            floatingQueue.classList.remove('has-scroll-cue');
+            const cue = floatingQueue.querySelector('.queue-scroll-cue');
+            if (cue && cue.parentNode) cue.parentNode.removeChild(cue);
+        }
         return;
     }
 
@@ -61,7 +85,39 @@ function renderQueue(state) {
         </div>
     `).join('');
 
-    containers.forEach(c => c.innerHTML = html);
+    containers.forEach(c => {
+        c.innerHTML = html;
+        const floatingQueue = document.getElementById('floating-queue-tracks');
+        if (floatingQueue && c === floatingQueue) {
+            const shouldShowCue = state.queue.length >= 6;
+            floatingQueue.classList.toggle('has-scroll-cue', shouldShowCue);
+
+            let cue = floatingQueue.querySelector('.queue-scroll-cue');
+            if (shouldShowCue) {
+                if (!cue) {
+                    cue = document.createElement('div');
+                    cue.className = 'queue-scroll-cue';
+                    const thumb = document.createElement('div');
+                    thumb.className = 'queue-scroll-cue-thumb';
+                    cue.appendChild(thumb);
+                    floatingQueue.appendChild(cue);
+                }
+                requestAnimationFrame(updateQueueScrollCuePosition);
+            } else if (cue && cue.parentNode) {
+                cue.parentNode.removeChild(cue);
+            }
+
+            if (!floatingQueue.dataset.scrollCueBound) {
+                floatingQueue.dataset.scrollCueBound = '1';
+                floatingQueue.addEventListener('scroll', () => {
+                    requestAnimationFrame(updateQueueScrollCuePosition);
+                }, { passive: true });
+                window.addEventListener('resize', () => {
+                    requestAnimationFrame(updateQueueScrollCuePosition);
+                });
+            }
+        }
+    });
 }
 
 const QUEUE_HOLD_MS = 280;
