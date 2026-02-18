@@ -271,6 +271,7 @@ queue_manager = None
 favourites_manager = None
 downloader_service = None
 queue_manager_dl = DownloadQueueManager()
+api_observer = None  # Store Observer reference for cleanup in daemon mode
 
 def get_core():
     global library_manager, playback_engine, queue_manager, favourites_manager
@@ -1101,6 +1102,7 @@ def update_config():
 # --- Server Management ---
 
 def start_api(port=5005, debug=False):
+    global api_observer
     print(f"--- Soundsible API Boot Sequence ---")
     print(f"Target Port: {port}")
     print(f"CWD: {os.getcwd()}")
@@ -1114,9 +1116,9 @@ def start_api(port=5005, debug=False):
         config_dir.mkdir(parents=True, exist_ok=True)
         
         event_handler = LibraryFileWatcher(lib)
-        observer = Observer()
-        observer.schedule(event_handler, str(config_dir), recursive=False)
-        observer.start()
+        api_observer = Observer()
+        api_observer.schedule(event_handler, str(config_dir), recursive=False)
+        api_observer.start()
         print(f"API: Library File Watcher started on {config_dir}")
         
     except Exception as e:

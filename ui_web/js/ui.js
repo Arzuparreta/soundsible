@@ -10,6 +10,11 @@ import { Haptics } from './haptics.js';
 window.audioEngine = audioEngine;
 
 export class UI {
+    /** When set, NP view shows this track (preview) without starting playback; cleared on hide or when user taps play. */
+    static _npDisplayTrack = null;
+    /** When set, apply this seek percent once on next timeupdate (after preview track starts). */
+    static _npPendingSeekPercent = null;
+
     static VIEW_LABELS = {
         'home': 'ALL SONGS',
         'favourites': 'FAVORITES',
@@ -34,11 +39,16 @@ export class UI {
         this.currentView = 'home';
         this._npGesturesBound = false;
         this.isIslandActive = false;
+        this.islandUserCollapsed = false; // user swiped down to collapse playback bar to seed form
         this.isBlooming = false;
         this.isDraggingQueue = false;
+        this.isSearchFormActive = false;
+        this._keyboardHeight = 0;
+        this._platform = this.detectPlatform();
 
         this.initGlobalListeners();
         this.initOmniIsland();
+        this.initKeyboardSync();
         this.updateLabel(this.currentView);
         store.subscribe((state) => this.updatePlayer(state));
 
@@ -71,9 +81,17 @@ export class UI {
         // Omni-Island State Sync
         this.syncIsland(state);
 
-        if (state.currentTrack) {
+        if (state.currentTrack || UI._npDisplayTrack) {
             if (document.getElementById('now-playing-view')?.classList.contains('active')) {
-                this.updateNowPlaying(state.currentTrack, state.isPlaying);
+                // Clear preview when user skipped to a different track
+                if (UI._npDisplayTrack && state.currentTrack && state.currentTrack.id !== UI._npDisplayTrack.id) {
+                    UI._npDisplayTrack = null;
+                }
+                const displayTrack = UI._npDisplayTrack || state.currentTrack;
+                const isPlaying = UI._npDisplayTrack
+                    ? (state.currentTrack?.id === UI._npDisplayTrack.id && state.isPlaying)
+                    : state.isPlaying;
+                this.updateNowPlaying(displayTrack, isPlaying);
             }
             this.updateTransportControls(state.isPlaying);
         }
@@ -137,7 +155,7 @@ export class UI {
 
         text1.innerHTML = contentHtml;
         text2.innerHTML = contentHtml;
-        container.style.opacity = '1';
+        container.style.opacity = this.islandUserCollapsed ? '0' : '1';
 
         // Marquee Logic
         const textWidth = text1.offsetWidth;
@@ -151,6 +169,7 @@ export class UI {
 
     static morphToActive() {
         this.isIslandActive = true;
+        this.islandUserCollapsed = false;
         Haptics.heavy();
         
         this.island.style.width = '250px';
@@ -163,10 +182,31 @@ export class UI {
         if (next) { next.classList.remove('hidden'); setTimeout(() => { next.classList.replace('opacity-0', 'opacity-100'); next.classList.replace('scale-75', 'scale-100'); }, 100); }
         
         if (anchorIcon) anchorIcon.className = store.state.isPlaying ? 'fas fa-pause text-lg text-white' : 'fas fa-play text-lg text-white ml-1';
+
+        const transport = document.getElementById('omni-transport');
+        const metadata = document.getElementById('omni-metadata-container');
+        const omniProgressTrack = document.getElementById('omni-progress-track');
+        const t = '0.4s';
+        if (transport) {
+            transport.style.transition = `opacity ${t} ease, filter 0.3s ease, transform 0.3s ease`;
+            transport.style.filter = 'blur(0px)';
+            transport.style.opacity = '1';
+            transport.style.transform = 'scale(1)';
+            transport.style.pointerEvents = 'auto';
+        }
+        if (omniProgressTrack) {
+            omniProgressTrack.style.transition = `opacity ${t} ease`;
+            omniProgressTrack.style.opacity = '1';
+        }
+        if (metadata) {
+            metadata.style.transition = `opacity ${t} ease`;
+            metadata.style.opacity = '1';
+        }
     }
 
     static collapseToSeed() {
         this.isIslandActive = false;
+        this.islandUserCollapsed = false;
         this.island.style.width = '56px';
         
         const prev = document.getElementById('omni-prev');
@@ -177,6 +217,170 @@ export class UI {
         if (next) { next.classList.replace('opacity-100', 'opacity-0'); next.classList.replace('scale-100', 'scale-75'); setTimeout(() => next.classList.add('hidden'), 300); }
         
         if (anchorIcon) anchorIcon.className = 'fas fa-command text-lg text-white';
+    }
+
+    static detectPlatform() {
+        const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || 
+                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        return isIOS ? 'ios' : 'android';
+    }
+
+    static transformToSearchForm() {
+        this.isSearchFormActive = true;
+        Haptics.heavy();
+        
+        this.island.style.width = '380px';
+        
+        const transport = document.getElementById('omni-transport');
+        const metadata = document.getElementById('omni-metadata-container');
+        const ribbon = document.getElementById('omni-nav-ribbon');
+        const searchForm = document.getElementById('omni-search-form');
+        const searchInput = document.getElementById('omni-search-input');
+        const touchArea = document.getElementById('omni-touch-area');
+
+        if (transport) {
+            transport.style.filter = 'blur(12px)';
+            transport.style.opacity = '0';
+            transport.style.transform = 'scale(0.9)';
+            transport.style.pointerEvents = 'none';
+        }
+        if (metadata) {
+            metadata.style.opacity = '0';
+        }
+        if (ribbon) {
+            ribbon.classList.add('pointer-events-none');
+            ribbon.style.opacity = '0';
+            ribbon.style.transform = 'scale(0.95)';
+            ribbon.style.filter = 'blur(8px)';
+        }
+        if (searchForm) {
+            searchForm.classList.add('active');
+            searchForm.classList.remove('pointer-events-none');
+            searchForm.style.pointerEvents = 'auto';
+        }
+        // Disable touch area when search form is active to allow direct input interaction
+        if (touchArea) {
+            touchArea.style.pointerEvents = 'none';
+        }
+        // Add direct click handler to search form/input for immediate focus
+        if (searchForm && !this._searchFormClickBound) {
+            searchForm.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (searchInput) {
+                    searchInput.focus();
+                }
+            });
+            this._searchFormClickBound = true;
+        }
+    }
+
+    static transformFromSearchForm() {
+        this.isSearchFormActive = false;
+        
+        const transport = document.getElementById('omni-transport');
+        const metadata = document.getElementById('omni-metadata-container');
+        const ribbon = document.getElementById('omni-nav-ribbon');
+        const searchForm = document.getElementById('omni-search-form');
+        const searchInput = document.getElementById('omni-search-input');
+        const touchArea = document.getElementById('omni-touch-area');
+
+        if (searchForm) {
+            searchForm.classList.remove('active');
+            searchForm.classList.add('pointer-events-none');
+            searchForm.style.pointerEvents = 'none';
+        }
+        if (searchInput) {
+            searchInput.blur();
+            searchInput.value = '';
+        }
+        // Re-enable touch area when search form is inactive
+        if (touchArea) {
+            touchArea.style.pointerEvents = 'auto';
+        }
+
+        // Restore appropriate state based on island state
+        if (this.isIslandActive && !this.islandUserCollapsed) {
+            this.island.style.width = '250px';
+        } else {
+            this.island.style.width = '56px';
+        }
+
+        if (transport) {
+            transport.style.filter = 'blur(0px)';
+            transport.style.opacity = '1';
+            transport.style.transform = 'scale(1)';
+            transport.style.pointerEvents = 'auto';
+        }
+        if (metadata && this.isIslandActive) {
+            metadata.style.opacity = '1';
+        }
+    }
+
+    static initKeyboardSync() {
+        if (!window.visualViewport) {
+            console.warn('Visual Viewport API not supported');
+            return;
+        }
+
+        const container = document.getElementById('omni-island-container');
+        if (!container) return;
+
+        // Apply platform-specific class
+        container.classList.add(`omni-keyboard-${this._platform}`);
+
+        let lastHeight = window.visualViewport.height;
+        let isKeyboardOpen = false;
+
+        const handleViewportResize = () => {
+            // Only handle keyboard sync when search form is active
+            if (!this.isSearchFormActive) {
+                return;
+            }
+
+            const currentHeight = window.visualViewport.height;
+            const heightDiff = window.innerHeight - currentHeight;
+            const keyboardHeight = Math.max(0, heightDiff);
+
+            // Detect keyboard state (threshold: 50px to avoid false positives from small viewport changes)
+            const keyboardJustOpened = !isKeyboardOpen && keyboardHeight > 50;
+            const keyboardJustClosed = isKeyboardOpen && keyboardHeight <= 50;
+
+            if (keyboardJustOpened || keyboardJustClosed) {
+                isKeyboardOpen = keyboardHeight > 50;
+                this._keyboardHeight = keyboardHeight;
+
+                if (isKeyboardOpen) {
+                    this.handleKeyboardOpen(keyboardHeight);
+                } else {
+                    this.handleKeyboardClose();
+                }
+            } else if (isKeyboardOpen && keyboardHeight > 0) {
+                // Update position continuously as keyboard height changes
+                container.style.transform = `translateY(-${keyboardHeight}px)`;
+                this._keyboardHeight = keyboardHeight;
+            }
+
+            lastHeight = currentHeight;
+        };
+
+        window.visualViewport.addEventListener('resize', handleViewportResize);
+        window.visualViewport.addEventListener('scroll', handleViewportResize);
+    }
+
+    static handleKeyboardOpen(keyboardHeight) {
+        const container = document.getElementById('omni-island-container');
+        if (!container) return;
+
+        this._keyboardHeight = keyboardHeight;
+        container.style.transform = `translateY(-${keyboardHeight}px)`;
+    }
+
+    static handleKeyboardClose() {
+        const container = document.getElementById('omni-island-container');
+        if (!container) return;
+
+        this._keyboardHeight = 0;
+        container.style.transform = '';
     }
 
     static updateThemeUI(theme) {
@@ -223,7 +427,10 @@ export class UI {
         const artist = el('np-artist');
         const album = el('np-album-title');
 
-        if (art) art.src = Resolver.getCoverUrl(track);
+        if (art) {
+            const url = Resolver.getCoverUrl(track);
+            art.style.backgroundImage = url ? `url("${String(url).replace(/"/g, '%22')}")` : '';
+        }
         if (title) title.textContent = track.title;
         if (artist) artist.textContent = track.artist;
         if (album) album.textContent = track.album;
@@ -231,27 +438,41 @@ export class UI {
         this.updateTransportControls(isPlaying);
     }
 
-    static showNowPlaying() {
-        const track = store.state.currentTrack;
+    static showNowPlaying(trackOrUndefined) {
+        const track = trackOrUndefined ?? store.state.currentTrack;
         if (!track) return;
-        
+
+        // Preview only when opening NP for a different track than the one playing
+        UI._npDisplayTrack = (trackOrUndefined !== undefined && store.state.currentTrack?.id !== track.id) ? track : null;
+
         const npView = document.getElementById('now-playing-view');
         if (!npView) return;
 
+        const isPlaying = UI._npDisplayTrack
+            ? (store.state.currentTrack?.id === UI._npDisplayTrack.id && store.state.isPlaying)
+            : store.state.isPlaying;
+
         npView.classList.remove('hidden');
+        if (UI._npDisplayTrack) npView.classList.add('np-preview');
+        else npView.classList.remove('np-preview');
         document.body.classList.add('now-playing-open');
-        this.updateNowPlaying(track, store.state.isPlaying);
-        
+        this.updateNowPlaying(track, isPlaying);
+
         setTimeout(() => {
             npView.classList.add('active');
             Haptics.heavy(); // 30ms pulse for opening
         }, 10);
 
-        // Fly-in timeline: trigger after layout so "from" state applies first
-        requestAnimationFrame(() => {
-            const npSeek = document.getElementById('np-seek-container');
-            if (npSeek) npSeek.classList.add('np-timeline-visible');
-        });
+        // Fly-in timeline only when not in preview (preview = keep omnibar timeline until track starts)
+        if (!UI._npDisplayTrack) {
+            requestAnimationFrame(() => {
+                const npSeek = document.getElementById('np-seek-container');
+                if (npSeek) {
+                    npSeek.classList.add('np-timeline-visible');
+                    document.body.classList.add('np-timeline-visible');
+                }
+            });
+        }
 
         if (!this._npGesturesBound) {
             this.initNowPlayingGestures();
@@ -260,17 +481,37 @@ export class UI {
     }
 
     static hideNowPlaying() {
+        UI._npDisplayTrack = null;
+        UI._npPendingSeekPercent = null;
         const npView = document.getElementById('now-playing-view');
         if (!npView) return;
-        
-        npView.classList.remove('active');
+
+        npView.classList.remove('active', 'np-preview');
         npView.style.transform = ''; // Clear manual drag
-        document.body.classList.remove('now-playing-open');
+        document.body.classList.remove('now-playing-open', 'np-timeline-visible');
         const npSeek = document.getElementById('np-seek-container');
         if (npSeek) npSeek.classList.remove('np-timeline-visible');
-        
+
         setTimeout(() => {
             if (!npView.classList.contains('active')) npView.classList.add('hidden');
+        }, 600);
+    }
+
+    static showSoundMash() {
+        const view = document.getElementById('soundmash-view');
+        if (!view) return;
+        view.classList.remove('hidden');
+        requestAnimationFrame(() => view.classList.add('active'));
+        Haptics.heavy();
+    }
+
+    static hideSoundMash() {
+        const view = document.getElementById('soundmash-view');
+        if (!view) return;
+        view.classList.remove('active');
+        view.style.transform = '';
+        setTimeout(() => {
+            if (!view.classList.contains('active')) view.classList.add('hidden');
         }, 600);
     }
 
@@ -307,6 +548,24 @@ export class UI {
         // Auto-hide Now Playing if active (even if selecting the same view)
         if (document.getElementById('now-playing-view')?.classList.contains('active')) {
             this.hideNowPlaying();
+        }
+
+        // Handle search form transformation when navigating to/from search
+        if (viewId === 'search' && !this.isSearchFormActive) {
+            this.transformToSearchForm();
+            // Focus search input after transformation animation completes
+            setTimeout(() => {
+                const searchInput = document.getElementById('omni-search-input');
+                if (searchInput) {
+                    // Small delay to ensure form is fully visible
+                    setTimeout(() => {
+                        searchInput.focus();
+                    }, 50);
+                }
+            }, 400);
+        } else if (viewId !== 'search' && this.isSearchFormActive) {
+            this.transformFromSearchForm();
+            this.handleKeyboardClose();
         }
 
         if (viewId === this.currentView) return;
@@ -425,22 +684,52 @@ export class UI {
             audioEngine.seek(pct);
         };
 
-        const mini = document.getElementById('player-progress-container');
         const full = document.getElementById('np-seek-container');
-        if (mini) mini.onclick = (e) => handleSeek(e, mini);
         if (full) {
-            full.onclick = (e) => handleSeek(e, full);
-            full.ontouchend = (e) => { if (e.cancelable) e.preventDefault(); handleSeek(e, full); };
+            const handleNPSeek = (e) => {
+                const rect = full.getBoundingClientRect();
+                const clientX = e.clientX ?? e.changedTouches?.[0]?.clientX ?? e.touches?.[0]?.clientX;
+                if (clientX == null) return;
+                const x = clientX - rect.left;
+                const pct = Math.max(0, Math.min(100, (x / rect.width) * 100));
+                if (UI._npDisplayTrack && store.state.currentTrack?.id !== UI._npDisplayTrack.id) {
+                    window.playTrack(UI._npDisplayTrack.id);
+                    UI._npPendingSeekPercent = pct;
+                    UI._npDisplayTrack = null;
+                    const npViewEl = document.getElementById('now-playing-view');
+                    if (npViewEl) npViewEl.classList.remove('np-preview');
+                    const npSeek = document.getElementById('np-seek-container');
+                    if (npSeek) {
+                        npSeek.classList.add('np-timeline-visible');
+                        document.body.classList.add('np-timeline-visible');
+                    }
+                } else {
+                    handleSeek(e, full);
+                }
+            };
+            full.onclick = (e) => handleNPSeek(e);
+            full.ontouchend = (e) => { if (e.cancelable) e.preventDefault(); handleNPSeek(e); };
         }
 
         window.addEventListener('audio:timeupdate', (e) => {
             const { progress, currentTime, duration } = e.detail;
-            
-            const omniBar = document.getElementById('omni-progress');
-            if (omniBar) omniBar.style.width = `${progress}%`;
-            if (document.getElementById('now-playing-view')?.classList.contains('active')) {
+
+            if (UI._npPendingSeekPercent != null && !UI._npDisplayTrack) {
+                audioEngine.seek(UI._npPendingSeekPercent);
+                UI._npPendingSeekPercent = null;
+            }
+
+            const npView = document.getElementById('now-playing-view');
+            const npActive = npView?.classList.contains('active');
+            const npSeek = document.getElementById('np-seek-container');
+            const npTimelineVisible = npActive && npSeek?.classList.contains('np-timeline-visible');
+
+            if (npTimelineVisible) {
                 const npBar = document.getElementById('np-seek-progress');
                 if (npBar) npBar.style.width = `${progress}%`;
+            } else {
+                const omniBar = document.getElementById('omni-progress');
+                if (omniBar) omniBar.style.width = `${progress}%`;
             }
         });
     }
@@ -456,6 +745,9 @@ export class UI {
         let activeRow = null;
         let isHorizontal = false;
         let isEdgeSwipe = false;
+        let isEdgeSwipeFromSoundMash = false;
+        let longPressTimer = null;
+        let longPressTriggered = false;
 
         document.addEventListener('touchstart', (e) => {
             const touch = e.touches[0];
@@ -466,17 +758,102 @@ export class UI {
             isHorizontal = false;
             isEdgeSwipe = false;
 
-            // 1. Edge Swipe Detection
+            // Clear any existing long press timer
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+            longPressTriggered = false;
+
+            // 1. Edge Swipe Detection (from left: back to home; when SoundMash open, closes SoundMash)
             if (startX < 40) {
                 isEdgeSwipe = true;
-                this.content.style.transition = 'none';
+                isEdgeSwipeFromSoundMash = document.getElementById('soundmash-view')?.classList.contains('active') ?? false;
+                if (isEdgeSwipeFromSoundMash) {
+                    const sm = document.getElementById('soundmash-view');
+                    if (sm) sm.style.transition = 'none';
+                } else {
+                    this.content.style.transition = 'none';
+                }
                 return;
             }
 
-            // 2. Song Row Gestures
+            // 2. Queue item cover long-press -> Now Playing (preview) for that track
+            const queueItem = e.target.closest('.queue-item');
+            if (queueItem) {
+                const target = e.target;
+                const coverContainer = queueItem.querySelector('.queue-item-cover');
+                if (coverContainer && (coverContainer.contains(target) || target === coverContainer.querySelector('img'))) {
+                    const idx = parseInt(queueItem.getAttribute('data-index'), 10);
+                    const track = store.state.queue && store.state.queue[idx];
+                    if (track) {
+                        longPressTimer = setTimeout(() => {
+                            if (!isHorizontal) {
+                                longPressTriggered = true;
+                                this.showNowPlaying(track);
+                                Haptics.heavy();
+                            }
+                            longPressTimer = null;
+                        }, 480);
+                    }
+                }
+                return;
+            }
+
+            // 3. Song Row Gestures
             if (row) {
                 activeRow = row;
                 row.style.transition = 'none';
+                
+                const trackId = row.getAttribute('data-id');
+                const target = e.target;
+                
+                // Check if touch started on cover area (div with bg-image, no img to avoid browser long-press preview)
+                const coverContainer = row.querySelector('.relative.w-14.h-14');
+                if (coverContainer && coverContainer.contains(target)) {
+                    // Start long press timer (~480ms, ~20% faster) for cover -> Now Playing (preview for this track)
+                    longPressTimer = setTimeout(() => {
+                        if (!isHorizontal) {
+                            longPressTriggered = true;
+                            const track = typeof window.getTrackFromCurrentContext === 'function' ? window.getTrackFromCurrentContext(trackId) : null;
+                            this.showNowPlaying(track ?? undefined);
+                            Haptics.heavy();
+                        }
+                        longPressTimer = null;
+                    }, 480);
+                }
+                // Check if touch started on song title
+                else if (target.classList.contains('song-title') || target.closest('.song-title')) {
+                    const songTitle = target.classList.contains('song-title') ? target : target.closest('.song-title');
+
+                    // Start long press timer (~480ms, ~20% faster) for song title -> Now Playing (preview for this track)
+                    longPressTimer = setTimeout(() => {
+                        if (!isHorizontal) {
+                            longPressTriggered = true;
+                            const track = typeof window.getTrackFromCurrentContext === 'function' ? window.getTrackFromCurrentContext(trackId) : null;
+                            this.showNowPlaying(track ?? undefined);
+                            Haptics.heavy();
+                        }
+                        longPressTimer = null;
+                    }, 480);
+                }
+                // Check if touch started on artist name
+                else if (target.classList.contains('song-artist') || target.closest('.song-artist')) {
+                    const artistEl = target.classList.contains('song-artist') ? target : target.closest('.song-artist');
+                    const artistName = artistEl?.getAttribute('data-artist');
+                    
+                    // Start long press timer (~480ms, ~20% faster) for artist name -> Artist Detail
+                    longPressTimer = setTimeout(() => {
+                        if (artistName && !isHorizontal) {
+                            longPressTriggered = true;
+                            if (typeof window.showArtistDetail === 'function') {
+                                window.showArtistDetail(artistName);
+                            }
+                            Haptics.heavy();
+                        }
+                        longPressTimer = null;
+                    }, 480);
+                }
             }
         }, { passive: true });
 
@@ -485,11 +862,22 @@ export class UI {
             const diffX = touch.clientX - startX;
             const diffY = Math.abs(touch.clientY - startY);
 
+            // Cancel long-press on significant movement (e.g. queue item hold then drag)
+            if (longPressTimer && (Math.abs(diffX) > 15 || diffY > 15)) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+
             // Edge Swipe Handling
             if (isEdgeSwipe) {
                 if (e.cancelable) e.preventDefault();
                 const move = Math.max(0, diffX);
-                this.content.style.transform = `translateX(${move}px)`;
+                if (isEdgeSwipeFromSoundMash) {
+                    const sm = document.getElementById('soundmash-view');
+                    if (sm) sm.style.transform = `translateX(${move}px)`;
+                } else {
+                    this.content.style.transform = `translateX(${move}px)`;
+                }
                 return;
             }
 
@@ -497,6 +885,11 @@ export class UI {
             
             if (!isHorizontal && Math.abs(diffX) > diffY && Math.abs(diffX) > 10) {
                 isHorizontal = true;
+                // Cancel long press timer when swipe is detected
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
             }
             
             if (isHorizontal) {
@@ -516,15 +909,28 @@ export class UI {
             if (isEdgeSwipe) {
                 const diffX = e.changedTouches[0].clientX - startX;
                 const threshold = window.innerWidth * 0.12;
-                
-                this.content.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
-                this.content.style.transform = 'translateX(0)';
-                
-                if (diffX > threshold) {
-                    this.vibrate(20);
-                    this.navigateBack();
+
+                if (isEdgeSwipeFromSoundMash) {
+                    const sm = document.getElementById('soundmash-view');
+                    if (sm) {
+                        sm.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
+                        sm.style.transform = 'translateX(0)';
+                    }
+                    if (diffX > threshold) {
+                        this.vibrate(20);
+                        this.hideSoundMash();
+                        this.showView('home', false, 'backward');
+                    }
+                } else {
+                    this.content.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
+                    this.content.style.transform = 'translateX(0)';
+                    if (diffX > threshold) {
+                        this.vibrate(20);
+                        this.navigateBack();
+                    }
                 }
                 isEdgeSwipe = false;
+                isEdgeSwipeFromSoundMash = false;
                 return;
             }
 
@@ -561,7 +967,28 @@ export class UI {
 
                 activeRow = null;
             }
+            
+            // Clear long press timer on touch end
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
         }, { passive: true });
+
+        // Prevent click events after long press (song row or queue item cover)
+        document.addEventListener('click', (e) => {
+            if (longPressTriggered) {
+                const row = e.target.closest('.song-row');
+                const queueItem = e.target.closest('.queue-item');
+                if (row || queueItem) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    longPressTriggered = false;
+                    return false;
+                }
+            }
+        }, { capture: true });
 
         // Action Menu Swipe-to-Dismiss logic
         this.initBottomSheetGestures();
@@ -573,18 +1000,20 @@ export class UI {
         
         let startY = 0;
         let isDragging = false;
+        const dragThreshold = 8;
 
         npView.addEventListener('touchstart', (e) => {
             if (e.target.closest('button') || e.target.closest('#np-seek-container')) return;
             startY = e.touches[0].clientY;
-            isDragging = true;
+            isDragging = false;
             npView.style.transition = 'none';
         }, { passive: true });
 
         npView.addEventListener('touchmove', (e) => {
-            if (!isDragging) return;
             const currentY = e.touches[0].clientY;
             const deltaY = currentY - startY;
+            if (!isDragging && deltaY > dragThreshold) isDragging = true;
+            if (!isDragging) return;
             if (deltaY > 0) {
                 npView.style.transform = `translateY(${deltaY}px)`;
             }
@@ -606,6 +1035,44 @@ export class UI {
                 npView.style.transform = '';
             }
         }, { passive: true });
+
+        const npArt = document.getElementById('np-art');
+        if (npArt) {
+            let coverStartTime = 0, coverStartX = 0, coverStartY = 0, coverMaxDelta = 0;
+            npArt.addEventListener('touchstart', (e) => {
+                const t = e.touches[0];
+                coverStartTime = Date.now();
+                coverStartX = t.clientX;
+                coverStartY = t.clientY;
+                coverMaxDelta = 0;
+            }, { passive: true });
+            npArt.addEventListener('touchmove', (e) => {
+                const t = e.touches[0];
+                const dx = t.clientX - coverStartX;
+                const dy = t.clientY - coverStartY;
+                coverMaxDelta = Math.max(coverMaxDelta, Math.hypot(dx, dy));
+            }, { passive: true });
+            npArt.addEventListener('touchend', (e) => {
+                const t = e.changedTouches[0];
+                const duration = Date.now() - coverStartTime;
+                const dx = t.clientX - coverStartX;
+                const dy = t.clientY - coverStartY;
+                const movement = Math.hypot(dx, dy);
+                const validTap = duration >= 100 && duration <= 450 && movement < 12 &&
+                    UI._npDisplayTrack && store.state.currentTrack?.id !== UI._npDisplayTrack.id;
+                if (!validTap) return;
+                Haptics.tick();
+                window.playTrack(UI._npDisplayTrack.id);
+                UI._npDisplayTrack = null;
+                const npViewEl = document.getElementById('now-playing-view');
+                if (npViewEl) npViewEl.classList.remove('np-preview');
+                const npSeek = document.getElementById('np-seek-container');
+                if (npSeek) {
+                    npSeek.classList.add('np-timeline-visible');
+                    document.body.classList.add('np-timeline-visible');
+                }
+            }, { passive: true });
+        }
     }
 
     static initOmniIsland() {
@@ -633,8 +1100,15 @@ export class UI {
         this._activeNavView = null;
         this._startY = 0;
         this._currentY = 0;
+        this._soundMashHoldTimer = null;
+        this._soundMashHoldTimerStarted = false;
+        this._soundMashOpenedThisGesture = false;
 
         const startBloom = (e) => {
+            if (document.getElementById('soundmash-view')?.classList.contains('active')) {
+                e.preventDefault();
+                return;
+            }
             const touch = e.touches[0];
             const rect = island.getBoundingClientRect();
             this._startedInside = touch.clientX >= rect.left && touch.clientX <= rect.right && 
@@ -643,6 +1117,10 @@ export class UI {
             this._isHolding = true;
             this._startY = touch.clientY;
             this._currentY = this._startY;
+            this._soundMashHoldTimerStarted = false;
+            this._soundMashOpenedThisGesture = false;
+            if (this._soundMashHoldTimer) clearTimeout(this._soundMashHoldTimer);
+            this._soundMashHoldTimer = null;
             Haptics.tick();
             
             this._labelAnimTimer = setTimeout(() => {
@@ -678,6 +1156,17 @@ export class UI {
                     ribbon.style.opacity = '1';
                     ribbon.style.transform = 'scale(1)';
                     ribbon.style.filter = 'blur(0px)';
+                    // When holding from search form: show nav form visually so ribbon is visible; keep isSearchFormActive so resetOmniIsland restores search form on release if no nav committed. Fade placeholder out in sync with ribbon fade-in (360ms).
+                    if (this.isSearchFormActive) {
+                        const searchFormEl = document.getElementById('omni-search-form');
+                        const searchInputEl = document.getElementById('omni-search-input');
+                        if (searchFormEl) {
+                            searchFormEl.classList.remove('active');
+                            searchFormEl.classList.add('pointer-events-none');
+                            searchFormEl.style.pointerEvents = 'none';
+                        }
+                        if (searchInputEl) searchInputEl.classList.add('placeholder-faded');
+                    }
                 }
             }, 324);
         };
@@ -695,12 +1184,24 @@ export class UI {
             
             if (this._omniHoldTimer) clearTimeout(this._omniHoldTimer);
             if (this._labelAnimTimer) clearTimeout(this._labelAnimTimer);
+            if (this._soundMashHoldTimer) clearTimeout(this._soundMashHoldTimer);
+            this._soundMashHoldTimer = null;
 
             // 0. SWIPE GESTURES FOR NOW PLAYING (Instant Toggle with 15px deadzone)
             if (this._isHolding && !this.isBlooming && this._startedInside && isHorizontalValid) {
                 const isNPActive = document.getElementById('now-playing-view')?.classList.contains('active');
                 const deadzone = 15;
-                
+
+                // Swipe up when manually collapsed: uncollapse only (unless we opened SoundMash via hold)
+                if (deltaY < -deadzone && this.islandUserCollapsed) {
+                    if (this._soundMashOpenedThisGesture) {
+                        this.resetOmniIsland();
+                        return;
+                    }
+                    this.islandUserCollapsed = false;
+                    this.resetOmniIsland();
+                    return;
+                }
                 if (deltaY < -deadzone && !isNPActive) {
                     this.showNowPlaying();
                     this.resetOmniIsland();
@@ -709,11 +1210,49 @@ export class UI {
                     this.hideNowPlaying();
                     this.resetOmniIsland();
                     return;
+                } else if (deltaY < -deadzone && isNPActive) {
+                    if (UI._npDisplayTrack) {
+                        window.playTrack(UI._npDisplayTrack.id);
+                        UI._npDisplayTrack = null;
+                        const npViewEl = document.getElementById('now-playing-view');
+                        if (npViewEl) npViewEl.classList.remove('np-preview');
+                        const npSeek = document.getElementById('np-seek-container');
+                        if (npSeek) {
+                            npSeek.classList.add('np-timeline-visible');
+                            document.body.classList.add('np-timeline-visible');
+                        }
+                    }
+                    this.resetOmniIsland();
+                    return;
                 }
             }
+
+            // 0b. SWIPE DOWN: collapse playback bar to blank (seed) form when not closing Now Playing
+            const isNPActive = document.getElementById('now-playing-view')?.classList.contains('active');
+            const deadzone = 15;
+            if (this._isHolding && !this.isBlooming && this._startedInside && isHorizontalValid &&
+                this.isIslandActive && !isNPActive && deltaY > deadzone) {
+                this.islandUserCollapsed = true;
+                this.resetOmniIsland();
+                return;
+            }
             
-            // 1. COORDINATE-BASED TRANSPORT
-            if (this._isHolding && !this.isBlooming && isInside) {
+            // 1. SEARCH FORM QUICK TAP (Similar to transport controls)
+            // Only handle quick tap if we didn't bloom (long-press triggers bloom instead)
+            if (this._isHolding && !this.isBlooming && this.isSearchFormActive && isInside) {
+                const searchInput = document.getElementById('omni-search-input');
+                if (searchInput) {
+                    Haptics.tick();
+                    searchInput.focus();
+                }
+                this.resetOmniIsland();
+                return;
+            }
+
+            // 2. COORDINATE-BASED TRANSPORT (disabled when manually collapsed)
+            if (this._isHolding && !this.isBlooming && !this.isSearchFormActive && isInside) {
+                if (this.islandUserCollapsed) return;
+
                 const relX = (touch.clientX - rect.left) / rect.width;
                 let zone = 'anchor'; // Default
                 
@@ -735,21 +1274,51 @@ export class UI {
                 if (zone === 'prev') audioEngine.prev();
                 else if (zone === 'next') audioEngine.next();
                 else {
-                    if (store.state.currentTrack) audioEngine.toggle();
-                    else if (store.state.library.length > 0) window.playTrack(store.state.library[0].id);
+                    if (UI._npDisplayTrack) {
+                        audioEngine.toggle();
+                    } else if (store.state.currentTrack) {
+                        audioEngine.toggle();
+                    }
                 }
             }
 
-            // 2. NAV COMMIT (Uses elementFromPoint but hides touchArea first)
+            // 3. NAV COMMIT (Uses elementFromPoint but hides touchArea first)
             if (this.isBlooming && this._activeNavView) {
                 Haptics.lock();
-                this.showView(this._activeNavView);
+                const viewToShow = this._activeNavView;
                 
-                // Dock the Label
-                label.classList.remove('hovered');
-                label.classList.add('docked');
-                label.style.removeProperty('transform');
-                label.style.setProperty('--tx', '0px');
+                // Check if selected entry equals current entry
+                if (viewToShow === this.currentView) {
+                    // Fade out at current position, then fade in at center
+                    label.classList.add('fade-out');
+                    
+                    setTimeout(() => {
+                        // Move to center and prepare for fade in
+                        label.style.setProperty('--tx', '0px');
+                        label.style.removeProperty('transform');
+                        label.classList.remove('hovered', 'fade-out');
+                        label.classList.add('fade-in');
+                        
+                        // Force reflow, then trigger fade in animation
+                        requestAnimationFrame(() => {
+                            label.classList.add('fade-in-active');
+                            
+                            setTimeout(() => {
+                                label.classList.remove('fade-in', 'fade-in-active');
+                                label.classList.add('docked');
+                            }, 200);
+                        });
+                    }, 200);
+                } else {
+                    // showView will handle search form transformation
+                    this.showView(viewToShow);
+                    
+                    // Dock the Label with bounce animation
+                    label.classList.remove('hovered');
+                    label.classList.add('docked');
+                    label.style.removeProperty('transform');
+                    label.style.setProperty('--tx', '0px');
+                }
             }
 
             this.resetOmniIsland();
@@ -760,6 +1329,32 @@ export class UI {
             e.preventDefault();
             startBloom(e);
         });
+        
+        // When search form is active, touchArea has pointer-events: none so touches hit the island/input.
+        // Same pattern as homepage transport: do NOT consume touchstart so quick taps reach the input
+        // and the browser can focus it and open the keyboard. Only arm the bloom timer; if the user
+        // holds 324ms we bloom. Only preventDefault in touchmove once holding to block iOS magnifying glass.
+        const handleIslandTouchStartWhenSearchActive = (e) => {
+            if (document.getElementById('soundmash-view')?.classList.contains('active')) return;
+            if (this.isSearchFormActive) {
+                startBloom(e);
+            }
+        };
+        
+        const handleIslandTouchMoveWhenSearchActive = (e) => {
+            if (this.isSearchFormActive && this._isHolding) {
+                e.preventDefault();
+            }
+        };
+        
+        const handleIslandTouchEndWhenSearchActive = () => {};
+        
+        // Bind to island (which is always accessible even when touchArea is disabled)
+        if (island) {
+            island.addEventListener('touchstart', handleIslandTouchStartWhenSearchActive, { passive: false });
+            island.addEventListener('touchmove', handleIslandTouchMoveWhenSearchActive, { passive: false });
+            island.addEventListener('touchend', handleIslandTouchEndWhenSearchActive, { passive: true });
+        }
 
         document.addEventListener('touchmove', (e) => {
             if (!this._isHolding) return;
@@ -773,24 +1368,19 @@ export class UI {
                 let item = null;
 
                 if (isVerticalValid) {
-                    const ribbon = document.getElementById('omni-nav-ribbon');
-                    const ribbonRect = ribbon.getBoundingClientRect();
                     const itemsArr = Array.from(items);
                     
-                    // Technical X-Calibration: Account for px-4 (16px) padding
-                    const padding = 16;
-                    const innerWidth = ribbonRect.width - (padding * 2);
-                    const touchX = touch.clientX - ribbonRect.left - padding;
+                    // Full viewport width for X mapping (same idea as bottom not losing control: extremes register)
+                    const trackLeft = 0;
+                    const trackWidth = window.innerWidth || document.documentElement.clientWidth;
+                    const touchX = touch.clientX - trackLeft;
+                    const slotWidth = trackWidth / 7;
+                    let index = Math.floor(touchX / slotWidth);
+                    index = Math.max(0, Math.min(6, index));
                     
-                    // Map to 7 slots
-                    const slotWidth = innerWidth / 7;
-                    const index = Math.floor(touchX / slotWidth);
-                    
-                    if (index >= 0 && index < 7) {
-                        // Correct for the blank center spacer (index 3)
-                        if (index < 3) item = itemsArr[index];
-                        else if (index > 3) item = itemsArr[index - 1]; // Skip the blank div in the DOM
-                    }
+                    // Correct for the blank center spacer (index 3)
+                    if (index < 3) item = itemsArr[index];
+                    else if (index > 3) item = itemsArr[index - 1];
                 }
 
                 if (item) {
@@ -846,6 +1436,20 @@ export class UI {
                 const deltaY = this._currentY - this._startY;
                 const isHorizontalValid = touch.clientX >= rect.left - 20 && touch.clientX <= rect.right + 20;
 
+                // When omnibar is in seed form (manually collapsed or no playback): swipe up and hold opens SoundMash (~392ms hold)
+                const deadzone = 15;
+                const soundMashHoldMs = 392;
+                const isSeedForm = this.islandUserCollapsed || !this.isIslandActive;
+                if (isSeedForm && deltaY < -deadzone && isHorizontalValid && !this._soundMashHoldTimerStarted) {
+                    this._soundMashHoldTimerStarted = true;
+                    this._soundMashHoldTimer = setTimeout(() => {
+                        this._soundMashHoldTimer = null;
+                        this.showSoundMash();
+                        this._soundMashOpenedThisGesture = true;
+                        this.resetOmniIsland();
+                    }, soundMashHoldMs);
+                }
+
                 if (!isHorizontalValid) {
                     island.style.transform = '';
                     return;
@@ -878,6 +1482,7 @@ export class UI {
     static resetOmniIsland() {
         const ribbon = document.getElementById('omni-nav-ribbon');
         const transport = document.getElementById('omni-transport');
+        const searchForm = document.getElementById('omni-search-form');
         const items = document.querySelectorAll('.omni-nav-item');
         const label = document.getElementById('omni-label');
 
@@ -890,22 +1495,68 @@ export class UI {
             this._labelAnimTimer = null;
         }
 
+        // Restore appropriate state based on current view
+        if (this.isSearchFormActive && this.currentView === 'search') {
+            // If in search view and search form is active, restore search form state
+            this.island.style.width = '380px';
+            this.island.style.transform = ''; // Clear swipe displacement
+            
+            if (transport) {
+                transport.style.filter = 'blur(12px)';
+                transport.style.opacity = '0';
+                transport.style.transform = 'scale(0.9)';
+                transport.style.pointerEvents = 'none';
+            }
+            
+            if (ribbon) {
+                ribbon.classList.add('pointer-events-none');
+                ribbon.style.opacity = '0';
+                ribbon.style.transform = 'scale(0.95)';
+                ribbon.style.filter = 'blur(8px)';
+            }
+            
+            if (searchForm) {
+                searchForm.classList.add('active');
+                searchForm.style.filter = 'blur(0px)';
+                searchForm.style.opacity = '1';
+                searchForm.style.transform = 'scale(1)';
+                searchForm.style.pointerEvents = 'auto';
+            }
+            const searchInput = document.getElementById('omni-search-input');
+            if (searchInput) searchInput.classList.remove('placeholder-faded');
+            
+            return;
+        }
+
         // Restore Playback UI
-        if (this.isIslandActive) this.island.style.width = '250px';
+        if (this.isIslandActive && !this.islandUserCollapsed) this.island.style.width = '250px';
         else this.island.style.width = '56px';
 
         this.island.style.transform = ''; // Clear swipe displacement
 
+        const omniProgressTrack = document.getElementById('omni-progress-track');
+        const transportFadeDuration = '0.4s';
         if (transport) {
-            transport.style.filter = 'blur(0px)';
-            transport.style.opacity = '1';
-            transport.style.transform = 'scale(1)';
-            transport.style.pointerEvents = 'auto';
+            transport.style.transition = `opacity ${transportFadeDuration} ease, filter 0.3s ease, transform 0.3s ease`;
+            if (this.isIslandActive && !this.islandUserCollapsed) {
+                transport.style.filter = 'blur(0px)';
+                transport.style.opacity = '1';
+                transport.style.transform = 'scale(1)';
+                transport.style.pointerEvents = 'auto';
+            } else {
+                transport.style.opacity = '0';
+                transport.style.pointerEvents = 'none';
+            }
+        }
+        if (omniProgressTrack) {
+            omniProgressTrack.style.transition = `opacity ${transportFadeDuration} ease`;
+            omniProgressTrack.style.opacity = (this.isIslandActive && !this.islandUserCollapsed) ? '1' : '0';
         }
 
         const metadata = document.getElementById('omni-metadata-container');
         if (metadata) {
-            metadata.style.opacity = '1';
+            metadata.style.transition = `opacity ${transportFadeDuration} ease`;
+            metadata.style.opacity = (this.isIslandActive && !this.islandUserCollapsed) ? '1' : '0';
         }
 
         if (ribbon) {
@@ -913,6 +1564,15 @@ export class UI {
             ribbon.style.opacity = '0';
             ribbon.style.transform = 'scale(0.95)';
             ribbon.style.filter = 'blur(8px)';
+        }
+
+        if (searchForm && !this.isSearchFormActive) {
+            searchForm.classList.remove('active');
+            searchForm.classList.add('pointer-events-none');
+            searchForm.style.pointerEvents = 'none';
+            searchForm.style.filter = '';
+            searchForm.style.opacity = '';
+            searchForm.style.transform = '';
         }
         
         items.forEach(i => {
@@ -1147,8 +1807,8 @@ export class UI {
         status.textContent = 'Matches found';
         resultsContainer.classList.remove('hidden');
         resultsContainer.innerHTML = results.slice(0, 5).map(r => `
-            <div class="flex items-center p-3 hover:bg-white/5 rounded-xl cursor-pointer transition-colors border border-transparent active:border-[var(--accent)]/30 active:bg-[var(--accent)]/5" onclick="UI.applyFetchedMetadata('${r.title.replace(/'/g, "\\'")}', '${r.artist.replace(/'/g, "\\'")}', '${r.album.replace(/'/g, "\\'")}', '${r.cover}')">
-                <img src="${r.cover}" class="w-10 h-10 rounded-lg object-cover shadow-md">
+            <div class="flex items-center p-3 hover:bg-white/5 rounded-[var(--radius-omni-sm)] cursor-pointer transition-colors border border-transparent active:border-[var(--accent)]/30 active:bg-[var(--accent)]/5" onclick="UI.applyFetchedMetadata('${r.title.replace(/'/g, "\\'")}', '${r.artist.replace(/'/g, "\\'")}', '${r.album.replace(/'/g, "\\'")}', '${r.cover}')">
+                <img src="${r.cover}" class="w-10 h-10 rounded-[var(--radius-omni-xs)] object-cover shadow-md">
                 <div class="ml-3 truncate">
                     <div class="text-xs font-bold truncate text-white/90">${r.title}</div>
                     <div class="text-[9px] font-bold text-white/40 truncate uppercase tracking-widest font-mono">${r.artist}</div>

@@ -1,0 +1,37 @@
+---
+description: Avoid double-cover / squared-cover bug in Now Playing and list covers (ui_web)
+alwaysApply: false
+globs: ui_web/**/*
+---
+
+# Now Playing & list covers: do not use `<img>` for cover art
+
+## The bug
+
+On mobile/PWA, when the user long-presses a **cover image** to open the Now Playing view (or when the OS/browser runs an image “hero” transition), the following can happen if cover art is implemented with `<img>`:
+
+- **Double cover:** A second, squared (no border-radius) copy of the cover appears on top, sometimes displaced. It disappears after ~0.5–2 seconds.
+- **First open:** Cover appears without rounded corners, then corners appear after a delay.
+- Cause: the OS/browser creates a snapshot or long-press preview of the **image element** and draws it without our CSS (no rounded corners, wrong position).
+
+## The fix (mandatory in this project)
+
+**Do not use `<img>` for cover art in:**
+
+1. **Song row cover** (library list) in `ui_web/js/app.js`  
+   Use a **`<div>`** with `background-image` (inline style or class). The touch target for long-press must be the container, not an image.
+
+2. **Now Playing full-screen cover** (`#np-art`) in `ui_web/index.html` and `ui_web/js/ui.js`  
+   Use a **`<div id="np-art">`** with `background-image` set via JS (`art.style.backgroundImage = url(...)`). Default placeholder in CSS: `#np-art { background-image: url("assets/icons/icon-512.png"); }`.
+
+3. **Queue item cover** (optional but recommended)  
+   Same pattern: div with background-image and `pointer-events: none` on the visual layer so the container receives touch.
+
+## Rules
+
+- **No `<img>` for list or Now Playing cover art** in `ui_web/`. Use `div` + `background-image` and `bg-cover` / `bg-center` (or equivalent).
+- **Escape URLs** when setting `background-image` in JS (e.g. `"` → `%22`, `'` → `%27`).
+- **Long-press target:** Ensure the element that receives the touch is the **container** (e.g. `.relative.w-12.h-12` or `.queue-item-cover`), not an image, so the browser does not show an image preview.
+- **Active row overlay:** The playing indicator overlay (`.active-indicator-container`) must have `pointer-events: none` so touches pass through to the cover container and the bug does not reappear on the currently playing row.
+
+If you add new cover-art UI (e.g. another list or modal), use the same pattern (div + background-image, no img) to avoid reintroducing the bug.

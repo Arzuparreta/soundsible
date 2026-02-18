@@ -27,6 +27,11 @@
             --text-dim: #808080;
             --glass-border: rgba(255, 255, 255, 0.08);
             --shadow: rgba(0, 0, 0, 0.5);
+            --radius-omni: 28px;
+            --radius-omni-sm: 20px;
+            --radius-omni-sm-inset: 12px; /* parent radius − padding: parallel corners inside song/queue containers */
+            --radius-omni-xs: 14px;
+            --shadow-omni: 0 20px 50px rgba(0, 0, 0, 0.5);
         }
 
         [data-theme="light"] {
@@ -75,6 +80,12 @@
             transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1), background-color 0.3s ease;
             will-change: transform;
             background-color: var(--bg-card); /* Ensure solid background */
+        }
+
+        /* Prevent browser long-press image preview (duplicate cover) when opening Now Playing via hold */
+        .song-row-cover-img,
+        .queue-item-cover-img {
+            pointer-events: none;
         }
 
         .swipe-hints {
@@ -150,6 +161,23 @@
             transform: translateY(0) scale(1);
         }
 
+        #soundmash-view {
+            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, visibility 0.4s;
+            will-change: transform, opacity;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(100%) scale(0.98);
+            background: rgba(13, 13, 15, 0.85);
+            backdrop-filter: blur(48px);
+            -webkit-backdrop-filter: blur(48px);
+            border-top: 1px solid var(--glass-border);
+        }
+        #soundmash-view.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0) scale(1);
+        }
+
         #action-menu {
             visibility: hidden;
             transition: visibility 0.4s;
@@ -212,28 +240,13 @@
             100% { transform: scale(1); opacity: 0.8; }
         }
 
-        /* Playing indicator: infinity (figure-8) path, smooth and consistent */
+        /* Playing indicator: aggressive breathing animation */
         .active-indicator-container.is-playing .playing-icon {
-            animation: playing-icon-infinity 2s linear infinite;
+            animation: playing-icon-breathe 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
-        @keyframes playing-icon-infinity {
-            /* x = 1.5*sin(t), y = 1.5*sin(2t) — figure-8, 16 steps */
-            0%, 100% { transform: translate(0, 0); }
-            6.25% { transform: translate(0.6px, 1.4px); }
-            12.5% { transform: translate(1.1px, 1.5px); }
-            18.75% { transform: translate(1.4px, 1.4px); }
-            25% { transform: translate(1.5px, 0); }
-            31.25% { transform: translate(1.4px, -1.4px); }
-            37.5% { transform: translate(1.1px, -1.5px); }
-            43.75% { transform: translate(0.6px, -1.4px); }
-            50% { transform: translate(0, 0); }
-            56.25% { transform: translate(-0.6px, -1.4px); }
-            62.5% { transform: translate(-1.1px, -1.5px); }
-            68.75% { transform: translate(-1.4px, -1.4px); }
-            75% { transform: translate(-1.5px, 0); }
-            81.25% { transform: translate(-1.4px, 1.4px); }
-            87.5% { transform: translate(-1.1px, 1.5px); }
-            93.75% { transform: translate(-0.6px, 1.4px); }
+        @keyframes playing-icon-breathe {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.4); }
         }
 
         @keyframes omni-marquee {
@@ -261,7 +274,7 @@
             top: 0;
             will-change: transform;
             box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
-            border-radius: 1rem;
+            border-radius: var(--radius-omni);
             border: 1px solid rgba(255, 255, 255, 0.14);
             background: rgba(255, 255, 255, 0.10);
             backdrop-filter: blur(22px) saturate(180%);
@@ -326,6 +339,23 @@
                         color 0.3s ease;
         }
 
+        #omni-label.fade-out {
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        #omni-label.fade-in {
+            color: var(--accent);
+            font-weight: 900;
+            transform: translateX(0px) scale(1.3);
+            opacity: 0;
+            transition: opacity 0.2s ease, color 0.2s ease, transform 0.2s ease;
+        }
+
+        #omni-label.fade-in.fade-in-active {
+            opacity: 1;
+        }
+
         /* Hitbox: expand touch area around island */
         #omni-island + #omni-touch-area {
             inset-x: -30px;
@@ -350,6 +380,46 @@
             opacity: 1;
             pointer-events: auto;
         }
+        /* Hide omnibar progress only when NP full view shows its own timeline (not in preview) */
+        body.now-playing-open.np-timeline-visible #omni-progress-track {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Search Form State */
+        #omni-search-form {
+            filter: blur(8px);
+        }
+        #omni-search-form.active {
+            opacity: 1;
+            scale: 1;
+            filter: blur(0px);
+            pointer-events: auto;
+        }
+        .omni-search-input {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 14px;
+            letter-spacing: -0.01em;
+        }
+        .omni-search-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+            transition: opacity 360ms;
+        }
+        .omni-search-input.placeholder-faded::placeholder {
+            opacity: 0;
+        }
+
+        /* Keyboard Animation: Platform-specific */
+        #omni-island-container {
+            transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+            will-change: transform;
+        }
+        #omni-island-container.omni-keyboard-ios {
+            transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+        #omni-island-container.omni-keyboard-android {
+            transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
 
         /* Artists: on touch, never use browser :hover/:active for card (wrong element gets selected). Only our .artist-card-tapped on real tap shows feedback. */
         @media (hover: none) {
@@ -373,15 +443,34 @@
         .artist-album-expanded .artist-album-tracks { display: block !important; }
         .artist-album-expanded .artist-album-chevron { transform: rotate(180deg); }
 
-        /* Now Playing: flying timeline under cover art */
+        /* Now Playing: cover as div (no img) to avoid OS/browser image transition snapshot; 2px crop each side */
+        #np-art {
+            background-image: url("assets/icons/icon-512.png");
+            margin: 2px;
+            width: calc(100% - 4px);
+            max-width: calc(340px - 4px);
+        }
+
+        /* Now Playing: hide "Now Playing" label in preview (B's page while A is playing) */
+        #now-playing-view.np-preview #np-now-playing-label {
+            opacity: 0;
+            pointer-events: none;
+        }
+        /* Now Playing: flying timeline under cover art; hidden in preview (no mini bar) */
+        #now-playing-view.active #np-seek-container:not(.np-timeline-visible) {
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
+        }
         #np-seek-container {
             transform: translateY(80px) scaleX(0.15) scaleY(0.3);
-            opacity: 0.7;
             transition: none;
         }
         #np-seek-container.np-timeline-visible {
             transform: translateY(0) scaleX(1) scaleY(1);
             opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
             transition: transform 0.35s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.3s ease;
         }
     </style>
@@ -391,7 +480,7 @@
         <div class="relative w-24 h-24 mb-8">
             <div class="absolute inset-0 border-4 border-[var(--accent)]/10 rounded-full"></div>
             <div class="absolute inset-0 border-4 border-t-[var(--accent)] rounded-full animate-spin"></div>
-            <img src="assets/icons/icon-512.png" class="absolute inset-4 w-16 h-16 rounded-2xl opacity-40 grayscale" alt="Logo">
+            <img src="assets/icons/icon-512.png" class="absolute inset-4 w-16 h-16 rounded-[var(--radius-omni-sm)] opacity-40 grayscale" alt="Logo">
         </div>
         <div class="text-[10px] font-black uppercase tracking-[0.4em] text-[var(--accent)] animate-pulse">Initializing Station</div>
     </div>
@@ -407,7 +496,7 @@
                 <i class="fas fa-list-ul"></i>
                 <div id="queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-black">0</div>
             </button>
-            <div id="queue-popover" class="mt-4 w-72 glass-view rounded-3xl border border-white/10 shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300">
+            <div id="queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-white/10 shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
                 <div class="p-5">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Next Up</h3>
@@ -431,7 +520,7 @@
                     <span>Back</span>
                 </button>
                 <div id="artist-detail-hero" class="flex flex-col sm:flex-row items-center sm:items-end gap-6 mb-10">
-                    <img id="artist-detail-cover" src="" alt="" class="w-32 h-32 sm:w-40 sm:h-40 rounded-2xl shadow-2xl object-cover border border-[var(--glass-border)] bg-[var(--bg-card)] flex-shrink-0">
+                    <img id="artist-detail-cover" src="" alt="" class="w-32 h-32 sm:w-40 sm:h-40 rounded-[var(--radius-omni-sm)] shadow-2xl object-cover border border-[var(--glass-border)] bg-[var(--bg-card)] flex-shrink-0">
                     <h1 id="artist-detail-title" class="text-4xl md:text-6xl font-black tracking-tighter leading-none text-center sm:text-left">Artist</h1>
                 </div>
                 <section class="mb-10">
@@ -444,7 +533,6 @@
                 </section>
             </div>
             <div id="view-search" class="view hidden">
-                <input type="text" id="search-input" placeholder="Search library..." class="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 focus:outline-none focus:border-[var(--accent)] mb-8 transition-colors">
                 <div id="search-results" class="space-y-2"></div>
             </div>
             <div id="view-favourites" class="view hidden">
@@ -452,12 +540,12 @@
             </div>
             <div id="view-downloader" class="view hidden">
                 <div class="space-y-6">
-                    <div class="glass-view rounded-3xl p-6 border border-white/10">
-                        <textarea id="dl-input" rows="3" placeholder="Spotify/YouTube URLs..." class="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-mono mb-4"></textarea>
-                        <button id="dl-add-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all active:scale-95">Add to Queue</button>
+                    <div class="glass-view rounded-[var(--radius-omni)] p-6 border border-white/10">
+                        <textarea id="dl-input" rows="3" placeholder="Spotify/YouTube URLs..." class="w-full bg-black/40 border border-white/5 rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-mono mb-4"></textarea>
+                        <button id="dl-add-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 py-4 rounded-[var(--radius-omni-xs)] font-black uppercase tracking-widest text-xs transition-all active:scale-95">Add to Queue</button>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="glass-view rounded-3xl p-6 border border-white/10 flex flex-col h-[400px]">
+                        <div class="glass-view rounded-[var(--radius-omni)] p-6 border border-white/10 flex flex-col h-[400px]">
                             <div class="flex justify-between items-center mb-4">
                                 <h2 class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Active Queue</h2>
                                 <div class="flex space-x-2">
@@ -467,7 +555,7 @@
                             </div>
                             <div id="dl-queue-list" class="flex-1 overflow-y-auto space-y-2 custom-scrollbar"></div>
                         </div>
-                        <div class="bg-black/40 rounded-3xl p-6 border border-white/5 flex flex-col h-[400px]">
+                        <div class="bg-black/40 rounded-[var(--radius-omni)] p-6 border border-white/5 flex flex-col h-[400px]">
                             <h2 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Logs</h2>
                             <div id="dl-logs" class="flex-1 overflow-y-auto font-mono text-[10px] text-green-500/60 space-y-1 custom-scrollbar"></div>
                         </div>
@@ -475,7 +563,7 @@
                 </div>
             </div>
             <div id="view-settings" class="view hidden">
-                <div class="glass-view rounded-3xl p-8 border border-white/10 mb-6">
+                <div class="glass-view rounded-[var(--radius-omni)] p-8 border border-white/10 mb-6">
                     <div class="flex justify-between items-center mb-8">
                         <div>
                             <h2 class="text-xl font-bold">Visual Theme</h2>
@@ -495,8 +583,8 @@
                         </button>
                     </div>
                     <h2 class="text-xl font-bold mb-4">Link Library</h2>
-                    <textarea id="sync-token-input" rows="4" class="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-[var(--secondary)] font-mono text-xs focus:outline-none focus:border-[var(--accent)] mb-6" placeholder="Paste token..."></textarea>
-                    <button id="import-token-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 text-white font-black py-4 rounded-2xl transition-all mb-8">Import Token</button>
+                    <textarea id="sync-token-input" rows="4" class="w-full bg-black/40 border border-white/5 rounded-[var(--radius-omni-xs)] px-4 py-3 text-[var(--secondary)] font-mono text-xs focus:outline-none focus:border-[var(--accent)] mb-6" placeholder="Paste token..."></textarea>
+                    <button id="import-token-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 text-white font-black py-4 rounded-[var(--radius-omni-xs)] transition-all mb-8">Import Token</button>
                     <div class="space-y-4 pt-8 border-t border-white/5">
                         <div class="flex justify-between text-sm">
                             <span class="text-gray-400">Station Status</span>
@@ -525,7 +613,7 @@
                         <button type="button" id="omni-shuffle-btn" class="w-full h-full flex items-center justify-center rounded-full text-[var(--text-dim)] transition-colors active:scale-90" aria-label="Shuffle"><i class="fas fa-shuffle text-sm"></i></button>
                     </div>
                     <div class="relative pointer-events-none">
-                        <div id="omni-island" class="glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all ease-[cubic-bezier(0.19,1,0.22,1)] overflow-hidden" style="width: 56px; height: 56px; border-radius: 28px; transition-duration: 600ms;">
+                        <div id="omni-island" class="glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all ease-[cubic-bezier(0.19,1,0.22,1)] overflow-hidden" style="width: 56px; height: 56px; border-radius: var(--radius-omni); transition-duration: 600ms;">
                             <div id="omni-progress-track" class="absolute bottom-0 left-[18px] right-[18px] h-[2px]">
                                 <div id="omni-progress" class="absolute inset-y-0 left-0 bg-[var(--accent)] w-0 transition-all duration-100 shadow-[0_0_10px_var(--accent)]"></div>
                             </div>
@@ -558,6 +646,9 @@
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="downloader"><i class="fas fa-cloud-arrow-down text-base text-white/40"></i></div>
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="settings"><i class="fas fa-cog text-base text-white/40"></i></div>
                             </div>
+                            <div id="omni-search-form" class="absolute inset-0 flex items-center px-4 opacity-0 scale-95 transition-all pointer-events-none" style="transition-duration: 360ms;">
+                                <input type="text" id="omni-search-input" placeholder="Search library..." class="omni-search-input w-full bg-transparent border-none outline-none text-sm font-medium text-white/90 placeholder:text-white/40 px-2 py-2 focus:outline-none">
+                            </div>
                         </div>
         
                         <!-- The Hitbox: Now placed after island to allow CSS sibling targeting -->
@@ -581,7 +672,7 @@
             <div class="flex justify-between items-center pt-4 mb-2">
                 <button onclick="UI.hideNowPlaying()" class="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-white/10 rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-chevron-down"></i></button>
                 <div class="text-center px-4 flex-1 truncate">
-                    <div class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)] mb-1">Now Playing</div>
+                    <div id="np-now-playing-label" class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)] mb-1 transition-opacity duration-300 ease-out">Now Playing</div>
                     <div id="np-album-title" class="text-[11px] font-bold text-[var(--text-dim)] truncate font-mono">Album</div>
                 </div>
                 <button onclick="UI.showActionMenu(store.state.currentTrack?.id)" class="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-white/10 rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-ellipsis"></i></button>
@@ -593,7 +684,7 @@
                     <div id="np-title" class="text-3xl font-black mb-1 tracking-tight truncate text-white">Song Title</div>
                     <div id="np-artist" class="text-sm text-[var(--accent)] font-bold uppercase tracking-widest truncate">Artist</div>
                 </div>
-                <img id="np-art" src="assets/icons/icon-512.png" class="w-full aspect-square max-w-[340px] rounded-[40px] shadow-[0_40px_80px_rgba(0,0,0,0.8)] object-cover border border-white/10" alt="Art">
+                <div id="np-art" class="np-art-bg w-full aspect-square max-w-[340px] rounded-[var(--radius-omni)] shadow-[0_40px_80px_rgba(0,0,0,0.8)] border border-white/10 overflow-hidden bg-cover bg-center" role="img" aria-label="Album art"></div>
                 <!-- Flying timeline: seek bar under cover art -->
                 <div id="np-seek-container" class="w-full max-w-[340px] mt-4 px-1 cursor-pointer touch-manipulation" role="slider" aria-label="Seek" tabindex="0">
                     <div class="h-2 rounded-full bg-white/10 overflow-hidden">
@@ -606,23 +697,37 @@
         </div>
     </div>
 
+    <!-- SoundMash (slide from bottom when omnibar collapsed + swipe-up-and-hold) -->
+    <div id="soundmash-view" class="fixed inset-0 z-[115] hidden flex flex-col touch-none overflow-hidden min-h-full-safe">
+        <div class="relative flex-1 flex flex-col p-8 safe-top safe-bottom">
+            <div class="flex justify-between items-center pt-4">
+                <button onclick="UI.hideSoundMash()" class="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-white/10 rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-chevron-down"></i></button>
+                <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)]">SoundMash</h1>
+                <div class="w-12"></div>
+            </div>
+            <div class="flex-1 flex items-center justify-center">
+                <!-- Blank for later -->
+            </div>
+        </div>
+    </div>
+
     <!-- Action Menu -->
     <div id="action-menu" class="fixed inset-0 z-[150] hidden">
         <div id="action-menu-overlay" class="absolute inset-0 bg-black/60 backdrop-blur-[3.2px] transition-all duration-150 ease-out opacity-0"></div>
-        <div id="action-menu-sheet" class="absolute bottom-0 left-0 right-0 bg-gray-950 rounded-t-[40px] p-8 transition-transform transform translate-y-full border-t border-white/5">
+        <div id="action-menu-sheet" class="absolute bottom-0 left-0 right-0 bg-gray-950 rounded-t-[var(--radius-omni)] p-8 transition-transform transform translate-y-full border-t border-white/5">
             <div class="w-12 h-1 bg-white/10 rounded-full mx-auto mb-8"></div>
             <div class="flex items-center space-x-4 mb-10">
-                <img id="action-track-art" src="assets/icons/icon-192.png" class="w-16 h-16 rounded-2xl object-cover shadow-2xl" alt="Art">
+                <img id="action-track-art" src="assets/icons/icon-192.png" class="w-16 h-16 rounded-[var(--radius-omni-sm)] object-cover shadow-2xl" alt="Art">
                 <div class="flex-1 truncate">
                     <div id="action-track-title" class="text-xl font-black truncate">Title</div>
                     <div id="action-track-artist" class="text-[10px] text-gray-400 font-bold uppercase tracking-widest truncate">Artist</div>
                 </div>
             </div>
             <div class="space-y-2">
-                <button id="action-queue" class="w-full flex items-center space-x-4 p-4 active:bg-white/10 rounded-2xl transition-colors font-bold focus:outline-none"><i class="fas fa-list-ul text-[var(--secondary)]"></i><span id="action-queue-text">Add to Queue</span></button>
-                <button id="action-edit-metadata" class="w-full flex items-center space-x-4 p-4 active:bg-white/10 rounded-2xl transition-colors font-bold focus:outline-none"><i class="fas fa-pen-to-square text-purple-400"></i><span>Edit Metadata</span></button>
-                <button id="action-fav" class="w-full flex items-center space-x-4 p-4 active:bg-white/10 rounded-2xl transition-colors font-bold focus:outline-none"><i class="fas fa-heart text-[var(--accent)]"></i><span id="action-fav-text">Favourite</span></button>
-                <button id="action-delete" class="w-full flex items-center space-x-4 p-4 active:bg-red-500/10 text-red-400 rounded-2xl transition-colors font-bold focus:outline-none"><i class="fas fa-trash-can"></i><span>Delete Track</span></button>
+                <button id="action-queue" class="w-full flex items-center space-x-4 p-4 active:bg-white/10 rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none"><i class="fas fa-list-ul text-[var(--secondary)]"></i><span id="action-queue-text">Add to Queue</span></button>
+                <button id="action-edit-metadata" class="w-full flex items-center space-x-4 p-4 active:bg-white/10 rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none"><i class="fas fa-pen-to-square text-purple-400"></i><span>Edit Metadata</span></button>
+                <button id="action-fav" class="w-full flex items-center space-x-4 p-4 active:bg-white/10 rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none"><i class="fas fa-heart text-[var(--accent)]"></i><span id="action-fav-text">Favourite</span></button>
+                <button id="action-delete" class="w-full flex items-center space-x-4 p-4 active:bg-red-500/10 text-red-400 rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none"><i class="fas fa-trash-can"></i><span>Delete Track</span></button>
             </div>
             <button onclick="UI.hideActionMenu()" class="w-full mt-8 py-4 text-gray-500 font-bold">Close</button>
         </div>
@@ -630,7 +735,7 @@
 
     <!-- Metadata Editor -->
     <div id="metadata-editor" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-[9.6px] transition-all duration-150 ease-out">
-        <div id="metadata-editor-content" class="glass-view rounded-[40px] w-full max-w-lg p-8 border border-white/10 shadow-2xl transition-all transform scale-95 opacity-0" style="backdrop-filter: blur(48px); -webkit-backdrop-filter: blur(48px); background: rgba(15, 15, 18, 0.85); transition-duration: 600ms; transition-timing-function: cubic-bezier(0.19, 1, 0.22, 1);">
+        <div id="metadata-editor-content" class="glass-view rounded-[var(--radius-omni)] w-full max-w-lg p-8 border border-white/10 shadow-2xl transition-all transform scale-95 opacity-0" style="box-shadow: var(--shadow-omni); transition-duration: 600ms; transition-timing-function: cubic-bezier(0.19, 1, 0.22, 1);">
             <div class="flex justify-between items-center mb-8">
                 <h2 class="text-2xl font-black tracking-tighter">Edit Metadata</h2>
                 <div class="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--accent)] bg-[var(--accent)]/10 px-3 py-1 rounded-full border border-[var(--accent)]/20 font-mono">Surgical Mode</div>
@@ -639,16 +744,16 @@
             <div class="space-y-6">
                 <div class="flex flex-col items-center space-y-4">
                     <div class="relative group">
-                        <img id="edit-cover-preview" src="assets/icons/icon-512.png" class="w-40 h-40 rounded-3xl shadow-2xl object-cover border border-white/5" alt="Art">
-                        <div class="absolute inset-0 bg-black/40 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                        <img id="edit-cover-preview" src="assets/icons/icon-512.png" class="w-40 h-40 rounded-[var(--radius-omni-sm)] shadow-2xl object-cover border border-white/5" alt="Art">
+                        <div class="absolute inset-0 bg-black/40 rounded-[var(--radius-omni-sm)] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                             <i class="fas fa-camera text-2xl text-white/80"></i>
                         </div>
                     </div>
                     <div class="flex space-x-3 w-full">
-                        <button id="edit-auto-fetch-btn" class="flex-1 bg-white/5 active:bg-white/10 py-3 rounded-2xl text-xs font-bold transition-all focus:outline-none border border-white/5 active:scale-95">
+                        <button id="edit-auto-fetch-btn" class="flex-1 bg-white/5 active:bg-white/10 py-3 rounded-[var(--radius-omni-xs)] text-xs font-bold transition-all focus:outline-none border border-white/5 active:scale-95">
                             <i class="fas fa-magic mr-2 text-[var(--accent)]"></i>Auto-fetch
                         </button>
-                        <button id="edit-upload-btn" class="flex-1 bg-white/5 active:bg-white/10 py-3 rounded-2xl text-xs font-bold transition-all focus:outline-none border border-white/5 active:scale-95">
+                        <button id="edit-upload-btn" class="flex-1 bg-white/5 active:bg-white/10 py-3 rounded-[var(--radius-omni-xs)] text-xs font-bold transition-all focus:outline-none border border-white/5 active:scale-95">
                             <i class="fas fa-upload mr-2 text-[var(--secondary)]"></i>Upload
                         </button>
                     </div>
@@ -658,15 +763,15 @@
                 <div class="space-y-4">
                     <div class="group">
                         <label class="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors font-mono">Track Title</label>
-                        <input type="text" id="edit-title" class="w-full bg-black/40 border border-white/5 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] focus:bg-black/60 transition-all font-medium text-white/90">
+                        <input type="text" id="edit-title" class="w-full bg-black/40 border border-white/5 rounded-[var(--radius-omni-xs)] px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] focus:bg-black/60 transition-all font-medium text-white/90">
                     </div>
                     <div class="group">
                         <label class="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors font-mono">Artist Name</label>
-                        <input type="text" id="edit-artist" class="w-full bg-black/40 border border-white/5 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] focus:bg-black/60 transition-all font-medium text-white/90">
+                        <input type="text" id="edit-artist" class="w-full bg-black/40 border border-white/5 rounded-[var(--radius-omni-xs)] px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] focus:bg-black/60 transition-all font-medium text-white/90">
                     </div>
                     <div class="group">
                         <label class="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors font-mono">Album Title</label>
-                        <input type="text" id="edit-album" class="w-full bg-black/40 border border-white/5 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] focus:bg-black/60 transition-all font-medium text-white/90">
+                        <input type="text" id="edit-album" class="w-full bg-black/40 border border-white/5 rounded-[var(--radius-omni-xs)] px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] focus:bg-black/60 transition-all font-medium text-white/90">
                     </div>
                 </div>
 
@@ -675,7 +780,7 @@
 
                 <div class="flex space-x-4 pt-4">
                     <button onclick="UI.hideMetadataEditor()" class="flex-1 py-4 text-white/40 font-black uppercase tracking-widest text-[10px] active:text-white transition-colors focus:outline-none font-mono">Cancel</button>
-                    <button id="edit-save-btn" class="flex-[2] bg-[var(--accent)] text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-[var(--accent)]/20 transition-all active:scale-95 active:brightness-110 focus:outline-none">
+                    <button id="edit-save-btn" class="flex-[2] bg-[var(--accent)] text-white py-4 rounded-[var(--radius-omni-xs)] font-black uppercase tracking-widest text-xs shadow-lg shadow-[var(--accent)]/20 transition-all active:scale-95 active:brightness-110 focus:outline-none">
                         Save & Sync
                     </button>
                 </div>
@@ -685,11 +790,11 @@
 
     <!-- Connection Refiner -->
     <div id="connection-overlay" class="fixed inset-0 bg-black/90 z-[300] flex items-center justify-center p-6 hidden">
-        <div class="glass-view rounded-3xl p-8 max-w-sm w-full border border-white/10 shadow-2xl">
+        <div class="glass-view rounded-[var(--radius-omni)] p-8 max-w-sm w-full border border-white/10 shadow-2xl" style="box-shadow: var(--shadow-omni);">
             <h2 class="text-2xl font-black text-center mb-2">Station Offline</h2>
             <p class="text-sm text-gray-400 text-center mb-8">Enter the IP address of your Soundsible Station.</p>
-            <input type="text" id="manual-ip-input" placeholder="e.g. 192.168.1.138" class="w-full bg-black border border-white/10 rounded-2xl px-4 py-4 text-center text-[var(--secondary)] font-mono mb-4">
-            <button id="reconnect-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 font-black py-4 rounded-2xl mb-4">Connect</button>
+            <input type="text" id="manual-ip-input" placeholder="e.g. 192.168.1.138" class="w-full bg-black border border-white/10 rounded-[var(--radius-omni-xs)] px-4 py-4 text-center text-[var(--secondary)] font-mono mb-4">
+            <button id="reconnect-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 font-black py-4 rounded-[var(--radius-omni-xs)] mb-4">Connect</button>
             <button onclick="window.hideConnectionRefiner()" class="w-full text-xs text-gray-500 font-bold">Cancel</button>
         </div>
     </div>

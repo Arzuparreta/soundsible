@@ -85,11 +85,21 @@ class SoundsibleLauncher:
         self._start_watcher()
         
     def cleanup(self):
-        """Force kill all child processes on exit."""
-        if not self.child_processes:
-            return
-            
-        console.print("\n[dim]Cleaning up background services...[/dim]")
+        """Force kill all child processes and clean up resources on exit."""
+        # Check for API observer in daemon mode
+        api_observer_ref = None
+        try:
+            from shared.api import api_observer
+            api_observer_ref = api_observer
+        except:
+            pass
+        
+        has_work = bool(self.child_processes) or api_observer_ref is not None
+        
+        if has_work:
+            console.print("\n[dim]Cleaning up background services...[/dim]")
+        
+        # Clean up child processes
         for proc in self.child_processes:
             try:
                 if platform.system() != "Windows":
@@ -100,7 +110,15 @@ class SoundsibleLauncher:
                 try: proc.kill()
                 except: pass
         
-        # Final safety check: kill anything on port 5005
+        # Stop API Observer if running in daemon mode
+        if api_observer_ref is not None:
+            try:
+                api_observer_ref.stop()
+                api_observer_ref.join(timeout=2)
+            except:
+                pass
+        
+        # Final safety check: kill anything on port 5005 (always run this)
         try:
             if self.os_name == "Linux":
                 subprocess.run(["fuser", "-k", "5005/tcp"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
@@ -481,7 +499,7 @@ class SoundsibleLauncher:
         if "--daemon" in sys.argv:
             console.print("[bold green]Soundsible Daemon is running.[/bold green]")
             from shared.api import start_api
-            start_api()
+            start_api()  # This blocks, but api_observer is set as module-level variable
             return
 
         while True:

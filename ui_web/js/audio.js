@@ -178,12 +178,8 @@ class AudioEngine {
         const duration = this.audio.duration || 0;
         const currentTime = this.audio.currentTime || 0;
         const progress = (currentTime / duration) * 100 || 0;
-        
-        // Update Mini-bar
-        const el = document.getElementById('player-progress');
-        if (el) el.style.width = `${progress}%`;
 
-        // Broadcast for Now Playing view
+        // Broadcast for Now Playing view and omnibar
         window.dispatchEvent(new CustomEvent('audio:timeupdate', { 
             detail: { progress, currentTime, duration } 
         }));
