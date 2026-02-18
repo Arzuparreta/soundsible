@@ -5,6 +5,7 @@
 import { store } from './store.js';
 import { Resolver } from './resolver.js';
 import { UI } from './ui.js';
+import { Haptics } from './haptics.js';
 import { audioEngine } from './audio.js';
 import { connectionManager } from './connection.js';
 import { Downloader } from './downloader.js';
@@ -108,26 +109,10 @@ window.renderQueue = renderQueue;
 window.store = store;
 window.audioEngine = audioEngine;
 
-window.showAlbumDetail = (albumName, artistName) => {
-    const state = store.state;
-    const tracks = state.library.filter(t => t.album === albumName && (t.album_artist || t.artist) === artistName);
-    if (tracks.length === 0) return;
-
-    window._currentAlbumTracks = tracks;
-
-    // 1. Populate Header
-    document.getElementById('album-detail-title').textContent = albumName;
-    document.getElementById('album-detail-artist').textContent = artistName;
-    document.getElementById('album-detail-cover').src = Resolver.getCoverUrl(tracks[0]);
-
-    // 2. Render Tracks
-    renderSongList(tracks, 'album-tracks');
-
-    // 3. Switch View
-    UI.showView('album-detail');
-    
-    // Store current view context for periodic sync
-    window._currentAlbum = { name: albumName, artist: artistName };
+window.showArtistDetail = (artistName) => {
+    window._currentArtistName = artistName;
+    renderArtistDetail(artistName);
+    UI.showView('artist-detail');
 };
 
 // INITIALIZATION ERROR HANDLER
@@ -148,16 +133,19 @@ async function init() {
         console.log("UI: Initializing...");
         UI.init();
         initSearch();
-        
+        initArtistScrollSuppress();
+        // #region agent log
+        fetch('http://127.0.0.1:7390/ingest/5e87ad09-2e12-436a-ac69-c14c6b45cb46', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ed9dd2' }, body: JSON.stringify({ sessionId: 'ed9dd2', runId: 'init', hypothesisId: 'H_media', location: 'app.js:init', message: 'hover:none media', data: { hoverNone: typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches }, timestamp: Date.now() }) }).catch(() => {});
+        // #endregion
         // 2. Perform Connection Race
         const endpoints = [...store.state.priorityList, window.location.hostname];
         const uniqueEndpoints = [...new Set(endpoints)].filter(e => e);
         console.log("NET: Probing endpoints:", uniqueEndpoints);
         await connectionManager.findActiveHost(uniqueEndpoints);
         
-        // 3. Load Library Data
-        console.log("DATA: Syncing library...");
-        await store.syncLibrary();
+        // 3. Load Library Data (Non-blocking)
+        console.log("DATA: Starting background library sync...");
+        store.syncLibrary();
         
         // 3. Subscribe to state changes for re-rendering (Optimized)
         let lastLibraryJson = null; // Force first render in subscription
@@ -177,9 +165,12 @@ async function init() {
             if (currentLibJson !== lastLibraryJson) {
                 console.log("Library synced, full re-render.");
                 renderHomeSongs(state.library);
-                renderAlbumGrid(state.library);
+                renderArtistList(state.library);
                 renderFavourites(state);
                 renderQueue(state);
+                if (UI.currentView === 'artist-detail' && window._currentArtistName) {
+                    renderArtistDetail(window._currentArtistName);
+                }
                 lastLibraryJson = currentLibJson;
             } else {
                 // 2. If ONLY favorites changed, we update the indicators surgically
@@ -205,15 +196,6 @@ async function init() {
             
             // --- End Smart Rendering ---
 
-            // Sync current album detail if open (Always refresh this if open)
-            if (window._currentAlbum && UI.currentView === 'album-detail') {
-                const tracks = state.library.filter(t => 
-                    t.album === window._currentAlbum.name && 
-                    (t.album_artist || t.artist) === window._currentAlbum.artist
-                );
-                renderSongList(tracks, 'album-tracks');
-            }
-            
             // Persist Search results if user is currently searching
             const searchInput = document.getElementById('search-input');
             if (searchInput && searchInput.value.trim() && UI.currentView === 'search') {
@@ -235,18 +217,9 @@ async function init() {
         if (store.state.library.length > 0) {
             console.log("DATA: Performing initial render...");
             renderHomeSongs(store.state.library);
-            renderAlbumGrid(store.state.library);
+            renderArtistList(store.state.library);
             renderFavourites(store.state);
             renderQueue(store.state);
-        }
-
-        // 5. Global Control Handlers
-        const playBtn = document.getElementById('mini-play-btn');
-        if (playBtn) {
-            playBtn.onclick = (e) => {
-                e.stopPropagation();
-                audioEngine.toggle();
-            };
         }
     } catch (err) {
         console.error("CRITICAL: App initialization failed:", err);
@@ -267,7 +240,7 @@ async function init() {
             console.log("Periodic Sync: Verifying library truth...");
             store.syncLibrary();
         }
-    }, 30000);
+    }, 300000);
 }
 
 function renderSongList(tracks, containerId) {
@@ -279,40 +252,77 @@ function renderSongList(tracks, containerId) {
         return;
     }
 
+    container.innerHTML = buildSongRowsHtml(tracks);
+}
+
+function renderHomeSongs(tracks) {
+    renderSongList(tracks, 'all-songs');
+}
+
+/** Split "A, B", "A feat. B", "A + B" etc. into trimmed unique names. Single artist -> [artist]. */
+function parseArtistNames(artistString) {
+    if (!artistString || typeof artistString !== 'string') return [];
+    const raw = artistString.trim();
+    if (!raw) return [];
+    const parts = raw.split(/\s*,\s*|\s+feat\.?\s+|\s+ft\.?\s+|\s+and\s+|\s+&\s+|\s+\+\s+|\s+x\s+/i)
+        .map(s => s.trim())
+        .filter(Boolean);
+    return [...new Set(parts)];
+}
+
+function getArtistTracks(artistName) {
+    return store.state.library.filter(t => {
+        const names = parseArtistNames(t.album_artist || t.artist);
+        return names.includes(artistName);
+    });
+}
+
+function getArtistAlbums(artistName) {
+    const tracks = getArtistTracks(artistName);
+    const byAlbum = {};
+    tracks.forEach(t => {
+        const album = t.album || 'Unknown Album';
+        if (!byAlbum[album]) byAlbum[album] = { tracks: [], coverTrack: t };
+        byAlbum[album].tracks.push(t);
+        if (t.track_number != null && (byAlbum[album].coverTrack.track_number == null || t.track_number < byAlbum[album].coverTrack.track_number)) {
+            byAlbum[album].coverTrack = t;
+        }
+    });
+    return Object.entries(byAlbum)
+        .map(([album, { tracks: albumTracks, coverTrack }]) => ({
+            album,
+            tracks: albumTracks.sort((a, b) => (a.track_number ?? 999) - (b.track_number ?? 999)),
+            coverTrack
+        }))
+        .sort((a, b) => a.album.localeCompare(b.album));
+}
+
+function buildSongRowsHtml(tracks) {
     const activeId = store.state.currentTrack ? store.state.currentTrack.id : null;
     const favIds = store.state.favorites || [];
-
-    const html = tracks.map(t => {
+    return tracks.map(t => {
         const isActive = t.id === activeId;
         const isFav = favIds.includes(t.id);
-        
         return `
             <div class="relative overflow-hidden rounded-2xl mb-2 group bg-[var(--bg-card)]">
-                <!-- Swipe Hints (Subtle) -->
-                <div class="absolute inset-0 flex items-center justify-between px-6 opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--accent)]/10">
+                <div class="swipe-hints absolute inset-0 flex items-center justify-between px-8 z-0 pointer-events-none">
                     <div class="text-[var(--secondary)] font-black text-[9px] uppercase tracking-[0.2em]">Queue</div>
                     <div class="text-[var(--accent)] font-black text-[9px] uppercase tracking-[0.2em]">Favourite</div>
                 </div>
-
-                <!-- Main Row -->
                 <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] border-transparent'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}" onclick="playTrack('${t.id}')">
                     <div class="relative w-12 h-12 flex-shrink-0">
                         <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-xl shadow-lg border border-white/5" alt="Cover">
-                        
-                        <!-- Active Indicator -->
-                        <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl backdrop-blur-[2px] ${isActive ? '' : 'hidden'}">
-                            <i class="fas fa-volume-up text-[var(--accent)] text-xs animate-pulse"></i>
+                        <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 rounded-xl backdrop-blur-[2px] ${isActive ? '' : 'hidden'}">
+                            <i class="fas fa-volume-high text-[var(--accent)] text-xs animate-pulse"></i>
                         </div>
-
-                        <!-- Favourite Dot -->
                         <div class="fav-indicator absolute -top-1 -right-1 w-3.5 h-3.5 bg-[var(--accent)] rounded-full border-2 border-[var(--bg-card)] shadow-lg ${isFav ? '' : 'hidden'}"></div>
                     </div>
                     <div class="ml-4 flex-1 truncate">
                         <div class="song-title font-bold text-sm truncate ${isActive ? 'text-white' : 'text-[var(--text-main)]'}">${esc(t.title)}</div>
-                        <div class="text-[10px] text-[var(--text-dim)] font-bold truncate uppercase tracking-widest mt-0.5">${esc(t.artist)}</div>
+                        <div class="text-[10px] text-[var(--text-dim)] font-bold truncate uppercase tracking-widest mt-0.5 font-mono">${esc(t.artist)}</div>
                     </div>
                     <div class="flex items-center space-x-3 ml-4">
-                        <div class="text-[9px] font-black font-mono text-[var(--text-dim)] opacity-50 tracking-tighter">${formatTime(t.duration)}</div>
+                        <div class="text-[9px] font-bold font-mono text-[var(--text-dim)] opacity-50 tracking-tighter">${formatTime(t.duration)}</div>
                         <button onclick="event.stopPropagation(); UI.showActionMenu('${t.id}')" class="w-10 h-10 flex items-center justify-center text-[var(--text-dim)] active:text-[var(--text-main)] transition-colors rounded-full active:bg-white/5 focus:outline-none">
                             <i class="fas fa-ellipsis-v text-xs"></i>
                         </button>
@@ -321,12 +331,132 @@ function renderSongList(tracks, containerId) {
             </div>
         `;
     }).join('');
-
-    container.innerHTML = html;
 }
 
-function renderHomeSongs(tracks) {
-    renderSongList(tracks, 'all-songs');
+window.toggleArtistAlbum = (ev) => {
+    const card = ev?.currentTarget?.closest?.('.artist-album-card');
+    if (!card) return;
+    const wasExpanded = card.classList.contains('artist-album-expanded');
+    document.querySelectorAll('.artist-album-card.artist-album-expanded').forEach(c => {
+        if (c !== card) c.classList.remove('artist-album-expanded');
+    });
+    card.classList.toggle('artist-album-expanded', !wasExpanded);
+};
+
+function renderArtistDetail(artistName) {
+    const tracks = getArtistTracks(artistName);
+    window._currentArtistTracks = tracks;
+    window._currentArtistName = artistName;
+
+    const titleEl = document.getElementById('artist-detail-title');
+    const coverEl = document.getElementById('artist-detail-cover');
+    if (titleEl) titleEl.textContent = artistName;
+    if (coverEl) {
+        const firstTrack = tracks[0];
+        if (firstTrack) {
+            coverEl.src = Resolver.getCoverUrl(firstTrack);
+            coverEl.alt = artistName;
+            coverEl.classList.remove('hidden');
+        } else {
+            coverEl.classList.add('hidden');
+        }
+    }
+
+    const albumsContainer = document.getElementById('artist-albums');
+    if (albumsContainer) {
+        const albums = getArtistAlbums(artistName);
+        if (albums.length === 0) {
+            albumsContainer.innerHTML = '<div class="col-span-full text-[var(--text-dim)] text-center py-8 text-sm">No albums</div>';
+        } else {
+            albumsContainer.innerHTML = albums.map(({ album, tracks: albumTracks, coverTrack }) => {
+                const trackLabel = albumTracks.length === 1 ? '1 track' : `${albumTracks.length} tracks`;
+                return `
+                    <div class="artist-album-card flex flex-col" data-album="${esc(album)}">
+                        <div class="artist-album-header cursor-pointer group rounded-2xl border border-[var(--glass-border)] bg-[var(--bg-card)] hover:border-[var(--accent)]/30 transition-colors active:scale-[0.98]" onclick="toggleArtistAlbum(event)">
+                            <div class="relative">
+                                <img src="${Resolver.getCoverUrl(coverTrack)}" class="w-full aspect-square object-cover rounded-t-2xl border-b border-white/5" alt="${esc(album)}">
+                                <div class="absolute bottom-2 right-2 w-6 h-6 rounded-full bg-black/60 flex items-center justify-center">
+                                    <i class="fas fa-chevron-down text-[10px] text-white transition-transform artist-album-chevron"></i>
+                                </div>
+                            </div>
+                            <div class="p-3">
+                                <div class="font-bold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${esc(album)}</div>
+                                <div class="text-[10px] font-mono text-[var(--text-dim)] truncate mt-0.5">${esc(trackLabel)}</div>
+                            </div>
+                        </div>
+                        <div class="artist-album-tracks mt-2 hidden overflow-hidden">
+                            ${buildSongRowsHtml(albumTracks)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+
+    const tracksContainer = document.getElementById('artist-tracks');
+    if (tracksContainer) {
+        if (tracks.length === 0) {
+            tracksContainer.innerHTML = '<div class="text-[var(--text-dim)] text-center py-10 italic text-sm">No tracks</div>';
+        } else {
+            const sorted = [...tracks].sort((a, b) => {
+                const albumCmp = (a.album || '').localeCompare(b.album || '');
+                if (albumCmp !== 0) return albumCmp;
+                return (a.track_number ?? 999) - (b.track_number ?? 999);
+            });
+            tracksContainer.innerHTML = buildSongRowsHtml(sorted);
+        }
+    }
+}
+
+function _artistElDesc(el) {
+    if (!el) return null;
+    const card = el.closest && el.closest('.artist-card');
+    const name = card ? (card.dataset?.artistName || card.querySelector('.artist-card-name')?.textContent?.trim() || '') : '';
+    return { tag: el.tagName, class: (el.className || '').slice(0, 80), artist: name || null };
+}
+
+function initArtistScrollSuppress() {
+    const viewArtists = document.getElementById('view-artists');
+    if (!viewArtists) return;
+    let scrollActive = false;
+    let touchMoveCount = 0;
+    const endpoint = 'http://127.0.0.1:7390/ingest/5e87ad09-2e12-436a-ac69-c14c6b45cb46';
+    const logBuffer = [];
+    const MAX_LOG = 50;
+    const send = (phase, hypothesisId, data) => {
+        const payload = { sessionId: 'ed9dd2', runId: 'touch', hypothesisId, location: 'app.js:initArtistScrollSuppress', message: 'artist touch ' + phase, data, timestamp: Date.now() };
+        logBuffer.push(payload);
+        if (logBuffer.length > MAX_LOG) logBuffer.shift();
+        fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ed9dd2' }, body: JSON.stringify(payload) }).catch(() => {});
+    };
+    window.__getArtistTouchLog = () => JSON.stringify(logBuffer, null, 2);
+    viewArtists.addEventListener('touchstart', (e) => {
+        scrollActive = false;
+        touchMoveCount = 0;
+        if (!e.touches.length) return;
+        const t = e.touches[0];
+        const under = document.elementFromPoint(t.clientX, t.clientY);
+        send('start', 'H_target', { x: t.clientX, y: t.clientY, target: _artistElDesc(e.target), fromPoint: _artistElDesc(under), same: e.target === under });
+    }, { passive: true });
+    viewArtists.addEventListener('touchmove', (e) => {
+        touchMoveCount++;
+        if (!scrollActive) {
+            scrollActive = true;
+            viewArtists.classList.add('artist-scroll-active');
+        }
+        if (e.touches.length && touchMoveCount <= 3) {
+            const t = e.touches[0];
+            const under = document.elementFromPoint(t.clientX, t.clientY);
+            send('move', 'H_fromPoint', { x: t.clientX, y: t.clientY, target: _artistElDesc(e.target), fromPoint: _artistElDesc(under), moveIndex: touchMoveCount });
+        }
+    }, { passive: true });
+    viewArtists.addEventListener('touchend', (e) => {
+        if (scrollActive) setTimeout(() => { viewArtists.classList.remove('artist-scroll-active'); scrollActive = false; }, 180);
+        if (!e.changedTouches.length) return;
+        const t = e.changedTouches[0];
+        const under = document.elementFromPoint(t.clientX, t.clientY);
+        send('end', 'H_active', { x: t.clientX, y: t.clientY, target: _artistElDesc(e.target), fromPoint: _artistElDesc(under), scrollActive, same: e.target === under });
+    }, { passive: true });
 }
 
 async function initSearch() {
@@ -345,49 +475,52 @@ async function initSearch() {
     };
 }
 
-function renderAlbumGrid(tracks) {
-    const container = document.getElementById('all-albums');
+function renderArtistList(tracks) {
+    const container = document.getElementById('all-artists');
     if (!container) return;
-    
-    // Group strictly by album name to prevent split albums
-    const albums = {};
-    tracks.forEach(t => {
-        const key = t.album;
-        if (!albums[key]) {
-            // First track found for this album name defines the display artist
-            const displayArtist = t.album_artist || t.artist;
-            albums[key] = { ...t, artist: displayArtist };
-        } else {
-            // If we found a track with a better 'album_artist', update the display artist
-            if (t.album_artist && !albums[key].album_artist) {
-                albums[key].artist = t.album_artist;
-                albums[key].album_artist = t.album_artist;
-            }
-            // Keep the track with the "minimum" ID for the cover image
-            if (t.id < albums[key].id) {
-                const currentArtist = albums[key].artist;
-                const currentAlbumArtist = albums[key].album_artist;
-                Object.assign(albums[key], t);
-                albums[key].artist = currentArtist;
-                albums[key].album_artist = currentAlbumArtist;
-            }
-        }
-    });
 
-    const albumHtml = Object.values(albums).sort((a, b) => a.album.localeCompare(b.album)).map(t => `
-        <div class="album-card group cursor-pointer" onclick="showAlbumDetail('${t.album.replace(/'/g, "\\'")}', '${t.artist.replace(/'/g, "\\'")}')">
-            <div class="relative overflow-hidden rounded-[32px] shadow-2xl transition-all duration-500 group-hover:scale-105 active:scale-95 border border-white/5 bg-[var(--bg-card)]">
-                <img src="${Resolver.getCoverUrl(t)}" class="w-full aspect-square object-cover bg-gray-900" alt="${t.album}">
-                <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+    // One card per parsed artist; multi-artist strings (e.g. "A, B", "A feat. B") become separate artists; count = tracks where this artist appears
+    const byArtist = {};
+    tracks.forEach(t => {
+        const raw = t.album_artist || t.artist;
+        const names = parseArtistNames(raw);
+        names.forEach(name => {
+            if (!byArtist[name]) byArtist[name] = { track: t, count: 0 };
+            byArtist[name].count += 1;
+            if (t.id < byArtist[name].track.id) byArtist[name].track = t;
+        });
+    });
+    const artistNames = Object.keys(byArtist).sort((a, b) => a.localeCompare(b));
+
+    if (artistNames.length === 0) {
+        container.innerHTML = `
+            <div class="col-span-full flex flex-col items-center justify-center py-16 text-center">
+                <i class="fas fa-user-music text-4xl text-[var(--text-dim)]/50 mb-4"></i>
+                <p class="text-[var(--text-dim)] font-bold text-sm uppercase tracking-widest">No artists in library</p>
+            </div>
+        `;
+        return;
+    }
+
+    const artistHtml = artistNames.map(name => {
+        const { track: t, count } = byArtist[name];
+        const trackLabel = count === 1 ? '1 track' : `${count} tracks`;
+        const safeName = (name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return `
+        <div class="artist-card group cursor-pointer" data-artist-name="${esc(name)}" onclick="(function(ev){ try { var card = ev && ev.currentTarget; if (card) { card.classList.add('artist-card-tapped'); setTimeout(function(){ card.classList.remove('artist-card-tapped'); }, 220); } window.showArtistDetail && window.showArtistDetail('${safeName}'); } catch(e) {} })(event)">
+            <div class="artist-card-cover relative overflow-hidden rounded-[32px] shadow-2xl transition-all ease-[cubic-bezier(0.19,1,0.22,1)] group-hover:scale-105 active:scale-95 border border-[var(--glass-border)] bg-[var(--bg-card)]" style="transition-duration: 500ms;">
+                <img src="${Resolver.getCoverUrl(t)}" class="w-full aspect-square object-cover bg-gray-900" alt="${esc(name)}">
+                <div class="artist-card-overlay absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             </div>
             <div class="mt-4 px-2">
-                <div class="font-bold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${t.album}</div>
-                <div class="text-[10px] text-[var(--text-dim)] font-bold truncate uppercase tracking-widest mt-0.5">${t.artist}</div>
+                <div class="artist-card-name font-bold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${esc(name)}</div>
+                <div class="text-[10px] font-mono text-[var(--text-dim)] truncate mt-0.5">${esc(trackLabel)}</div>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 
-    container.innerHTML = albumHtml;
+    container.innerHTML = artistHtml;
 }
 
 function formatTime(seconds) {
@@ -399,26 +532,18 @@ function formatTime(seconds) {
 
 window.playTrack = (trackId) => {
     console.log("Playing track ID:", trackId);
-    UI.vibrate(10);
-    
+    Haptics.tick();
+
     let context = store.state.library;
-    if (UI.currentView === 'album-detail') context = window._currentAlbumTracks || context;
-    else if (UI.currentView === 'favourites') context = window._currentFavTracks || context;
+    if (UI.currentView === 'favourites') context = window._currentFavTracks || context;
     else if (UI.currentView === 'search') context = window._currentSearchTracks || context;
+    else if (UI.currentView === 'artist-detail') context = window._currentArtistTracks || context;
 
     const track = context.find(t => t.id === trackId);
     if (track) {
         audioEngine.setContext(context);
         store.update({ currentTrack: track });
         audioEngine.playTrack(track);
-    }
-};
-
-window.playAlbum = (albumName) => {
-    console.log("Playing album:", albumName);
-    const tracks = store.state.library.filter(t => t.album === albumName);
-    if (tracks.length > 0) {
-        audioEngine.playTrack(tracks[0]);
     }
 };
 

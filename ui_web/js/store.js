@@ -20,7 +20,8 @@ class Store {
             shuffleEnabled: false,
             currentTrack: null,
             isPlaying: false,
-            theme: this.load('theme', 'dark')
+            theme: this.load('theme', 'dark'),
+            hapticsEnabled: this.load('haptics', true)
         };
         this.subscribers = [];
         this.applyTheme(this.state.theme);
@@ -35,6 +36,12 @@ class Store {
         const newTheme = this.state.theme === 'dark' ? 'light' : 'dark';
         this.update({ theme: newTheme });
         this.applyTheme(newTheme);
+    }
+
+    toggleHaptics() {
+        const newVal = !this.state.hapticsEnabled;
+        this.update({ hapticsEnabled: newVal });
+        this.save('haptics', newVal);
     }
 
     load(key, fallback) {
@@ -143,7 +150,7 @@ class Store {
         try {
             const res = await fetch(`${this.apiBase}/api/playback/shuffle`, { method: 'POST' });
             if (res.ok) {
-                // Shuffle reorders the actual queue on server, so we just sync
+                this.update({ shuffleEnabled: !this.state.shuffleEnabled });
                 await this.syncQueue();
                 return true;
             }

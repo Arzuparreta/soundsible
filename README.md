@@ -1,64 +1,65 @@
-# Soundsible: The Universal Music Ecosystem
+# Soundsible Station
 
-Soundsible is a high-fidelity, modular media platform designed for absolute data sovereignty and an uncompromised listening experience. It unifies your local files (NAS), cloud storage (Cloudflare R2, Backblaze B2, S3), and streaming capabilities into a single, resilient ecosystem featuring a high-end, mobile-first **Omni-Island** control system.
+**The Cloud-Native Audiophile WebUI.**
 
-## 🌟 The Soundsible Philosophy
-- **Omni-Island Control**: A unified, state-driven capsule that anchors the entire experience. It adapts fluidly between playback transport and technical navigation.
-- **Cyber-Premium Design**: A sophisticated blend of high-end glassmorphism (`blur(40px)`), Apple-inspired layouts, and JetBrains-inspired technical accents.
-- **Surgical Intentionality**: Advanced "Safe Release" touch logic and coordinate-based zone detection ensure zero accidental triggers on mobile.
-- **Privacy & Sovereignty**: You own your files, your metadata, and your infrastructure. All credentials remain encrypted on your "Home Station."
+Soundsible Station is the flagship interface of the Soundsible ecosystem, a high-fidelity, self-hosted music platform for the post-streaming era. Engineered as a Progressive Web App (PWA) with native-grade performance, it transforms any browser into a dedicated audiophile console.
+
+This repository contains the full Soundsible ecosystem, with the Station as its core component.
 
 ---
 
-## 🚀 Getting Started
+## 💎 Core Product: Soundsible Station (WebUI)
 
-### 1. Installation
-Ensure you have **Python 3.10+** and **FFMPEG** installed.
+The **Station** is the primary, recommended interface for all users. It combines the precision of a dedicated hardware player with the ubiquity of the modern web, delivering a "Cyber-Premium" listening experience across your entire digital life.
+
+### Key Features
+- **Omni-Island Control**: A unified, gesture-driven navigation hub that seamlessly blends transport controls with deep-link navigation.
+- **Cyber-Premium Haptics**: A custom-tuned tactile engine delivers precise physical feedback for every interaction, from the "thud" of playback to the "tick" of navigation.
+- **Fluid Motion**: 60fps animations and "Premium Slime" transitions create an interface that feels alive and responsive.
+- **Adaptive Layout**: Intelligent viewport handling ensures a flawless, notch-safe experience on iPhone, Android, and Desktop.
+- **Universal Sync**: Your library, queue, and preferences float effortlessly between devices via the self-hosted backend.
+
+### Getting Started
+Launch the Station on your server:
 ```bash
-git clone https://github.com/youruser/soundsible.git
-cd soundsible
-python3 run.py
+./start_web.sh
 ```
-*The launcher will automatically set up a virtual environment and install all necessary dependencies.*
-
-### 2. Initial Setup
-Run the guided setup to link your storage:
-- **Option 5 (Manage Storage)** -> **Option 1 (Setup Wizard)**.
-- Follow the prompts to link your **Cloudflare R2**, **Backblaze B2**, or **NAS**.
-
-### 3. Populating Your Library
-- **Deep Scan**: Point Soundsible to your large NAS folders to index them instantly without moving files.
-- **Metadata Surgeon**: Use the integrated technical editor to auto-fetch high-resolution covers and harmonize tags against global standards.
-- **Grow Your Station**: Use the **ODST Tool** to download directly from Spotify or YouTube URLs with bit-perfect quality.
+Access via `http://localhost:5005` or your server's LAN IP. Add to Home Screen on iOS for the full immersive experience.
 
 ---
 
-## 📱 The Mobile Experience (PWA)
+## 🔧 Legacy Support: Soundsible Desktop (GTK)
 
-Soundsible is optimized for a native-app feel on iPhone and Android. Launch the **Web Station (Option 3)** and add it to your home screen.
+The **Desktop** client is a specialized, lightweight interface built for resource-constrained Linux environments or dedicated single-board computers (Raspberry Pi).
 
-### The Omni-Island Interface
-The bottom-center capsule is your cockpit:
-- **Playback (Active Mode)**: A sleek 286px capsule with [Prev], [Anchor], and [Next] controls.
-- **Navigation (Bloom Mode)**: Hold the center for 400ms to reveal a symmetrical 7-slot navigation grid.
-- **Adaptive Physics**: The island dynamically expands and retracts based on your interaction state.
-- **Technical Scroller**: A JetBrains Mono marquee runs technical metadata in the background of the island.
+While it retains core playback functionality, it is maintained primarily as a legacy option for users requiring a native window manager footprint without the overhead of a full web stack.
 
-### Core Interactions
-- **Safe Release**: Taps only trigger if you release inside the zone. Slide your finger away to cancel any action.
-- **Subtle Inflation**: High-end visual feedback where buttons "breathe" ऑर्गेनिकally when touched.
-- **Card Deck Navigation**: Views slide OVER each other with "Premium Slime" physics (`cubic-bezier(0.19, 1, 0.22, 1)`).
-- **Gestures**: 
-    - **Swipe Right**: Add to Queue.
-    - **Swipe Left**: Toggle Favourite.
-    - **Pull Down**: Dismiss Now Playing or Action Menus (14% threshold).
+### Usage
+```bash
+./gui.sh
+```
+*Note: The GTK client receives maintenance updates but may lag behind the Station in UI/UX features.*
 
 ---
 
-## 💻 Desktop & Advanced
-- **Linux (GTK4 / Adwaita)**: High-fidelity native player with MPRIS and system-level integration.
-- **Smart Resolver**: Connection Race logic pings Local, Tailscale, and Cloud paths simultaneously to lock onto the fastest streaming route.
-- **Technical Deep-Dive**: See the **[Advanced Documentation](ADVANCED.md)** for architecture and API specs.
+## 🛠 Architecture
 
-## License
-MIT License. Created for the love of music and technical freedom.
+Soundsible is built on a robust, modular Python backend that serves as the single source of truth for your music library.
+
+- **Backend**: Python/Flask (Metadata, Indexing, Audio Stream)
+- **Frontend**: Vanilla JS / Tailwind CSS (Zero-dependency, high-performance)
+- **Storage**: Local Filesystem + Optional Cloud Sync (Backblaze B2 / Cloudflare R2)
+
+## 📦 Installation
+
+Clone the repository and initialize the environment:
+
+```bash
+git clone https://github.com/Arzuparreta/soundsible.git
+cd soundsible
+./setup_tool/init.sh
+```
+
+## 📜 License
+
+MIT License. Copyright © 2026.

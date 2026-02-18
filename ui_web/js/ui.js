@@ -4,6 +4,7 @@
 import { store } from './store.js';
 import { Resolver } from './resolver.js';
 import { audioEngine } from './audio.js';
+import { Haptics } from './haptics.js';
 
 // Global availability for inline onclick handlers
 window.audioEngine = audioEngine;
@@ -11,12 +12,12 @@ window.audioEngine = audioEngine;
 export class UI {
     static VIEW_LABELS = {
         'home': 'ALL SONGS',
-        'favourites': 'FAVOURITES',
-        'albums': 'ALBUMS',
+        'favourites': 'FAVORITES',
+        'artists': 'ARTISTS',
+        'artist-detail': 'ARTIST',
         'search': 'SEARCH',
         'downloader': 'ODST',
-        'settings': 'CONFIG',
-        'album-detail': 'ALBUM DETAIL'
+        'settings': 'CONFIG'
     };
 
     static init() {
@@ -40,6 +41,15 @@ export class UI {
         this.updateLabel(this.currentView);
         store.subscribe((state) => this.updatePlayer(state));
 
+        // INTERRUPTION RECOVERY: If app backgrounds or loses focus during a gesture, reset the island.
+        // This prevents the island from being stuck in "nav mode" if an iOS system gesture interrupts.
+        const resetEvents = ['visibilitychange', 'blur', 'contextmenu'];
+        resetEvents.forEach(evt => {
+            window.addEventListener(evt, () => {
+                this.resetOmniIsland();
+            });
+        });
+
         // Gestures Engine
         this.initGestures();
     }
@@ -50,7 +60,8 @@ export class UI {
             label.textContent = this.VIEW_LABELS[viewId] || '';
             label.classList.remove('hovered');
             label.classList.add('docked');
-            label.style.transform = 'translateX(0)';
+            label.style.removeProperty('transform');
+            label.style.setProperty('--tx', '0px');
             label.style.opacity = '1';
         }
     }
@@ -85,6 +96,7 @@ export class UI {
 
         this.updateStatus(state);
         this.updateThemeUI(state.theme);
+        this.updateHapticsUI(state.hapticsEnabled);
     }
 
     static syncIsland(state) {
@@ -112,19 +124,25 @@ export class UI {
         const text2 = document.getElementById('omni-text-2');
         if (!container || !scroller || !text1 || !text2) return;
 
-        const content = `${track.title} • ${track.artist} • ${track.album} • `;
-        if (text1.textContent === content) return;
+        // Escape function for safety since we're using innerHTML
+        const esc = (str) => (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 
-        text1.textContent = content;
-        text2.textContent = content;
+        const titleHtml = `<span class="text-white/40">${esc(track.title)}</span>`;
+        const restHtml = ` • ${esc(track.artist)} • ${esc(track.album)} • `;
+        const contentHtml = titleHtml + restHtml;
+        
+        // Simple comparison to avoid DOM thrashing
+        if (text1.innerHTML === contentHtml) return;
+
+        text1.innerHTML = contentHtml;
+        text2.innerHTML = contentHtml;
         container.style.opacity = '1';
 
         // Marquee Logic
-        const containerWidth = container.offsetWidth;
         const textWidth = text1.offsetWidth;
 
         if (textWidth > 150) { // If it's more than a small stub
-            scroller.style.animation = `omni-marquee ${content.length * 0.25}s linear infinite`;
+            scroller.style.animation = `omni-marquee ${textWidth * 0.05}s linear infinite`;
         } else {
             scroller.style.animation = 'none';
         }
@@ -132,9 +150,9 @@ export class UI {
 
     static morphToActive() {
         this.isIslandActive = true;
-        this.vibrate(30);
+        Haptics.heavy();
         
-        this.island.style.width = '286px';
+        this.island.style.width = '250px';
         
         const prev = document.getElementById('omni-prev');
         const next = document.getElementById('omni-next');
@@ -164,6 +182,13 @@ export class UI {
         const indicator = document.getElementById('theme-indicator');
         if (indicator) {
             indicator.style.transform = theme === 'dark' ? 'translateX(24px)' : 'translateX(0px)';
+        }
+    }
+
+    static updateHapticsUI(enabled) {
+        const indicator = document.getElementById('haptics-indicator');
+        if (indicator) {
+            indicator.style.transform = enabled ? 'translateX(24px)' : 'translateX(0px)';
         }
     }
 
@@ -213,9 +238,19 @@ export class UI {
         if (!npView) return;
 
         npView.classList.remove('hidden');
+        document.body.classList.add('now-playing-open');
         this.updateNowPlaying(track, store.state.isPlaying);
         
-        setTimeout(() => npView.classList.add('active'), 10);
+        setTimeout(() => {
+            npView.classList.add('active');
+            Haptics.heavy(); // 30ms pulse for opening
+        }, 10);
+
+        // Fly-in timeline: trigger after layout so "from" state applies first
+        requestAnimationFrame(() => {
+            const npSeek = document.getElementById('np-seek-container');
+            if (npSeek) npSeek.classList.add('np-timeline-visible');
+        });
 
         if (!this._npGesturesBound) {
             this.initNowPlayingGestures();
@@ -226,8 +261,13 @@ export class UI {
     static hideNowPlaying() {
         const npView = document.getElementById('now-playing-view');
         if (!npView) return;
+        
         npView.classList.remove('active');
         npView.style.transform = ''; // Clear manual drag
+        document.body.classList.remove('now-playing-open');
+        const npSeek = document.getElementById('np-seek-container');
+        if (npSeek) npSeek.classList.remove('np-timeline-visible');
+        
         setTimeout(() => {
             if (!npView.classList.contains('active')) npView.classList.add('hidden');
         }, 600);
@@ -263,16 +303,26 @@ export class UI {
     }
 
     static showView(viewId, saveToHistory = true, direction = 'forward') {
+        // Auto-hide Now Playing if active (even if selecting the same view)
+        if (document.getElementById('now-playing-view')?.classList.contains('active')) {
+            this.hideNowPlaying();
+        }
+
         if (viewId === this.currentView) return;
         
         this.updateLabel(viewId);
 
         const oldView = document.getElementById(`view-${this.currentView}`);
         const targetView = document.getElementById(`view-${viewId}`);
-        if (!targetView) return;
+        // #region agent log
+        if (!targetView) {
+            fetch('http://127.0.0.1:7390/ingest/5e87ad09-2e12-436a-ac69-c14c6b45cb46', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ed9dd2' }, body: JSON.stringify({ sessionId: 'ed9dd2', runId: 'click', hypothesisId: 'H2', location: 'ui.js:showView', message: 'showView: target view not found', data: { viewId }, timestamp: Date.now() }) }).catch(() => {});
+            return;
+        }
+        // #endregion
 
         if (saveToHistory) {
-            const roots = ['home', 'search', 'albums', 'downloader', 'favourites', 'settings'];
+            const roots = ['home', 'search', 'artists', 'downloader', 'favourites', 'settings'];
             if (roots.includes(this.currentView) && roots.includes(viewId)) this.viewStack = [];
             else this.viewStack.push(this.currentView);
         }
@@ -288,6 +338,14 @@ export class UI {
         targetView.classList.remove('hidden');
         targetView.classList.add('view-incoming');
         targetView.classList.add(direction === 'forward' ? 'view-from-right' : 'view-from-left');
+        
+        // Returning to artists from artist-detail: clear sticky :active from back button and suppress card feedback briefly
+        const fromArtistDetail = viewId === 'artists' && this.currentView === 'artist-detail';
+        if (fromArtistDetail) {
+            document.activeElement?.blur?.();
+            targetView.classList.add('artist-just-returned');
+            setTimeout(() => targetView.classList.remove('artist-just-returned'), 320);
+        }
         
         // 3. Trigger Animation (Force Reflow)
         void targetView.offsetWidth;
@@ -334,10 +392,31 @@ export class UI {
             if (q && !q.contains(e.target)) this.hideQueue();
         });
 
+        // Transport Handlers
+        const bindTransport = (id, fn) => {
+            const el = document.getElementById(id);
+            if (el) el.onclick = (e) => { 
+                e.stopPropagation(); 
+                Haptics.tick(); // 15ms tactile feedback
+                fn(); 
+            };
+        };
+
+        bindTransport('mini-play-btn', () => audioEngine.toggle());
+        bindTransport('mini-next-btn', () => audioEngine.next());
+        bindTransport('mini-prev-btn', () => audioEngine.prev());
+        
+        bindTransport('mini-shuffle-btn', () => store.toggleShuffle());
+        bindTransport('mini-repeat-btn', () => store.toggleRepeat());
+        bindTransport('omni-shuffle-btn', () => store.toggleShuffle());
+        bindTransport('omni-repeat-btn', () => store.toggleRepeat());
+
         // Seek
         const handleSeek = (e, container) => {
             const rect = container.getBoundingClientRect();
-            const x = (e.clientX || e.touches?.[0].clientX) - rect.left;
+            const clientX = e.clientX ?? e.changedTouches?.[0]?.clientX ?? e.touches?.[0]?.clientX;
+            if (clientX == null) return;
+            const x = clientX - rect.left;
             const pct = Math.max(0, Math.min(100, (x / rect.width) * 100));
             audioEngine.seek(pct);
         };
@@ -345,21 +424,20 @@ export class UI {
         const mini = document.getElementById('player-progress-container');
         const full = document.getElementById('np-seek-container');
         if (mini) mini.onclick = (e) => handleSeek(e, mini);
-        if (full) full.onclick = (e) => handleSeek(e, full);
+        if (full) {
+            full.onclick = (e) => handleSeek(e, full);
+            full.ontouchend = (e) => { if (e.cancelable) e.preventDefault(); handleSeek(e, full); };
+        }
 
         window.addEventListener('audio:timeupdate', (e) => {
             const { progress, currentTime, duration } = e.detail;
             
-            const bar = document.getElementById('np-seek-bar');
-            if (bar) bar.style.width = `${progress}%`;
-            
             const omniBar = document.getElementById('omni-progress');
             if (omniBar) omniBar.style.width = `${progress}%`;
-
-            const curr = document.getElementById('np-time-curr');
-            const total = document.getElementById('np-time-total');
-            if (curr) curr.textContent = this.formatTime(currentTime);
-            if (total) total.textContent = this.formatTime(duration);
+            if (document.getElementById('now-playing-view')?.classList.contains('active')) {
+                const npBar = document.getElementById('np-seek-progress');
+                if (npBar) npBar.style.width = `${progress}%`;
+            }
         });
     }
 
@@ -421,6 +499,11 @@ export class UI {
                 if (e.cancelable) e.preventDefault();
                 const move = Math.max(Math.min(diffX, 100), -100);
                 activeRow.style.transform = `translateX(${move}px)`;
+                
+                // Show hints only when swiping horizontally
+                if (activeRow.parentElement) {
+                    activeRow.parentElement.classList.add('is-swiping');
+                }
             }
         }, { passive: false });
 
@@ -428,7 +511,7 @@ export class UI {
             // 1. End Edge Swipe
             if (isEdgeSwipe) {
                 const diffX = e.changedTouches[0].clientX - startX;
-                const threshold = window.innerWidth * 0.3;
+                const threshold = window.innerWidth * 0.12;
                 
                 this.content.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
                 this.content.style.transform = 'translateX(0)';
@@ -444,20 +527,34 @@ export class UI {
             // 2. End Row Swipe
             if (activeRow) {
                 const diff = e.changedTouches[0].clientX - startX;
-                activeRow.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+                
+                // Standardized 'Premium Slime' Physics for return
+                activeRow.style.transition = 'transform 0.4s cubic-bezier(0.19, 1, 0.22, 1)';
                 activeRow.style.transform = 'translateX(0)';
                 
                 if (isHorizontal) {
+                    const trackId = activeRow.getAttribute('data-id');
                     if (diff > 70) {
-                        store.toggleQueue(activeRow.getAttribute('data-id'));
-                        this.vibrate(30);
-                        this.showToast('Updated Queue');
+                        const inQueue = store.state.queue.some(t => t.id === trackId);
+                        store.toggleQueue(trackId);
+                        Haptics.tick(); // 15ms pulse
+                        this.showToast(inQueue ? 'Removed from Queue' : 'Added to Queue');
                     } else if (diff < -70) {
-                        store.toggleFavourite(activeRow.getAttribute('data-id'));
-                        this.vibrate(30);
-                        this.showToast('Updated Favourites');
+                        const isFav = store.state.favorites.includes(trackId);
+                        store.toggleFavourite(trackId);
+                        Haptics.tick(); // 15ms pulse
+                        this.showToast(isFav ? 'Removed from Favourites' : 'Added to Favourites');
                     }
                 }
+
+                // Hide hints after a delay to ensure the return animation finishes
+                const rowToCleanup = activeRow;
+                setTimeout(() => {
+                    if (rowToCleanup && rowToCleanup.parentElement) {
+                        rowToCleanup.parentElement.classList.remove('is-swiping');
+                    }
+                }, 400);
+
                 activeRow = null;
             }
         }, { passive: true });
@@ -493,12 +590,13 @@ export class UI {
             if (!isDragging) return;
             isDragging = false;
             const deltaY = e.changedTouches[0].clientY - startY;
-            const threshold = window.innerHeight * 0.14; // Reduced by 30% from 0.2
+            const threshold = window.innerHeight * 0.08; 
 
-            npView.style.transition = 'transform 0.6s cubic-bezier(0.19, 1, 0.22, 1)';
+            // Standardized 'Premium Slime' Physics
+            npView.style.transition = 'transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease';
 
             if (deltaY > threshold) {
-                this.vibrate(20);
+                Haptics.lock(); // 15ms pulse for dismissal
                 this.hideNowPlaying();
             } else {
                 npView.style.transform = '';
@@ -521,58 +619,97 @@ export class UI {
     static initOmniGestures() {
         const island = document.getElementById('omni-island');
         const touchArea = document.getElementById('omni-touch-area');
-        const transport = document.getElementById('omni-transport');
         const ribbon = document.getElementById('omni-nav-ribbon');
         const label = document.getElementById('omni-label');
         const items = document.querySelectorAll('.omni-nav-item');
         if (!island || !touchArea || !ribbon || !label) return;
 
-        let holdTimer;
-        let isHolding = false;
-        let activeNavView = null;
+        this._isHolding = false;
+        this._startedInside = false;
+        this._activeNavView = null;
+        this._startY = 0;
+        this._currentY = 0;
 
         const startBloom = (e) => {
-            isHolding = true;
-            this.vibrate(20);
+            const touch = e.touches[0];
+            const rect = island.getBoundingClientRect();
+            this._startedInside = touch.clientX >= rect.left && touch.clientX <= rect.right && 
+                                 touch.clientY >= rect.top && touch.clientY <= rect.bottom;
+
+            this._isHolding = true;
+            this._startY = touch.clientY;
+            this._currentY = this._startY;
+            Haptics.tick();
             
-            // Set initial label state
-            label.classList.remove('docked');
-            label.classList.add('hovered');
-            label.style.opacity = '1';
+            this._labelAnimTimer = setTimeout(() => {
+                if (this._isHolding && this._startedInside) {
+                    label.classList.remove('docked');
+                    label.classList.add('hovered');
+                    label.style.opacity = '1';
+                }
+            }, 120);
 
-            holdTimer = setTimeout(() => {
-                this.vibrate(50);
-                this.isBlooming = true;
-                this.island.style.width = '380px';
-                
-                transport.style.filter = 'blur(12px)';
-                transport.style.opacity = '0';
-                transport.style.transform = 'scale(0.9)';
-                transport.style.pointerEvents = 'none';
+            this._omniHoldTimer = setTimeout(() => {
+                // Only bloom if we haven't swiped up significantly
+                if (this._startedInside && Math.abs(this._currentY - this._startY) < 30) {
+                    Haptics.heavy();
+                    this.isBlooming = true;
 
-                ribbon.classList.remove('pointer-events-none');
-                ribbon.style.opacity = '1';
-                ribbon.style.transform = 'scale(1)';
-                ribbon.style.filter = 'blur(0px)';
-            }, 400);
+                    island.style.width = '380px';
+                    
+                    const transport = document.getElementById('omni-transport');
+                    const metadata = document.getElementById('omni-metadata-container');
+
+                    if (transport) {
+                        transport.style.filter = 'blur(12px)';
+                        transport.style.opacity = '0';
+                        transport.style.transform = 'scale(0.9)';
+                        transport.style.pointerEvents = 'none';
+                    }
+                    if (metadata) {
+                        metadata.style.opacity = '0';
+                    }
+
+                    ribbon.classList.remove('pointer-events-none');
+                    ribbon.style.opacity = '1';
+                    ribbon.style.transform = 'scale(1)';
+                    ribbon.style.filter = 'blur(0px)';
+                }
+            }, 324);
         };
 
         const endHold = (e) => {
             const touch = e.changedTouches[0];
             const rect = island.getBoundingClientRect();
+            const hitboxRect = touchArea.getBoundingClientRect();
+            const deltaY = touch.clientY - this._startY;
             
-            // Generous boundary check (Bounding box + 20px)
-            const isInside = (
-                touch.clientX >= rect.left - 20 &&
-                touch.clientX <= rect.right + 20 &&
-                touch.clientY >= rect.top - 20 &&
-                touch.clientY <= rect.bottom + 20
-            );
+            // Dynamic Horizontal Check: Must be within the current width of the island
+            const isHorizontalValid = touch.clientX >= rect.left - 20 && touch.clientX <= rect.right + 20;
+            const isInside = touch.clientX >= hitboxRect.left && touch.clientX <= hitboxRect.right && 
+                             touch.clientY >= hitboxRect.top && touch.clientY <= hitboxRect.bottom;
             
-            clearTimeout(holdTimer);
+            if (this._omniHoldTimer) clearTimeout(this._omniHoldTimer);
+            if (this._labelAnimTimer) clearTimeout(this._labelAnimTimer);
+
+            // 0. SWIPE GESTURES FOR NOW PLAYING (Instant Toggle with 15px deadzone)
+            if (this._isHolding && !this.isBlooming && this._startedInside && isHorizontalValid) {
+                const isNPActive = document.getElementById('now-playing-view')?.classList.contains('active');
+                const deadzone = 15;
+                
+                if (deltaY < -deadzone && !isNPActive) {
+                    this.showNowPlaying();
+                    this.resetOmniIsland();
+                    return;
+                } else if (deltaY > deadzone && isNPActive) {
+                    this.hideNowPlaying();
+                    this.resetOmniIsland();
+                    return;
+                }
+            }
             
             // 1. COORDINATE-BASED TRANSPORT
-            if (isHolding && !this.isBlooming && isInside) {
+            if (this._isHolding && !this.isBlooming && isInside) {
                 const relX = (touch.clientX - rect.left) / rect.width;
                 let zone = 'anchor'; // Default
                 
@@ -581,7 +718,7 @@ export class UI {
                     else if (relX > 0.65) zone = 'next';
                 }
 
-                this.vibrate(15);
+                Haptics.tick();
                 
                 // Subtle Inflation Feedback
                 const targetId = zone === 'prev' ? 'omni-prev' : zone === 'next' ? 'omni-next' : 'omni-anchor';
@@ -600,39 +737,18 @@ export class UI {
             }
 
             // 2. NAV COMMIT (Uses elementFromPoint but hides touchArea first)
-            if (this.isBlooming && activeNavView) {
-                this.vibrate(30);
-                this.showView(activeNavView);
+            if (this.isBlooming && this._activeNavView) {
+                Haptics.lock();
+                this.showView(this._activeNavView);
                 
                 // Dock the Label
                 label.classList.remove('hovered');
                 label.classList.add('docked');
-                label.style.transform = 'translateX(0)';
+                label.style.removeProperty('transform');
+                label.style.setProperty('--tx', '0px');
             }
 
-            // 3. RESTORE PLAYBACK UI
-            if (this.isIslandActive) this.island.style.width = '286px';
-            else this.island.style.width = '56px';
-
-            transport.style.filter = 'blur(0px)';
-            transport.style.opacity = '1';
-            transport.style.transform = 'scale(1)';
-            transport.style.pointerEvents = 'auto';
-
-            ribbon.classList.add('pointer-events-none');
-            ribbon.style.opacity = '0';
-            ribbon.style.transform = 'scale(0.95)';
-            ribbon.style.filter = 'blur(8px)';
-            
-            items.forEach(i => {
-                i.classList.remove('active');
-                i.style.transform = 'scale(1)';
-                i.querySelector('i').style.color = '';
-            });
-
-            this.isBlooming = false;
-            isHolding = false;
-            activeNavView = null;
+            this.resetOmniIsland();
         };
 
         // Bind events to the Hitbox Layer
@@ -642,48 +758,173 @@ export class UI {
         });
 
         document.addEventListener('touchmove', (e) => {
-            if (!isHolding) return;
+            if (!this._isHolding) return;
             const touch = e.touches[0];
+            this._currentY = touch.clientY;
             const rect = island.getBoundingClientRect();
             
             if (this.isBlooming) {
-                // To detect nav items, we need elementFromPoint. 
-                // Since touchArea is on top, we hide it briefly or use coordinate math.
-                // Plural elementsFromPoint is more efficient.
-                const targets = document.elementsFromPoint(touch.clientX, touch.clientY);
-                const item = targets.find(t => t.classList.contains('omni-nav-item'));
+                const islandRect = island.getBoundingClientRect();
+                const isVerticalValid = touch.clientY >= islandRect.top - 40;
+                let item = null;
 
-                items.forEach(i => {
-                    i.classList.remove('active');
-                    i.style.transform = 'scale(1)';
-                    i.querySelector('i').style.color = '';
-                });
-                
+                if (isVerticalValid) {
+                    const ribbon = document.getElementById('omni-nav-ribbon');
+                    const ribbonRect = ribbon.getBoundingClientRect();
+                    const itemsArr = Array.from(items);
+                    
+                    // Technical X-Calibration: Account for px-4 (16px) padding
+                    const padding = 16;
+                    const innerWidth = ribbonRect.width - (padding * 2);
+                    const touchX = touch.clientX - ribbonRect.left - padding;
+                    
+                    // Map to 7 slots
+                    const slotWidth = innerWidth / 7;
+                    const index = Math.floor(touchX / slotWidth);
+                    
+                    if (index >= 0 && index < 7) {
+                        // Correct for the blank center spacer (index 3)
+                        if (index < 3) item = itemsArr[index];
+                        else if (index > 3) item = itemsArr[index - 1]; // Skip the blank div in the DOM
+                    }
+                }
+
                 if (item) {
                     const view = item.getAttribute('data-view');
-                    if (view !== activeNavView) {
-                        this.vibrate(10);
-                        activeNavView = view;
+                    if (view !== this._activeNavView) {
+                        Haptics.tick();
+                        this._activeNavView = view;
+
+                        // Reset siblings and set active state
+                        items.forEach(i => {
+                            i.classList.remove('active');
+                            i.style.transform = 'scale(1)';
+                            i.querySelector('i').style.color = '';
+                        });
+
+                        item.classList.add('active');
+                        item.style.transform = 'scale(1.3)';
+                        item.querySelector('i').style.color = 'var(--accent)';
 
                         // Update Label
-                        label.textContent = UI.VIEW_LABELS[view] || '';
+                        label.textContent = this.VIEW_LABELS[view] || '';
                         label.classList.add('hovered');
                         
+                        // Centering logic: translateX(itemCenter - islandCenter)
                         const itemRect = item.getBoundingClientRect();
                         const offset = (itemRect.left + itemRect.width / 2) - (rect.left + rect.width / 2);
-                        label.style.transform = `translateX(${offset}px)`;
+                        label.style.setProperty('--tx', `${offset}px`);
+                        label.style.removeProperty('transform');
                     }
-                    item.classList.add('active');
-                    item.style.transform = 'scale(1.3)';
-                    item.querySelector('i').style.color = 'var(--accent)';
-                } else {
-                    activeNavView = null;
-                    label.classList.remove('hovered');
+                } else if (this._activeNavView !== null) {
+                    // RESET: Finger is over a blank area
+                    this._activeNavView = null;
+                    
+                    // Maintain 'hovered' (grey) state during active bloom
+                    label.classList.add('hovered');
+                    label.classList.remove('docked');
+                    
+                    // Update text without clearing the transform logic
+                    label.textContent = this.VIEW_LABELS[this.currentView] || '';
+                    label.style.setProperty('--tx', '0px');
+
+                    items.forEach(i => {
+                        i.classList.remove('active');
+                        i.style.transform = 'scale(1)';
+                        i.querySelector('i').style.color = '';
+                    });
+                }
+            } else {
+                // SWIPE FEEDBACK: Subtle movement when swiping
+                // Only move if we started inside the island
+                if (!this._startedInside) return;
+
+                const deltaY = this._currentY - this._startY;
+                const isHorizontalValid = touch.clientX >= rect.left - 20 && touch.clientX <= rect.right + 20;
+
+                if (!isHorizontalValid) {
+                    island.style.transform = '';
+                    return;
+                }
+
+                if (deltaY < 0) {
+                    const move = Math.max(deltaY, -80);
+                    island.style.transform = `translateY(${move * 0.328}px)`;
+                } else if (deltaY > 0) {
+                    const move = Math.min(deltaY, 80);
+                    island.style.transform = `translateY(${move * 0.328}px)`;
                 }
             }
         });
 
         document.addEventListener('touchend', endHold);
+        
+        // Critical: Handle system gestures (swiping home) that cancel the touch event
+        touchArea.addEventListener('touchcancel', () => this.resetOmniIsland());
+    }
+
+    static vibrate(ms) {
+        Haptics.trigger(ms);
+    }
+
+    /**
+     * Resets the Omni-Island to its stable state (playback mode).
+     * Used for touch cancellation, interruption, or committing navigation.
+     */
+    static resetOmniIsland() {
+        const ribbon = document.getElementById('omni-nav-ribbon');
+        const transport = document.getElementById('omni-transport');
+        const items = document.querySelectorAll('.omni-nav-item');
+        const label = document.getElementById('omni-label');
+
+        if (this._omniHoldTimer) {
+            clearTimeout(this._omniHoldTimer);
+            this._omniHoldTimer = null;
+        }
+        if (this._labelAnimTimer) {
+            clearTimeout(this._labelAnimTimer);
+            this._labelAnimTimer = null;
+        }
+
+        // Restore Playback UI
+        if (this.isIslandActive) this.island.style.width = '250px';
+        else this.island.style.width = '56px';
+
+        this.island.style.transform = ''; // Clear swipe displacement
+
+        if (transport) {
+            transport.style.filter = 'blur(0px)';
+            transport.style.opacity = '1';
+            transport.style.transform = 'scale(1)';
+            transport.style.pointerEvents = 'auto';
+        }
+
+        const metadata = document.getElementById('omni-metadata-container');
+        if (metadata) {
+            metadata.style.opacity = '1';
+        }
+
+        if (ribbon) {
+            ribbon.classList.add('pointer-events-none');
+            ribbon.style.opacity = '0';
+            ribbon.style.transform = 'scale(0.95)';
+            ribbon.style.filter = 'blur(8px)';
+        }
+        
+        items.forEach(i => {
+            i.classList.remove('active');
+            i.style.transform = 'scale(1)';
+            i.querySelector('i').style.color = '';
+        });
+
+        // Always reset label to the current view's docked state
+        if (label) {
+            this.updateLabel(this.currentView);
+        }
+
+        this.isBlooming = false;
+        this._isHolding = false;
+        this._activeNavView = null;
     }
 
     static showActionMenu(trackId) {
@@ -697,7 +938,10 @@ export class UI {
         const el = id => document.getElementById(id);
         
         if (el('action-track-title')) el('action-track-title').textContent = track.title;
-        if (el('action-track-artist')) el('action-track-artist').textContent = track.artist;
+        if (el('action-track-artist')) {
+            el('action-track-artist').textContent = track.artist;
+            el('action-track-artist').classList.add('font-mono');
+        }
         if (el('action-track-art')) el('action-track-art').src = Resolver.getCoverUrl(track);
 
         const isFav = store.state.favorites.includes(trackId);
@@ -772,11 +1016,13 @@ export class UI {
             if (!isDragging) return;
             isDragging = false;
             const deltaY = e.changedTouches[0].clientY - startY;
-            const threshold = sheet.offsetHeight * 0.14; // Reduced to 14% for consistency
+            const threshold = sheet.offsetHeight * 0.14; 
             
-            sheet.style.transition = 'transform 0.4s cubic-bezier(0.19, 1, 0.22, 1)';
+            // Standardized 'Premium Slime' Physics
+            sheet.style.transition = 'transform 0.6s cubic-bezier(0.19, 1, 0.22, 1)';
             
             if (deltaY > threshold) {
+                Haptics.lock(); // 15ms pulse for dismissal
                 this.hideActionMenu();
             } else {
                 sheet.style.transform = 'translateY(0)';
@@ -786,25 +1032,28 @@ export class UI {
 
     static updateTransportControls(isPlaying) {
         const mini = document.querySelector('#mini-play-btn i');
-        const np = document.querySelector('#np-play-btn i');
         if (mini) {
             mini.className = isPlaying ? 'fas fa-pause' : 'fas fa-play ml-0.5';
         }
-        if (np) {
-            np.className = isPlaying ? 'fas fa-pause' : 'fas fa-play ml-1';
-        }
 
         const mode = store.state.repeatMode;
-        const btns = [document.getElementById('np-repeat-btn'), document.getElementById('mini-repeat-btn')].filter(b => b);
-        btns.forEach(b => {
+        const shuffleOn = store.state.shuffleEnabled;
+        const repeatBtns = [document.getElementById('mini-repeat-btn'), document.getElementById('omni-repeat-btn')].filter(b => b);
+        repeatBtns.forEach(b => {
             b.classList.toggle('text-[var(--accent)]', mode !== 'off');
             b.classList.toggle('text-[var(--text-dim)]', mode === 'off');
         });
+        const omniRepeatOne = document.getElementById('omni-repeat-one-indicator');
+        if (omniRepeatOne) omniRepeatOne.classList.toggle('hidden', mode !== 'one');
         
         const indMini = document.getElementById('mini-repeat-one-indicator');
-        const indNP = document.getElementById('np-repeat-one-indicator');
         if (indMini) indMini.classList.toggle('hidden', mode !== 'one');
-        if (indNP) indNP.classList.toggle('hidden', mode !== 'one');
+
+        const shuffleBtns = [document.getElementById('mini-shuffle-btn'), document.getElementById('omni-shuffle-btn')].filter(b => b);
+        shuffleBtns.forEach(b => {
+            b.classList.toggle('text-[var(--accent)]', shuffleOn);
+            b.classList.toggle('text-[var(--text-dim)]', !shuffleOn);
+        });
     }
 
     static showMetadataEditor(id) {
@@ -898,7 +1147,7 @@ export class UI {
                 <img src="${r.cover}" class="w-10 h-10 rounded-lg object-cover shadow-md">
                 <div class="ml-3 truncate">
                     <div class="text-xs font-bold truncate text-white/90">${r.title}</div>
-                    <div class="text-[9px] font-bold text-white/40 truncate uppercase tracking-widest">${r.artist}</div>
+                    <div class="text-[9px] font-bold text-white/40 truncate uppercase tracking-widest font-mono">${r.artist}</div>
                 </div>
             </div>
         `).join('');
@@ -932,7 +1181,6 @@ export class UI {
         }
     }
 
-    static vibrate(ms) { if (navigator.vibrate) navigator.vibrate(ms); }
     static formatTime(s) {
         if (!s || isNaN(s)) return '0:00';
         const m = Math.floor(s / 60);
@@ -944,11 +1192,15 @@ export class UI {
         const c = document.getElementById('toast-container');
         if (!c) return;
         const t = document.createElement('div');
-        t.className = 'bg-gray-800 border border-white/10 px-6 py-3 rounded-2xl shadow-2xl text-sm font-bold transition-all transform translate-y-10 opacity-0';
+        // Omni-Island Styled Toast
+        t.className = 'glass-view px-6 py-3 rounded-full shadow-2xl text-[10px] font-black uppercase tracking-[0.2em] font-mono text-white/80 transition-all duration-500 ease-[cubic-bezier(0.19,1,0.22,1)] transform translate-y-10 opacity-0 border border-white/10';
+        t.style.backdropFilter = 'blur(40px)';
+        t.style.webkitBackdropFilter = 'blur(40px)';
+        t.style.backgroundColor = 'rgba(30, 31, 34, 0.85)';
         t.textContent = m;
         c.appendChild(t);
         setTimeout(() => { t.classList.replace('translate-y-10', 'translate-y-0'); t.classList.replace('opacity-0', 'opacity-100'); }, 10);
-        setTimeout(() => { t.classList.replace('translate-y-0', 'translate-y-10'); t.classList.replace('opacity-100', 'opacity-0'); setTimeout(() => t.remove(), 500); }, 3000);
+        setTimeout(() => { t.classList.replace('translate-y-0', 'translate-y-10'); t.classList.replace('opacity-100', 'opacity-0'); setTimeout(() => t.remove(), 500); }, 2500);
     }
 }
 window.UI = UI;

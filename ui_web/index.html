@@ -7,6 +7,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#0d0d0f">
     <title>Soundsible Web Player</title>
+    <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
     <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
@@ -40,14 +42,21 @@
             --shadow: rgba(0, 0, 0, 0.1);
         }
 
+        html {
+            background-color: var(--bg-deep);
+            min-height: 100dvh;
+        }
+
         body { 
             font-family: 'Plus Jakarta Sans', sans-serif; 
             touch-action: pan-y;
             overscroll-behavior-x: none;
-            overscroll-behavior-y: contain;
+            overscroll-behavior-y: none;
             background-color: var(--bg-deep);
             color: var(--text-main);
             letter-spacing: -0.01em;
+            min-height: calc(100dvh + env(safe-area-inset-bottom, 0px));
+            width: 100%;
             overflow: hidden;
             user-select: none;
             -webkit-user-select: none;
@@ -55,13 +64,26 @@
         }
 
         .safe-top { padding-top: max(1.5rem, env(safe-area-inset-top)); }
+        .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+        .min-h-full-safe { min-height: calc(100dvh + env(safe-area-inset-bottom, 0px)); }
+        .bottom-safe { bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem); }
         .is-ios .safe-top { padding-top: max(3.5rem, env(safe-area-inset-top)); }
         
         * { -webkit-tap-highlight-color: transparent; }
         
         .song-row {
-            transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.3s ease;
+            transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1), background-color 0.3s ease;
             will-change: transform;
+            background-color: var(--bg-card); /* Ensure solid background */
+        }
+
+        .swipe-hints {
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .is-swiping .swipe-hints {
+            opacity: 1;
         }
 
         .glass-view {
@@ -114,9 +136,10 @@
             opacity: 0;
             visibility: hidden;
             transform: translateY(100%) scale(0.98);
-            background: var(--bg-deep);
+            background: rgba(13, 13, 15, 0.85); /* Slightly transparent for better glass effect */
             backdrop-filter: blur(60px);
             -webkit-backdrop-filter: blur(60px);
+            border-top: 1px solid var(--glass-border);
         }
         
         #now-playing-view.active {
@@ -133,7 +156,9 @@
             visibility: visible;
         }
         #action-menu-sheet {
-            background: var(--bg-card);
+            background: rgba(10, 10, 12, 0.85); /* Deeper charcoal for sheet */
+            backdrop-filter: blur(60px);
+            -webkit-backdrop-filter: blur(60px);
             border-top: 1px solid var(--glass-border);
             transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1);
             will-change: transform;
@@ -167,12 +192,13 @@
             100% { transform: scale(1); }
         }
 
-        /* Dynamic Docking Labels */
+        /* Dynamic Docking Labels: above omni bar (bar is bottom-safe + ~56px height; keep label 68px above bar bottom) */
         #omni-label-container {
-            position: absolute;
-            bottom: calc(100% + 12px);
+            position: fixed;
+            bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem + 68px);
             left: 0;
-            width: 100%;
+            right: 0;
+            width: auto;
             display: flex;
             justify-content: center;
             pointer-events: none;
@@ -186,11 +212,13 @@
             text-transform: uppercase;
             letter-spacing: 0.2em;
             color: rgba(255, 255, 255, 0.2);
-            transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1), 
-                        color 0.3s ease, 
-                        opacity 0.3s ease;
+            transition: transform 0.2s ease, 
+                        color 0.2s ease, 
+                        opacity 0.2s ease;
             will-change: transform, color;
             white-space: nowrap;
+            transform-origin: center;
+            transform: translateX(var(--tx, 0)) scale(1);
         }
 
         #omni-label.hovered {
@@ -201,7 +229,69 @@
         #omni-label.docked {
             color: var(--accent);
             font-weight: 900;
-            transform: scale(1.1);
+            /* Perfectly centered mathematically */
+            transform: translateX(0px) scale(1.3);
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), 
+                        color 0.3s ease;
+        }
+
+        /* Hitbox: expand touch area around island */
+        #omni-island + #omni-touch-area {
+            inset-x: -30px;
+            inset-y: -20px;
+        }
+
+        /* Shuffle/Repeat bubbles on sides of nav bar – visible when Now Playing is open */
+        .omni-side-bubble {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+            width: 43px;
+            height: 43px;
+            min-width: 43px;
+            min-height: 43px;
+            max-width: 43px;
+            max-height: 43px;
+            flex-shrink: 0;
+            border-radius: 50%;
+        }
+        body.now-playing-open .omni-side-bubble {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Artists: on touch, never use browser :hover/:active for card (wrong element gets selected). Only our .artist-card-tapped on real tap shows feedback. */
+        @media (hover: none) {
+            #view-artists .artist-card-cover { transform: none !important; }
+            #view-artists .artist-card-overlay { opacity: 0 !important; }
+            #view-artists .artist-card-name { color: var(--text-main) !important; }
+        }
+        /* Tap-driven selection: only the card that received the click gets this class (overrides touch suppress) */
+        #view-artists .artist-card.artist-card-tapped .artist-card-cover { transform: scale(0.95) !important; }
+        #view-artists .artist-card.artist-card-tapped .artist-card-overlay { opacity: 1 !important; }
+        #view-artists .artist-card.artist-card-tapped .artist-card-name { color: var(--accent) !important; }
+        /* During/after scroll or just after return: keep suppress so no stray :active shows (backup) */
+        #view-artists.artist-scroll-active .artist-card-cover { transform: none !important; }
+        #view-artists.artist-scroll-active .artist-card-overlay { opacity: 0 !important; }
+        #view-artists.artist-scroll-active .artist-card-name { color: var(--text-main) !important; }
+        #view-artists.artist-just-returned .artist-card-cover { transform: none !important; }
+        #view-artists.artist-just-returned .artist-card-overlay { opacity: 0 !important; }
+        #view-artists.artist-just-returned .artist-card-name { color: var(--text-main) !important; }
+
+        /* Artist detail: expandable album tracks */
+        .artist-album-expanded .artist-album-tracks { display: block !important; }
+        .artist-album-expanded .artist-album-chevron { transform: rotate(180deg); }
+
+        /* Now Playing: flying timeline under cover art */
+        #np-seek-container {
+            transform: translateY(80px) scaleX(0.15) scaleY(0.3);
+            opacity: 0.7;
+            transition: none;
+        }
+        #np-seek-container.np-timeline-visible {
+            transform: translateY(0) scaleX(1) scaleY(1);
+            opacity: 1;
+            transition: transform 0.35s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.3s ease;
         }
     </style>
 </head>
@@ -215,7 +305,7 @@
         <div class="text-[10px] font-black uppercase tracking-[0.4em] text-[var(--accent)] animate-pulse">Initializing Station</div>
     </div>
 
-    <div id="app" class="h-[100dvh] flex flex-col relative overflow-hidden bg-black">
+    <div id="app" class="min-h-full-safe flex flex-col relative overflow-hidden" style="background-color: var(--bg-deep);">
         <div class="fixed inset-0 -z-10 opacity-20 pointer-events-none">
             <div class="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-[var(--accent)]/20 blur-[120px] rounded-full"></div>
             <div class="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-[var(--secondary)]/10 blur-[120px] rounded-full"></div>
@@ -241,22 +331,26 @@
             <div id="view-home" class="view">
                 <div id="all-songs" class="space-y-2"></div>
             </div>
-            <div id="view-albums" class="view hidden">
-                <div id="all-albums" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6"></div>
+            <div id="view-artists" class="view hidden">
+                <div id="all-artists" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6"></div>
             </div>
-            <div id="view-album-detail" class="view hidden">
-                <button onclick="UI.showView('albums')" class="flex items-center text-[var(--secondary)] font-bold mb-8 group">
+            <div id="view-artist-detail" class="view hidden">
+                <button onclick="UI.showView('artists')" class="flex items-center text-[var(--secondary)] font-bold mb-8 group">
                     <i class="fas fa-chevron-left mr-2 group-active:-translate-x-1 transition-transform"></i>
                     <span>Back</span>
                 </button>
-                <div class="flex flex-col md:flex-row items-center md:items-end space-y-6 md:space-y-0 md:space-x-8 mb-12">
-                    <img id="album-detail-cover" src="assets/icons/icon-512.png" class="w-64 h-64 shadow-2xl rounded-3xl object-cover bg-gray-900 border border-white/5" alt="Cover">
-                    <div class="text-center md:text-left">
-                        <h2 id="album-detail-title" class="text-4xl md:text-6xl font-black mb-2 tracking-tighter leading-none">Album Title</h2>
-                        <div id="album-detail-artist" class="text-xl text-[var(--text-dim)] font-bold uppercase tracking-wider">Artist</div>
-                    </div>
+                <div id="artist-detail-hero" class="flex flex-col sm:flex-row items-center sm:items-end gap-6 mb-10">
+                    <img id="artist-detail-cover" src="" alt="" class="w-32 h-32 sm:w-40 sm:h-40 rounded-2xl shadow-2xl object-cover border border-[var(--glass-border)] bg-[var(--bg-card)] flex-shrink-0">
+                    <h1 id="artist-detail-title" class="text-4xl md:text-6xl font-black tracking-tighter leading-none text-center sm:text-left">Artist</h1>
                 </div>
-                <div id="album-tracks" class="space-y-2"></div>
+                <section class="mb-10">
+                    <h2 class="text-[10px] font-black text-[var(--text-dim)] uppercase tracking-widest mb-4">All tracks</h2>
+                    <div id="artist-tracks" class="space-y-2"></div>
+                </section>
+                <section>
+                    <h2 class="text-[10px] font-black text-[var(--text-dim)] uppercase tracking-widest mb-4">Albums</h2>
+                    <div id="artist-albums" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6"></div>
+                </section>
             </div>
             <div id="view-search" class="view hidden">
                 <input type="text" id="search-input" placeholder="Search library..." class="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 focus:outline-none focus:border-[var(--accent)] mb-8 transition-colors">
@@ -300,6 +394,15 @@
                             <div class="w-6 h-6 bg-[var(--accent)] rounded-full shadow-lg transform transition-transform duration-300 translate-x-0" id="theme-indicator"></div>
                         </button>
                     </div>
+                    <div class="flex justify-between items-center mb-8">
+                        <div>
+                            <h2 class="text-xl font-bold">Haptic Feedback</h2>
+                            <p class="text-xs text-[var(--text-dim)]">Tactile confirmation for gestures and actions</p>
+                        </div>
+                        <button onclick="store.toggleHaptics()" class="w-14 h-8 bg-[var(--bg-selection)] rounded-full relative p-1 transition-colors">
+                            <div class="w-6 h-6 bg-[var(--accent)] rounded-full shadow-lg transform transition-transform duration-300 translate-x-0" id="haptics-indicator"></div>
+                        </button>
+                    </div>
                     <h2 class="text-xl font-bold mb-4">Link Library</h2>
                     <textarea id="sync-token-input" rows="4" class="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-[var(--secondary)] font-mono text-xs focus:outline-none focus:border-[var(--accent)] mb-6" placeholder="Paste token..."></textarea>
                     <button id="import-token-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 text-white font-black py-4 rounded-2xl transition-all mb-8">Import Token</button>
@@ -324,89 +427,90 @@
             </div>
         </main>
 
-        <!-- Omni-Island: Unified Control System -->
-        <div id="omni-island-container" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] pointer-events-none">
-            <!-- The Hitbox: A generous invisible touch surface -->
-            <div id="omni-touch-area" class="absolute inset-x-[-30px] inset-y-[-20px] z-[210] pointer-events-auto cursor-pointer"></div>
-            
-            <div id="omni-island" class="glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-500 ease-[cubic-bezier(0.19,1,0.22,1)] overflow-hidden" style="width: 56px; height: 56px; border-radius: 28px;">
-                <div id="omni-progress" class="absolute bottom-0 left-0 h-[2px] bg-[var(--accent)] w-0 transition-all duration-100 shadow-[0_0_10px_var(--accent)]"></div>
-                <div id="omni-metadata-container" class="absolute inset-0 flex items-center px-14 opacity-0 transition-opacity duration-300 pointer-events-none overflow-hidden">
-                    <div id="omni-metadata" class="flex whitespace-nowrap font-mono text-[9px] font-black uppercase tracking-[0.2em] text-white/20">
-                        <span id="omni-text-1"></span>
-                        <span id="omni-text-2" class="ml-8"></span>
+                <!-- Omni-Island: Unified Control System -->
+                <div id="omni-island-container" class="fixed bottom-safe left-0 right-0 flex flex-row items-center justify-center gap-3 z-[200] pointer-events-none">
+                    <!-- Shuffle bubble: left of nav bar, glassmorph circle -->
+                    <div class="omni-side-bubble glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden transition-all ease-[cubic-bezier(0.19,1,0.22,1)]" style="transition-duration: 600ms;">
+                        <button type="button" id="omni-shuffle-btn" class="w-full h-full flex items-center justify-center rounded-full text-[var(--text-dim)] transition-colors active:scale-90" aria-label="Shuffle"><i class="fas fa-shuffle text-sm"></i></button>
                     </div>
-                </div>
-                <div id="omni-transport" class="relative flex items-center justify-between w-full h-full px-10">
-                    <div id="omni-prev" class="flex-1 h-full flex items-center justify-start opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto">
-                        <i class="fas fa-backward-step text-xs text-white/60"></i>
+                    <div class="relative pointer-events-none">
+                        <div id="omni-island" class="glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all ease-[cubic-bezier(0.19,1,0.22,1)] overflow-hidden" style="width: 56px; height: 56px; border-radius: 28px; transition-duration: 600ms;">
+                            <div id="omni-progress-track" class="absolute bottom-0 left-[18px] right-[18px] h-[2px]">
+                                <div id="omni-progress" class="absolute inset-y-0 left-0 bg-[var(--accent)] w-0 transition-all duration-100 shadow-[0_0_10px_var(--accent)]"></div>
+                            </div>
+                            <div id="omni-metadata-container" class="absolute inset-0 flex items-center px-14 opacity-0 transition-opacity pointer-events-none overflow-hidden" style="transition-duration: 270ms;">
+                                <div id="omni-metadata" class="flex whitespace-nowrap font-mono text-[11px] font-black uppercase tracking-[0.2em] text-white/20">
+                                    <span id="omni-text-1"></span>
+                                    <span id="omni-text-2" class="ml-8"></span>
+                                </div>
+                            </div>
+                            <div id="omni-transport" class="relative flex items-center justify-between w-full h-full px-10">
+                                <div id="omni-prev" class="flex-1 h-full flex items-center justify-start opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto">
+                                    <i class="fas fa-backward-step text-xs text-white/60"></i>
+                                </div>
+                                <div id="omni-anchor" class="w-14 h-14 flex-shrink-0 flex items-center justify-center relative pointer-events-none transition-transform z-50">
+                                    <i id="omni-anchor-icon" class="fas fa-command text-lg text-white"></i>
+                                </div>
+                                <div id="omni-next" class="flex-1 h-full flex items-center justify-end opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto">
+                                    <i class="fas fa-forward-step text-xs text-white/60"></i>
+                                </div>
+                            </div>
+                            <div id="omni-nav-ribbon" class="absolute inset-0 flex items-center justify-between px-4 opacity-0 scale-95 transition-all pointer-events-none" style="transition-duration: 360ms;">
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="home"><i class="fas fa-home text-base text-white/40"></i></div>
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="artists"><i class="fas fa-user text-base text-white/40"></i></div>
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="favourites"><i class="fas fa-heart text-base text-white/40"></i></div>
+                                
+                                <!-- Middle Blank Position -->
+                                <div class="w-10 h-10"></div>
+                                
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="search"><i class="fas fa-search text-base text-white/40"></i></div>
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="downloader"><i class="fas fa-cloud-arrow-down text-base text-white/40"></i></div>
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="settings"><i class="fas fa-cog text-base text-white/40"></i></div>
+                            </div>
+                        </div>
+        
+                        <!-- The Hitbox: Now placed after island to allow CSS sibling targeting -->
+                        <div id="omni-touch-area" class="absolute inset-x-[-30px] inset-y-[-20px] z-[210] pointer-events-auto cursor-pointer"></div>
                     </div>
-                    <div id="omni-anchor" class="w-14 h-14 flex-shrink-0 flex items-center justify-center relative pointer-events-none transition-transform z-50">
-                        <i id="omni-anchor-icon" class="fas fa-command text-lg text-white"></i>
+                    <!-- Repeat bubble: right of nav bar, glassmorph circle -->
+                    <div class="omni-side-bubble glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden transition-all ease-[cubic-bezier(0.19,1,0.22,1)]" style="transition-duration: 600ms;">
+                        <button type="button" id="omni-repeat-btn" class="w-full h-full flex items-center justify-center rounded-full text-[var(--text-dim)] transition-colors active:scale-90 relative" aria-label="Repeat"><i class="fas fa-repeat text-sm"></i><span id="omni-repeat-one-indicator" class="absolute bottom-0 right-0 text-[7px] font-black text-[var(--accent)] hidden">1</span></button>
                     </div>
-                    <div id="omni-next" class="flex-1 h-full flex items-center justify-end opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto">
-                        <i class="fas fa-forward-step text-xs text-white/60"></i>
-                    </div>
-                </div>
-                <div id="omni-nav-ribbon" class="absolute inset-0 flex items-center justify-between px-4 opacity-0 scale-95 transition-all duration-400 pointer-events-none">
-                    <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="albums"><i class="fas fa-record-vinyl text-sm text-white/40"></i></div>
-                    <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="home"><i class="fas fa-home text-sm text-white/40"></i></div>
-                    <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="favourites"><i class="fas fa-heart text-sm text-white/40"></i></div>
-                    
-                    <!-- Middle Blank Position -->
-                    <div class="w-10 h-10"></div>
-                    
-                    <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="search"><i class="fas fa-search text-sm text-white/40"></i></div>
-                    <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="downloader"><i class="fas fa-cloud-arrow-down text-sm text-white/40"></i></div>
-                    <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="settings"><i class="fas fa-cog text-sm text-white/40"></i></div>
-                </div>
-            </div>
-            <div id="omni-label-container">
-                <div id="omni-label">ALL SONGS</div>
-            </div>
+                </div>        
+        <!-- Independent Label Container -->
+        <div id="omni-label-container">
+            <div id="omni-label">ALL SONGS</div>
         </div>
     </div>
 
     <!-- Now Playing Full View -->
-    <div id="now-playing-view" class="fixed inset-0 z-[120] hidden flex flex-col touch-none overflow-hidden h-[100dvh]">
-        <div class="relative flex-1 flex flex-col p-8 safe-top safe-bottom justify-between">
-            <div class="flex justify-between items-center pt-4">
-                <button onclick="UI.hideNowPlaying()" class="w-12 h-12 flex items-center justify-center bg-white/10 rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-chevron-down"></i></button>
-                <div class="text-center">
+    <div id="now-playing-view" class="fixed inset-0 z-[120] hidden flex flex-col touch-none overflow-hidden min-h-full-safe">
+        <div class="relative flex-1 flex flex-col p-8 safe-top safe-bottom">
+            <!-- Header (Fixed at top) -->
+            <div class="flex justify-between items-center pt-4 mb-2">
+                <button onclick="UI.hideNowPlaying()" class="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-white/10 rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-chevron-down"></i></button>
+                <div class="text-center px-4 flex-1 truncate">
                     <div class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)] mb-1">Now Playing</div>
-                    <div id="np-album-title" class="text-[11px] font-bold text-[var(--text-dim)] truncate max-w-[180px]">Album</div>
+                    <div id="np-album-title" class="text-[11px] font-bold text-[var(--text-dim)] truncate font-mono">Album</div>
                 </div>
-                <button onclick="UI.showActionMenu(store.state.currentTrack?.id)" class="w-12 h-12 flex items-center justify-center bg-white/10 rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-ellipsis"></i></button>
+                <button onclick="UI.showActionMenu(store.state.currentTrack?.id)" class="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-white/10 rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-ellipsis"></i></button>
             </div>
-            <div class="flex-1 flex items-center justify-center min-h-0 py-8">
-                <img id="np-art" src="assets/icons/icon-512.png" class="w-full aspect-square max-w-[320px] rounded-[40px] shadow-[0_40px_80px_rgba(0,0,0,0.8)] object-cover border border-white/10" alt="Art">
-            </div>
-            <div class="space-y-8">
-                <div class="text-center md:text-left">
-                    <div id="np-title" class="text-3xl font-black mb-1 tracking-tight truncate text-[var(--text-main)]">Song Title</div>
+
+            <!-- Content Area: Centered but pushed up -->
+            <div class="flex-1 flex flex-col items-center justify-center">
+                <div class="text-center mb-7 w-full px-8">
+                    <div id="np-title" class="text-3xl font-black mb-1 tracking-tight truncate text-white">Song Title</div>
                     <div id="np-artist" class="text-sm text-[var(--accent)] font-bold uppercase tracking-widest truncate">Artist</div>
                 </div>
-                <div class="space-y-4">
-                    <div id="np-seek-container" class="relative w-full h-1.5 bg-white/10 rounded-full cursor-pointer overflow-hidden group">
-                        <div id="np-seek-bar" class="absolute top-0 left-0 h-full bg-[var(--accent)] w-0 transition-all duration-100 shadow-[0_0_15px_var(--accent)]"></div>
-                    </div>
-                    <div class="flex justify-between text-[10px] font-bold font-mono text-[var(--text-dim)] tracking-widest uppercase px-1">
-                        <span id="np-time-curr">0:00</span>
-                        <span id="np-time-total">0:00</span>
+                <img id="np-art" src="assets/icons/icon-512.png" class="w-full aspect-square max-w-[340px] rounded-[40px] shadow-[0_40px_80px_rgba(0,0,0,0.8)] object-cover border border-white/10" alt="Art">
+                <!-- Flying timeline: seek bar under cover art -->
+                <div id="np-seek-container" class="w-full max-w-[340px] mt-4 px-1 cursor-pointer touch-manipulation" role="slider" aria-label="Seek" tabindex="0">
+                    <div class="h-2 rounded-full bg-white/10 overflow-hidden">
+                        <div id="np-seek-progress" class="h-full bg-[var(--accent)] w-0 transition-[width] duration-100 shadow-[0_0_10px_var(--accent)]" style="width: 0%"></div>
                     </div>
                 </div>
-                <div class="flex items-center justify-between">
-                    <button id="np-shuffle-btn" class="w-12 h-12 text-[var(--text-dim)] active:scale-90"><i class="fas fa-shuffle text-xl"></i></button>
-                    <div class="flex items-center space-x-6">
-                        <button id="np-prev-btn" class="w-14 h-14 bg-white/5 rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-backward-step text-2xl"></i></button>
-                        <button id="np-play-btn" class="w-24 h-24 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full active:scale-90 shadow-2xl"><i class="fas fa-play text-4xl ml-1"></i></button>
-                        <button id="np-next-btn" class="w-14 h-14 bg-white/5 rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-forward-step text-2xl"></i></button>
-                    </div>
-                    <button id="np-repeat-btn" class="w-12 h-12 text-[var(--text-dim)] active:scale-90 relative">
-                        <i class="fas fa-repeat text-xl"></i>
-                        <div id="np-repeat-one-indicator" class="absolute top-1 right-1 text-[10px] font-black hidden">1</div>
-                    </button>
-                </div>
+                <!-- This spacer pushes everything above it higher -->
+                <div class="flex-1 max-h-[30vh] min-h-[40px]"></div>
             </div>
         </div>
     </div>
@@ -435,10 +539,10 @@
 
     <!-- Metadata Editor -->
     <div id="metadata-editor" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-        <div id="metadata-editor-content" class="glass-view rounded-[40px] w-full max-w-lg p-8 border border-white/10 shadow-2xl transition-all transform scale-95 opacity-0">
+        <div id="metadata-editor-content" class="glass-view rounded-[40px] w-full max-w-lg p-8 border border-white/10 shadow-2xl transition-all transform scale-95 opacity-0" style="backdrop-filter: blur(60px); -webkit-backdrop-filter: blur(60px); background: rgba(15, 15, 18, 0.85); transition-duration: 600ms; transition-timing-function: cubic-bezier(0.19, 1, 0.22, 1);">
             <div class="flex justify-between items-center mb-8">
                 <h2 class="text-2xl font-black tracking-tighter">Edit Metadata</h2>
-                <div class="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--accent)] bg-[var(--accent)]/10 px-3 py-1 rounded-full border border-[var(--accent)]/20">Surgical Mode</div>
+                <div class="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--accent)] bg-[var(--accent)]/10 px-3 py-1 rounded-full border border-[var(--accent)]/20 font-mono">Surgical Mode</div>
             </div>
             
             <div class="space-y-6">
@@ -462,24 +566,24 @@
 
                 <div class="space-y-4">
                     <div class="group">
-                        <label class="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors">Track Title</label>
+                        <label class="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors font-mono">Track Title</label>
                         <input type="text" id="edit-title" class="w-full bg-black/40 border border-white/5 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] focus:bg-black/60 transition-all font-medium text-white/90">
                     </div>
                     <div class="group">
-                        <label class="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors">Artist Name</label>
+                        <label class="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors font-mono">Artist Name</label>
                         <input type="text" id="edit-artist" class="w-full bg-black/40 border border-white/5 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] focus:bg-black/60 transition-all font-medium text-white/90">
                     </div>
                     <div class="group">
-                        <label class="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors">Album Title</label>
+                        <label class="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors font-mono">Album Title</label>
                         <input type="text" id="edit-album" class="w-full bg-black/40 border border-white/5 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] focus:bg-black/60 transition-all font-medium text-white/90">
                     </div>
                 </div>
 
                 <div id="auto-fetch-results" class="hidden space-y-2 max-h-40 overflow-y-auto custom-scrollbar border-t border-white/5 pt-4"></div>
-                <div id="edit-status" class="text-[10px] font-bold text-center min-h-[1rem] uppercase tracking-widest text-[var(--accent)] opacity-60"></div>
+                <div id="edit-status" class="text-[10px] font-bold text-center min-h-[1rem] uppercase tracking-widest text-[var(--accent)] opacity-60 font-mono"></div>
 
                 <div class="flex space-x-4 pt-4">
-                    <button onclick="UI.hideMetadataEditor()" class="flex-1 py-4 text-white/40 font-black uppercase tracking-widest text-[10px] active:text-white transition-colors focus:outline-none">Cancel</button>
+                    <button onclick="UI.hideMetadataEditor()" class="flex-1 py-4 text-white/40 font-black uppercase tracking-widest text-[10px] active:text-white transition-colors focus:outline-none font-mono">Cancel</button>
                     <button id="edit-save-btn" class="flex-[2] bg-[var(--accent)] text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-[var(--accent)]/20 transition-all active:scale-95 active:brightness-110 focus:outline-none">
                         Save & Sync
                     </button>
@@ -501,6 +605,44 @@
 
     <!-- Toasts -->
     <div id="toast-container" class="fixed bottom-32 left-1/2 -translate-x-1/2 z-[400] flex flex-col items-center space-y-4 pointer-events-none w-full max-w-xs"></div>
+
+    <!-- #region agent log -->
+    <script>
+    (function debugViewport() {
+        function send() {
+            var probe = document.createElement('div');
+            probe.style.cssText = 'position:absolute;pointer-events:none;padding-bottom:env(safe-area-inset-bottom);';
+            document.body.appendChild(probe);
+            var safeBottom = getComputedStyle(probe).paddingBottom;
+            document.body.removeChild(probe);
+            var vv = window.visualViewport;
+            var payload = {
+                sessionId: 'f60ea1',
+                runId: 'viewport-check',
+                hypothesisId: 'H2_H3_H4',
+                location: 'index.html:debugViewport',
+                message: 'Viewport and safe-area on load',
+                data: {
+                    innerHeight: window.innerHeight,
+                    visualViewportHeight: vv ? vv.height : null,
+                    bodyOffsetHeight: document.body.offsetHeight,
+                    docClientHeight: document.documentElement.clientHeight,
+                    safeAreaBottomComputed: safeBottom,
+                    gap: window.innerHeight - document.body.offsetHeight
+                },
+                timestamp: Date.now()
+            };
+            fetch('http://127.0.0.1:7390/ingest/5e87ad09-2e12-436a-ac69-c14c6b45cb46', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f60ea1' },
+                body: JSON.stringify(payload)
+            }).catch(function(){});
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', send);
+        else setTimeout(send, 0);
+    })();
+    </script>
+    <!-- #endregion -->
 
     <script type="module" src="js/app.js"></script>
 </body>

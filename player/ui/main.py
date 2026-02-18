@@ -344,6 +344,16 @@ class MainWindow(Adw.ApplicationWindow):
         self.title_widget = Adw.WindowTitle(title="Soundsible", subtitle="Local Library")
         header.set_title_widget(self.title_widget)
         main_box.append(header)
+
+        # View Stack for switching between Main and Mini modes
+        self.view_stack = Gtk.Stack()
+        self.view_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self.view_stack.set_transition_duration(300)
+        main_box.append(self.view_stack)
+
+        # Main View Container
+        self.main_view = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.view_stack.add_named(self.main_view, "main")
         
         # Settings action
         settings_action = Gio.SimpleAction.new("settings", None)
@@ -376,6 +386,13 @@ class MainWindow(Adw.ApplicationWindow):
         
         menu_button.set_menu_model(menu)
         header.pack_end(menu_button)
+
+        # Mini Mode Toggle Button
+        self.mini_mode_btn = Gtk.ToggleButton()
+        self.mini_mode_btn.set_icon_name("view-restore-symbolic")
+        self.mini_mode_btn.set_tooltip_text("Toggle Mini Player (F12)")
+        self.mini_mode_btn.connect("toggled", self.on_mini_mode_toggled)
+        header.pack_end(self.mini_mode_btn)
 
 
         
@@ -501,16 +518,19 @@ class MainWindow(Adw.ApplicationWindow):
         self.volume_knob.connect('value-changed', self.on_volume_changed)
         player_container.append(self.volume_knob)
         
-        main_box.append(player_container)
+        self.main_view.append(player_container)
 
         # Content Area (Split View)
         # Check for config and show wizard if needed
         config = self._load_config()
         if config:
-            self._init_player_ui(main_box, config)
+            self._init_player_ui(self.main_view, config)
         else:
             # No config - show setup wizard
             self._show_first_run_wizard()
+        
+        # Initialize Mini Player View
+        self._init_mini_player_ui()
         
         # Connect Time Update
         self.engine.set_time_update_callback(self.on_time_update)
@@ -596,8 +616,104 @@ class MainWindow(Adw.ApplicationWindow):
             current_vol = self.volume_knob.get_value()
             self.volume_knob.set_value(max(0, current_vol - 5))
             return True
+
+        # F12: Toggle Mini Mode
+        elif keyval == Gdk.KEY_F12:
+            self.mini_mode_btn.set_active(not self.mini_mode_btn.get_active())
+            return True
         
         return False  # Let other handlers process the key
+
+    def on_mini_mode_toggled(self, btn):
+        """Switch between main and mini player views."""
+        is_mini = btn.get_active()
+        if is_mini:
+            self.view_stack.set_visible_child_name("mini")
+            self.set_default_size(300, 450)
+            self.set_resizable(False)
+        else:
+            self.view_stack.set_visible_child_name("main")
+            self.set_default_size(1000, 700)
+            self.set_resizable(True)
+
+    def _init_mini_player_ui(self):
+        """Initialize the Mini Player view for small windows."""
+        mini_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        mini_box.set_valign(Gtk.Align.CENTER)
+        mini_box.set_halign(Gtk.Align.CENTER)
+        mini_box.set_spacing(16)
+        mini_box.set_margin_top(24)
+        mini_box.set_margin_bottom(24)
+        
+        # 1. Large Cover Art
+        self.mini_cover = Gtk.Image()
+        self.mini_cover.set_pixel_size(240)
+        self.mini_cover.set_size_request(240, 240)
+        self.mini_cover.add_css_class("card")
+        self.mini_cover.set_from_icon_name("emblem-music-symbolic")
+        self.mini_cover.set_halign(Gtk.Align.CENTER)
+        mini_box.append(self.mini_cover)
+        
+        # 2. Title & Artist
+        info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        info_box.set_halign(Gtk.Align.CENTER)
+        
+        self.mini_title = Gtk.Label(label="Soundsible")
+        self.mini_title.add_css_class("title-2") # Large title
+        self.mini_title.set_ellipsize(3)
+        self.mini_title.set_max_width_chars(20)
+        
+        self.mini_artist = Gtk.Label(label="Not Playing")
+        self.mini_artist.add_css_class("title-4")
+        self.mini_artist.add_css_class("dim-label")
+        self.mini_artist.set_ellipsize(3)
+        self.mini_artist.set_max_width_chars(20)
+        
+        info_box.append(self.mini_title)
+        info_box.append(self.mini_artist)
+        mini_box.append(info_box)
+        
+        # 3. Progress Bar
+        self.mini_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL)
+        self.mini_scale.set_size_request(200, -1)
+        self.mini_scale.set_draw_value(False)
+        self.mini_scale.add_css_class("seek-bar")
+        self.mini_scale.connect('value-changed', self.on_seek)
+        mini_box.append(self.mini_scale)
+        
+        # Time Label
+        self.mini_time_label = Gtk.Label(label="0:00 / 0:00")
+        self.mini_time_label.add_css_class("numeric")
+        mini_box.append(self.mini_time_label)
+
+        # 4. Controls
+        controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+        controls.set_halign(Gtk.Align.CENTER)
+        
+        # Prev
+        prev = Gtk.Button(icon_name="media-skip-backward-symbolic")
+        prev.add_css_class("circular")
+        prev.connect('clicked', self.play_previous)
+        controls.append(prev)
+        
+        # Play/Pause
+        self.mini_play_btn = Gtk.Button(icon_name="media-playback-start-symbolic")
+        self.mini_play_btn.add_css_class("circular")
+        self.mini_play_btn.add_css_class("play-button") 
+        self.mini_play_btn.set_size_request(64, 64)
+        self.mini_play_btn.connect('clicked', self.on_play_toggle)
+        controls.append(self.mini_play_btn)
+        
+        # Next
+        next_btn = Gtk.Button(icon_name="media-skip-forward-symbolic")
+        next_btn.add_css_class("circular")
+        next_btn.connect('clicked', self.play_next)
+        controls.append(next_btn)
+        
+        mini_box.append(controls)
+        
+        # Add to stack
+        self.view_stack.add_named(mini_box, "mini")
 
 
     def on_player_state_change(self, state):
@@ -692,12 +808,14 @@ class MainWindow(Adw.ApplicationWindow):
         """Update progress scale on main thread (thread-safe)."""
         self._seeking = True
         self.progress_scale.set_value(time)
+        self.mini_scale.set_value(time)
         
         # Update time label
         total = self.progress_scale.get_adjustment().get_upper()
         
         t_str = f"{self._format_time(time)} / {self._format_time(total)}"
         self.time_label.set_text(t_str)
+        self.mini_time_label.set_text(t_str)
         
         self._seeking = False
         return False  # Remove callback from idle queue to prevent memory leak
@@ -713,6 +831,10 @@ class MainWindow(Adw.ApplicationWindow):
              self.cover_art.set_visible(True)
              self.title_label.set_text(track.title)
              self.artist_label.set_text(track.artist)
+             
+             # Mini View Sync
+             self.mini_title.set_text(track.title)
+             self.mini_artist.set_text(track.artist)
              
              self.title_widget.set_subtitle(f"Playing: {track.title}")
              
@@ -769,16 +891,21 @@ class MainWindow(Adw.ApplicationWindow):
         """Update progress bar range after track loads in MPV."""
         duration = self.engine.get_duration()
         if duration and duration > 0:
-            self.progress_scale.set_range(0, duration)
+            rng = (0, duration)
         elif track.duration:
-            self.progress_scale.set_range(0, track.duration)
+            rng = (0, track.duration)
         else:
-            self.progress_scale.set_range(0, 300)  # Fallback
+            rng = (0, 300)  # Fallback
             
+        self.progress_scale.set_range(*rng)
+        self.mini_scale.set_range(*rng)
+
         # Update time label with new duration
         total = self.progress_scale.get_adjustment().get_upper()
         current = self.progress_scale.get_value()
-        self.time_label.set_text(f"{self._format_time(current)} / {self._format_time(total)}")
+        t_str = f"{self._format_time(current)} / {self._format_time(total)}"
+        self.time_label.set_text(t_str)
+        self.mini_time_label.set_text(t_str)
         
         return False  # Remove from timeout queue
     
@@ -821,6 +948,11 @@ class MainWindow(Adw.ApplicationWindow):
                         local_cover_path, 48, 48, True
                     )
                     self.cover_art.set_from_pixbuf(pixbuf)
+                    
+                    mini_pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                        local_cover_path, 240, 240, True
+                    )
+                    self.mini_cover.set_from_pixbuf(mini_pixbuf)
                     return # Done!
                 except Exception as e:
                     pass
@@ -840,12 +972,18 @@ class MainWindow(Adw.ApplicationWindow):
                         tmp_path, 48, 48, True
                     )
                     self.cover_art.set_from_pixbuf(pixbuf)
+                    
+                    mini_pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                        tmp_path, 240, 240, True
+                    )
+                    self.mini_cover.set_from_pixbuf(mini_pixbuf)
 
                 finally:
                     os.remove(tmp_path)
             else:
                 # No cover found, use default
                 self.cover_art.set_from_icon_name("emblem-music-symbolic")
+                self.mini_cover.set_from_icon_name("emblem-music-symbolic")
                 
                 # Fallback: Trigger online fetch
                 self._fetch_online_cover(track)
@@ -856,6 +994,7 @@ class MainWindow(Adw.ApplicationWindow):
                 import traceback
                 traceback.print_exc()
             self.cover_art.set_from_icon_name("emblem-music-symbolic")
+            self.mini_cover.set_from_icon_name("emblem-music-symbolic")
 
             # Fallback: Trigger online fetch if not found locally
             self._fetch_online_cover(track)
@@ -1136,10 +1275,9 @@ class MainWindow(Adw.ApplicationWindow):
     
     def _poll_engine_state(self):
         """Poll engine state and update button icon (runs every 250ms)."""
-        if self.engine.is_playing:
-            self.play_btn.set_icon_name("media-playback-pause-symbolic")
-        else:
-            self.play_btn.set_icon_name("media-playback-start-symbolic")
+        icon = "media-playback-pause-symbolic" if self.engine.is_playing else "media-playback-start-symbolic"
+        self.play_btn.set_icon_name(icon)
+        self.mini_play_btn.set_icon_name(icon)
         return True  # Keep timer running
     
     def play_next(self, *args):
@@ -1191,7 +1329,7 @@ class MainWindow(Adw.ApplicationWindow):
             print("Cannot play: library is empty.")
     
 
-    def _init_player_ui(self, main_box, config):
+    def _init_player_ui(self, container, config):
         """Initialize the main player interface once config exists."""
         # Initialize Library Manager
         self.lib_manager = LibraryManager()
@@ -1199,7 +1337,7 @@ class MainWindow(Adw.ApplicationWindow):
         # Create Main Content Box (Horizontal split)
         content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         content_box.set_vexpand(True)
-        main_box.append(content_box)
+        container.append(content_box)
 
         # Create Tab View (Left side, expansive via hexpand)
         self.tab_view = TabView()
@@ -1281,7 +1419,7 @@ class MainWindow(Adw.ApplicationWindow):
         
         search_box.append(self.search_entry)
         
-        main_box.append(search_box)
+        container.append(search_box)
         
         # Connect search entry to active library view filter
         self.search_entry.connect("search-changed", self._on_search_changed)

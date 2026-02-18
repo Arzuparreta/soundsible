@@ -2,6 +2,7 @@
  * Soundsible Downloader Manager
  */
 import { store } from './store.js';
+import { Haptics } from './haptics.js';
 
 /**
  * Security: Escape HTML characters to prevent XSS.
@@ -92,13 +93,15 @@ export class Downloader {
                 this.input.value = '';
                 await this.refreshStatus();
                 this.addLog(`Queued ${lines.length} item(s).`);
-                // Auto-trigger removed as per user request
+                Haptics.tick();
             } else {
                 alert(`Failed to add: ${data.message || 'Unknown error'}`);
+                Haptics.error();
             }
         } catch (err) {
             console.error("Queue failed:", err);
             alert("Could not reach Station. Check your connection.");
+            Haptics.error();
         } finally {
             this.addBtn.disabled = false;
             this.addBtn.textContent = 'Add to Queue';

@@ -30,7 +30,7 @@ Soundsible animations must be fast, tactile, and responsive—silky like Apple's
         - *ACTIVE mode (286px):* Playback state, capsule with symmetrical controls (`[Prev] [Anchor] [Next]`) and an under-bar progress indicator.
         - *BLOOM mode (380px):* Navigation state, expanded capsule with a 7-slot uniform grid.
     - **Safe Release Logic:** Transport actions (Play/Pause, Skip) are triggered on `touchend` only if the user's finger is still within the island's boundary. Dragging away cancels the action.
-    - **Hold-to-Bloom (400ms):** Holding the center anchor for 400ms blooms the navigation ribbon. Selection is tracked via real-time thumb tracking.
+    - **Hold-to-Bloom (324ms):** Holding the center anchor for 324ms blooms the navigation ribbon. Selection is tracked via real-time thumb tracking.
     - **Visual Feedback (Subtle Inflation):** Tapping any zone triggers a rapid, 300ms structural "breath" (scale 1.08) rather than distracting flashes.
     - **Generous Hitbox:** A 20px invisible touch area extends beyond the visual glass to ensure zero-miss interaction on rounded corners.
 - **Card Deck Transitions:** Views slide OVER each other. Outgoing views dim and scale down slightly (`scale(0.96)`) to create depth.
@@ -38,7 +38,7 @@ Soundsible animations must be fast, tactile, and responsive—silky like Apple's
     - **Horizontal Swipes:** Right Swipe = Add to Queue. Left Swipe = Toggle Favourite.
     - **Vertical Dismissal (Standardized):** 14% height threshold for dismissing Sheets (Now Playing, Action Menu).
 - **Haptic Feedback:**
-    - **Vibrate (15-50ms):** Subtle 15ms pulses for transport taps; 50ms for Bloom activation.
+    - **Vibrate (15-30ms):** Subtle 15ms pulses for transport taps; 30ms for Bloom activation.
 
 ## 4. Platform Safety (Mobile)
 - **Selection Block:** Global `user-select: none` and `-webkit-touch-callout: none` are enforced to prevent browser selection mode during hold gestures.

@@ -1,0 +1,13 @@
+---
+description: Apply Apple-like glassmorphism and premium UI design in soundsible
+alwaysApply: true
+---
+
+# UI design standard (soundsible)
+
+For any UI or frontend work in this project, follow the **premium-glass-ui-design** skill:
+
+- **Location:** `.cursor/skills/premium-glass-ui-design/SKILL.md`
+- **Use it for:** Layouts, components, styling, glass panels, typography, spacing, motion, and visual polish in `ui_web/`, `player/ui/`, or any frontend code.
+
+Apply its principles (glassmorphism, clarity, spacing, motion) unless the user explicitly asks for a different style.

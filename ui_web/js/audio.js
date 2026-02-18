@@ -4,6 +4,7 @@
 import { store } from './store.js';
 import { Resolver } from './resolver.js';
 import { connectionManager } from './connection.js';
+import { Haptics } from './haptics.js';
 
 class AudioEngine {
     constructor() {
@@ -25,12 +26,19 @@ class AudioEngine {
             this.onTimeUpdate();
         });
         
-        this.audio.addEventListener('play', () => store.update({ isPlaying: true }));
-        this.audio.addEventListener('pause', () => store.update({ isPlaying: false }));
+        this.audio.addEventListener('play', () => {
+            store.update({ isPlaying: true });
+            Haptics.heavy();
+        });
+        this.audio.addEventListener('pause', () => {
+            store.update({ isPlaying: false });
+            Haptics.lock();
+        });
         
         this.audio.addEventListener('error', (e) => {
             console.error("Playback error:", this.audio.error);
             store.update({ isPlaying: false });
+            Haptics.error();
         });
 
         if ('mediaSession' in navigator) {
