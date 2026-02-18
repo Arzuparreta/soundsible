@@ -35,6 +35,7 @@ export class UI {
         this._npGesturesBound = false;
         this.isIslandActive = false;
         this.isBlooming = false;
+        this.isDraggingQueue = false;
 
         this.initGlobalListeners();
         this.initOmniIsland();
@@ -370,6 +371,9 @@ export class UI {
         }, 500);
 
         this.currentView = viewId;
+        if (viewId === 'artists' && typeof window.syncArtistGridIndicators === 'function') {
+            window.syncArtistGridIndicators(store.state);
+        }
     }
 
     static navigateBack() {
@@ -1194,8 +1198,8 @@ export class UI {
         const t = document.createElement('div');
         // Omni-Island Styled Toast
         t.className = 'glass-view px-6 py-3 rounded-full shadow-2xl text-[10px] font-black uppercase tracking-[0.2em] font-mono text-white/80 transition-all duration-500 ease-[cubic-bezier(0.19,1,0.22,1)] transform translate-y-10 opacity-0 border border-white/10';
-        t.style.backdropFilter = 'blur(40px)';
-        t.style.webkitBackdropFilter = 'blur(40px)';
+        t.style.backdropFilter = 'blur(32px)';
+        t.style.webkitBackdropFilter = 'blur(32px)';
         t.style.backgroundColor = 'rgba(30, 31, 34, 0.85)';
         t.textContent = m;
         c.appendChild(t);

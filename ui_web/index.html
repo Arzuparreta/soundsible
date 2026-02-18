@@ -88,9 +88,10 @@
 
         .glass-view {
             background: var(--bg-surface);
-            backdrop-filter: blur(40px);
-            -webkit-backdrop-filter: blur(40px);
+            backdrop-filter: blur(32px);
+            -webkit-backdrop-filter: blur(32px);
             border: 1px solid var(--glass-border);
+            transition: backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
         }
 
         /* View Stacking Engine */
@@ -137,9 +138,10 @@
             visibility: hidden;
             transform: translateY(100%) scale(0.98);
             background: rgba(13, 13, 15, 0.85); /* Slightly transparent for better glass effect */
-            backdrop-filter: blur(60px);
-            -webkit-backdrop-filter: blur(60px);
+            backdrop-filter: blur(48px);
+            -webkit-backdrop-filter: blur(48px);
             border-top: 1px solid var(--glass-border);
+            transition: backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
         }
         
         #now-playing-view.active {
@@ -157,10 +159,10 @@
         }
         #action-menu-sheet {
             background: rgba(10, 10, 12, 0.85); /* Deeper charcoal for sheet */
-            backdrop-filter: blur(60px);
-            -webkit-backdrop-filter: blur(60px);
+            backdrop-filter: blur(48px);
+            -webkit-backdrop-filter: blur(48px);
             border-top: 1px solid var(--glass-border);
-            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
             will-change: transform;
         }
         #action-menu.active #action-menu-sheet {
@@ -177,6 +179,30 @@
             100% { transform: scale(1); opacity: 0.8; }
         }
 
+        /* Playing indicator: infinity (figure-8) path, smooth and consistent */
+        .active-indicator-container.is-playing .playing-icon {
+            animation: playing-icon-infinity 2s linear infinite;
+        }
+        @keyframes playing-icon-infinity {
+            /* x = 1.5*sin(t), y = 1.5*sin(2t) — figure-8, 16 steps */
+            0%, 100% { transform: translate(0, 0); }
+            6.25% { transform: translate(0.6px, 1.4px); }
+            12.5% { transform: translate(1.1px, 1.5px); }
+            18.75% { transform: translate(1.4px, 1.4px); }
+            25% { transform: translate(1.5px, 0); }
+            31.25% { transform: translate(1.4px, -1.4px); }
+            37.5% { transform: translate(1.1px, -1.5px); }
+            43.75% { transform: translate(0.6px, -1.4px); }
+            50% { transform: translate(0, 0); }
+            56.25% { transform: translate(-0.6px, -1.4px); }
+            62.5% { transform: translate(-1.1px, -1.5px); }
+            68.75% { transform: translate(-1.4px, -1.4px); }
+            75% { transform: translate(-1.5px, 0); }
+            81.25% { transform: translate(-1.4px, 1.4px); }
+            87.5% { transform: translate(-1.1px, 1.5px); }
+            93.75% { transform: translate(-0.6px, 1.4px); }
+        }
+
         @keyframes omni-marquee {
             0% { transform: translateX(0); }
             100% { transform: translateX(-50%); }
@@ -190,6 +216,38 @@
             0% { transform: scale(1); }
             30% { transform: scale(1.08); }
             100% { transform: scale(1); }
+        }
+
+        /* Queue reorder: drag clone (visual only; original row stays in DOM to keep touch target) */
+        .queue-drag-clone {
+            position: fixed;
+            z-index: 9999;
+            pointer-events: none;
+            touch-action: none;
+            left: 0;
+            top: 0;
+            will-change: transform;
+            box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+            border-radius: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(255, 255, 255, 0.10);
+            backdrop-filter: blur(22px) saturate(180%);
+            -webkit-backdrop-filter: blur(22px) saturate(180%);
+        }
+
+        /* Queue reorder: drop target highlight (subtle Apple-like glow) */
+        .queue-item.queue-drop-target {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+            transform: translateZ(0) scale(1.01);
+            transition: transform 0.18s cubic-bezier(0.19, 1, 0.22, 1), background 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        }
+
+        /* Queue reorder: dim source row slightly (keeps layout stable) */
+        .queue-item.queue-drag-source {
+            opacity: 0.18 !important;
+            transition: opacity 0.18s ease-out;
         }
 
         /* Dynamic Docking Labels: above omni bar (bar is bottom-safe + ~56px height; keep label 68px above bar bottom) */
@@ -517,7 +575,7 @@
 
     <!-- Action Menu -->
     <div id="action-menu" class="fixed inset-0 z-[150] hidden">
-        <div id="action-menu-overlay" class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity opacity-0"></div>
+        <div id="action-menu-overlay" class="absolute inset-0 bg-black/60 backdrop-blur-[3.2px] transition-all duration-150 ease-out opacity-0"></div>
         <div id="action-menu-sheet" class="absolute bottom-0 left-0 right-0 bg-gray-950 rounded-t-[40px] p-8 transition-transform transform translate-y-full border-t border-white/5">
             <div class="w-12 h-1 bg-white/10 rounded-full mx-auto mb-8"></div>
             <div class="flex items-center space-x-4 mb-10">
@@ -538,8 +596,8 @@
     </div>
 
     <!-- Metadata Editor -->
-    <div id="metadata-editor" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-        <div id="metadata-editor-content" class="glass-view rounded-[40px] w-full max-w-lg p-8 border border-white/10 shadow-2xl transition-all transform scale-95 opacity-0" style="backdrop-filter: blur(60px); -webkit-backdrop-filter: blur(60px); background: rgba(15, 15, 18, 0.85); transition-duration: 600ms; transition-timing-function: cubic-bezier(0.19, 1, 0.22, 1);">
+    <div id="metadata-editor" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-[9.6px] transition-all duration-150 ease-out">
+        <div id="metadata-editor-content" class="glass-view rounded-[40px] w-full max-w-lg p-8 border border-white/10 shadow-2xl transition-all transform scale-95 opacity-0" style="backdrop-filter: blur(48px); -webkit-backdrop-filter: blur(48px); background: rgba(15, 15, 18, 0.85); transition-duration: 600ms; transition-timing-function: cubic-bezier(0.19, 1, 0.22, 1);">
             <div class="flex justify-between items-center mb-8">
                 <h2 class="text-2xl font-black tracking-tighter">Edit Metadata</h2>
                 <div class="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--accent)] bg-[var(--accent)]/10 px-3 py-1 rounded-full border border-[var(--accent)]/20 font-mono">Surgical Mode</div>

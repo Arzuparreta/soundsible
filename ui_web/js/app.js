@@ -64,6 +64,320 @@ function renderQueue(state) {
     containers.forEach(c => c.innerHTML = html);
 }
 
+const QUEUE_HOLD_MS = 280;
+const QUEUE_MOVE_THRESHOLD_PX = 14;
+const QUEUE_CANCEL_THRESHOLD_PX = 30;
+const QUEUE_DROP_FADE_MS = 170;
+
+function initQueueDrag() {
+    const container = document.getElementById('floating-queue-tracks');
+    if (!container) return;
+
+    let holdTimer = null;
+    let fromIndex = null;
+    let clone = null;
+    let originalItem = null;
+    let startX = 0, startY = 0;
+    let dragStarted = false;
+    let pointerId = null;
+    let currentDropTargetIndex = null;
+    let rafDropTarget = 0;
+    let hasMoved = false;
+
+    function clearHoldTimer() {
+        if (holdTimer) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+        }
+    }
+
+    function getPointerCoords(e) {
+        if (e.touches && e.touches.length) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        return { x: e.clientX, y: e.clientY };
+    }
+
+    function cleanupDrag() {
+        clearHoldTimer();
+        if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
+        clone = null;
+        if (originalItem && originalItem.parentNode) {
+            originalItem.classList.remove('queue-drag-source');
+            originalItem.style.opacity = '';
+            originalItem.style.transition = '';
+            originalItem.style.pointerEvents = '';
+        }
+        originalItem = null;
+        clearDropTarget();
+        UI.isDraggingQueue = false;
+        dragStarted = false;
+        currentDropTargetIndex = null;
+        hasMoved = false;
+        document.removeEventListener('pointermove', onDocMove, { capture: true });
+        document.removeEventListener('pointerup', onDocEnd, { capture: true });
+        document.removeEventListener('pointercancel', onDocEnd, { capture: true });
+        document.removeEventListener('touchmove', onDocTouchMove, { capture: true, passive: false });
+        document.removeEventListener('touchend', onDocTouchEnd, { capture: true, passive: false });
+        document.removeEventListener('touchcancel', onDocTouchCancel, { capture: true, passive: false });
+    }
+
+    function updateClonePosition(x, y) {
+        if (clone) {
+            const w = clone.getBoundingClientRect().width;
+            const h = clone.getBoundingClientRect().height;
+            clone.style.transition = 'none';
+            clone.style.left = `${x - w / 2}px`;
+            clone.style.top = `${y - h / 2}px`;
+        }
+    }
+
+    function clearDropTarget() {
+        const cont = document.getElementById('floating-queue-tracks');
+        if (!cont) return;
+        cont.querySelectorAll('.queue-item.queue-drop-target').forEach(el => el.classList.remove('queue-drop-target'));
+    }
+
+    function setDropTarget(index) {
+        if (index == null) return;
+        const cont = document.getElementById('floating-queue-tracks');
+        if (!cont) return;
+        const el = cont.querySelector(`.queue-item[data-index="${index}"]`);
+        if (!el) return;
+        el.classList.add('queue-drop-target');
+    }
+
+    function scheduleDropTargetUpdate() {
+        if (!dragStarted || !clone || !hasMoved) return;
+        if (rafDropTarget) return;
+        rafDropTarget = requestAnimationFrame(() => {
+            rafDropTarget = 0;
+            const next = getClosestSlotIndex();
+            if (next !== currentDropTargetIndex) {
+                clearDropTarget();
+                currentDropTargetIndex = next;
+                if (next !== fromIndex) {
+                    setDropTarget(next);
+                }
+            }
+        });
+    }
+
+    function getClosestSlotIndex() {
+        const cont = document.getElementById('floating-queue-tracks');
+        if (!cont || !clone || !originalItem) return fromIndex;
+        
+        const cloneRect = clone.getBoundingClientRect();
+        const cx = cloneRect.left + cloneRect.width / 2;
+        const cy = cloneRect.top + cloneRect.height / 2;
+        
+        const originalRect = originalItem.getBoundingClientRect();
+        const ox = originalRect.left + originalRect.width / 2;
+        const oy = originalRect.top + originalRect.height / 2;
+        const distanceToOriginal = Math.hypot(cx - ox, cy - oy);
+        
+        if (distanceToOriginal <= QUEUE_CANCEL_THRESHOLD_PX) {
+            return fromIndex;
+        }
+        
+        const children = Array.from(cont.children).filter(el => {
+            return el.classList.contains('queue-item') && el !== originalItem;
+        });
+        if (children.length === 0) return fromIndex;
+        const sorted = children.map((el) => {
+            const idx = parseInt(el.getAttribute('data-index'), 10);
+            return { idx: Number.isNaN(idx) ? 0 : idx, rect: el.getBoundingClientRect() };
+        }).sort((a, b) => a.rect.top - b.rect.top);
+        if (sorted.length === 0) return fromIndex;
+        let best = sorted[0];
+        let bestD = Infinity;
+        sorted.forEach((s) => {
+            const scx = s.rect.left + s.rect.width / 2;
+            const scy = s.rect.top + s.rect.height / 2;
+            const d = (cx - scx) ** 2 + (cy - scy) ** 2;
+            if (d < bestD) { bestD = d; best = s; }
+        });
+        return best.idx;
+    }
+
+    function flyToSlotAndCommit(toIndex) {
+        // No travel/bounce: clean “drop” fade, then commit.
+        if (!clone) {
+            commitReorder(toIndex);
+            return;
+        }
+
+        clearDropTarget();
+
+        // Let the original stay dim until commit swaps the list.
+        clone.style.transition = `opacity ${QUEUE_DROP_FADE_MS}ms ease-out, transform ${QUEUE_DROP_FADE_MS}ms cubic-bezier(0.19, 1, 0.22, 1)`;
+        clone.style.opacity = '0';
+        clone.style.transform = 'scale(0.985)';
+
+        const onDropFade = () => {
+            clone.removeEventListener('transitionend', onDropFade);
+            commitReorder(toIndex);
+        };
+        clone.addEventListener('transitionend', onDropFade);
+    }
+
+    function commitReorder(toIndex) {
+        const from = fromIndex;
+        cleanupDrag();
+        if (from !== toIndex) {
+            store.reorderQueue(from, toIndex);
+        } else {
+            renderQueue(store.state);
+        }
+        Haptics.tick();
+    }
+
+    function onDocTouchMove(e) {
+        if (!dragStarted || !e.touches.length) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        if (!hasMoved) {
+            const distance = Math.hypot(t.clientX - startX, t.clientY - startY);
+            if (distance > QUEUE_MOVE_THRESHOLD_PX) {
+                hasMoved = true;
+            } else {
+                updateClonePosition(t.clientX, t.clientY);
+                return;
+            }
+        }
+        updateClonePosition(t.clientX, t.clientY);
+        scheduleDropTargetUpdate();
+    }
+
+    function onDocTouchEnd(e) {
+        if (!dragStarted || !clone) return;
+        e.preventDefault();
+        if (e.changedTouches && e.changedTouches.length) {
+            if (!hasMoved) {
+                cleanupDrag();
+                return;
+            }
+            const toIndex = getClosestSlotIndex();
+            flyToSlotAndCommit(toIndex);
+        }
+    }
+
+    function onDocTouchCancel() {
+        if (dragStarted) {
+            cleanupDrag();
+            renderQueue(store.state);
+        }
+    }
+
+    function onDocMove(e) {
+        if (e.pointerId !== pointerId && pointerId != null) return;
+        e.preventDefault();
+        const { x, y } = getPointerCoords(e);
+        if (!hasMoved) {
+            const distance = Math.hypot(x - startX, y - startY);
+            if (distance > QUEUE_MOVE_THRESHOLD_PX) {
+                hasMoved = true;
+            } else {
+                updateClonePosition(x, y);
+                return;
+            }
+        }
+        updateClonePosition(x, y);
+        scheduleDropTargetUpdate();
+    }
+
+    function onDocEnd(e) {
+        if (e.pointerId !== pointerId && pointerId != null) return;
+        e.preventDefault();
+        if (!dragStarted || !clone) {
+            cleanupDrag();
+            return;
+        }
+        if (!hasMoved) {
+            cleanupDrag();
+            return;
+        }
+        const toIndex = getClosestSlotIndex();
+        flyToSlotAndCommit(toIndex);
+    }
+
+    container.addEventListener('pointerdown', function startHold(e) {
+        if (dragStarted) return;
+        const item = e.target.closest('.queue-item');
+        if (!item) return;
+        e.preventDefault();
+        const idx = parseInt(item.getAttribute('data-index'), 10);
+        if (Number.isNaN(idx)) return;
+        const rect = item.getBoundingClientRect();
+        const { x, y } = getPointerCoords(e);
+        startX = x; startY = y;
+        fromIndex = idx;
+        pointerId = e.pointerId;
+        hasMoved = false;
+
+        clearHoldTimer();
+        holdTimer = setTimeout(() => {
+            holdTimer = null;
+            dragStarted = true;
+            UI.isDraggingQueue = true;
+            Haptics.tick();
+
+            originalItem = item;
+            const currentOpacity = window.getComputedStyle(item).opacity || '1';
+            item.style.transition = 'opacity 0.2s ease-out';
+            item.style.opacity = currentOpacity;
+            item.style.pointerEvents = 'none';
+            item.classList.add('queue-drag-source');
+            requestAnimationFrame(() => {
+                if (originalItem && originalItem.parentNode) {
+                    // Keep a faint ghost to avoid “hard disappear” feeling.
+                    originalItem.style.opacity = '0.18';
+                }
+            });
+
+            const cloneNode = item.cloneNode(true);
+            cloneNode.classList.add('queue-drag-clone');
+            cloneNode.classList.remove('queue-item');
+            cloneNode.querySelectorAll('button').forEach(b => b.remove());
+            cloneNode.style.width = `${rect.width}px`;
+            cloneNode.style.left = `${rect.left}px`;
+            cloneNode.style.top = `${rect.top}px`;
+            cloneNode.style.opacity = '0';
+            cloneNode.style.transform = 'scale(0.96) translateY(6px)';
+            cloneNode.style.transition = 'none';
+            document.body.appendChild(cloneNode);
+            clone = cloneNode;
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    if (clone && clone.parentNode) {
+                        clone.style.transition = 'opacity 0.2s ease-out, transform 0.2s ease-out';
+                        clone.style.opacity = '1';
+                        clone.style.transform = 'scale(1) translateY(0px)';
+                    }
+                });
+            });
+
+            document.addEventListener('pointermove', onDocMove, { passive: false, capture: true });
+            document.addEventListener('pointerup', onDocEnd, { passive: false, capture: true });
+            document.addEventListener('pointercancel', onDocEnd, { passive: false, capture: true });
+            document.addEventListener('touchmove', onDocTouchMove, { passive: false, capture: true });
+            document.addEventListener('touchend', onDocTouchEnd, { passive: false, capture: true });
+            document.addEventListener('touchcancel', onDocTouchCancel, { passive: false, capture: true });
+        }, QUEUE_HOLD_MS);
+    });
+
+    document.addEventListener('pointermove', function cancelHoldOnMove(e) {
+        if (holdTimer == null || dragStarted) return;
+        const { x, y } = getPointerCoords(e);
+        if (Math.hypot(x - startX, y - startY) > QUEUE_MOVE_THRESHOLD_PX) clearHoldTimer();
+    });
+
+    document.addEventListener('pointerup', function cancelHoldOnPointerUp() {
+        if (!dragStarted && holdTimer) clearHoldTimer();
+    });
+    document.addEventListener('pointercancel', function cancelHoldOnPointerCancel() {
+        if (!dragStarted && holdTimer) clearHoldTimer();
+    });
+}
+
 /**
  * Surgical UI Sync: Updates indicators (favs, active) without full re-render.
  */
@@ -89,7 +403,12 @@ function syncUIState(state) {
 
         // Surgical update: Active indicator (Volume icon)
         const indicator = row.querySelector('.active-indicator-container');
-        if (indicator) indicator.classList.toggle('hidden', !isActive);
+        if (indicator) {
+            indicator.classList.toggle('opacity-100', isActive);
+            indicator.classList.toggle('opacity-0', !isActive);
+            indicator.classList.toggle('pointer-events-none', !isActive);
+            indicator.classList.toggle('is-playing', isActive);
+        }
 
         // Surgical update: Favourite indicator (Orange dot)
         const favIndicator = row.querySelector('.fav-indicator');
@@ -104,8 +423,42 @@ function syncUIState(state) {
     });
 }
 
+/** Normalize artist name for comparison (trim + lower). */
+function normalizeArtistName(name) {
+    return (name || '').trim().toLowerCase();
+}
+
+/**
+ * Surgical Artist Grid Sync: Updates playing indicators on artist cards without full re-render.
+ */
+function syncArtistGridIndicators(state) {
+    // Only update if artists view is visible
+    if (UI.currentView !== 'artists') return;
+
+    const currentTrack = state.currentTrack;
+    const isPlaying = state.isPlaying;
+    const raw = currentTrack && isPlaying ? (currentTrack.album_artist || currentTrack.artist) : '';
+    const currentTrackArtistsSet = new Set(
+        parseArtistNames(raw).map(n => normalizeArtistName(n))
+    );
+
+    const artistCards = document.querySelectorAll('.artist-card');
+    artistCards.forEach(card => {
+        const artistName = card.getAttribute('data-artist-name');
+        const isCurrentlyPlaying = currentTrackArtistsSet.has(normalizeArtistName(artistName));
+        const indicator = card.querySelector('.active-indicator-container');
+        if (indicator) {
+            indicator.classList.toggle('opacity-100', isCurrentlyPlaying);
+            indicator.classList.toggle('opacity-0', !isCurrentlyPlaying);
+            indicator.classList.toggle('pointer-events-none', !isCurrentlyPlaying);
+            indicator.classList.toggle('is-playing', isCurrentlyPlaying);
+        }
+    });
+}
+
 window.renderFavourites = renderFavourites;
 window.renderQueue = renderQueue;
+window.syncArtistGridIndicators = syncArtistGridIndicators;
 window.store = store;
 window.audioEngine = audioEngine;
 
@@ -134,6 +487,7 @@ async function init() {
         UI.init();
         initSearch();
         initArtistScrollSuppress();
+        initQueueDrag();
         // #region agent log
         fetch('http://127.0.0.1:7390/ingest/5e87ad09-2e12-436a-ac69-c14c6b45cb46', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ed9dd2' }, body: JSON.stringify({ sessionId: 'ed9dd2', runId: 'init', hypothesisId: 'H_media', location: 'app.js:init', message: 'hover:none media', data: { hoverNone: typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches }, timestamp: Date.now() }) }).catch(() => {});
         // #endregion
@@ -152,12 +506,14 @@ async function init() {
         let lastFavsJson = JSON.stringify(store.state.favorites);
         let lastQueueJson = JSON.stringify(store.state.queue);
         let lastTrackId = store.state.currentTrack ? store.state.currentTrack.id : null;
+        let lastIsPlaying = store.state.isPlaying;
 
         store.subscribe((state) => {
             const currentLibJson = JSON.stringify(state.library);
             const currentFavsJson = JSON.stringify(state.favorites);
             const currentQueueJson = JSON.stringify(state.queue);
             const currentTrackId = state.currentTrack ? state.currentTrack.id : null;
+            const currentIsPlaying = state.isPlaying;
 
             // --- SMART RE-RENDERING LOGIC ---
             
@@ -180,9 +536,10 @@ async function init() {
                     if (UI.currentView === 'favourites') renderFavourites(state);
                 }
 
-                // 3. If ONLY the active track changed, we update highlights surgically
-                if (currentTrackId !== lastTrackId) {
+                // 3. If the active track or playing state changed, we update highlights surgically
+                if (currentTrackId !== lastTrackId || currentIsPlaying !== lastIsPlaying) {
                     syncUIState(state);
+                    syncArtistGridIndicators(state);
                 }
 
                 // 4. If ONLY the queue changed
@@ -211,6 +568,7 @@ async function init() {
             lastFavsJson = currentFavsJson;
             lastQueueJson = currentQueueJson;
             lastTrackId = currentTrackId;
+            lastIsPlaying = currentIsPlaying;
         });
 
         // 4. Initial Render (Safety check)
@@ -312,8 +670,8 @@ function buildSongRowsHtml(tracks) {
                 <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] border-transparent'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}" onclick="playTrack('${t.id}')">
                     <div class="relative w-12 h-12 flex-shrink-0">
                         <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-xl shadow-lg border border-white/5" alt="Cover">
-                        <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 rounded-xl backdrop-blur-[2px] ${isActive ? '' : 'hidden'}">
-                            <i class="fas fa-volume-high text-[var(--accent)] text-xs animate-pulse"></i>
+                        <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 rounded-xl backdrop-blur-[1.6px] transition-all duration-150 ease-out ${isActive ? 'opacity-100 is-playing' : 'opacity-0 pointer-events-none'}">
+                            <i class="playing-icon fas fa-volume-high text-[var(--accent)] text-[14.4px]"></i>
                         </div>
                         <div class="fav-indicator absolute -top-1 -right-1 w-3.5 h-3.5 bg-[var(--accent)] rounded-full border-2 border-[var(--bg-card)] shadow-lg ${isFav ? '' : 'hidden'}"></div>
                     </div>
@@ -502,15 +860,26 @@ function renderArtistList(tracks) {
         return;
     }
 
+    // Get current playing track's artists (normalized for comparison)
+    const currentTrack = store.state.currentTrack;
+    const isPlaying = store.state.isPlaying;
+    const currentTrackArtistsSet = new Set(
+        (currentTrack && isPlaying ? parseArtistNames(currentTrack.album_artist || currentTrack.artist) : []).map(n => normalizeArtistName(n))
+    );
+
     const artistHtml = artistNames.map(name => {
         const { track: t, count } = byArtist[name];
         const trackLabel = count === 1 ? '1 track' : `${count} tracks`;
         const safeName = (name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const isCurrentlyPlaying = currentTrackArtistsSet.has(normalizeArtistName(name));
         return `
         <div class="artist-card group cursor-pointer" data-artist-name="${esc(name)}" onclick="(function(ev){ try { var card = ev && ev.currentTarget; if (card) { card.classList.add('artist-card-tapped'); setTimeout(function(){ card.classList.remove('artist-card-tapped'); }, 220); } window.showArtistDetail && window.showArtistDetail('${safeName}'); } catch(e) {} })(event)">
             <div class="artist-card-cover relative overflow-hidden rounded-[32px] shadow-2xl transition-all ease-[cubic-bezier(0.19,1,0.22,1)] group-hover:scale-105 active:scale-95 border border-[var(--glass-border)] bg-[var(--bg-card)]" style="transition-duration: 500ms;">
                 <img src="${Resolver.getCoverUrl(t)}" class="w-full aspect-square object-cover bg-gray-900" alt="${esc(name)}">
                 <div class="artist-card-overlay absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 rounded-[32px] backdrop-blur-[1.6px] transition-all duration-150 ease-out ${isCurrentlyPlaying ? 'opacity-100 is-playing' : 'opacity-0 pointer-events-none'}">
+                    <i class="playing-icon fas fa-volume-high text-[var(--accent)] text-[14.4px]"></i>
+                </div>
             </div>
             <div class="mt-4 px-2">
                 <div class="artist-card-name font-bold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${esc(name)}</div>
