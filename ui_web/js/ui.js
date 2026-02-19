@@ -12,6 +12,8 @@ window.audioEngine = audioEngine;
 export class UI {
     /** When set, NP view shows this track (preview) without starting playback; cleared on hide or when user taps play. */
     static _npDisplayTrack = null;
+    /** Last currentTrack.id we saw; used to detect "playing track changed" so we only clear _npDisplayTrack on skip, not on play/pause or seek. */
+    static _lastCurrentTrackId = null;
     /** When set, apply this seek percent once on next timeupdate (after preview track starts). */
     static _npPendingSeekPercent = null;
 
@@ -82,17 +84,32 @@ export class UI {
 
         if (state.currentTrack || UI._npDisplayTrack) {
             if (document.getElementById('now-playing-view')?.classList.contains('active')) {
-                // Clear preview when user skipped to a different track
-                if (UI._npDisplayTrack && state.currentTrack && state.currentTrack.id !== UI._npDisplayTrack.id) {
+                // Clear preview only when the *playing* track actually changed (user skipped), not on play/pause or seek
+                const playingTrackJustChanged = state.currentTrack && UI._lastCurrentTrackId !== state.currentTrack.id;
+                if (UI._npDisplayTrack && playingTrackJustChanged && state.currentTrack.id !== UI._npDisplayTrack.id) {
                     UI._npDisplayTrack = null;
+                    const npViewEl = document.getElementById('now-playing-view');
+                    if (npViewEl) npViewEl.classList.remove('np-preview');
                 }
                 const displayTrack = UI._npDisplayTrack || state.currentTrack;
                 const isPlaying = UI._npDisplayTrack
                     ? (state.currentTrack?.id === UI._npDisplayTrack.id && state.isPlaying)
                     : state.isPlaying;
                 this.updateNowPlaying(displayTrack, isPlaying);
+                // Timeline expands only when current track's NP (not preview)
+                const npSeek = document.getElementById('np-seek-container');
+                if (UI._npDisplayTrack) {
+                    if (npSeek) npSeek.classList.remove('np-timeline-expanded');
+                    document.body.classList.remove('np-timeline-expanded');
+                } else if (state.currentTrack) {
+                    if (npSeek) npSeek.classList.add('np-timeline-expanded');
+                    document.body.classList.add('np-timeline-expanded');
+                }
             }
             this.updateTransportControls(state.isPlaying);
+            UI._lastCurrentTrackId = state.currentTrack?.id ?? null;
+        } else {
+            UI._lastCurrentTrackId = null;
         }
 
         // Floating Queue
@@ -360,7 +377,7 @@ export class UI {
             ? (store.state.currentTrack?.id === UI._npDisplayTrack.id && store.state.isPlaying)
             : store.state.isPlaying;
 
-        npView.classList.remove('hidden');
+        npView.classList.remove('hidden', 'np-closing');
         if (UI._npDisplayTrack) npView.classList.add('np-preview');
         else npView.classList.remove('np-preview');
         document.body.classList.add('now-playing-open');
@@ -369,6 +386,13 @@ export class UI {
         setTimeout(() => {
             npView.classList.add('active');
             Haptics.heavy(); // 30ms pulse for opening
+            if (!UI._npDisplayTrack) {
+                requestAnimationFrame(() => {
+                    const npSeek = document.getElementById('np-seek-container');
+                    if (npSeek) npSeek.classList.add('np-timeline-expanded');
+                    document.body.classList.add('np-timeline-expanded');
+                });
+            }
         }, 10);
 
         if (!this._npGesturesBound) {
@@ -380,21 +404,37 @@ export class UI {
     static hideNowPlaying() {
         UI._npDisplayTrack = null;
         UI._npPendingSeekPercent = null;
+        UI._lastCurrentTrackId = store.state.currentTrack?.id ?? null;
         const npView = document.getElementById('now-playing-view');
         if (!npView) return;
 
-        const closeDurationMs = 480; /* 20% faster than open (0.6s -> 0.48s) */
-        npView.classList.add('np-closing');
-        npView.classList.remove('active', 'np-preview');
-        npView.style.transform = '';
-        document.body.classList.remove('now-playing-open');
+        const npSeek = document.getElementById('np-seek-container');
+        const hadTimelineExpanded = npSeek?.classList.contains('np-timeline-expanded');
+        if (npSeek) npSeek.classList.remove('np-timeline-expanded');
+        document.body.classList.remove('np-timeline-expanded');
 
-        setTimeout(() => {
-            if (!npView.classList.contains('active')) {
-                npView.classList.add('hidden');
-                npView.classList.remove('np-closing');
-            }
-        }, closeDurationMs);
+        const closeDurationMs = 480; /* 20% faster than open (0.6s -> 0.48s) */
+        const timelineCollapseMs = 400;
+
+        const doClose = () => {
+            npView.classList.add('np-closing');
+            npView.offsetHeight; /* force reflow so close transition is applied */
+            npView.classList.remove('active', 'np-preview');
+            npView.style.transform = '';
+            document.body.classList.remove('now-playing-open');
+            setTimeout(() => {
+                if (!npView.classList.contains('active')) {
+                    npView.classList.add('hidden');
+                    npView.classList.remove('np-closing');
+                }
+            }, closeDurationMs);
+        };
+
+        if (hadTimelineExpanded) {
+            setTimeout(doClose, timelineCollapseMs);
+        } else {
+            doClose();
+        }
     }
 
     static showSoundMash() {
@@ -576,6 +616,29 @@ export class UI {
             audioEngine.seek(pct);
         };
 
+        let lastDuration = 0;
+        /** Min % for omnibar current-time label so it stays visible (not behind island rounded corner). Once bar passes this, label follows bar. */
+        const OMNI_CURRENT_LABEL_MIN_PCT = 8;
+        const updateTimeLabels = (progress, currentTime, duration) => {
+            const dur = duration ?? lastDuration;
+            const cur = currentTime ?? (dur * (progress / 100));
+            lastDuration = dur;
+            const omniCurrent = document.getElementById('omni-time-current');
+            const omniDuration = document.getElementById('omni-time-duration');
+            if (omniCurrent) {
+                omniCurrent.textContent = UI.formatTime(cur);
+                omniCurrent.style.left = `${Math.max(progress, OMNI_CURRENT_LABEL_MIN_PCT)}%`;
+            }
+            if (omniDuration) omniDuration.textContent = UI.formatTime(dur);
+            const npCurrent = document.getElementById('np-time-current');
+            const npDuration = document.getElementById('np-time-duration');
+            if (npCurrent) {
+                npCurrent.textContent = UI.formatTime(cur);
+                npCurrent.style.left = `${progress}%`;
+            }
+            if (npDuration) npDuration.textContent = UI.formatTime(dur);
+        };
+
         // Drag state for omnibar (single timebar)
         let isDraggingOmni = false;
         let omniDragPointerId = null;
@@ -601,6 +664,7 @@ export class UI {
                     omniProgressBar.style.transition = 'none';
                     omniProgressBar.style.width = `${pct}%`;
                 }
+                if (pct != null) updateTimeLabels(pct, (pct / 100) * lastDuration, lastDuration);
             };
 
             const onOmniMove = (e) => {
@@ -617,6 +681,7 @@ export class UI {
                         omniTrack._lastSeekTime = Date.now();
                     }
                 }
+                if (pct != null) updateTimeLabels(pct, (pct / 100) * lastDuration, lastDuration);
             };
 
             const onOmniEnd = (e) => {
@@ -657,25 +722,99 @@ export class UI {
             });
         }
 
-        // Block page scroll while dragging omnibar timeline
+        // NP timeline seek bar (expanded in current track's NP only)
+        let isDraggingNp = false;
+        let npDragPointerId = null;
+        let npHasDragged = false;
+        const npSeekContainer = document.getElementById('np-seek-container');
+        const npSeekProgress = document.getElementById('np-seek-progress');
+        if (npSeekContainer && npSeekProgress) {
+            const onNpStart = (e) => {
+                if (isDraggingNp) return;
+                if (!document.body.classList.contains('np-timeline-expanded')) return;
+                e.preventDefault();
+                e.stopPropagation();
+                isDraggingNp = true;
+                npHasDragged = false;
+                npDragPointerId = e.pointerId;
+                npSeekContainer.setPointerCapture(e.pointerId);
+                npSeekContainer.classList.add('seeking');
+                const pct = calculateSeekPercent(e, npSeekContainer);
+                if (pct != null) {
+                    npSeekProgress.style.transition = 'none';
+                    npSeekProgress.style.width = `${pct}%`;
+                }
+                if (pct != null) updateTimeLabels(pct, (pct / 100) * lastDuration, lastDuration);
+            };
+            const onNpMove = (e) => {
+                if (!isDraggingNp || e.pointerId !== npDragPointerId) return;
+                e.preventDefault();
+                e.stopPropagation();
+                npHasDragged = true;
+                const pct = calculateSeekPercent(e, npSeekContainer);
+                if (pct != null) {
+                    npSeekProgress.style.width = `${pct}%`;
+                    if (!npSeekContainer._lastSeekTime || Date.now() - npSeekContainer._lastSeekTime > 50) {
+                        audioEngine.seek(pct);
+                        npSeekContainer._lastSeekTime = Date.now();
+                    }
+                }
+                if (pct != null) updateTimeLabels(pct, (pct / 100) * lastDuration, lastDuration);
+            };
+            const onNpEnd = (e) => {
+                if (!isDraggingNp || e.pointerId !== npDragPointerId) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const wasDragging = npHasDragged;
+                isDraggingNp = false;
+                npDragPointerId = null;
+                npSeekContainer.releasePointerCapture(e.pointerId);
+                npSeekContainer.classList.remove('seeking');
+                const pct = calculateSeekPercent(e, npSeekContainer);
+                if (pct != null) {
+                    audioEngine.seek(pct);
+                    npSeekProgress.style.transition = '';
+                }
+                if (wasDragging) setTimeout(() => { npHasDragged = false; }, 100);
+            };
+            npSeekContainer.addEventListener('pointerdown', onNpStart);
+            npSeekContainer.addEventListener('pointermove', onNpMove);
+            npSeekContainer.addEventListener('pointerup', onNpEnd);
+            npSeekContainer.addEventListener('pointercancel', onNpEnd);
+            npSeekContainer.addEventListener('click', (e) => {
+                if (!npHasDragged) {
+                    const pct = calculateSeekPercent(e, npSeekContainer);
+                    if (pct != null) handleSeek(e, npSeekContainer);
+                }
+            });
+        }
+
+        // Block page scroll while dragging omnibar or NP timeline
         document.addEventListener('touchmove', (e) => {
-            if (isDraggingOmni && e.cancelable) {
+            if ((isDraggingOmni || isDraggingNp) && e.cancelable) {
                 e.preventDefault();
             }
         }, { passive: false });
         document.addEventListener('wheel', (e) => {
-            if (isDraggingOmni) {
+            if (isDraggingOmni || isDraggingNp) {
                 e.preventDefault();
             }
         }, { passive: false });
 
         window.addEventListener('audio:timeupdate', (e) => {
-            const { progress } = e.detail;
+            const { progress, currentTime, duration } = e.detail;
 
             if (isDraggingOmni) return;
 
             const omniBar = document.getElementById('omni-progress');
             if (omniBar) omniBar.style.width = `${progress}%`;
+
+            if (!isDraggingNp && document.body.classList.contains('np-timeline-expanded')) {
+                const npBar = document.getElementById('np-seek-progress');
+                if (npBar) npBar.style.width = `${progress}%`;
+            }
+
+            updateTimeLabels(progress, currentTime, duration);
         });
     }
 
@@ -910,42 +1049,41 @@ export class UI {
     static initNowPlayingGestures() {
         const npView = document.getElementById('now-playing-view');
         if (!npView) return;
-        
+
         let startY = 0;
         let isDragging = false;
+        let touchStartedOnSeekBar = false;
         const dragThreshold = 8;
+        const closeThreshold = window.innerHeight * 0.08;
 
         npView.addEventListener('touchstart', (e) => {
-            if (e.target.closest('button') || e.target.closest('#np-seek-container')) return;
+            if (e.target.closest('button')) return;
+            if (e.target.closest('#np-seek-container')) {
+                touchStartedOnSeekBar = true;
+                return;
+            }
+            touchStartedOnSeekBar = false;
             startY = e.touches[0].clientY;
             isDragging = false;
-            npView.style.transition = 'none';
         }, { passive: true });
 
         npView.addEventListener('touchmove', (e) => {
-            const currentY = e.touches[0].clientY;
-            const deltaY = currentY - startY;
+            if (touchStartedOnSeekBar) return;
+            const deltaY = e.touches[0].clientY - startY;
             if (!isDragging && deltaY > dragThreshold) isDragging = true;
-            if (!isDragging) return;
-            if (deltaY > 0) {
-                npView.style.transform = `translateY(${deltaY}px)`;
-            }
         }, { passive: true });
 
         npView.addEventListener('touchend', (e) => {
+            if (touchStartedOnSeekBar) {
+                touchStartedOnSeekBar = false;
+                return;
+            }
             if (!isDragging) return;
             isDragging = false;
             const deltaY = e.changedTouches[0].clientY - startY;
-            const threshold = window.innerHeight * 0.08; 
-
-            // Standardized 'Premium Slime' Physics
-            npView.style.transition = 'transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease';
-
-            if (deltaY > threshold) {
-                Haptics.lock(); // 15ms pulse for dismissal
+            if (deltaY > closeThreshold) {
+                Haptics.lock();
                 this.hideNowPlaying();
-            } else {
-                npView.style.transform = '';
             }
         }, { passive: true });
 
@@ -979,6 +1117,9 @@ export class UI {
                 UI._npDisplayTrack = null;
                 const npViewEl = document.getElementById('now-playing-view');
                 if (npViewEl) npViewEl.classList.remove('np-preview');
+                const npSeekEl = document.getElementById('np-seek-container');
+                if (npSeekEl) npSeekEl.classList.add('np-timeline-expanded');
+                document.body.classList.add('np-timeline-expanded');
             }, { passive: true });
         }
     }
@@ -1049,6 +1190,7 @@ export class UI {
                     
                     const transport = document.getElementById('omni-transport');
                     const metadata = document.getElementById('omni-metadata-container');
+                    const omniProgressTrack = document.getElementById('omni-progress-track');
 
                     if (transport) {
                         transport.style.filter = 'blur(12px)';
@@ -1058,6 +1200,10 @@ export class UI {
                     }
                     if (metadata) {
                         metadata.style.opacity = '0';
+                    }
+                    if (omniProgressTrack) {
+                        omniProgressTrack.style.transition = 'opacity 0.28s ease';
+                        omniProgressTrack.style.opacity = '0';
                     }
 
                     ribbon.classList.remove('pointer-events-none');
@@ -1113,6 +1259,9 @@ export class UI {
                         UI._npDisplayTrack = null;
                         const npViewEl = document.getElementById('now-playing-view');
                         if (npViewEl) npViewEl.classList.remove('np-preview');
+                        const npSeekEl = document.getElementById('np-seek-container');
+                        if (npSeekEl) npSeekEl.classList.add('np-timeline-expanded');
+                        document.body.classList.add('np-timeline-expanded');
                     }
                     this.resetOmniIsland();
                     return;

@@ -2,9 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content">
+    <meta name="format-detection" content="telephone=no, email=no, address=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Soundsible">
     <meta name="theme-color" content="#0d0d0f">
     <title>Soundsible Web Player</title>
     <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
@@ -153,7 +155,7 @@
             -webkit-backdrop-filter: blur(48px);
             border-top: 1px solid var(--glass-border);
         }
-        /* Closing: ~20% faster than opening (0.6s -> 0.48s, 0.4s -> 0.32s) */
+        /* Close 20% faster than open (open 0.6s -> close 0.48s) */
         #now-playing-view.np-closing {
             transition: transform 0.48s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.32s ease, visibility 0.32s, backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
         }
@@ -385,6 +387,10 @@
         /* Omnibar progress: always visible (single timebar); transition for seeking feedback */
         #omni-progress-track {
             transition: opacity 0.28s ease;
+            overflow: visible;
+        }
+        #omni-progress {
+            overflow: visible;
         }
 
         /* Home search bar */
@@ -444,14 +450,43 @@
             opacity: 0;
             pointer-events: none;
         }
-        /* Single timebar: only omnibar; timeline under cover is not used */
-        #np-seek-container {
-            display: none;
+        /* NP timeline: hidden in preview (B's page while A plays); when current track's NP, unsticks and expands */
+        #now-playing-view.np-preview #np-seek-container {
+            display: none !important;
+        }
+        #now-playing-view #np-seek-container {
+            display: block;
+            overflow: hidden;
+            max-height: 0;
+            opacity: 0;
+            transform: translateY(-32px);
+            transition: max-height 0.4s cubic-bezier(0.19, 1, 0.22, 1),
+                opacity 0.35s ease-out,
+                transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        #now-playing-view.active:not(.np-preview):not(.np-closing) #np-seek-container.np-timeline-expanded,
+        #now-playing-view.active:not(.np-preview) #np-seek-container.np-timeline-expanded {
+            max-height: 72px;
+            opacity: 1;
+            transform: translateY(0);
+        }
+        #now-playing-view.np-closing #np-seek-container {
+            max-height: 0;
+            opacity: 0;
+            transform: translateY(-32px);
+        }
+        /* Hide omnibar timebar when NP timeline is expanded (it "moved" into NP view) */
+        body.np-timeline-expanded #omni-progress-track {
+            opacity: 0 !important;
+            pointer-events: none !important;
         }
         #omni-progress-track.seeking {
             opacity: 0.9;
         }
         #omni-progress-track.seeking #omni-progress {
+            box-shadow: 0 0 16px var(--accent);
+        }
+        #np-seek-container.seeking #np-seek-progress {
             box-shadow: 0 0 16px var(--accent);
         }
     </style>
@@ -670,6 +705,8 @@
                     <div class="relative pointer-events-none">
                         <div id="omni-island" class="glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all ease-[cubic-bezier(0.19,1,0.22,1)] overflow-hidden" style="width: 56px; height: 56px; border-radius: var(--radius-omni); transition-duration: 600ms;">
                             <div id="omni-progress-track" class="absolute bottom-0 left-[18px] right-[18px] h-[2px] cursor-pointer touch-manipulation" style="pointer-events: auto; touch-action: none;">
+                                <span id="omni-time-duration" class="absolute right-0 bottom-full mb-0.5 text-[9px] font-bold font-mono text-[var(--text-dim)] opacity-50 tracking-tighter whitespace-nowrap" aria-hidden="true">0:00</span>
+                                <span id="omni-time-current" class="absolute bottom-full mb-0.5 left-0 text-[9px] font-bold font-mono text-[var(--text-dim)] opacity-50 tracking-tighter whitespace-nowrap -translate-x-1/2" style="left: 0%;" aria-hidden="true">0:00</span>
                                 <div id="omni-progress" class="absolute inset-y-0 left-0 bg-[var(--accent)] w-0 transition-all duration-100 shadow-[0_0_10px_var(--accent)]"></div>
                             </div>
                             <div id="omni-metadata-container" class="absolute inset-0 flex items-center px-14 opacity-0 transition-opacity pointer-events-none overflow-hidden" style="transition-duration: 270ms;">
@@ -737,9 +774,13 @@
                     <div id="np-artist" class="text-sm text-[var(--accent)] font-bold uppercase tracking-widest truncate">Artist</div>
                 </div>
                 <div id="np-art" class="np-art-bg w-full aspect-square max-w-[340px] rounded-[var(--radius-omni)] shadow-[0_40px_80px_rgba(0,0,0,0.8)] border border-white/10 overflow-hidden bg-cover bg-center" role="img" aria-label="Album art"></div>
-                <!-- Flying timeline: seek bar under cover art -->
-                <div id="np-seek-container" class="w-full max-w-[340px] mt-4 px-1 cursor-pointer touch-manipulation" role="slider" aria-label="Seek" tabindex="0">
-                    <div class="h-2 rounded-full bg-white/10 overflow-hidden">
+                <!-- Flying timeline: seek bar under cover art (expands when current track's NP; hidden in preview) -->
+                <div id="np-seek-container" class="w-full max-w-[340px] mt-4 px-1 py-3 cursor-pointer touch-manipulation" role="slider" aria-label="Seek" tabindex="0">
+                    <div class="relative min-h-[14px] mb-1">
+                        <span id="np-time-current" class="absolute bottom-0 text-[11px] font-bold text-[var(--text-dim)] font-mono whitespace-nowrap" style="left: 0%; transform: translateX(-50%);" aria-hidden="true">0:00</span>
+                        <span id="np-time-duration" class="absolute right-0 bottom-0 text-[11px] font-bold text-[var(--text-dim)] truncate font-mono" aria-hidden="true">0:00</span>
+                    </div>
+                    <div class="h-3 rounded-full bg-white/10 overflow-hidden touch-manipulation" style="touch-action: none;">
                         <div id="np-seek-progress" class="h-full bg-[var(--accent)] w-0 transition-[width] duration-100 shadow-[0_0_10px_var(--accent)]" style="width: 0%"></div>
                     </div>
                 </div>
