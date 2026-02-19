@@ -34,6 +34,15 @@ class Track:
     track_number: Optional[int] = None
     is_local: bool = False
     local_path: Optional[str] = None
+    musicbrainz_id: Optional[str] = None
+    isrc: Optional[str] = None
+    metadata_source_authority: Optional[str] = None
+    metadata_confidence: Optional[float] = None
+    metadata_decision_id: Optional[str] = None
+    metadata_state: Optional[str] = None
+    metadata_query_fingerprint: Optional[str] = None
+    cover_source: Optional[str] = None  # spotify | youtube_music | youtube | musicbrainz | itunes | manual | none
+    metadata_modified_by_user: bool = False  # True if user manually edited metadata/cover
     
     @staticmethod
     def generate_id() -> str:

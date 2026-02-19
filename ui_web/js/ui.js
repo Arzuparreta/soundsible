@@ -20,7 +20,7 @@ export class UI {
         'favourites': 'FAVORITES',
         'artists': 'ARTISTS',
         'artist-detail': 'ARTIST',
-        'search': 'SEARCH',
+        'playlists': 'PLAYLISTS',
         'downloader': 'ODST',
         'settings': 'CONFIG'
     };
@@ -42,7 +42,6 @@ export class UI {
         this.islandUserCollapsed = false; // user swiped down to collapse playback bar to seed form
         this.isBlooming = false;
         this.isDraggingQueue = false;
-        this.isSearchFormActive = false;
         this._keyboardHeight = 0;
         this._platform = this.detectPlatform();
 
@@ -225,97 +224,6 @@ export class UI {
         return isIOS ? 'ios' : 'android';
     }
 
-    static transformToSearchForm() {
-        this.isSearchFormActive = true;
-        Haptics.heavy();
-        
-        this.island.style.width = '380px';
-        
-        const transport = document.getElementById('omni-transport');
-        const metadata = document.getElementById('omni-metadata-container');
-        const ribbon = document.getElementById('omni-nav-ribbon');
-        const searchForm = document.getElementById('omni-search-form');
-        const searchInput = document.getElementById('omni-search-input');
-        const touchArea = document.getElementById('omni-touch-area');
-
-        if (transport) {
-            transport.style.filter = 'blur(12px)';
-            transport.style.opacity = '0';
-            transport.style.transform = 'scale(0.9)';
-            transport.style.pointerEvents = 'none';
-        }
-        if (metadata) {
-            metadata.style.opacity = '0';
-        }
-        if (ribbon) {
-            ribbon.classList.add('pointer-events-none');
-            ribbon.style.opacity = '0';
-            ribbon.style.transform = 'scale(0.95)';
-            ribbon.style.filter = 'blur(8px)';
-        }
-        if (searchForm) {
-            searchForm.classList.add('active');
-            searchForm.classList.remove('pointer-events-none');
-            searchForm.style.pointerEvents = 'auto';
-        }
-        // Disable touch area when search form is active to allow direct input interaction
-        if (touchArea) {
-            touchArea.style.pointerEvents = 'none';
-        }
-        // Add direct click handler to search form/input for immediate focus
-        if (searchForm && !this._searchFormClickBound) {
-            searchForm.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (searchInput) {
-                    searchInput.focus();
-                }
-            });
-            this._searchFormClickBound = true;
-        }
-    }
-
-    static transformFromSearchForm() {
-        this.isSearchFormActive = false;
-        
-        const transport = document.getElementById('omni-transport');
-        const metadata = document.getElementById('omni-metadata-container');
-        const ribbon = document.getElementById('omni-nav-ribbon');
-        const searchForm = document.getElementById('omni-search-form');
-        const searchInput = document.getElementById('omni-search-input');
-        const touchArea = document.getElementById('omni-touch-area');
-
-        if (searchForm) {
-            searchForm.classList.remove('active');
-            searchForm.classList.add('pointer-events-none');
-            searchForm.style.pointerEvents = 'none';
-        }
-        if (searchInput) {
-            searchInput.blur();
-            searchInput.value = '';
-        }
-        // Re-enable touch area when search form is inactive
-        if (touchArea) {
-            touchArea.style.pointerEvents = 'auto';
-        }
-
-        // Restore appropriate state based on island state
-        if (this.isIslandActive && !this.islandUserCollapsed) {
-            this.island.style.width = '250px';
-        } else {
-            this.island.style.width = '56px';
-        }
-
-        if (transport) {
-            transport.style.filter = 'blur(0px)';
-            transport.style.opacity = '1';
-            transport.style.transform = 'scale(1)';
-            transport.style.pointerEvents = 'auto';
-        }
-        if (metadata && this.isIslandActive) {
-            metadata.style.opacity = '1';
-        }
-    }
-
     static initKeyboardSync() {
         if (!window.visualViewport) {
             console.warn('Visual Viewport API not supported');
@@ -332,8 +240,10 @@ export class UI {
         let isKeyboardOpen = false;
 
         const handleViewportResize = () => {
-            // Only handle keyboard sync when search form is active
-            if (!this.isSearchFormActive) {
+            // Do NOT move the omni bar when any input/textarea is focused (keyboard overlays, bar stays at bottom)
+            const active = document.activeElement;
+            const isInputLike = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.getAttribute?.('contenteditable') === 'true');
+            if (isInputLike) {
                 return;
             }
 
@@ -341,7 +251,6 @@ export class UI {
             const heightDiff = window.innerHeight - currentHeight;
             const keyboardHeight = Math.max(0, heightDiff);
 
-            // Detect keyboard state (threshold: 50px to avoid false positives from small viewport changes)
             const keyboardJustOpened = !isKeyboardOpen && keyboardHeight > 50;
             const keyboardJustClosed = isKeyboardOpen && keyboardHeight <= 50;
 
@@ -355,7 +264,6 @@ export class UI {
                     this.handleKeyboardClose();
                 }
             } else if (isKeyboardOpen && keyboardHeight > 0) {
-                // Update position continuously as keyboard height changes
                 container.style.transform = `translateY(-${keyboardHeight}px)`;
                 this._keyboardHeight = keyboardHeight;
             }
@@ -463,17 +371,6 @@ export class UI {
             Haptics.heavy(); // 30ms pulse for opening
         }, 10);
 
-        // Fly-in timeline only when not in preview (preview = keep omnibar timeline until track starts)
-        if (!UI._npDisplayTrack) {
-            requestAnimationFrame(() => {
-                const npSeek = document.getElementById('np-seek-container');
-                if (npSeek) {
-                    npSeek.classList.add('np-timeline-visible');
-                    document.body.classList.add('np-timeline-visible');
-                }
-            });
-        }
-
         if (!this._npGesturesBound) {
             this.initNowPlayingGestures();
             this._npGesturesBound = true;
@@ -486,15 +383,18 @@ export class UI {
         const npView = document.getElementById('now-playing-view');
         if (!npView) return;
 
+        const closeDurationMs = 480; /* 20% faster than open (0.6s -> 0.48s) */
+        npView.classList.add('np-closing');
         npView.classList.remove('active', 'np-preview');
-        npView.style.transform = ''; // Clear manual drag
-        document.body.classList.remove('now-playing-open', 'np-timeline-visible');
-        const npSeek = document.getElementById('np-seek-container');
-        if (npSeek) npSeek.classList.remove('np-timeline-visible');
+        npView.style.transform = '';
+        document.body.classList.remove('now-playing-open');
 
         setTimeout(() => {
-            if (!npView.classList.contains('active')) npView.classList.add('hidden');
-        }, 600);
+            if (!npView.classList.contains('active')) {
+                npView.classList.add('hidden');
+                npView.classList.remove('np-closing');
+            }
+        }, closeDurationMs);
     }
 
     static showSoundMash() {
@@ -550,24 +450,6 @@ export class UI {
             this.hideNowPlaying();
         }
 
-        // Handle search form transformation when navigating to/from search
-        if (viewId === 'search' && !this.isSearchFormActive) {
-            this.transformToSearchForm();
-            // Focus search input after transformation animation completes
-            setTimeout(() => {
-                const searchInput = document.getElementById('omni-search-input');
-                if (searchInput) {
-                    // Small delay to ensure form is fully visible
-                    setTimeout(() => {
-                        searchInput.focus();
-                    }, 50);
-                }
-            }, 400);
-        } else if (viewId !== 'search' && this.isSearchFormActive) {
-            this.transformFromSearchForm();
-            this.handleKeyboardClose();
-        }
-
         if (viewId === this.currentView) return;
         
         this.updateLabel(viewId);
@@ -582,7 +464,7 @@ export class UI {
         // #endregion
 
         if (saveToHistory) {
-            const roots = ['home', 'search', 'artists', 'downloader', 'favourites', 'settings'];
+            const roots = ['home', 'favourites', 'playlists', 'artists', 'downloader', 'settings'];
             if (roots.includes(this.currentView) && roots.includes(viewId)) this.viewStack = [];
             else this.viewStack.push(this.currentView);
         }
@@ -594,10 +476,15 @@ export class UI {
             oldView.classList.add('view-outgoing');
         }
 
-        // 2. Prepare Incoming (Slides OVER)
+        // 2. Prepare Incoming (Slides OVER) — left-of-center nav pages slide from left, right-of-center from right
+        const navLeft = ['home', 'favourites', 'playlists'];
+        const navRight = ['artists', 'downloader', 'settings'];
+        const slideFromLeft = navLeft.includes(viewId);
+        const slideFromRight = navRight.includes(viewId);
+        const slideClass = slideFromLeft ? 'view-from-left' : slideFromRight ? 'view-from-right' : (direction === 'forward' ? 'view-from-right' : 'view-from-left');
         targetView.classList.remove('hidden');
         targetView.classList.add('view-incoming');
-        targetView.classList.add(direction === 'forward' ? 'view-from-right' : 'view-from-left');
+        targetView.classList.add(slideClass);
         
         // Returning to artists from artist-detail: clear sticky :active from back button and suppress card feedback briefly
         const fromArtistDetail = viewId === 'artists' && this.currentView === 'artist-detail';
@@ -674,63 +561,121 @@ export class UI {
         bindTransport('omni-shuffle-btn', () => store.toggleShuffle());
         bindTransport('omni-repeat-btn', () => store.toggleRepeat());
 
-        // Seek
-        const handleSeek = (e, container) => {
+        // Seek helpers
+        const calculateSeekPercent = (e, container) => {
             const rect = container.getBoundingClientRect();
             const clientX = e.clientX ?? e.changedTouches?.[0]?.clientX ?? e.touches?.[0]?.clientX;
-            if (clientX == null) return;
+            if (clientX == null) return null;
             const x = clientX - rect.left;
-            const pct = Math.max(0, Math.min(100, (x / rect.width) * 100));
+            return Math.max(0, Math.min(100, (x / rect.width) * 100));
+        };
+
+        const handleSeek = (e, container) => {
+            const pct = calculateSeekPercent(e, container);
+            if (pct == null) return;
             audioEngine.seek(pct);
         };
 
-        const full = document.getElementById('np-seek-container');
-        if (full) {
-            const handleNPSeek = (e) => {
-                const rect = full.getBoundingClientRect();
-                const clientX = e.clientX ?? e.changedTouches?.[0]?.clientX ?? e.touches?.[0]?.clientX;
-                if (clientX == null) return;
-                const x = clientX - rect.left;
-                const pct = Math.max(0, Math.min(100, (x / rect.width) * 100));
-                if (UI._npDisplayTrack && store.state.currentTrack?.id !== UI._npDisplayTrack.id) {
-                    window.playTrack(UI._npDisplayTrack.id);
-                    UI._npPendingSeekPercent = pct;
-                    UI._npDisplayTrack = null;
-                    const npViewEl = document.getElementById('now-playing-view');
-                    if (npViewEl) npViewEl.classList.remove('np-preview');
-                    const npSeek = document.getElementById('np-seek-container');
-                    if (npSeek) {
-                        npSeek.classList.add('np-timeline-visible');
-                        document.body.classList.add('np-timeline-visible');
-                    }
-                } else {
-                    handleSeek(e, full);
+        // Drag state for omnibar (single timebar)
+        let isDraggingOmni = false;
+        let omniDragPointerId = null;
+        let omniHasDragged = false;
+
+        // Omnibar timeline drag handler (only timebar)
+        const omniTrack = document.getElementById('omni-progress-track');
+        if (omniTrack) {
+            const omniProgressBar = document.getElementById('omni-progress');
+            
+            const onOmniStart = (e) => {
+                if (isDraggingOmni) return;
+                e.preventDefault();
+                e.stopPropagation();
+                isDraggingOmni = true;
+                omniHasDragged = false;
+                omniDragPointerId = e.pointerId;
+                omniTrack.setPointerCapture(e.pointerId);
+                omniTrack.classList.add('seeking');
+                
+                const pct = calculateSeekPercent(e, omniTrack);
+                if (pct != null && omniProgressBar) {
+                    omniProgressBar.style.transition = 'none';
+                    omniProgressBar.style.width = `${pct}%`;
                 }
             };
-            full.onclick = (e) => handleNPSeek(e);
-            full.ontouchend = (e) => { if (e.cancelable) e.preventDefault(); handleNPSeek(e); };
+
+            const onOmniMove = (e) => {
+                if (!isDraggingOmni || e.pointerId !== omniDragPointerId) return;
+                e.preventDefault();
+                e.stopPropagation();
+                omniHasDragged = true;
+                const pct = calculateSeekPercent(e, omniTrack);
+                if (pct != null && omniProgressBar) {
+                    omniProgressBar.style.width = `${pct}%`;
+                    // Throttled seek during drag for responsiveness
+                    if (!omniTrack._lastSeekTime || Date.now() - omniTrack._lastSeekTime > 50) {
+                        audioEngine.seek(pct);
+                        omniTrack._lastSeekTime = Date.now();
+                    }
+                }
+            };
+
+            const onOmniEnd = (e) => {
+                if (!isDraggingOmni || e.pointerId !== omniDragPointerId) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const wasDragging = omniHasDragged;
+                isDraggingOmni = false;
+                omniDragPointerId = null;
+                omniTrack.releasePointerCapture(e.pointerId);
+                omniTrack.classList.remove('seeking');
+                
+                const pct = calculateSeekPercent(e, omniTrack);
+                if (pct != null) {
+                    audioEngine.seek(pct);
+                    if (omniProgressBar) {
+                        omniProgressBar.style.transition = '';
+                    }
+                }
+                
+                // Prevent click if we dragged
+                if (wasDragging) {
+                    setTimeout(() => { omniHasDragged = false; }, 100);
+                }
+            };
+
+            omniTrack.addEventListener('pointerdown', onOmniStart);
+            omniTrack.addEventListener('pointermove', onOmniMove);
+            omniTrack.addEventListener('pointerup', onOmniEnd);
+            omniTrack.addEventListener('pointercancel', onOmniEnd);
+            
+            // Fallback click handler for tap (non-drag)
+            omniTrack.addEventListener('click', (e) => {
+                if (!omniHasDragged) {
+                    const pct = calculateSeekPercent(e, omniTrack);
+                    if (pct != null) handleSeek(e, omniTrack);
+                }
+            });
         }
 
+        // Block page scroll while dragging omnibar timeline
+        document.addEventListener('touchmove', (e) => {
+            if (isDraggingOmni && e.cancelable) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+        document.addEventListener('wheel', (e) => {
+            if (isDraggingOmni) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
         window.addEventListener('audio:timeupdate', (e) => {
-            const { progress, currentTime, duration } = e.detail;
+            const { progress } = e.detail;
 
-            if (UI._npPendingSeekPercent != null && !UI._npDisplayTrack) {
-                audioEngine.seek(UI._npPendingSeekPercent);
-                UI._npPendingSeekPercent = null;
-            }
+            if (isDraggingOmni) return;
 
-            const npView = document.getElementById('now-playing-view');
-            const npActive = npView?.classList.contains('active');
-            const npSeek = document.getElementById('np-seek-container');
-            const npTimelineVisible = npActive && npSeek?.classList.contains('np-timeline-visible');
-
-            if (npTimelineVisible) {
-                const npBar = document.getElementById('np-seek-progress');
-                if (npBar) npBar.style.width = `${progress}%`;
-            } else {
-                const omniBar = document.getElementById('omni-progress');
-                if (omniBar) omniBar.style.width = `${progress}%`;
-            }
+            const omniBar = document.getElementById('omni-progress');
+            if (omniBar) omniBar.style.width = `${progress}%`;
         });
     }
 
@@ -778,82 +723,38 @@ export class UI {
                 return;
             }
 
-            // 2. Queue item cover long-press -> Now Playing (preview) for that track
+            // 2. Queue item: long-press anywhere -> Now Playing for that track
             const queueItem = e.target.closest('.queue-item');
             if (queueItem) {
-                const target = e.target;
-                const coverContainer = queueItem.querySelector('.queue-item-cover');
-                if (coverContainer && (coverContainer.contains(target) || target === coverContainer.querySelector('img'))) {
-                    const idx = parseInt(queueItem.getAttribute('data-index'), 10);
-                    const track = store.state.queue && store.state.queue[idx];
-                    if (track) {
-                        longPressTimer = setTimeout(() => {
-                            if (!isHorizontal) {
-                                longPressTriggered = true;
-                                this.showNowPlaying(track);
-                                Haptics.heavy();
-                            }
-                            longPressTimer = null;
-                        }, 480);
-                    }
+                const idx = parseInt(queueItem.getAttribute('data-index'), 10);
+                const track = store.state.queue && store.state.queue[idx];
+                if (track) {
+                    longPressTimer = setTimeout(() => {
+                        if (!isHorizontal) {
+                            longPressTriggered = true;
+                            this.showNowPlaying(track);
+                            Haptics.heavy();
+                        }
+                        longPressTimer = null;
+                    }, 480);
                 }
                 return;
             }
 
-            // 3. Song Row Gestures
+            // 3. Song row: long-press on cover or anywhere else (title, artist, duration, 3-dots) -> NP; short tap 3-dots still opens action menu
             if (row) {
                 activeRow = row;
                 row.style.transition = 'none';
-                
                 const trackId = row.getAttribute('data-id');
-                const target = e.target;
-                
-                // Check if touch started on cover area (div with bg-image, no img to avoid browser long-press preview)
-                const coverContainer = row.querySelector('.relative.w-14.h-14');
-                if (coverContainer && coverContainer.contains(target)) {
-                    // Start long press timer (~480ms, ~20% faster) for cover -> Now Playing (preview for this track)
-                    longPressTimer = setTimeout(() => {
-                        if (!isHorizontal) {
-                            longPressTriggered = true;
-                            const track = typeof window.getTrackFromCurrentContext === 'function' ? window.getTrackFromCurrentContext(trackId) : null;
-                            this.showNowPlaying(track ?? undefined);
-                            Haptics.heavy();
-                        }
-                        longPressTimer = null;
-                    }, 480);
-                }
-                // Check if touch started on song title
-                else if (target.classList.contains('song-title') || target.closest('.song-title')) {
-                    const songTitle = target.classList.contains('song-title') ? target : target.closest('.song-title');
-
-                    // Start long press timer (~480ms, ~20% faster) for song title -> Now Playing (preview for this track)
-                    longPressTimer = setTimeout(() => {
-                        if (!isHorizontal) {
-                            longPressTriggered = true;
-                            const track = typeof window.getTrackFromCurrentContext === 'function' ? window.getTrackFromCurrentContext(trackId) : null;
-                            this.showNowPlaying(track ?? undefined);
-                            Haptics.heavy();
-                        }
-                        longPressTimer = null;
-                    }, 480);
-                }
-                // Check if touch started on artist name
-                else if (target.classList.contains('song-artist') || target.closest('.song-artist')) {
-                    const artistEl = target.classList.contains('song-artist') ? target : target.closest('.song-artist');
-                    const artistName = artistEl?.getAttribute('data-artist');
-                    
-                    // Start long press timer (~480ms, ~20% faster) for artist name -> Artist Detail
-                    longPressTimer = setTimeout(() => {
-                        if (artistName && !isHorizontal) {
-                            longPressTriggered = true;
-                            if (typeof window.showArtistDetail === 'function') {
-                                window.showArtistDetail(artistName);
-                            }
-                            Haptics.heavy();
-                        }
-                        longPressTimer = null;
-                    }, 480);
-                }
+                longPressTimer = setTimeout(() => {
+                    if (!isHorizontal) {
+                        longPressTriggered = true;
+                        const track = typeof window.getTrackFromCurrentContext === 'function' ? window.getTrackFromCurrentContext(trackId) : null;
+                        this.showNowPlaying(track ?? undefined);
+                        Haptics.heavy();
+                    }
+                    longPressTimer = null;
+                }, 480);
             }
         }, { passive: true });
 
@@ -990,6 +891,18 @@ export class UI {
             }
         }, { capture: true });
 
+        // No-action zones: do not trigger row default action (e.g. play) on tap/long-press release
+        document.addEventListener('click', (e) => {
+            const row = e.target.closest('.song-row');
+            const noAction = e.target.closest('.no-row-action');
+            if (!row || !noAction || !row.contains(noAction)) return;
+            const claimedBy = e.target.closest('[onclick]');
+            if (claimedBy === row) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }, { capture: true });
+
         // Action Menu Swipe-to-Dismiss logic
         this.initBottomSheetGestures();
     }
@@ -1066,11 +979,6 @@ export class UI {
                 UI._npDisplayTrack = null;
                 const npViewEl = document.getElementById('now-playing-view');
                 if (npViewEl) npViewEl.classList.remove('np-preview');
-                const npSeek = document.getElementById('np-seek-container');
-                if (npSeek) {
-                    npSeek.classList.add('np-timeline-visible');
-                    document.body.classList.add('np-timeline-visible');
-                }
             }, { passive: true });
         }
     }
@@ -1156,17 +1064,6 @@ export class UI {
                     ribbon.style.opacity = '1';
                     ribbon.style.transform = 'scale(1)';
                     ribbon.style.filter = 'blur(0px)';
-                    // When holding from search form: show nav form visually so ribbon is visible; keep isSearchFormActive so resetOmniIsland restores search form on release if no nav committed. Fade placeholder out in sync with ribbon fade-in (360ms).
-                    if (this.isSearchFormActive) {
-                        const searchFormEl = document.getElementById('omni-search-form');
-                        const searchInputEl = document.getElementById('omni-search-input');
-                        if (searchFormEl) {
-                            searchFormEl.classList.remove('active');
-                            searchFormEl.classList.add('pointer-events-none');
-                            searchFormEl.style.pointerEvents = 'none';
-                        }
-                        if (searchInputEl) searchInputEl.classList.add('placeholder-faded');
-                    }
                 }
             }, 324);
         };
@@ -1216,11 +1113,6 @@ export class UI {
                         UI._npDisplayTrack = null;
                         const npViewEl = document.getElementById('now-playing-view');
                         if (npViewEl) npViewEl.classList.remove('np-preview');
-                        const npSeek = document.getElementById('np-seek-container');
-                        if (npSeek) {
-                            npSeek.classList.add('np-timeline-visible');
-                            document.body.classList.add('np-timeline-visible');
-                        }
                     }
                     this.resetOmniIsland();
                     return;
@@ -1237,20 +1129,8 @@ export class UI {
                 return;
             }
             
-            // 1. SEARCH FORM QUICK TAP (Similar to transport controls)
-            // Only handle quick tap if we didn't bloom (long-press triggers bloom instead)
-            if (this._isHolding && !this.isBlooming && this.isSearchFormActive && isInside) {
-                const searchInput = document.getElementById('omni-search-input');
-                if (searchInput) {
-                    Haptics.tick();
-                    searchInput.focus();
-                }
-                this.resetOmniIsland();
-                return;
-            }
-
-            // 2. COORDINATE-BASED TRANSPORT (disabled when manually collapsed)
-            if (this._isHolding && !this.isBlooming && !this.isSearchFormActive && isInside) {
+            // 1. COORDINATE-BASED TRANSPORT (disabled when manually collapsed)
+            if (this._isHolding && !this.isBlooming && isInside) {
                 if (this.islandUserCollapsed) return;
 
                 const relX = (touch.clientX - rect.left) / rect.width;
@@ -1282,7 +1162,7 @@ export class UI {
                 }
             }
 
-            // 3. NAV COMMIT (Uses elementFromPoint but hides touchArea first)
+            // 2. NAV COMMIT (Uses elementFromPoint but hides touchArea first)
             if (this.isBlooming && this._activeNavView) {
                 Haptics.lock();
                 const viewToShow = this._activeNavView;
@@ -1330,32 +1210,6 @@ export class UI {
             startBloom(e);
         });
         
-        // When search form is active, touchArea has pointer-events: none so touches hit the island/input.
-        // Same pattern as homepage transport: do NOT consume touchstart so quick taps reach the input
-        // and the browser can focus it and open the keyboard. Only arm the bloom timer; if the user
-        // holds 324ms we bloom. Only preventDefault in touchmove once holding to block iOS magnifying glass.
-        const handleIslandTouchStartWhenSearchActive = (e) => {
-            if (document.getElementById('soundmash-view')?.classList.contains('active')) return;
-            if (this.isSearchFormActive) {
-                startBloom(e);
-            }
-        };
-        
-        const handleIslandTouchMoveWhenSearchActive = (e) => {
-            if (this.isSearchFormActive && this._isHolding) {
-                e.preventDefault();
-            }
-        };
-        
-        const handleIslandTouchEndWhenSearchActive = () => {};
-        
-        // Bind to island (which is always accessible even when touchArea is disabled)
-        if (island) {
-            island.addEventListener('touchstart', handleIslandTouchStartWhenSearchActive, { passive: false });
-            island.addEventListener('touchmove', handleIslandTouchMoveWhenSearchActive, { passive: false });
-            island.addEventListener('touchend', handleIslandTouchEndWhenSearchActive, { passive: true });
-        }
-
         document.addEventListener('touchmove', (e) => {
             if (!this._isHolding) return;
             const touch = e.touches[0];
@@ -1482,7 +1336,6 @@ export class UI {
     static resetOmniIsland() {
         const ribbon = document.getElementById('omni-nav-ribbon');
         const transport = document.getElementById('omni-transport');
-        const searchForm = document.getElementById('omni-search-form');
         const items = document.querySelectorAll('.omni-nav-item');
         const label = document.getElementById('omni-label');
 
@@ -1493,39 +1346,6 @@ export class UI {
         if (this._labelAnimTimer) {
             clearTimeout(this._labelAnimTimer);
             this._labelAnimTimer = null;
-        }
-
-        // Restore appropriate state based on current view
-        if (this.isSearchFormActive && this.currentView === 'search') {
-            // If in search view and search form is active, restore search form state
-            this.island.style.width = '380px';
-            this.island.style.transform = ''; // Clear swipe displacement
-            
-            if (transport) {
-                transport.style.filter = 'blur(12px)';
-                transport.style.opacity = '0';
-                transport.style.transform = 'scale(0.9)';
-                transport.style.pointerEvents = 'none';
-            }
-            
-            if (ribbon) {
-                ribbon.classList.add('pointer-events-none');
-                ribbon.style.opacity = '0';
-                ribbon.style.transform = 'scale(0.95)';
-                ribbon.style.filter = 'blur(8px)';
-            }
-            
-            if (searchForm) {
-                searchForm.classList.add('active');
-                searchForm.style.filter = 'blur(0px)';
-                searchForm.style.opacity = '1';
-                searchForm.style.transform = 'scale(1)';
-                searchForm.style.pointerEvents = 'auto';
-            }
-            const searchInput = document.getElementById('omni-search-input');
-            if (searchInput) searchInput.classList.remove('placeholder-faded');
-            
-            return;
         }
 
         // Restore Playback UI
@@ -1564,15 +1384,6 @@ export class UI {
             ribbon.style.opacity = '0';
             ribbon.style.transform = 'scale(0.95)';
             ribbon.style.filter = 'blur(8px)';
-        }
-
-        if (searchForm && !this.isSearchFormActive) {
-            searchForm.classList.remove('active');
-            searchForm.classList.add('pointer-events-none');
-            searchForm.style.pointerEvents = 'none';
-            searchForm.style.filter = '';
-            searchForm.style.opacity = '';
-            searchForm.style.transform = '';
         }
         
         items.forEach(i => {

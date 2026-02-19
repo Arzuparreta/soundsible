@@ -25,7 +25,16 @@ function esc(str) {
 }
 
 function renderFavourites(state) {
-    const favTracks = state.favorites.map(id => state.library.find(t => t.id === id)).filter(t => t);
+    const fullFavTracks = state.favorites.map(id => state.library.find(t => t.id === id)).filter(t => t);
+    const favSearchInput = document.getElementById('fav-search-input');
+    const favQuery = favSearchInput ? favSearchInput.value.trim().toLowerCase() : '';
+    const favTracks = !favQuery
+        ? fullFavTracks
+        : fullFavTracks.filter(t =>
+            t.title.toLowerCase().includes(favQuery) ||
+            t.artist.toLowerCase().includes(favQuery) ||
+            t.album.toLowerCase().includes(favQuery)
+        );
     window._currentFavTracks = favTracks;
     renderSongList(favTracks, 'fav-tracks');
 }
@@ -68,9 +77,9 @@ function renderQueue(state) {
     }
 
     const html = state.queue.map((t, idx) => `
-        <div class="queue-item flex items-center p-2 hover:bg-white/5 rounded-[var(--radius-omni-sm)] transition-colors group" data-index="${idx}">
-            <div class="queue-item-cover w-10 h-10 flex-shrink-0 rounded-[var(--radius-omni-sm-inset)] overflow-hidden">
-                <img src="${Resolver.getCoverUrl(t)}" class="queue-item-cover-img w-full h-full rounded-[var(--radius-omni-sm-inset)] shadow-lg object-cover" alt="Queue cover">
+        <div class="queue-item flex items-center p-2 hover:bg-white/5 rounded-2xl transition-colors group" data-index="${idx}">
+            <div class="queue-item-cover w-10 h-10 flex-shrink-0 rounded-xl overflow-hidden">
+                <img src="${Resolver.getCoverUrl(t)}" class="queue-item-cover-img w-full h-full object-cover shadow-lg border border-white/5" alt="">
             </div>
             <div class="ml-3 flex-1 truncate pointer-events-none">
                 <div class="font-bold text-[13px] truncate text-white/90">${esc(t.title)}</div>
@@ -617,6 +626,7 @@ async function init() {
         console.log("UI: Initializing...");
         UI.init();
         initSearch();
+        initFavSearch();
         initArtistScrollSuppress();
         initQueueDrag();
         // #region agent log
@@ -651,7 +661,20 @@ async function init() {
             // 1. If the entire Library changed (e.g. metadata sync), we must re-render all
             if (currentLibJson !== lastLibraryJson) {
                 console.log("Library synced, full re-render.");
-                renderHomeSongs(state.library);
+                const homeSearchInput = document.getElementById('home-search-input');
+                const homeQuery = homeSearchInput ? homeSearchInput.value.trim().toLowerCase() : '';
+                if (!homeQuery) {
+                    window._currentHomeTracks = null;
+                    renderHomeSongs(state.library);
+                } else {
+                    const homeResults = state.library.filter(t =>
+                        t.title.toLowerCase().includes(homeQuery) ||
+                        t.artist.toLowerCase().includes(homeQuery) ||
+                        t.album.toLowerCase().includes(homeQuery)
+                    );
+                    window._currentHomeTracks = homeResults;
+                    renderSongList(homeResults, 'all-songs');
+                }
                 renderArtistList(state.library);
                 renderFavourites(state);
                 renderQueue(state);
@@ -684,17 +707,7 @@ async function init() {
             
             // --- End Smart Rendering ---
 
-            // Persist Search results if user is currently searching
-            const searchInput = document.getElementById('search-input');
-            if (searchInput && searchInput.value.trim() && UI.currentView === 'search') {
-                const query = searchInput.value.toLowerCase();
-                const results = state.library.filter(t => 
-                    t.title.toLowerCase().includes(query) || 
-                    t.artist.toLowerCase().includes(query) || 
-                    t.album.toLowerCase().includes(query)
-                );
-                renderSongList(results, 'search-results');
-            }
+            // Dedicated search bars already own rendering for home/favourites.
             
             lastFavsJson = currentFavsJson;
             lastQueueJson = currentQueueJson;
@@ -722,8 +735,7 @@ async function init() {
         }
     }
 
-    // 6. Periodic 'Truth' Sync (every 30 seconds)
-    // Mirrored logic from GTK app to ensure mobile stays in sync even without tab switching
+    // 6. Periodic 'Truth' Sync (slow safety net)
     setInterval(() => {
         if (store.state.isOnline) {
             console.log("Periodic Sync: Verifying library truth...");
@@ -793,13 +805,13 @@ function buildSongRowsHtml(tracks) {
         const isActive = t.id === activeId;
         const isFav = favIds.includes(t.id);
         return `
-            <div class="relative overflow-hidden rounded-[var(--radius-omni-sm)] mb-2 group bg-[var(--bg-card)]">
+            <div class="relative overflow-hidden rounded-2xl mb-2 group bg-[var(--bg-card)]">
                 <div class="swipe-hints absolute inset-0 flex items-center justify-between px-8 z-0 pointer-events-none">
                     <div class="text-[var(--secondary)] font-black text-[9px] uppercase tracking-[0.2em]">Queue</div>
                     <div class="text-[var(--accent)] font-black text-[9px] uppercase tracking-[0.2em]">Favourite</div>
                 </div>
-                <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] border-transparent'} rounded-[var(--radius-omni-sm)] border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}" onclick="playTrack('${t.id}')">
-                    <div class="relative w-12 h-12 flex-shrink-0">
+                <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] border-transparent'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}" onclick="playTrack('${t.id}')">
+                    <div class="song-row-cover relative w-12 h-12 flex-shrink-0">
                         <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-xl shadow-lg border border-white/5" alt="Cover">
                         <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 rounded-xl backdrop-blur-[1.6px] transition-all duration-150 ease-out ${isActive ? 'opacity-100 is-playing' : 'opacity-0 pointer-events-none'}">
                             <i class="playing-icon fas fa-volume-high text-[var(--accent)] text-[14.4px]"></i>
@@ -811,7 +823,7 @@ function buildSongRowsHtml(tracks) {
                         <div class="text-[10px] text-[var(--text-dim)] font-bold truncate uppercase tracking-widest mt-0.5 font-mono">${esc(t.artist)}</div>
                     </div>
                     <div class="flex items-center space-x-3 ml-4">
-                        <div class="text-[9px] font-bold font-mono text-[var(--text-dim)] opacity-50 tracking-tighter">${formatTime(t.duration)}</div>
+                        <div class="no-row-action text-[9px] font-bold font-mono text-[var(--text-dim)] opacity-50 tracking-tighter">${formatTime(t.duration)}</div>
                         <button onclick="event.stopPropagation(); UI.showActionMenu('${t.id}')" class="w-10 h-10 flex items-center justify-center text-[var(--text-dim)] active:text-[var(--text-main)] transition-colors rounded-full active:bg-white/5 focus:outline-none">
                             <i class="fas fa-ellipsis-v text-xs"></i>
                         </button>
@@ -861,7 +873,7 @@ function renderArtistDetail(artistName) {
                 const trackLabel = albumTracks.length === 1 ? '1 track' : `${albumTracks.length} tracks`;
                 return `
                     <div class="artist-album-card flex flex-col" data-album="${esc(album)}">
-                        <div class="artist-album-header cursor-pointer group rounded-[var(--radius-omni-sm)] border border-[var(--glass-border)] bg-[var(--bg-card)] hover:border-[var(--accent)]/30 transition-colors active:scale-[0.98]" onclick="toggleArtistAlbum(event)">
+                        <div class="artist-album-header cursor-pointer group rounded-2xl border border-[var(--glass-border)] bg-[var(--bg-card)] hover:border-[var(--accent)]/30 transition-colors active:scale-[0.98]" onclick="toggleArtistAlbum(event)">
                             <div class="relative">
                                 <img src="${Resolver.getCoverUrl(coverTrack)}" class="w-full aspect-square object-cover rounded-t-2xl border-b border-white/5" alt="${esc(album)}">
                                 <div class="absolute bottom-2 right-2 w-6 h-6 rounded-full bg-black/60 flex items-center justify-center">
@@ -949,40 +961,74 @@ function initArtistScrollSuppress() {
 }
 
 async function initSearch() {
-    const input = document.getElementById('omni-search-input');
+    const input = document.getElementById('home-search-input');
     if (!input) {
-        // Retry if input not yet available (DOM might not be ready)
         setTimeout(initSearch, 100);
         return;
     }
 
     input.oninput = () => {
-        const query = input.value.toLowerCase();
-        const results = store.state.library.filter(t => 
-            t.title.toLowerCase().includes(query) || 
-            t.artist.toLowerCase().includes(query) || 
+        const query = input.value.trim().toLowerCase();
+        if (!query) {
+            window._currentHomeTracks = null;
+            renderHomeSongs(store.state.library);
+            return;
+        }
+        const results = store.state.library.filter(t =>
+            t.title.toLowerCase().includes(query) ||
+            t.artist.toLowerCase().includes(query) ||
             t.album.toLowerCase().includes(query)
         );
-        window._currentSearchTracks = results;
-        renderSongList(results, 'search-results');
+        window._currentHomeTracks = results;
+        renderSongList(results, 'all-songs');
     };
 
-    // Keyboard dismissal handling
-    input.addEventListener('blur', () => {
-        // Don't transform away if user is still on search view
-        // The transform will happen when navigating away
-    });
-
     input.addEventListener('keydown', (e) => {
-        // ESC key: dismiss keyboard and exit search form
         if (e.key === 'Escape') {
             input.blur();
-            if (window.UI && window.UI.currentView === 'search') {
-                window.UI.transformFromSearchForm();
-                window.UI.showView('home', false);
-            }
+            input.value = '';
+            window._currentHomeTracks = null;
+            renderHomeSongs(store.state.library);
         }
     });
+
+    input.addEventListener('blur', () => UI.handleKeyboardClose());
+}
+
+async function initFavSearch() {
+    const input = document.getElementById('fav-search-input');
+    if (!input) {
+        setTimeout(initFavSearch, 100);
+        return;
+    }
+
+    input.oninput = () => {
+        const state = store.state;
+        const fullFavTracks = state.favorites.map(id => state.library.find(t => t.id === id)).filter(t => t);
+        const query = input.value.trim().toLowerCase();
+        if (!query) {
+            window._currentFavTracks = fullFavTracks;
+            renderSongList(fullFavTracks, 'fav-tracks');
+            return;
+        }
+        const results = fullFavTracks.filter(t =>
+            t.title.toLowerCase().includes(query) ||
+            t.artist.toLowerCase().includes(query) ||
+            t.album.toLowerCase().includes(query)
+        );
+        window._currentFavTracks = results;
+        renderSongList(results, 'fav-tracks');
+    };
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            input.blur();
+            input.value = '';
+            renderFavourites(store.state);
+        }
+    });
+
+    input.addEventListener('blur', () => UI.handleKeyboardClose());
 }
 
 function renderArtistList(tracks) {
@@ -1000,7 +1046,7 @@ function renderArtistList(tracks) {
             if (t.id < byArtist[name].track.id) byArtist[name].track = t;
         });
     });
-    const artistNames = Object.keys(byArtist).sort((a, b) => byArtist[b].count - byArtist[a].count || a.localeCompare(b));
+    const artistNames = Object.keys(byArtist).sort((a, b) => a.localeCompare(b));
 
     if (artistNames.length === 0) {
         container.innerHTML = `
@@ -1026,7 +1072,7 @@ function renderArtistList(tracks) {
         const isCurrentlyPlaying = currentTrackArtistsSet.has(normalizeArtistName(name));
         return `
         <div class="artist-card group cursor-pointer" data-artist-name="${esc(name)}" onclick="(function(ev){ try { var card = ev && ev.currentTarget; if (card) { card.classList.add('artist-card-tapped'); setTimeout(function(){ card.classList.remove('artist-card-tapped'); }, 220); } window.showArtistDetail && window.showArtistDetail('${safeName}'); } catch(e) {} })(event)">
-            <div class="artist-card-cover relative overflow-hidden rounded-[var(--radius-omni-sm)] shadow-2xl transition-all ease-[cubic-bezier(0.19,1,0.22,1)] group-hover:scale-105 active:scale-95 border border-[var(--glass-border)] bg-[var(--bg-card)]" style="transition-duration: 500ms;">
+            <div class="artist-card-cover relative overflow-hidden rounded-[32px] shadow-2xl transition-all ease-[cubic-bezier(0.19,1,0.22,1)] group-hover:scale-105 active:scale-95 border border-[var(--glass-border)] bg-[var(--bg-card)]" style="transition-duration: 500ms;">
                 <img src="${Resolver.getCoverUrl(t)}" class="w-full aspect-square object-cover bg-gray-900" alt="${esc(name)}">
                 <div class="artist-card-overlay absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                 <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 rounded-[32px] backdrop-blur-[1.6px] transition-all duration-150 ease-out ${isCurrentlyPlaying ? 'opacity-100 is-playing' : 'opacity-0 pointer-events-none'}">
@@ -1051,24 +1097,26 @@ function formatTime(seconds) {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+/** Same context as playTrack; used by long-press to resolve track for NP. */
 window.getTrackFromCurrentContext = (trackId) => {
     let context = store.state.library;
     if (UI.currentView === 'favourites') context = window._currentFavTracks || context;
-    else if (UI.currentView === 'search') context = window._currentSearchTracks || context;
+    else if (UI.currentView === 'playlists') context = window._currentPlaylistTracks || context;
     else if (UI.currentView === 'artist-detail') context = window._currentArtistTracks || context;
-    return context?.find(t => t.id === trackId);
+    return context && context.find(t => t.id === trackId) || null;
 };
 
 window.playTrack = (trackId) => {
     console.log("Playing track ID:", trackId);
     Haptics.tick();
 
-    const track = window.getTrackFromCurrentContext(trackId);
+    let context = store.state.library;
+    if (UI.currentView === 'favourites') context = window._currentFavTracks || context;
+    else if (UI.currentView === 'playlists') context = window._currentPlaylistTracks || context;
+    else if (UI.currentView === 'artist-detail') context = window._currentArtistTracks || context;
+
+    const track = context.find(t => t.id === trackId);
     if (track) {
-        let context = store.state.library;
-        if (UI.currentView === 'favourites') context = window._currentFavTracks || context;
-        else if (UI.currentView === 'search') context = window._currentSearchTracks || context;
-        else if (UI.currentView === 'artist-detail') context = window._currentArtistTracks || context;
         audioEngine.setContext(context);
         store.update({ currentTrack: track });
         audioEngine.playTrack(track);

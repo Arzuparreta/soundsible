@@ -8,11 +8,14 @@ import sys
 import threading
 import json
 import uuid
+import logging
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, Response, send_from_directory
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
+
+logger = logging.getLogger(__name__)
 
 from shared.models import PlayerConfig, Track, LibraryMetadata, StorageProvider
 from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, DEFAULT_CACHE_DIR
@@ -33,8 +36,139 @@ import socket
 import requests
 import re
 import time
+import hashlib
 import ipaddress
 import tempfile
+from typing import Optional, Any
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from setup_tool.metadata_migration import MetadataMigrationManager
+from odst_tool.metadata_scorer import metadata_query_fingerprint
+
+def normalize_youtube_url(url: str) -> str:
+    """
+    Normalize YouTube/YouTube Music URL to a single-video URL (no list=, index=, etc.).
+    Address-bar links often include list= and cause wrong/failed downloads; Share → Copy link is correct.
+    """
+    if not url or not isinstance(url, str):
+        return url
+    url = url.strip()
+    if "youtube.com" not in url and "youtu.be" not in url:
+        return url
+    try:
+        parsed = urlparse(url)
+        if "youtu.be" in parsed.netloc:
+            video_id = (parsed.path or "").strip("/").split("?")[0].split("/")[0]
+            if video_id:
+                return f"https://www.youtube.com/watch?v={video_id}"
+            return url
+        q = parse_qs(parsed.query)
+        video_id = (q.get("v") or [None])[0]
+        if not video_id:
+            return url
+        # Keep only v= and optionally si=; drop list, index, and all other params
+        new_query = {"v": video_id}
+        if "si" in q and q["si"]:
+            new_query["si"] = q["si"][0]
+        return urlunparse((parsed.scheme or "https", parsed.netloc or "www.youtube.com", parsed.path, "", urlencode(new_query), ""))
+    except Exception:
+        return url
+
+
+def extract_youtube_video_id(url: str) -> Optional[str]:
+    """Extract YouTube video id from youtube.com/youtu.be/music.youtube.com URLs."""
+    if not url:
+        return None
+    try:
+        parsed = urlparse(url.strip())
+        host = (parsed.netloc or "").lower()
+        if "youtu.be" in host:
+            vid = (parsed.path or "").strip("/").split("/")[0]
+            return vid or None
+        if "youtube.com" in host:
+            q = parse_qs(parsed.query)
+            vid = (q.get("v") or [None])[0]
+            return vid or None
+    except Exception:
+        return None
+    return None
+
+
+def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
+    """Validate and normalize intake schema for /api/downloader/queue."""
+    if not isinstance(item, dict):
+        return None, "Item must be an object"
+
+    source_type = (item.get("source_type") or item.get("type") or "").strip() or None
+    song_str = (item.get("song_str") or "").strip()
+    spotify_data = item.get("spotify_data")
+    metadata_evidence = item.get("metadata_evidence") if isinstance(item.get("metadata_evidence"), dict) else None
+    output_dir = item.get("output_dir")
+
+    if isinstance(spotify_data, dict) and spotify_data.get("type") == "playlist":
+        return {
+            "source_type": "spotify_playlist",
+            "song_str": song_str or f"Playlist: {spotify_data.get('id', 'unknown')}",
+            "spotify_data": spotify_data,
+            "output_dir": output_dir,
+            "metadata_evidence": metadata_evidence,
+        }, None
+
+    if source_type in {"youtube_url", "ytmusic_search"}:
+        normalized = normalize_youtube_url(song_str)
+        video_id = extract_youtube_video_id(normalized or song_str)
+        if not normalized or ("youtube.com" not in normalized and "youtu.be" not in normalized) or not video_id:
+            return None, "Invalid or unsupported YouTube URL"
+        if source_type == "ytmusic_search":
+            evidence_video_id = (metadata_evidence or {}).get("video_id")
+            evidence_title = (metadata_evidence or {}).get("title")
+            evidence_channel = (metadata_evidence or {}).get("channel")
+            if not evidence_video_id:
+                return None, "ytmusic_search requires metadata_evidence.video_id"
+            if not evidence_title or not evidence_channel:
+                return None, "ytmusic_search requires metadata_evidence title and channel"
+        evidence = metadata_evidence or {}
+        fingerprint = metadata_query_fingerprint(
+            evidence.get("title") or normalized,
+            evidence.get("artist") or evidence.get("channel") or "",
+            int(evidence.get("duration_sec") or 0),
+        )
+        return {
+            "source_type": source_type,
+            "song_str": normalized,
+            "output_dir": output_dir,
+            "metadata_evidence": metadata_evidence,
+            "video_id": (metadata_evidence or {}).get("video_id") or video_id,
+            "metadata_query_fingerprint": fingerprint,
+        }, None
+
+    if song_str:
+        if "youtube.com" in song_str or "youtu.be" in song_str:
+            normalized = normalize_youtube_url(song_str)
+            if not extract_youtube_video_id(normalized):
+                return None, "Playlist-only or invalid YouTube URL (missing v=)"
+            return {
+                "source_type": "youtube_url",
+                "song_str": normalized,
+                "output_dir": output_dir,
+                "metadata_evidence": metadata_evidence,
+                "metadata_query_fingerprint": metadata_query_fingerprint(normalized, "", 0),
+            }, None
+        if "spotify.com" in song_str:
+            return {
+                "source_type": "spotify_url",
+                "song_str": song_str,
+                "output_dir": output_dir,
+                "metadata_evidence": metadata_evidence,
+            }, None
+        return {
+            "source_type": "manual",
+            "song_str": song_str,
+            "output_dir": output_dir,
+            "metadata_evidence": metadata_evidence,
+            "metadata_query_fingerprint": metadata_query_fingerprint(song_str, "", 0),
+        }, None
+
+    return None, "Missing source_type/song_str"
 
 def is_trusted_network(remote_addr):
     """
@@ -104,6 +238,46 @@ def resolve_spotify_url(url):
                 return title_text
     except Exception as e:
         print(f"Error resolving URL: {e}")
+    return None
+
+def resolve_local_track_path(track):
+    """
+    Resolve a local audio path for a track.
+    Priority:
+    1) track.local_path (if present)
+    2) OUTPUT_DIR/tracks/{track.id}.{track.format}
+    3) OUTPUT_DIR/tracks/{track.file_hash}.{track.format}
+    """
+    candidates = []
+
+    local_path = getattr(track, 'local_path', None)
+    if local_path:
+        candidates.append(local_path)
+
+    track_id = getattr(track, 'id', None)
+    file_hash = getattr(track, 'file_hash', None)
+    track_format = (getattr(track, 'format', None) or 'mp3').strip('.')
+
+    try:
+        from dotenv import dotenv_values
+        env_path = Path('odst_tool/.env')
+        env_vars = dotenv_values(env_path) if env_path.exists() else {}
+        output_dir = env_vars.get("OUTPUT_DIR") or os.getenv("OUTPUT_DIR")
+        if output_dir:
+            tracks_dir = Path(output_dir).expanduser().absolute() / "tracks"
+            if track_id:
+                candidates.append(str(tracks_dir / f"{track_id}.{track_format}"))
+            if file_hash and file_hash != track_id:
+                candidates.append(str(tracks_dir / f"{file_hash}.{track_format}"))
+    except Exception:
+        pass
+
+    for candidate in candidates:
+        try:
+            if candidate and os.path.exists(candidate):
+                return candidate
+        except Exception:
+            continue
     return None
 
 class LibraryFileWatcher(FileSystemEventHandler):
@@ -271,6 +445,7 @@ queue_manager = None
 favourites_manager = None
 downloader_service = None
 queue_manager_dl = DownloadQueueManager()
+metadata_migration_manager = None
 api_observer = None  # Store Observer reference for cleanup in daemon mode
 
 def get_core():
@@ -358,6 +533,54 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
         
     return downloader_service
 
+
+def get_metadata_migration_manager():
+    global metadata_migration_manager
+    if metadata_migration_manager is None:
+        lib, _, _ = get_core()
+        metadata_migration_manager = MetadataMigrationManager(lib, log_callback=queue_manager_dl.add_log)
+    return metadata_migration_manager
+
+
+def add_review_queue_item(
+    queue_item_id: str,
+    song_str: str,
+    source_type: str,
+    metadata_state: str,
+    confidence: float,
+    fingerprint: str,
+    candidates: dict,
+    proposed: dict,
+    track_id: Optional[str] = None,
+) -> str:
+    review_id = str(uuid.uuid4())
+    now = datetime.utcnow().isoformat() + "Z"
+    lib, _, _ = get_core()
+    with lib.db._get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO metadata_review_queue
+            (id, queue_item_id, track_id, source_type, song_str, metadata_state, confidence, fingerprint, candidates_json, proposed_json, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                review_id,
+                queue_item_id,
+                track_id,
+                source_type,
+                song_str,
+                metadata_state,
+                float(confidence or 0.0),
+                fingerprint,
+                json.dumps(candidates or {}),
+                json.dumps(proposed or {}),
+                "pending_review",
+                now,
+                now,
+            ),
+        )
+    return review_id
+
 def process_queue_background():
     global downloader_service, queue_manager_dl
     if queue_manager_dl.is_processing:
@@ -378,10 +601,13 @@ def process_queue_background():
             song_str = item.get('song_str')
             spotify_data = item.get('spotify_data')
             output_dir = item.get('output_dir')
+            source_type = item.get('source_type') or ('spotify_track' if spotify_data else 'manual')
+            metadata_evidence = item.get('metadata_evidence') if isinstance(item.get('metadata_evidence'), dict) else {}
             
             queue_manager_dl.add_log(f"Preparing: {song_str or item_id}...")
             queue_manager_dl.update_status(item_id, 'downloading')
-            socketio.emit('downloader_update', {'id': item_id, 'status': 'downloading'})
+            with app.app_context():
+                socketio.emit('downloader_update', {'id': item_id, 'status': 'downloading'})
             
             try:
                 dl = get_downloader(output_dir, log_callback=queue_manager_dl.add_log)
@@ -413,19 +639,26 @@ def process_queue_background():
                         })
                     
                     queue_manager_dl.update_status(item_id, 'completed')
-                    socketio.emit('downloader_update', {'id': item_id, 'status': 'completed'})
+                    with app.app_context():
+                        socketio.emit('downloader_update', {'id': item_id, 'status': 'completed'})
                     queue_manager_dl.add_log(f"✅ Queued {len(tracks)} tracks from playlist.")
                     continue # Move to next item in while loop
                 
                 track = None
                 if spotify_data:
                     meta = dl.spotify.extract_track_metadata(spotify_data)
-                    track = dl.downloader.process_track(meta)
+                    if metadata_evidence:
+                        meta.update({k: v for k, v in metadata_evidence.items() if v is not None})
+                    track = dl.downloader.process_track(meta, source="spotify_track")
                 elif song_str:
-                    # Direct URL or simple string
-                    if "youtube.com" in song_str or "youtu.be" in song_str:
+                    # Direct URL or simple string (typed intake contract)
+                    if source_type in {"youtube_url", "ytmusic_search"} or "youtube.com" in song_str or "youtu.be" in song_str:
+                        song_str = normalize_youtube_url(song_str)
                         queue_manager_dl.add_log(f"Downloading direct YouTube: {song_str}...")
-                        track = dl.downloader.process_video(song_str)
+                        runtime_hint = dict(metadata_evidence or {})
+                        if getattr(dl.spotify, "client", None):
+                            runtime_hint["_spotify_client"] = dl.spotify.client
+                        track = dl.downloader.process_video(song_str, metadata_hint=runtime_hint, source=source_type)
                     else:
                         # Manual search
                         fake_meta = {
@@ -433,28 +666,107 @@ def process_queue_background():
                             'artist': 'Unknown',
                             'album': 'Manual',
                             'duration_sec': 0,
-                            'id': f"manual_{uuid.uuid4().hex[:8]}"
+                            'id': f"manual_{uuid.uuid4().hex[:8]}",
+                            'metadata_decision_id': uuid.uuid4().hex
                         }
+                        if metadata_evidence:
+                            fake_meta.update({k: v for k, v in metadata_evidence.items() if v is not None})
                         track = dl.downloader.process_track(fake_meta, source="manual")
                 
                 if track:
+                    review_id = None
+                    if getattr(track, "metadata_state", None) == "pending_review":
+                        review_id = add_review_queue_item(
+                            queue_item_id=item_id,
+                            song_str=song_str or "",
+                            source_type=source_type,
+                            metadata_state=track.metadata_state,
+                            confidence=getattr(track, "metadata_confidence", 0.0) or 0.0,
+                            fingerprint=getattr(track, "metadata_query_fingerprint", "") or item.get("metadata_query_fingerprint", ""),
+                            candidates=getattr(track, "review_candidates", {}) or {},
+                            proposed=track.to_dict(),
+                            track_id=track.id,
+                        )
+                        queue_manager_dl.add_log(f"🟨 Metadata queued for review: {song_str or item_id}")
+
                     # Update ODST internal record
                     dl.library.add_track(track)
                     dl.save_library()
                     
-                    # Update main Soundsible library core
+                    # Update main Soundsible library core (convert ODST Track to shared Track so sync_from_metadata does not raise)
                     lib, _, _ = get_core()
-                    if lib.metadata:
-                        lib.metadata.add_track(track)
-                        # Persist to DB and library.json
-                        lib._save_metadata()
-                        
-                        # Signal all clients to refresh
-                        socketio.emit('library_updated')
+                    # Ensure we have main library in memory (e.g. if None, load from config cache)
+                    cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+                    if not lib.metadata and cache_path.exists():
+                        lib._load_from_cache(cache_path)
+                    if not lib.metadata:
+                        lib.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
                     
-                    # Auto-clear successful items from queue
-                    queue_manager_dl.remove_item(item_id)
-                    socketio.emit('downloader_update', {'id': item_id, 'status': 'completed', 'track': track.to_dict()})
+                    shared_track = Track.from_dict(track.to_dict())
+                    
+                    # Album-level cover consistency: check if another track in the same album has a premium cover
+                    if lib.db and shared_track.album:
+                        try:
+                            existing_album_tracks = lib.db.get_tracks_by_album(shared_track.album, shared_track.album_artist or shared_track.artist)
+                            # Find a track with premium cover_source
+                            for existing_track in existing_album_tracks:
+                                if existing_track.id != shared_track.id and existing_track.cover_source in ("spotify", "musicbrainz", "itunes", "youtube_music"):
+                                    # Reuse the premium cover from existing track
+                                    # Extract cover from existing track's file or cache
+                                    existing_local_path = resolve_local_track_path(existing_track)
+                                    if existing_local_path:
+                                        try:
+                                            from setup_tool.audio import AudioProcessor
+                                            cover_data = AudioProcessor.extract_cover_art(existing_local_path)
+                                            if cover_data:
+                                                # Update the new track's cover by re-embedding
+                                                local_track_path = resolve_local_track_path(shared_track)
+                                                if local_track_path:
+                                                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
+                                                        tmp.write(cover_data)
+                                                        tmp_path = tmp.name
+                                                    AudioProcessor.embed_artwork(local_track_path, tmp_path)
+                                                    os.remove(tmp_path)
+                                                    # Update track metadata
+                                                    shared_track.cover_source = existing_track.cover_source
+                                                    track.cover_source = existing_track.cover_source
+                                                    track.premium_cover_failed = False
+                                                    print(f"API: Reused premium cover from album '{shared_track.album}' (source: {existing_track.cover_source})")
+                                                    break
+                                        except Exception as e:
+                                            print(f"API: Could not extract cover from existing album track: {e}")
+                        except Exception as e:
+                            print(f"API: Album consistency check failed: {e}")
+                    if not lib.metadata.get_track_by_id(shared_track.id):
+                        lib.metadata.add_track(shared_track)
+                    # Pre-cache cover so first request serves it (avoids placeholder until second load)
+                    local_track_path = resolve_local_track_path(shared_track)
+                    if local_track_path:
+                        try:
+                            from setup_tool.audio import AudioProcessor
+                            covers_dir = os.path.join(os.path.expanduser(DEFAULT_CACHE_DIR), "covers")
+                            os.makedirs(covers_dir, exist_ok=True)
+                            cover_path = os.path.join(covers_dir, f"{shared_track.id}.jpg")
+                            if not os.path.exists(cover_path):
+                                cover_data = AudioProcessor.extract_cover_art(local_track_path)
+                                if cover_data:
+                                    with open(cover_path, 'wb') as f:
+                                        f.write(cover_data)
+                        except Exception as e:
+                            print(f"API: Pre-cache cover failed: {e}")
+                    # Persist to DB and library.json (config dir) so API and frontends see the new track
+                    lib._save_metadata()
+                    # Signal all clients to refresh (app context required when emitting from background thread)
+                    with app.app_context():
+                        socketio.emit('library_updated')
+                        queue_manager_dl.remove_item(item_id)
+                        track_dict = track.to_dict()
+                        # Include premium_cover_failed and fallback_cover_url if they exist
+                        if hasattr(track, 'premium_cover_failed'):
+                            track_dict['premium_cover_failed'] = track.premium_cover_failed
+                        if hasattr(track, 'fallback_cover_url'):
+                            track_dict['fallback_cover_url'] = track.fallback_cover_url
+                        socketio.emit('downloader_update', {'id': item_id, 'status': 'completed', 'track': track_dict, 'review_id': review_id})
                     queue_manager_dl.add_log(f"✅ Finished & Cleared: {track.artist} - {track.title}")
                 else:
                     raise Exception("Downloader returned no track. Check logs for details.")
@@ -464,7 +776,8 @@ def process_queue_background():
                 import traceback
                 traceback.print_exc()
                 queue_manager_dl.update_status(item_id, 'failed', error=str(e))
-                socketio.emit('downloader_update', {'id': item_id, 'status': 'failed', 'error': str(e)})
+                with app.app_context():
+                    socketio.emit('downloader_update', {'id': item_id, 'status': 'failed', 'error': str(e)})
                 queue_manager_dl.add_log(f"❌ Failed: {song_str or item_id} - {e}")
 
     except Exception as e:
@@ -585,6 +898,9 @@ def update_track_metadata(track_id):
                 tmp.write(img_data)
                 cover_path = tmp.name
                 
+    # Check if clearing cover
+    clear_cover = data.get('clear_cover', False)
+    
     # Prepare metadata dict for LibraryManager.update_track
     new_meta = {
         'title': data.get('title', track.title),
@@ -593,10 +909,25 @@ def update_track_metadata(track_id):
         'album_artist': data.get('album_artist', track.album_artist)
     }
     
-    success = lib.update_track(track, new_meta, cover_path)
+    success = lib.update_track(track, new_meta, cover_path if not clear_cover else None)
     
     if cover_path and os.path.exists(cover_path):
         os.remove(cover_path)
+    
+    # Update cover_source and metadata_modified_by_user after update
+    if success:
+        updated_track = lib.metadata.get_track_by_id(track_id)
+        if updated_track:
+            updated_track.metadata_modified_by_user = True
+            if clear_cover:
+                updated_track.cover_source = "none"
+            elif cover_url:
+                # Determine cover source from URL or default to manual
+                if "youtube.com" in cover_url or "youtu.be" in cover_url:
+                    updated_track.cover_source = "youtube"
+                else:
+                    updated_track.cover_source = "manual"
+            lib._save_metadata()
         
     if success:
         socketio.emit('library_updated')
@@ -632,12 +963,417 @@ def upload_track_cover(track_id):
     
     if os.path.exists(cover_path):
         os.remove(cover_path)
+    
+    # Update cover_source and metadata_modified_by_user after update
+    if success:
+        updated_track = lib.metadata.get_track_by_id(track_id)
+        if updated_track:
+            updated_track.cover_source = "manual"
+            updated_track.metadata_modified_by_user = True
+            lib._save_metadata()
         
     if success:
         socketio.emit('library_updated')
         return jsonify({"status": "success"})
     else:
         return jsonify({"error": "Failed to update cover"}), 500
+
+@app.route('/api/library/tracks/<track_id>/cover/from-track', methods=['POST'])
+def copy_track_cover(track_id):
+    """Copy cover art from another track in the library."""
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
+
+    lib, _, _ = get_core()
+    data = request.json or {}
+    source_track_id = data.get('source_track_id')
+    
+    if not source_track_id:
+        return jsonify({"error": "source_track_id required"}), 400
+    
+    track = lib.metadata.get_track_by_id(track_id)
+    if not track:
+        return jsonify({"error": "Track not found"}), 404
+    
+    source_track = lib.metadata.get_track_by_id(source_track_id)
+    if not source_track:
+        return jsonify({"error": "Source track not found"}), 404
+    
+    # Extract cover from source track
+    source_local_path = resolve_local_track_path(source_track)
+    if not source_local_path:
+        return jsonify({"error": "Source track file not found"}), 404
+    
+    try:
+        from setup_tool.audio import AudioProcessor
+        cover_data = AudioProcessor.extract_cover_art(source_local_path)
+        if not cover_data:
+            return jsonify({"error": "No cover art found in source track"}), 404
+        
+        # Save to temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
+            tmp.write(cover_data)
+            cover_path = tmp.name
+        
+        # Update track with copied cover
+        success = lib.update_track(track, {}, cover_path)
+        
+        if os.path.exists(cover_path):
+            os.remove(cover_path)
+        
+        # Update cover_source and metadata_modified_by_user
+        if success:
+            updated_track = lib.metadata.get_track_by_id(track_id)
+            if updated_track:
+                updated_track.cover_source = "manual"  # Using cover from library
+                updated_track.metadata_modified_by_user = True
+                lib._save_metadata()
+        
+        if success:
+            socketio.emit('library_updated')
+            return jsonify({"status": "success"})
+        else:
+            return jsonify({"error": "Failed to update cover"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Failed to copy cover: {str(e)}"}), 500
+
+@app.route('/api/library/tracks/<track_id>/cover/none', methods=['POST'])
+def clear_track_cover(track_id):
+    """Remove cover art from a track."""
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
+
+    lib, _, _ = get_core()
+    track = lib.metadata.get_track_by_id(track_id)
+    if not track:
+        return jsonify({"error": "Track not found"}), 404
+    
+    # Use update_track_metadata with clear_cover flag
+    # Create a minimal 1x1 transparent PNG as placeholder
+    try:
+        from PIL import Image
+        placeholder = Image.new('RGBA', (1, 1), (0, 0, 0, 0))
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+            placeholder.save(tmp.name, 'PNG')
+            placeholder_path = tmp.name
+        
+        success = lib.update_track(track, {}, placeholder_path)
+        
+        if os.path.exists(placeholder_path):
+            os.remove(placeholder_path)
+        
+        # Update cover_source and metadata_modified_by_user
+        if success:
+            updated_track = lib.metadata.get_track_by_id(track_id)
+            if updated_track:
+                updated_track.cover_source = "none"
+                updated_track.metadata_modified_by_user = True
+                lib._save_metadata()
+        
+        if success:
+            socketio.emit('library_updated')
+            return jsonify({"status": "success"})
+        else:
+            return jsonify({"error": "Failed to clear cover"}), 500
+    except ImportError:
+        # PIL not available, just update metadata
+        updated_track = lib.metadata.get_track_by_id(track_id)
+        if updated_track:
+            updated_track.cover_source = "none"
+            updated_track.metadata_modified_by_user = True
+            lib._save_metadata()
+            socketio.emit('library_updated')
+            return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"error": f"Failed to clear cover: {str(e)}"}), 500
+
+
+@app.route('/api/library/refetch-metadata', methods=['POST'])
+def refetch_metadata():
+    """Re-fetch metadata for all tracks that haven't been manually edited."""
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
+
+    lib, _, _ = get_core()
+    if not lib.metadata:
+        return jsonify({"error": "No library metadata found"}), 404
+    
+    from odst_tool.metadata_harmonizer import MetadataHarmonizer
+    from odst_tool.youtube_downloader import YouTubeDownloader
+    
+    updated_count = 0
+    skipped_count = 0
+    error_count = 0
+    
+    all_tracks = lib.metadata.tracks.copy()
+    
+    for track in all_tracks:
+        # Skip tracks modified by user
+        if track.metadata_modified_by_user:
+            skipped_count += 1
+            continue
+        
+        try:
+            # Prepare raw metadata for harmonization
+            raw_meta = {
+                'title': track.title,
+                'artist': track.artist,
+                'album': track.album,
+                'album_artist': track.album_artist,
+                'duration_sec': track.duration,
+                'year': track.year,
+                'track_number': track.track_number,
+                'isrc': track.isrc,
+                'musicbrainz_id': track.musicbrainz_id,
+                'is_music_content': False,  # Assume not music-specific for refetch
+            }
+            
+            # Harmonize metadata
+            clean_meta = MetadataHarmonizer.harmonize(raw_meta, source="refetch")
+            
+            # Update track if metadata changed
+            new_meta = {}
+            changed = False
+            
+            if clean_meta.get('title') != track.title:
+                new_meta['title'] = clean_meta['title']
+                changed = True
+            if clean_meta.get('artist') != track.artist:
+                new_meta['artist'] = clean_meta['artist']
+                changed = True
+            if clean_meta.get('album') != track.album:
+                new_meta['album'] = clean_meta['album']
+                changed = True
+            if clean_meta.get('album_artist') != track.album_artist:
+                new_meta['album_artist'] = clean_meta.get('album_artist')
+                changed = True
+            
+            # Update cover if we got a better one
+            cover_path = None
+            if clean_meta.get('album_art_url') and clean_meta.get('cover_source'):
+                # Check if new cover is better than current
+                new_cover_source = clean_meta.get('cover_source')
+                current_cover_source = track.cover_source or "none"
+                
+                # Premium sources are better
+                premium_sources = ("spotify", "musicbrainz", "itunes", "youtube_music")
+                if new_cover_source in premium_sources and current_cover_source not in premium_sources:
+                    # Download new cover
+                    try:
+                        cover_url = clean_meta.get('album_art_url')
+                        img_data = download_image(cover_url)
+                        if img_data:
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
+                                tmp.write(img_data)
+                                cover_path = tmp.name
+                            changed = True
+                    except Exception as e:
+                        print(f"Failed to download cover for {track.title}: {e}")
+            
+            if changed:
+                # Update track
+                success = lib.update_track(track, new_meta, cover_path)
+                
+                if cover_path and os.path.exists(cover_path):
+                    os.remove(cover_path)
+                
+                if success:
+                    # Update metadata fields
+                    updated_track = lib.metadata.get_track_by_id(track.id)
+                    if updated_track:
+                        updated_track.cover_source = clean_meta.get('cover_source')
+                        updated_track.metadata_source_authority = clean_meta.get('metadata_source_authority')
+                        updated_track.metadata_confidence = clean_meta.get('metadata_confidence')
+                        updated_track.metadata_state = clean_meta.get('metadata_state')
+                        updated_track.metadata_query_fingerprint = clean_meta.get('metadata_query_fingerprint')
+                        updated_track.metadata_modified_by_user = False  # System-driven refetch
+                        updated_track.musicbrainz_id = clean_meta.get('musicbrainz_id') or updated_track.musicbrainz_id
+                        updated_track.isrc = clean_meta.get('isrc') or updated_track.isrc
+                    updated_count += 1
+                else:
+                    error_count += 1
+        except Exception as e:
+            print(f"Error refetching metadata for {track.title}: {e}")
+            error_count += 1
+    
+    # Save changes
+    if updated_count > 0:
+        lib._save_metadata()
+        socketio.emit('library_updated')
+    
+    return jsonify({
+        "status": "success",
+        "updated": updated_count,
+        "skipped": skipped_count,
+        "errors": error_count
+    })
+
+@app.route('/api/library/migrate-metadata', methods=['POST'])
+def start_metadata_migration():
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
+    dry_run = True
+    if request.json is not None:
+        dry_run = bool(request.json.get("dry_run", True))
+    manager = get_metadata_migration_manager()
+    job_id = manager.start(dry_run=dry_run)
+    if not job_id:
+        status = manager.status()
+        return jsonify({"status": "already_running", "job": status}), 409
+    return jsonify({"status": "started", "job_id": job_id, "dry_run": dry_run})
+
+
+@app.route('/api/library/migrate-metadata/status', methods=['GET'])
+def get_metadata_migration_status():
+    manager = get_metadata_migration_manager()
+    job_id = request.args.get("job_id")
+    status = manager.status(job_id=job_id)
+    if not status:
+        return jsonify({"status": "not_found"}), 404
+    return jsonify({"status": "ok", "job": status})
+
+
+@app.route('/api/library/migrate-metadata/pause', methods=['POST'])
+def pause_metadata_migration():
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
+    manager = get_metadata_migration_manager()
+    manager.pause()
+    return jsonify({"status": "pause_requested"})
+
+
+@app.route('/api/library/migrate-metadata/resume', methods=['POST'])
+def resume_metadata_migration():
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
+    manager = get_metadata_migration_manager()
+    manager.resume()
+    return jsonify({"status": "resume_requested"})
+
+
+@app.route('/api/library/migrate-metadata/cancel', methods=['POST'])
+def cancel_metadata_migration():
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
+    manager = get_metadata_migration_manager()
+    manager.cancel()
+    return jsonify({"status": "cancel_requested"})
+
+
+@app.route('/api/library/migrate-metadata/rollback', methods=['POST'])
+def rollback_metadata_migration():
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
+    data = request.json or {}
+    job_id = data.get("job_id")
+    if not job_id:
+        return jsonify({"error": "job_id is required"}), 400
+    manager = get_metadata_migration_manager()
+    result = manager.rollback(job_id)
+    socketio.emit('library_updated')
+    return jsonify({"status": "rolled_back", **result})
+
+
+@app.route('/api/downloader/metadata-review', methods=['GET'])
+def list_metadata_review_items():
+    lib, _, _ = get_core()
+    status = request.args.get("status", "pending_review")
+    with lib.db._get_connection() as conn:
+        conn.row_factory = None
+        rows = conn.execute(
+            """
+            SELECT id, queue_item_id, track_id, source_type, song_str, metadata_state, confidence, fingerprint, candidates_json, proposed_json, status, created_at, updated_at
+            FROM metadata_review_queue
+            WHERE status = ?
+            ORDER BY created_at DESC
+            """,
+            (status,),
+        ).fetchall()
+    items = []
+    for row in rows:
+        items.append({
+            "id": row[0],
+            "queue_item_id": row[1],
+            "track_id": row[2],
+            "source_type": row[3],
+            "song_str": row[4],
+            "metadata_state": row[5],
+            "confidence": row[6],
+            "fingerprint": row[7],
+            "candidates": json.loads(row[8] or "{}"),
+            "proposed": json.loads(row[9] or "{}"),
+            "status": row[10],
+            "created_at": row[11],
+            "updated_at": row[12],
+        })
+    return jsonify({"items": items})
+
+
+@app.route('/api/downloader/metadata-review/<review_id>/approve', methods=['POST'])
+def approve_metadata_review_item(review_id):
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
+    lib, _, _ = get_core()
+    with lib.db._get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT track_id, proposed_json, status
+            FROM metadata_review_queue
+            WHERE id = ?
+            """,
+            (review_id,),
+        ).fetchone()
+    if not row:
+        return jsonify({"error": "Review item not found"}), 404
+    track_id, proposed_json, status = row
+    if status != "pending_review":
+        return jsonify({"error": "Review item not pending"}), 400
+    proposed = json.loads(proposed_json or "{}")
+    if not track_id:
+        return jsonify({"error": "Review item has no track_id"}), 400
+    track = lib.metadata.get_track_by_id(track_id) if lib.metadata else None
+    if not track:
+        return jsonify({"error": "Track not found"}), 404
+
+    cover_path = None
+    cover_url = proposed.get("album_art_url")
+    if cover_url:
+        img_data = download_image(cover_url)
+        if img_data:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                tmp.write(img_data)
+                cover_path = tmp.name
+    new_meta = {
+        "title": proposed.get("title", track.title),
+        "artist": proposed.get("artist", track.artist),
+        "album": proposed.get("album", track.album),
+        "album_artist": proposed.get("album_artist", track.album_artist),
+    }
+    ok = lib.update_track(track, new_meta, cover_path)
+    if cover_path and os.path.exists(cover_path):
+        os.remove(cover_path)
+    if not ok:
+        return jsonify({"error": "Failed to apply approved metadata"}), 500
+
+    with lib.db._get_connection() as conn:
+        now = datetime.utcnow().isoformat() + "Z"
+        conn.execute("UPDATE metadata_review_queue SET status='approved', updated_at=? WHERE id=?", (now, review_id))
+    socketio.emit('library_updated')
+    return jsonify({"status": "approved"})
+
+
+@app.route('/api/downloader/metadata-review/<review_id>/reject', methods=['POST'])
+def reject_metadata_review_item(review_id):
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
+    lib, _, _ = get_core()
+    with lib.db._get_connection() as conn:
+        now = datetime.utcnow().isoformat() + "Z"
+        row = conn.execute("SELECT id FROM metadata_review_queue WHERE id=?", (review_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "Review item not found"}), 404
+        conn.execute("UPDATE metadata_review_queue SET status='rejected', updated_at=? WHERE id=?", (now, review_id))
+    return jsonify({"status": "rejected"})
 
 # --- Favourites Endpoints ---
 
@@ -747,6 +1483,27 @@ def get_track_cover(track_id):
     # Use unified resolver
     path = lib.get_cover_url(track)
     print(f"DEBUG: [Cover] Resolved path: {path}")
+    
+    # Sync fallback: if no cache yet, resolve local file and extract once
+    if not path:
+        local_track_path = resolve_local_track_path(track)
+    else:
+        local_track_path = None
+    if not path and local_track_path and not str(local_track_path).startswith('http'):
+        try:
+            from setup_tool.audio import AudioProcessor
+            covers_dir = os.path.join(os.path.expanduser(DEFAULT_CACHE_DIR), "covers")
+            os.makedirs(covers_dir, exist_ok=True)
+            cover_path = os.path.join(covers_dir, f"{track.id}.jpg")
+            if not os.path.exists(cover_path):
+                cover_data = AudioProcessor.extract_cover_art(local_track_path)
+                if cover_data:
+                    with open(cover_path, 'wb') as f:
+                        f.write(cover_data)
+            if os.path.exists(cover_path):
+                path = cover_path
+        except Exception as e:
+            print(f"DEBUG: [Cover] Sync extract failed: {e}")
     
     if path and os.path.exists(path):
         # SECURITY: Path Jail Check with Smart Trust
@@ -878,6 +1635,21 @@ def toggle_playback():
 
 # --- Downloader Endpoints ---
 
+@app.route('/api/downloader/youtube/search', methods=['GET'])
+def youtube_search():
+    """YouTube Music–style search: plain-text query, returns list of minimal entries (id, title, duration, thumbnail, webpage_url, channel)."""
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({"results": []})
+    limit = min(20, max(1, request.args.get('limit', 10, type=int)))
+    try:
+        dl = get_downloader(open_browser=False)
+        results = dl.downloader.search_youtube(q, max_results=limit)
+        return jsonify({"results": results})
+    except Exception as e:
+        print(f"API: YouTube search error: {e}")
+        return jsonify({"results": [], "error": str(e)}), 500
+
 @app.route('/api/downloader/queue', methods=['POST'])
 def add_to_downloader_queue():
     try:
@@ -887,12 +1659,25 @@ def add_to_downloader_queue():
             
         items = data.get('items', [])
         added_ids = []
-        
-        for item in items:
-            new_item = queue_manager_dl.add(item)
+        accepted = []
+        rejected = []
+
+        for idx, item in enumerate(items):
+            parsed, err = parse_intake_item(item)
+            if err:
+                rejected.append({"index": idx, "reason": err, "item": item})
+                continue
+            parsed["intake_source"] = parsed.get("source_type")
+            parsed["intake_payload_hash"] = hashlib.sha256(
+                json.dumps(parsed, sort_keys=True, default=str).encode("utf-8")
+            ).hexdigest()
+            new_item = queue_manager_dl.add(parsed)
             added_ids.append(new_item['id'])
+            accepted.append({"index": idx, "id": new_item["id"], "source_type": parsed.get("source_type")})
             
-        return jsonify({"status": "queued", "ids": added_ids})
+        status = "queued" if accepted else "error"
+        code = 200 if accepted else 400
+        return jsonify({"status": status, "ids": added_ids, "accepted": accepted, "rejected": rejected}), code
     except Exception as e:
         print(f"API: Queue Add Error: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500

@@ -143,7 +143,7 @@
         .view-from-left { transform: translateX(-100%); }
 
         #now-playing-view {
-            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, visibility 0.4s;
+            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, visibility 0.4s, backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
             will-change: transform, opacity;
             opacity: 0;
             visibility: hidden;
@@ -152,9 +152,11 @@
             backdrop-filter: blur(48px);
             -webkit-backdrop-filter: blur(48px);
             border-top: 1px solid var(--glass-border);
-            transition: backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
         }
-        
+        /* Closing: ~20% faster than opening (0.6s -> 0.48s, 0.4s -> 0.32s) */
+        #now-playing-view.np-closing {
+            transition: transform 0.48s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.32s ease, visibility 0.32s, backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
+        }
         #now-playing-view.active {
             opacity: 1;
             visibility: visible;
@@ -380,33 +382,19 @@
             opacity: 1;
             pointer-events: auto;
         }
-        /* Hide omnibar progress only when NP full view shows its own timeline (not in preview) */
-        body.now-playing-open.np-timeline-visible #omni-progress-track {
-            opacity: 0;
-            pointer-events: none;
+        /* Omnibar progress: always visible (single timebar); transition for seeking feedback */
+        #omni-progress-track {
+            transition: opacity 0.28s ease;
         }
 
-        /* Search Form State */
-        #omni-search-form {
-            filter: blur(8px);
-        }
-        #omni-search-form.active {
-            opacity: 1;
-            scale: 1;
-            filter: blur(0px);
-            pointer-events: auto;
-        }
-        .omni-search-input {
+        /* Home search bar */
+        .home-search-input {
             font-family: 'Plus Jakarta Sans', sans-serif;
             font-size: 14px;
             letter-spacing: -0.01em;
         }
-        .omni-search-input::placeholder {
+        .home-search-input::placeholder {
             color: rgba(255, 255, 255, 0.4);
-            transition: opacity 360ms;
-        }
-        .omni-search-input.placeholder-faded::placeholder {
-            opacity: 0;
         }
 
         /* Keyboard Animation: Platform-specific */
@@ -456,22 +444,15 @@
             opacity: 0;
             pointer-events: none;
         }
-        /* Now Playing: flying timeline under cover art; hidden in preview (no mini bar) */
-        #now-playing-view.active #np-seek-container:not(.np-timeline-visible) {
-            opacity: 0;
-            pointer-events: none;
-            visibility: hidden;
-        }
+        /* Single timebar: only omnibar; timeline under cover is not used */
         #np-seek-container {
-            transform: translateY(80px) scaleX(0.15) scaleY(0.3);
-            transition: none;
+            display: none;
         }
-        #np-seek-container.np-timeline-visible {
-            transform: translateY(0) scaleX(1) scaleY(1);
-            opacity: 1;
-            visibility: visible;
-            pointer-events: auto;
-            transition: transform 0.35s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.3s ease;
+        #omni-progress-track.seeking {
+            opacity: 0.9;
+        }
+        #omni-progress-track.seeking #omni-progress {
+            box-shadow: 0 0 16px var(--accent);
         }
     </style>
 </head>
@@ -509,6 +490,9 @@
 
         <main id="content" class="flex-1 relative">
             <div id="view-home" class="view">
+                <div id="home-search-bar" class="glass-view rounded-[var(--radius-omni)] p-3 border border-white/10 mb-4">
+                    <input type="text" id="home-search-input" placeholder="Search library..." class="home-search-input w-full bg-black/40 border border-white/5 rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium text-[var(--text-main)] placeholder:text-white/40" />
+                </div>
                 <div id="all-songs" class="space-y-2"></div>
             </div>
             <div id="view-artists" class="view hidden">
@@ -532,33 +516,96 @@
                     <div id="artist-albums" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6"></div>
                 </section>
             </div>
-            <div id="view-search" class="view hidden">
-                <div id="search-results" class="space-y-2"></div>
+            <div id="view-playlists" class="view hidden">
+                <div class="glass-view rounded-[var(--radius-omni)] p-8 border border-white/10">
+                    <p class="text-[var(--text-dim)] text-sm text-center">Coming soon</p>
+                </div>
             </div>
             <div id="view-favourites" class="view hidden">
+                <div id="fav-search-bar" class="glass-view rounded-[var(--radius-omni)] p-3 border border-white/10 mb-4">
+                    <input type="text" id="fav-search-input" placeholder="Search favorites..." class="home-search-input w-full bg-black/40 border border-white/5 rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium text-[var(--text-main)] placeholder:text-white/40" />
+                </div>
                 <div id="fav-tracks" class="space-y-2"></div>
             </div>
             <div id="view-downloader" class="view hidden">
                 <div class="space-y-6">
-                    <div class="glass-view rounded-[var(--radius-omni)] p-6 border border-white/10">
-                        <textarea id="dl-input" rows="3" placeholder="Spotify/YouTube URLs..." class="w-full bg-black/40 border border-white/5 rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-mono mb-4"></textarea>
-                        <button id="dl-add-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 py-4 rounded-[var(--radius-omni-xs)] font-black uppercase tracking-widest text-xs transition-all active:scale-95">Add to Queue</button>
+                    <div class="glass-view rounded-[var(--radius-omni)] p-4 border border-white/10">
+                        <div class="flex gap-2">
+                            <input type="text" id="dl-search-input" placeholder="Search songs/artists or paste YouTube URLs (one per line)" class="flex-1 bg-black/40 border border-white/5 rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm" />
+                            <button type="button" id="dl-search-btn" class="bg-[var(--accent)] hover:opacity-90 text-white px-5 py-3 rounded-[var(--radius-omni-xs)] font-bold transition-all active:scale-95"><i class="fas fa-search"></i></button>
+                        </div>
+                        <p class="text-[10px] text-[var(--text-dim)] mt-2">URL input adds pending items to queue. Plain text performs YouTube Music search.</p>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="glass-view rounded-[var(--radius-omni)] p-6 border border-white/10 flex flex-col h-[400px]">
+                    <div id="dl-search-results" class="space-y-2 min-h-[120px]"></div>
+                    <div id="dl-review-panel" class="glass-view rounded-[var(--radius-omni)] p-4 border border-white/10 hidden">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Metadata review</h3>
+                            <button type="button" id="dl-review-refresh" class="text-[10px] text-[var(--accent)] font-bold">Refresh</button>
+                        </div>
+                        <div id="dl-review-list" class="space-y-2 max-h-56 overflow-y-auto custom-scrollbar"></div>
+                    </div>
+                </div>
+                <!-- Download queue: auto-expanded popover + submit bubble -->
+                <div id="dl-queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[90] flex flex-col items-end pointer-events-none">
+                    <div id="dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-white/10 shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right transition-all duration-300" style="box-shadow: var(--shadow-omni);">
+                        <div class="p-5">
                             <div class="flex justify-between items-center mb-4">
-                                <h2 class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Active Queue</h2>
-                                <div class="flex space-x-2">
-                                    <button id="dl-clear-btn" class="text-[9px] text-red-400 font-bold">Clear</button>
-                                    <button id="dl-start-btn" class="text-[9px] bg-green-600 px-3 py-1 rounded-full text-white font-bold">Start</button>
-                                </div>
+                                <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Download queue</h3>
+                                <button type="button" id="dl-submit-download-btn" class="w-9 h-9 rounded-full bg-[var(--accent)] text-white flex items-center justify-center shadow-lg hover:opacity-90 active:scale-90 pointer-events-auto transition-all duration-300" aria-label="Start download"><i class="fas fa-download text-xs"></i></button>
                             </div>
-                            <div id="dl-queue-list" class="flex-1 overflow-y-auto space-y-2 custom-scrollbar"></div>
+                            <div id="dl-download-queue-list" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
                         </div>
-                        <div class="bg-black/40 rounded-[var(--radius-omni)] p-6 border border-white/5 flex flex-col h-[400px]">
-                            <h2 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Logs</h2>
-                            <div id="dl-logs" class="flex-1 overflow-y-auto font-mono text-[10px] text-green-500/60 space-y-1 custom-scrollbar"></div>
+                    </div>
+                </div>
+                <!-- YouTube preview modal (click result = play) -->
+                <div id="dl-preview-modal" class="fixed inset-0 z-[110] hidden flex-col bg-black/90 backdrop-blur-sm">
+                    <div class="flex justify-end p-4">
+                        <button type="button" id="dl-preview-close" class="w-12 h-12 flex items-center justify-center rounded-full bg-white/10 text-white"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="flex-1 flex items-center justify-center p-4">
+                        <div id="dl-preview-iframe-wrap" class="w-full max-w-2xl aspect-video rounded-xl overflow-hidden bg-black"></div>
+                    </div>
+                </div>
+                <!-- Cover choice modal (when premium cover fails) -->
+                <div id="dl-cover-choice-modal" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-[9.6px]">
+                    <div class="glass-view rounded-[var(--radius-omni)] w-full max-w-md p-8 border border-white/10 shadow-2xl">
+                        <h3 class="text-xl font-bold mb-2">No Premium Cover Found</h3>
+                        <p class="text-sm text-[var(--text-dim)] mb-6">Choose how to handle the cover art for this track:</p>
+                        <div id="dl-cover-choice-track-info" class="mb-6 p-4 bg-black/20 rounded-lg">
+                            <div class="text-sm font-bold" id="dl-cover-choice-title"></div>
+                            <div class="text-xs text-[var(--text-dim)] mt-1" id="dl-cover-choice-artist"></div>
                         </div>
+                        <div class="space-y-3">
+                            <button id="dl-cover-choice-yt" class="w-full flex items-center space-x-3 p-4 bg-white/5 hover:bg-white/10 rounded-lg transition-colors text-left">
+                                <i class="fas fa-image text-[var(--accent)]"></i>
+                                <div>
+                                    <div class="font-bold text-sm">Use YouTube Cover</div>
+                                    <div class="text-xs text-[var(--text-dim)]">Use the YouTube thumbnail</div>
+                                </div>
+                            </button>
+                            <button id="dl-cover-choice-library" class="w-full flex items-center space-x-3 p-4 bg-white/5 hover:bg-white/10 rounded-lg transition-colors text-left">
+                                <i class="fas fa-folder-open text-purple-400"></i>
+                                <div>
+                                    <div class="font-bold text-sm">Choose from Library</div>
+                                    <div class="text-xs text-[var(--text-dim)]">Use cover from another song</div>
+                                </div>
+                            </button>
+                            <button id="dl-cover-choice-upload" class="w-full flex items-center space-x-3 p-4 bg-white/5 hover:bg-white/10 rounded-lg transition-colors text-left">
+                                <i class="fas fa-upload text-blue-400"></i>
+                                <div>
+                                    <div class="font-bold text-sm">Upload File</div>
+                                    <div class="text-xs text-[var(--text-dim)]">Upload your own cover image</div>
+                                </div>
+                            </button>
+                            <button id="dl-cover-choice-none" class="w-full flex items-center space-x-3 p-4 bg-white/5 hover:bg-white/10 rounded-lg transition-colors text-left">
+                                <i class="fas fa-ban text-gray-400"></i>
+                                <div>
+                                    <div class="font-bold text-sm">No Cover</div>
+                                    <div class="text-xs text-[var(--text-dim)]">Leave without cover art</div>
+                                </div>
+                            </button>
+                        </div>
+                        <button id="dl-cover-choice-close" class="w-full mt-6 py-3 text-gray-500 font-bold hover:text-white transition-colors">Cancel</button>
                     </div>
                 </div>
             </div>
@@ -602,6 +649,14 @@
                         </div>
                         <button onclick="window.showConnectionRefiner()" class="w-full text-xs text-[var(--secondary)] font-bold hover:underline py-2">Manual Connection Refiner</button>
                     </div>
+                    <div class="space-y-4 pt-8 border-t border-white/5 mt-8">
+                        <div>
+                            <h2 class="text-xl font-bold mb-2">Library</h2>
+                            <p class="text-xs text-[var(--text-dim)] mb-4">Re-fetch metadata for all tracks that haven't been manually edited</p>
+                            <button id="refetch-metadata-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 text-white font-black py-4 rounded-[var(--radius-omni-xs)] transition-all">Re-fetch Metadata</button>
+                            <div id="refetch-metadata-status" class="mt-3 text-xs text-[var(--text-dim)] hidden"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
@@ -614,7 +669,7 @@
                     </div>
                     <div class="relative pointer-events-none">
                         <div id="omni-island" class="glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all ease-[cubic-bezier(0.19,1,0.22,1)] overflow-hidden" style="width: 56px; height: 56px; border-radius: var(--radius-omni); transition-duration: 600ms;">
-                            <div id="omni-progress-track" class="absolute bottom-0 left-[18px] right-[18px] h-[2px]">
+                            <div id="omni-progress-track" class="absolute bottom-0 left-[18px] right-[18px] h-[2px] cursor-pointer touch-manipulation" style="pointer-events: auto; touch-action: none;">
                                 <div id="omni-progress" class="absolute inset-y-0 left-0 bg-[var(--accent)] w-0 transition-all duration-100 shadow-[0_0_10px_var(--accent)]"></div>
                             </div>
                             <div id="omni-metadata-container" class="absolute inset-0 flex items-center px-14 opacity-0 transition-opacity pointer-events-none overflow-hidden" style="transition-duration: 270ms;">
@@ -636,18 +691,15 @@
                             </div>
                             <div id="omni-nav-ribbon" class="absolute inset-0 flex items-center justify-between px-4 opacity-0 scale-95 transition-all pointer-events-none" style="transition-duration: 360ms;">
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="home"><i class="fas fa-home text-base text-white/40"></i></div>
-                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="artists"><i class="fas fa-user text-base text-white/40"></i></div>
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="favourites"><i class="fas fa-heart text-base text-white/40"></i></div>
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="playlists"><i class="fas fa-layer-group text-base text-white/40"></i></div>
                                 
                                 <!-- Middle Blank Position -->
                                 <div class="w-10 h-10"></div>
                                 
-                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="search"><i class="fas fa-search text-base text-white/40"></i></div>
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="artists"><i class="fas fa-user text-base text-white/40"></i></div>
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="downloader"><i class="fas fa-cloud-arrow-down text-base text-white/40"></i></div>
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="settings"><i class="fas fa-cog text-base text-white/40"></i></div>
-                            </div>
-                            <div id="omni-search-form" class="absolute inset-0 flex items-center px-4 opacity-0 scale-95 transition-all pointer-events-none" style="transition-duration: 360ms;">
-                                <input type="text" id="omni-search-input" placeholder="Search library..." class="omni-search-input w-full bg-transparent border-none outline-none text-sm font-medium text-white/90 placeholder:text-white/40 px-2 py-2 focus:outline-none">
                             </div>
                         </div>
         

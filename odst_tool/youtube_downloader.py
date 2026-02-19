@@ -2,6 +2,7 @@ import os
 import shutil
 import time
 import re
+import uuid
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 import yt_dlp
@@ -51,6 +52,8 @@ class YouTubeDownloader:
         Full workflow for a single track: Search -> Download -> Process -> Return Track
         """
         # 1. Harmonize metadata (Standardize source)
+        metadata = dict(metadata or {})
+        metadata.setdefault("metadata_decision_id", uuid.uuid4().hex)
         clean_metadata = MetadataHarmonizer.harmonize(metadata, source=source)
         
         # 2. Search for video
@@ -109,18 +112,76 @@ class YouTubeDownloader:
                 genre=None,
                 track_number=clean_metadata.get('track_number'),
                 is_local=True,
-                local_path=str(final_path.absolute())
+                local_path=str(final_path.absolute()),
+                musicbrainz_id=clean_metadata.get("musicbrainz_id"),
+                isrc=clean_metadata.get("isrc"),
+                metadata_source_authority=clean_metadata.get("metadata_source_authority"),
+                metadata_confidence=clean_metadata.get("metadata_confidence"),
+                metadata_decision_id=clean_metadata.get("metadata_decision_id"),
+                metadata_state=clean_metadata.get("metadata_state"),
+                metadata_query_fingerprint=clean_metadata.get("metadata_query_fingerprint"),
+                cover_source=clean_metadata.get("cover_source"),
+                metadata_modified_by_user=False
             )
+            track.review_candidates = clean_metadata.get("review_candidates") or {}
+            track.premium_cover_failed = clean_metadata.get("premium_cover_failed", False)
+            track.fallback_cover_url = clean_metadata.get("fallback_cover_url")
             
             return track
             
         except Exception as e:
-            print(f"Error processing downloaded file {spotify_metadata['title']}: {e}")
+            print(f"Error processing downloaded file {metadata.get('title', 'unknown')}: {e}")
             if temp_file.exists():
                 os.remove(temp_file)
             return None
 
-    def process_video(self, url: str) -> Optional[Track]:
+    @staticmethod
+    def _is_music_specific_content(info: Dict[str, Any], url: str = "") -> bool:
+        """
+        Detect if YouTube content is music-specific (likely to have good album art thumbnails).
+        Returns True if content appears to be music-focused (YouTube Music, VEVO, Topic channels, etc.).
+        """
+        # Check yt-dlp music-specific fields
+        if info.get('artist') or info.get('track') or info.get('album'):
+            return True
+        
+        # Check URL domain
+        if 'music.youtube.com' in url.lower():
+            return True
+        
+        # Check channel/uploader patterns
+        channel = (info.get('channel') or info.get('uploader') or "").lower()
+        if not channel:
+            return False
+        
+        # VEVO channels
+        if 'vevo' in channel:
+            return True
+        
+        # Topic channels (official music channels)
+        if channel.endswith('- topic') or channel.endswith(' - topic'):
+            return True
+        
+        # Known music labels/collectives (from MetadataHarmonizer.COLLECTIVES)
+        music_keywords = [
+            'records', 'music', 'official', 'oficial', 'label',
+            '88rising', 'trap nation', 'proximity', 'monstercat',
+            'ncs', 'nocopyrightsounds', 'lyrical lemonade'
+        ]
+        for keyword in music_keywords:
+            if keyword in channel:
+                return True
+        
+        # Check category if available
+        category = (info.get('categories') or [])
+        if isinstance(category, list):
+            category_str = ' '.join(category).lower()
+            if 'music' in category_str:
+                return True
+        
+        return False
+
+    def process_video(self, url: str, metadata_hint: Optional[Dict[str, Any]] = None, source: str = "youtube_url") -> Optional[Track]:
         """
         Process a direct YouTube URL.
         1. Fetch metadata
@@ -148,12 +209,16 @@ class YouTubeDownloader:
         video_id = info.get('id')
         video_title = info.get('title', 'Unknown Title')
         uploader = info.get('uploader', 'Unknown Artist')
+        channel = info.get('channel') or uploader
         duration = info.get('duration', 0)
         
         # Use YT-DLP's specific fields if available (YouTube Music)
         artist = info.get('artist') or info.get('uploader') or uploader
         title = info.get('track') or video_title
         album = info.get('album')
+        
+        # Detect if content is music-specific (for cover art priority)
+        is_music_content = self._is_music_specific_content(info, url)
         
         # Initial raw dict
         raw_meta = {
@@ -163,12 +228,32 @@ class YouTubeDownloader:
             'album_art_url': MetadataHarmonizer.get_best_yt_thumbnail(video_id) if video_id else info.get('thumbnail'),
             'duration_sec': duration,
             'release_date': info.get('upload_date'),
-            'track_number': info.get('track_number', 1)
+            'track_number': info.get('track_number', 1),
+            'channel': channel,
+            'uploader': uploader,
+            'description': info.get('description') or "",
+            'metadata_decision_id': uuid.uuid4().hex,
+            'is_music_content': is_music_content
         }
+        if isinstance(metadata_hint, dict):
+            evidence_title = metadata_hint.get("title")
+            evidence_artist = metadata_hint.get("artist") or metadata_hint.get("channel")
+            if evidence_title:
+                raw_meta["title"] = evidence_title
+            if evidence_artist:
+                raw_meta["artist"] = evidence_artist
+            if metadata_hint.get("duration_sec"):
+                raw_meta["duration_sec"] = metadata_hint.get("duration_sec")
+            if metadata_hint.get("album"):
+                raw_meta["album"] = metadata_hint.get("album")
+            if metadata_hint.get("metadata_decision_id"):
+                raw_meta["metadata_decision_id"] = metadata_hint.get("metadata_decision_id")
+            if metadata_hint.get("_spotify_client") is not None:
+                raw_meta["_spotify_client"] = metadata_hint.get("_spotify_client")
         
         # Harmonize (Standardize + MusicBrainz/iTunes lookup)
         # Use source="youtube" to trigger resolution if uploader is generic (Topic/collective)
-        clean_meta = MetadataHarmonizer.harmonize(raw_meta, source="youtube")
+        clean_meta = MetadataHarmonizer.harmonize(raw_meta, source=source)
         
         # 2. Download
         temp_file = self._download_audio(url)
@@ -213,8 +298,20 @@ class YouTubeDownloader:
                 genre=None,
                 track_number=clean_meta.get('track_number'),
                 is_local=True,
-                local_path=str(final_path.absolute())
+                local_path=str(final_path.absolute()),
+                musicbrainz_id=clean_meta.get("musicbrainz_id"),
+                isrc=clean_meta.get("isrc"),
+                metadata_source_authority=clean_meta.get("metadata_source_authority"),
+                metadata_confidence=clean_meta.get("metadata_confidence"),
+                metadata_decision_id=clean_meta.get("metadata_decision_id"),
+                metadata_state=clean_meta.get("metadata_state"),
+                metadata_query_fingerprint=clean_meta.get("metadata_query_fingerprint"),
+                cover_source=clean_meta.get("cover_source"),
+                metadata_modified_by_user=False
             )
+            track.review_candidates = clean_meta.get("review_candidates") or {}
+            track.premium_cover_failed = clean_meta.get("premium_cover_failed", False)
+            track.fallback_cover_url = clean_meta.get("fallback_cover_url")
             
             return track
 
@@ -338,7 +435,7 @@ class YouTubeDownloader:
     def _download_audio(self, url: str) -> Optional[Path]:
         """Download audio from URL and convert/remux based on quality."""
         import time
-        temp_filename = f"temp_{os.getpid()}_{int(time.time())}"
+        temp_filename = f"temp_{os.getpid()}_{time.time_ns()}_{uuid.uuid4().hex[:6]}"
         output_template = str(self.temp_dir / f"{temp_filename}.%(ext)s")
         
         profile = QUALITY_PROFILES.get(self.quality, QUALITY_PROFILES[DEFAULT_QUALITY])
@@ -351,7 +448,6 @@ class YouTubeDownloader:
             'outtmpl': output_template,
             'quiet': True,
             'no_warnings': True,
-            'js_runtimes': ['node'],
             'extractor_args': {
                 'youtube': {
                     'player_client': ['web', 'android', 'mweb'],
@@ -408,5 +504,52 @@ class YouTubeDownloader:
         
         for f in self.temp_dir.glob(f"{temp_filename}.*"):
             return f
-            
+
         return None
+
+    def search_youtube(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+        """
+        Search YouTube with plain text (e.g. song name, artist). Returns a list of
+        minimal entries for UI: id, title, duration, thumbnail, webpage_url, channel.
+        Uses extract_flat; no download. Safe for YouTube Music–style search UX.
+        """
+        if not query or not query.strip():
+            return []
+        query = query.strip()
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+            'extractor_args': {
+                'youtube': {'player_client': ['android', 'ios', 'web']}
+            }
+        }
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            ydl_opts['cookiefile'] = self.cookie_file
+        elif self.cookie_browser:
+            ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
+
+        out: List[Dict[str, Any]] = []
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                result = ydl.extract_info(f"ytsearch{max_results}:{query}", download=False)
+            if not result or 'entries' not in result:
+                return []
+            for entry in result['entries']:
+                if not entry:
+                    continue
+                video_id = entry.get('id')
+                if not video_id:
+                    continue
+                webpage_url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
+                out.append({
+                    'id': video_id,
+                    'title': entry.get('title') or 'Unknown',
+                    'duration': entry.get('duration') or 0,
+                    'thumbnail': entry.get('thumbnail') or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else ''),
+                    'webpage_url': webpage_url,
+                    'channel': entry.get('channel') or entry.get('uploader') or ''
+                })
+        except Exception as e:
+            print(f"YouTube search error: {e}")
+        return out
