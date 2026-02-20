@@ -18,7 +18,7 @@ export class UI {
     static _npPendingSeekPercent = null;
 
     static VIEW_LABELS = {
-        'home': 'ALL SONGS',
+        'home': 'ALL TRACKS',
         'favourites': 'FAVORITES',
         'artists': 'ARTISTS',
         'artist-detail': 'ARTIST',
@@ -132,6 +132,7 @@ export class UI {
         this.updateStatus(state);
         this.updateThemeUI(state.theme);
         this.updateHapticsUI(state.hapticsEnabled);
+        this.updateLibraryOrderUI(state.libraryOrder);
     }
 
     static syncIsland(state) {
@@ -146,7 +147,7 @@ export class UI {
         // Real-time UI Sync
         const anchorIcon = document.getElementById('omni-anchor-icon');
         if (this.isIslandActive && anchorIcon) {
-            anchorIcon.className = state.isPlaying ? 'fas fa-pause text-lg text-white' : 'fas fa-play text-lg text-white ml-1';
+            anchorIcon.className = state.isPlaying ? 'fas fa-pause text-lg text-[var(--text-main)]' : 'fas fa-play text-lg text-[var(--text-main)] ml-1';
             this.updateMetadataScroller(state.currentTrack);
         }
     }
@@ -162,7 +163,7 @@ export class UI {
         // Escape function for safety since we're using innerHTML
         const esc = (str) => (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 
-        const titleHtml = `<span class="text-white/40">${esc(track.title)}</span>`;
+        const titleHtml = `<span class="text-[var(--nav-icon)]">${esc(track.title)}</span>`;
         const restHtml = ` • ${esc(track.artist)} • ${esc(track.album)} • `;
         const contentHtml = titleHtml + restHtml;
         
@@ -197,7 +198,7 @@ export class UI {
         if (prev) { prev.classList.remove('hidden'); setTimeout(() => { prev.classList.replace('opacity-0', 'opacity-100'); prev.classList.replace('scale-75', 'scale-100'); }, 100); }
         if (next) { next.classList.remove('hidden'); setTimeout(() => { next.classList.replace('opacity-0', 'opacity-100'); next.classList.replace('scale-75', 'scale-100'); }, 100); }
         
-        if (anchorIcon) anchorIcon.className = store.state.isPlaying ? 'fas fa-pause text-lg text-white' : 'fas fa-play text-lg text-white ml-1';
+        if (anchorIcon) anchorIcon.className = store.state.isPlaying ? 'fas fa-pause text-lg text-[var(--text-main)]' : 'fas fa-play text-lg text-[var(--text-main)] ml-1';
 
         const transport = document.getElementById('omni-transport');
         const metadata = document.getElementById('omni-metadata-container');
@@ -232,7 +233,7 @@ export class UI {
         if (prev) { prev.classList.replace('opacity-100', 'opacity-0'); prev.classList.replace('scale-100', 'scale-75'); setTimeout(() => prev.classList.add('hidden'), 300); }
         if (next) { next.classList.replace('opacity-100', 'opacity-0'); next.classList.replace('scale-100', 'scale-75'); setTimeout(() => next.classList.add('hidden'), 300); }
         
-        if (anchorIcon) anchorIcon.className = 'fas fa-command text-lg text-white';
+        if (anchorIcon) anchorIcon.className = 'fas fa-command text-lg text-[var(--text-main)]';
     }
 
     static detectPlatform() {
@@ -322,6 +323,11 @@ export class UI {
         }
     }
 
+    static updateLibraryOrderUI(libraryOrder) {
+        const sel = document.getElementById('settings-library-order');
+        if (sel && libraryOrder) sel.value = libraryOrder;
+    }
+
     static updateStatus(state) {
         const statusLed = document.getElementById('status-led');
         const statusPulse = document.getElementById('status-led-pulse');
@@ -336,12 +342,6 @@ export class UI {
             if (statusPulse) statusPulse.className = `absolute inset-0 w-2 h-2 rounded-full bg-${isOnline ? 'green' : 'red'}-500 status-pulse`;
             statusText.textContent = isOnline ? 'Connected' : 'Offline';
             statusText.className = `text-${isOnline ? 'green' : 'red'}-500 font-bold`;
-            
-            const overlay = document.getElementById('connection-overlay');
-            if (overlay) {
-                if (isOnline) overlay.classList.add('hidden');
-                else if (state.config.syncToken) overlay.classList.remove('hidden');
-            }
         }
     }
 
@@ -997,35 +997,79 @@ export class UI {
             // 2. End Row Swipe
             if (activeRow) {
                 const diff = e.changedTouches[0].clientX - startX;
-                
-                // Standardized 'Premium Slime' Physics for return
-                activeRow.style.transition = 'transform 0.4s cubic-bezier(0.19, 1, 0.22, 1)';
-                activeRow.style.transform = 'translateX(0)';
-                
-                if (isHorizontal) {
-                    const trackId = activeRow.getAttribute('data-id');
-                    if (diff > 70) {
-                        const inQueue = store.state.queue.some(t => t.id === trackId);
-                        store.toggleQueue(trackId);
-                        Haptics.tick(); // 15ms pulse
-                        this.showToast(inQueue ? 'Removed from Queue' : 'Added to Queue');
-                    } else if (diff < -70) {
-                        const isFav = store.state.favorites.includes(trackId);
-                        store.toggleFavourite(trackId);
-                        Haptics.tick(); // 15ms pulse
-                        this.showToast(isFav ? 'Removed from Favourites' : 'Added to Favourites');
+                const trackId = activeRow.getAttribute('data-id');
+                const isFav = trackId && store.state.favorites.includes(trackId);
+                const isFavFirstAdd = isHorizontal && diff < -70 && !isFav &&
+                    this.currentView === 'home' && (store.state.libraryOrder || 'date_added') === 'favorites_first';
+
+                if (isFavFirstAdd) {
+                    // Exit animation: slide row left off screen, then toggle and run entrance after re-render
+                    Haptics.tick();
+                    this.showToast('Added to Favourites');
+                    window._favFirstExitTrackId = trackId;
+                    activeRow.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
+                    activeRow.offsetHeight; // force reflow so browser commits "from" state before "to"
+                    activeRow.style.transform = 'translateX(-100vw)';
+                    const rowForEnd = activeRow;
+                    const onExitEnd = () => {
+                        rowForEnd.removeEventListener('transitionend', onExitEnd);
+                        if (trackId) {
+                            store.toggleFavourite(trackId);
+                            window._pendingFavFirstEntranceTrackId = trackId;
+                        }
+                        window._favFirstExitTrackId = undefined;
+                        if (rowForEnd.parentElement) rowForEnd.parentElement.classList.remove('is-swiping');
+                    };
+                    activeRow.addEventListener('transitionend', onExitEnd, { once: true });
+                    activeRow = null;
+                } else {
+                    // Fast swipe add-to-fav (favorites_first): same exit/entrance as isFavFirstAdd
+                    const fastSwipeFavFirstAdd = !isHorizontal && diff < -70 && !isFav &&
+                        this.currentView === 'home' && (store.state.libraryOrder || 'date_added') === 'favorites_first';
+                    if (fastSwipeFavFirstAdd) {
+                        Haptics.tick();
+                        this.showToast('Added to Favourites');
+                        window._favFirstExitTrackId = trackId;
+                        activeRow.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
+                        activeRow.offsetHeight;
+                        activeRow.style.transform = 'translateX(-100vw)';
+                        const rowForEnd = activeRow;
+                        const onExitEnd = () => {
+                            rowForEnd.removeEventListener('transitionend', onExitEnd);
+                            if (trackId) {
+                                store.toggleFavourite(trackId);
+                                window._pendingFavFirstEntranceTrackId = trackId;
+                            }
+                            window._favFirstExitTrackId = undefined;
+                            if (rowForEnd.parentElement) rowForEnd.parentElement.classList.remove('is-swiping');
+                        };
+                        activeRow.addEventListener('transitionend', onExitEnd, { once: true });
+                        activeRow = null;
+                    } else {
+                        // Standard behavior: return to 0 and optionally toggle
+                        activeRow.style.transition = 'transform 0.4s cubic-bezier(0.19, 1, 0.22, 1)';
+                        activeRow.style.transform = 'translateX(0)';
+                        if (isHorizontal) {
+                            if (diff > 70) {
+                                const inQueue = store.state.queue.some(t => t.id === trackId);
+                                store.toggleQueue(trackId);
+                                Haptics.tick();
+                                this.showToast(inQueue ? 'Removed from Queue' : 'Added to Queue');
+                            } else if (diff < -70) {
+                                store.toggleFavourite(trackId);
+                                Haptics.tick();
+                                this.showToast(isFav ? 'Removed from Favourites' : 'Added to Favourites');
+                            }
+                        }
+                        const rowToCleanup = activeRow;
+                        setTimeout(() => {
+                            if (rowToCleanup && rowToCleanup.parentElement) {
+                                rowToCleanup.parentElement.classList.remove('is-swiping');
+                            }
+                        }, 400);
+                        activeRow = null;
                     }
                 }
-
-                // Hide hints after a delay to ensure the return animation finishes
-                const rowToCleanup = activeRow;
-                setTimeout(() => {
-                    if (rowToCleanup && rowToCleanup.parentElement) {
-                        rowToCleanup.parentElement.classList.remove('is-swiping');
-                    }
-                }, 400);
-
-                activeRow = null;
             }
             
             // Clear long press timer on touch end
@@ -1652,7 +1696,35 @@ export class UI {
         if (!this._menuBound) {
             el('action-menu-overlay').onclick = () => this.hideActionMenu();
             el('action-queue').onclick = () => { store.toggleQueue(this.currentActionTrack.id); this.hideActionMenu(); };
-            el('action-fav').onclick = () => { store.toggleFavourite(this.currentActionTrack.id); this.hideActionMenu(); };
+            el('action-fav').onclick = () => {
+                const trackId = this.currentActionTrack.id;
+                const isFav = store.state.favorites.includes(trackId);
+                const onHomeFavFirst = this.currentView === 'home' && (store.state.libraryOrder || 'date_added') === 'favorites_first';
+                if (onHomeFavFirst && !isFav) {
+                    const container = document.getElementById('all-songs');
+                    const row = container && container.querySelector(`.song-row[data-id="${CSS.escape(trackId)}"]`);
+                    if (row) {
+                        this.hideActionMenu();
+                        Haptics.tick();
+                        this.showToast('Added to Favourites');
+                        window._favFirstExitTrackId = trackId;
+                        row.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
+                        row.offsetHeight;
+                        row.style.transform = 'translateX(-100vw)';
+                        const onExitEnd = () => {
+                            row.removeEventListener('transitionend', onExitEnd);
+                            store.toggleFavourite(trackId);
+                            window._pendingFavFirstEntranceTrackId = trackId;
+                            window._favFirstExitTrackId = undefined;
+                            if (row.parentElement) row.parentElement.classList.remove('is-swiping');
+                        };
+                        row.addEventListener('transitionend', onExitEnd, { once: true });
+                        return;
+                    }
+                }
+                store.toggleFavourite(trackId);
+                this.hideActionMenu();
+            };
             el('action-delete').onclick = () => { if(confirm('Delete?')) store.deleteTrack(this.currentActionTrack.id); this.hideActionMenu(); };
             el('action-edit-metadata').onclick = () => { this.hideActionMenu(); this.showMetadataEditor(this.currentActionTrack.id); };
             this._menuBound = true;
@@ -1825,11 +1897,11 @@ export class UI {
         status.textContent = 'Matches found';
         resultsContainer.classList.remove('hidden');
         resultsContainer.innerHTML = results.slice(0, 5).map(r => `
-            <div class="flex items-center p-3 hover:bg-white/5 rounded-[var(--radius-omni-sm)] cursor-pointer transition-colors border border-transparent active:border-[var(--accent)]/30 active:bg-[var(--accent)]/5" onclick="UI.applyFetchedMetadata('${r.title.replace(/'/g, "\\'")}', '${r.artist.replace(/'/g, "\\'")}', '${r.album.replace(/'/g, "\\'")}', '${r.cover}')">
+            <div class="flex items-center p-3 hover:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] cursor-pointer transition-colors border border-transparent active:border-[var(--accent)]/30 active:bg-[var(--accent)]/5" onclick="UI.applyFetchedMetadata('${r.title.replace(/'/g, "\\'")}', '${r.artist.replace(/'/g, "\\'")}', '${r.album.replace(/'/g, "\\'")}', '${r.cover}')">
                 <img src="${r.cover}" class="w-10 h-10 rounded-[var(--radius-omni-xs)] object-cover shadow-md">
                 <div class="ml-3 truncate">
-                    <div class="text-xs font-bold truncate text-white/90">${r.title}</div>
-                    <div class="text-[9px] font-bold text-white/40 truncate uppercase tracking-widest font-mono">${r.artist}</div>
+                    <div class="text-xs font-bold truncate text-[var(--text-main)]">${r.title}</div>
+                    <div class="text-[9px] font-bold text-[var(--text-dim)] truncate uppercase tracking-widest font-mono">${r.artist}</div>
                 </div>
             </div>
         `).join('');
@@ -1875,10 +1947,10 @@ export class UI {
         if (!c) return;
         const t = document.createElement('div');
         // Omni-Island Styled Toast
-        t.className = 'glass-view px-6 py-3 rounded-full shadow-2xl text-[10px] font-black uppercase tracking-[0.2em] font-mono text-white/80 transition-all duration-500 ease-[cubic-bezier(0.19,1,0.22,1)] transform translate-y-10 opacity-0 border border-white/10';
+        t.className = 'glass-view px-6 py-3 rounded-full shadow-2xl text-[10px] font-black uppercase tracking-[0.2em] font-mono text-[var(--text-main)] transition-all duration-500 ease-[cubic-bezier(0.19,1,0.22,1)] transform translate-y-10 opacity-0 border border-[var(--glass-border)]';
         t.style.backdropFilter = 'blur(32px)';
         t.style.webkitBackdropFilter = 'blur(32px)';
-        t.style.backgroundColor = 'rgba(30, 31, 34, 0.85)';
+        t.style.backgroundColor = 'var(--bg-surface)';
         t.textContent = m;
         c.appendChild(t);
         setTimeout(() => { t.classList.replace('translate-y-10', 'translate-y-0'); t.classList.replace('opacity-0', 'opacity-100'); }, 10);

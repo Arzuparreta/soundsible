@@ -21,7 +21,8 @@ class Store {
             currentTrack: null,
             isPlaying: false,
             theme: this.load('theme', 'dark'),
-            hapticsEnabled: this.load('haptics', true)
+            hapticsEnabled: this.load('haptics', true),
+            libraryOrder: this.load('library_order', 'date_added')
         };
         this.subscribers = [];
         this.applyTheme(this.state.theme);
@@ -30,6 +31,8 @@ class Store {
     applyTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
         this.save('theme', theme);
+        const meta = document.querySelector('#meta-theme-color');
+        if (meta) meta.setAttribute('content', theme === 'light' ? '#f5f5f5' : '#0d0d0f');
     }
 
     toggleTheme() {
@@ -71,6 +74,7 @@ class Store {
         if (!changed) return;
 
         this.state = { ...this.state, ...patch };
+        if (patch.libraryOrder !== undefined) this.save('library_order', patch.libraryOrder);
         console.log("State Update:", Object.keys(patch));
         this.subscribers.forEach(cb => cb(this.state));
     }
@@ -184,6 +188,7 @@ class Store {
 
     async toggleFavourite(trackId) {
         try {
+            const wasFav = this.state.favorites.includes(trackId);
             const res = await fetch(`${this.apiBase}/api/library/favourites/toggle`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -191,6 +196,11 @@ class Store {
             });
             if (res.ok) {
                 await this.syncFavourites();
+                if (!wasFav) {
+                    const reordered = [trackId, ...this.state.favorites.filter(id => id !== trackId)];
+                    this.update({ favorites: reordered });
+                    this.save('favorites', reordered);
+                }
                 return true;
             }
             return false;

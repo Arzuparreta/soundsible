@@ -77,19 +77,19 @@ function renderQueue(state) {
     }
 
     const html = state.queue.map((t, idx) => `
-        <div class="queue-item flex items-center p-2 hover:bg-white/5 rounded-2xl transition-colors group" data-index="${idx}">
+        <div class="queue-item flex items-center p-2 hover:bg-[var(--surface-overlay)] rounded-2xl transition-colors group" data-index="${idx}">
             <div class="queue-item-cover w-10 h-10 flex-shrink-0 rounded-xl overflow-hidden">
-                <img src="${Resolver.getCoverUrl(t)}" class="queue-item-cover-img w-full h-full object-cover shadow-lg border border-white/5" alt="">
+                <img src="${Resolver.getCoverUrl(t)}" class="queue-item-cover-img w-full h-full object-cover shadow-lg border border-[var(--glass-border)]" alt="">
             </div>
             <div class="ml-3 flex-1 truncate pointer-events-none">
-                <div class="font-bold text-[13px] truncate text-white/90">${esc(t.title)}</div>
-                <div class="text-[10px] text-gray-500 truncate uppercase tracking-widest">${esc(t.artist)}</div>
+                <div class="font-bold text-[13px] truncate text-[var(--text-main)]">${esc(t.title)}</div>
+                <div class="text-[10px] text-[var(--text-dim)] truncate uppercase tracking-widest">${esc(t.artist)}</div>
             </div>
             <div class="flex items-center space-x-2">
                 <button onclick="playTrack('${t.id}')" class="w-10 h-10 flex items-center justify-center bg-blue-500/10 text-blue-400 rounded-full hover:bg-blue-500/20 active:scale-90 transition-all">
                     <i class="fas fa-play text-xs"></i>
                 </button>
-                <button onclick="store.removeFromQueue(${idx})" class="w-10 h-10 flex items-center justify-center bg-white/5 text-gray-500 rounded-full hover:bg-red-500/10 hover:text-red-400 active:scale-90 transition-all">
+                <button onclick="store.removeFromQueue(${idx})" class="w-10 h-10 flex items-center justify-center bg-[var(--surface-overlay)] text-[var(--text-dim)] rounded-full hover:bg-red-500/10 hover:text-red-400 active:scale-90 transition-all">
                     <i class="fas fa-times text-xs"></i>
                 </button>
             </div>
@@ -557,7 +557,7 @@ function syncUIState(state) {
         // Surgical update: Title color
         const title = row.querySelector('.song-title');
         if (title) {
-            title.classList.toggle('text-white', isActive);
+            title.classList.toggle('text-[var(--text-on-selection)]', isActive);
             title.classList.toggle('text-[var(--text-main)]', !isActive);
         }
     });
@@ -629,6 +629,30 @@ async function init() {
         initFavSearch();
         initArtistScrollSuppress();
         initQueueDrag();
+
+        // Settings: Import Token
+        const importTokenBtn = document.getElementById('import-token-btn');
+        const syncTokenInput = document.getElementById('sync-token-input');
+        if (importTokenBtn && syncTokenInput) {
+            importTokenBtn.addEventListener('click', () => {
+                const token = syncTokenInput.value.trim();
+                if (!token) {
+                    UI.showToast('Paste a token first');
+                    return;
+                }
+                try {
+                    if (store.importToken(token)) {
+                        UI.showToast('Token imported');
+                        syncTokenInput.value = '';
+                    } else {
+                        UI.showToast('Import failed');
+                    }
+                } catch (e) {
+                    UI.showToast('Import failed');
+                }
+            });
+        }
+
         // #region agent log
         fetch('http://127.0.0.1:7390/ingest/5e87ad09-2e12-436a-ac69-c14c6b45cb46', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ed9dd2' }, body: JSON.stringify({ sessionId: 'ed9dd2', runId: 'init', hypothesisId: 'H_media', location: 'app.js:init', message: 'hover:none media', data: { hoverNone: typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches }, timestamp: Date.now() }) }).catch(() => {});
         // #endregion
@@ -673,7 +697,8 @@ async function init() {
                         t.album.toLowerCase().includes(homeQuery)
                     );
                     window._currentHomeTracks = homeResults;
-                    renderSongList(homeResults, 'all-songs');
+                    const order = state.libraryOrder || 'date_added';
+                    renderSongList(sortLibraryTracks(homeResults, order, state.favorites), 'all-songs');
                 }
                 renderArtistList(state.library);
                 renderFavourites(state);
@@ -686,8 +711,11 @@ async function init() {
                 // 2. If ONLY favorites changed, we update the indicators surgically
                 if (currentFavsJson !== lastFavsJson) {
                     syncUIState(state);
-                    // If the user is looking at the Favourites view, we still need a full render there
                     if (UI.currentView === 'favourites') renderFavourites(state);
+                    if (UI.currentView === 'home' && (state.libraryOrder || 'date_added') === 'favorites_first') {
+                        renderHomeSongs(state.library);
+                        setTimeout(() => applyFavFirstEntranceIfNeeded(), 0);
+                    }
                 }
 
                 // 3. If the active track or playing state changed, we update highlights surgically
@@ -723,6 +751,19 @@ async function init() {
             renderFavourites(store.state);
             renderQueue(store.state);
         }
+
+        // 5. Settings: library order select
+        const libraryOrderSelect = document.getElementById('settings-library-order');
+        if (libraryOrderSelect) {
+            libraryOrderSelect.value = store.state.libraryOrder || 'date_added';
+            libraryOrderSelect.addEventListener('change', () => {
+                const value = libraryOrderSelect.value;
+                if (value && ['date_added', 'alphabetical', 'favorites_first'].includes(value)) {
+                    store.update({ libraryOrder: value });
+                    renderHomeSongs(store.state.library);
+                }
+            });
+        }
     } catch (err) {
         console.error("CRITICAL: App initialization failed:", err);
     } finally {
@@ -744,6 +785,29 @@ async function init() {
     }, 300000);
 }
 
+function sortLibraryTracks(tracks, order, favorites) {
+    if (!tracks.length) return tracks;
+    const favoritesSet = new Set(favorites || []);
+    const alphaCmp = (a, b) => {
+        const tc = (a.title || '').toLowerCase().localeCompare((b.title || '').toLowerCase());
+        if (tc !== 0) return tc;
+        return (a.artist || '').toLowerCase().localeCompare((b.artist || '').toLowerCase());
+    };
+    if (order === 'date_added') {
+        // API order = order of download; reverse so newest first, oldest at bottom
+        return [...tracks].reverse();
+    }
+    if (order === 'favorites_first') {
+        const fav = (favorites || []).map(id => tracks.find(t => t.id === id)).filter(Boolean);
+        const rest = tracks.filter(t => !favoritesSet.has(t.id));
+        return [...fav, ...rest];
+    }
+    if (order === 'alphabetical') {
+        return [...tracks].sort(alphaCmp);
+    }
+    return [...tracks];
+}
+
 function renderSongList(tracks, containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -756,8 +820,33 @@ function renderSongList(tracks, containerId) {
     container.innerHTML = buildSongRowsHtml(tracks);
 }
 
+function applyFavFirstEntranceIfNeeded() {
+    const trackId = window._pendingFavFirstEntranceTrackId;
+    if (!trackId) return;
+    const container = document.getElementById('all-songs');
+    if (!container) return;
+    const row = container.querySelector(`.song-row[data-id="${CSS.escape(trackId)}"]`);
+    if (!row) {
+        window._pendingFavFirstEntranceTrackId = undefined;
+        return;
+    }
+    window._pendingFavFirstEntranceTrackId = undefined;
+    row.style.transition = 'none';
+    row.style.transform = 'translateX(-100vw)';
+    row.offsetHeight; // reflow
+    row.style.transition = 'transform 0.6s cubic-bezier(0.19, 1, 0.22, 1)';
+    row.style.transform = 'translateX(0)';
+    const onEntranceEnd = () => {
+        row.removeEventListener('transitionend', onEntranceEnd);
+        row.style.transition = ''; // restore default from CSS
+    };
+    row.addEventListener('transitionend', onEntranceEnd, { once: true });
+}
+
 function renderHomeSongs(tracks) {
-    renderSongList(tracks, 'all-songs');
+    const order = store.state.libraryOrder || 'date_added';
+    const sorted = sortLibraryTracks(tracks, order, store.state.favorites);
+    renderSongList(sorted, 'all-songs');
 }
 
 /** Split "A, B", "A feat. B", "A + B" etc. into trimmed unique names. Single artist -> [artist]. */
@@ -812,19 +901,19 @@ function buildSongRowsHtml(tracks) {
                 </div>
                 <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] border-transparent'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}" onclick="playTrack('${t.id}')">
                     <div class="song-row-cover relative w-12 h-12 flex-shrink-0">
-                        <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-xl shadow-lg border border-white/5" alt="Cover">
+                        <img src="${Resolver.getCoverUrl(t)}" class="w-full h-full object-cover rounded-xl shadow-lg border border-[var(--glass-border)]" alt="Cover">
                         <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 rounded-xl backdrop-blur-[1.6px] transition-all duration-150 ease-out ${isActive ? 'opacity-100 is-playing' : 'opacity-0 pointer-events-none'}">
                             <i class="playing-icon fas fa-volume-high text-[var(--accent)] text-[14.4px]"></i>
                         </div>
                         <div class="fav-indicator absolute -top-1 -right-1 w-3.5 h-3.5 bg-[var(--accent)] rounded-full border-2 border-[var(--bg-card)] shadow-lg ${isFav ? '' : 'hidden'}"></div>
                     </div>
                     <div class="ml-4 flex-1 truncate">
-                        <div class="song-title font-bold text-sm truncate ${isActive ? 'text-white' : 'text-[var(--text-main)]'}">${esc(t.title)}</div>
+                        <div class="song-title font-bold text-sm truncate ${isActive ? 'text-[var(--text-on-selection)]' : 'text-[var(--text-main)]'}">${esc(t.title)}</div>
                         <div class="text-[10px] text-[var(--text-dim)] font-bold truncate uppercase tracking-widest mt-0.5 font-mono">${esc(t.artist)}</div>
                     </div>
                     <div class="flex items-center space-x-3 ml-4">
                         <div class="no-row-action text-[9px] font-bold font-mono text-[var(--text-dim)] opacity-50 tracking-tighter">${formatTime(t.duration)}</div>
-                        <button onclick="event.stopPropagation(); UI.showActionMenu('${t.id}')" class="w-10 h-10 flex items-center justify-center text-[var(--text-dim)] active:text-[var(--text-main)] transition-colors rounded-full active:bg-white/5 focus:outline-none">
+                        <button onclick="event.stopPropagation(); UI.showActionMenu('${t.id}')" class="w-10 h-10 flex items-center justify-center text-[var(--text-dim)] active:text-[var(--text-main)] transition-colors rounded-full active:bg-[var(--surface-overlay)] focus:outline-none">
                             <i class="fas fa-ellipsis-v text-xs"></i>
                         </button>
                     </div>
@@ -980,7 +1069,8 @@ async function initSearch() {
             t.album.toLowerCase().includes(query)
         );
         window._currentHomeTracks = results;
-        renderSongList(results, 'all-songs');
+        const order = store.state.libraryOrder || 'date_added';
+        renderSongList(sortLibraryTracks(results, order, store.state.favorites), 'all-songs');
     };
 
     input.addEventListener('keydown', (e) => {

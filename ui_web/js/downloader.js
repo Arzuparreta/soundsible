@@ -186,18 +186,18 @@ export class Downloader {
         const youtubeBtn = this.searchSourceYoutubeBtn;
         if (musicBtn && youtubeBtn) {
             if (value === 'music') {
-                musicBtn.classList.add('bg-[var(--accent)]', 'text-white');
-                musicBtn.classList.remove('bg-white/10', 'text-white/70');
+                musicBtn.classList.add('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
+                musicBtn.classList.remove('bg-[var(--surface-overlay)]', 'text-[var(--nav-icon)]');
                 musicBtn.setAttribute('aria-pressed', 'true');
-                youtubeBtn.classList.remove('bg-[var(--accent)]', 'text-white');
-                youtubeBtn.classList.add('text-white/70');
+                youtubeBtn.classList.remove('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
+                youtubeBtn.classList.add('text-[var(--nav-icon)]');
                 youtubeBtn.setAttribute('aria-pressed', 'false');
             } else {
-                youtubeBtn.classList.add('bg-[var(--accent)]', 'text-white');
-                youtubeBtn.classList.remove('bg-white/10', 'text-white/70');
+                youtubeBtn.classList.add('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
+                youtubeBtn.classList.remove('bg-[var(--surface-overlay)]', 'text-[var(--nav-icon)]');
                 youtubeBtn.setAttribute('aria-pressed', 'true');
-                musicBtn.classList.remove('bg-[var(--accent)]', 'text-white');
-                musicBtn.classList.add('bg-white/10', 'text-white/70');
+                musicBtn.classList.remove('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
+                musicBtn.classList.add('bg-[var(--surface-overlay)]', 'text-[var(--nav-icon)]');
                 musicBtn.setAttribute('aria-pressed', 'false');
             }
         }
@@ -271,13 +271,13 @@ export class Downloader {
     static renderResultRow(r) {
         const thumbUrl = (r.thumbnail || '').replace(/"/g, '%22').replace(/'/g, '%27');
         const duration = formatDuration(r.duration);
-        return `<div class="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-black/20 hover:bg-white/5 transition-colors group cursor-pointer" data-video-id="${esc(r.id)}">
-            <div class="w-12 h-12 rounded-lg bg-black/40 flex-shrink-0 dl-result-thumb" style="background-image:url('${thumbUrl}'); background-size:cover; background-position:center;"></div>
+        return `<div class="flex items-center gap-3 p-3 rounded-xl border border-[var(--input-border)] transition-colors group cursor-pointer hover:bg-[var(--surface-overlay)]" style="background-color: var(--input-bg);" data-video-id="${esc(r.id)}">
+            <div class="w-12 h-12 rounded-lg flex-shrink-0 dl-result-thumb" style="background-image:url('${thumbUrl}'); background-size:cover; background-position:center; background-color: var(--input-bg);"></div>
             <div class="flex-1 min-w-0">
-                <div class="text-sm font-bold truncate">${esc(r.title)}</div>
-                <div class="text-xs text-gray-500 truncate">${esc(r.channel)} ${duration ? ' · ' + duration : ''}</div>
+                <div class="text-sm font-bold truncate text-[var(--text-main)]">${esc(r.title)}</div>
+                <div class="text-xs text-[var(--text-dim)] truncate">${esc(r.channel)} ${duration ? ' · ' + duration : ''}</div>
             </div>
-            <button type="button" class="dl-add-one w-10 h-10 rounded-full bg-white/10 hover:bg-[var(--accent)] flex items-center justify-center flex-shrink-0 opacity-100 transition-all" data-video-id="${esc(r.id)}" aria-label="Add to download queue"><i class="fas fa-plus text-sm"></i></button>
+            <button type="button" class="dl-add-one w-10 h-10 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 opacity-100 transition-all" data-video-id="${esc(r.id)}" aria-label="Add to download queue"><i class="fas fa-plus text-sm"></i></button>
         </div>`;
     }
 
@@ -433,13 +433,13 @@ export class Downloader {
             return;
         }
         this.downloadQueueList.innerHTML = this.downloadQueue.map((r, i) => `
-            <div class="queue-item flex items-center p-2 hover:bg-white/5 rounded-2xl transition-colors group">
-                <div class="w-10 h-10 rounded-xl bg-black/40 flex-shrink-0 bg-cover bg-center" style="background-image:url('${(r.thumbnail || '').replace(/"/g, '%22')}');"></div>
+            <div class="queue-item flex items-center p-2 hover:bg-[var(--surface-overlay)] rounded-2xl transition-colors group">
+                <div class="w-10 h-10 rounded-xl flex-shrink-0 bg-cover bg-center" style="background-image:url('${(r.thumbnail || '').replace(/"/g, '%22')}'); background-color: var(--input-bg);"></div>
                 <div class="ml-3 flex-1 min-w-0 truncate">
-                    <div class="font-bold text-[13px] truncate text-white/90">${esc(r.title || r.song_str || 'Queue item')}</div>
-                    <div class="text-[10px] text-gray-500 truncate uppercase tracking-widest">${esc(r.source_type || 'manual')}</div>
+                    <div class="font-bold text-[13px] truncate text-[var(--text-main)]">${esc(r.title || r.song_str || 'Queue item')}</div>
+                    <div class="text-[10px] text-[var(--text-dim)] truncate uppercase tracking-widest">${esc(r.source_type || 'manual')}</div>
                 </div>
-                <button type="button" class="dl-remove-queue w-10 h-10 flex items-center justify-center bg-white/5 text-gray-500 rounded-full hover:bg-red-500/10 hover:text-red-400 active:scale-90 transition-all opacity-0 group-hover:opacity-100" data-index="${i}"><i class="fas fa-times text-xs"></i></button>
+                <button type="button" class="dl-remove-queue w-10 h-10 flex items-center justify-center bg-[var(--surface-overlay)] text-[var(--text-dim)] rounded-full hover:bg-red-500/10 hover:text-red-400 active:scale-90 transition-all opacity-0 group-hover:opacity-100" data-index="${i}"><i class="fas fa-times text-xs"></i></button>
             </div>
         `).join('');
         this.downloadQueueList.querySelectorAll('.dl-remove-queue').forEach(btn => {
