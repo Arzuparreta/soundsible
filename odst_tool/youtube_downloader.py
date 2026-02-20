@@ -5,6 +5,7 @@ import re
 import uuid
 from pathlib import Path
 from typing import Optional, Dict, Any, List
+from urllib.parse import quote
 import yt_dlp
 from .config import (
     DEFAULT_OUTPUT_DIR,
@@ -251,9 +252,15 @@ class YouTubeDownloader:
             if metadata_hint.get("_spotify_client") is not None:
                 raw_meta["_spotify_client"] = metadata_hint.get("_spotify_client")
         
-        # Harmonize (Standardize + MusicBrainz/iTunes lookup)
-        # Use source="youtube" to trigger resolution if uploader is generic (Topic/collective)
-        clean_meta = MetadataHarmonizer.harmonize(raw_meta, source=source)
+        # Normal-YouTube path: no harmonization; fixed metadata only
+        if source == "youtube_search":
+            raw_meta["title"] = video_title
+            raw_meta["artist"] = channel
+            raw_meta["album"] = "Downloaded from YouTube"
+            clean_meta = raw_meta
+        else:
+            # Harmonize (Standardize + MusicBrainz/iTunes lookup)
+            clean_meta = MetadataHarmonizer.harmonize(raw_meta, source=source)
         
         # 2. Download
         temp_file = self._download_audio(url)
@@ -306,8 +313,9 @@ class YouTubeDownloader:
                 metadata_decision_id=clean_meta.get("metadata_decision_id"),
                 metadata_state=clean_meta.get("metadata_state"),
                 metadata_query_fingerprint=clean_meta.get("metadata_query_fingerprint"),
-                cover_source=clean_meta.get("cover_source"),
-                metadata_modified_by_user=False
+                cover_source=clean_meta.get("cover_source") if source != "youtube_search" else "youtube",
+                metadata_modified_by_user=False,
+                download_source=source
             )
             track.review_candidates = clean_meta.get("review_candidates") or {}
             track.premium_cover_failed = clean_meta.get("premium_cover_failed", False)
@@ -507,11 +515,12 @@ class YouTubeDownloader:
 
         return None
 
-    def search_youtube(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+    def search_youtube(self, query: str, max_results: int = 10, use_ytmusic: bool = True) -> List[Dict[str, Any]]:
         """
-        Search YouTube with plain text (e.g. song name, artist). Returns a list of
+        Search YouTube or YouTube Music with plain text. Returns a list of
         minimal entries for UI: id, title, duration, thumbnail, webpage_url, channel.
-        Uses extract_flat; no download. Safe for YouTube Music–style search UX.
+        use_ytmusic=True: uses URL that triggers yt-dlp extractor "youtube:music:search_url" (see --list-extractors).
+        use_ytmusic=False: uses "youtube:search" via ytsearch prefix.
         """
         if not query or not query.strip():
             return []
@@ -529,13 +538,26 @@ class YouTubeDownloader:
         elif self.cookie_browser:
             ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
 
+        # youtube:music:search_url (from yt-dlp --list-extractors) is triggered by this URL
+        if use_ytmusic:
+            search_input = f"https://music.youtube.com/search?q={quote(query)}"
+        else:
+            # youtube:search via ytsearchN:query
+            search_input = f"ytsearch{max_results}:{query}"
+
         out: List[Dict[str, Any]] = []
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                result = ydl.extract_info(f"ytsearch{max_results}:{query}", download=False)
+                result = ydl.extract_info(search_input, download=False)
             if not result or 'entries' not in result:
                 return []
-            for entry in result['entries']:
+            raw_entries = result['entries']
+            if raw_entries is None:
+                return []
+            entries_list = list(raw_entries) if not isinstance(raw_entries, list) else raw_entries
+            if use_ytmusic:
+                entries_list = entries_list[:max_results]
+            for entry in entries_list:
                 if not entry:
                     continue
                 video_id = entry.get('id')
@@ -551,5 +573,29 @@ class YouTubeDownloader:
                     'channel': entry.get('channel') or entry.get('uploader') or ''
                 })
         except Exception as e:
-            print(f"YouTube search error: {e}")
+            if use_ytmusic:
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        result = ydl.extract_info(f"ytsearch{max_results}:{query}", download=False)
+                    if result and 'entries' in result:
+                        for entry in result['entries']:
+                            if not entry:
+                                continue
+                            video_id = entry.get('id')
+                            if not video_id:
+                                continue
+                            webpage_url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
+                            out.append({
+                                'id': video_id,
+                                'title': entry.get('title') or 'Unknown',
+                                'duration': entry.get('duration') or 0,
+                                'thumbnail': entry.get('thumbnail') or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else ''),
+                                'webpage_url': webpage_url,
+                                'channel': entry.get('channel') or entry.get('uploader') or ''
+                            })
+                    print(f"YouTube Music search failed, used YouTube fallback: {e}")
+                except Exception as e2:
+                    print(f"YouTube search error (fallback): {e2}")
+            else:
+                print(f"YouTube search error: {e}")
         return out

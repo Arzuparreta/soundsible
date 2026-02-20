@@ -43,7 +43,8 @@ class Track:
     metadata_query_fingerprint: Optional[str] = None
     cover_source: Optional[str] = None  # spotify | youtube_music | youtube | musicbrainz | itunes | manual | none
     metadata_modified_by_user: bool = False  # True if user manually edited metadata/cover
-    
+    download_source: Optional[str] = None  # youtube_search | ytmusic_search | youtube_url | spotify_track | manual
+
     @staticmethod
     def generate_id() -> str:
         """Generate a unique track ID."""

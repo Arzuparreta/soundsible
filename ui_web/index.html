@@ -52,6 +52,7 @@
         html {
             background-color: var(--bg-deep);
             min-height: 100dvh;
+            overscroll-behavior: none;
         }
 
         body { 
@@ -113,6 +114,7 @@
             flex: 1;
             width: 100%;
             overflow: hidden;
+            overscroll-behavior: none;
         }
 
         .view {
@@ -121,6 +123,7 @@
             width: 100%;
             height: 100%;
             overflow-y: auto;
+            overscroll-behavior: contain;
             padding: max(1.5rem, env(safe-area-inset-top)) 1.25rem 12rem 1.25rem;
             background-color: var(--bg-deep);
             transition: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, filter 0.5s ease;
@@ -157,7 +160,7 @@
         }
         /* Close 20% faster than open (open 0.6s -> close 0.48s) */
         #now-playing-view.np-closing {
-            transition: transform 0.48s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.32s ease, visibility 0.32s, backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
+            transition: transform 0.692s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.461s ease, visibility 0.461s, backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
         }
         #now-playing-view.active {
             opacity: 1;
@@ -202,7 +205,7 @@
         }
 
         .custom-scrollbar::-webkit-scrollbar { width: 0; }
-        .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; overscroll-behavior: contain; }
         
         /* Queue: modern Apple-like scroll cue (informative only) */
         #floating-queue-tracks {
@@ -474,6 +477,7 @@
             max-height: 0;
             opacity: 0;
             transform: translateY(-32px);
+            transition: none; /* no bar collapse; whole page slides */
         }
         /* Hide omnibar timebar when NP timeline is expanded (it "moved" into NP view) */
         body.np-timeline-expanded #omni-progress-track {
@@ -501,7 +505,7 @@
         <div class="text-[10px] font-black uppercase tracking-[0.4em] text-[var(--accent)] animate-pulse">Initializing Station</div>
     </div>
 
-    <div id="app" class="min-h-full-safe flex flex-col relative overflow-hidden" style="background-color: var(--bg-deep);">
+    <div id="app" class="min-h-full-safe flex flex-col relative overflow-hidden" style="background-color: var(--bg-deep); overscroll-behavior: none;">
         <div class="fixed inset-0 -z-10 opacity-20 pointer-events-none">
             <div class="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-[var(--accent)]/20 blur-[120px] rounded-full"></div>
             <div class="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-[var(--secondary)]/10 blur-[120px] rounded-full"></div>
@@ -523,6 +527,11 @@
             </div>
         </div>
 
+        <!-- ODST Music/YouTube toggle: fixed overlay, visible only when downloader view is active -->
+        <div id="dl-search-source-wrap" class="fixed bottom-24 right-6 z-[85] flex items-center gap-0 rounded-[var(--radius-omni-xs)] border border-white/10 bg-black/60 backdrop-blur-xl overflow-hidden pointer-events-auto hidden transition-opacity duration-200" aria-hidden="true" style="box-shadow: var(--shadow-omni);">
+            <button type="button" id="dl-search-source-music" class="dl-search-source-btn px-4 py-2 text-xs font-bold bg-[var(--accent)] text-white transition-colors" aria-pressed="true">Music</button>
+            <button type="button" id="dl-search-source-youtube" class="dl-search-source-btn px-4 py-2 text-xs font-bold text-white/70 hover:text-white hover:bg-white/10 transition-colors" aria-pressed="false">YouTube</button>
+        </div>
         <main id="content" class="flex-1 relative">
             <div id="view-home" class="view">
                 <div id="home-search-bar" class="glass-view rounded-[var(--radius-omni)] p-3 border border-white/10 mb-4">
@@ -572,20 +581,18 @@
                         <p class="text-[10px] text-[var(--text-dim)] mt-2">URL input adds pending items to queue. Plain text performs YouTube Music search.</p>
                     </div>
                     <div id="dl-search-results" class="space-y-2 min-h-[120px]"></div>
-                    <div id="dl-review-panel" class="glass-view rounded-[var(--radius-omni)] p-4 border border-white/10 hidden">
-                        <div class="flex items-center justify-between mb-3">
-                            <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Metadata review</h3>
-                            <button type="button" id="dl-review-refresh" class="text-[10px] text-[var(--accent)] font-bold">Refresh</button>
-                        </div>
-                        <div id="dl-review-list" class="space-y-2 max-h-56 overflow-y-auto custom-scrollbar"></div>
-                    </div>
                 </div>
-                <!-- Download queue: auto-expanded popover + submit bubble -->
+                <!-- Download queue: FAB + popover (same structure as Song Queue) -->
                 <div id="dl-queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[90] flex flex-col items-end pointer-events-none">
-                    <div id="dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-white/10 shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right transition-all duration-300" style="box-shadow: var(--shadow-omni);">
+                    <button id="dl-queue-fab" type="button" onclick="Downloader.toggleDownloadQueue()" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-black relative">
+                        <i class="fas fa-list-ul"></i>
+                        <div id="dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-black">0</div>
+                    </button>
+                    <div id="dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-white/10 shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
                         <div class="p-5">
                             <div class="flex justify-between items-center mb-4">
                                 <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Download queue</h3>
+                                <button type="button" id="dl-clear-queue-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-1 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
                                 <button type="button" id="dl-submit-download-btn" class="w-9 h-9 rounded-full bg-[var(--accent)] text-white flex items-center justify-center shadow-lg hover:opacity-90 active:scale-90 pointer-events-auto transition-all duration-300" aria-label="Start download"><i class="fas fa-download text-xs"></i></button>
                             </div>
                             <div id="dl-download-queue-list" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
@@ -805,7 +812,7 @@
     </div>
 
     <!-- Action Menu -->
-    <div id="action-menu" class="fixed inset-0 z-[150] hidden">
+    <div id="action-menu" class="fixed inset-0 z-[250] hidden touch-none overflow-hidden">
         <div id="action-menu-overlay" class="absolute inset-0 bg-black/60 backdrop-blur-[3.2px] transition-all duration-150 ease-out opacity-0"></div>
         <div id="action-menu-sheet" class="absolute bottom-0 left-0 right-0 bg-gray-950 rounded-t-[var(--radius-omni)] p-8 transition-transform transform translate-y-full border-t border-white/5">
             <div class="w-12 h-1 bg-white/10 rounded-full mx-auto mb-8"></div>

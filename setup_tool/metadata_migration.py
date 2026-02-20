@@ -124,30 +124,6 @@ class MetadataMigrationManager:
                         applied += 1
                     elif metadata_state == "auto_resolved" and confidence >= 0.9 and dry_run:
                         status = "would_apply"
-                    elif metadata_state == "pending_review":
-                        status = "pending_review"
-                        self._db_exec(
-                            """
-                            INSERT INTO metadata_review_queue
-                            (id, queue_item_id, track_id, source_type, song_str, metadata_state, confidence, fingerprint, candidates_json, proposed_json, status, created_at, updated_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (
-                                uuid.uuid4().hex,
-                                None,
-                                track.id,
-                                "migration",
-                                f"{track.artist} - {track.title}",
-                                metadata_state,
-                                confidence,
-                                harmonized.get("metadata_query_fingerprint"),
-                                json.dumps(harmonized.get("review_candidates") or {}),
-                                json.dumps(new_payload),
-                                "pending_review",
-                                datetime.utcnow().isoformat() + "Z",
-                                datetime.utcnow().isoformat() + "Z",
-                            ),
-                        )
 
                     self._db_exec(
                         """

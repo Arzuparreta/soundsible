@@ -113,23 +113,22 @@ def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
             "metadata_evidence": metadata_evidence,
         }, None
 
-    if source_type in {"youtube_url", "ytmusic_search"}:
+    if source_type in {"youtube_url", "ytmusic_search", "youtube_search"}:
         normalized = normalize_youtube_url(song_str)
         video_id = extract_youtube_video_id(normalized or song_str)
         if not normalized or ("youtube.com" not in normalized and "youtu.be" not in normalized) or not video_id:
             return None, "Invalid or unsupported YouTube URL"
-        if source_type == "ytmusic_search":
+        if source_type in ("ytmusic_search", "youtube_search"):
             evidence_video_id = (metadata_evidence or {}).get("video_id")
-            evidence_title = (metadata_evidence or {}).get("title")
-            evidence_channel = (metadata_evidence or {}).get("channel")
             if not evidence_video_id:
-                return None, "ytmusic_search requires metadata_evidence.video_id"
-            if not evidence_title or not evidence_channel:
-                return None, "ytmusic_search requires metadata_evidence title and channel"
+                return None, f"{source_type} requires metadata_evidence.video_id"
+            # title/channel may be empty from search; backend can use video title
         evidence = metadata_evidence or {}
+        title_for_fp = (evidence.get("title") or "").strip() or normalized
+        artist_for_fp = (evidence.get("artist") or evidence.get("channel") or "").strip()
         fingerprint = metadata_query_fingerprint(
-            evidence.get("title") or normalized,
-            evidence.get("artist") or evidence.get("channel") or "",
+            title_for_fp,
+            artist_for_fp,
             int(evidence.get("duration_sec") or 0),
         )
         return {
@@ -324,7 +323,7 @@ class DownloadQueueManager:
             self.log_buffer.append(log_entry)
             if len(self.log_buffer) > self.max_logs:
                 self.log_buffer.pop(0)
-        # Still emit for real-time if socket is alive
+        print(f"API: [Queue] {msg}")
         socketio.emit('downloader_log', {'data': msg})
 
     def _load(self):
@@ -542,45 +541,6 @@ def get_metadata_migration_manager():
     return metadata_migration_manager
 
 
-def add_review_queue_item(
-    queue_item_id: str,
-    song_str: str,
-    source_type: str,
-    metadata_state: str,
-    confidence: float,
-    fingerprint: str,
-    candidates: dict,
-    proposed: dict,
-    track_id: Optional[str] = None,
-) -> str:
-    review_id = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat() + "Z"
-    lib, _, _ = get_core()
-    with lib.db._get_connection() as conn:
-        conn.execute(
-            """
-            INSERT INTO metadata_review_queue
-            (id, queue_item_id, track_id, source_type, song_str, metadata_state, confidence, fingerprint, candidates_json, proposed_json, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                review_id,
-                queue_item_id,
-                track_id,
-                source_type,
-                song_str,
-                metadata_state,
-                float(confidence or 0.0),
-                fingerprint,
-                json.dumps(candidates or {}),
-                json.dumps(proposed or {}),
-                "pending_review",
-                now,
-                now,
-            ),
-        )
-    return review_id
-
 def process_queue_background():
     global downloader_service, queue_manager_dl
     if queue_manager_dl.is_processing:
@@ -652,7 +612,7 @@ def process_queue_background():
                     track = dl.downloader.process_track(meta, source="spotify_track")
                 elif song_str:
                     # Direct URL or simple string (typed intake contract)
-                    if source_type in {"youtube_url", "ytmusic_search"} or "youtube.com" in song_str or "youtu.be" in song_str:
+                    if source_type in {"youtube_url", "ytmusic_search", "youtube_search"} or "youtube.com" in song_str or "youtu.be" in song_str:
                         song_str = normalize_youtube_url(song_str)
                         queue_manager_dl.add_log(f"Downloading direct YouTube: {song_str}...")
                         runtime_hint = dict(metadata_evidence or {})
@@ -674,21 +634,6 @@ def process_queue_background():
                         track = dl.downloader.process_track(fake_meta, source="manual")
                 
                 if track:
-                    review_id = None
-                    if getattr(track, "metadata_state", None) == "pending_review":
-                        review_id = add_review_queue_item(
-                            queue_item_id=item_id,
-                            song_str=song_str or "",
-                            source_type=source_type,
-                            metadata_state=track.metadata_state,
-                            confidence=getattr(track, "metadata_confidence", 0.0) or 0.0,
-                            fingerprint=getattr(track, "metadata_query_fingerprint", "") or item.get("metadata_query_fingerprint", ""),
-                            candidates=getattr(track, "review_candidates", {}) or {},
-                            proposed=track.to_dict(),
-                            track_id=track.id,
-                        )
-                        queue_manager_dl.add_log(f"🟨 Metadata queued for review: {song_str or item_id}")
-
                     # Update ODST internal record
                     dl.library.add_track(track)
                     dl.save_library()
@@ -766,7 +711,7 @@ def process_queue_background():
                             track_dict['premium_cover_failed'] = track.premium_cover_failed
                         if hasattr(track, 'fallback_cover_url'):
                             track_dict['fallback_cover_url'] = track.fallback_cover_url
-                        socketio.emit('downloader_update', {'id': item_id, 'status': 'completed', 'track': track_dict, 'review_id': review_id})
+                        socketio.emit('downloader_update', {'id': item_id, 'status': 'completed', 'track': track_dict})
                     queue_manager_dl.add_log(f"✅ Finished & Cleared: {track.artist} - {track.title}")
                 else:
                     raise Exception("Downloader returned no track. Check logs for details.")
@@ -1112,7 +1057,11 @@ def refetch_metadata():
         if track.metadata_modified_by_user:
             skipped_count += 1
             continue
-        
+        # Skip normal-YouTube downloads (no harmonization; do not re-fetch)
+        if getattr(track, 'download_source', None) == 'youtube_search':
+            skipped_count += 1
+            continue
+
         try:
             # Prepare raw metadata for harmonization
             raw_meta = {
@@ -1273,107 +1222,6 @@ def rollback_metadata_migration():
     socketio.emit('library_updated')
     return jsonify({"status": "rolled_back", **result})
 
-
-@app.route('/api/downloader/metadata-review', methods=['GET'])
-def list_metadata_review_items():
-    lib, _, _ = get_core()
-    status = request.args.get("status", "pending_review")
-    with lib.db._get_connection() as conn:
-        conn.row_factory = None
-        rows = conn.execute(
-            """
-            SELECT id, queue_item_id, track_id, source_type, song_str, metadata_state, confidence, fingerprint, candidates_json, proposed_json, status, created_at, updated_at
-            FROM metadata_review_queue
-            WHERE status = ?
-            ORDER BY created_at DESC
-            """,
-            (status,),
-        ).fetchall()
-    items = []
-    for row in rows:
-        items.append({
-            "id": row[0],
-            "queue_item_id": row[1],
-            "track_id": row[2],
-            "source_type": row[3],
-            "song_str": row[4],
-            "metadata_state": row[5],
-            "confidence": row[6],
-            "fingerprint": row[7],
-            "candidates": json.loads(row[8] or "{}"),
-            "proposed": json.loads(row[9] or "{}"),
-            "status": row[10],
-            "created_at": row[11],
-            "updated_at": row[12],
-        })
-    return jsonify({"items": items})
-
-
-@app.route('/api/downloader/metadata-review/<review_id>/approve', methods=['POST'])
-def approve_metadata_review_item(review_id):
-    if not is_trusted_network(request.remote_addr):
-        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
-    lib, _, _ = get_core()
-    with lib.db._get_connection() as conn:
-        row = conn.execute(
-            """
-            SELECT track_id, proposed_json, status
-            FROM metadata_review_queue
-            WHERE id = ?
-            """,
-            (review_id,),
-        ).fetchone()
-    if not row:
-        return jsonify({"error": "Review item not found"}), 404
-    track_id, proposed_json, status = row
-    if status != "pending_review":
-        return jsonify({"error": "Review item not pending"}), 400
-    proposed = json.loads(proposed_json or "{}")
-    if not track_id:
-        return jsonify({"error": "Review item has no track_id"}), 400
-    track = lib.metadata.get_track_by_id(track_id) if lib.metadata else None
-    if not track:
-        return jsonify({"error": "Track not found"}), 404
-
-    cover_path = None
-    cover_url = proposed.get("album_art_url")
-    if cover_url:
-        img_data = download_image(cover_url)
-        if img_data:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-                tmp.write(img_data)
-                cover_path = tmp.name
-    new_meta = {
-        "title": proposed.get("title", track.title),
-        "artist": proposed.get("artist", track.artist),
-        "album": proposed.get("album", track.album),
-        "album_artist": proposed.get("album_artist", track.album_artist),
-    }
-    ok = lib.update_track(track, new_meta, cover_path)
-    if cover_path and os.path.exists(cover_path):
-        os.remove(cover_path)
-    if not ok:
-        return jsonify({"error": "Failed to apply approved metadata"}), 500
-
-    with lib.db._get_connection() as conn:
-        now = datetime.utcnow().isoformat() + "Z"
-        conn.execute("UPDATE metadata_review_queue SET status='approved', updated_at=? WHERE id=?", (now, review_id))
-    socketio.emit('library_updated')
-    return jsonify({"status": "approved"})
-
-
-@app.route('/api/downloader/metadata-review/<review_id>/reject', methods=['POST'])
-def reject_metadata_review_item(review_id):
-    if not is_trusted_network(request.remote_addr):
-        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
-    lib, _, _ = get_core()
-    with lib.db._get_connection() as conn:
-        now = datetime.utcnow().isoformat() + "Z"
-        row = conn.execute("SELECT id FROM metadata_review_queue WHERE id=?", (review_id,)).fetchone()
-        if not row:
-            return jsonify({"error": "Review item not found"}), 404
-        conn.execute("UPDATE metadata_review_queue SET status='rejected', updated_at=? WHERE id=?", (now, review_id))
-    return jsonify({"status": "rejected"})
 
 # --- Favourites Endpoints ---
 
@@ -1637,14 +1485,16 @@ def toggle_playback():
 
 @app.route('/api/downloader/youtube/search', methods=['GET'])
 def youtube_search():
-    """YouTube Music–style search: plain-text query, returns list of minimal entries (id, title, duration, thumbnail, webpage_url, channel)."""
+    """YouTube Music or normal YouTube search: plain-text query, returns list of minimal entries (id, title, duration, thumbnail, webpage_url, channel)."""
     q = request.args.get('q', '').strip()
     if not q:
         return jsonify({"results": []})
     limit = min(20, max(1, request.args.get('limit', 10, type=int)))
+    source = (request.args.get('source') or 'ytmusic').strip().lower()
+    use_ytmusic = (source == 'ytmusic')
     try:
         dl = get_downloader(open_browser=False)
-        results = dl.downloader.search_youtube(q, max_results=limit)
+        results = dl.downloader.search_youtube(q, max_results=limit, use_ytmusic=use_ytmusic)
         return jsonify({"results": results})
     except Exception as e:
         print(f"API: YouTube search error: {e}")
@@ -1658,6 +1508,7 @@ def add_to_downloader_queue():
             return jsonify({"status": "error", "message": "No JSON data received"}), 400
             
         items = data.get('items', [])
+        print(f"API: [Queue] POST received, items={len(items)}")
         added_ids = []
         accepted = []
         rejected = []
@@ -1665,6 +1516,7 @@ def add_to_downloader_queue():
         for idx, item in enumerate(items):
             parsed, err = parse_intake_item(item)
             if err:
+                print(f"API: [Queue] Rejected item {idx}: {err}")
                 rejected.append({"index": idx, "reason": err, "item": item})
                 continue
             parsed["intake_source"] = parsed.get("source_type")
@@ -1674,7 +1526,7 @@ def add_to_downloader_queue():
             new_item = queue_manager_dl.add(parsed)
             added_ids.append(new_item['id'])
             accepted.append({"index": idx, "id": new_item["id"], "source_type": parsed.get("source_type")})
-            
+        print(f"API: [Queue] Accepted {len(accepted)}, rejected {len(rejected)}")
         status = "queued" if accepted else "error"
         code = 200 if accepted else 400
         return jsonify({"status": status, "ids": added_ids, "accepted": accepted, "rejected": rejected}), code
@@ -1703,6 +1555,7 @@ def clear_downloader_queue():
 @app.route('/api/downloader/start', methods=['POST'])
 def trigger_downloader():
     if not queue_manager_dl.is_processing:
+        print("API: [Queue] Start download requested, starting background processor.")
         threading.Thread(target=process_queue_background, daemon=True).start()
         return jsonify({"status": "started"})
     return jsonify({"status": "already_running"})

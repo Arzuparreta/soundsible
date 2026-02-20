@@ -137,6 +137,8 @@ class DatabaseManager:
                     conn.execute("ALTER TABLE tracks ADD COLUMN cover_source TEXT")
                 if 'metadata_modified_by_user' not in columns:
                     conn.execute("ALTER TABLE tracks ADD COLUMN metadata_modified_by_user BOOLEAN DEFAULT 0")
+                if 'download_source' not in columns:
+                    conn.execute("ALTER TABLE tracks ADD COLUMN download_source TEXT")
 
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS metadata_migration_jobs (
@@ -164,24 +166,6 @@ class DatabaseManager:
                         created_at TEXT
                     )
                 """)
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS metadata_review_queue (
-                        id TEXT PRIMARY KEY,
-                        queue_item_id TEXT,
-                        track_id TEXT,
-                        source_type TEXT,
-                        song_str TEXT,
-                        metadata_state TEXT,
-                        confidence REAL,
-                        fingerprint TEXT,
-                        candidates_json TEXT,
-                        proposed_json TEXT,
-                        status TEXT NOT NULL,
-                        created_at TEXT,
-                        updated_at TEXT
-                    )
-                """)
-                
                 conn.execute("COMMIT")
             except Exception as e:
                 conn.execute("ROLLBACK")
@@ -218,8 +202,8 @@ class DatabaseManager:
                             format, cover_art_key, year, genre, track_number, 
                             is_local, local_path, musicbrainz_id, isrc, album_artist,
                             metadata_source_authority, metadata_confidence, metadata_decision_id,
-                            metadata_state, metadata_query_fingerprint, cover_source, metadata_modified_by_user
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            metadata_state, metadata_query_fingerprint, cover_source, metadata_modified_by_user, download_source
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             title=excluded.title,
                             artist=excluded.artist,
@@ -241,7 +225,8 @@ class DatabaseManager:
                             metadata_state=COALESCE(excluded.metadata_state, tracks.metadata_state),
                             metadata_query_fingerprint=COALESCE(excluded.metadata_query_fingerprint, tracks.metadata_query_fingerprint),
                             cover_source=COALESCE(excluded.cover_source, tracks.cover_source),
-                            metadata_modified_by_user=CASE WHEN excluded.metadata_modified_by_user THEN 1 ELSE tracks.metadata_modified_by_user END
+                            metadata_modified_by_user=CASE WHEN excluded.metadata_modified_by_user THEN 1 ELSE tracks.metadata_modified_by_user END,
+                            download_source=COALESCE(excluded.download_source, tracks.download_source)
                     """, (
                         track.id, track.title, track.artist, track.album,
                         track.duration, track.file_hash, track.original_filename, 
@@ -251,7 +236,8 @@ class DatabaseManager:
                         track.isrc, track.album_artist, track.metadata_source_authority,
                         track.metadata_confidence, track.metadata_decision_id,
                         track.metadata_state, track.metadata_query_fingerprint,
-                        track.cover_source, track.metadata_modified_by_user
+                        track.cover_source, track.metadata_modified_by_user,
+                        getattr(track, 'download_source', None)
                     ))
                 conn.execute("COMMIT")
             except Exception as e:

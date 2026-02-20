@@ -409,32 +409,22 @@ export class UI {
         if (!npView) return;
 
         const npSeek = document.getElementById('np-seek-container');
-        const hadTimelineExpanded = npSeek?.classList.contains('np-timeline-expanded');
         if (npSeek) npSeek.classList.remove('np-timeline-expanded');
         document.body.classList.remove('np-timeline-expanded');
 
-        const closeDurationMs = 480; /* 20% faster than open (0.6s -> 0.48s) */
-        const timelineCollapseMs = 400;
+        const closeDurationMs = 692; /* matches np-closing transition duration */
 
-        const doClose = () => {
-            npView.classList.add('np-closing');
-            npView.offsetHeight; /* force reflow so close transition is applied */
-            npView.classList.remove('active', 'np-preview');
-            npView.style.transform = '';
-            document.body.classList.remove('now-playing-open');
-            setTimeout(() => {
-                if (!npView.classList.contains('active')) {
-                    npView.classList.add('hidden');
-                    npView.classList.remove('np-closing');
-                }
-            }, closeDurationMs);
-        };
-
-        if (hadTimelineExpanded) {
-            setTimeout(doClose, timelineCollapseMs);
-        } else {
-            doClose();
-        }
+        npView.classList.add('np-closing');
+        npView.offsetHeight; /* force reflow so close transition is applied */
+        npView.classList.remove('active', 'np-preview');
+        npView.style.transform = '';
+        document.body.classList.remove('now-playing-open');
+        setTimeout(() => {
+            if (!npView.classList.contains('active')) {
+                npView.classList.add('hidden');
+                npView.classList.remove('np-closing');
+            }
+        }, closeDurationMs);
     }
 
     static showSoundMash() {
@@ -557,6 +547,24 @@ export class UI {
         }, 500);
 
         this.currentView = viewId;
+
+        const dlSearchSourceWrap = document.getElementById('dl-search-source-wrap');
+        if (dlSearchSourceWrap) {
+            if (viewId === 'downloader') {
+                dlSearchSourceWrap.classList.remove('hidden');
+                dlSearchSourceWrap.setAttribute('aria-hidden', 'false');
+            } else {
+                dlSearchSourceWrap.classList.add('hidden');
+                dlSearchSourceWrap.setAttribute('aria-hidden', 'true');
+            }
+        }
+
+        const queueContainer = document.getElementById('queue-container');
+        if (queueContainer) {
+            if (viewId === 'downloader') queueContainer.classList.add('hidden');
+            else queueContainer.classList.remove('hidden');
+        }
+
         if (viewId === 'artists' && typeof window.syncArtistGridIndicators === 'function') {
             window.syncArtistGridIndicators(store.state);
         }
@@ -578,8 +586,13 @@ export class UI {
 
         // Global Clicks
         window.addEventListener('click', (e) => {
-            const q = document.getElementById('queue-container');
-            if (q && !q.contains(e.target)) this.hideQueue();
+            if (this.currentView === 'downloader') {
+                const dlq = document.getElementById('dl-queue-container');
+                if (dlq && !dlq.contains(e.target)) Downloader.hideDownloadQueue?.();
+            } else {
+                const q = document.getElementById('queue-container');
+                if (q && !q.contains(e.target)) this.hideQueue();
+            }
         });
 
         // Transport Handlers
@@ -862,12 +875,17 @@ export class UI {
                 return;
             }
 
-            // 2. Queue item: long-press anywhere -> Now Playing for that track
+            const holdMsFull = 480;   /* hold anywhere on row/item */
+            const holdMsCover = Math.round(holdMsFull * 0.7); /* 70% when on cover */
+
+            // 2. Queue item: long-press anywhere -> Now Playing; on cover 70% of that time
             const queueItem = e.target.closest('.queue-item');
             if (queueItem) {
                 const idx = parseInt(queueItem.getAttribute('data-index'), 10);
                 const track = store.state.queue && store.state.queue[idx];
                 if (track) {
+                    const onCover = !!e.target.closest('.queue-item-cover');
+                    const delay = onCover ? holdMsCover : holdMsFull;
                     longPressTimer = setTimeout(() => {
                         if (!isHorizontal) {
                             longPressTriggered = true;
@@ -875,16 +893,18 @@ export class UI {
                             Haptics.heavy();
                         }
                         longPressTimer = null;
-                    }, 480);
+                    }, delay);
                 }
                 return;
             }
 
-            // 3. Song row: long-press on cover or anywhere else (title, artist, duration, 3-dots) -> NP; short tap 3-dots still opens action menu
+            // 3. Song row: long-press anywhere -> NP; on cover 70% of that time; short tap 3-dots still opens action menu
             if (row) {
                 activeRow = row;
                 row.style.transition = 'none';
                 const trackId = row.getAttribute('data-id');
+                const onCover = !!e.target.closest('.song-row-cover');
+                const delay = onCover ? holdMsCover : holdMsFull;
                 longPressTimer = setTimeout(() => {
                     if (!isHorizontal) {
                         longPressTriggered = true;
@@ -893,7 +913,7 @@ export class UI {
                         Haptics.heavy();
                     }
                     longPressTimer = null;
-                }, 480);
+                }, delay);
             }
         }, { passive: true });
 
@@ -1090,6 +1110,19 @@ export class UI {
         const npArt = document.getElementById('np-art');
         if (npArt) {
             let coverStartTime = 0, coverStartX = 0, coverStartY = 0, coverMaxDelta = 0;
+            let coverTapHandled = false; /* avoid double-fire when touch triggers click */
+            const playPreviewTrackAndExpandTimeline = () => {
+                if (!UI._npDisplayTrack || store.state.currentTrack?.id === UI._npDisplayTrack.id) return false;
+                Haptics.tick();
+                window.playTrack(UI._npDisplayTrack.id);
+                UI._npDisplayTrack = null;
+                const npViewEl = document.getElementById('now-playing-view');
+                if (npViewEl) npViewEl.classList.remove('np-preview');
+                const npSeekEl = document.getElementById('np-seek-container');
+                if (npSeekEl) npSeekEl.classList.add('np-timeline-expanded');
+                document.body.classList.add('np-timeline-expanded');
+                return true;
+            };
             npArt.addEventListener('touchstart', (e) => {
                 const t = e.touches[0];
                 coverStartTime = Date.now();
@@ -1112,15 +1145,18 @@ export class UI {
                 const validTap = duration >= 100 && duration <= 450 && movement < 12 &&
                     UI._npDisplayTrack && store.state.currentTrack?.id !== UI._npDisplayTrack.id;
                 if (!validTap) return;
-                Haptics.tick();
-                window.playTrack(UI._npDisplayTrack.id);
-                UI._npDisplayTrack = null;
-                const npViewEl = document.getElementById('now-playing-view');
-                if (npViewEl) npViewEl.classList.remove('np-preview');
-                const npSeekEl = document.getElementById('np-seek-container');
-                if (npSeekEl) npSeekEl.classList.add('np-timeline-expanded');
-                document.body.classList.add('np-timeline-expanded');
+                if (playPreviewTrackAndExpandTimeline()) {
+                    coverTapHandled = true;
+                    setTimeout(() => { coverTapHandled = false; }, 300);
+                }
             }, { passive: true });
+            npArt.addEventListener('click', (e) => {
+                if (coverTapHandled) return;
+                if (!UI._npDisplayTrack || store.state.currentTrack?.id === UI._npDisplayTrack.id) return;
+                e.preventDefault();
+                e.stopPropagation();
+                playPreviewTrackAndExpandTimeline();
+            });
         }
     }
 
@@ -1132,6 +1168,13 @@ export class UI {
         this.omniProgress = document.getElementById('omni-progress');
         
         if (!this.island || !this.anchor) return;
+
+        // Sync progress track (and time labels) to collapsed state on load so labels are not visible before first touch
+        const omniProgressTrack = document.getElementById('omni-progress-track');
+        if (omniProgressTrack) {
+            omniProgressTrack.style.transition = 'opacity 0.28s ease';
+            omniProgressTrack.style.opacity = (this.isIslandActive && !this.islandUserCollapsed) ? '1' : '0';
+        }
 
         this.initOmniGestures();
     }
@@ -1640,11 +1683,8 @@ export class UI {
             if (!isDragging) return;
             isDragging = false;
             const deltaY = e.changedTouches[0].clientY - startY;
-            const threshold = sheet.offsetHeight * 0.14; 
-            
-            // Standardized 'Premium Slime' Physics
+            const threshold = window.innerHeight * 0.08; // Same as NP swipe-to-close
             sheet.style.transition = 'transform 0.6s cubic-bezier(0.19, 1, 0.22, 1)';
-            
             if (deltaY > threshold) {
                 Haptics.lock(); // 15ms pulse for dismissal
                 this.hideActionMenu();

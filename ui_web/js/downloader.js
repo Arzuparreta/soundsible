@@ -48,15 +48,8 @@ export class Downloader {
     static librarySyncFallbackAttempts = 0;
     static lastDownloaderStatus = null;
     static suppressResultClicksUntil = 0;
-    static queueWindowOffsetX = 0;
-    static queueWindowOffsetY = 0;
-    static queueWindowDragPending = null;
-    static queueWindowDragTimer = null;
-    static queueWindowDragBound = false;
-    static QUEUE_DRAG_HOLD_MS = 220;
-    static QUEUE_DRAG_ACTIVATION_STRIP_PX = 16;
-    static QUEUE_DRAG_EDGE_MARGIN_PX = 10;
-    static QUEUE_DRAG_STORAGE_KEY = 'soundsible_odst_queue_window_pos_v1';
+    /** Search source: 'music' = YouTube Music (default), 'youtube' = normal YouTube */
+    static searchSource = 'music';
 
     static init() {
         if (this.initialized) return;
@@ -65,12 +58,12 @@ export class Downloader {
         this.searchInput = document.getElementById('dl-search-input');
         this.searchBtn = document.getElementById('dl-search-btn');
         this.searchResults = document.getElementById('dl-search-results');
-        this.reviewPanel = document.getElementById('dl-review-panel');
-        this.reviewList = document.getElementById('dl-review-list');
-        this.reviewRefreshBtn = document.getElementById('dl-review-refresh');
         this.queueContainer = document.getElementById('dl-queue-container');
+        this.dlQueueFab = document.getElementById('dl-queue-fab');
+        this.dlQueueBadge = document.getElementById('dl-queue-badge');
         this.downloadQueuePopover = document.getElementById('dl-download-queue-popover');
         this.downloadQueueList = document.getElementById('dl-download-queue-list');
+        this.clearQueueBtn = document.getElementById('dl-clear-queue-btn');
         this.submitDownloadBtn = document.getElementById('dl-submit-download-btn');
         this.previewModal = document.getElementById('dl-preview-modal');
         this.previewClose = document.getElementById('dl-preview-close');
@@ -95,12 +88,13 @@ export class Downloader {
         this.syncBtn = document.getElementById('dl-sync-btn');
         this.spotifyList = document.getElementById('dl-spotify-playlists');
         this.refreshSpotifyBtn = document.getElementById('dl-refresh-spotify-btn');
+        this.searchSourceMusicBtn = document.getElementById('dl-search-source-music');
+        this.searchSourceYoutubeBtn = document.getElementById('dl-search-source-youtube');
 
+        if (this.queueContainer) this.queueContainer.style.transform = '';
         this.bindEvents();
-        this.initQueueWindowDrag();
         this.updateFabAndPopover();
         this.refreshStatus();
-        this.loadMetadataReviews();
         if (this.confClientId) this.loadConfig();
         if (this.spotifyList) this.loadSpotifyPlaylists();
         setInterval(() => this.refreshStatus(), 5000);
@@ -112,8 +106,8 @@ export class Downloader {
             this.refreshStatus();
             if (e?.detail?.status === 'completed') {
                 store.syncLibrary();
-                // Check if premium cover failed
                 const track = e?.detail?.track;
+                if (track?.download_source === 'youtube_search') return;
                 if (track && (track.premium_cover_failed || (track.cover_source && !['spotify', 'musicbrainz', 'itunes', 'youtube_music'].includes(track.cover_source)))) {
                     this.showCoverChoiceModal(track);
                 }
@@ -122,8 +116,14 @@ export class Downloader {
 
         if (this.searchBtn) this.searchBtn.addEventListener('click', () => this.handlePrimaryInput());
         if (this.searchInput) this.searchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.handlePrimaryInput(); });
+        if (this.clearQueueBtn) this.clearQueueBtn.addEventListener('click', () => {
+            this.downloadQueue = [];
+            this.renderDownloadQueueList();
+            this.updateFabAndPopover();
+            this.hideDownloadQueue();
+            Haptics.tick();
+        });
         if (this.submitDownloadBtn) this.submitDownloadBtn.addEventListener('click', (e) => {
-            // Prevent ghost/click-through on underlying search results.
             e.preventDefault();
             e.stopPropagation();
             this.suppressResultClicksUntil = Date.now() + 700;
@@ -137,169 +137,22 @@ export class Downloader {
         if (this.refreshSpotifyBtn) this.refreshSpotifyBtn.addEventListener('click', () => this.loadSpotifyPlaylists());
         if (this.optimizeBtn) this.optimizeBtn.addEventListener('click', () => this.triggerOptimize());
         if (this.syncBtn) this.syncBtn.addEventListener('click', () => this.triggerSync());
-        if (this.reviewRefreshBtn) this.reviewRefreshBtn.addEventListener('click', () => this.loadMetadataReviews());
-        
+
         // Refetch metadata button
         const refetchBtn = document.getElementById('refetch-metadata-btn');
         if (refetchBtn) {
             refetchBtn.addEventListener('click', () => this.refetchMetadata());
         }
 
+        // Search source: Music | YouTube
+        if (this.searchSourceMusicBtn) {
+            this.searchSourceMusicBtn.addEventListener('click', () => this.setSearchSource('music'));
+        }
+        if (this.searchSourceYoutubeBtn) {
+            this.searchSourceYoutubeBtn.addEventListener('click', () => this.setSearchSource('youtube'));
+        }
+
         window.Downloader = this;
-    }
-
-    static initQueueWindowDrag() {
-        if (!this.queueContainer || !this.downloadQueuePopover) return;
-        if (!this.queueWindowDragBound) {
-            this.downloadQueuePopover.addEventListener('pointerdown', (e) => this.onQueueWindowPointerDown(e));
-            window.addEventListener('pointermove', (e) => this.onQueueWindowPointerMove(e));
-            window.addEventListener('pointerup', (e) => this.onQueueWindowPointerUp(e));
-            window.addEventListener('pointercancel', (e) => this.onQueueWindowPointerUp(e));
-            window.addEventListener('resize', () => this.clampQueueWindowToViewport(true));
-            this.queueWindowDragBound = true;
-        }
-        this.restoreQueueWindowPosition();
-        this.applyQueueWindowTransform();
-        this.clampQueueWindowToViewport(true);
-    }
-
-    static restoreQueueWindowPosition() {
-        try {
-            const raw = localStorage.getItem(this.QUEUE_DRAG_STORAGE_KEY);
-            if (!raw) return;
-            const parsed = JSON.parse(raw);
-            const ox = Number(parsed?.x);
-            const oy = Number(parsed?.y);
-            if (Number.isFinite(ox)) this.queueWindowOffsetX = ox;
-            if (Number.isFinite(oy)) this.queueWindowOffsetY = oy;
-        } catch {
-            // Ignore corrupt storage.
-        }
-    }
-
-    static persistQueueWindowPosition() {
-        try {
-            localStorage.setItem(this.QUEUE_DRAG_STORAGE_KEY, JSON.stringify({
-                x: this.queueWindowOffsetX,
-                y: this.queueWindowOffsetY
-            }));
-        } catch {
-            // Ignore storage errors.
-        }
-    }
-
-    static applyQueueWindowTransform() {
-        if (!this.queueContainer) return;
-        this.queueContainer.style.transform = `translate3d(${this.queueWindowOffsetX}px, ${this.queueWindowOffsetY}px, 0)`;
-    }
-
-    static clampQueueWindowToViewport(apply = false) {
-        if (!this.downloadQueuePopover || !this.queueContainer) return;
-        const rect = this.downloadQueuePopover.getBoundingClientRect();
-        const margin = this.QUEUE_DRAG_EDGE_MARGIN_PX;
-        let nextX = this.queueWindowOffsetX;
-        let nextY = this.queueWindowOffsetY;
-
-        if (rect.left < margin) nextX += (margin - rect.left);
-        if (rect.right > window.innerWidth - margin) nextX -= (rect.right - (window.innerWidth - margin));
-        if (rect.top < margin) nextY += (margin - rect.top);
-        if (rect.bottom > window.innerHeight - margin) nextY -= (rect.bottom - (window.innerHeight - margin));
-
-        this.queueWindowOffsetX = nextX;
-        this.queueWindowOffsetY = nextY;
-        if (apply) {
-            this.applyQueueWindowTransform();
-            this.persistQueueWindowPosition();
-        }
-    }
-
-    static popQueueWindow() {
-        if (!this.downloadQueuePopover) return;
-        if (typeof this.downloadQueuePopover.animate === 'function') {
-            this.downloadQueuePopover.animate(
-                [
-                    { transform: 'scale(1)' },
-                    { transform: 'scale(1.035)' },
-                    { transform: 'scale(1)' }
-                ],
-                { duration: 170, easing: 'cubic-bezier(0.19, 1, 0.22, 1)' }
-            );
-        }
-    }
-
-    static onQueueWindowPointerDown(e) {
-        if (!this.downloadQueuePopover || this.downloadQueue.length === 0) return;
-        if (e.pointerType === 'mouse' && e.button !== 0) return;
-        const interactiveTarget = e.target?.closest?.('button, a, input, textarea, select, [data-no-drag]');
-        if (interactiveTarget) return;
-
-        const rect = this.downloadQueuePopover.getBoundingClientRect();
-        const localY = e.clientY - rect.top;
-        if (localY < 0 || localY > this.QUEUE_DRAG_ACTIVATION_STRIP_PX) return;
-
-        this.queueWindowDragPending = {
-            pointerId: e.pointerId,
-            startX: e.clientX,
-            startY: e.clientY,
-            baseOffsetX: this.queueWindowOffsetX,
-            baseOffsetY: this.queueWindowOffsetY,
-            baseRect: rect,
-            started: false,
-        };
-        clearTimeout(this.queueWindowDragTimer);
-        this.queueWindowDragTimer = setTimeout(() => {
-            if (!this.queueWindowDragPending || this.queueWindowDragPending.pointerId !== e.pointerId) return;
-            this.queueWindowDragPending.started = true;
-            this.suppressResultClicksUntil = Date.now() + 600;
-            this.popQueueWindow();
-            Haptics.tick();
-            document.body.style.userSelect = 'none';
-            document.body.style.webkitUserSelect = 'none';
-        }, this.QUEUE_DRAG_HOLD_MS);
-    }
-
-    static onQueueWindowPointerMove(e) {
-        const pending = this.queueWindowDragPending;
-        if (!pending || pending.pointerId !== e.pointerId) return;
-        const dx = e.clientX - pending.startX;
-        const dy = e.clientY - pending.startY;
-
-        if (!pending.started) {
-            // If user starts scrolling/moving before hold, treat it as normal interaction.
-            if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
-                clearTimeout(this.queueWindowDragTimer);
-                this.queueWindowDragTimer = null;
-                this.queueWindowDragPending = null;
-            }
-            return;
-        }
-
-        e.preventDefault();
-        const margin = this.QUEUE_DRAG_EDGE_MARGIN_PX;
-        const minX = margin - pending.baseRect.left + pending.baseOffsetX;
-        const maxX = (window.innerWidth - margin - pending.baseRect.right) + pending.baseOffsetX;
-        const minY = margin - pending.baseRect.top + pending.baseOffsetY;
-        const maxY = (window.innerHeight - margin - pending.baseRect.bottom) + pending.baseOffsetY;
-        const nextX = Math.min(maxX, Math.max(minX, pending.baseOffsetX + dx));
-        const nextY = Math.min(maxY, Math.max(minY, pending.baseOffsetY + dy));
-        this.queueWindowOffsetX = nextX;
-        this.queueWindowOffsetY = nextY;
-        this.applyQueueWindowTransform();
-    }
-
-    static onQueueWindowPointerUp(e) {
-        const pending = this.queueWindowDragPending;
-        if (!pending || pending.pointerId !== e.pointerId) return;
-        clearTimeout(this.queueWindowDragTimer);
-        this.queueWindowDragTimer = null;
-
-        if (pending.started) {
-            this.clampQueueWindowToViewport(true);
-        }
-
-        this.queueWindowDragPending = null;
-        document.body.style.userSelect = '';
-        document.body.style.webkitUserSelect = '';
     }
 
     static parseUrlLines(rawInput) {
@@ -324,6 +177,31 @@ export class Downloader {
         }
         const isUrlMode = accepted.length > 0 && rejected.length === 0;
         return { mode: isUrlMode ? 'url' : 'search', accepted, rejected, lines };
+    }
+
+    static setSearchSource(value) {
+        if (value !== 'music' && value !== 'youtube') return;
+        this.searchSource = value;
+        const musicBtn = this.searchSourceMusicBtn;
+        const youtubeBtn = this.searchSourceYoutubeBtn;
+        if (musicBtn && youtubeBtn) {
+            if (value === 'music') {
+                musicBtn.classList.add('bg-[var(--accent)]', 'text-white');
+                musicBtn.classList.remove('bg-white/10', 'text-white/70');
+                musicBtn.setAttribute('aria-pressed', 'true');
+                youtubeBtn.classList.remove('bg-[var(--accent)]', 'text-white');
+                youtubeBtn.classList.add('text-white/70');
+                youtubeBtn.setAttribute('aria-pressed', 'false');
+            } else {
+                youtubeBtn.classList.add('bg-[var(--accent)]', 'text-white');
+                youtubeBtn.classList.remove('bg-white/10', 'text-white/70');
+                youtubeBtn.setAttribute('aria-pressed', 'true');
+                musicBtn.classList.remove('bg-[var(--accent)]', 'text-white');
+                musicBtn.classList.add('bg-white/10', 'text-white/70');
+                musicBtn.setAttribute('aria-pressed', 'false');
+            }
+        }
+        Haptics.tick();
     }
 
     static async handlePrimaryInput() {
@@ -366,8 +244,9 @@ export class Downloader {
         if (!q || !this.searchResults) return;
         this.searchResults.innerHTML = '<div class="text-center py-8 text-gray-500">Searching...</div>';
         this.searchBtn?.classList.add('opacity-70');
+        const sourceParam = this.searchSource === 'youtube' ? 'youtube' : 'ytmusic';
         try {
-            const resp = await fetch(`${store.apiBase}/api/downloader/youtube/search?q=${encodeURIComponent(q)}&limit=10`);
+            const resp = await fetch(`${store.apiBase}/api/downloader/youtube/search?q=${encodeURIComponent(q)}&limit=10&source=${sourceParam}`);
             const data = await resp.json();
             this.searchBtn?.classList.remove('opacity-70');
             if (!resp.ok) {
@@ -434,6 +313,7 @@ export class Downloader {
     }
 
     static showCoverChoiceModal(track) {
+        if (track?.download_source === 'youtube_search') return;
         const modal = document.getElementById('dl-cover-choice-modal');
         if (!modal || !track) return;
         
@@ -523,8 +403,9 @@ export class Downloader {
         if (!result || !result.id) return;
         const canonicalUrl = normalizeYouTubeUrl(result.webpage_url || `https://www.youtube.com/watch?v=${result.id}`);
         if (!canonicalUrl) return;
+        const sourceType = this.searchSource === 'youtube' ? 'youtube_search' : 'ytmusic_search';
         this.downloadQueue.push({
-            source_type: 'ytmusic_search',
+            source_type: sourceType,
             song_str: canonicalUrl,
             video_id: result.id,
             title: result.title || canonicalUrl,
@@ -535,7 +416,7 @@ export class Downloader {
                 title: result.title || '',
                 artist: result.channel || '',
                 duration_sec: result.duration || 0,
-                source: 'ytmusic_search',
+                source: sourceType,
                 video_id: result.id,
                 channel: result.channel || ''
             }
@@ -548,17 +429,17 @@ export class Downloader {
     static renderDownloadQueueList() {
         if (!this.downloadQueueList) return;
         if (this.downloadQueue.length === 0) {
-            this.downloadQueueList.innerHTML = '<div class="text-center text-gray-500 py-4 text-sm">No songs in queue</div>';
+            this.downloadQueueList.innerHTML = '<div class="text-center text-gray-500 py-10 italic text-xs">No songs in queue</div>';
             return;
         }
         this.downloadQueueList.innerHTML = this.downloadQueue.map((r, i) => `
-            <div class="flex items-center gap-2 p-2 rounded-lg bg-black/20">
-                <div class="w-8 h-8 rounded bg-black/40 flex-shrink-0" style="background-image:url('${(r.thumbnail || '').replace(/"/g, '%22')}'); background-size:cover;"></div>
-                <div class="flex-1 min-w-0">
-                    <div class="text-xs font-medium truncate">${esc(r.title || r.song_str || 'Queue item')}</div>
-                    <div class="text-[10px] text-gray-500 truncate">${esc(r.source_type || 'manual')}</div>
+            <div class="queue-item flex items-center p-2 hover:bg-white/5 rounded-2xl transition-colors group">
+                <div class="w-10 h-10 rounded-xl bg-black/40 flex-shrink-0 bg-cover bg-center" style="background-image:url('${(r.thumbnail || '').replace(/"/g, '%22')}');"></div>
+                <div class="ml-3 flex-1 min-w-0 truncate">
+                    <div class="font-bold text-[13px] truncate text-white/90">${esc(r.title || r.song_str || 'Queue item')}</div>
+                    <div class="text-[10px] text-gray-500 truncate uppercase tracking-widest">${esc(r.source_type || 'manual')}</div>
                 </div>
-                <button type="button" class="dl-remove-queue text-red-400 hover:text-red-300 p-1" data-index="${i}"><i class="fas fa-times text-[10px]"></i></button>
+                <button type="button" class="dl-remove-queue w-10 h-10 flex items-center justify-center bg-white/5 text-gray-500 rounded-full hover:bg-red-500/10 hover:text-red-400 active:scale-90 transition-all opacity-0 group-hover:opacity-100" data-index="${i}"><i class="fas fa-times text-xs"></i></button>
             </div>
         `).join('');
         this.downloadQueueList.querySelectorAll('.dl-remove-queue').forEach(btn => {
@@ -573,34 +454,75 @@ export class Downloader {
 
     static updateFabAndPopover() {
         const n = this.downloadQueue.length;
-        const popover = this.downloadQueuePopover;
-
-        // Contract/expand behavior disabled: queue is always expanded when it has items.
-        const showPopover = n > 0;
-        if (popover) {
-            popover.style.pointerEvents = showPopover ? 'auto' : 'none';
-            popover.style.transform = showPopover ? 'scale(1)' : 'scale(0.95)';
-            popover.style.opacity = showPopover ? '1' : '0';
-            // Ensure draggable window is never trapped outside viewport.
-            if (showPopover) this.clampQueueWindowToViewport(true);
+        const fab = this.dlQueueFab;
+        const badge = this.dlQueueBadge;
+        if (fab && badge) {
+            if (n > 0) {
+                fab.classList.replace('scale-0', 'scale-100');
+                fab.classList.replace('opacity-0', 'opacity-100');
+                badge.textContent = String(n);
+            } else {
+                fab.classList.replace('scale-100', 'scale-0');
+                fab.classList.replace('opacity-100', 'opacity-0');
+                badge.textContent = '0';
+                this.hideDownloadQueue();
+            }
         }
     }
 
+    static toggleDownloadQueue() {
+        const popover = this.downloadQueuePopover;
+        if (!popover) return;
+        if (popover.classList.contains('hidden')) {
+            popover.classList.remove('hidden');
+            setTimeout(() => {
+                popover.classList.remove('pointer-events-none');
+                popover.style.pointerEvents = 'auto';
+                popover.classList.replace('scale-95', 'scale-100');
+                popover.classList.replace('opacity-0', 'opacity-100');
+            }, 10);
+            this.renderDownloadQueueList();
+        } else {
+            this.hideDownloadQueue();
+        }
+    }
+
+    static hideDownloadQueue() {
+        const popover = this.downloadQueuePopover;
+        if (!popover || popover.classList.contains('hidden')) return;
+        popover.classList.replace('scale-100', 'scale-95');
+        popover.classList.replace('opacity-100', 'opacity-0');
+        popover.classList.add('pointer-events-none');
+        popover.style.pointerEvents = 'none';
+        setTimeout(() => popover.classList.add('hidden'), 300);
+    }
+
     static async submitDownloadQueue() {
-        if (this.downloadQueue.length === 0) return;
+        if (this.downloadQueue.length === 0) {
+            this.addLog('Queue is empty. Add songs first.');
+            return;
+        }
         const items = this.downloadQueue.map((r) => ({
             source_type: r.source_type || 'youtube_url',
             song_str: r.song_str || normalizeYouTubeUrl(r.webpage_url || `https://www.youtube.com/watch?v=${r.video_id || r.id || ''}`),
             output_dir: r.output_dir,
             metadata_evidence: r.metadata_evidence || null
         })).filter((item) => !!item.song_str);
+        if (items.length === 0) {
+            this.addLog('No valid items to send (missing URL).');
+            return;
+        }
         try {
             const resp = await fetch(`${store.apiBase}/api/downloader/queue`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ items })
             });
-            if (!resp.ok) throw new Error((await resp.json()).message || 'Failed');
+            const body = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                const reason = body.rejected?.[0]?.reason || body.message || 'Failed';
+                throw new Error(reason);
+            }
             this.downloadQueue = [];
             this.renderDownloadQueueList();
             this.updateFabAndPopover();
@@ -636,7 +558,6 @@ export class Downloader {
             this.lastDownloaderStatus = data;
             this.renderQueue(data.queue, data.is_processing);
             this.renderLogs(data.logs);
-            this.loadMetadataReviews();
             if (!data.is_processing && this.librarySyncFallbackTimer) {
                 // Final forced sync once processing is idle, then stop fallback loop.
                 store.syncLibrary();
@@ -728,97 +649,9 @@ export class Downloader {
             'pending': 'bg-gray-700 text-gray-400',
             'downloading': 'bg-blue-900/40 text-blue-400 animate-pulse',
             'completed': 'bg-green-900/40 text-green-400',
-            'failed': 'bg-red-900/40 text-red-400',
-            'pending_review': 'bg-amber-900/40 text-amber-300'
+            'failed': 'bg-red-900/40 text-red-400'
         };
         return `<span class="text-[8px] uppercase font-black px-2 py-0.5 rounded-full ${colors[status] || 'bg-gray-700'}">${status}</span>`;
-    }
-
-    static formatReviewSourceLabel(sourceKey) {
-        const key = String(sourceKey || '').toLowerCase();
-        if (key === 'spotify_web' || key === 'spotify_api' || key === 'spotify') return 'Spotify';
-        if (key === 'musicbrainz') return 'MusicBrainz';
-        if (key === 'itunes') return 'iTunes';
-        if (key === 'youtube') return 'YouTube';
-        return sourceKey || 'Unknown';
-    }
-
-    static buildReviewCandidateLine(sourceKey, candidate) {
-        if (!candidate || typeof candidate !== 'object') return '';
-        const label = this.formatReviewSourceLabel(sourceKey);
-        const title = esc(candidate.title || 'Unknown title');
-        const artist = esc(candidate.artist || 'Unknown artist');
-        const album = esc(candidate.album || 'Unknown album');
-        return `<div class="text-[10px] text-[var(--text-dim)] truncate">${label}: ${title} · ${artist} · ${album}</div>`;
-    }
-
-    static async loadMetadataReviews() {
-        if (!store.state.activeHost || !this.reviewList || !this.reviewPanel) return;
-        try {
-            const resp = await fetch(`${store.apiBase}/api/downloader/metadata-review?status=pending_review`);
-            if (!resp.ok) return;
-            const data = await resp.json();
-            const items = data.items || [];
-            if (items.length === 0) {
-                this.reviewPanel.classList.add('hidden');
-                return;
-            }
-            this.reviewPanel.classList.remove('hidden');
-            this.reviewList.innerHTML = items.map((item) => `
-                <div class="p-2 rounded-lg bg-black/20 border border-white/5">
-                    <div class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Metadata review required</div>
-                    <div class="mt-2">
-                        <div class="text-[10px] font-bold text-[var(--text-dim)] uppercase tracking-wide">YouTube detected</div>
-                        <div class="text-xs font-semibold truncate">${esc(item.song_str || 'Unknown YouTube item')}</div>
-                    </div>
-                    <div class="mt-2">
-                        <div class="text-[10px] font-bold text-[var(--text-dim)] uppercase tracking-wide">Proposed canonical metadata</div>
-                        <div class="text-xs font-semibold truncate">${esc((item.proposed && item.proposed.title) || 'Unknown title')}</div>
-                        <div class="text-[10px] text-[var(--text-dim)] truncate">${esc((item.proposed && item.proposed.artist) || 'Unknown artist')} · ${esc((item.proposed && item.proposed.album) || 'Unknown album')}</div>
-                    </div>
-                    <div class="text-[10px] text-[var(--text-dim)] mt-1">confidence ${(item.confidence || 0).toFixed(3)}</div>
-                    <div class="mt-1 space-y-0.5">
-                        ${this.buildReviewCandidateLine('spotify_web', item.candidates?.spotify_web)}
-                        ${this.buildReviewCandidateLine('spotify_api', item.candidates?.spotify_api)}
-                        ${this.buildReviewCandidateLine('musicbrainz', item.candidates?.musicbrainz)}
-                        ${this.buildReviewCandidateLine('itunes', item.candidates?.itunes)}
-                    </div>
-                    <div class="flex gap-2 mt-2">
-                        <button type="button" class="dl-review-approve text-[10px] px-2 py-1 rounded bg-[var(--accent)] text-white" data-id="${esc(item.id)}">Use proposed metadata</button>
-                        <button type="button" class="dl-review-reject text-[10px] px-2 py-1 rounded bg-red-500/30 text-red-200" data-id="${esc(item.id)}">Keep YouTube metadata</button>
-                    </div>
-                </div>
-            `).join('');
-            this.reviewList.querySelectorAll('.dl-review-approve').forEach((btn) => {
-                btn.addEventListener('click', () => this.approveReviewItem(btn.getAttribute('data-id')));
-            });
-            this.reviewList.querySelectorAll('.dl-review-reject').forEach((btn) => {
-                btn.addEventListener('click', () => this.rejectReviewItem(btn.getAttribute('data-id')));
-            });
-        } catch (_err) {
-            // silent
-        }
-    }
-
-    static async approveReviewItem(id) {
-        if (!id) return;
-        try {
-            const resp = await fetch(`${store.apiBase}/api/downloader/metadata-review/${encodeURIComponent(id)}/approve`, { method: 'POST' });
-            if (!resp.ok) return;
-            this.loadMetadataReviews();
-            store.syncLibrary();
-            this.addLog('Metadata review approved.');
-        } catch (_err) {}
-    }
-
-    static async rejectReviewItem(id) {
-        if (!id) return;
-        try {
-            const resp = await fetch(`${store.apiBase}/api/downloader/metadata-review/${encodeURIComponent(id)}/reject`, { method: 'POST' });
-            if (!resp.ok) return;
-            this.loadMetadataReviews();
-            this.addLog('Metadata review rejected (fallback kept).');
-        } catch (_err) {}
     }
 
     static addLog(msg) {
