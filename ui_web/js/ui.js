@@ -1274,12 +1274,13 @@ export class UI {
             this._soundMashHoldTimer = null;
 
             // 0. SWIPE GESTURES FOR NOW PLAYING (Instant Toggle with 15px deadzone)
+            const deadzone = 15;
+            const expandSwipeThreshold = 10; // Softer threshold so slightly slower swipe still expands from dot
             if (this._isHolding && !this.isBlooming && this._startedInside && isHorizontalValid) {
                 const isNPActive = document.getElementById('now-playing-view')?.classList.contains('active');
-                const deadzone = 15;
 
                 // Swipe up when manually collapsed: uncollapse only (unless we opened SoundMash via hold)
-                if (deltaY < -deadzone && this.islandUserCollapsed) {
+                if (deltaY < -expandSwipeThreshold && this.islandUserCollapsed) {
                     if (this._soundMashOpenedThisGesture) {
                         this.resetOmniIsland();
                         return;
@@ -1313,7 +1314,6 @@ export class UI {
 
             // 0b. SWIPE DOWN: collapse playback bar to blank (seed) form when not closing Now Playing
             const isNPActive = document.getElementById('now-playing-view')?.classList.contains('active');
-            const deadzone = 15;
             if (this._isHolding && !this.isBlooming && this._startedInside && isHorizontalValid &&
                 this.isIslandActive && !isNPActive && deltaY > deadzone) {
                 this.islandUserCollapsed = true;
@@ -1323,7 +1323,15 @@ export class UI {
             
             // 1. COORDINATE-BASED TRANSPORT (disabled when manually collapsed)
             if (this._isHolding && !this.isBlooming && isInside) {
-                if (this.islandUserCollapsed) return;
+                const tapExpandDeadzone = 12;
+                if (this.islandUserCollapsed) {
+                    if (Math.abs(deltaY) <= tapExpandDeadzone) {
+                        this.islandUserCollapsed = false;
+                        this.resetOmniIsland();
+                        return;
+                    }
+                    return;
+                }
 
                 const relX = (touch.clientX - rect.left) / rect.width;
                 let zone = 'anchor'; // Default
@@ -1401,7 +1409,17 @@ export class UI {
             e.preventDefault();
             startBloom(e);
         });
-        
+
+        touchArea.addEventListener('click', (e) => {
+            if (document.getElementById('soundmash-view')?.classList.contains('active')) return;
+            if (this.islandUserCollapsed && this.isIslandActive) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.islandUserCollapsed = false;
+                this.resetOmniIsland();
+            }
+        });
+
         document.addEventListener('touchmove', (e) => {
             if (!this._isHolding) return;
             const touch = e.touches[0];
