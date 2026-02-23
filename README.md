@@ -14,9 +14,6 @@ The **Station** is the primary, recommended interface for all users. It combines
 
 ### Key Features
 - **Omni-Island Control**: A unified, gesture-driven navigation hub that seamlessly blends transport controls with deep-link navigation.
-- **Cyber-Premium Haptics**: A custom-tuned tactile engine delivers precise physical feedback for every interaction, from the "thud" of playback to the "tick" of navigation.
-- **Fluid Motion**: 60fps animations and "Premium Slime" transitions create an interface that feels alive and responsive.
-- **Adaptive Layout**: Intelligent viewport handling ensures a flawless, notch-safe experience on iPhone, Android, and Desktop.
 - **Universal Sync**: Your library, queue, and preferences float effortlessly between devices via the self-hosted backend.
 
 ### Getting Started
