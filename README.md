@@ -10,7 +10,7 @@ This repository contains the full Soundsible ecosystem, with the Station as its 
 ## Station 
 The **Station** is the primary, recommended interface for all users. It combines the precision of a dedicated hardware player with the ubiquity of the modern web, delivering a premium listening experience across all your devices.
 
-### <img src="branding/logo-app.png" alt="Soundsible" width="64" height="64" align="center"> Key Features:
+### Key Features:
 - **Max quality**: Playback **engine** ensures **máximum quality**. Downloader tool defaults to **losless quality** and offer **manual quality selection**.
 - **Setup Wizard on app launch**: Easy setup for setting absolutely every configuration needed for you to start streaming your music right now!
 - **ODST Downloader**: Embeded downloader that downloads music from youtube or yt-music. It automatically fetches all the metadata including covers, and uploads it to your previously configured NAS (or desktop local) storage or third provided cloud (setup for Cloudflare R2, Backblaze R2 and S2 users on **Setup Wizard**).
