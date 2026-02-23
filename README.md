@@ -21,7 +21,9 @@ The **Station** is the primary, recommended interface for all users. It combines
 
 ## Two uses:
 - Full environment experience: [**Tailscale**](https://github.com/tailscale/tailscale) **(Recommended)**
+   (Tailscale let's you access your running API from anywhere in the world, so you can listen to your streamed music anywhere)
 - Only local playback: No extra configuration needed.
+   (Just use Downloader tool to downlaod songs, and enjoy your local music!)
 
 ### Getting Started
 After [installation](#-installation), run the launcher and open the Station in your browser:
