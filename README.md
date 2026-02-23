@@ -8,7 +8,7 @@ This repository contains the full Soundsible ecosystem, with the Station as its 
 
 ---
 
-## 💎 Core Product: Soundsible Station (WebUI)
+## Sounsible Station
 
 The **Station** is the primary, recommended interface for all users. It combines the precision of a dedicated hardware player with the ubiquity of the modern web, delivering a "Cyber-Premium" listening experience across your entire digital life.
 
