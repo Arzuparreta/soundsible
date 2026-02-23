@@ -568,6 +568,7 @@ async function init() {
             importBtn: 'desktop-import-token-btn',
             libraryOrderSelect: 'desktop-settings-library-order',
             themeSelect: 'desktop-settings-theme-select',
+            appIconSelect: 'desktop-settings-app-icon-select',
             hapticsIndicator: null,
             refetchBtn: 'desktop-refetch-metadata-btn',
             refetchStatus: 'desktop-refetch-metadata-status',

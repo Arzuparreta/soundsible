@@ -400,6 +400,8 @@
             0%, 100% { transform: scale(1); opacity: 1; }
             50% { transform: scale(1.06); opacity: 0.92; }
         }
+        .omni-anchor-logo-wrap.hidden { display: none !important; }
+        .omni-anchor-logo { width: 40px; height: 40px; object-fit: contain; }
 
         /* Queue reorder: drag clone (visual only; original row stays in DOM to keep touch target) */
         .queue-drag-clone {
@@ -431,6 +433,18 @@
         .queue-item.queue-drag-source {
             opacity: 0.18 !important;
             transition: opacity 0.18s ease-out;
+        }
+
+        /* Block touches in the omnibar region from reaching the list so songs don't "follow the finger" when dragging in nav gaps */
+        #omni-bar-touch-block {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: calc(120px + env(safe-area-inset-bottom, 0px));
+            z-index: 199;
+            pointer-events: auto;
+            touch-action: none;
         }
 
         /* Dynamic Docking Labels: above omni bar (bar is bottom-safe + ~56px height; keep label 68px above bar bottom) */
@@ -662,7 +676,7 @@
         <div class="relative w-24 h-24 mb-8">
             <div class="absolute inset-0 border-4 border-[var(--accent)]/10 rounded-full"></div>
             <div class="absolute inset-0 border-4 border-t-[var(--accent)] rounded-full animate-spin"></div>
-            <img src="assets/icons/icon-512.png" class="absolute inset-4 w-16 h-16 rounded-[var(--radius-omni-sm)] opacity-40 grayscale" alt="Logo">
+            <img src="assets/icons/logo-mark.svg" class="absolute inset-4 w-16 h-16 opacity-60" alt="Logo">
         </div>
         <div class="text-[10px] font-black uppercase tracking-[0.4em] text-[var(--accent)] animate-pulse">Initializing Station</div>
     </div>
@@ -855,6 +869,16 @@
                                 <option value="odst">ODST</option>
                             </select>
                         </div>
+                        <div class="settings-row flex justify-between items-center min-h-[44px] gap-4">
+                            <div>
+                                <div class="text-sm font-medium text-[var(--text-main)]">App icon</div>
+                                <div class="text-xs text-[var(--text-dim)] mt-0.5">Icon used in-app (loading, placeholders)</div>
+                            </div>
+                            <select id="settings-app-icon-select" class="input-theme rounded-[var(--radius-omni-xs)] px-4 py-2.5 text-sm font-medium text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors flex-shrink-0 min-w-[140px]" aria-label="App icon">
+                                <option value="default">Default</option>
+                                <option value="alt">Secondary</option>
+                            </select>
+                        </div>
                     </div>
 
                     <!-- General -->
@@ -929,6 +953,8 @@
             </div>
         </main>
 
+                <!-- Touch block: captures touches in bar region so list behind doesn't scroll when finger hits gaps between island/bubbles -->
+                <div id="omni-bar-touch-block" aria-hidden="true"></div>
                 <!-- Omni-Island: Unified Control System -->
                 <div id="omni-island-container" class="fixed bottom-safe left-0 right-0 flex flex-row items-center justify-center gap-3 z-[200] pointer-events-none">
                     <!-- Shuffle bubble: left of nav bar, glassmorph circle -->
@@ -953,7 +979,8 @@
                                     <i class="fas fa-backward-step text-xs text-[var(--text-main)]"></i>
                                 </div>
                                 <div id="omni-anchor" class="w-14 h-14 flex-shrink-0 flex items-center justify-center relative pointer-events-none transition-transform z-50">
-                                    <i id="omni-anchor-icon" class="fas fa-th-large text-lg text-[var(--text-main)] omni-grid-hint-pulse" aria-hidden="true"></i>
+                                    <span id="omni-anchor-logo-wrap" class="omni-anchor-logo-wrap omni-grid-hint-pulse flex items-center justify-center w-full h-full"><img src="branding/logo_con_fondo.png" alt="" class="omni-anchor-logo" aria-hidden="true"></span>
+                                    <i id="omni-anchor-icon" class="fas fa-pause text-lg text-[var(--text-main)] hidden" aria-hidden="true"></i>
                                 </div>
                                 <div id="omni-next" class="flex-1 h-full flex items-center justify-end opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto">
                                     <i class="fas fa-forward-step text-xs text-[var(--text-main)]"></i>

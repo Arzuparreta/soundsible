@@ -425,8 +425,10 @@ app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Path to the new Web UI
+# Path to the new Web UI and repo branding
 WEB_UI_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ui_web')
+REPO_ROOT = os.path.dirname(WEB_UI_PATH)
+BRANDING_PATH = os.path.join(REPO_ROOT, 'branding')
 
 # Serve Web Player
 @app.route('/player/')
@@ -436,6 +438,10 @@ def serve_web_player():
 @app.route('/player/desktop/')
 def serve_web_player_desktop():
     return send_from_directory(WEB_UI_PATH, 'desktop.html')
+
+@app.route('/player/branding/<path:path>')
+def serve_branding(path):
+    return send_from_directory(BRANDING_PATH, path)
 
 @app.route('/player/<path:path>')
 def serve_web_player_assets(path):

@@ -50,7 +50,7 @@ export const DesktopUI = {
         const playIcon = playBtn?.querySelector('i');
         const track = state.currentTrack;
 
-        if (cover) cover.style.backgroundImage = track ? `url("${String(Resolver.getCoverUrl(track)).replace(/"/g, '%22')}")` : "url('assets/icons/icon-512.png')";
+        if (cover) cover.style.backgroundImage = track ? `url("${String(Resolver.getCoverUrl(track)).replace(/"/g, '%22')}")` : `url('${store.placeholderCoverUrl}')`;
         if (title) title.textContent = track?.title ?? '—';
         if (artist) artist.textContent = track?.artist ?? '—';
         if (playBtn && playIcon) {
@@ -329,8 +329,9 @@ export const DesktopUI = {
             const artist = (r.artist || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
             const album = (r.album || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
             const cover = (r.cover || '').replace(/"/g, '&quot;');
+            const placeholder = store.placeholderCoverUrl.replace(/'/g, "\\'");
             return `<div class="flex items-center p-3 hover:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] cursor-pointer transition-colors border border-transparent active:border-[var(--accent)]/30 active:bg-[var(--accent)]/5" data-meta-title="${title}" data-meta-artist="${artist}" data-meta-album="${album}" data-meta-cover="${cover}">
-                <img src="${cover}" class="w-10 h-10 rounded-[var(--radius-omni-xs)] object-cover shadow-md" onerror="this.src='assets/icons/icon-512.png'">
+                <img src="${cover}" class="w-10 h-10 rounded-[var(--radius-omni-xs)] object-cover shadow-md" onerror="this.src='${placeholder}'">
                 <div class="ml-3 truncate">
                     <div class="text-xs font-bold truncate text-[var(--text-main)]">${(r.title || '').replace(/</g, '&lt;')}</div>
                     <div class="text-[9px] font-bold text-[var(--text-dim)] truncate uppercase tracking-widest font-mono">${(r.artist || '').replace(/</g, '&lt;')}</div>
@@ -354,7 +355,7 @@ export const DesktopUI = {
         el('edit-title').value = title;
         el('edit-artist').value = artist;
         el('edit-album').value = album;
-        el('edit-cover-preview').src = cover || 'assets/icons/icon-512.png';
+        el('edit-cover-preview').src = cover || store.placeholderCoverUrl;
         el('auto-fetch-results').classList.add('hidden');
         el('edit-status').textContent = 'Metadata applied locally';
     },
@@ -391,7 +392,14 @@ export const DesktopUI = {
             btn.addEventListener('click', () => this.showView(btn.getAttribute('data-view')));
         });
         const queueBtn = el('desktop-queue-btn');
-        if (queueBtn) queueBtn.addEventListener('click', () => this.showView('home'));
+        if (queueBtn) queueBtn.addEventListener('click', () => this.showView('queue'));
+
+        const logoOmni = el('desktop-logo-omni');
+        if (logoOmni) {
+            logoOmni.addEventListener('click', () => {
+                logoOmni.classList.toggle('logo-omni-seed');
+            });
+        }
     },
 
     bindNowPlayingBar() {
@@ -432,7 +440,7 @@ export const DesktopUI = {
         const overlay = el('full-cover-overlay');
         const img = el('full-cover-image');
         if (!overlay || !img) return;
-        const url = (coverUrl || 'assets/icons/icon-512.png').replace(/"/g, '%22').replace(/'/g, '%27');
+        const url = (coverUrl || store.placeholderCoverUrl).replace(/"/g, '%22').replace(/'/g, '%27');
         img.style.backgroundImage = `url("${url}")`;
         overlay.classList.remove('hidden');
     },

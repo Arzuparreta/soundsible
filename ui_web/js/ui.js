@@ -43,6 +43,7 @@ export class UI {
             queueFab: d('queue-fab'),
             queueBadge: d('queue-badge'),
             omniAnchorIcon: d('omni-anchor-icon'),
+            omniAnchorLogoWrap: d('omni-anchor-logo-wrap'),
             omniMetadataContainer: d('omni-metadata-container'),
             omniMetadata: d('omni-metadata'),
             omniText1: d('omni-text-1'),
@@ -264,15 +265,20 @@ export class UI {
             this.collapseToSeed();
         }
 
-        // Real-time UI Sync: expanded = play/pause; collapsed = always grid (hold hint)
+        // Real-time UI Sync: expanded = play/pause; collapsed = logo (hold hint)
         const anchorIcon = this.dom.omniAnchorIcon;
-        if (!anchorIcon) return;
+        const logoWrap = this.dom.omniAnchorLogoWrap;
+        if (!anchorIcon || !logoWrap) return;
         if (this.isIslandActive) {
+            logoWrap.classList.add('hidden');
+            anchorIcon.classList.remove('hidden');
             anchorIcon.classList.remove('omni-grid-hint-pulse');
             anchorIcon.className = state.isPlaying ? 'fas fa-pause text-lg text-[var(--text-main)]' : 'fas fa-play text-lg text-[var(--text-main)] ml-1';
             this.updateMetadataScroller(state.currentTrack);
         } else {
-            anchorIcon.className = 'fas fa-th-large text-lg text-[var(--text-main)] omni-grid-hint-pulse';
+            anchorIcon.classList.add('hidden');
+            logoWrap.classList.remove('hidden');
+            logoWrap.classList.add('omni-grid-hint-pulse');
         }
     }
 
@@ -325,7 +331,9 @@ export class UI {
         if (anchorIcon) {
             anchorIcon.classList.remove('omni-grid-hint-pulse');
             anchorIcon.className = store.state.isPlaying ? 'fas fa-pause text-lg text-[var(--text-main)]' : 'fas fa-play text-lg text-[var(--text-main)] ml-1';
+            anchorIcon.classList.remove('hidden');
         }
+        if (this.dom.omniAnchorLogoWrap) this.dom.omniAnchorLogoWrap.classList.add('hidden');
 
         const transport = this.dom.omniTransport;
         const metadata = this.dom.omniMetadataContainer;
@@ -376,8 +384,10 @@ export class UI {
         if (prev) { prev.classList.replace('opacity-100', 'opacity-0'); prev.classList.replace('scale-100', 'scale-75'); setTimeout(() => prev.classList.add('hidden'), 300); }
         if (next) { next.classList.replace('opacity-100', 'opacity-0'); next.classList.replace('scale-100', 'scale-75'); setTimeout(() => next.classList.add('hidden'), 300); }
         
-        if (anchorIcon) {
-            anchorIcon.className = 'fas fa-th-large text-lg text-[var(--text-main)] omni-grid-hint-pulse';
+        if (anchorIcon) anchorIcon.classList.add('hidden');
+        if (this.dom.omniAnchorLogoWrap) {
+            this.dom.omniAnchorLogoWrap.classList.remove('hidden');
+            this.dom.omniAnchorLogoWrap.classList.add('omni-grid-hint-pulse');
         }
     }
 
@@ -494,7 +504,8 @@ export class UI {
 
         if (art) {
             const url = Resolver.getCoverUrl(track);
-            art.style.backgroundImage = url ? `url("${String(url).replace(/"/g, '%22')}")` : '';
+            const fallback = store.placeholderCoverUrl.replace(/"/g, '%22');
+            art.style.backgroundImage = url ? `url("${String(url).replace(/"/g, '%22')}")` : `url("${fallback}")`;
         }
         if (title) title.textContent = track.title;
         if (artistEl) artistEl.textContent = track.artist;
@@ -579,7 +590,7 @@ export class UI {
         const overlay = this.dom.fullCoverOverlay;
         const img = this.dom.fullCoverImage;
         if (!overlay || !img) return;
-        const url = (coverUrl || 'assets/icons/icon-512.png').replace(/"/g, '%22').replace(/'/g, '%27');
+        const url = (coverUrl || store.placeholderCoverUrl).replace(/"/g, '%22').replace(/'/g, '%27');
         img.style.backgroundImage = `url("${url}")`;
         overlay.classList.remove('hidden');
     }
@@ -1350,6 +1361,7 @@ export class UI {
                     const anchorIcon = this.dom.omniAnchorIcon;
 
                     if (anchorIcon) anchorIcon.classList.remove('omni-grid-hint-pulse');
+                    if (this.dom.omniAnchorLogoWrap) this.dom.omniAnchorLogoWrap.classList.remove('omni-grid-hint-pulse');
                     if (transport) {
                         transport.style.transition = 'opacity 0.16s ease, filter 0.17s ease, transform 0.17s ease';
                         transport.style.filter = 'blur(12px)';
@@ -1666,10 +1678,15 @@ export class UI {
             i.querySelector('i').style.color = '';
         });
 
-        // Seed state: show grid icon and urge pulse; playback state leaves play/pause as-is
+        // Seed state: show logo and urge pulse; playback state leaves play/pause as-is
         const anchorIcon = this.dom.omniAnchorIcon;
-        if (!this.isIslandActive && anchorIcon) {
-            anchorIcon.className = 'fas fa-th-large text-lg text-[var(--text-main)] omni-grid-hint-pulse';
+        const logoWrap = this.dom.omniAnchorLogoWrap;
+        if (!this.isIslandActive) {
+            if (anchorIcon) anchorIcon.classList.add('hidden');
+            if (logoWrap) {
+                logoWrap.classList.remove('hidden');
+                logoWrap.classList.add('omni-grid-hint-pulse');
+            }
         }
 
         // Always reset label to the current view's docked state
@@ -1699,7 +1716,10 @@ export class UI {
             actionTrackArtist.textContent = track.artist;
             actionTrackArtist.classList.add('font-mono');
         }
-        if (actionTrackArt) actionTrackArt.src = Resolver.getCoverUrl(track);
+        if (actionTrackArt) {
+            actionTrackArt.src = Resolver.getCoverUrl(track);
+            actionTrackArt.onerror = function () { this.src = store.placeholderCoverUrl192; };
+        }
 
         const isFav = store.state.favorites.includes(trackId);
         const actionFavText = document.getElementById('action-fav-text');
@@ -1916,7 +1936,7 @@ export class UI {
         if (this.dom.editTitle) this.dom.editTitle.value = title;
         if (this.dom.editArtist) this.dom.editArtist.value = artist;
         if (this.dom.editAlbum) this.dom.editAlbum.value = album;
-        if (this.dom.editCoverPreview) this.dom.editCoverPreview.src = cover;
+        if (this.dom.editCoverPreview) this.dom.editCoverPreview.src = cover || store.placeholderCoverUrl;
         if (this.dom.autoFetchResults) this.dom.autoFetchResults.classList.add('hidden');
         if (this.dom.editStatus) this.dom.editStatus.textContent = 'Metadata applied locally';
     }

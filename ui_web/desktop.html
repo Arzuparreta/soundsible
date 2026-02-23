@@ -97,7 +97,8 @@
         #desktop-main { flex: 1; overflow: auto; padding: 1.5rem; }
         .desktop-view { display: none; }
         .desktop-view.active { display: block; }
-        #desktop-now-playing { height: 80px; flex-shrink: 0; border-top: 1px solid var(--glass-border); background: var(--bg-surface); backdrop-filter: blur(24px); display: flex; align-items: center; padding: 0 1rem; gap: 1rem; }
+        #desktop-now-playing { min-height: 80px; flex-shrink: 0; border-top: 1px solid var(--glass-border); background: var(--bg-surface); backdrop-filter: blur(24px); }
+        #desktop-now-playing .desktop-queue-status-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         .desktop-nav-btn { width: 100%; text-align: left; padding: 0.6rem 0.75rem; border-radius: var(--radius-omni-xs); color: var(--text-dim); font-weight: 600; font-size: 0.875rem; border: none; background: transparent; cursor: pointer; transition: background 0.2s, color 0.2s; }
         .desktop-nav-btn:hover { background: var(--surface-overlay); color: var(--text-main); }
         .desktop-nav-btn.active { background: var(--bg-selection); color: var(--accent); }
@@ -117,6 +118,16 @@
         #desktop-now-playing button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         #desktop-sidebar .desktop-nav-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         #desktop-sidebar-playback button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        /* Desktop logo-omnibar: circle (seed) / pill (expanded), same look as mobile omni-seed. */
+        #desktop-logo-omni {
+            height: 56px;
+            min-height: 56px;
+            border-radius: var(--radius-omni);
+            box-shadow: var(--shadow-omni);
+            transition: width 333ms cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        #desktop-logo-omni.logo-omni-seed { width: 56px; }
+        #desktop-logo-omni:not(.logo-omni-seed) { width: 250px; }
         /* Desktop pseudo-omnibar: full width, prev/next at edges, play centered. */
         #desktop-omni-island {
             display: flex;
@@ -214,7 +225,7 @@
         <div class="relative w-24 h-24 mb-8">
             <div class="absolute inset-0 border-4 border-[var(--accent)]/10 rounded-full"></div>
             <div class="absolute inset-0 border-4 border-t-[var(--accent)] rounded-full animate-spin"></div>
-            <img src="assets/icons/icon-512.png" class="absolute inset-4 w-16 h-16 rounded-[var(--radius-omni-sm)] opacity-40 grayscale" alt="Logo">
+            <img src="assets/icons/logo-mark.svg" class="absolute inset-4 w-16 h-16 opacity-60" alt="Logo">
         </div>
         <div class="text-[10px] font-black uppercase tracking-[0.4em] text-[var(--accent)] animate-pulse">Initializing</div>
     </div>
@@ -222,7 +233,11 @@
     <div id="desktop-app" class="hidden">
         <div id="desktop-body">
             <aside id="desktop-sidebar" class="glass-view">
-                <div class="font-black text-lg tracking-tight mb-4 text-[var(--accent)]">Soundsible</div>
+                <div class="mb-4 flex justify-center">
+                    <button type="button" id="desktop-logo-omni" class="logo-omni-seed desktop-logo-omni glass-view flex items-center justify-center overflow-hidden pointer-events-auto cursor-pointer border-none outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-deep)]" aria-label="Soundsible menu" title="Soundsible">
+                        <img src="assets/icons/logo-mark.svg" class="h-10 w-10 flex-shrink-0 opacity-90 pointer-events-none" alt="" aria-hidden="true">
+                    </button>
+                </div>
                 <button type="button" class="desktop-nav-btn active" data-view="home"><i class="fas fa-home mr-3 w-4"></i>All Tracks</button>
                 <button type="button" class="desktop-nav-btn" data-view="favourites"><i class="fas fa-heart mr-3 w-4"></i>Favourites</button>
                 <button type="button" class="desktop-nav-btn" data-view="artists"><i class="fas fa-user mr-3 w-4"></i>Artists</button>
@@ -237,8 +252,6 @@
                         <button type="button" id="desktop-omni-next" class="desktop-omni-btn-side flex items-center justify-center rounded-full hover:bg-[var(--surface-overlay)] text-[var(--text-main)] transition-colors" aria-label="Next"><i class="fas fa-forward-step text-xs"></i></button>
                     </div>
                 </div>
-                <div class="flex-1 min-h-0"></div>
-                <button type="button" id="desktop-queue-btn" class="desktop-nav-btn flex-shrink-0" data-view="queue"><i class="fas fa-list-ul mr-3 w-4"></i>Queue <span id="desktop-queue-count" class="opacity-70">0</span></button>
             </aside>
 
             <main id="desktop-main">
@@ -358,6 +371,13 @@
                                 <option value="odst">ODST</option>
                             </select>
                         </div>
+                        <div class="flex justify-between items-center gap-4">
+                            <span class="text-sm text-[var(--text-main)]">App icon</span>
+                            <select id="desktop-settings-app-icon-select" class="input-theme rounded-[var(--radius-omni-xs)] px-4 py-2 text-sm font-medium min-w-[140px]" aria-label="App icon">
+                                <option value="default">Default</option>
+                                <option value="alt">Secondary</option>
+                            </select>
+                        </div>
                         <h2 class="text-lg font-bold pt-4">Sync & connection</h2>
                         <textarea id="desktop-sync-token-input" rows="3" class="input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-3 text-sm font-mono text-[var(--secondary)]" placeholder="Paste sync token..."></textarea>
                         <button type="button" id="desktop-import-token-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 text-[var(--text-on-accent)] font-bold py-3 rounded-[var(--radius-omni-xs)]">Import Token</button>
@@ -383,16 +403,23 @@
             </main>
         </div>
 
-        <div id="desktop-now-playing" class="glass-view">
-            <div id="desktop-np-cover" class="w-14 h-14 rounded-xl bg-cover bg-center flex-shrink-0 border border-[var(--glass-border)] cursor-pointer" style="background-image: url('assets/icons/icon-512.png');"></div>
-            <div class="flex-1 min-w-0">
-                <div id="desktop-np-title" class="font-bold text-sm truncate text-[var(--text-main)]">—</div>
-                <div id="desktop-np-artist" class="text-xs text-[var(--text-dim)] truncate">—</div>
-                <div class="flex items-center gap-2 mt-1">
-                    <span id="desktop-np-time-current" class="text-[10px] font-mono text-[var(--text-dim)]">0:00</span>
-                    <input type="range" id="desktop-np-seek" class="flex-1 h-1.5 rounded-full accent-[var(--accent)]" min="0" max="100" value="0" style="background: var(--seek-track);" />
-                    <span id="desktop-np-time-duration" class="text-[10px] font-mono text-[var(--text-dim)]">0:00</span>
+        <div id="desktop-now-playing" class="glass-view flex flex-col justify-center">
+            <div class="flex items-center gap-4 px-4 pt-3">
+                <div id="desktop-np-cover" class="w-14 h-14 rounded-xl bg-cover bg-center flex-shrink-0 border border-[var(--glass-border)] cursor-pointer" style="background-image: url('assets/icons/icon-512.png');"></div>
+                <div class="flex-1 min-w-0">
+                    <div id="desktop-np-title" class="font-bold text-sm truncate text-[var(--text-main)]">—</div>
+                    <div id="desktop-np-artist" class="text-xs text-[var(--text-dim)] truncate">—</div>
                 </div>
+                <button type="button" id="desktop-queue-btn" class="desktop-queue-status-btn flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-[var(--radius-omni-xs)] hover:bg-[var(--surface-overlay)] text-[var(--text-dim)] hover:text-[var(--text-main)] font-semibold text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" data-view="queue" aria-label="Queue">
+                    <i class="fas fa-list-ul w-4"></i>
+                    <span>Queue</span>
+                    <span id="desktop-queue-count" class="opacity-70">0</span>
+                </button>
+            </div>
+            <div class="flex items-center gap-2 px-4 pb-3 mt-1">
+                <span id="desktop-np-time-current" class="text-[10px] font-mono text-[var(--text-dim)] w-10 flex-shrink-0">0:00</span>
+                <input type="range" id="desktop-np-seek" class="flex-1 h-1.5 rounded-full accent-[var(--accent)] min-w-0" min="0" max="100" value="0" style="background: var(--seek-track);" />
+                <span id="desktop-np-time-duration" class="text-[10px] font-mono text-[var(--text-dim)] w-10 flex-shrink-0 text-right">0:00</span>
             </div>
         </div>
     </div>

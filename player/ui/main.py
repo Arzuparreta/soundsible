@@ -169,6 +169,12 @@ class MusicApp(Adw.Application):
                 issue_url="https://github.com/Arzuparreta/soundsible/issues",
                 license_type=Gtk.License.MIT_X11
             )
+            _icon_path = Path(__file__).resolve().parent.parent / "ui_web" / "assets" / "icons" / "icon-512.png"
+            if _icon_path.exists():
+                try:
+                    about.set_icon(Gdk.Texture.new_from_filename(str(_icon_path)))
+                except Exception:
+                    pass
             about.present()
     
     def on_activate(self, app):
@@ -305,7 +311,16 @@ class MainWindow(Adw.ApplicationWindow):
         
         self.set_title("Soundsible")
         self.set_default_size(1000, 700)
-        
+
+        # Application icon from repo branding (ui_web/assets/icons generated from branding/)
+        _repo_root = Path(__file__).resolve().parent.parent
+        _icon_path = _repo_root / "ui_web" / "assets" / "icons" / "icon-512.png"
+        if _icon_path.exists():
+            try:
+                self.set_icon(Gdk.Texture.new_from_filename(str(_icon_path)))
+            except Exception:
+                pass
+
         # Queue Manager
         self.queue_manager = QueueManager()
         

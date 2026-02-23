@@ -26,6 +26,10 @@ class Store {
                 const t = this.load('theme', 'dark');
                 return ['dark', 'light', 'odst'].includes(t) ? t : 'dark';
             })(),
+            appIcon: (() => {
+                const a = this.load('app_icon', 'default');
+                return ['default', 'alt'].includes(a) ? a : 'default';
+            })(),
             hapticsEnabled: this.load('haptics', true),
             libraryOrder: this.load('library_order', 'date_added'),
             songsViewMode: (() => { const v = this.load('songs_view_mode', 'list'); const valid = ['list', 'grid', 'gridCompact', 'gridLarge']; return valid.includes(v) ? v : (v === 'gridXLarge' ? 'gridLarge' : 'list'); })(),
@@ -56,6 +60,11 @@ class Store {
         const newTheme = this.state.theme === 'dark' ? 'light' : 'dark';
         this.update({ theme: newTheme });
         this.applyTheme(newTheme);
+    }
+
+    setAppIcon(value) {
+        const valid = ['default', 'alt'].includes(value) ? value : 'default';
+        this.update({ appIcon: valid });
     }
 
     toggleHaptics() {
@@ -92,6 +101,7 @@ class Store {
 
         this.state = { ...this.state, ...patch };
         if (patch.libraryOrder !== undefined) this.save('library_order', patch.libraryOrder);
+        if (patch.appIcon !== undefined) this.save('app_icon', patch.appIcon);
         if (patch.songsViewMode !== undefined) this.save('songs_view_mode', patch.songsViewMode);
         if (patch.artistViewMode !== undefined) this.save('artist_view_mode', patch.artistViewMode);
         if (patch.playlists !== undefined) this.save('playlists', patch.playlists);
@@ -108,6 +118,14 @@ class Store {
 
     get apiBase() {
         return `http://${this.state.activeHost}:5005`;
+    }
+
+    get placeholderCoverUrl() {
+        return this.state.appIcon === 'alt' ? 'assets/icons/icon-alt-512.png' : 'assets/icons/icon-512.png';
+    }
+
+    get placeholderCoverUrl192() {
+        return this.state.appIcon === 'alt' ? 'assets/icons/icon-alt-192.png' : 'assets/icons/icon-192.png';
     }
 
     async syncLibrary() {

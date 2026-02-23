@@ -16,7 +16,7 @@ function getElement(root, selector) {
 
 /**
  * Wire settings panel: token import, library order, theme, haptics, refetch metadata, status display.
- * @param {Object} selectors - { root?, tokenInput, importBtn, libraryOrderSelect?, themeSelect?, hapticsToggle?, themeIndicator?, hapticsIndicator?, refetchBtn?, refetchStatus?, statusLed?, statusPulse?, serverStatus?, hostDisplay? }
+ * @param {Object} selectors - { root?, tokenInput, importBtn, libraryOrderSelect?, themeSelect?, appIconSelect?, hapticsToggle?, themeIndicator?, hapticsIndicator?, refetchBtn?, refetchStatus?, statusLed?, statusPulse?, serverStatus?, hostDisplay? }
  * @param {Object} deps - { store, showToast, onLibraryOrderChange?, subscribeIndicators? }
  *   subscribeIndicators: if false, do not subscribe to store for theme/status (caller e.g. UI owns updates).
  */
@@ -59,6 +59,7 @@ export function wireSettings(selectors, deps) {
     }
 
     const themeSelect = getElement(root, selectors.themeSelect);
+    const appIconSelect = getElement(root, selectors.appIconSelect);
     const themeIndicator = getElement(root, selectors.themeIndicator);
     const hapticsIndicator = getElement(root, selectors.hapticsIndicator);
     const statusLed = getElement(root, selectors.statusLed);
@@ -73,9 +74,17 @@ export function wireSettings(selectors, deps) {
             if (value && ['dark', 'light', 'odst'].includes(value)) store.setTheme(value);
         });
     }
+    if (appIconSelect) {
+        appIconSelect.value = store.state.appIcon || 'default';
+        appIconSelect.addEventListener('change', () => {
+            const value = appIconSelect.value;
+            if (value && ['default', 'alt'].includes(value)) store.setAppIcon(value);
+        });
+    }
 
     const updateIndicators = (state) => {
         if (themeSelect) themeSelect.value = state.theme;
+        if (appIconSelect) appIconSelect.value = state.appIcon || 'default';
         else if (themeIndicator) {
             themeIndicator.style.transform = (state.theme === 'light') ? 'translateX(28px)' : 'translateX(0)';
         }

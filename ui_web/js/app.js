@@ -36,6 +36,7 @@ const MOBILE_SETTINGS_IDS = {
     importBtn: 'import-token-btn',
     libraryOrderSelect: 'settings-library-order',
     themeSelect: 'settings-theme-select',
+    appIconSelect: 'settings-app-icon-select',
     hapticsToggle: 'haptics-indicator',
     hapticsIndicator: 'haptics-indicator',
     refetchBtn: 'refetch-metadata-btn',
