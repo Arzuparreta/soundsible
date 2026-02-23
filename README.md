@@ -8,6 +8,7 @@ This repository contains the full Soundsible ecosystem, with the Station as its 
 
 
 ## Station 
+(Windows, Linux, Android, iOS)
 The **Station** is the primary, recommended interface for all users. It combines the precision of a dedicated hardware player with the ubiquity of the modern web, delivering a premium listening experience across all your devices.
 
 ### Key Features:
@@ -74,6 +75,7 @@ python3 -m venv venv
 
 
 ## Legacy option: Desktop (GTK)
+(Linux)
 
 A lightweight native client for **low-end or resource-constrained devices** (e.g. Raspberry Pi, thin clients, older Linux boxes). Uses less RAM than the web stack; core playback only. May lag behind the Station in UI/UX.
 
