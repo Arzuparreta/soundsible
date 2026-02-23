@@ -20,7 +20,7 @@ The **Station** is the primary, recommended interface for all users. It combines
 - **Omni-Island Control**: A unified, gesture-driven navigation hub that seamlessly blends transport controls with deep-link navigation.
 
 ## Two uses:
-- Full environment experience: **Tailscale (Recommended)**
+- Full environment experience: [**Tailscale](https://github.com/tailscale/tailscale) (Recommended)**
 - Only local playback: No extra configuration needed.
 
 ### Getting Started
