@@ -66,7 +66,6 @@ export class UI {
             soundmashView: d('soundmash-view'),
             queuePopover: d('queue-popover'),
             queueContainer: d('queue-container'),
-            dlSearchSourceWrap: d('dl-search-source-wrap'),
             dlQueueContainer: d('dl-queue-container'),
             omniTimeCurrent: d('omni-time-current'),
             omniTimeDuration: d('omni-time-duration'),
@@ -727,17 +726,6 @@ export class UI {
         }, 500);
 
         this.currentView = viewId;
-
-        const dlSearchSourceWrap = this.dom.dlSearchSourceWrap;
-        if (dlSearchSourceWrap) {
-            if (viewId === 'downloader') {
-                dlSearchSourceWrap.classList.remove('hidden');
-                dlSearchSourceWrap.setAttribute('aria-hidden', 'false');
-            } else {
-                dlSearchSourceWrap.classList.add('hidden');
-                dlSearchSourceWrap.setAttribute('aria-hidden', 'true');
-            }
-        }
 
         const queueContainer = this.dom.queueContainer;
         if (queueContainer) {

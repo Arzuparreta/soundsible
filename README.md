@@ -17,11 +17,11 @@ The **Station** is the primary, recommended interface for all users. It combines
 - **Universal Sync**: Your library, queue, and preferences float effortlessly between devices via the self-hosted backend.
 
 ### Getting Started
-Launch the Station on your server:
+After [installation](#-installation), run the launcher and open the Station in your browser:
 ```bash
-./start_web.sh
+python run.py
 ```
-Access via `http://localhost:5005` or your server's LAN IP. Add to Home Screen on iOS for the full immersive experience.
+Then open **http://localhost:5005/player/** (or your server’s LAN IP). Add to Home Screen on iOS for the full immersive experience.
 
 ---
 
@@ -49,13 +49,40 @@ Soundsible is built on a robust, modular Python backend that serves as the singl
 
 ## 📦 Installation
 
-Clone the repository and initialize the environment:
+**Requirements:** Python 3.10+ and `git`. On Linux you may need system packages (e.g. `python3-venv`, `python3-pip`).
+
+**Quick (if you’re comfortable with venv):**
 
 ```bash
 git clone https://github.com/Arzuparreta/soundsible.git
 cd soundsible
-./setup_tool/init.sh
+python3 -m venv venv
+./venv/bin/pip install -r requirements.txt
 ```
+
+**Step-by-step:**
+
+1. Clone the repo and go into it:
+   ```bash
+   git clone https://github.com/Arzuparreta/soundsible.git
+   cd soundsible
+   ```
+2. Create a virtual environment (so dependencies don’t touch system Python):
+   ```bash
+   python3 -m venv venv
+   ```
+   *If `python3` isn’t found, install Python 3 from [python.org](https://www.python.org/downloads/) or your package manager (e.g. `sudo apt install python3 python3-venv` on Debian/Ubuntu).*
+3. Install dependencies:
+   ```bash
+   ./venv/bin/pip install -r requirements.txt
+   ```
+   *On Windows use `venv\Scripts\pip.exe` instead of `./venv/bin/pip`.*
+
+**After install:**
+
+- **Station (main web UI):** run the launcher — `python run.py` (or `./venv/bin/python run.py`). Open **http://localhost:5005/player/** in your browser.
+- **Desktop (GTK):** `./gui.sh` — it will create/update the venv and install deps if needed.
+- **Cloud storage (optional):** to attach R2/B2/S3, run once: `./venv/bin/python -m setup_tool init`.
 
 ## 📜 License
 

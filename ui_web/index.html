@@ -689,11 +689,6 @@
             </div>
         </div>
 
-        <!-- ODST Music/YouTube toggle: fixed overlay, visible only when downloader view is active; both options use theme accent for intuitive controls -->
-        <div id="dl-search-source-wrap" class="fixed bottom-24 right-6 z-[85] flex items-center gap-0 rounded-[var(--radius-omni-xs)] border border-[var(--accent)]/30 bg-[var(--input-bg)] backdrop-blur-xl overflow-hidden pointer-events-auto hidden transition-opacity duration-200" aria-hidden="true" style="box-shadow: var(--shadow-omni);">
-            <button type="button" id="dl-search-source-music" class="dl-search-source-btn px-4 py-2 text-xs font-bold bg-[var(--accent)] text-[var(--text-on-accent)] transition-colors" aria-pressed="true">Music</button>
-            <button type="button" id="dl-search-source-youtube" class="dl-search-source-btn px-4 py-2 text-xs font-bold bg-[var(--accent)]/15 text-[var(--accent)] hover:bg-[var(--accent)]/25 transition-colors" aria-pressed="false">YouTube</button>
-        </div>
         <main id="content" class="flex-1 relative">
             <div id="view-home" class="view">
                 <div id="home-search-bar" class="glass-view rounded-[var(--radius-omni)] p-3 border border-[var(--glass-border)] mb-4">
@@ -762,10 +757,16 @@
                 <div class="space-y-6">
                     <div class="glass-view rounded-[var(--radius-omni)] p-4 border border-[var(--glass-border)]">
                         <div class="flex gap-2">
-                            <input type="text" id="dl-search-input" placeholder="Search songs/artists or paste YouTube URLs (one per line)" class="flex-1 input-theme rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm text-[var(--text-main)]" />
-                            <button type="button" id="dl-search-btn" class="bg-[var(--accent)] hover:opacity-90 text-[var(--text-on-accent)] px-5 py-3 rounded-[var(--radius-omni-xs)] font-bold transition-all active:scale-95"><i class="fas fa-search"></i></button>
+                            <input type="text" id="dl-search-input" placeholder="Search songs/artists or paste YouTube URLs (one per line)" class="flex-1 min-w-0 input-theme rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm text-[var(--text-main)]" />
+                            <button type="button" id="dl-search-btn" class="bg-[var(--accent)] hover:opacity-90 text-[var(--text-on-accent)] px-5 py-3 rounded-[var(--radius-omni-xs)] font-bold transition-all active:scale-95 shrink-0"><i class="fas fa-search"></i></button>
                         </div>
-                        <p class="text-[10px] text-[var(--text-dim)] mt-2">URL input adds pending items to queue. Plain text performs YouTube Music search.</p>
+                        <div class="flex justify-end mt-2">
+                            <div class="flex items-stretch rounded-[var(--radius-omni-xs)] border border-[var(--accent)]/30 bg-[var(--input-bg)] overflow-hidden" role="group" aria-label="Search source">
+                                <button type="button" id="dl-search-source-music" class="dl-search-source-btn px-4 py-2 text-xs font-bold bg-[var(--accent)] text-[var(--text-on-accent)] transition-colors" aria-pressed="true">Music</button>
+                                <button type="button" id="dl-search-source-youtube" class="dl-search-source-btn px-4 py-2 text-xs font-bold bg-[var(--accent)]/15 text-[var(--accent)] hover:bg-[var(--accent)]/25 transition-colors" aria-pressed="false">YouTube</button>
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-[var(--text-dim)] mt-2">URL input adds pending items to queue. Plain text searches the selected source (Music or YouTube).</p>
                     </div>
                     <div id="dl-search-results" class="space-y-2 min-h-[120px]"></div>
                 </div>
@@ -949,13 +950,13 @@
                             </div>
                             <div id="omni-transport" class="relative flex items-center justify-between w-full h-full px-10">
                                 <div id="omni-prev" class="flex-1 h-full flex items-center justify-start opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto">
-                                    <i class="fas fa-backward-step text-xs text-[var(--text-dim)]"></i>
+                                    <i class="fas fa-backward-step text-xs text-[var(--text-main)]"></i>
                                 </div>
                                 <div id="omni-anchor" class="w-14 h-14 flex-shrink-0 flex items-center justify-center relative pointer-events-none transition-transform z-50">
                                     <i id="omni-anchor-icon" class="fas fa-th-large text-lg text-[var(--text-main)] omni-grid-hint-pulse" aria-hidden="true"></i>
                                 </div>
                                 <div id="omni-next" class="flex-1 h-full flex items-center justify-end opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto">
-                                    <i class="fas fa-forward-step text-xs text-[var(--text-dim)]"></i>
+                                    <i class="fas fa-forward-step text-xs text-[var(--text-main)]"></i>
                                 </div>
                             </div>
                             <div id="omni-nav-ribbon" class="absolute inset-0 flex items-center justify-between px-4 opacity-0 scale-95 transition-all pointer-events-none" style="transition-duration: 200ms;">
