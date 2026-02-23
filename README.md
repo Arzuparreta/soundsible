@@ -7,7 +7,7 @@ Soundsible Station is the flagship interface of the Soundsible ecosystem, a high
 This repository contains the full Soundsible ecosystem, with the Station as its core component.
 
 
-## Station (Windows, Linux, Android, iOS)
+## Station (Windows, Linux, Android, iOS):
 The **Station** is the primary, recommended interface for all users. It combines the precision of a dedicated hardware player with the ubiquity of the modern web, delivering a premium listening experience across all your devices.
 
 ### Key Features:
@@ -25,7 +25,7 @@ The **Station** is the primary, recommended interface for all users. It combines
 
 ---
 
-## 📦 Installation
+## 📦 Installation:
 
 **Requirements:** Python 3.10+ and `git`. On Linux you may need system packages (e.g. `python3-venv`, `python3-pip`).
 
@@ -81,7 +81,7 @@ A lightweight native client for **low-end or resource-constrained devices** (e.g
 *First run will create the venv and install dependencies; on some distros you may need system packages (GTK, mpv, LibAdwaita) — the script will prompt.*
 
 
-## Architecture
+## Architecture:
 
 - **Backend**: Python/Flask (Metadata, Indexing, Audio Stream)
 - **Frontend**: Vanilla JS / Tailwind CSS (Zero-dependency, high-performance)
