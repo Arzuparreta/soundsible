@@ -25,20 +25,6 @@ Then open **http://localhost:5005/player/** (or your server’s LAN IP). Add to 
 
 ---
 
-## 🔧 Legacy Support: Soundsible Desktop (GTK)
-
-The **Desktop** client is a specialized, lightweight interface built for resource-constrained Linux environments or dedicated single-board computers (Raspberry Pi).
-
-While it retains core playback functionality, it is maintained primarily as a legacy option for users requiring a native window manager footprint without the overhead of a full web stack.
-
-### Usage
-```bash
-./gui.sh
-```
-*Note: The GTK client receives maintenance updates but may lag behind the Station in UI/UX features.*
-
----
-
 ## 🛠 Architecture
 
 Soundsible is built on a robust, modular Python backend that serves as the single source of truth for your music library.
@@ -81,8 +67,18 @@ python3 -m venv venv
 **After install:**
 
 - **Station (main web UI):** run the launcher — `python run.py` (or `./venv/bin/python run.py`). Open **http://localhost:5005/player/** in your browser.
-- **Desktop (GTK):** `./gui.sh` — it will create/update the venv and install deps if needed.
 - **Cloud storage (optional):** to attach R2/B2/S3, run once: `./venv/bin/python -m setup_tool init`.
+
+---
+
+## 🔧 Secondary option: Desktop (GTK)
+
+A lightweight native client for **low-end or resource-constrained devices** (e.g. Raspberry Pi, thin clients, older Linux boxes). Uses less RAM than the web stack; core playback only. May lag behind the Station in UI/UX.
+
+```bash
+./gui.sh
+```
+*First run will create the venv and install dependencies; on some distros you may need system packages (GTK, mpv, LibAdwaita) — the script will prompt.*
 
 ## 📜 License
 
