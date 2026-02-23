@@ -1,4 +1,11 @@
-# <img src="branding/logo-app.png" alt="Soundsible" width="72" height="72" align="center"> Soundsible
+<table width="100%">
+  <tr>
+    <td align="left"><h1>Soundsible</h1></td>
+    <td align="right"><img src="branding/logo-app.png" alt="Soundsible" width="72" height="72"></td>
+  </tr>
+</table>
+
+---
 
 **The Cloud-Native Audiophile WebUI.**
 
