@@ -56,7 +56,7 @@ python3 -m venv venv
    ```
    *On Windows use `venv\Scripts\pip.exe` instead of `./venv/bin/pip`.*
 
-## Getting Started
+## Getting Started!:
 After [installation](#-installation), run the launcher and open the Station in your browser:
 ```bash
 python run.py
@@ -71,7 +71,7 @@ This links redirects automatically to mobile or desktop versions.
 
 ---
 
-## Legacy option: Desktop (GTK) (Linux)
+## Legacy option: Desktop (GTK) (Linux):
 
 A lightweight native client for **low-end or resource-constrained devices** (e.g. Raspberry Pi, thin clients, older Linux boxes). Uses less RAM than the web stack; core playback only. May lag behind the Station in UI/UX.
 
