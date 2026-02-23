@@ -17,21 +17,23 @@ The **Station** is the primary, recommended interface for all users. It combines
 - **Universal Sync**: Your library, playlists, queue, metadata, configurations... all synchronised along your devices.
 - **Omni-Island Control**: A unified, gesture-driven navigation hub that seamlessly blends transport controls with deep-link navigation.
 
-## Two uses:
+### Use cases:
 - Full environment experience: [**Tailscale**](https://github.com/tailscale/tailscale) **(Recommended)**
    (Tailscale let's you access your running API from anywhere in the world, so you can listen to your streamed music anywhere)
 - Only local playback: No extra configuration needed.
    (Just download and enjoy your local music)
+---
 
-### Getting Started
+## Getting Started
 After [installation](#-installation), run the launcher and open the Station in your browser:
 ```bash
 python run.py
 ```
-Then open **http://localhost:5005/player/** (or your server’s LAN IP).
-If you used [**Tailscale**](https://github.com/tailscale/tailscale), for example, you open **http://[your-tailscale-ip]:5005/player/**
+- Then open **http://localhost:5005/player/** (or your server’s LAN IP).
+- If you used [**Tailscale**](https://github.com/tailscale/tailscale), for example, you open **http://[your-tailscale-ip]:5005/player/**
 This links redirects automatically to mobile or desktop versions.
-Add as a webapp on desktop and mobile for the full inmersive experience.
+
+### Add as a webapp on desktop and mobile for the full inmersive experience:
 - iOS/Safari: Share > "Add to Home Screen"
 - Android/Chrome: "More" > "Install"
 
