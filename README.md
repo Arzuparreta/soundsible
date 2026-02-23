@@ -73,8 +73,7 @@ python3 -m venv venv
 - **Cloud storage (optional):** to attach R2/B2/S3, run once: `./venv/bin/python -m setup_tool init`.
 
 
-## Legacy option: Desktop (GTK)
-(Linux)
+## Legacy option: Desktop (GTK) (Linux)
 
 A lightweight native client for **low-end or resource-constrained devices** (e.g. Raspberry Pi, thin clients, older Linux boxes). Uses less RAM than the web stack; core playback only. May lag behind the Station in UI/UX.
 
