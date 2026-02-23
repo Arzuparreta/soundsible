@@ -71,7 +71,7 @@ python3 -m venv venv
 
 ---
 
-## 🔧 Secondary option: Desktop (GTK)
+## 🔧 Legacy option: Desktop (GTK)
 
 A lightweight native client for **low-end or resource-constrained devices** (e.g. Raspberry Pi, thin clients, older Linux boxes). Uses less RAM than the web stack; core playback only. May lag behind the Station in UI/UX.
 
@@ -79,7 +79,3 @@ A lightweight native client for **low-end or resource-constrained devices** (e.g
 ./gui.sh
 ```
 *First run will create the venv and install dependencies; on some distros you may need system packages (GTK, mpv, LibAdwaita) — the script will prompt.*
-
-## 📜 License
-
-MIT License. Copyright © 2026.
