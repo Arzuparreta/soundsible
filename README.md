@@ -63,7 +63,7 @@ python3 -m venv venv
 
 ---
 
-## 🔧 Legacy option: Desktop (GTK)
+## Legacy option: Desktop (GTK)
 
 A lightweight native client for **low-end or resource-constrained devices** (e.g. Raspberry Pi, thin clients, older Linux boxes). Uses less RAM than the web stack; core playback only. May lag behind the Station in UI/UX.
 
@@ -74,9 +74,7 @@ A lightweight native client for **low-end or resource-constrained devices** (e.g
 
 ---
 
-## 🛠 Architecture
-
-Soundsible is built on a robust, modular Python backend that serves as the single source of truth for your music library.
+## Architecture
 
 - **Backend**: Python/Flask (Metadata, Indexing, Audio Stream)
 - **Frontend**: Vanilla JS / Tailwind CSS (Zero-dependency, high-performance)
