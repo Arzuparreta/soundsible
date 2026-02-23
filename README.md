@@ -25,14 +25,6 @@ Then open **http://localhost:5005/player/** (or your server’s LAN IP). Add to 
 
 ---
 
-## 🛠 Architecture
-
-Soundsible is built on a robust, modular Python backend that serves as the single source of truth for your music library.
-
-- **Backend**: Python/Flask (Metadata, Indexing, Audio Stream)
-- **Frontend**: Vanilla JS / Tailwind CSS (Zero-dependency, high-performance)
-- **Storage**: Local Filesystem + Optional Cloud Sync (Backblaze B2 / Cloudflare R2)
-
 ## 📦 Installation
 
 **Requirements:** Python 3.10+ and `git`. On Linux you may need system packages (e.g. `python3-venv`, `python3-pip`).
@@ -79,3 +71,13 @@ A lightweight native client for **low-end or resource-constrained devices** (e.g
 ./gui.sh
 ```
 *First run will create the venv and install dependencies; on some distros you may need system packages (GTK, mpv, LibAdwaita) — the script will prompt.*
+
+---
+
+## 🛠 Architecture
+
+Soundsible is built on a robust, modular Python backend that serves as the single source of truth for your music library.
+
+- **Backend**: Python/Flask (Metadata, Indexing, Audio Stream)
+- **Frontend**: Vanilla JS / Tailwind CSS (Zero-dependency, high-performance)
+- **Storage**: Local Filesystem + Optional Cloud Sync (Backblaze B2 / Cloudflare R2)
