@@ -15,7 +15,7 @@ The **Station** is the primary, recommended interface for all users. It combines
 ### Key Features
 - **Max quality**: Playback **engine** ensures **máximum quality**. Downloader tool defaults to **losless quality** and offer **manual quality selection**.
 - **Setup Wizard on app launch**: Easy setup for setting absolutely everything from app install to start downloading and streaming your music.
-- **ODST Downloader**: Embeded downloader that downloads music from youtube or yt-music. It automatically fetches all the metadata including covers, and uploads it to your previously configured NAS (or desktop local) storage or third provided cloud.
+- **ODST Downloader**: Embeded downloader that downloads music from youtube or yt-music. It automatically fetches all the metadata including covers, and uploads it to your previously configured NAS (or desktop local) storage or third provided cloud (setup for Cloudflare R2, Backblaze R2 and S2 users on **Setup Wizard**).
 - **Universal Sync**: Your library, playlists, queue, metadata, configurations... all synchronised along your devices.
 - **Omni-Island Control**: A unified, gesture-driven navigation hub that seamlessly blends transport controls with deep-link navigation.
 
