@@ -22,21 +22,8 @@ The **Station** is the primary, recommended interface for all users. It combines
    (Tailscale let's you access your running API from anywhere in the world, so you can listen to your streamed music anywhere)
 - Only local playback: No extra configuration needed.
    (Just download and enjoy your local music)
+
 ---
-
-## Getting Started
-After [installation](#-installation), run the launcher and open the Station in your browser:
-```bash
-python run.py
-```
-- Then open **http://localhost:5005/player/** (or your server’s LAN IP).
-- If you used [**Tailscale**](https://github.com/tailscale/tailscale), for example, you open **http://[your-tailscale-ip]:5005/player/**
-This links redirects automatically to mobile or desktop versions.
-
-### Add as a webapp on desktop and mobile for the full inmersive experience:
-- iOS/Safari: Share > "Add to Home Screen"
-- Android/Chrome: "More" > "Install"
-
 
 ## 📦 Installation
 
@@ -69,11 +56,20 @@ python3 -m venv venv
    ```
    *On Windows use `venv\Scripts\pip.exe` instead of `./venv/bin/pip`.*
 
-**After install:**
+## Getting Started
+After [installation](#-installation), run the launcher and open the Station in your browser:
+```bash
+python run.py
+```
+- Then open **http://localhost:5005/player/** (or your server’s LAN IP).
+- If you used [**Tailscale**](https://github.com/tailscale/tailscale), for example, you open **http://[your-tailscale-ip]:5005/player/**
+This links redirects automatically to mobile or desktop versions.
 
-- **Station (main web UI):** run the launcher — `python run.py` (or `./venv/bin/python run.py`). Open **http://localhost:5005/player/** in your browser.
-- **Cloud storage (optional):** to attach R2/B2/S3, run once: `./venv/bin/python -m setup_tool init`.
+### Add as a webapp on desktop and mobile for the full inmersive experience:
+- iOS/Safari: Share > "Add to Home Screen"
+- Android/Chrome: "More" > "Install"
 
+---
 
 ## Legacy option: Desktop (GTK) (Linux)
 
