@@ -1,4 +1,4 @@
-# Soundsible <img src="branding/logo-mark.svg" alt="Soundsible" width="48" height="48" align="right">
+# <img src="branding/logo-app.png" alt="Soundsible" width="72" height="72" align="center"> Soundsible
 
 **The Cloud-Native Audiophile WebUI.**
 
