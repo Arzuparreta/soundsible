@@ -28,7 +28,12 @@ After [installation](#-installation), run the launcher and open the Station in y
 ```bash
 python run.py
 ```
-Then open **http://localhost:5005/player/** (or your server’s LAN IP). Add to Home Screen on iOS for the full immersive experience.
+Then open **http://localhost:5005/player/** (or your server’s LAN IP).
+If you used **Tailscale**, for example, you open **http://[your-tailscale-ip]:5005/player/**
+This links redirects automatically to mobile or desktop versions.
+Add as a webapp on desktop and mobile for the full inmersive experience.
+- iOS/Safari: Share > "Add to Home Screen"
+- Android/Chrome: "More" > "Install"
 
 ---
 
