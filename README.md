@@ -21,7 +21,7 @@ The **Station** is the primary, recommended interface for all users. It combines
 - Full environment experience: [**Tailscale**](https://github.com/tailscale/tailscale) **(Recommended)**
    (Tailscale let's you access your running API from anywhere in the world, so you can listen to your streamed music anywhere)
 - Only local playback: No extra configuration needed.
-   (Just downlaod and enjoy your local music)
+   (Just download and enjoy your local music)
 
 ### Getting Started
 After [installation](#-installation), run the launcher and open the Station in your browser:
@@ -29,7 +29,7 @@ After [installation](#-installation), run the launcher and open the Station in y
 python run.py
 ```
 Then open **http://localhost:5005/player/** (or your server’s LAN IP).
-If you used **Tailscale**, for example, you open **http://[your-tailscale-ip]:5005/player/**
+If you used [**Tailscale**](https://github.com/tailscale/tailscale), for example, you open **http://[your-tailscale-ip]:5005/player/**
 This links redirects automatically to mobile or desktop versions.
 Add as a webapp on desktop and mobile for the full inmersive experience.
 - iOS/Safari: Share > "Add to Home Screen"
