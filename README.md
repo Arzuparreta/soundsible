@@ -1,11 +1,4 @@
-<table width="100%">
-  <tr>
-    <td align="left"><h1>Soundsible</h1></td>
-    <td align="right"><img src="branding/logo-app.png" alt="Soundsible" width="72" height="72"></td>
-  </tr>
-</table>
-
----
+# Soundsible <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" width="951" height="0" align="center"> <img src="branding/logo-mark.svg" alt="Soundsible" width="52" height="52" align="center">
 
 **The Cloud-Native Audiophile WebUI.**
 
@@ -13,7 +6,6 @@ Soundsible Station is the flagship interface of the Soundsible ecosystem, a high
 
 This repository contains the full Soundsible ecosystem, with the Station as its core component.
 
----
 
 ## Station
 
@@ -44,7 +36,6 @@ Add as a webapp on desktop and mobile for the full inmersive experience.
 - iOS/Safari: Share > "Add to Home Screen"
 - Android/Chrome: "More" > "Install"
 
----
 
 ## 📦 Installation
 
@@ -82,7 +73,6 @@ python3 -m venv venv
 - **Station (main web UI):** run the launcher — `python run.py` (or `./venv/bin/python run.py`). Open **http://localhost:5005/player/** in your browser.
 - **Cloud storage (optional):** to attach R2/B2/S3, run once: `./venv/bin/python -m setup_tool init`.
 
----
 
 ## Legacy option: Desktop (GTK)
 
@@ -93,7 +83,6 @@ A lightweight native client for **low-end or resource-constrained devices** (e.g
 ```
 *First run will create the venv and install dependencies; on some distros you may need system packages (GTK, mpv, LibAdwaita) — the script will prompt.*
 
----
 
 ## Architecture
 
