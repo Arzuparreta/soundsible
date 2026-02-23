@@ -1,13 +1,20 @@
-const CACHE_NAME = 'soundsible-v5';
+const CACHE_NAME = 'soundsible-v6';
 const AUDIO_CACHE = 'soundsible-audio';
 const ASSETS = [
   'index.html',
+  'desktop.html',
   'js/app.js',
+  'js/app_desktop.js',
   'js/store.js',
   'js/resolver.js',
   'js/ui.js',
+  'js/ui_desktop.js',
   'js/audio.js',
+  'js/renderers.js',
+  'js/wires.js',
+  'js/downloader.js',
   'manifest.json',
+  'manifest-desktop.json',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css'
 ];

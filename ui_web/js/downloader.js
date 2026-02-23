@@ -5,19 +5,13 @@
  */
 import { store } from './store.js';
 import { Haptics } from './haptics.js';
+import { formatTime } from './renderers.js';
 
 function esc(str) {
     if (!str) return "";
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
-}
-
-function formatDuration(sec) {
-    if (!sec || sec <= 0) return "";
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 function normalizeYouTubeUrl(url) {
@@ -41,6 +35,43 @@ function normalizeYouTubeUrl(url) {
     }
 }
 
+/** Default element IDs for mobile (index.html). Desktop passes overrides so the same class works in desktop.html. */
+const DEFAULT_DL_SELECTORS = {
+    searchInput: 'dl-search-input',
+    searchBtn: 'dl-search-btn',
+    searchResults: 'dl-search-results',
+    queueContainer: 'dl-queue-container',
+    dlQueueFab: 'dl-queue-fab',
+    dlQueueBadge: 'dl-queue-badge',
+    downloadQueuePopover: 'dl-download-queue-popover',
+    downloadQueueList: 'dl-download-queue-list',
+    clearQueueBtn: 'dl-clear-queue-btn',
+    submitDownloadBtn: 'dl-submit-download-btn',
+    previewModal: 'dl-preview-modal',
+    previewClose: 'dl-preview-close',
+    previewIframeWrap: 'dl-preview-iframe-wrap',
+    coverChoiceModal: 'dl-cover-choice-modal',
+    queueList: 'dl-queue-list',
+    logs: 'dl-logs',
+    startBtn: 'dl-start-btn',
+    confClientId: 'dl-conf-client-id',
+    confClientSecret: 'dl-conf-client-secret',
+    confPath: 'dl-conf-path',
+    confR2Acc: 'dl-conf-r2-acc',
+    confR2Bucket: 'dl-conf-r2-bucket',
+    confR2Key: 'dl-conf-r2-key',
+    confR2Secret: 'dl-conf-r2-secret',
+    saveConfBtn: 'dl-save-conf-btn',
+    optimizeBtn: 'dl-optimize-btn',
+    syncBtn: 'dl-sync-btn',
+    spotifyList: 'dl-spotify-playlists',
+    refreshSpotifyBtn: 'dl-refresh-spotify-btn',
+    searchSourceMusicBtn: 'dl-search-source-music',
+    searchSourceYoutubeBtn: 'dl-search-source-youtube',
+    refetchMetadataBtn: 'refetch-metadata-btn',
+    refetchMetadataStatus: 'refetch-metadata-status'
+};
+
 export class Downloader {
     static downloadQueue = [];
     static lastSearchResults = [];
@@ -48,48 +79,54 @@ export class Downloader {
     static librarySyncFallbackAttempts = 0;
     static lastDownloaderStatus = null;
     static suppressResultClicksUntil = 0;
+    /** Guard: ignore outside-click close for this many ms after opening (avoids mobile ghost tap closing the popover). */
+    static _downloadQueueOpenedAt = 0;
     /** Search source: 'music' = YouTube Music (default), 'youtube' = normal YouTube */
     static searchSource = 'music';
 
-    static init() {
+    /** @param {Partial<typeof DEFAULT_DL_SELECTORS>} [selectors] - Override element IDs (e.g. desktop-dl-*). Omit for mobile. */
+    static init(selectors) {
         if (this.initialized) return;
         this.initialized = true;
+        const sel = { ...DEFAULT_DL_SELECTORS, ...(selectors || {}) };
 
-        this.searchInput = document.getElementById('dl-search-input');
-        this.searchBtn = document.getElementById('dl-search-btn');
-        this.searchResults = document.getElementById('dl-search-results');
-        this.queueContainer = document.getElementById('dl-queue-container');
-        this.dlQueueFab = document.getElementById('dl-queue-fab');
-        this.dlQueueBadge = document.getElementById('dl-queue-badge');
-        this.downloadQueuePopover = document.getElementById('dl-download-queue-popover');
-        this.downloadQueueList = document.getElementById('dl-download-queue-list');
-        this.clearQueueBtn = document.getElementById('dl-clear-queue-btn');
-        this.submitDownloadBtn = document.getElementById('dl-submit-download-btn');
-        this.previewModal = document.getElementById('dl-preview-modal');
-        this.previewClose = document.getElementById('dl-preview-close');
-        this.previewIframeWrap = document.getElementById('dl-preview-iframe-wrap');
-        this.coverChoiceModal = document.getElementById('dl-cover-choice-modal');
+        this.searchInput = document.getElementById(sel.searchInput);
+        this.searchBtn = document.getElementById(sel.searchBtn);
+        this.searchResults = document.getElementById(sel.searchResults);
+        this.queueContainer = document.getElementById(sel.queueContainer);
+        this.dlQueueFab = document.getElementById(sel.dlQueueFab);
+        this.dlQueueBadge = document.getElementById(sel.dlQueueBadge);
+        this.downloadQueuePopover = document.getElementById(sel.downloadQueuePopover);
+        this.downloadQueueList = document.getElementById(sel.downloadQueueList);
+        this.clearQueueBtn = document.getElementById(sel.clearQueueBtn);
+        this.submitDownloadBtn = document.getElementById(sel.submitDownloadBtn);
+        this.previewModal = document.getElementById(sel.previewModal);
+        this.previewClose = document.getElementById(sel.previewClose);
+        this.previewIframeWrap = document.getElementById(sel.previewIframeWrap);
+        this.coverChoiceModal = document.getElementById(sel.coverChoiceModal);
         this.coverChoiceBound = false;
         this.currentCoverChoiceTrack = null;
 
-        this.queueList = document.getElementById('dl-queue-list');
-        this.logs = document.getElementById('dl-logs');
-        this.startBtn = document.getElementById('dl-start-btn');
+        this.queueList = document.getElementById(sel.queueList);
+        this.logs = document.getElementById(sel.logs);
+        this.startBtn = document.getElementById(sel.startBtn);
 
-        this.confClientId = document.getElementById('dl-conf-client-id');
-        this.confClientSecret = document.getElementById('dl-conf-client-secret');
-        this.confPath = document.getElementById('dl-conf-path');
-        this.confR2Acc = document.getElementById('dl-conf-r2-acc');
-        this.confR2Bucket = document.getElementById('dl-conf-r2-bucket');
-        this.confR2Key = document.getElementById('dl-conf-r2-key');
-        this.confR2Secret = document.getElementById('dl-conf-r2-secret');
-        this.saveConfBtn = document.getElementById('dl-save-conf-btn');
-        this.optimizeBtn = document.getElementById('dl-optimize-btn');
-        this.syncBtn = document.getElementById('dl-sync-btn');
-        this.spotifyList = document.getElementById('dl-spotify-playlists');
-        this.refreshSpotifyBtn = document.getElementById('dl-refresh-spotify-btn');
-        this.searchSourceMusicBtn = document.getElementById('dl-search-source-music');
-        this.searchSourceYoutubeBtn = document.getElementById('dl-search-source-youtube');
+        this.confClientId = document.getElementById(sel.confClientId);
+        this.confClientSecret = document.getElementById(sel.confClientSecret);
+        this.confPath = document.getElementById(sel.confPath);
+        this.confR2Acc = document.getElementById(sel.confR2Acc);
+        this.confR2Bucket = document.getElementById(sel.confR2Bucket);
+        this.confR2Key = document.getElementById(sel.confR2Key);
+        this.confR2Secret = document.getElementById(sel.confR2Secret);
+        this.saveConfBtn = document.getElementById(sel.saveConfBtn);
+        this.optimizeBtn = document.getElementById(sel.optimizeBtn);
+        this.syncBtn = document.getElementById(sel.syncBtn);
+        this.spotifyList = document.getElementById(sel.spotifyList);
+        this.refreshSpotifyBtn = document.getElementById(sel.refreshSpotifyBtn);
+        this.searchSourceMusicBtn = document.getElementById(sel.searchSourceMusicBtn);
+        this.searchSourceYoutubeBtn = document.getElementById(sel.searchSourceYoutubeBtn);
+        this.refetchBtn = document.getElementById(sel.refetchMetadataBtn);
+        this.refetchStatusEl = document.getElementById(sel.refetchMetadataStatus);
 
         if (this.queueContainer) this.queueContainer.style.transform = '';
         this.bindEvents();
@@ -129,6 +166,7 @@ export class Downloader {
             this.suppressResultClicksUntil = Date.now() + 700;
             this.submitDownloadQueue();
         });
+        if (this.dlQueueFab) this.dlQueueFab.addEventListener('click', () => this.toggleDownloadQueue());
         if (this.previewClose) this.previewClose.addEventListener('click', () => this.hidePreview());
 
         if (this.startBtn) this.startBtn.addEventListener('click', () => this.startProcessing());
@@ -138,10 +176,8 @@ export class Downloader {
         if (this.optimizeBtn) this.optimizeBtn.addEventListener('click', () => this.triggerOptimize());
         if (this.syncBtn) this.syncBtn.addEventListener('click', () => this.triggerSync());
 
-        // Refetch metadata button
-        const refetchBtn = document.getElementById('refetch-metadata-btn');
-        if (refetchBtn) {
-            refetchBtn.addEventListener('click', () => this.refetchMetadata());
+        if (this.refetchBtn) {
+            this.refetchBtn.addEventListener('click', () => this.refetchMetadata());
         }
 
         // Search source: Music | YouTube
@@ -187,17 +223,17 @@ export class Downloader {
         if (musicBtn && youtubeBtn) {
             if (value === 'music') {
                 musicBtn.classList.add('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
-                musicBtn.classList.remove('bg-[var(--surface-overlay)]', 'text-[var(--nav-icon)]');
+                musicBtn.classList.remove('bg-[var(--accent)]/15', 'text-[var(--accent)]');
                 musicBtn.setAttribute('aria-pressed', 'true');
                 youtubeBtn.classList.remove('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
-                youtubeBtn.classList.add('text-[var(--nav-icon)]');
+                youtubeBtn.classList.add('bg-[var(--accent)]/15', 'text-[var(--accent)]');
                 youtubeBtn.setAttribute('aria-pressed', 'false');
             } else {
                 youtubeBtn.classList.add('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
-                youtubeBtn.classList.remove('bg-[var(--surface-overlay)]', 'text-[var(--nav-icon)]');
+                youtubeBtn.classList.remove('bg-[var(--accent)]/15', 'text-[var(--accent)]');
                 youtubeBtn.setAttribute('aria-pressed', 'true');
                 musicBtn.classList.remove('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
-                musicBtn.classList.add('bg-[var(--surface-overlay)]', 'text-[var(--nav-icon)]');
+                musicBtn.classList.add('bg-[var(--accent)]/15', 'text-[var(--accent)]');
                 musicBtn.setAttribute('aria-pressed', 'false');
             }
         }
@@ -270,7 +306,7 @@ export class Downloader {
 
     static renderResultRow(r) {
         const thumbUrl = (r.thumbnail || '').replace(/"/g, '%22').replace(/'/g, '%27');
-        const duration = formatDuration(r.duration);
+        const duration = formatTime(r.duration);
         return `<div class="flex items-center gap-3 p-3 rounded-xl border border-[var(--input-border)] transition-colors group cursor-pointer hover:bg-[var(--surface-overlay)]" style="background-color: var(--input-bg);" data-video-id="${esc(r.id)}">
             <div class="w-12 h-12 rounded-lg flex-shrink-0 dl-result-thumb" style="background-image:url('${thumbUrl}'); background-size:cover; background-position:center; background-color: var(--input-bg);"></div>
             <div class="flex-1 min-w-0">
@@ -474,6 +510,7 @@ export class Downloader {
         const popover = this.downloadQueuePopover;
         if (!popover) return;
         if (popover.classList.contains('hidden')) {
+            this._downloadQueueOpenedAt = Date.now();
             popover.classList.remove('hidden');
             setTimeout(() => {
                 popover.classList.remove('pointer-events-none');
@@ -488,6 +525,7 @@ export class Downloader {
     }
 
     static hideDownloadQueue() {
+        if (Date.now() - this._downloadQueueOpenedAt < 300) return;
         const popover = this.downloadQueuePopover;
         if (!popover || popover.classList.contains('hidden')) return;
         popover.classList.replace('scale-100', 'scale-95');
@@ -792,21 +830,21 @@ export class Downloader {
     }
 
     static async refetchMetadata() {
-        const btn = document.getElementById('refetch-metadata-btn');
-        const status = document.getElementById('refetch-metadata-status');
+        const btn = this.refetchBtn;
+        const status = this.refetchStatusEl;
         if (!btn || !status) return;
-        
+
         btn.disabled = true;
         btn.textContent = 'Refetching...';
         status.classList.remove('hidden');
         status.textContent = 'Starting metadata refetch...';
-        
+
         try {
             const res = await fetch(`${store.apiBase}/api/library/refetch-metadata`, {
                 method: 'POST'
             });
             const data = await res.json();
-            
+
             if (res.ok) {
                 status.textContent = `✓ Updated: ${data.updated || 0}, Skipped: ${data.skipped || 0}, Errors: ${data.errors || 0}`;
                 status.classList.remove('text-red-400');

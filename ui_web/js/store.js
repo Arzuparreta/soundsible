@@ -1,6 +1,7 @@
 /**
  * State Management Store
  */
+import { connectionManager } from './connection.js';
 
 class Store {
     constructor() {
@@ -15,24 +16,40 @@ class Store {
             isOnline: true,
             library: this.load('library', []),
             favorites: this.load('favorites', []),
+            playlists: this.load('playlists', {}),
             queue: [],
             repeatMode: 'off', // off, all, one
             shuffleEnabled: false,
             currentTrack: null,
             isPlaying: false,
-            theme: this.load('theme', 'dark'),
+            theme: (() => {
+                const t = this.load('theme', 'dark');
+                return ['dark', 'light', 'odst'].includes(t) ? t : 'dark';
+            })(),
             hapticsEnabled: this.load('haptics', true),
-            libraryOrder: this.load('library_order', 'date_added')
+            libraryOrder: this.load('library_order', 'date_added'),
+            songsViewMode: (() => { const v = this.load('songs_view_mode', 'list'); const valid = ['list', 'grid', 'gridCompact', 'gridLarge']; return valid.includes(v) ? v : (v === 'gridXLarge' ? 'gridLarge' : 'list'); })(),
+            artistViewMode: (() => { const v = this.load('artist_view_mode', 'gridCompact'); const valid = ['gridCompact', 'grid', 'gridLarge']; return valid.includes(v) ? v : (v === 'gridXLarge' ? 'gridLarge' : 'gridCompact'); })()
         };
         this.subscribers = [];
         this.applyTheme(this.state.theme);
     }
 
     applyTheme(theme) {
-        document.documentElement.setAttribute('data-theme', theme);
-        this.save('theme', theme);
+        const valid = ['dark', 'light', 'odst'].includes(theme) ? theme : 'dark';
+        document.documentElement.setAttribute('data-theme', valid);
+        this.save('theme', valid);
         const meta = document.querySelector('#meta-theme-color');
-        if (meta) meta.setAttribute('content', theme === 'light' ? '#f5f5f5' : '#0d0d0f');
+        if (meta) {
+            const color = valid === 'light' ? '#f5f5f5' : valid === 'odst' ? '#1c2026' : '#0d0d0f';
+            meta.setAttribute('content', color);
+        }
+    }
+
+    setTheme(theme) {
+        const valid = ['dark', 'light', 'odst'].includes(theme) ? theme : 'dark';
+        this.update({ theme: valid });
+        this.applyTheme(valid);
     }
 
     toggleTheme() {
@@ -75,6 +92,9 @@ class Store {
 
         this.state = { ...this.state, ...patch };
         if (patch.libraryOrder !== undefined) this.save('library_order', patch.libraryOrder);
+        if (patch.songsViewMode !== undefined) this.save('songs_view_mode', patch.songsViewMode);
+        if (patch.artistViewMode !== undefined) this.save('artist_view_mode', patch.artistViewMode);
+        if (patch.playlists !== undefined) this.save('playlists', patch.playlists);
         console.log("State Update:", Object.keys(patch));
         this.subscribers.forEach(cb => cb(this.state));
     }
@@ -101,23 +121,20 @@ class Store {
             if (!res.ok) throw new Error("Sync failed");
             
             const data = await res.json();
-            
+
             // Also sync favourites and queue
             await this.syncFavourites();
             await this.syncQueue();
-            
-            this.update({ library: data.tracks, isOnline: true });
+
+            const playlists = data.playlists && typeof data.playlists === 'object' ? data.playlists : {};
+            this.update({ library: data.tracks, playlists, isOnline: true });
             this.save('library', data.tracks);
+            this.save('playlists', playlists);
             return true;
         } catch (err) {
             console.error("Library sync error:", err);
             this.update({ isOnline: false });
-            
-            // Trigger reconnection race if we're not explicitly offline
-            import('./connection.js').then(({ connectionManager }) => {
-                connectionManager.startReconnectionLoop();
-            });
-            
+            connectionManager.startReconnectionLoop();
             return false;
         }
     }
@@ -223,6 +240,167 @@ class Store {
             return false;
         } catch (err) {
             console.error("Deletion error:", err);
+            return false;
+        }
+    }
+
+    async createPlaylist(name) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/library/playlists`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: String(name).trim() })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.playlists) {
+                    this.update({ playlists: data.playlists });
+                    this.save('playlists', data.playlists);
+                } else await this.syncLibrary();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Create playlist error:", err);
+            return false;
+        }
+    }
+
+    async renamePlaylist(oldName, newName) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/library/playlists/${encodeURIComponent(oldName)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: String(newName).trim() })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.playlists) {
+                    this.update({ playlists: data.playlists });
+                    this.save('playlists', data.playlists);
+                } else await this.syncLibrary();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Rename playlist error:", err);
+            return false;
+        }
+    }
+
+    async deletePlaylist(name) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/library/playlists/${encodeURIComponent(name)}`, {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.playlists) {
+                    this.update({ playlists: data.playlists });
+                    this.save('playlists', data.playlists);
+                } else await this.syncLibrary();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Delete playlist error:", err);
+            return false;
+        }
+    }
+
+    async addToPlaylist(playlistName, trackId) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/library/playlists/${encodeURIComponent(playlistName)}/tracks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ track_id: trackId })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.playlists) {
+                    this.update({ playlists: data.playlists });
+                    this.save('playlists', data.playlists);
+                } else await this.syncLibrary();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Add to playlist error:", err);
+            return false;
+        }
+    }
+
+    async removeFromPlaylist(playlistName, trackId) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/library/playlists/${encodeURIComponent(playlistName)}/tracks/${encodeURIComponent(trackId)}`, {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.playlists) {
+                    this.update({ playlists: data.playlists });
+                    this.save('playlists', data.playlists);
+                } else await this.syncLibrary();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Remove from playlist error:", err);
+            return false;
+        }
+    }
+
+    async reorderPlaylistTracks(playlistName, trackIds) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/library/playlists/${encodeURIComponent(playlistName)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ track_ids: trackIds })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.playlists) {
+                    this.update({ playlists: data.playlists });
+                    this.save('playlists', data.playlists);
+                } else await this.syncLibrary();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Reorder playlist tracks error:", err);
+            return false;
+        }
+    }
+
+    async duplicatePlaylist(sourceName, newName) {
+        const ids = (this.state.playlists && this.state.playlists[sourceName]) || [];
+        const ok = await this.createPlaylist(newName);
+        if (!ok) return false;
+        for (const trackId of ids) {
+            await this.addToPlaylist(newName, trackId);
+        }
+        await this.syncLibrary();
+        return true;
+    }
+
+    async reorderPlaylists(orderedNames) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/library/playlists`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order: orderedNames })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.playlists) {
+                    this.update({ playlists: data.playlists });
+                    this.save('playlists', data.playlists);
+                } else await this.syncLibrary();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Reorder playlists error:", err);
             return false;
         }
     }

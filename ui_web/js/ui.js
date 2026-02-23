@@ -3,8 +3,10 @@
  */
 import { store } from './store.js';
 import { Resolver } from './resolver.js';
+import { formatTime } from './renderers.js';
 import { audioEngine } from './audio.js';
 import { Haptics } from './haptics.js';
+import { wireActionMenu } from './wires.js';
 
 // Global availability for inline onclick handlers
 window.audioEngine = audioEngine;
@@ -23,14 +25,91 @@ export class UI {
         'artists': 'ARTISTS',
         'artist-detail': 'ARTIST',
         'playlists': 'PLAYLISTS',
+        'playlist-detail': 'PLAYLIST',
         'downloader': 'ODST',
         'settings': 'CONFIG'
     };
 
     static init() {
         console.log("UI: Initializing Omni-Island Core...");
-        this.content = document.getElementById('content');
-        
+        const d = document.getElementById.bind(document);
+        this.dom = {
+            content: d('content'),
+            allSongs: d('all-songs'),
+            omniLabel: d('omni-label'),
+            omniLabelContainer: d('omni-label-container'),
+            nowPlayingView: d('now-playing-view'),
+            npSeekContainer: d('np-seek-container'),
+            queueFab: d('queue-fab'),
+            queueBadge: d('queue-badge'),
+            omniAnchorIcon: d('omni-anchor-icon'),
+            omniMetadataContainer: d('omni-metadata-container'),
+            omniMetadata: d('omni-metadata'),
+            omniText1: d('omni-text-1'),
+            omniText2: d('omni-text-2'),
+            omniPrev: d('omni-prev'),
+            omniNext: d('omni-next'),
+            omniTransport: d('omni-transport'),
+            omniProgressTrack: d('omni-progress-track'),
+            omniIslandContainer: d('omni-island-container'),
+            settingsThemeSelect: d('settings-theme-select'),
+            hapticsIndicator: d('haptics-indicator'),
+            settingsLibraryOrder: d('settings-library-order'),
+            statusLed: d('status-led'),
+            statusLedPulse: d('status-led-pulse'),
+            serverStatus: d('server-status'),
+            activeHostDisplay: d('active-host-display'),
+            fullCoverOverlay: d('full-cover-overlay'),
+            fullCoverImage: d('full-cover-image'),
+            fullCoverOverlayBackdrop: d('full-cover-overlay-backdrop'),
+            fullCoverCloseBottom: d('full-cover-close-bottom'),
+            soundmashView: d('soundmash-view'),
+            queuePopover: d('queue-popover'),
+            queueContainer: d('queue-container'),
+            dlSearchSourceWrap: d('dl-search-source-wrap'),
+            dlQueueContainer: d('dl-queue-container'),
+            omniTimeCurrent: d('omni-time-current'),
+            omniTimeDuration: d('omni-time-duration'),
+            npTimeCurrent: d('np-time-current'),
+            npTimeDuration: d('np-time-duration'),
+            omniProgress: d('omni-progress'),
+            npSeekProgress: d('np-seek-progress'),
+            npArt: d('np-art'),
+            npTitle: d('np-title'),
+            npArtist: d('np-artist'),
+            npAlbumTitle: d('np-album-title'),
+            desktopApp: d('desktop-app'),
+            omniIsland: d('omni-island'),
+            omniAnchor: d('omni-anchor'),
+            omniTouchArea: d('omni-touch-area'),
+            omniNavRibbon: d('omni-nav-ribbon'),
+            actionMenu: d('action-menu'),
+            actionMenuOverlay: d('action-menu-overlay'),
+            actionMenuSheet: d('action-menu-sheet'),
+            metadataEditor: d('metadata-editor'),
+            metadataEditorContent: d('metadata-editor-content'),
+            editTitle: d('edit-title'),
+            editArtist: d('edit-artist'),
+            editAlbum: d('edit-album'),
+            editCoverPreview: d('edit-cover-preview'),
+            editSaveBtn: d('edit-save-btn'),
+            editAutoFetchBtn: d('edit-auto-fetch-btn'),
+            editUploadBtn: d('edit-upload-btn'),
+            editFileInput: d('edit-file-input'),
+            editStatus: d('edit-status'),
+            autoFetchResults: d('auto-fetch-results'),
+            toastContainer: d('toast-container'),
+            miniPlayBtn: d('mini-play-btn'),
+            miniRepeatBtn: d('mini-repeat-btn'),
+            omniRepeatBtn: d('omni-repeat-btn'),
+            omniRepeatOneIndicator: d('omni-repeat-one-indicator'),
+            miniRepeatOneIndicator: d('mini-repeat-one-indicator'),
+            miniShuffleBtn: d('mini-shuffle-btn'),
+            omniShuffleBtn: d('omni-shuffle-btn'),
+            miniNextBtn: d('mini-next-btn'),
+            miniPrevBtn: d('mini-prev-btn')
+        };
+        this.content = this.dom.content;
         // Platform Detection: Notch Safety
         const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || 
                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPad Pro
@@ -40,8 +119,9 @@ export class UI {
         this.viewStack = [];
         this.currentView = 'home';
         this._npGesturesBound = false;
+        this._npCurrentTrackOpen = false; // true when NP is open for the *currently playing* track (labels fade out)
+        this._npViewOpen = false; // true when Now Playing view is visible (omni label fades out)
         this.isIslandActive = false;
-        this.islandUserCollapsed = false; // user swiped down to collapse playback bar to seed form
         this.isBlooming = false;
         this.isDraggingQueue = false;
         this._keyboardHeight = 0;
@@ -52,6 +132,7 @@ export class UI {
         this.initKeyboardSync();
         this.updateLabel(this.currentView);
         store.subscribe((state) => this.updatePlayer(state));
+        this.updatePlayer(store.state);
 
         // INTERRUPTION RECOVERY: If app backgrounds or loses focus during a gesture, reset the island.
         // This prevents the island from being stuck in "nav mode" if an iOS system gesture interrupts.
@@ -64,10 +145,51 @@ export class UI {
 
         // Gestures Engine
         this.initGestures();
+
+        // Action menu: wire buttons once (shared wires.js)
+        wireActionMenu({
+            overlay: 'action-menu-overlay',
+            queueBtn: 'action-queue',
+            editBtn: 'action-edit-metadata',
+            favBtn: 'action-fav',
+            addToPlaylistBtn: 'action-add-to-playlist',
+            deleteBtn: 'action-delete',
+            removeFromPlaylistBtn: 'action-remove-from-playlist'
+        }, {
+            store,
+            getCurrentActionTrack: () => this.currentActionTrack,
+            onClose: () => this.hideActionMenu(),
+            onShowMetadataEditor: (id) => this.showMetadataEditor(id),
+            onAddToPlaylist: (trackId) => typeof window.showAddToPlaylistPicker === 'function' && window.showAddToPlaylistPicker(trackId),
+            onRemoveFromPlaylist: (track) => {
+                const name = window.viewContext?.currentPlaylistName;
+                if (name && track) store.removeFromPlaylist(name, track.id);
+                this.hideActionMenu();
+            },
+            onFavClick: (track) => {
+                if (!track) return;
+                const trackId = track.id;
+                const isFav = store.state.favorites.includes(trackId);
+                const onHomeFavFirst = this.currentView === 'home' && (store.state.libraryOrder || 'date_added') === 'favorites_first';
+                if (onHomeFavFirst && !isFav) {
+                    const container = this.dom.allSongs;
+                    const row = container && container.querySelector(`.song-row[data-id="${CSS.escape(trackId)}"]`);
+                    if (row && typeof window.scheduleFavFirstAnimation === 'function') {
+                        this.hideActionMenu();
+                        Haptics.tick();
+                        this.showToast('Added to Favourites');
+                        window.scheduleFavFirstAnimation(trackId, row);
+                        return;
+                    }
+                }
+                store.toggleFavourite(trackId);
+                this.hideActionMenu();
+            }
+        });
     }
 
     static updateLabel(viewId) {
-        const label = document.getElementById('omni-label');
+        const label = this.dom.omniLabel;
         if (label) {
             label.textContent = this.VIEW_LABELS[viewId] || '';
             label.classList.remove('hovered');
@@ -83,13 +205,12 @@ export class UI {
         this.syncIsland(state);
 
         if (state.currentTrack || UI._npDisplayTrack) {
-            if (document.getElementById('now-playing-view')?.classList.contains('active')) {
+            if (this.dom.nowPlayingView?.classList.contains('active')) {
                 // Clear preview only when the *playing* track actually changed (user skipped), not on play/pause or seek
                 const playingTrackJustChanged = state.currentTrack && UI._lastCurrentTrackId !== state.currentTrack.id;
                 if (UI._npDisplayTrack && playingTrackJustChanged && state.currentTrack.id !== UI._npDisplayTrack.id) {
                     UI._npDisplayTrack = null;
-                    const npViewEl = document.getElementById('now-playing-view');
-                    if (npViewEl) npViewEl.classList.remove('np-preview');
+                    if (this.dom.nowPlayingView) this.dom.nowPlayingView.classList.remove('np-preview');
                 }
                 const displayTrack = UI._npDisplayTrack || state.currentTrack;
                 const isPlaying = UI._npDisplayTrack
@@ -97,7 +218,7 @@ export class UI {
                     : state.isPlaying;
                 this.updateNowPlaying(displayTrack, isPlaying);
                 // Timeline expands only when current track's NP (not preview)
-                const npSeek = document.getElementById('np-seek-container');
+                const npSeek = this.dom.npSeekContainer;
                 if (UI._npDisplayTrack) {
                     if (npSeek) npSeek.classList.remove('np-timeline-expanded');
                     document.body.classList.remove('np-timeline-expanded');
@@ -113,8 +234,8 @@ export class UI {
         }
 
         // Floating Queue
-        const fab = document.getElementById('queue-fab');
-        const badge = document.getElementById('queue-badge');
+        const fab = this.dom.queueFab;
+        const badge = this.dom.queueBadge;
         const qCount = state.queue ? state.queue.length : 0;
 
         if (fab && badge) {
@@ -144,20 +265,24 @@ export class UI {
             this.collapseToSeed();
         }
 
-        // Real-time UI Sync
-        const anchorIcon = document.getElementById('omni-anchor-icon');
-        if (this.isIslandActive && anchorIcon) {
+        // Real-time UI Sync: expanded = play/pause; collapsed = always grid (hold hint)
+        const anchorIcon = this.dom.omniAnchorIcon;
+        if (!anchorIcon) return;
+        if (this.isIslandActive) {
+            anchorIcon.classList.remove('omni-grid-hint-pulse');
             anchorIcon.className = state.isPlaying ? 'fas fa-pause text-lg text-[var(--text-main)]' : 'fas fa-play text-lg text-[var(--text-main)] ml-1';
             this.updateMetadataScroller(state.currentTrack);
+        } else {
+            anchorIcon.className = 'fas fa-th-large text-lg text-[var(--text-main)] omni-grid-hint-pulse';
         }
     }
 
     static updateMetadataScroller(track) {
         if (!track) return;
-        const container = document.getElementById('omni-metadata-container');
-        const scroller = document.getElementById('omni-metadata');
-        const text1 = document.getElementById('omni-text-1');
-        const text2 = document.getElementById('omni-text-2');
+        const container = this.dom.omniMetadataContainer;
+        const scroller = this.dom.omniMetadata;
+        const text1 = this.dom.omniText1;
+        const text2 = this.dom.omniText2;
         if (!container || !scroller || !text1 || !text2) return;
 
         // Escape function for safety since we're using innerHTML
@@ -172,7 +297,7 @@ export class UI {
 
         text1.innerHTML = contentHtml;
         text2.innerHTML = contentHtml;
-        container.style.opacity = this.islandUserCollapsed ? '0' : '1';
+        this.updateOmniMetadataVisibility();
 
         // Marquee Logic
         const textWidth = text1.offsetWidth;
@@ -186,26 +311,29 @@ export class UI {
 
     static morphToActive() {
         this.isIslandActive = true;
-        this.islandUserCollapsed = false;
         Haptics.heavy();
         
         this.island.style.width = '250px';
-        
-        const prev = document.getElementById('omni-prev');
-        const next = document.getElementById('omni-next');
-        const anchorIcon = document.getElementById('omni-anchor-icon');
+        this.island.classList.remove('omni-seed');
+
+        const prev = this.dom.omniPrev;
+        const next = this.dom.omniNext;
+        const anchorIcon = this.dom.omniAnchorIcon;
 
         if (prev) { prev.classList.remove('hidden'); setTimeout(() => { prev.classList.replace('opacity-0', 'opacity-100'); prev.classList.replace('scale-75', 'scale-100'); }, 100); }
         if (next) { next.classList.remove('hidden'); setTimeout(() => { next.classList.replace('opacity-0', 'opacity-100'); next.classList.replace('scale-75', 'scale-100'); }, 100); }
         
-        if (anchorIcon) anchorIcon.className = store.state.isPlaying ? 'fas fa-pause text-lg text-[var(--text-main)]' : 'fas fa-play text-lg text-[var(--text-main)] ml-1';
+        if (anchorIcon) {
+            anchorIcon.classList.remove('omni-grid-hint-pulse');
+            anchorIcon.className = store.state.isPlaying ? 'fas fa-pause text-lg text-[var(--text-main)]' : 'fas fa-play text-lg text-[var(--text-main)] ml-1';
+        }
 
-        const transport = document.getElementById('omni-transport');
-        const metadata = document.getElementById('omni-metadata-container');
-        const omniProgressTrack = document.getElementById('omni-progress-track');
-        const t = '0.4s';
+        const transport = this.dom.omniTransport;
+        const metadata = this.dom.omniMetadataContainer;
+        const omniProgressTrack = this.dom.omniProgressTrack;
+        const t = '0.22s';
         if (transport) {
-            transport.style.transition = `opacity ${t} ease, filter 0.3s ease, transform 0.3s ease`;
+            transport.style.transition = `opacity ${t} ease, filter 0.17s ease, transform 0.17s ease`;
             transport.style.filter = 'blur(0px)';
             transport.style.opacity = '1';
             transport.style.transform = 'scale(1)';
@@ -217,23 +345,41 @@ export class UI {
         }
         if (metadata) {
             metadata.style.transition = `opacity ${t} ease`;
-            metadata.style.opacity = '1';
+            this.updateOmniMetadataVisibility();
         }
+    }
+
+    /** Omnibar metadata visible only when island expanded and not viewing current track's NP. */
+    static updateOmniMetadataVisibility() {
+        const container = this.dom.omniMetadataContainer;
+        if (!container) return;
+        const visible = this.isIslandActive && !this._npCurrentTrackOpen;
+        container.style.opacity = visible ? '1' : '0';
+    }
+
+    /** Omni page label: hidden when NP view is open; visible when NP closed or when nav bar (ribbon) is open. */
+    static updateOmniLabelVisibility() {
+        const container = this.dom.omniLabelContainer;
+        if (!container) return;
+        const hidden = this._npViewOpen && !this.isBlooming;
+        container.classList.toggle('omni-label-hidden', hidden);
     }
 
     static collapseToSeed() {
         this.isIslandActive = false;
-        this.islandUserCollapsed = false;
         this.island.style.width = '56px';
-        
-        const prev = document.getElementById('omni-prev');
-        const next = document.getElementById('omni-next');
-        const anchorIcon = document.getElementById('omni-anchor-icon');
+        this.island.classList.add('omni-seed');
+
+        const prev = this.dom.omniPrev;
+        const next = this.dom.omniNext;
+        const anchorIcon = this.dom.omniAnchorIcon;
 
         if (prev) { prev.classList.replace('opacity-100', 'opacity-0'); prev.classList.replace('scale-100', 'scale-75'); setTimeout(() => prev.classList.add('hidden'), 300); }
         if (next) { next.classList.replace('opacity-100', 'opacity-0'); next.classList.replace('scale-100', 'scale-75'); setTimeout(() => next.classList.add('hidden'), 300); }
         
-        if (anchorIcon) anchorIcon.className = 'fas fa-command text-lg text-[var(--text-main)]';
+        if (anchorIcon) {
+            anchorIcon.className = 'fas fa-th-large text-lg text-[var(--text-main)] omni-grid-hint-pulse';
+        }
     }
 
     static detectPlatform() {
@@ -248,10 +394,8 @@ export class UI {
             return;
         }
 
-        const container = document.getElementById('omni-island-container');
+        const container = this.dom.omniIslandContainer;
         if (!container) return;
-
-        // Apply platform-specific class
         container.classList.add(`omni-keyboard-${this._platform}`);
 
         let lastHeight = window.visualViewport.height;
@@ -294,7 +438,7 @@ export class UI {
     }
 
     static handleKeyboardOpen(keyboardHeight) {
-        const container = document.getElementById('omni-island-container');
+        const container = this.dom.omniIslandContainer;
         if (!container) return;
 
         this._keyboardHeight = keyboardHeight;
@@ -302,7 +446,7 @@ export class UI {
     }
 
     static handleKeyboardClose() {
-        const container = document.getElementById('omni-island-container');
+        const container = this.dom.omniIslandContainer;
         if (!container) return;
 
         this._keyboardHeight = 0;
@@ -310,29 +454,27 @@ export class UI {
     }
 
     static updateThemeUI(theme) {
-        const indicator = document.getElementById('theme-indicator');
-        if (indicator) {
-            indicator.style.transform = theme === 'dark' ? 'translateX(24px)' : 'translateX(0px)';
-        }
+        const select = this.dom.settingsThemeSelect;
+        if (select && ['dark', 'light', 'odst'].includes(theme)) select.value = theme;
     }
 
     static updateHapticsUI(enabled) {
-        const indicator = document.getElementById('haptics-indicator');
+        const indicator = this.dom.hapticsIndicator;
         if (indicator) {
             indicator.style.transform = enabled ? 'translateX(24px)' : 'translateX(0px)';
         }
     }
 
     static updateLibraryOrderUI(libraryOrder) {
-        const sel = document.getElementById('settings-library-order');
+        const sel = this.dom.settingsLibraryOrder;
         if (sel && libraryOrder) sel.value = libraryOrder;
     }
 
     static updateStatus(state) {
-        const statusLed = document.getElementById('status-led');
-        const statusPulse = document.getElementById('status-led-pulse');
-        const statusText = document.getElementById('server-status');
-        const hostDisplay = document.getElementById('active-host-display');
+        const statusLed = this.dom.statusLed;
+        const statusPulse = this.dom.statusLedPulse;
+        const statusText = this.dom.serverStatus;
+        const hostDisplay = this.dom.activeHostDisplay;
 
         if (hostDisplay) hostDisplay.textContent = state.activeHost;
         
@@ -346,18 +488,17 @@ export class UI {
     }
 
     static updateNowPlaying(track, isPlaying) {
-        const el = id => document.getElementById(id);
-        const art = el('np-art');
-        const title = el('np-title');
-        const artist = el('np-artist');
-        const album = el('np-album-title');
+        const art = this.dom.npArt;
+        const title = this.dom.npTitle;
+        const artistEl = this.dom.npArtist;
+        const album = this.dom.npAlbumTitle;
 
         if (art) {
             const url = Resolver.getCoverUrl(track);
             art.style.backgroundImage = url ? `url("${String(url).replace(/"/g, '%22')}")` : '';
         }
         if (title) title.textContent = track.title;
-        if (artist) artist.textContent = track.artist;
+        if (artistEl) artistEl.textContent = track.artist;
         if (album) album.textContent = track.album;
         
         this.updateTransportControls(isPlaying);
@@ -370,7 +511,7 @@ export class UI {
         // Preview only when opening NP for a different track than the one playing
         UI._npDisplayTrack = (trackOrUndefined !== undefined && store.state.currentTrack?.id !== track.id) ? track : null;
 
-        const npView = document.getElementById('now-playing-view');
+        const npView = this.dom.nowPlayingView;
         if (!npView) return;
 
         const isPlaying = UI._npDisplayTrack
@@ -380,6 +521,10 @@ export class UI {
         npView.classList.remove('hidden', 'np-closing');
         if (UI._npDisplayTrack) npView.classList.add('np-preview');
         else npView.classList.remove('np-preview');
+        this._npCurrentTrackOpen = !UI._npDisplayTrack; // hide omnibar labels only when viewing current track's NP
+        this._npViewOpen = true;
+        this.updateOmniMetadataVisibility();
+        this.updateOmniLabelVisibility();
         document.body.classList.add('now-playing-open');
         this.updateNowPlaying(track, isPlaying);
 
@@ -388,7 +533,7 @@ export class UI {
             Haptics.heavy(); // 30ms pulse for opening
             if (!UI._npDisplayTrack) {
                 requestAnimationFrame(() => {
-                    const npSeek = document.getElementById('np-seek-container');
+                    const npSeek = this.dom.npSeekContainer;
                     if (npSeek) npSeek.classList.add('np-timeline-expanded');
                     document.body.classList.add('np-timeline-expanded');
                 });
@@ -403,12 +548,16 @@ export class UI {
 
     static hideNowPlaying() {
         UI._npDisplayTrack = null;
+        UI._npCurrentTrackOpen = false;
+        this._npViewOpen = false;
+        this.updateOmniMetadataVisibility();
+        this.updateOmniLabelVisibility();
         UI._npPendingSeekPercent = null;
         UI._lastCurrentTrackId = store.state.currentTrack?.id ?? null;
-        const npView = document.getElementById('now-playing-view');
+        const npView = this.dom.nowPlayingView;
         if (!npView) return;
 
-        const npSeek = document.getElementById('np-seek-container');
+        const npSeek = this.dom.npSeekContainer;
         if (npSeek) npSeek.classList.remove('np-timeline-expanded');
         document.body.classList.remove('np-timeline-expanded');
 
@@ -427,8 +576,34 @@ export class UI {
         }, closeDurationMs);
     }
 
+    static showFullCoverView(coverUrl) {
+        const overlay = this.dom.fullCoverOverlay;
+        const img = this.dom.fullCoverImage;
+        if (!overlay || !img) return;
+        const url = (coverUrl || 'assets/icons/icon-512.png').replace(/"/g, '%22').replace(/'/g, '%27');
+        img.style.backgroundImage = `url("${url}")`;
+        overlay.classList.remove('hidden');
+    }
+
+    static hideFullCoverView() {
+        const overlay = this.dom.fullCoverOverlay;
+        if (overlay) overlay.classList.add('hidden');
+    }
+
+    static bindFullCoverOverlay() {
+        const overlay = this.dom.fullCoverOverlay;
+        const backdrop = this.dom.fullCoverOverlayBackdrop;
+        const closeBottom = this.dom.fullCoverCloseBottom;
+        if (!overlay) return;
+        if (backdrop) backdrop.addEventListener('click', () => this.hideFullCoverView());
+        if (closeBottom) closeBottom.addEventListener('click', () => this.hideFullCoverView());
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this.hideFullCoverView();
+        });
+    }
+
     static showSoundMash() {
-        const view = document.getElementById('soundmash-view');
+        const view = this.dom.soundmashView;
         if (!view) return;
         view.classList.remove('hidden');
         requestAnimationFrame(() => view.classList.add('active'));
@@ -436,7 +611,7 @@ export class UI {
     }
 
     static hideSoundMash() {
-        const view = document.getElementById('soundmash-view');
+        const view = this.dom.soundmashView;
         if (!view) return;
         view.classList.remove('active');
         view.style.transform = '';
@@ -446,7 +621,7 @@ export class UI {
     }
 
     static toggleQueue() {
-        const popover = document.getElementById('queue-popover');
+        const popover = this.dom.queuePopover;
         if (!popover) return;
 
         if (popover.classList.contains('hidden')) {
@@ -464,7 +639,7 @@ export class UI {
     }
 
     static hideQueue() {
-        const popover = document.getElementById('queue-popover');
+        const popover = this.dom.queuePopover;
         if (!popover || popover.classList.contains('hidden')) return;
         
         popover.classList.replace('scale-100', 'scale-95');
@@ -476,22 +651,18 @@ export class UI {
 
     static showView(viewId, saveToHistory = true, direction = 'forward') {
         // Auto-hide Now Playing if active (even if selecting the same view)
-        if (document.getElementById('now-playing-view')?.classList.contains('active')) {
+        if (this.dom.nowPlayingView?.classList.contains('active')) {
             this.hideNowPlaying();
         }
 
         if (viewId === this.currentView) return;
-        
+
+        UI._viewTransitionEnd = Date.now() + 520;
         this.updateLabel(viewId);
 
         const oldView = document.getElementById(`view-${this.currentView}`);
         const targetView = document.getElementById(`view-${viewId}`);
-        // #region agent log
-        if (!targetView) {
-            fetch('http://127.0.0.1:7390/ingest/5e87ad09-2e12-436a-ac69-c14c6b45cb46', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ed9dd2' }, body: JSON.stringify({ sessionId: 'ed9dd2', runId: 'click', hypothesisId: 'H2', location: 'ui.js:showView', message: 'showView: target view not found', data: { viewId }, timestamp: Date.now() }) }).catch(() => {});
-            return;
-        }
-        // #endregion
+        if (!targetView) return;
 
         if (saveToHistory) {
             const roots = ['home', 'favourites', 'playlists', 'artists', 'downloader', 'settings'];
@@ -512,7 +683,7 @@ export class UI {
         const slideFromLeft = navLeft.includes(viewId);
         const slideFromRight = navRight.includes(viewId);
         const slideClass = slideFromLeft ? 'view-from-left' : slideFromRight ? 'view-from-right' : (direction === 'forward' ? 'view-from-right' : 'view-from-left');
-        targetView.classList.remove('hidden');
+        targetView.classList.remove('hidden', 'view-warm-hidden-left', 'view-warm-hidden-right');
         targetView.classList.add('view-incoming');
         targetView.classList.add(slideClass);
         
@@ -524,31 +695,40 @@ export class UI {
             setTimeout(() => targetView.classList.remove('artist-just-returned'), 320);
         }
         
-        // 3. Trigger Animation (Force Reflow)
-        void targetView.offsetWidth;
+        // 3. Trigger Animation — double rAF so browser can apply classes without forcing synchronous reflow
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                targetView.classList.remove('view-from-right', 'view-from-left');
+                if (this.dom.content) this.dom.content.scrollTop = 0;
+            });
+        });
 
+        // 4. Cleanup after transition — clear old view content, hide old view, then render new view content (Option B: no heavy DOM during slide)
         setTimeout(() => {
-            targetView.classList.remove('view-from-right', 'view-from-left');
-            
-            // Background Tasks
-            const content = document.getElementById('content');
-            if (content) content.scrollTop = 0;
-            if (viewId === 'favourites' && window.renderFavourites) window.renderFavourites(store.state);
-            if (viewId === 'downloader') import('./downloader.js').then(m => m.Downloader.init());
-        }, 10);
-
-        // 4. Cleanup after transition
-        setTimeout(() => {
+            const oldViewId = oldView && oldView.id ? oldView.id.replace(/^view-/, '') : null;
+            if (oldViewId && typeof window.clearContentForView === 'function') {
+                window.clearContentForView(oldViewId);
+            }
             if (oldView && oldView.id !== `view-${viewId}`) {
-                oldView.classList.add('hidden');
+                const warmViews = { 'view-home': 'view-warm-hidden-left', 'view-artists': 'view-warm-hidden-right' };
+                const warmClass = warmViews[oldView.id];
+                if (warmClass) {
+                    oldView.classList.add(warmClass);
+                } else {
+                    oldView.classList.add('hidden');
+                }
                 oldView.classList.remove('view-outgoing');
             }
             targetView.classList.remove('view-incoming');
+            UI._viewTransitionEnd = 0;
+            if (typeof window.renderContentForView === 'function') {
+                window.renderContentForView(viewId);
+            }
         }, 500);
 
         this.currentView = viewId;
 
-        const dlSearchSourceWrap = document.getElementById('dl-search-source-wrap');
+        const dlSearchSourceWrap = this.dom.dlSearchSourceWrap;
         if (dlSearchSourceWrap) {
             if (viewId === 'downloader') {
                 dlSearchSourceWrap.classList.remove('hidden');
@@ -559,15 +739,13 @@ export class UI {
             }
         }
 
-        const queueContainer = document.getElementById('queue-container');
+        const queueContainer = this.dom.queueContainer;
         if (queueContainer) {
             if (viewId === 'downloader') queueContainer.classList.add('hidden');
             else queueContainer.classList.remove('hidden');
         }
 
-        if (viewId === 'artists' && typeof window.syncArtistGridIndicators === 'function') {
-            window.syncArtistGridIndicators(store.state);
-        }
+        // syncArtistGridIndicators deferred to 500ms cleanup so we don't touch sliding view DOM in same turn
     }
 
     static navigateBack() {
@@ -587,10 +765,10 @@ export class UI {
         // Global Clicks
         window.addEventListener('click', (e) => {
             if (this.currentView === 'downloader') {
-                const dlq = document.getElementById('dl-queue-container');
+                const dlq = this.dom.dlQueueContainer;
                 if (dlq && !dlq.contains(e.target)) Downloader.hideDownloadQueue?.();
             } else {
-                const q = document.getElementById('queue-container');
+                const q = this.dom.queueContainer;
                 if (q && !q.contains(e.target)) this.hideQueue();
             }
         });
@@ -630,21 +808,20 @@ export class UI {
         };
 
         let lastDuration = 0;
-        /** Min % for omnibar current-time label so it stays visible (not behind island rounded corner). Once bar passes this, label follows bar. */
         const OMNI_CURRENT_LABEL_MIN_PCT = 8;
         const updateTimeLabels = (progress, currentTime, duration) => {
             const dur = duration ?? lastDuration;
             const cur = currentTime ?? (dur * (progress / 100));
             lastDuration = dur;
-            const omniCurrent = document.getElementById('omni-time-current');
-            const omniDuration = document.getElementById('omni-time-duration');
+            const omniCurrent = this.dom.omniTimeCurrent;
+            const omniDuration = this.dom.omniTimeDuration;
             if (omniCurrent) {
                 omniCurrent.textContent = UI.formatTime(cur);
                 omniCurrent.style.left = `${Math.max(progress, OMNI_CURRENT_LABEL_MIN_PCT)}%`;
             }
             if (omniDuration) omniDuration.textContent = UI.formatTime(dur);
-            const npCurrent = document.getElementById('np-time-current');
-            const npDuration = document.getElementById('np-time-duration');
+            const npCurrent = this.dom.npTimeCurrent;
+            const npDuration = this.dom.npTimeDuration;
             if (npCurrent) {
                 npCurrent.textContent = UI.formatTime(cur);
                 npCurrent.style.left = `${progress}%`;
@@ -652,164 +829,94 @@ export class UI {
             if (npDuration) npDuration.textContent = UI.formatTime(dur);
         };
 
-        // Drag state for omnibar (single timebar)
-        let isDraggingOmni = false;
-        let omniDragPointerId = null;
-        let omniHasDragged = false;
-
-        // Omnibar timeline drag handler (only timebar)
-        const omniTrack = document.getElementById('omni-progress-track');
-        if (omniTrack) {
-            const omniProgressBar = document.getElementById('omni-progress');
-            
-            const onOmniStart = (e) => {
-                if (isDraggingOmni) return;
+        const omniDragRef = { current: false };
+        const npDragRef = { current: false };
+        const attachSeekBar = (container, progressBarEl, opts = {}) => {
+            const { onPointerDownGuard = () => true, dragRef } = opts;
+            let isDragging = false, dragPointerId = null, hasDragged = false;
+            const onStart = (e) => {
+                if (isDragging) return;
+                if (!onPointerDownGuard()) return;
                 e.preventDefault();
                 e.stopPropagation();
-                isDraggingOmni = true;
-                omniHasDragged = false;
-                omniDragPointerId = e.pointerId;
-                omniTrack.setPointerCapture(e.pointerId);
-                omniTrack.classList.add('seeking');
-                
-                const pct = calculateSeekPercent(e, omniTrack);
-                if (pct != null && omniProgressBar) {
-                    omniProgressBar.style.transition = 'none';
-                    omniProgressBar.style.width = `${pct}%`;
+                isDragging = true;
+                if (dragRef) dragRef.current = true;
+                hasDragged = false;
+                dragPointerId = e.pointerId;
+                container.setPointerCapture(e.pointerId);
+                container.classList.add('seeking');
+                const pct = calculateSeekPercent(e, container);
+                if (pct != null && progressBarEl) {
+                    progressBarEl.style.transition = 'none';
+                    progressBarEl.style.width = `${pct}%`;
                 }
                 if (pct != null) updateTimeLabels(pct, (pct / 100) * lastDuration, lastDuration);
             };
-
-            const onOmniMove = (e) => {
-                if (!isDraggingOmni || e.pointerId !== omniDragPointerId) return;
+            const onMove = (e) => {
+                if (!isDragging || e.pointerId !== dragPointerId) return;
                 e.preventDefault();
                 e.stopPropagation();
-                omniHasDragged = true;
-                const pct = calculateSeekPercent(e, omniTrack);
-                if (pct != null && omniProgressBar) {
-                    omniProgressBar.style.width = `${pct}%`;
-                    // Throttled seek during drag for responsiveness
-                    if (!omniTrack._lastSeekTime || Date.now() - omniTrack._lastSeekTime > 50) {
+                hasDragged = true;
+                const pct = calculateSeekPercent(e, container);
+                if (pct != null && progressBarEl) {
+                    progressBarEl.style.width = `${pct}%`;
+                    if (!container._lastSeekTime || Date.now() - container._lastSeekTime > 50) {
                         audioEngine.seek(pct);
-                        omniTrack._lastSeekTime = Date.now();
+                        container._lastSeekTime = Date.now();
                     }
                 }
                 if (pct != null) updateTimeLabels(pct, (pct / 100) * lastDuration, lastDuration);
             };
-
-            const onOmniEnd = (e) => {
-                if (!isDraggingOmni || e.pointerId !== omniDragPointerId) return;
+            const onEnd = (e) => {
+                if (!isDragging || e.pointerId !== dragPointerId) return;
                 e.preventDefault();
                 e.stopPropagation();
-                const wasDragging = omniHasDragged;
-                isDraggingOmni = false;
-                omniDragPointerId = null;
-                omniTrack.releasePointerCapture(e.pointerId);
-                omniTrack.classList.remove('seeking');
-                
-                const pct = calculateSeekPercent(e, omniTrack);
+                const wasDragging = hasDragged;
+                isDragging = false;
+                if (dragRef) dragRef.current = false;
+                dragPointerId = null;
+                container.releasePointerCapture(e.pointerId);
+                container.classList.remove('seeking');
+                const pct = calculateSeekPercent(e, container);
                 if (pct != null) {
                     audioEngine.seek(pct);
-                    if (omniProgressBar) {
-                        omniProgressBar.style.transition = '';
-                    }
+                    if (progressBarEl) progressBarEl.style.transition = '';
                 }
-                
-                // Prevent click if we dragged
-                if (wasDragging) {
-                    setTimeout(() => { omniHasDragged = false; }, 100);
-                }
+                if (wasDragging) setTimeout(() => { hasDragged = false; }, 100);
             };
-
-            omniTrack.addEventListener('pointerdown', onOmniStart);
-            omniTrack.addEventListener('pointermove', onOmniMove);
-            omniTrack.addEventListener('pointerup', onOmniEnd);
-            omniTrack.addEventListener('pointercancel', onOmniEnd);
-            
-            // Fallback click handler for tap (non-drag)
-            omniTrack.addEventListener('click', (e) => {
-                if (!omniHasDragged) {
-                    const pct = calculateSeekPercent(e, omniTrack);
-                    if (pct != null) handleSeek(e, omniTrack);
+            container.addEventListener('pointerdown', onStart);
+            container.addEventListener('pointermove', onMove);
+            container.addEventListener('pointerup', onEnd);
+            container.addEventListener('pointercancel', onEnd);
+            container.addEventListener('click', (e) => {
+                if (!hasDragged) {
+                    const pct = calculateSeekPercent(e, container);
+                    if (pct != null) handleSeek(e, container);
                 }
             });
-        }
+        };
 
-        // NP timeline seek bar (expanded in current track's NP only)
-        let isDraggingNp = false;
-        let npDragPointerId = null;
-        let npHasDragged = false;
-        const npSeekContainer = document.getElementById('np-seek-container');
-        const npSeekProgress = document.getElementById('np-seek-progress');
+        const omniTrack = this.dom.omniProgressTrack;
+        const omniProgressBar = this.dom.omniProgress;
+        if (omniTrack && omniProgressBar) attachSeekBar(omniTrack, omniProgressBar, { dragRef: omniDragRef });
+
+        const npSeekContainer = this.dom.npSeekContainer;
+        const npSeekProgress = this.dom.npSeekProgress;
         if (npSeekContainer && npSeekProgress) {
-            const onNpStart = (e) => {
-                if (isDraggingNp) return;
-                if (!document.body.classList.contains('np-timeline-expanded')) return;
-                e.preventDefault();
-                e.stopPropagation();
-                isDraggingNp = true;
-                npHasDragged = false;
-                npDragPointerId = e.pointerId;
-                npSeekContainer.setPointerCapture(e.pointerId);
-                npSeekContainer.classList.add('seeking');
-                const pct = calculateSeekPercent(e, npSeekContainer);
-                if (pct != null) {
-                    npSeekProgress.style.transition = 'none';
-                    npSeekProgress.style.width = `${pct}%`;
-                }
-                if (pct != null) updateTimeLabels(pct, (pct / 100) * lastDuration, lastDuration);
-            };
-            const onNpMove = (e) => {
-                if (!isDraggingNp || e.pointerId !== npDragPointerId) return;
-                e.preventDefault();
-                e.stopPropagation();
-                npHasDragged = true;
-                const pct = calculateSeekPercent(e, npSeekContainer);
-                if (pct != null) {
-                    npSeekProgress.style.width = `${pct}%`;
-                    if (!npSeekContainer._lastSeekTime || Date.now() - npSeekContainer._lastSeekTime > 50) {
-                        audioEngine.seek(pct);
-                        npSeekContainer._lastSeekTime = Date.now();
-                    }
-                }
-                if (pct != null) updateTimeLabels(pct, (pct / 100) * lastDuration, lastDuration);
-            };
-            const onNpEnd = (e) => {
-                if (!isDraggingNp || e.pointerId !== npDragPointerId) return;
-                e.preventDefault();
-                e.stopPropagation();
-                const wasDragging = npHasDragged;
-                isDraggingNp = false;
-                npDragPointerId = null;
-                npSeekContainer.releasePointerCapture(e.pointerId);
-                npSeekContainer.classList.remove('seeking');
-                const pct = calculateSeekPercent(e, npSeekContainer);
-                if (pct != null) {
-                    audioEngine.seek(pct);
-                    npSeekProgress.style.transition = '';
-                }
-                if (wasDragging) setTimeout(() => { npHasDragged = false; }, 100);
-            };
-            npSeekContainer.addEventListener('pointerdown', onNpStart);
-            npSeekContainer.addEventListener('pointermove', onNpMove);
-            npSeekContainer.addEventListener('pointerup', onNpEnd);
-            npSeekContainer.addEventListener('pointercancel', onNpEnd);
-            npSeekContainer.addEventListener('click', (e) => {
-                if (!npHasDragged) {
-                    const pct = calculateSeekPercent(e, npSeekContainer);
-                    if (pct != null) handleSeek(e, npSeekContainer);
-                }
+            attachSeekBar(npSeekContainer, npSeekProgress, {
+                onPointerDownGuard: () => document.body.classList.contains('np-timeline-expanded'),
+                dragRef: npDragRef
             });
         }
 
         // Block page scroll while dragging omnibar or NP timeline
         document.addEventListener('touchmove', (e) => {
-            if ((isDraggingOmni || isDraggingNp) && e.cancelable) {
+            if ((omniDragRef.current || npDragRef.current) && e.cancelable) {
                 e.preventDefault();
             }
         }, { passive: false });
         document.addEventListener('wheel', (e) => {
-            if (isDraggingOmni || isDraggingNp) {
+            if (omniDragRef.current || npDragRef.current) {
                 e.preventDefault();
             }
         }, { passive: false });
@@ -817,13 +924,13 @@ export class UI {
         window.addEventListener('audio:timeupdate', (e) => {
             const { progress, currentTime, duration } = e.detail;
 
-            if (isDraggingOmni) return;
+            if (omniDragRef.current) return;
 
-            const omniBar = document.getElementById('omni-progress');
+            const omniBar = this.dom.omniProgress;
             if (omniBar) omniBar.style.width = `${progress}%`;
 
-            if (!isDraggingNp && document.body.classList.contains('np-timeline-expanded')) {
-                const npBar = document.getElementById('np-seek-progress');
+            if (!npDragRef.current && document.body.classList.contains('np-timeline-expanded')) {
+                const npBar = this.dom.npSeekProgress;
                 if (npBar) npBar.style.width = `${progress}%`;
             }
 
@@ -843,10 +950,14 @@ export class UI {
         let isHorizontal = false;
         let isEdgeSwipe = false;
         let isEdgeSwipeFromSoundMash = false;
+        let isEdgeSwipeFromFullCover = false;
         let longPressTimer = null;
         let longPressTriggered = false;
 
         document.addEventListener('touchstart', (e) => {
+            if (!e.touches.length) return;
+            // Desktop context (fine pointer + large width): no mobile swipe/long-press; use click-only behaviour
+            if (this.dom.desktopApp || (window.matchMedia('(pointer: fine)').matches && window.matchMedia('(min-width: 1024px)').matches)) return;
             const touch = e.touches[0];
             const row = e.target.closest('.song-row');
             
@@ -854,6 +965,7 @@ export class UI {
             startY = touch.clientY;
             isHorizontal = false;
             isEdgeSwipe = false;
+            isEdgeSwipeFromFullCover = false;
 
             // Clear any existing long press timer
             if (longPressTimer) {
@@ -862,43 +974,33 @@ export class UI {
             }
             longPressTriggered = false;
 
-            // 1. Edge Swipe Detection (from left: back to home; when SoundMash open, closes SoundMash)
+            // 1. Edge Swipe Detection (from left: close full-cover / SoundMash, or go to All songs). Capture phase so it works when touch starts on overlay.
             if (startX < 40) {
                 isEdgeSwipe = true;
-                isEdgeSwipeFromSoundMash = document.getElementById('soundmash-view')?.classList.contains('active') ?? false;
-                if (isEdgeSwipeFromSoundMash) {
-                    const sm = document.getElementById('soundmash-view');
-                    if (sm) sm.style.transition = 'none';
+                const fullCoverEl = this.dom.fullCoverOverlay;
+                const fullCoverOpen = fullCoverEl && !fullCoverEl.classList.contains('hidden');
+                if (fullCoverOpen) {
+                    isEdgeSwipeFromFullCover = true;
                 } else {
-                    this.content.style.transition = 'none';
+                    isEdgeSwipeFromSoundMash = this.dom.soundmashView?.classList.contains('active') ?? false;
+                    if (isEdgeSwipeFromSoundMash) {
+                        const sm = this.dom.soundmashView;
+                        if (sm) sm.style.transition = 'none';
+                    } else {
+                        this.content.style.transition = 'none';
+                    }
                 }
                 return;
             }
 
-            const holdMsFull = 480;   /* hold anywhere on row/item */
+            const holdMsFull = 480;   /* hold anywhere on row */
             const holdMsCover = Math.round(holdMsFull * 0.7); /* 70% when on cover */
 
-            // 2. Queue item: long-press anywhere -> Now Playing; on cover 70% of that time
+            // 2. Queue item: long-press is only for reorder (handled in app.js). Do not open NP or full-cover.
             const queueItem = e.target.closest('.queue-item');
-            if (queueItem) {
-                const idx = parseInt(queueItem.getAttribute('data-index'), 10);
-                const track = store.state.queue && store.state.queue[idx];
-                if (track) {
-                    const onCover = !!e.target.closest('.queue-item-cover');
-                    const delay = onCover ? holdMsCover : holdMsFull;
-                    longPressTimer = setTimeout(() => {
-                        if (!isHorizontal) {
-                            longPressTriggered = true;
-                            this.showNowPlaying(track);
-                            Haptics.heavy();
-                        }
-                        longPressTimer = null;
-                    }, delay);
-                }
-                return;
-            }
+            if (queueItem) return;
 
-            // 3. Song row: long-press anywhere -> NP; on cover 70% of that time; short tap 3-dots still opens action menu
+            // 3. Song row: long-press on cover -> full-resolution cover overlay; elsewhere -> Now Playing
             if (row) {
                 activeRow = row;
                 row.style.transition = 'none';
@@ -909,13 +1011,18 @@ export class UI {
                     if (!isHorizontal) {
                         longPressTriggered = true;
                         const track = typeof window.getTrackFromCurrentContext === 'function' ? window.getTrackFromCurrentContext(trackId) : null;
-                        this.showNowPlaying(track ?? undefined);
-                        Haptics.heavy();
+                        if (onCover && track) {
+                            this.showFullCoverView(Resolver.getCoverUrl(track));
+                            Haptics.heavy();
+                        } else {
+                            this.showNowPlaying(track ?? undefined);
+                            Haptics.heavy();
+                        }
+                        longPressTimer = null;
                     }
-                    longPressTimer = null;
                 }, delay);
             }
-        }, { passive: true });
+        }, { passive: true, capture: true });
 
         document.addEventListener('touchmove', (e) => {
             const touch = e.touches[0];
@@ -931,9 +1038,10 @@ export class UI {
             // Edge Swipe Handling
             if (isEdgeSwipe) {
                 if (e.cancelable) e.preventDefault();
+                if (isEdgeSwipeFromFullCover) return; // no visual drag for full-cover; just close on touchend
                 const move = Math.max(0, diffX);
                 if (isEdgeSwipeFromSoundMash) {
-                    const sm = document.getElementById('soundmash-view');
+                    const sm = this.dom.soundmashView;
                     if (sm) sm.style.transform = `translateX(${move}px)`;
                 } else {
                     this.content.style.transform = `translateX(${move}px)`;
@@ -970,8 +1078,13 @@ export class UI {
                 const diffX = e.changedTouches[0].clientX - startX;
                 const threshold = window.innerWidth * 0.12;
 
-                if (isEdgeSwipeFromSoundMash) {
-                    const sm = document.getElementById('soundmash-view');
+                if (isEdgeSwipeFromFullCover) {
+                    if (diffX > threshold) {
+                        this.vibrate(20);
+                        this.hideFullCoverView();
+                    }
+                } else if (isEdgeSwipeFromSoundMash) {
+                    const sm = this.dom.soundmashView;
                     if (sm) {
                         sm.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
                         sm.style.transform = 'translateX(0)';
@@ -982,15 +1095,18 @@ export class UI {
                         this.showView('home', false, 'backward');
                     }
                 } else {
-                    this.content.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
-                    this.content.style.transform = 'translateX(0)';
+                    if (this.dom.content) this.dom.content.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
+                    if (this.dom.content) this.dom.content.style.transform = 'translateX(0)';
                     if (diffX > threshold) {
                         this.vibrate(20);
-                        this.navigateBack();
+                        if (this.currentView === 'artist-detail') this.showView('artists', false, 'backward');
+                        else if (this.currentView === 'playlist-detail') this.showView('playlists', false, 'backward');
+                        else this.showView('home', false, 'backward');
                     }
                 }
                 isEdgeSwipe = false;
                 isEdgeSwipeFromSoundMash = false;
+                isEdgeSwipeFromFullCover = false;
                 return;
             }
 
@@ -1003,47 +1119,17 @@ export class UI {
                     this.currentView === 'home' && (store.state.libraryOrder || 'date_added') === 'favorites_first';
 
                 if (isFavFirstAdd) {
-                    // Exit animation: slide row left off screen, then toggle and run entrance after re-render
                     Haptics.tick();
                     this.showToast('Added to Favourites');
-                    window._favFirstExitTrackId = trackId;
-                    activeRow.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
-                    activeRow.offsetHeight; // force reflow so browser commits "from" state before "to"
-                    activeRow.style.transform = 'translateX(-100vw)';
-                    const rowForEnd = activeRow;
-                    const onExitEnd = () => {
-                        rowForEnd.removeEventListener('transitionend', onExitEnd);
-                        if (trackId) {
-                            store.toggleFavourite(trackId);
-                            window._pendingFavFirstEntranceTrackId = trackId;
-                        }
-                        window._favFirstExitTrackId = undefined;
-                        if (rowForEnd.parentElement) rowForEnd.parentElement.classList.remove('is-swiping');
-                    };
-                    activeRow.addEventListener('transitionend', onExitEnd, { once: true });
+                    if (typeof window.scheduleFavFirstAnimation === 'function') window.scheduleFavFirstAnimation(trackId, activeRow);
                     activeRow = null;
                 } else {
-                    // Fast swipe add-to-fav (favorites_first): same exit/entrance as isFavFirstAdd
                     const fastSwipeFavFirstAdd = !isHorizontal && diff < -70 && !isFav &&
                         this.currentView === 'home' && (store.state.libraryOrder || 'date_added') === 'favorites_first';
                     if (fastSwipeFavFirstAdd) {
                         Haptics.tick();
                         this.showToast('Added to Favourites');
-                        window._favFirstExitTrackId = trackId;
-                        activeRow.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
-                        activeRow.offsetHeight;
-                        activeRow.style.transform = 'translateX(-100vw)';
-                        const rowForEnd = activeRow;
-                        const onExitEnd = () => {
-                            rowForEnd.removeEventListener('transitionend', onExitEnd);
-                            if (trackId) {
-                                store.toggleFavourite(trackId);
-                                window._pendingFavFirstEntranceTrackId = trackId;
-                            }
-                            window._favFirstExitTrackId = undefined;
-                            if (rowForEnd.parentElement) rowForEnd.parentElement.classList.remove('is-swiping');
-                        };
-                        activeRow.addEventListener('transitionend', onExitEnd, { once: true });
+                        if (typeof window.scheduleFavFirstAnimation === 'function') window.scheduleFavFirstAnimation(trackId, activeRow);
                         activeRow = null;
                     } else {
                         // Standard behavior: return to 0 and optionally toggle
@@ -1108,10 +1194,11 @@ export class UI {
 
         // Action Menu Swipe-to-Dismiss logic
         this.initBottomSheetGestures();
+        this.bindFullCoverOverlay();
     }
 
     static initNowPlayingGestures() {
-        const npView = document.getElementById('now-playing-view');
+        const npView = this.dom.nowPlayingView;
         if (!npView) return;
 
         let startY = 0;
@@ -1151,7 +1238,7 @@ export class UI {
             }
         }, { passive: true });
 
-        const npArt = document.getElementById('np-art');
+        const npArt = this.dom.npArt;
         if (npArt) {
             let coverStartTime = 0, coverStartX = 0, coverStartY = 0, coverMaxDelta = 0;
             let coverTapHandled = false; /* avoid double-fire when touch triggers click */
@@ -1160,10 +1247,8 @@ export class UI {
                 Haptics.tick();
                 window.playTrack(UI._npDisplayTrack.id);
                 UI._npDisplayTrack = null;
-                const npViewEl = document.getElementById('now-playing-view');
-                if (npViewEl) npViewEl.classList.remove('np-preview');
-                const npSeekEl = document.getElementById('np-seek-container');
-                if (npSeekEl) npSeekEl.classList.add('np-timeline-expanded');
+                if (this.dom.nowPlayingView) this.dom.nowPlayingView.classList.remove('np-preview');
+                if (this.dom.npSeekContainer) this.dom.npSeekContainer.classList.add('np-timeline-expanded');
                 document.body.classList.add('np-timeline-expanded');
                 return true;
             };
@@ -1205,43 +1290,41 @@ export class UI {
     }
 
     static initOmniIsland() {
-        this.island = document.getElementById('omni-island');
-        this.anchor = document.getElementById('omni-anchor');
-        this.omniPrev = document.getElementById('omni-prev');
-        this.omniNext = document.getElementById('omni-next');
-        this.omniProgress = document.getElementById('omni-progress');
+        this.island = this.dom.omniIsland;
+        this.anchor = this.dom.omniAnchor;
+        this.omniPrev = this.dom.omniPrev;
+        this.omniNext = this.dom.omniNext;
+        this.omniProgress = this.dom.omniProgress;
         
         if (!this.island || !this.anchor) return;
 
         // Sync progress track (and time labels) to collapsed state on load so labels are not visible before first touch
-        const omniProgressTrack = document.getElementById('omni-progress-track');
+        const omniProgressTrack = this.dom.omniProgressTrack;
         if (omniProgressTrack) {
             omniProgressTrack.style.transition = 'opacity 0.28s ease';
-            omniProgressTrack.style.opacity = (this.isIslandActive && !this.islandUserCollapsed) ? '1' : '0';
+            omniProgressTrack.style.opacity = this.isIslandActive ? '1' : '0';
         }
 
         this.initOmniGestures();
     }
 
     static initOmniGestures() {
-        const island = document.getElementById('omni-island');
-        const touchArea = document.getElementById('omni-touch-area');
-        const ribbon = document.getElementById('omni-nav-ribbon');
-        const label = document.getElementById('omni-label');
+        const island = this.dom.omniIsland;
+        const touchArea = this.dom.omniTouchArea;
+        const ribbon = this.dom.omniNavRibbon;
+        const label = this.dom.omniLabel;
         const items = document.querySelectorAll('.omni-nav-item');
         if (!island || !touchArea || !ribbon || !label) return;
 
         this._isHolding = false;
         this._startedInside = false;
         this._activeNavView = null;
+        this._lastActiveNavView = null;
         this._startY = 0;
         this._currentY = 0;
-        this._soundMashHoldTimer = null;
-        this._soundMashHoldTimerStarted = false;
-        this._soundMashOpenedThisGesture = false;
 
         const startBloom = (e) => {
-            if (document.getElementById('soundmash-view')?.classList.contains('active')) {
+            if (this.dom.soundmashView?.classList.contains('active')) {
                 e.preventDefault();
                 return;
             }
@@ -1251,12 +1334,9 @@ export class UI {
                                  touch.clientY >= rect.top && touch.clientY <= rect.bottom;
 
             this._isHolding = true;
+            this._lastActiveNavView = null;
             this._startY = touch.clientY;
             this._currentY = this._startY;
-            this._soundMashHoldTimerStarted = false;
-            this._soundMashOpenedThisGesture = false;
-            if (this._soundMashHoldTimer) clearTimeout(this._soundMashHoldTimer);
-            this._soundMashHoldTimer = null;
             Haptics.tick();
             
             this._labelAnimTimer = setTimeout(() => {
@@ -1265,7 +1345,7 @@ export class UI {
                     label.classList.add('hovered');
                     label.style.opacity = '1';
                 }
-            }, 120);
+            }, 67);
 
             this._omniHoldTimer = setTimeout(() => {
                 // Only bloom if we haven't swiped up significantly
@@ -1274,12 +1354,16 @@ export class UI {
                     this.isBlooming = true;
 
                     island.style.width = '380px';
-                    
-                    const transport = document.getElementById('omni-transport');
-                    const metadata = document.getElementById('omni-metadata-container');
-                    const omniProgressTrack = document.getElementById('omni-progress-track');
+                    island.classList.remove('omni-seed');
 
+                    const transport = this.dom.omniTransport;
+                    const metadata = this.dom.omniMetadataContainer;
+                    const omniProgressTrack = this.dom.omniProgressTrack;
+                    const anchorIcon = this.dom.omniAnchorIcon;
+
+                    if (anchorIcon) anchorIcon.classList.remove('omni-grid-hint-pulse');
                     if (transport) {
+                        transport.style.transition = 'opacity 0.16s ease, filter 0.17s ease, transform 0.17s ease';
                         transport.style.filter = 'blur(12px)';
                         transport.style.opacity = '0';
                         transport.style.transform = 'scale(0.9)';
@@ -1289,7 +1373,7 @@ export class UI {
                         metadata.style.opacity = '0';
                     }
                     if (omniProgressTrack) {
-                        omniProgressTrack.style.transition = 'opacity 0.28s ease';
+                        omniProgressTrack.style.transition = 'opacity 0.16s ease';
                         omniProgressTrack.style.opacity = '0';
                     }
 
@@ -1297,8 +1381,9 @@ export class UI {
                     ribbon.style.opacity = '1';
                     ribbon.style.transform = 'scale(1)';
                     ribbon.style.filter = 'blur(0px)';
+                    this.updateOmniLabelVisibility();
                 }
-            }, 324);
+            }, 180);
         };
 
         const endHold = (e) => {
@@ -1314,82 +1399,45 @@ export class UI {
             
             if (this._omniHoldTimer) clearTimeout(this._omniHoldTimer);
             if (this._labelAnimTimer) clearTimeout(this._labelAnimTimer);
-            if (this._soundMashHoldTimer) clearTimeout(this._soundMashHoldTimer);
-            this._soundMashHoldTimer = null;
 
-            // 0. SWIPE GESTURES FOR NOW PLAYING (Instant Toggle with 15px deadzone)
+            // 0. SWIPE GESTURES: up = NP / preview play; down = back to all tracks (same as edge swipe from left)
             const deadzone = 15;
-            const expandSwipeThreshold = 10; // Softer threshold so slightly slower swipe still expands from dot
             if (this._isHolding && !this.isBlooming && this._startedInside && isHorizontalValid) {
-                const isNPActive = document.getElementById('now-playing-view')?.classList.contains('active');
+                const isNPActive = this.dom.nowPlayingView?.classList.contains('active');
 
-                // Swipe up when manually collapsed: uncollapse only (unless we opened SoundMash via hold)
-                if (deltaY < -expandSwipeThreshold && this.islandUserCollapsed) {
-                    if (this._soundMashOpenedThisGesture) {
-                        this.resetOmniIsland();
-                        return;
-                    }
-                    this.islandUserCollapsed = false;
-                    this.resetOmniIsland();
-                    return;
-                }
                 if (deltaY < -deadzone && !isNPActive) {
                     this.showNowPlaying();
                     this.resetOmniIsland();
                     return;
-                } else if (deltaY > deadzone && isNPActive) {
-                    this.hideNowPlaying();
+                }
+                if (deltaY < -deadzone && isNPActive && UI._npDisplayTrack) {
+                    window.playTrack(UI._npDisplayTrack.id);
+                    UI._npDisplayTrack = null;
+                    if (this.dom.nowPlayingView) this.dom.nowPlayingView.classList.remove('np-preview');
+                    if (this.dom.npSeekContainer) this.dom.npSeekContainer.classList.add('np-timeline-expanded');
+                    document.body.classList.add('np-timeline-expanded');
                     this.resetOmniIsland();
                     return;
-                } else if (deltaY < -deadzone && isNPActive) {
-                    if (UI._npDisplayTrack) {
-                        window.playTrack(UI._npDisplayTrack.id);
-                        UI._npDisplayTrack = null;
-                        const npViewEl = document.getElementById('now-playing-view');
-                        if (npViewEl) npViewEl.classList.remove('np-preview');
-                        const npSeekEl = document.getElementById('np-seek-container');
-                        if (npSeekEl) npSeekEl.classList.add('np-timeline-expanded');
-                        document.body.classList.add('np-timeline-expanded');
-                    }
+                }
+                // Swipe down: same as edge swipe from left — go back (artist-detail → artists, playlist-detail → playlists, else home)
+                if (deltaY > deadzone) {
+                    const targetView = this.currentView === 'artist-detail' ? 'artists' : this.currentView === 'playlist-detail' ? 'playlists' : 'home';
+                    if (this.currentView !== targetView) this.vibrate(20);
+                    this.showView(targetView, false, 'backward');
                     this.resetOmniIsland();
                     return;
                 }
             }
 
-            // 0b. SWIPE DOWN: collapse playback bar to blank (seed) form when not closing Now Playing
-            const isNPActive = document.getElementById('now-playing-view')?.classList.contains('active');
-            if (this._isHolding && !this.isBlooming && this._startedInside && isHorizontalValid &&
-                this.isIslandActive && !isNPActive && deltaY > deadzone) {
-                this.islandUserCollapsed = true;
-                this.resetOmniIsland();
-                return;
-            }
-            
-            // 1. COORDINATE-BASED TRANSPORT (disabled when manually collapsed)
-            if (this._isHolding && !this.isBlooming && isInside) {
-                const tapExpandDeadzone = 12;
-                if (this.islandUserCollapsed) {
-                    if (Math.abs(deltaY) <= tapExpandDeadzone) {
-                        this.islandUserCollapsed = false;
-                        this.resetOmniIsland();
-                        return;
-                    }
-                    return;
-                }
-
+            // 1. COORDINATE-BASED TRANSPORT — only when expanded; when collapsed, tap does nothing (keep grid icon)
+            if (this._isHolding && !this.isBlooming && isInside && this.isIslandActive) {
                 const relX = (touch.clientX - rect.left) / rect.width;
-                let zone = 'anchor'; // Default
-                
-                if (this.isIslandActive) {
-                    if (relX < 0.35) zone = 'prev';
-                    else if (relX > 0.65) zone = 'next';
-                }
+                let zone = 'anchor';
+                if (relX < 0.35) zone = 'prev';
+                else if (relX > 0.65) zone = 'next';
 
                 Haptics.tick();
-                
-                // Subtle Inflation Feedback
-                const targetId = zone === 'prev' ? 'omni-prev' : zone === 'next' ? 'omni-next' : 'omni-anchor';
-                const visualEl = document.getElementById(targetId);
+                const visualEl = zone === 'prev' ? this.dom.omniPrev : zone === 'next' ? this.dom.omniNext : this.dom.omniAnchor;
                 if (visualEl) {
                     visualEl.classList.add('omni-tap-inflate');
                     setTimeout(() => visualEl.classList.remove('omni-tap-inflate'), 300);
@@ -1406,10 +1454,10 @@ export class UI {
                 }
             }
 
-            // 2. NAV COMMIT (Uses elementFromPoint but hides touchArea first)
-            if (this.isBlooming && this._activeNavView) {
+            // 2. NAV COMMIT — use _activeNavView, or _lastActiveNavView if finger released over blank (e.g. edge of Artists slot)
+            const viewToShow = this._activeNavView || this._lastActiveNavView;
+            if (this.isBlooming && viewToShow) {
                 Haptics.lock();
-                const viewToShow = this._activeNavView;
                 
                 // Check if selected entry equals current entry
                 if (viewToShow === this.currentView) {
@@ -1445,23 +1493,13 @@ export class UI {
                 }
             }
 
-            this.resetOmniIsland();
+            requestAnimationFrame(() => this.resetOmniIsland());
         };
 
         // Bind events to the Hitbox Layer
         touchArea.addEventListener('touchstart', (e) => {
             e.preventDefault();
             startBloom(e);
-        });
-
-        touchArea.addEventListener('click', (e) => {
-            if (document.getElementById('soundmash-view')?.classList.contains('active')) return;
-            if (this.islandUserCollapsed && this.isIslandActive) {
-                e.preventDefault();
-                e.stopPropagation();
-                this.islandUserCollapsed = false;
-                this.resetOmniIsland();
-            }
         });
 
         document.addEventListener('touchmove', (e) => {
@@ -1496,6 +1534,7 @@ export class UI {
                     if (view !== this._activeNavView) {
                         Haptics.tick();
                         this._activeNavView = view;
+                        this._lastActiveNavView = view;
 
                         // Reset siblings and set active state
                         items.forEach(i => {
@@ -1538,25 +1577,10 @@ export class UI {
                 }
             } else {
                 // SWIPE FEEDBACK: Subtle movement when swiping
-                // Only move if we started inside the island
                 if (!this._startedInside) return;
 
                 const deltaY = this._currentY - this._startY;
                 const isHorizontalValid = touch.clientX >= rect.left - 20 && touch.clientX <= rect.right + 20;
-
-                // When omnibar is in seed form (manually collapsed or no playback): swipe up and hold opens SoundMash (~392ms hold)
-                const deadzone = 15;
-                const soundMashHoldMs = 392;
-                const isSeedForm = this.islandUserCollapsed || !this.isIslandActive;
-                if (isSeedForm && deltaY < -deadzone && isHorizontalValid && !this._soundMashHoldTimerStarted) {
-                    this._soundMashHoldTimerStarted = true;
-                    this._soundMashHoldTimer = setTimeout(() => {
-                        this._soundMashHoldTimer = null;
-                        this.showSoundMash();
-                        this._soundMashOpenedThisGesture = true;
-                        this.resetOmniIsland();
-                    }, soundMashHoldMs);
-                }
 
                 if (!isHorizontalValid) {
                     island.style.transform = '';
@@ -1588,10 +1612,10 @@ export class UI {
      * Used for touch cancellation, interruption, or committing navigation.
      */
     static resetOmniIsland() {
-        const ribbon = document.getElementById('omni-nav-ribbon');
-        const transport = document.getElementById('omni-transport');
+        const ribbon = this.dom.omniNavRibbon;
+        const transport = this.dom.omniTransport;
         const items = document.querySelectorAll('.omni-nav-item');
-        const label = document.getElementById('omni-label');
+        const label = this.dom.omniLabel;
 
         if (this._omniHoldTimer) {
             clearTimeout(this._omniHoldTimer);
@@ -1603,34 +1627,41 @@ export class UI {
         }
 
         // Restore Playback UI
-        if (this.isIslandActive && !this.islandUserCollapsed) this.island.style.width = '250px';
-        else this.island.style.width = '56px';
+        if (this.isIslandActive) {
+            this.island.style.width = '250px';
+            this.island.classList.remove('omni-seed');
+        } else {
+            this.island.style.width = '56px';
+            this.island.classList.add('omni-seed');
+        }
 
         this.island.style.transform = ''; // Clear swipe displacement
 
-        const omniProgressTrack = document.getElementById('omni-progress-track');
-        const transportFadeDuration = '0.4s';
+        const omniProgressTrack = this.dom.omniProgressTrack;
+        const transportFadeDuration = '0.22s';
         if (transport) {
-            transport.style.transition = `opacity ${transportFadeDuration} ease, filter 0.3s ease, transform 0.3s ease`;
-            if (this.isIslandActive && !this.islandUserCollapsed) {
+            transport.style.transition = `opacity ${transportFadeDuration} ease, filter 0.17s ease, transform 0.17s ease`;
+            if (this.isIslandActive) {
                 transport.style.filter = 'blur(0px)';
                 transport.style.opacity = '1';
                 transport.style.transform = 'scale(1)';
                 transport.style.pointerEvents = 'auto';
             } else {
-                transport.style.opacity = '0';
+                transport.style.filter = 'blur(0px)';
+                transport.style.opacity = '1';
+                transport.style.transform = 'scale(1)';
                 transport.style.pointerEvents = 'none';
             }
         }
         if (omniProgressTrack) {
             omniProgressTrack.style.transition = `opacity ${transportFadeDuration} ease`;
-            omniProgressTrack.style.opacity = (this.isIslandActive && !this.islandUserCollapsed) ? '1' : '0';
+            omniProgressTrack.style.opacity = this.isIslandActive ? '1' : '0';
         }
 
-        const metadata = document.getElementById('omni-metadata-container');
+        const metadata = this.dom.omniMetadataContainer;
         if (metadata) {
             metadata.style.transition = `opacity ${transportFadeDuration} ease`;
-            metadata.style.opacity = (this.isIslandActive && !this.islandUserCollapsed) ? '1' : '0';
+            this.updateOmniMetadataVisibility();
         }
 
         if (ribbon) {
@@ -1639,12 +1670,19 @@ export class UI {
             ribbon.style.transform = 'scale(0.95)';
             ribbon.style.filter = 'blur(8px)';
         }
-        
+        this.updateOmniLabelVisibility();
+
         items.forEach(i => {
             i.classList.remove('active');
             i.style.transform = 'scale(1)';
             i.querySelector('i').style.color = '';
         });
+
+        // Seed state: show grid icon and urge pulse; playback state leaves play/pause as-is
+        const anchorIcon = this.dom.omniAnchorIcon;
+        if (!this.isIslandActive && anchorIcon) {
+            anchorIcon.className = 'fas fa-th-large text-lg text-[var(--text-main)] omni-grid-hint-pulse';
+        }
 
         // Always reset label to the current view's docked state
         if (label) {
@@ -1654,6 +1692,7 @@ export class UI {
         this.isBlooming = false;
         this._isHolding = false;
         this._activeNavView = null;
+        this._lastActiveNavView = null;
     }
 
     static showActionMenu(trackId) {
@@ -1664,23 +1703,34 @@ export class UI {
         if (!track) return;
 
         this.currentActionTrack = track;
-        const el = id => document.getElementById(id);
-        
-        if (el('action-track-title')) el('action-track-title').textContent = track.title;
-        if (el('action-track-artist')) {
-            el('action-track-artist').textContent = track.artist;
-            el('action-track-artist').classList.add('font-mono');
+        const actionTrackTitle = document.getElementById('action-track-title');
+        const actionTrackArtist = document.getElementById('action-track-artist');
+        const actionTrackArt = document.getElementById('action-track-art');
+        if (actionTrackTitle) actionTrackTitle.textContent = track.title;
+        if (actionTrackArtist) {
+            actionTrackArtist.textContent = track.artist;
+            actionTrackArtist.classList.add('font-mono');
         }
-        if (el('action-track-art')) el('action-track-art').src = Resolver.getCoverUrl(track);
+        if (actionTrackArt) actionTrackArt.src = Resolver.getCoverUrl(track);
 
         const isFav = store.state.favorites.includes(trackId);
-        if (el('action-fav-text')) el('action-fav-text').textContent = isFav ? 'Remove from Favourites' : 'Add to Favourites';
+        const actionFavText = document.getElementById('action-fav-text');
+        if (actionFavText) actionFavText.textContent = isFav ? 'Remove from Favourites' : 'Add to Favourites';
         
         const isInQueue = store.state.queue.some(t => t.id === trackId);
-        if (el('action-queue-text')) el('action-queue-text').textContent = isInQueue ? 'Remove from Queue' : 'Add to Queue';
+        const actionQueueText = document.getElementById('action-queue-text');
+        if (actionQueueText) actionQueueText.textContent = isInQueue ? 'Remove from Queue' : 'Add to Queue';
 
-        const menu = el('action-menu');
-        const sheet = el('action-menu-sheet');
+        const inPlaylistDetail = this.currentView === 'playlist-detail';
+        const actionDelete = document.getElementById('action-delete');
+        const actionAddToPlaylist = document.getElementById('action-add-to-playlist');
+        const actionRemoveFromPlaylist = document.getElementById('action-remove-from-playlist');
+        if (actionDelete) actionDelete.classList.toggle('hidden', inPlaylistDetail);
+        if (actionAddToPlaylist) actionAddToPlaylist.classList.toggle('hidden', inPlaylistDetail);
+        if (actionRemoveFromPlaylist) actionRemoveFromPlaylist.classList.toggle('hidden', !inPlaylistDetail);
+
+        const menu = this.dom.actionMenu;
+        const sheet = this.dom.actionMenuSheet;
         if (menu) menu.classList.remove('hidden');
         setTimeout(() => {
             if (menu) {
@@ -1692,50 +1742,13 @@ export class UI {
                 sheet.classList.remove('translate-y-full');
             }
         }, 10);
-
-        if (!this._menuBound) {
-            el('action-menu-overlay').onclick = () => this.hideActionMenu();
-            el('action-queue').onclick = () => { store.toggleQueue(this.currentActionTrack.id); this.hideActionMenu(); };
-            el('action-fav').onclick = () => {
-                const trackId = this.currentActionTrack.id;
-                const isFav = store.state.favorites.includes(trackId);
-                const onHomeFavFirst = this.currentView === 'home' && (store.state.libraryOrder || 'date_added') === 'favorites_first';
-                if (onHomeFavFirst && !isFav) {
-                    const container = document.getElementById('all-songs');
-                    const row = container && container.querySelector(`.song-row[data-id="${CSS.escape(trackId)}"]`);
-                    if (row) {
-                        this.hideActionMenu();
-                        Haptics.tick();
-                        this.showToast('Added to Favourites');
-                        window._favFirstExitTrackId = trackId;
-                        row.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
-                        row.offsetHeight;
-                        row.style.transform = 'translateX(-100vw)';
-                        const onExitEnd = () => {
-                            row.removeEventListener('transitionend', onExitEnd);
-                            store.toggleFavourite(trackId);
-                            window._pendingFavFirstEntranceTrackId = trackId;
-                            window._favFirstExitTrackId = undefined;
-                            if (row.parentElement) row.parentElement.classList.remove('is-swiping');
-                        };
-                        row.addEventListener('transitionend', onExitEnd, { once: true });
-                        return;
-                    }
-                }
-                store.toggleFavourite(trackId);
-                this.hideActionMenu();
-            };
-            el('action-delete').onclick = () => { if(confirm('Delete?')) store.deleteTrack(this.currentActionTrack.id); this.hideActionMenu(); };
-            el('action-edit-metadata').onclick = () => { this.hideActionMenu(); this.showMetadataEditor(this.currentActionTrack.id); };
-            this._menuBound = true;
-        }
     }
 
     static hideActionMenu() {
         if (document.activeElement) document.activeElement.blur();
         
-        const menu = document.getElementById('action-menu');
-        const sheet = document.getElementById('action-menu-sheet');
+        const menu = this.dom.actionMenu;
+        const sheet = this.dom.actionMenuSheet;
         if (sheet) {
             sheet.style.transform = ''; // Clear manual drag
             sheet.classList.add('translate-y-full');
@@ -1750,7 +1763,7 @@ export class UI {
     }
 
     static initBottomSheetGestures() {
-        const sheet = document.getElementById('action-menu-sheet');
+        const sheet = this.dom.actionMenuSheet;
         if (!sheet) return;
         
         let startY = 0;
@@ -1785,25 +1798,25 @@ export class UI {
     }
 
     static updateTransportControls(isPlaying) {
-        const mini = document.querySelector('#mini-play-btn i');
+        const mini = this.dom.miniPlayBtn?.querySelector('i');
         if (mini) {
             mini.className = isPlaying ? 'fas fa-pause' : 'fas fa-play ml-0.5';
         }
 
         const mode = store.state.repeatMode;
         const shuffleOn = store.state.shuffleEnabled;
-        const repeatBtns = [document.getElementById('mini-repeat-btn'), document.getElementById('omni-repeat-btn')].filter(b => b);
+        const repeatBtns = [this.dom.miniRepeatBtn, this.dom.omniRepeatBtn].filter(b => b);
         repeatBtns.forEach(b => {
             b.classList.toggle('text-[var(--accent)]', mode !== 'off');
             b.classList.toggle('text-[var(--text-dim)]', mode === 'off');
         });
-        const omniRepeatOne = document.getElementById('omni-repeat-one-indicator');
+        const omniRepeatOne = this.dom.omniRepeatOneIndicator;
         if (omniRepeatOne) omniRepeatOne.classList.toggle('hidden', mode !== 'one');
         
-        const indMini = document.getElementById('mini-repeat-one-indicator');
+        const indMini = this.dom.miniRepeatOneIndicator;
         if (indMini) indMini.classList.toggle('hidden', mode !== 'one');
 
-        const shuffleBtns = [document.getElementById('mini-shuffle-btn'), document.getElementById('omni-shuffle-btn')].filter(b => b);
+        const shuffleBtns = [this.dom.miniShuffleBtn, this.dom.omniShuffleBtn].filter(b => b);
         shuffleBtns.forEach(b => {
             b.classList.toggle('text-[var(--accent)]', shuffleOn);
             b.classList.toggle('text-[var(--text-dim)]', !shuffleOn);
@@ -1815,13 +1828,13 @@ export class UI {
         if (!t) return;
         this.editingTrack = t;
         
-        const modal = document.getElementById('metadata-editor');
-        const content = document.getElementById('metadata-editor-content');
+        const modal = this.dom.metadataEditor;
+        const content = this.dom.metadataEditorContent;
         
-        document.getElementById('edit-title').value = t.title;
-        document.getElementById('edit-artist').value = t.artist;
-        document.getElementById('edit-album').value = t.album;
-        document.getElementById('edit-cover-preview').src = Resolver.getCoverUrl(t);
+        this.dom.editTitle.value = t.title;
+        this.dom.editArtist.value = t.artist;
+        this.dom.editAlbum.value = t.album;
+        this.dom.editCoverPreview.src = Resolver.getCoverUrl(t);
 
         if (modal) modal.classList.remove('hidden');
         setTimeout(() => {
@@ -1832,11 +1845,11 @@ export class UI {
         }, 10);
 
         if (!this._edBound) {
-            document.getElementById('edit-save-btn').onclick = () => this.saveMetadata();
-            document.getElementById('edit-auto-fetch-btn').onclick = () => this.autoFetch();
+            this.dom.editSaveBtn.onclick = () => this.saveMetadata();
+            this.dom.editAutoFetchBtn.onclick = () => this.autoFetch();
             
-            const uploadBtn = document.getElementById('edit-upload-btn');
-            const fileInput = document.getElementById('edit-file-input');
+            const uploadBtn = this.dom.editUploadBtn;
+            const fileInput = this.dom.editFileInput;
             if (uploadBtn && fileInput) {
                 uploadBtn.onclick = () => { this.vibrate(10); fileInput.click(); };
                 fileInput.onchange = (e) => this.handleCoverUpload(e);
@@ -1846,8 +1859,8 @@ export class UI {
     }
 
     static hideMetadataEditor() {
-        const modal = document.getElementById('metadata-editor');
-        const content = document.getElementById('metadata-editor-content');
+        const modal = this.dom.metadataEditor;
+        const content = this.dom.metadataEditorContent;
         if (content) {
             content.classList.replace('scale-100', 'scale-95');
             content.classList.replace('opacity-100', 'opacity-0');
@@ -1858,13 +1871,13 @@ export class UI {
     static async saveMetadata() {
         if (!this.editingTrack) return;
         this.vibrate(30);
-        const status = document.getElementById('edit-status');
-        status.textContent = 'Saving Changes...';
+        const status = this.dom.editStatus;
+        if (status) status.textContent = 'Saving Changes...';
 
         const metadata = {
-            title: document.getElementById('edit-title').value,
-            artist: document.getElementById('edit-artist').value,
-            album: document.getElementById('edit-album').value
+            title: this.dom.editTitle?.value ?? '',
+            artist: this.dom.editArtist?.value ?? '',
+            album: this.dom.editAlbum?.value ?? ''
         };
 
         const success = await store.updateMetadata(this.editingTrack.id, metadata);
@@ -1879,24 +1892,26 @@ export class UI {
     static async autoFetch() {
         if (!this.editingTrack) return;
         this.vibrate(20);
-        const status = document.getElementById('edit-status');
-        const resultsContainer = document.getElementById('auto-fetch-results');
-        
-        status.textContent = 'Searching technical data...';
-        resultsContainer.innerHTML = '';
-        resultsContainer.classList.add('hidden');
+        const status = this.dom.editStatus;
+        const resultsContainer = this.dom.autoFetchResults;
+        if (status) status.textContent = 'Searching technical data...';
+        if (resultsContainer) {
+            resultsContainer.innerHTML = '';
+            resultsContainer.classList.add('hidden');
+        }
 
-        const query = `${document.getElementById('edit-title').value} ${document.getElementById('edit-artist').value}`;
+        const query = `${this.dom.editTitle?.value ?? ''} ${this.dom.editArtist?.value ?? ''}`;
         const results = await store.searchMetadata(query);
 
         if (!results || results.length === 0) {
-            status.textContent = 'No matches found';
+            if (status) status.textContent = 'No matches found';
             return;
         }
 
-        status.textContent = 'Matches found';
-        resultsContainer.classList.remove('hidden');
-        resultsContainer.innerHTML = results.slice(0, 5).map(r => `
+        if (status) status.textContent = 'Matches found';
+        if (resultsContainer) {
+            resultsContainer.classList.remove('hidden');
+            resultsContainer.innerHTML = results.slice(0, 5).map(r => `
             <div class="flex items-center p-3 hover:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] cursor-pointer transition-colors border border-transparent active:border-[var(--accent)]/30 active:bg-[var(--accent)]/5" onclick="UI.applyFetchedMetadata('${r.title.replace(/'/g, "\\'")}', '${r.artist.replace(/'/g, "\\'")}', '${r.album.replace(/'/g, "\\'")}', '${r.cover}')">
                 <img src="${r.cover}" class="w-10 h-10 rounded-[var(--radius-omni-xs)] object-cover shadow-md">
                 <div class="ml-3 truncate">
@@ -1905,16 +1920,17 @@ export class UI {
                 </div>
             </div>
         `).join('');
+        }
     }
 
     static applyFetchedMetadata(title, artist, album, cover) {
         this.vibrate(10);
-        document.getElementById('edit-title').value = title;
-        document.getElementById('edit-artist').value = artist;
-        document.getElementById('edit-album').value = album;
-        document.getElementById('edit-cover-preview').src = cover;
-        document.getElementById('auto-fetch-results').classList.add('hidden');
-        document.getElementById('edit-status').textContent = 'Metadata applied locally';
+        if (this.dom.editTitle) this.dom.editTitle.value = title;
+        if (this.dom.editArtist) this.dom.editArtist.value = artist;
+        if (this.dom.editAlbum) this.dom.editAlbum.value = album;
+        if (this.dom.editCoverPreview) this.dom.editCoverPreview.src = cover;
+        if (this.dom.autoFetchResults) this.dom.autoFetchResults.classList.add('hidden');
+        if (this.dom.editStatus) this.dom.editStatus.textContent = 'Metadata applied locally';
     }
 
     static async handleCoverUpload(e) {
@@ -1922,28 +1938,25 @@ export class UI {
         if (!file || !this.editingTrack) return;
         
         this.vibrate(20);
-        const status = document.getElementById('edit-status');
-        status.textContent = 'Uploading Cover Art...';
+        const status = this.dom.editStatus;
+        if (status) status.textContent = 'Uploading Cover Art...';
 
         const success = await store.uploadCover(this.editingTrack.id, file);
         if (success) {
             this.showToast('Cover Art Updated');
-            document.getElementById('edit-cover-preview').src = URL.createObjectURL(file);
-            status.textContent = 'Cover applied';
+            if (this.dom.editCoverPreview) this.dom.editCoverPreview.src = URL.createObjectURL(file);
+            if (status) status.textContent = 'Cover applied';
         } else {
-            status.textContent = 'Upload Failed';
+            if (status) status.textContent = 'Upload Failed';
         }
     }
 
     static formatTime(s) {
-        if (!s || isNaN(s)) return '0:00';
-        const m = Math.floor(s / 60);
-        const sc = Math.floor(s % 60);
-        return `${m}:${sc.toString().padStart(2, '0')}`;
+        return formatTime(s);
     }
 
     static showToast(m) {
-        const c = document.getElementById('toast-container');
+        const c = this.dom.toastContainer;
         if (!c) return;
         const t = document.createElement('div');
         // Omni-Island Styled Toast

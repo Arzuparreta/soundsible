@@ -22,21 +22,10 @@ export class Haptics {
      * @param {number|number[]} pattern - Duration or array of [vibrate, pause, ...]
      */
     static trigger(pattern) {
-        if (!store.state.hapticsEnabled) {
-            console.log("Haptics: Disabled in settings.");
-            return;
-        }
-        
+        if (!store.state.hapticsEnabled) return;
         try {
-            if ('vibrate' in navigator) {
-                const result = navigator.vibrate(pattern);
-                console.log(`Haptics: Triggered [${pattern}] -> Success: ${result}`);
-            } else {
-                console.warn("Haptics: navigator.vibrate not supported on this device.");
-            }
-        } catch (err) {
-            console.warn("Haptics: Interaction failed or blocked by browser policy.", err);
-        }
+            if ('vibrate' in navigator) navigator.vibrate(pattern);
+        } catch (_) {}
     }
 
     // Semantic Aliases

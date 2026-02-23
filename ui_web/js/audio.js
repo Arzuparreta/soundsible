@@ -159,12 +159,17 @@ class AudioEngine {
     }
 
     async prev() {
-        // Prev is tricky without a history stack, for now we just restart current track
-        // if we are more than 3 seconds in, otherwise we can't do much without a proper history.
         if (this.audio.currentTime > 3) {
             this.audio.currentTime = 0;
-        } else {
-            console.log("Prev track (Not implemented: History stack needed)");
+            return;
+        }
+        if (this.currentContext && this.currentContext.length > 0 && store.state.currentTrack) {
+            const currentIndex = this.currentContext.findIndex(t => t.id === store.state.currentTrack.id);
+            if (currentIndex > 0) {
+                const prevTrack = this.currentContext[currentIndex - 1];
+                this.playTrack(prevTrack);
+                return;
+            }
         }
     }
 

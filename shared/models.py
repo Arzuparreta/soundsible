@@ -214,6 +214,69 @@ class LibraryMetadata:
             self.last_updated = datetime.utcnow().isoformat()
         return True
 
+    def remove_from_playlist(self, playlist_name: str, track_id: str) -> bool:
+        """
+        Remove track from playlist.
+        
+        Returns:
+            True if removed or playlist didn't contain track, False if playlist doesn't exist
+        """
+        if playlist_name not in self.playlists:
+            return False
+        ids = self.playlists[playlist_name]
+        if track_id in ids:
+            ids.remove(track_id)
+            self.last_updated = datetime.utcnow().isoformat()
+        return True
+
+    def delete_playlist(self, name: str) -> bool:
+        """
+        Delete a playlist by name.
+        
+        Returns:
+            True if deleted, False if not found
+        """
+        if name not in self.playlists:
+            return False
+        del self.playlists[name]
+        self.last_updated = datetime.utcnow().isoformat()
+        return True
+
+    def rename_playlist(self, old_name: str, new_name: str) -> bool:
+        """
+        Rename a playlist.
+        
+        Returns:
+            True if renamed, False if old name not found or new name already exists
+        """
+        if old_name not in self.playlists or new_name in self.playlists:
+            return False
+        self.playlists[new_name] = self.playlists.pop(old_name)
+        self.last_updated = datetime.utcnow().isoformat()
+        return True
+
+    def set_playlist_tracks(self, name: str, track_ids: List[str]) -> bool:
+        """
+        Set the ordered list of track IDs for a playlist (used for reorder).
+        
+        Returns:
+            True if set, False if playlist doesn't exist
+        """
+        if name not in self.playlists:
+            return False
+        self.playlists[name] = list(track_ids)
+        self.last_updated = datetime.utcnow().isoformat()
+        return True
+
+    def reorder_playlists(self, ordered_names: List[str]) -> None:
+        """Rebuild playlists dict in the given order (preserves only listed names)."""
+        new_playlists = {}
+        for name in ordered_names:
+            if name in self.playlists:
+                new_playlists[name] = self.playlists[name]
+        self.playlists = new_playlists
+        self.last_updated = datetime.utcnow().isoformat()
+
 
 @dataclass
 class PlayerConfig:

@@ -433,6 +433,10 @@ WEB_UI_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ui_web')
 def serve_web_player():
     return send_from_directory(WEB_UI_PATH, 'index.html')
 
+@app.route('/player/desktop/')
+def serve_web_player_desktop():
+    return send_from_directory(WEB_UI_PATH, 'desktop.html')
+
 @app.route('/player/<path:path>')
 def serve_web_player_assets(path):
     return send_from_directory(WEB_UI_PATH, path)
@@ -1240,6 +1244,129 @@ def toggle_favourite():
         
     is_fav = favourites_manager.toggle(track_id)
     return jsonify({"status": "success", "is_favourite": is_fav})
+
+
+# --- Playlist Endpoints ---
+
+def _ensure_lib_metadata():
+    """Ensure library and metadata are loaded; return (lib, metadata) or (None, None)."""
+    lib, _, _ = get_core()
+    if not lib.metadata:
+        lib.sync_library()
+    return lib, lib.metadata if lib else None
+
+
+@app.route('/api/library/playlists', methods=['POST'])
+def create_playlist():
+    """Create a new empty playlist."""
+    lib, metadata = _ensure_lib_metadata()
+    if not metadata:
+        return jsonify({"error": "Library not loaded"}), 404
+    data = request.json or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    if name in metadata.playlists:
+        return jsonify({"error": "Playlist already exists"}), 409
+    metadata.create_playlist(name)
+    lib._save_metadata()
+    socketio.emit('library_updated')
+    return jsonify({"status": "success", "playlists": metadata.playlists})
+
+
+@app.route('/api/library/playlists', methods=['PATCH'])
+def reorder_playlists():
+    """Set playlist order. Body: { \"order\": [\"name1\", \"name2\", ...] }."""
+    lib, metadata = _ensure_lib_metadata()
+    if not metadata:
+        return jsonify({"error": "Library not loaded"}), 404
+    data = request.json or {}
+    order = data.get('order')
+    if not isinstance(order, list):
+        return jsonify({"error": "order must be a list of playlist names"}), 400
+    metadata.reorder_playlists(order)
+    lib._save_metadata()
+    socketio.emit('library_updated')
+    return jsonify({"status": "success", "playlists": metadata.playlists})
+
+
+@app.route('/api/library/playlists/<path:name>/tracks', methods=['POST'])
+def add_track_to_playlist(name):
+    from urllib.parse import unquote
+    name = unquote(name)
+    lib, metadata = _ensure_lib_metadata()
+    if not metadata:
+        return jsonify({"error": "Library not loaded"}), 404
+    if name not in metadata.playlists:
+        return jsonify({"error": "Playlist not found"}), 404
+    data = request.json or {}
+    track_id = data.get('track_id')
+    if not track_id:
+        return jsonify({"error": "track_id is required"}), 400
+    if not metadata.add_to_playlist(name, track_id):
+        return jsonify({"error": "Add to playlist failed"}), 500
+    lib._save_metadata()
+    socketio.emit('library_updated')
+    return jsonify({"status": "success", "playlists": metadata.playlists})
+
+
+@app.route('/api/library/playlists/<path:name>/tracks/<track_id>', methods=['DELETE'])
+def remove_track_from_playlist(name, track_id):
+    from urllib.parse import unquote
+    name = unquote(name)
+    lib, metadata = _ensure_lib_metadata()
+    if not metadata:
+        return jsonify({"error": "Library not loaded"}), 404
+    if name not in metadata.playlists:
+        return jsonify({"error": "Playlist not found"}), 404
+    if not metadata.remove_from_playlist(name, track_id):
+        return jsonify({"error": "Remove from playlist failed"}), 500
+    lib._save_metadata()
+    socketio.emit('library_updated')
+    return jsonify({"status": "success", "playlists": metadata.playlists})
+
+
+@app.route('/api/library/playlists/<path:name>', methods=['PATCH'])
+def update_playlist(name):
+    """Rename playlist or set track order. Body: { \"name\": \"newName\" } or { \"track_ids\": [\"id1\", ...] }."""
+    from urllib.parse import unquote
+    name = unquote(name)
+    lib, metadata = _ensure_lib_metadata()
+    if not metadata:
+        return jsonify({"error": "Library not loaded"}), 404
+    if name not in metadata.playlists:
+        return jsonify({"error": "Playlist not found"}), 404
+    data = request.json or {}
+    if 'name' in data:
+        new_name = (data.get('name') or '').strip()
+        if not new_name:
+            return jsonify({"error": "name cannot be empty"}), 400
+        if not metadata.rename_playlist(name, new_name):
+            return jsonify({"error": "Rename failed (new name may already exist)"}), 409
+        name = new_name
+    if 'track_ids' in data:
+        track_ids = data.get('track_ids')
+        if not isinstance(track_ids, list):
+            return jsonify({"error": "track_ids must be a list"}), 400
+        metadata.set_playlist_tracks(name, list(track_ids))
+    lib._save_metadata()
+    socketio.emit('library_updated')
+    return jsonify({"status": "success", "playlists": metadata.playlists})
+
+
+@app.route('/api/library/playlists/<path:name>', methods=['DELETE'])
+def delete_playlist(name):
+    from urllib.parse import unquote
+    name = unquote(name)
+    lib, metadata = _ensure_lib_metadata()
+    if not metadata:
+        return jsonify({"error": "Library not loaded"}), 404
+    if not metadata.delete_playlist(name):
+        return jsonify({"error": "Playlist not found"}), 404
+    lib._save_metadata()
+    socketio.emit('library_updated')
+    return jsonify({"status": "success", "playlists": metadata.playlists})
+
 
 # --- Playback Endpoints ---
 

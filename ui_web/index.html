@@ -48,6 +48,8 @@
             --scroll-cue-thumb: rgba(255, 255, 255, 0.42);
             --omni-label-default: rgba(255, 255, 255, 0.2);
             --omni-label-hovered: rgba(255, 255, 255, 0.6);
+            --omni-label-shade: rgba(255, 255, 255, 0.04);
+            --omni-label-text-shadow: 0 0 10px rgba(0, 0, 0, 0.6), 0 1px 2px rgba(0, 0, 0, 0.4);
             --text-on-selection: #ffffff;
             --drop-target-bg: rgba(255, 255, 255, 0.06);
             --drop-target-border: rgba(255, 255, 255, 0.14);
@@ -78,9 +80,67 @@
             --scroll-cue-thumb: rgba(0, 0, 0, 0.35);
             --omni-label-default: rgba(0, 0, 0, 0.35);
             --omni-label-hovered: rgba(0, 0, 0, 0.6);
+            --omni-label-shade: rgba(0, 0, 0, 0.04);
+            --omni-label-text-shadow: 0 0 8px rgba(255, 255, 255, 0.7), 0 1px 2px rgba(255, 255, 255, 0.3);
             --text-on-selection: #1c1c1c;
             --drop-target-bg: rgba(0, 0, 0, 0.06);
             --drop-target-border: rgba(0, 0, 0, 0.12);
+        }
+
+        [data-theme="odst"] {
+            /* Content (e.g. under "All tracks") = card/surface; background = slightly darker + very subtle gradient to ODST orange */
+            --bg-deep: #1c2026;
+            --bg-deep-mid: #1d1f24;
+            --bg-deep-end: #1e1f21;
+            --bg-surface: rgba(32, 34, 42, 0.94);
+            --bg-card: #242830;
+            --bg-selection: rgba(201, 162, 39, 0.15);
+            --accent: #c9a227;
+            --secondary: #a88b3a;
+            --text-main: #e8e6e3;
+            --text-dim: #9a968f;
+            --glass-border: rgba(255, 255, 255, 0.06);
+            --shadow: rgba(0, 0, 0, 0.25);
+            --radius-omni: 28px;
+            --radius-omni-sm: 20px;
+            --radius-omni-sm-inset: 12px;
+            --radius-omni-xs: 14px;
+            --shadow-omni: 0 12px 32px rgba(0, 0, 0, 0.25);
+            --input-bg: rgba(0, 0, 0, 0.25);
+            --input-border: rgba(255, 255, 255, 0.06);
+            --placeholder: rgba(232, 230, 227, 0.45);
+            --overlay-bg: rgba(28, 32, 38, 0.92);
+            --sheet-bg: rgba(32, 34, 42, 0.96);
+            --text-on-accent: #1a1e28;
+            --nav-icon: rgba(232, 230, 227, 0.45);
+            --surface-overlay: rgba(255, 255, 255, 0.04);
+            --np-view-bg: rgba(32, 34, 42, 0.96);
+            --seek-track: rgba(255, 255, 255, 0.08);
+            --scroll-cue-thumb: rgba(232, 230, 227, 0.35);
+            --omni-label-default: rgba(255, 255, 255, 0.14);
+            --omni-label-hovered: rgba(255, 255, 255, 0.5);
+            --omni-label-shade: rgba(255, 255, 255, 0.04);
+            --omni-label-text-shadow: 0 0 10px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.35);
+            --text-on-selection: #1a1e28;
+            --drop-target-bg: rgba(255, 255, 255, 0.04);
+            --drop-target-border: rgba(255, 255, 255, 0.08);
+        }
+
+        html[data-theme="odst"],
+        html[data-theme="odst"] body {
+            /* Slightly darker than content; subtle gradient toward ODST orange at bottom */
+            background: linear-gradient(to bottom, var(--bg-deep) 0%, var(--bg-deep-mid) 55%, var(--bg-deep-end) 100%);
+            background-attachment: fixed;
+        }
+
+        html[data-theme="odst"] #initial-loader.initial-loader-bg,
+        html[data-theme="odst"] .initial-loader-bg#initial-loader {
+            background: linear-gradient(to bottom, var(--bg-deep) 0%, var(--bg-deep-mid) 55%, var(--bg-deep-end) 100%) !important;
+        }
+
+        #initial-loader.initial-loader-bg,
+        .initial-loader-bg#initial-loader {
+            background-color: var(--bg-deep);
         }
 
         html {
@@ -174,6 +234,22 @@
             display: none;
             opacity: 0;
             pointer-events: none;
+        }
+
+        /* Home/Artists: keep laid out so slide animation never waits on content (no display:none) */
+        .view-warm-hidden-left {
+            visibility: hidden;
+            pointer-events: none;
+            transform: translateX(-100%);
+            z-index: 0;
+            transition: none;
+        }
+        .view-warm-hidden-right {
+            visibility: hidden;
+            pointer-events: none;
+            transform: translateX(100%);
+            z-index: 0;
+            transition: none;
         }
 
         .view-incoming { z-index: 20 !important; }
@@ -305,6 +381,26 @@
             100% { transform: scale(1); }
         }
 
+        /* Seed state (56px pill): center transport content so anchor/icon are centered */
+        #omni-island.omni-seed #omni-transport {
+            justify-content: center;
+            padding-left: 0;
+            padding-right: 0;
+        }
+        /* Grid hint (seed state): subtle urge-to-hold pulse; only when collapsed */
+        @media (prefers-reduced-motion: no-preference) {
+            .omni-grid-hint-pulse {
+                animation: omni-grid-hint-pulse 2s ease-out infinite;
+            }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .omni-grid-hint-pulse { animation: none; }
+        }
+        @keyframes omni-grid-hint-pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.06); opacity: 0.92; }
+        }
+
         /* Queue reorder: drag clone (visual only; original row stays in DOM to keep touch target) */
         .queue-drag-clone {
             position: fixed;
@@ -348,6 +444,10 @@
             justify-content: center;
             pointer-events: none;
             z-index: 220;
+            transition: opacity 0.28s ease;
+        }
+        #omni-label-container.omni-label-hidden {
+            opacity: 0;
         }
 
         #omni-label {
@@ -357,9 +457,14 @@
             text-transform: uppercase;
             letter-spacing: 0.2em;
             color: var(--omni-label-default);
-            transition: transform 0.2s ease, 
-                        color 0.2s ease, 
-                        opacity 0.2s ease;
+            background: var(--omni-label-shade);
+            padding: 6px 12px;
+            border-radius: 999px;
+            text-shadow: var(--omni-label-text-shadow);
+            transition: transform 0.2s ease,
+                        color 0.2s ease,
+                        opacity 0.2s ease,
+                        background 0.2s ease;
             will-change: transform, color;
             white-space: nowrap;
             transform-origin: center;
@@ -536,9 +641,24 @@
             box-shadow: 0 0 16px var(--accent);
         }
     </style>
+    <script>
+        (function() {
+            try {
+                var raw = localStorage.getItem('soundsible_theme');
+                if (raw) {
+                    var theme = (typeof raw === 'string' && raw !== '') ? (function() { try { return JSON.parse(raw); } catch(e) { return null; } })() : null;
+                    if (theme && ['dark','light','odst'].indexOf(theme) !== -1) {
+                        document.documentElement.setAttribute('data-theme', theme);
+                        var meta = document.getElementById('meta-theme-color');
+                        if (meta) meta.setAttribute('content', theme === 'light' ? '#f5f5f5' : theme === 'odst' ? '#1c2026' : '#0d0d0f');
+                    }
+                }
+            } catch (e) {}
+        })();
+    </script>
 </head>
 <body style="background-color: var(--bg-deep); color: var(--text-main);">
-    <div id="initial-loader" class="fixed inset-0 z-[1000] flex flex-col items-center justify-center transition-opacity duration-700" style="background-color: var(--bg-deep);">
+    <div id="initial-loader" class="fixed inset-0 z-[1000] flex flex-col items-center justify-center transition-opacity duration-700 initial-loader-bg">
         <div class="relative w-24 h-24 mb-8">
             <div class="absolute inset-0 border-4 border-[var(--accent)]/10 rounded-full"></div>
             <div class="absolute inset-0 border-4 border-t-[var(--accent)] rounded-full animate-spin"></div>
@@ -569,10 +689,10 @@
             </div>
         </div>
 
-        <!-- ODST Music/YouTube toggle: fixed overlay, visible only when downloader view is active -->
-        <div id="dl-search-source-wrap" class="fixed bottom-24 right-6 z-[85] flex items-center gap-0 rounded-[var(--radius-omni-xs)] border border-[var(--input-border)] bg-[var(--input-bg)] backdrop-blur-xl overflow-hidden pointer-events-auto hidden transition-opacity duration-200" aria-hidden="true" style="box-shadow: var(--shadow-omni);">
+        <!-- ODST Music/YouTube toggle: fixed overlay, visible only when downloader view is active; both options use theme accent for intuitive controls -->
+        <div id="dl-search-source-wrap" class="fixed bottom-24 right-6 z-[85] flex items-center gap-0 rounded-[var(--radius-omni-xs)] border border-[var(--accent)]/30 bg-[var(--input-bg)] backdrop-blur-xl overflow-hidden pointer-events-auto hidden transition-opacity duration-200" aria-hidden="true" style="box-shadow: var(--shadow-omni);">
             <button type="button" id="dl-search-source-music" class="dl-search-source-btn px-4 py-2 text-xs font-bold bg-[var(--accent)] text-[var(--text-on-accent)] transition-colors" aria-pressed="true">Music</button>
-            <button type="button" id="dl-search-source-youtube" class="dl-search-source-btn px-4 py-2 text-xs font-bold text-[var(--nav-icon)] hover:text-[var(--text-main)] hover:bg-[var(--surface-overlay)] transition-colors" aria-pressed="false">YouTube</button>
+            <button type="button" id="dl-search-source-youtube" class="dl-search-source-btn px-4 py-2 text-xs font-bold bg-[var(--accent)]/15 text-[var(--accent)] hover:bg-[var(--accent)]/25 transition-colors" aria-pressed="false">YouTube</button>
         </div>
         <main id="content" class="flex-1 relative">
             <div id="view-home" class="view">
@@ -581,7 +701,7 @@
                 </div>
                 <div id="all-songs" class="space-y-2"></div>
             </div>
-            <div id="view-artists" class="view hidden">
+            <div id="view-artists" class="view view-warm-hidden-right">
                 <div id="all-artists" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6"></div>
             </div>
             <div id="view-artist-detail" class="view hidden">
@@ -603,9 +723,34 @@
                 </section>
             </div>
             <div id="view-playlists" class="view hidden">
-                <div class="glass-view rounded-[var(--radius-omni)] p-8 border border-[var(--glass-border)]">
-                    <p class="text-[var(--text-dim)] text-sm text-center">Coming soon</p>
+                <div class="glass-view rounded-[var(--radius-omni)] p-3 border border-[var(--glass-border)] mb-4 flex gap-2 items-center">
+                    <input type="text" id="playlist-search-input" placeholder="Search playlists..." class="playlist-search-input input-theme flex-1 rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium text-[var(--text-main)]" />
+                    <button type="button" id="playlist-create-btn" class="create-playlist-btn flex-shrink-0 px-4 py-3 rounded-[var(--radius-omni-xs)] bg-[var(--accent)] text-[var(--text-on-accent)] font-bold text-sm transition-all active:scale-95" onclick="typeof createPlaylistPrompt==='function'&&createPlaylistPrompt()"><i class="fas fa-plus mr-1"></i>New</button>
                 </div>
+                <div id="playlist-list-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4"></div>
+            </div>
+            <div id="view-playlist-detail" class="view hidden">
+                <button type="button" id="playlist-detail-back" class="flex items-center text-[var(--secondary)] font-bold mb-4 hover:underline focus:outline-none" onclick="typeof UI!=='undefined'&&UI.navigateBack&&UI.navigateBack()">
+                    <i class="fas fa-chevron-left mr-2"></i>Back
+                </button>
+                <div id="playlist-detail-hero" class="flex flex-col sm:flex-row items-center sm:items-end gap-6 mb-6">
+                    <div id="playlist-detail-cover" class="w-32 h-32 sm:w-40 sm:h-40 rounded-[var(--radius-omni-sm)] shadow-2xl bg-cover bg-center border border-[var(--glass-border)] bg-[var(--bg-card)] flex-shrink-0 flex items-center justify-center">
+                        <i class="fas fa-layer-group text-4xl text-[var(--text-dim)]/40 hidden" id="playlist-detail-cover-icon"></i>
+                    </div>
+                    <div class="flex-1 min-w-0 text-center sm:text-left">
+                        <h1 id="playlist-detail-title" class="text-2xl sm:text-4xl font-black tracking-tighter leading-none text-[var(--text-main)] truncate">Playlist</h1>
+                        <p id="playlist-detail-meta" class="text-[var(--text-dim)] text-sm mt-1 font-mono">0 tracks</p>
+                        <div class="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
+                            <button type="button" id="playlist-detail-rename-btn" class="px-3 py-1.5 rounded-lg bg-[var(--surface-overlay)] text-[var(--text-main)] text-xs font-bold hover:opacity-90 transition-opacity" onclick="typeof renamePlaylistPrompt==='function'&&renamePlaylistPrompt()">Rename</button>
+                            <button type="button" id="playlist-detail-duplicate-btn" class="px-3 py-1.5 rounded-lg bg-[var(--surface-overlay)] text-[var(--text-main)] text-xs font-bold hover:opacity-90 transition-opacity" onclick="typeof duplicatePlaylistPrompt==='function'&&duplicatePlaylistPrompt()">Duplicate</button>
+                            <button type="button" id="playlist-detail-delete-btn" class="px-3 py-1.5 rounded-lg bg-red-500/15 text-red-400 text-xs font-bold hover:bg-red-500/25 transition-colors" onclick="typeof deletePlaylistConfirm==='function'&&deletePlaylistConfirm()">Delete</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="glass-view rounded-[var(--radius-omni)] p-3 border border-[var(--glass-border)] mb-4">
+                    <input type="text" id="playlist-detail-search-input" placeholder="Search in playlist..." class="playlist-detail-search-input input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium text-[var(--text-main)]" />
+                </div>
+                <div id="playlist-detail-tracks" class="space-y-2"></div>
             </div>
             <div id="view-favourites" class="view hidden">
                 <div id="fav-search-bar" class="glass-view rounded-[var(--radius-omni)] p-3 border border-[var(--glass-border)] mb-4">
@@ -698,14 +843,16 @@
                     <!-- Appearance -->
                     <div class="glass-view rounded-[var(--radius-omni)] p-6 border border-[var(--glass-border)] transition-all duration-200">
                         <h2 class="text-lg font-bold tracking-tight mb-4" style="letter-spacing: -0.02em;">Appearance</h2>
-                        <div class="settings-row flex justify-between items-center min-h-[44px]">
+                        <div class="settings-row flex justify-between items-center min-h-[44px] gap-4">
                             <div>
-                                <div class="text-sm font-medium text-[var(--text-main)]">Visual theme</div>
-                                <div class="text-xs text-[var(--text-dim)] mt-0.5">Light or Dark mode</div>
+                                <div class="text-sm font-medium text-[var(--text-main)]">Theme</div>
+                                <div class="text-xs text-[var(--text-dim)] mt-0.5">Visual theme</div>
                             </div>
-                            <button onclick="store.toggleTheme()" class="w-14 h-8 bg-[var(--bg-selection)] rounded-full relative p-1 transition-all duration-200 ease-out flex-shrink-0" aria-label="Toggle theme">
-                                <div class="w-6 h-6 bg-[var(--accent)] rounded-full shadow-lg transform transition-transform duration-300 ease-out translate-x-0" id="theme-indicator"></div>
-                            </button>
+                            <select id="settings-theme-select" class="input-theme rounded-[var(--radius-omni-xs)] px-4 py-2.5 text-sm font-medium text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors flex-shrink-0 min-w-[140px]" aria-label="Theme">
+                                <option value="dark">Dark</option>
+                                <option value="light">Light</option>
+                                <option value="odst">ODST</option>
+                            </select>
                         </div>
                     </div>
 
@@ -763,6 +910,10 @@
                                 <span class="text-sm text-[var(--text-dim)]">Host</span>
                                 <span id="active-host-display" class="font-mono text-xs text-[var(--secondary)]">localhost</span>
                             </div>
+                            <div class="settings-row flex justify-between items-center min-h-[44px] mt-2">
+                                <span class="text-sm text-[var(--text-dim)]">Desktop layout</span>
+                                <a href="/player/desktop/" class="text-sm font-bold text-[var(--accent)] hover:underline">Open Desktop mode</a>
+                            </div>
                         </div>
                     </div>
 
@@ -784,7 +935,7 @@
                         <button type="button" id="omni-shuffle-btn" class="w-full h-full flex items-center justify-center rounded-full text-[var(--text-dim)] transition-colors active:scale-90" aria-label="Shuffle"><i class="fas fa-shuffle text-sm"></i></button>
                     </div>
                     <div class="relative pointer-events-none">
-                        <div id="omni-island" class="glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all ease-[cubic-bezier(0.19,1,0.22,1)] overflow-hidden" style="width: 56px; height: 56px; border-radius: var(--radius-omni); transition-duration: 600ms;">
+                        <div id="omni-island" class="omni-seed glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all ease-[cubic-bezier(0.19,1,0.22,1)] overflow-hidden" style="width: 56px; height: 56px; border-radius: var(--radius-omni); transition-duration: 333ms;">
                             <div id="omni-progress-track" class="absolute bottom-0 left-[18px] right-[18px] h-[2px] cursor-pointer touch-manipulation" style="pointer-events: auto; touch-action: none;">
                                 <span id="omni-time-duration" class="absolute right-0 bottom-full mb-0.5 text-[9px] font-bold font-mono text-[var(--text-dim)] opacity-50 tracking-tighter whitespace-nowrap" aria-hidden="true">0:00</span>
                                 <span id="omni-time-current" class="absolute bottom-full mb-0.5 left-0 text-[9px] font-bold font-mono text-[var(--text-dim)] opacity-50 tracking-tighter whitespace-nowrap -translate-x-1/2" style="left: 0%;" aria-hidden="true">0:00</span>
@@ -801,13 +952,13 @@
                                     <i class="fas fa-backward-step text-xs text-[var(--text-dim)]"></i>
                                 </div>
                                 <div id="omni-anchor" class="w-14 h-14 flex-shrink-0 flex items-center justify-center relative pointer-events-none transition-transform z-50">
-                                    <i id="omni-anchor-icon" class="fas fa-command text-lg text-[var(--text-main)]"></i>
+                                    <i id="omni-anchor-icon" class="fas fa-th-large text-lg text-[var(--text-main)] omni-grid-hint-pulse" aria-hidden="true"></i>
                                 </div>
                                 <div id="omni-next" class="flex-1 h-full flex items-center justify-end opacity-0 scale-75 transition-all duration-300 hidden pointer-events-auto">
                                     <i class="fas fa-forward-step text-xs text-[var(--text-dim)]"></i>
                                 </div>
                             </div>
-                            <div id="omni-nav-ribbon" class="absolute inset-0 flex items-center justify-between px-4 opacity-0 scale-95 transition-all pointer-events-none" style="transition-duration: 360ms;">
+                            <div id="omni-nav-ribbon" class="absolute inset-0 flex items-center justify-between px-4 opacity-0 scale-95 transition-all pointer-events-none" style="transition-duration: 200ms;">
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="home"><i class="fas fa-home text-base text-[var(--nav-icon)]"></i></div>
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="favourites"><i class="fas fa-heart text-base text-[var(--nav-icon)]"></i></div>
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="playlists"><i class="fas fa-layer-group text-base text-[var(--nav-icon)]"></i></div>
@@ -885,6 +1036,15 @@
         </div>
     </div>
 
+    <!-- Full-resolution cover overlay (Spotify-style) -->
+    <div id="full-cover-overlay" class="fixed inset-0 z-[130] hidden flex items-center justify-center p-4 transition-opacity duration-300 ease-out touch-none overflow-hidden" style="background-color: var(--overlay-bg);">
+        <div id="full-cover-overlay-backdrop" class="absolute inset-0" aria-hidden="true"></div>
+        <div id="full-cover-overlay-content" class="relative flex flex-col items-center max-w-[min(90vw,400px)] w-full" onclick="event.stopPropagation()">
+            <div id="full-cover-image" class="w-full aspect-square max-w-[min(90vw,400px)] rounded-[var(--radius-omni)] bg-cover bg-center border border-[var(--glass-border)] shadow-[0_40px_80px_rgba(0,0,0,0.8)]" role="img" aria-label="Album art"></div>
+            <button type="button" id="full-cover-close-bottom" class="mt-4 py-2.5 min-h-[44px] text-[var(--text-dim)] active:text-[var(--text-main)] hover:text-[var(--text-main)] font-bold text-xs uppercase tracking-widest transition-colors focus:outline-none bg-transparent border-0" aria-label="Close">Close</button>
+        </div>
+    </div>
+
     <!-- Action Menu -->
     <div id="action-menu" class="fixed inset-0 z-[250] hidden touch-none overflow-hidden">
         <div id="action-menu-overlay" class="absolute inset-0 backdrop-blur-[3.2px] transition-all duration-150 ease-out opacity-0" style="background-color: var(--overlay-bg);"></div>
@@ -901,9 +1061,22 @@
                 <button id="action-queue" class="w-full flex items-center space-x-4 p-4 active:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none text-[var(--text-main)]"><i class="fas fa-list-ul text-[var(--secondary)]"></i><span id="action-queue-text">Add to Queue</span></button>
                 <button id="action-edit-metadata" class="w-full flex items-center space-x-4 p-4 active:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none text-[var(--text-main)]"><i class="fas fa-pen-to-square text-purple-400"></i><span>Edit Metadata</span></button>
                 <button id="action-fav" class="w-full flex items-center space-x-4 p-4 active:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none text-[var(--text-main)]"><i class="fas fa-heart text-[var(--accent)]"></i><span id="action-fav-text">Favourite</span></button>
+                <button id="action-add-to-playlist" class="w-full flex items-center space-x-4 p-4 active:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none text-[var(--text-main)]"><i class="fas fa-layer-group text-[var(--secondary)]"></i><span>Add to playlist</span></button>
+                <button id="action-remove-from-playlist" class="w-full flex items-center space-x-4 p-4 active:bg-red-500/10 text-red-400 rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none hidden"><i class="fas fa-eject"></i><span>Remove from playlist</span></button>
                 <button id="action-delete" class="w-full flex items-center space-x-4 p-4 active:bg-red-500/10 text-red-400 rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none"><i class="fas fa-trash-can"></i><span>Delete Track</span></button>
             </div>
             <button onclick="UI.hideActionMenu()" class="w-full mt-8 py-4 text-[var(--text-dim)] font-bold hover:text-[var(--text-main)] transition-colors">Close</button>
+        </div>
+    </div>
+
+    <div id="add-to-playlist-picker" class="fixed inset-0 z-[260] hidden flex items-center justify-center p-4 touch-none" style="background-color: var(--overlay-bg);">
+        <div id="add-to-playlist-picker-backdrop" class="absolute inset-0" style="backdrop-filter: blur(4px);"></div>
+        <div class="add-to-playlist-picker-sheet glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl w-full max-w-sm overflow-hidden relative">
+            <div class="p-4 border-b border-[var(--glass-border)]">
+                <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Add to playlist</h3>
+            </div>
+            <div id="add-to-playlist-picker-list" class="max-h-64 overflow-y-auto p-2 space-y-1 custom-scrollbar"></div>
+            <button type="button" id="add-to-playlist-picker-close" class="w-full p-4 text-sm font-bold text-[var(--text-dim)] active:bg-[var(--surface-overlay)] transition-colors border-t border-[var(--glass-border)]">Cancel</button>
         </div>
     </div>
 
@@ -964,44 +1137,6 @@
 
     <!-- Toasts -->
     <div id="toast-container" class="fixed bottom-32 left-1/2 -translate-x-1/2 z-[400] flex flex-col items-center space-y-4 pointer-events-none w-full max-w-xs"></div>
-
-    <!-- #region agent log -->
-    <script>
-    (function debugViewport() {
-        function send() {
-            var probe = document.createElement('div');
-            probe.style.cssText = 'position:absolute;pointer-events:none;padding-bottom:env(safe-area-inset-bottom);';
-            document.body.appendChild(probe);
-            var safeBottom = getComputedStyle(probe).paddingBottom;
-            document.body.removeChild(probe);
-            var vv = window.visualViewport;
-            var payload = {
-                sessionId: 'f60ea1',
-                runId: 'viewport-check',
-                hypothesisId: 'H2_H3_H4',
-                location: 'index.html:debugViewport',
-                message: 'Viewport and safe-area on load',
-                data: {
-                    innerHeight: window.innerHeight,
-                    visualViewportHeight: vv ? vv.height : null,
-                    bodyOffsetHeight: document.body.offsetHeight,
-                    docClientHeight: document.documentElement.clientHeight,
-                    safeAreaBottomComputed: safeBottom,
-                    gap: window.innerHeight - document.body.offsetHeight
-                },
-                timestamp: Date.now()
-            };
-            fetch('http://127.0.0.1:7390/ingest/5e87ad09-2e12-436a-ac69-c14c6b45cb46', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f60ea1' },
-                body: JSON.stringify(payload)
-            }).catch(function(){});
-        }
-        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', send);
-        else setTimeout(send, 0);
-    })();
-    </script>
-    <!-- #endregion -->
 
     <script type="module" src="js/app.js"></script>
 </body>
