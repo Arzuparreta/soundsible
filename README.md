@@ -1,6 +1,6 @@
 # <img src="branding/logo-app.png" alt="Soundsible" width="48" height="48" align="center"> **Soundsible**
 
-**The Cloud-Native Audiophile WebUI.**
+**The Self-Hosted, full featured Music Environment.**
 
 Soundsible Station is the flagship interface of the Soundsible ecosystem, a high-fidelity, self-hosted music platform for the post-streaming era. Engineered as a Progressive Web App (PWA) with native-grade performance, it transforms any browser into a dedicated audiophile console.
 
