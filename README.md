@@ -19,7 +19,7 @@ The **Station** is the primary, recommended interface for all users. It combines
 
 ### Use cases:
 - Full environment experience: [**Tailscale**](https://github.com/tailscale/tailscale) **(Recommended)**
-   (Tailscale let's you access your running API from anywhere in the world, so you can listen to your streamed music anywhere)
+   (Tailscale let's you access your running API from anywhere in the world, so you can listen to your streamed music anywhere) or;
 - Only local playback: No extra configuration needed.
    (Just download and enjoy your local music)
 
