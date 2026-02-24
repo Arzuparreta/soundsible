@@ -29,7 +29,7 @@ function escapeCssUrl(url) {
 
 /**
  * Shared library search: filter tracks by query (title, artist, album).
- * Same engine used by Home (ALL TRACKS) and Search tab — single source of truth.
+ * Same engine used by Library and Search tab — single source of truth.
  */
 export function filterLibraryByQuery(library, query) {
     const lib = library ?? [];
@@ -127,7 +127,7 @@ export function filterArtistsByQuery(library, query) {
     return names.filter(name => name.toLowerCase().includes(q));
 }
 
-/** Returns { name, track } for each artist (one representative track for cover). Used by Home mixed search. */
+/** Returns { name, track } for each artist (one representative track for cover). Used by Library mixed search. */
 export function getArtistsWithRepresentativeTrack(library) {
     const byArtist = {};
     (library || []).forEach(t => {
@@ -141,7 +141,7 @@ export function getArtistsWithRepresentativeTrack(library) {
     return Object.entries(byArtist).map(([name, track]) => ({ name, track }));
 }
 
-/** One compact artist row for Home mixed search (same row height as song row). Click → showArtistDetail(name). */
+/** One compact artist row for Library mixed search (same row height as song row). Click → showArtistDetail(name). */
 export function buildHomeArtistRowHtml(artistName, track, options = {}) {
     const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
     const coverUrl = getCoverUrl(track);

@@ -6,6 +6,7 @@
 import { store } from './store.js';
 import * as renderers from './renderers.js';
 import { Resolver } from './resolver.js';
+import { Haptics } from './haptics.js';
 
 const DEBOUNCE_MS = 1000;
 
@@ -28,6 +29,8 @@ let resultsEl = null;
 let lastLibraryItems = [];
 let lastOdstResults = [];
 let isMobile = true;
+/** Search tab ODST source: 'music' = YouTube Music, 'youtube' = normal YouTube. */
+let odstSourceMode = 'music';
 
 function scoreLibrary(track, query) {
     const q = query.toLowerCase();
@@ -56,7 +59,7 @@ function scoreOdst(item, query) {
     return score;
 }
 
-/** Same scoring idea as scoreLibrary: for artist name vs query. Used by Home mixed search. */
+/** Same scoring idea as scoreLibrary: for artist name vs query. Used by Library mixed search. */
 export function scoreArtist(artistName, query) {
     const q = (query || '').toLowerCase();
     const name = (artistName || '').toLowerCase();
@@ -119,19 +122,20 @@ function buildOdstRowHtml(r) {
 
 function render(merged) {
     if (!resultsEl) return;
-    const libraryTracks = merged.filter((m) => m.source === 'library').map((m) => m.track);
+    const list = Array.isArray(merged) ? merged : [];
+    const libraryTracks = list.filter((m) => m.source === 'library').map((m) => m.track);
     if (typeof window.viewContext !== 'undefined') window.viewContext.searchTracks = libraryTracks;
     window._currentSearchTracks = libraryTracks;
-    if (merged.length === 0) {
+    if (list.length === 0) {
         resultsEl.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">No results</div>';
         return;
     }
-    const html = merged.map((item) => {
+    const html = list.map((item) => {
         if (item.source === 'library') return buildLibraryRowHtml(item.track);
         return buildOdstRowHtml(item);
     }).join('');
     resultsEl.innerHTML = html;
-    bindListeners(merged);
+    bindListeners(list);
 }
 
 function bindListeners(merged) {
@@ -165,7 +169,7 @@ function bindListeners(merged) {
     });
 }
 
-/** Same engine as Home (ALL TRACKS): shared filter, instant. Only updates library list; ODST is separate (debounced). */
+/** Same engine as Library: shared filter, instant. Only updates library list; ODST is separate (debounced). */
 function runLibraryOnly(raw) {
     if (!resultsEl) return;
     const libraryTracks = renderers.filterLibraryByQuery(store.state.library, raw);
@@ -205,7 +209,7 @@ function runOdstFetch(raw) {
             return;
         }
     }
-    const sourceParam = (Downloader && Downloader.searchSource === 'youtube') ? 'youtube' : 'ytmusic';
+    const sourceParam = (odstSourceMode === 'youtube') ? 'youtube' : 'ytmusic';
     if (odstAbortController) odstAbortController.abort();
     odstAbortController = new AbortController();
     fetch(`${store.apiBase}/api/downloader/youtube/search?q=${encodeURIComponent(raw)}&limit=10&source=${sourceParam}`, {
@@ -257,6 +261,8 @@ function onInput() {
     if (!raw) {
         resultsEl.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">Search library and ODST...</div>';
         lastLibraryItems = [];
+        lastOdstResults = [];
+        lastMergedFull = [];
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = null;
         return;
@@ -315,6 +321,33 @@ function clear() {
     window._currentSearchTracks = null;
 }
 
+function setSearchOdstSource(value) {
+    if (value !== 'music' && value !== 'youtube') return;
+    odstSourceMode = value;
+    const musicBtn = document.getElementById('search-odst-music');
+    const youtubeBtn = document.getElementById('search-odst-youtube');
+    if (musicBtn && youtubeBtn) {
+        if (value === 'music') {
+            musicBtn.classList.add('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
+            musicBtn.classList.remove('bg-[var(--accent)]/15', 'text-[var(--accent)]');
+            musicBtn.setAttribute('aria-pressed', 'true');
+            youtubeBtn.classList.remove('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
+            youtubeBtn.classList.add('bg-[var(--accent)]/15', 'text-[var(--accent)]');
+            youtubeBtn.setAttribute('aria-pressed', 'false');
+        } else {
+            youtubeBtn.classList.add('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
+            youtubeBtn.classList.remove('bg-[var(--accent)]/15', 'text-[var(--accent)]');
+            youtubeBtn.setAttribute('aria-pressed', 'true');
+            musicBtn.classList.remove('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
+            musicBtn.classList.add('bg-[var(--accent)]/15', 'text-[var(--accent)]');
+            musicBtn.setAttribute('aria-pressed', 'false');
+        }
+    }
+    Haptics.tick();
+    const raw = (inputEl && inputEl.value) ? inputEl.value.trim() : '';
+    if (raw) runOdstFetch(raw);
+}
+
 function init(opts = {}) {
     isMobile = opts.mobile !== false;
     const inputId = isMobile ? 'search-page-input' : 'desktop-search-page-input';
@@ -325,6 +358,14 @@ function init(opts = {}) {
 
     clear();
     resultsEl.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">Search library and ODST...</div>';
+
+    const musicBtn = document.getElementById('search-odst-music');
+    const youtubeBtn = document.getElementById('search-odst-youtube');
+    if (musicBtn && youtubeBtn) {
+        setSearchOdstSource(odstSourceMode);
+        musicBtn.addEventListener('click', () => setSearchOdstSource('music'));
+        youtubeBtn.addEventListener('click', () => setSearchOdstSource('youtube'));
+    }
 
     inputEl.removeEventListener('input', onInput);
     inputEl.removeEventListener('paste', onPaste);

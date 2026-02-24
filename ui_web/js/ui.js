@@ -20,7 +20,7 @@ export class UI {
     static _npPendingSeekPercent = null;
 
     static VIEW_LABELS = {
-        'home': 'ALL TRACKS',
+        'home': 'LIBRARY',
         'favourites': 'FAVORITES',
         'artists': 'ARTISTS',
         'artist-detail': 'ARTIST',
@@ -683,6 +683,12 @@ export class UI {
             else dlQueueContainer.classList.add('hidden');
         }
 
+        const searchOdstOverlay = document.getElementById('search-odst-toggle-overlay');
+        if (searchOdstOverlay) {
+            if (viewId === 'search') searchOdstOverlay.classList.remove('hidden');
+            else searchOdstOverlay.classList.add('hidden');
+        }
+
         // syncArtistGridIndicators deferred to 500ms cleanup so we don't touch sliding view DOM in same turn
     }
 
@@ -1312,7 +1318,7 @@ export class UI {
             if (this._omniHoldTimer) clearTimeout(this._omniHoldTimer);
             if (this._labelAnimTimer) clearTimeout(this._labelAnimTimer);
 
-            // 0. SWIPE GESTURES: up = NP / preview play; down = back to all tracks (same as edge swipe from left)
+            // 0. SWIPE GESTURES: up = NP / preview play; down = back to library (same as edge swipe from left)
             const deadzone = 15;
             if (this._isHolding && !this.isBlooming && this._startedInside && isHorizontalValid) {
                 const isNPActive = this.dom.nowPlayingView?.classList.contains('active');

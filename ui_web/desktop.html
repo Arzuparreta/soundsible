@@ -52,7 +52,7 @@
             --seek-track: rgba(0, 0, 0, 0.12);
         }
         [data-theme="odst"] {
-            /* Content (e.g. under "All tracks") = card/surface; background = slightly darker + very subtle gradient to ODST orange */
+            /* Content (e.g. under "Library") = card/surface; background = slightly darker + very subtle gradient to ODST orange */
             --bg-deep: #1c2026;
             --bg-deep-mid: #1d1f24;
             --bg-deep-end: #1e1f21;
@@ -110,6 +110,8 @@
         .desktop-search-sticky { position: fixed; top: 0; left: 240px; right: 0; z-index: 20; height: var(--desktop-search-bar-height); min-height: var(--desktop-search-bar-height); background: transparent; padding: 1rem 1.5rem 0 1.5rem; isolation: isolate; display: flex; align-items: flex-start; box-sizing: border-box; }
         #desktop-view-home:not(.active) .desktop-search-sticky,
         #desktop-view-favourites:not(.active) .desktop-search-sticky { display: none; }
+        /* Search view: positioning context for ODST toggle (one button height from bottom) */
+        #desktop-view-search { position: relative; --search-odst-toggle-offset: 2rem; }
         .desktop-search-sticky .glass-view { width: 100%; max-width: 100%; }
         .desktop-search-spacer { height: var(--desktop-search-bar-height); flex-shrink: 0; }
         /* Desktop: no mobile swipe/long-press; hide swipe hints so Favourite/Queue labels never show */
@@ -123,9 +125,13 @@
             height: 56px;
             min-height: 56px;
             border-radius: var(--radius-omni);
-            box-shadow: var(--shadow-omni);
+            box-shadow: 0 0 28px rgba(0, 0, 0, 0.45);
             transition: width 333ms cubic-bezier(0.19, 1, 0.22, 1);
+            transform: translateZ(0);
+            isolation: isolate;
         }
+        [data-theme="light"] #desktop-logo-omni { box-shadow: 0 0 24px rgba(0, 0, 0, 0.2); }
+        [data-theme="odst"] #desktop-logo-omni { box-shadow: 0 0 20px rgba(0, 0, 0, 0.3); }
         #desktop-logo-omni.logo-omni-seed { width: 56px; }
         #desktop-logo-omni:not(.logo-omni-seed) { width: 250px; }
         /* Desktop pseudo-omnibar: full width, prev/next at edges, play centered. */
@@ -235,10 +241,10 @@
             <aside id="desktop-sidebar" class="glass-view">
                 <div class="mb-4 flex justify-center">
                     <button type="button" id="desktop-logo-omni" class="logo-omni-seed desktop-logo-omni glass-view flex items-center justify-center overflow-hidden pointer-events-auto cursor-pointer border-none outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-deep)]" aria-label="Soundsible menu" title="Soundsible">
-                        <img src="assets/icons/logo-mark.svg" class="h-10 w-10 flex-shrink-0 opacity-90 pointer-events-none" alt="" aria-hidden="true">
+                        <img src="assets/icons/logo_sin_fondo.png" class="h-10 w-10 flex-shrink-0 object-contain pointer-events-none" alt="" aria-hidden="true">
                     </button>
                 </div>
-                <button type="button" class="desktop-nav-btn active" data-view="home"><i class="fas fa-home mr-3 w-4"></i>All Tracks</button>
+                <button type="button" class="desktop-nav-btn active" data-view="home"><i class="fas fa-record-vinyl mr-3 w-4"></i>Library</button>
                 <button type="button" class="desktop-nav-btn" data-view="favourites"><i class="fas fa-heart mr-3 w-4"></i>Favourites</button>
                 <button type="button" class="desktop-nav-btn" data-view="artists"><i class="fas fa-user mr-3 w-4"></i>Artists</button>
                 <button type="button" class="desktop-nav-btn" data-view="playlists"><i class="fas fa-layer-group mr-3 w-4"></i>Playlists</button>
@@ -310,6 +316,11 @@
                         <input type="text" id="desktop-search-page-input" placeholder="Search library and ODST..." class="input-theme w-full min-h-[44px] rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium" />
                     </div>
                     <div id="desktop-search-page-results" class="space-y-2 min-h-[120px] mt-4"></div>
+                    <!-- Music/Youtube toggle: relative to #desktop-view-search bottom (one button height raised) -->
+                    <div id="search-odst-toggle-overlay" class="absolute right-6 z-10 flex gap-1.5 p-1 rounded-full border border-[var(--glass-border)] shadow-lg pointer-events-auto" style="bottom: var(--search-odst-toggle-offset); background: var(--input-bg);">
+                        <button type="button" id="search-odst-music" class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-[var(--accent)] text-[var(--text-on-accent)]" aria-pressed="true">Music</button>
+                        <button type="button" id="search-odst-youtube" class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-[var(--accent)]/15 text-[var(--accent)]" aria-pressed="false">Youtube</button>
+                    </div>
                 </div>
                 <div id="desktop-view-playlist-detail" class="desktop-view">
                     <button type="button" id="desktop-playlist-detail-back" class="flex items-center text-[var(--secondary)] font-bold mb-8 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" onclick="typeof DesktopUI!=='undefined'&&DesktopUI.navigateBack&&DesktopUI.navigateBack()">

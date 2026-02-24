@@ -99,7 +99,7 @@
         }
 
         [data-theme="odst"] {
-            /* Content (e.g. under "All tracks") = card/surface; background = slightly darker + very subtle gradient to ODST orange */
+            /* Content (e.g. under "Library") = card/surface; background = slightly darker + very subtle gradient to ODST orange */
             --bg-deep: #1c2026;
             --bg-deep-mid: #1d1f24;
             --bg-deep-end: #1e1f21;
@@ -894,7 +894,7 @@
                         <h2 class="text-lg font-bold tracking-tight mb-4" style="letter-spacing: -0.02em;">General</h2>
                         <div class="settings-row flex justify-between items-center min-h-[44px] gap-4">
                             <div>
-                                <div class="text-sm font-medium text-[var(--text-main)]">Order All Tracks by:</div>
+                                <div class="text-sm font-medium text-[var(--text-main)]">Order Library by:</div>
                                 <div class="text-xs text-[var(--text-dim)] mt-0.5">How the main library list is sorted</div>
                             </div>
                             <select id="settings-library-order" class="input-theme rounded-[var(--radius-omni-xs)] px-4 py-2.5 text-sm font-medium text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors flex-shrink-0 min-w-[140px]">
@@ -1003,7 +1003,7 @@
                                 <!-- Middle blank: center of bar is icon-sized -->
                                 <div class="w-10 h-10 flex-shrink-0"></div>
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="playlists"><i class="fas fa-layer-group text-base text-[var(--nav-icon)]"></i></div>
-                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="home"><i class="fas fa-home text-base text-[var(--nav-icon)]"></i></div>
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="home"><i class="fas fa-record-vinyl text-base text-[var(--nav-icon)]"></i></div>
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="favourites"><i class="fas fa-heart text-base text-[var(--nav-icon)]"></i></div>
                             </div>
                         </div>
@@ -1018,7 +1018,7 @@
                 </div>
         <!-- Independent Label Container -->
         <div id="omni-label-container">
-            <div id="omni-label">ALL TRACKS</div>
+            <div id="omni-label">LIBRARY</div>
         </div>
         </div>
     </div>
@@ -1156,6 +1156,12 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Search ODST source toggle: fixed overlay above bottom bar, visible only on Search view -->
+    <div id="search-odst-toggle-overlay" class="fixed left-4 z-[85] hidden flex gap-1.5 p-1 rounded-full border border-[var(--glass-border)] shadow-lg pointer-events-auto" style="bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem + 68px); background: var(--input-bg);">
+        <button type="button" id="search-odst-music" class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-[var(--accent)] text-[var(--text-on-accent)]" aria-pressed="true">Music</button>
+        <button type="button" id="search-odst-youtube" class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-[var(--accent)]/15 text-[var(--accent)]" aria-pressed="false">Youtube</button>
     </div>
 
     <!-- Toasts -->
