@@ -26,8 +26,9 @@ export class UI {
         'artist-detail': 'ARTIST',
         'playlists': 'PLAYLISTS',
         'playlist-detail': 'PLAYLIST',
-        'downloader': 'ODST',
-        'settings': 'CONFIG'
+        'search': 'SEARCH',
+        'settings': 'CONFIG',
+        'soundmash': 'SOUNDMASH'
     };
 
     static init() {
@@ -53,6 +54,7 @@ export class UI {
             omniTransport: d('omni-transport'),
             omniProgressTrack: d('omni-progress-track'),
             omniIslandContainer: d('omni-island-container'),
+            omniBarTouchBlock: d('omni-bar-touch-block'),
             settingsThemeSelect: d('settings-theme-select'),
             hapticsIndicator: d('haptics-indicator'),
             settingsLibraryOrder: d('settings-library-order'),
@@ -64,7 +66,6 @@ export class UI {
             fullCoverImage: d('full-cover-image'),
             fullCoverOverlayBackdrop: d('full-cover-overlay-backdrop'),
             fullCoverCloseBottom: d('full-cover-close-bottom'),
-            soundmashView: d('soundmash-view'),
             queuePopover: d('queue-popover'),
             queueContainer: d('queue-container'),
             dlQueueContainer: d('dl-queue-container'),
@@ -397,69 +398,18 @@ export class UI {
         return isIOS ? 'ios' : 'android';
     }
 
-    static initKeyboardSync() {
-        if (!window.visualViewport) {
-            console.warn('Visual Viewport API not supported');
-            return;
-        }
+    /** No-op: omnibar is pinned to layout viewport via #omni-bar-root so it does not move with the keyboard. */
+    static initKeyboardSync() {}
 
-        const container = this.dom.omniIslandContainer;
-        if (!container) return;
-        container.classList.add(`omni-keyboard-${this._platform}`);
-
-        let lastHeight = window.visualViewport.height;
-        let isKeyboardOpen = false;
-
-        const handleViewportResize = () => {
-            // Do NOT move the omni bar when any input/textarea is focused (keyboard overlays, bar stays at bottom)
-            const active = document.activeElement;
-            const isInputLike = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.getAttribute?.('contenteditable') === 'true');
-            if (isInputLike) {
-                return;
-            }
-
-            const currentHeight = window.visualViewport.height;
-            const heightDiff = window.innerHeight - currentHeight;
-            const keyboardHeight = Math.max(0, heightDiff);
-
-            const keyboardJustOpened = !isKeyboardOpen && keyboardHeight > 50;
-            const keyboardJustClosed = isKeyboardOpen && keyboardHeight <= 50;
-
-            if (keyboardJustOpened || keyboardJustClosed) {
-                isKeyboardOpen = keyboardHeight > 50;
-                this._keyboardHeight = keyboardHeight;
-
-                if (isKeyboardOpen) {
-                    this.handleKeyboardOpen(keyboardHeight);
-                } else {
-                    this.handleKeyboardClose();
-                }
-            } else if (isKeyboardOpen && keyboardHeight > 0) {
-                container.style.transform = `translateY(-${keyboardHeight}px)`;
-                this._keyboardHeight = keyboardHeight;
-            }
-
-            lastHeight = currentHeight;
-        };
-
-        window.visualViewport.addEventListener('resize', handleViewportResize);
-        window.visualViewport.addEventListener('scroll', handleViewportResize);
-    }
-
-    static handleKeyboardOpen(keyboardHeight) {
-        const container = this.dom.omniIslandContainer;
-        if (!container) return;
-
-        this._keyboardHeight = keyboardHeight;
-        container.style.transform = `translateY(-${keyboardHeight}px)`;
-    }
+    static handleKeyboardOpen() {}
 
     static handleKeyboardClose() {
         const container = this.dom.omniIslandContainer;
-        if (!container) return;
-
-        this._keyboardHeight = 0;
-        container.style.transform = '';
+        const touchBlock = this.dom.omniBarTouchBlock;
+        const labelContainer = this.dom.omniLabelContainer;
+        if (container) container.style.transform = '';
+        if (touchBlock) touchBlock.style.transform = '';
+        if (labelContainer) labelContainer.style.transform = '';
     }
 
     static updateThemeUI(theme) {
@@ -612,22 +562,13 @@ export class UI {
         });
     }
 
+    /** SoundMash is a full content view; kept for any external callers (e.g. gestures). */
     static showSoundMash() {
-        const view = this.dom.soundmashView;
-        if (!view) return;
-        view.classList.remove('hidden');
-        requestAnimationFrame(() => view.classList.add('active'));
-        Haptics.heavy();
+        this.showView('soundmash');
     }
 
     static hideSoundMash() {
-        const view = this.dom.soundmashView;
-        if (!view) return;
-        view.classList.remove('active');
-        view.style.transform = '';
-        setTimeout(() => {
-            if (!view.classList.contains('active')) view.classList.add('hidden');
-        }, 600);
+        if (this.currentView === 'soundmash') this.navigateBack();
     }
 
     static toggleQueue() {
@@ -659,7 +600,7 @@ export class UI {
         setTimeout(() => popover.classList.add('hidden'), 300);
     }
 
-    static showView(viewId, saveToHistory = true, direction = 'forward') {
+    static showView(viewId, saveToHistory = true) {
         // Auto-hide Now Playing if active (even if selecting the same view)
         if (this.dom.nowPlayingView?.classList.contains('active')) {
             this.hideNowPlaying();
@@ -675,24 +616,20 @@ export class UI {
         if (!targetView) return;
 
         if (saveToHistory) {
-            const roots = ['home', 'favourites', 'playlists', 'artists', 'downloader', 'settings'];
+            const roots = ['home', 'favourites', 'playlists', 'artists', 'search', 'settings', 'soundmash'];
             if (roots.includes(this.currentView) && roots.includes(viewId)) this.viewStack = [];
             else this.viewStack.push(this.currentView);
         }
 
         // --- PERFORM STACKING TRANSITION ---
         
-        // 1. Prepare Outgoing (Stays in background)
-        if (oldView) {
-            oldView.classList.add('view-outgoing');
-        }
+        // 1. Prepare Outgoing (stays in background with dim/scale)
+        if (oldView) oldView.classList.add('view-outgoing');
 
-        // 2. Prepare Incoming (Slides OVER) — left-of-center nav pages slide from left, right-of-center from right
-        const navLeft = ['home', 'favourites', 'playlists'];
-        const navRight = ['artists', 'downloader', 'settings'];
-        const slideFromLeft = navLeft.includes(viewId);
-        const slideFromRight = navRight.includes(viewId);
-        const slideClass = slideFromLeft ? 'view-from-left' : slideFromRight ? 'view-from-right' : (direction === 'forward' ? 'view-from-right' : 'view-from-left');
+        // 2. Prepare Incoming — by omnibar position only: left of center → slide from left, right of center → slide from right (never direction-based)
+        const leftOfCenter = ['soundmash', 'search', 'settings'];
+        const rightOfCenter = ['playlists', 'home', 'favourites', 'artists', 'artist-detail', 'playlist-detail'];
+        const slideClass = leftOfCenter.includes(viewId) ? 'view-from-left' : 'view-from-right';
         targetView.classList.remove('hidden', 'view-warm-hidden-left', 'view-warm-hidden-right');
         targetView.classList.add('view-incoming');
         targetView.classList.add(slideClass);
@@ -720,7 +657,7 @@ export class UI {
                 window.clearContentForView(oldViewId);
             }
             if (oldView && oldView.id !== `view-${viewId}`) {
-                const warmViews = { 'view-home': 'view-warm-hidden-left', 'view-artists': 'view-warm-hidden-right' };
+                const warmViews = { 'view-home': 'view-warm-hidden-right', 'view-artists': 'view-warm-hidden-right' };
                 const warmClass = warmViews[oldView.id];
                 if (warmClass) {
                     oldView.classList.add(warmClass);
@@ -739,9 +676,11 @@ export class UI {
         this.currentView = viewId;
 
         const queueContainer = this.dom.queueContainer;
-        if (queueContainer) {
-            if (viewId === 'downloader') queueContainer.classList.add('hidden');
-            else queueContainer.classList.remove('hidden');
+        if (queueContainer) queueContainer.classList.remove('hidden');
+        const dlQueueContainer = this.dom.dlQueueContainer;
+        if (dlQueueContainer) {
+            if (viewId === 'search') dlQueueContainer.classList.remove('hidden');
+            else dlQueueContainer.classList.add('hidden');
         }
 
         // syncArtistGridIndicators deferred to 500ms cleanup so we don't touch sliding view DOM in same turn
@@ -749,12 +688,12 @@ export class UI {
 
     static navigateBack() {
         if (this.viewStack.length === 0) {
-            this.showView('home', false, 'backward'); // Home fallback
+            this.showView('home', false);
             return;
         }
         
         const previousView = this.viewStack.pop();
-        this.showView(previousView, false, 'backward');
+        this.showView(previousView, false);
     }
 
     static initGlobalListeners() {
@@ -763,7 +702,7 @@ export class UI {
 
         // Global Clicks
         window.addEventListener('click', (e) => {
-            if (this.currentView === 'downloader') {
+            if (this.currentView === 'search') {
                 const dlq = this.dom.dlQueueContainer;
                 if (dlq && !dlq.contains(e.target)) Downloader.hideDownloadQueue?.();
             } else {
@@ -948,7 +887,6 @@ export class UI {
         let activeRow = null;
         let isHorizontal = false;
         let isEdgeSwipe = false;
-        let isEdgeSwipeFromSoundMash = false;
         let isEdgeSwipeFromFullCover = false;
         let longPressTimer = null;
         let longPressTriggered = false;
@@ -973,7 +911,7 @@ export class UI {
             }
             longPressTriggered = false;
 
-            // 1. Edge Swipe Detection (from left: close full-cover / SoundMash, or go to All songs). Capture phase so it works when touch starts on overlay.
+            // 1. Edge Swipe Detection (from left: close full-cover or go back). Capture phase so it works when touch starts on overlay.
             if (startX < 40) {
                 isEdgeSwipe = true;
                 const fullCoverEl = this.dom.fullCoverOverlay;
@@ -981,13 +919,7 @@ export class UI {
                 if (fullCoverOpen) {
                     isEdgeSwipeFromFullCover = true;
                 } else {
-                    isEdgeSwipeFromSoundMash = this.dom.soundmashView?.classList.contains('active') ?? false;
-                    if (isEdgeSwipeFromSoundMash) {
-                        const sm = this.dom.soundmashView;
-                        if (sm) sm.style.transition = 'none';
-                    } else {
-                        this.content.style.transition = 'none';
-                    }
+                    this.content.style.transition = 'none';
                 }
                 return;
             }
@@ -1039,12 +971,7 @@ export class UI {
                 if (e.cancelable) e.preventDefault();
                 if (isEdgeSwipeFromFullCover) return; // no visual drag for full-cover; just close on touchend
                 const move = Math.max(0, diffX);
-                if (isEdgeSwipeFromSoundMash) {
-                    const sm = this.dom.soundmashView;
-                    if (sm) sm.style.transform = `translateX(${move}px)`;
-                } else {
-                    this.content.style.transform = `translateX(${move}px)`;
-                }
+                this.content.style.transform = `translateX(${move}px)`;
                 return;
             }
 
@@ -1082,29 +1009,18 @@ export class UI {
                         this.vibrate(20);
                         this.hideFullCoverView();
                     }
-                } else if (isEdgeSwipeFromSoundMash) {
-                    const sm = this.dom.soundmashView;
-                    if (sm) {
-                        sm.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
-                        sm.style.transform = 'translateX(0)';
-                    }
-                    if (diffX > threshold) {
-                        this.vibrate(20);
-                        this.hideSoundMash();
-                        this.showView('home', false, 'backward');
-                    }
                 } else {
                     if (this.dom.content) this.dom.content.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
                     if (this.dom.content) this.dom.content.style.transform = 'translateX(0)';
                     if (diffX > threshold) {
                         this.vibrate(20);
-                        if (this.currentView === 'artist-detail') this.showView('artists', false, 'backward');
-                        else if (this.currentView === 'playlist-detail') this.showView('playlists', false, 'backward');
-                        else this.showView('home', false, 'backward');
+                        if (this.currentView === 'artist-detail') this.showView('artists', false);
+                        else if (this.currentView === 'playlist-detail') this.showView('playlists', false);
+                        else if (this.currentView === 'soundmash') this.navigateBack();
+                        else this.showView('home', false);
                     }
                 }
                 isEdgeSwipe = false;
-                isEdgeSwipeFromSoundMash = false;
                 isEdgeSwipeFromFullCover = false;
                 return;
             }
@@ -1323,10 +1239,6 @@ export class UI {
         this._currentY = 0;
 
         const startBloom = (e) => {
-            if (this.dom.soundmashView?.classList.contains('active')) {
-                e.preventDefault();
-                return;
-            }
             const touch = e.touches[0];
             const rect = island.getBoundingClientRect();
             this._startedInside = touch.clientX >= rect.left && touch.clientX <= rect.right && 
@@ -1423,7 +1335,7 @@ export class UI {
                 if (deltaY > deadzone) {
                     const targetView = this.currentView === 'artist-detail' ? 'artists' : this.currentView === 'playlist-detail' ? 'playlists' : 'home';
                     if (this.currentView !== targetView) this.vibrate(20);
-                    this.showView(targetView, false, 'backward');
+                    this.showView(targetView, false);
                     this.resetOmniIsland();
                     return;
                 }
@@ -1458,39 +1370,11 @@ export class UI {
             const viewToShow = this._activeNavView || this._lastActiveNavView;
             if (this.isBlooming && viewToShow) {
                 Haptics.lock();
-                
-                // Check if selected entry equals current entry
-                if (viewToShow === this.currentView) {
-                    // Fade out at current position, then fade in at center
-                    label.classList.add('fade-out');
-                    
-                    setTimeout(() => {
-                        // Move to center and prepare for fade in
-                        label.style.setProperty('--tx', '0px');
-                        label.style.removeProperty('transform');
-                        label.classList.remove('hovered', 'fade-out');
-                        label.classList.add('fade-in');
-                        
-                        // Force reflow, then trigger fade in animation
-                        requestAnimationFrame(() => {
-                            label.classList.add('fade-in-active');
-                            
-                            setTimeout(() => {
-                                label.classList.remove('fade-in', 'fade-in-active');
-                                label.classList.add('docked');
-                            }, 200);
-                        });
-                    }, 200);
-                } else {
-                    // showView will handle search form transformation
-                    this.showView(viewToShow);
-                    
-                    // Dock the Label with bounce animation
-                    label.classList.remove('hovered');
-                    label.classList.add('docked');
-                    label.style.removeProperty('transform');
-                    label.style.setProperty('--tx', '0px');
-                }
+                if (viewToShow !== this.currentView) this.showView(viewToShow);
+                label.classList.remove('hovered');
+                label.classList.add('docked');
+                label.style.removeProperty('transform');
+                label.style.setProperty('--tx', '0px');
             }
 
             requestAnimationFrame(() => this.resetOmniIsland());
@@ -1523,10 +1407,9 @@ export class UI {
                     const slotWidth = trackWidth / 7;
                     let index = Math.floor(touchX / slotWidth);
                     index = Math.max(0, Math.min(6, index));
-                    
-                    // Correct for the blank center spacer (index 3)
-                    if (index < 3) item = itemsArr[index];
-                    else if (index > 3) item = itemsArr[index - 1];
+                    // Order: soundmash(0), search(1), settings(2), blank(3), playlists(4), home(5), favourites(6) → itemsArr has 6 items
+                    const itemIndex = index === 3 ? -1 : index < 3 ? index : index - 1;
+                    if (itemIndex >= 0 && itemIndex < itemsArr.length) item = itemsArr[itemIndex];
                 }
 
                 if (item) {

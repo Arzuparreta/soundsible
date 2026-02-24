@@ -31,6 +31,11 @@ export const DesktopUI = {
         const btnEl = document.querySelector(`.desktop-nav-btn[data-view="${viewId}"]`);
         if (viewEl) viewEl.classList.add('active');
         if (btnEl) btnEl.classList.add('active');
+        const dlQueueContainer = el('desktop-dl-queue-container');
+        if (dlQueueContainer) {
+            if (viewId === 'search') dlQueueContainer.classList.remove('hidden');
+            else dlQueueContainer.classList.add('hidden');
+        }
     },
 
     navigateBack() {

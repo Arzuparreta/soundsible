@@ -61,8 +61,14 @@ def main() -> None:
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         shutil.copy2(logo_mark_svg, OUT_DIR / "logo-mark.svg")
         print(f"Wrote {OUT_DIR / 'logo-mark.svg'}")
-    else:
-        raise SystemExit(f"Logo mark not found: {logo_mark_svg}")
+
+    logo_sin_fondo = BRANDING_DIR / "Logo_sin_fondo.png"
+    if not logo_sin_fondo.exists():
+        logo_sin_fondo = BRANDING_DIR / "logo_sin_fondo.png"
+    if logo_sin_fondo.exists():
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(logo_sin_fondo, OUT_DIR / "logo_sin_fondo.png")
+        print(f"Wrote {OUT_DIR / 'logo_sin_fondo.png'}")
 
 
 if __name__ == "__main__":

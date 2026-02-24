@@ -78,7 +78,11 @@ export function wireSettings(selectors, deps) {
         appIconSelect.value = store.state.appIcon || 'default';
         appIconSelect.addEventListener('change', () => {
             const value = appIconSelect.value;
-            if (value && ['default', 'alt'].includes(value)) store.setAppIcon(value);
+            if (value && ['default', 'alt'].includes(value)) {
+                store.setAppIcon(value);
+                const link = document.getElementById('app-manifest-link');
+                if (link) link.href = value === 'alt' ? 'manifest-alt.json' : 'manifest.json';
+            }
         });
     }
 

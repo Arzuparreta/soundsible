@@ -7,6 +7,7 @@ import { connectionManager } from './connection.js';
 import { audioEngine } from './audio.js';
 import { Downloader } from './downloader.js';
 import * as renderers from './renderers.js';
+import { scoreLibrary, scoreArtist, mergeAndSortByScore } from './search.js';
 import { wireSettings, wireActionMenu } from './wires.js';
 import { DesktopUI } from './ui_desktop.js';
 
@@ -20,6 +21,7 @@ function playTrack(trackId) {
     } else if (DesktopUI.currentView === 'favourites') context = window._currentFavTracks ?? context;
     else if (DesktopUI.currentView === 'artist-detail') context = window._currentArtistTracks ?? context;
     else if (DesktopUI.currentView === 'playlist-detail') context = window._currentPlaylistTracks ?? context;
+    else if (DesktopUI.currentView === 'search') context = window._currentSearchTracks ?? context;
     const track = context?.find((t) => t.id === trackId);
     if (track) {
         audioEngine.setContext(context);
@@ -558,7 +560,7 @@ async function init() {
         });
 
         window.addEventListener('click', (e) => {
-            if (DesktopUI.currentView !== 'downloader') return;
+            if (DesktopUI.currentView !== 'search') return;
             const dlq = document.getElementById('desktop-dl-queue-container');
             if (dlq && !dlq.contains(e.target)) Downloader.hideDownloadQueue?.();
         });
@@ -647,12 +649,46 @@ async function init() {
 
         function renderHomeSongs() {
             const input = document.getElementById('desktop-home-search-input');
-            const q = input?.value.trim().toLowerCase() || '';
-            const lib = store.state.library;
-            const tracks = !q ? lib : lib.filter((t) => [t.title, t.artist, t.album].some((s) => String(s).toLowerCase().includes(q)));
-            const sorted = renderers.sortLibraryTracks(tracks, store.state.libraryOrder || 'date_added', store.state.favorites);
-            window._currentHomeTracks = sorted;
-            renderSongsInto(document.getElementById('desktop-all-songs'), sorted, store.state.songsViewMode);
+            const container = document.getElementById('desktop-all-songs');
+            const q = input?.value.trim() || '';
+            const library = store.state.library || [];
+            if (!q) {
+                const sorted = renderers.sortLibraryTracks(library, store.state.libraryOrder || 'date_added', store.state.favorites);
+                window._currentHomeTracks = sorted;
+                renderSongsInto(container, sorted, store.state.songsViewMode);
+                return;
+            }
+            const artistsWithTrack = renderers.getArtistsWithRepresentativeTrack(library).filter(({ name }) => name.toLowerCase().includes(q.toLowerCase()));
+            const artistItems = artistsWithTrack.map(({ name, track }) => ({
+                type: 'artist',
+                name,
+                track,
+                score: scoreArtist(name, q),
+                sortTitle: name.toLowerCase()
+            }));
+            const trackResults = renderers.filterLibraryByQuery(library, q);
+            const trackItems = trackResults.map(track => ({
+                type: 'track',
+                track,
+                score: scoreLibrary(track, q),
+                sortTitle: (track.title || '').toLowerCase()
+            }));
+            const merged = mergeAndSortByScore([...artistItems, ...trackItems]);
+            window._currentHomeTracks = merged.filter(m => m.type === 'track').map(m => m.track);
+            if (!container) return;
+            if (merged.length === 0) {
+                container.className = 'space-y-2';
+                container.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">No results</div>';
+                return;
+            }
+            container.className = 'space-y-2';
+            const options = { favIds: store.state.favorites, activeTrackId: store.state.currentTrack?.id };
+            const html = merged.map(item =>
+                item.type === 'artist'
+                    ? renderers.buildHomeArtistRowHtml(item.name, item.track, options)
+                    : renderers.buildSongRowsHtml([item.track], options)
+            ).join('');
+            container.innerHTML = html;
         }
 
         function renderFavourites() {
@@ -702,6 +738,12 @@ async function init() {
             origShowView(viewId);
             if (viewId === 'playlists') renderPlaylists();
             if (viewId === 'playlist-detail' && window._currentPlaylistName) renderPlaylistDetail();
+            if (viewId === 'search') {
+                import('./search.js').then((m) => {
+                    window.unifiedSearch = m.unifiedSearch;
+                    m.unifiedSearch.init({ mobile: false });
+                });
+            }
         };
 
         initPlaylistTrackDrag();

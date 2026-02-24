@@ -10,6 +10,7 @@ import { audioEngine } from './audio.js';
 import { connectionManager } from './connection.js';
 import { Downloader } from './downloader.js';
 import * as renderers from './renderers.js';
+import { scoreLibrary, scoreArtist, mergeAndSortByScore } from './search.js';
 import { wireSettings } from './wires.js';
 
 console.log("🚀 Soundsible Web Player Initializing...");
@@ -24,6 +25,7 @@ const viewContext = {
     artistTracks: null,
     artistName: null,
     currentPlaylistName: null,
+    searchTracks: null,
     pendingFavFirstEntranceId: null,
     favFirstExitId: null
 };
@@ -660,19 +662,28 @@ async function init() {
                 renderQueue(state);
                 const currentView = UI.currentView;
                 if (currentView === 'home') {
-                    const homeQuery = dom && dom.homeSearchInput ? dom.homeSearchInput.value.trim().toLowerCase() : '';
+                    const homeQuery = dom && dom.homeSearchInput ? dom.homeSearchInput.value.trim() : '';
                     if (!homeQuery) {
                         viewContext.homeTracks = null;
-                        renderHomeSongs(state.library);
-                    } else {
-                        const homeResults = state.library.filter(t =>
-                            t.title.toLowerCase().includes(homeQuery) ||
-                            t.artist.toLowerCase().includes(homeQuery) ||
-                            t.album.toLowerCase().includes(homeQuery)
-                        );
-                        viewContext.homeTracks = homeResults;
                         const order = state.libraryOrder || 'date_added';
-                        if (dom && dom.allSongs) renderers.renderSongList(renderers.sortLibraryTracks(homeResults, order, state.favorites), dom.allSongs);
+                        if (dom && dom.allSongs) renderers.renderSongList(renderers.sortLibraryTracks(state.library || [], order, state.favorites), dom.allSongs);
+                    } else {
+                        const library = state.library || [];
+                        const q = homeQuery.toLowerCase();
+                        const artistsWithTrack = renderers.getArtistsWithRepresentativeTrack(library).filter(({ name }) => name.toLowerCase().includes(q));
+                        const artistItems = artistsWithTrack.map(({ name, track }) => ({ type: 'artist', name, track, score: scoreArtist(name, homeQuery), sortTitle: name.toLowerCase() }));
+                        const trackResults = renderers.filterLibraryByQuery(library, homeQuery);
+                        const trackItems = trackResults.map(track => ({ type: 'track', track, score: scoreLibrary(track, homeQuery), sortTitle: (track.title || '').toLowerCase() }));
+                        const merged = mergeAndSortByScore([...artistItems, ...trackItems]);
+                        viewContext.homeTracks = merged.filter(m => m.type === 'track').map(m => m.track);
+                        if (dom && dom.allSongs) {
+                            if (merged.length === 0) {
+                                dom.allSongs.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">No results</div>';
+                            } else {
+                                const options = { favIds: state.favorites, activeTrackId: state.currentTrack?.id };
+                                dom.allSongs.innerHTML = merged.map(item => item.type === 'artist' ? renderers.buildHomeArtistRowHtml(item.name, item.track, options) : renderers.buildSongRowsHtml([item.track], options)).join('');
+                            }
+                        }
                     }
                 } else if (currentView === 'favourites') {
                     renderFavourites(state);
@@ -958,7 +969,9 @@ function clearContentForView(viewId) {
             if (dom.playlistDetailTracks) dom.playlistDetailTracks.innerHTML = '';
             if (dom.playlistDetailSearchInput) dom.playlistDetailSearchInput.value = '';
             break;
-        case 'downloader':
+        case 'search':
+            if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) window.unifiedSearch.clear();
+            break;
         case 'settings':
             break;
         default:
@@ -986,8 +999,9 @@ function renderContentForView(viewId) {
         case 'artist-detail':
             if (viewContext.artistName) renderArtistDetail(viewContext.artistName);
             break;
-        case 'downloader':
-            import('./downloader.js').then(m => m.Downloader.init());
+        case 'search':
+            import('./downloader.js').then((dm) => { dm.Downloader.init(); });
+            import('./search.js').then(m => { window.unifiedSearch = m.unifiedSearch; m.unifiedSearch.init({ mobile: true }); });
             break;
         case 'playlists':
             renderPlaylistList(state);
@@ -1084,20 +1098,44 @@ async function initSearch() {
     }
 
     input.oninput = () => {
-        const query = input.value.trim().toLowerCase();
+        const query = input.value.trim();
+        const library = store.state.library || [];
         if (!query) {
             viewContext.homeTracks = null;
-            renderHomeSongs(store.state.library);
+            const order = store.state.libraryOrder || 'date_added';
+            renderSongList(renderers.sortLibraryTracks(library, order, store.state.favorites), 'all-songs');
             return;
         }
-        const results = store.state.library.filter(t =>
-            t.title.toLowerCase().includes(query) ||
-            t.artist.toLowerCase().includes(query) ||
-            t.album.toLowerCase().includes(query)
-        );
-        viewContext.homeTracks = results;
-        const order = store.state.libraryOrder || 'date_added';
-        renderSongList(sortLibraryTracks(results, order, store.state.favorites), 'all-songs');
+        const q = query.toLowerCase();
+        const artistsWithTrack = renderers.getArtistsWithRepresentativeTrack(library).filter(({ name }) => name.toLowerCase().includes(q));
+        const artistItems = artistsWithTrack.map(({ name, track }) => ({
+            type: 'artist',
+            name,
+            track,
+            score: scoreArtist(name, query),
+            sortTitle: name.toLowerCase()
+        }));
+        const trackResults = renderers.filterLibraryByQuery(library, query);
+        const trackItems = trackResults.map(track => ({
+            type: 'track',
+            track,
+            score: scoreLibrary(track, query),
+            sortTitle: (track.title || '').toLowerCase()
+        }));
+        const merged = mergeAndSortByScore([...artistItems, ...trackItems]);
+        viewContext.homeTracks = merged.filter(m => m.type === 'track').map(m => m.track);
+        if (!dom.allSongs) return;
+        if (merged.length === 0) {
+            dom.allSongs.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">No results</div>';
+            return;
+        }
+        const options = { favIds: store.state.favorites, activeTrackId: store.state.currentTrack?.id };
+        const html = merged.map(item =>
+            item.type === 'artist'
+                ? renderers.buildHomeArtistRowHtml(item.name, item.track, options)
+                : renderers.buildSongRowsHtml([item.track], options)
+        ).join('');
+        dom.allSongs.innerHTML = html;
     };
 
     input.addEventListener('keydown', (e) => {
@@ -1156,6 +1194,7 @@ function getCurrentTrackList() {
     if (UI.currentView === 'favourites') return viewContext.favTracks || store.state.library;
     if (UI.currentView === 'playlists' || UI.currentView === 'playlist-detail') return window._currentPlaylistTracks || store.state.library;
     if (UI.currentView === 'artist-detail') return viewContext.artistTracks || store.state.library;
+    if (UI.currentView === 'search' && viewContext.searchTracks) return viewContext.searchTracks;
     return store.state.library;
 }
 

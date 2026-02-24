@@ -27,6 +27,21 @@ function escapeCssUrl(url) {
     return String(url).replace(/"/g, '%22').replace(/'/g, '%27');
 }
 
+/**
+ * Shared library search: filter tracks by query (title, artist, album).
+ * Same engine used by Home (ALL TRACKS) and Search tab — single source of truth.
+ */
+export function filterLibraryByQuery(library, query) {
+    const lib = library ?? [];
+    const q = (query ?? '').trim().toLowerCase();
+    if (!q) return lib;
+    return lib.filter((t) =>
+        (t.title && t.title.toLowerCase().includes(q)) ||
+        (t.artist && t.artist.toLowerCase().includes(q)) ||
+        (t.album && t.album.toLowerCase().includes(q))
+    );
+}
+
 export function sortLibraryTracks(tracks, order, favorites) {
     if (!tracks.length) return tracks;
     const favoritesSet = new Set(favorites || []);
@@ -89,6 +104,63 @@ export function getArtistAlbums(artistName, library) {
             coverTrack
         }))
         .sort((a, b) => a.album.localeCompare(b.album));
+}
+
+/** Same aggregation as renderArtistList: unique artist names from library. */
+export function getArtistNamesFromLibrary(library) {
+    const byArtist = {};
+    (library || []).forEach(t => {
+        const raw = t.album_artist || t.artist;
+        const names = parseArtistNames(raw);
+        names.forEach(name => {
+            if (!byArtist[name]) byArtist[name] = { track: t };
+        });
+    });
+    return Object.keys(byArtist).sort((a, b) => a.localeCompare(b));
+}
+
+/** Artist names that match the query (name contains query, case-insensitive). */
+export function filterArtistsByQuery(library, query) {
+    const q = (query ?? '').trim().toLowerCase();
+    if (!q) return getArtistNamesFromLibrary(library);
+    const names = getArtistNamesFromLibrary(library);
+    return names.filter(name => name.toLowerCase().includes(q));
+}
+
+/** Returns { name, track } for each artist (one representative track for cover). Used by Home mixed search. */
+export function getArtistsWithRepresentativeTrack(library) {
+    const byArtist = {};
+    (library || []).forEach(t => {
+        const raw = t.album_artist || t.artist;
+        const names = parseArtistNames(raw);
+        names.forEach(name => {
+            if (!byArtist[name]) byArtist[name] = t;
+            else if (t.id < byArtist[name].id) byArtist[name] = t;
+        });
+    });
+    return Object.entries(byArtist).map(([name, track]) => ({ name, track }));
+}
+
+/** One compact artist row for Home mixed search (same row height as song row). Click → showArtistDetail(name). */
+export function buildHomeArtistRowHtml(artistName, track, options = {}) {
+    const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
+    const coverUrl = getCoverUrl(track);
+    const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+    const safeName = (artistName || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return `
+            <div class="relative overflow-hidden rounded-2xl mb-2 group bg-[var(--bg-card)]">
+                <div class="home-mixed-artist-row flex items-center p-3 rounded-2xl border border-transparent active:scale-[0.98] transition-all cursor-pointer" data-artist-name="${esc(artistName)}" onclick="typeof showArtistDetail==='function'&&showArtistDetail('${safeName}')">
+                    <div class="song-row-cover-wrapper relative w-12 h-12 flex-shrink-0">
+                        <div class="song-row-cover absolute inset-0 rounded-xl overflow-hidden bg-cover bg-center border border-[var(--glass-border)] shadow-lg" style="${coverStyle}" role="img" aria-label="${esc(artistName)}"></div>
+                    </div>
+                    <div class="ml-4 flex-1 truncate">
+                        <div class="text-[9px] font-black uppercase tracking-widest text-[var(--text-dim)] mb-0.5">Artist</div>
+                        <div class="song-title font-bold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${esc(artistName)}</div>
+                    </div>
+                    <div class="ml-4 text-[var(--text-dim)]"><i class="fas fa-chevron-right text-xs"></i></div>
+                </div>
+            </div>
+        `;
 }
 
 /**

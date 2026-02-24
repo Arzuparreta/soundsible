@@ -242,7 +242,8 @@
                 <button type="button" class="desktop-nav-btn" data-view="favourites"><i class="fas fa-heart mr-3 w-4"></i>Favourites</button>
                 <button type="button" class="desktop-nav-btn" data-view="artists"><i class="fas fa-user mr-3 w-4"></i>Artists</button>
                 <button type="button" class="desktop-nav-btn" data-view="playlists"><i class="fas fa-layer-group mr-3 w-4"></i>Playlists</button>
-                <button type="button" class="desktop-nav-btn" data-view="downloader"><i class="fas fa-cloud-arrow-down mr-3 w-4"></i>ODST</button>
+                <button type="button" class="desktop-nav-btn" data-view="search"><i class="fas fa-search mr-3 w-4"></i>Search</button>
+                <button type="button" class="desktop-nav-btn" data-view="soundmash"><i class="fas fa-compact-disc mr-3 w-4"></i>SoundMash</button>
                 <button type="button" class="desktop-nav-btn" data-view="settings"><i class="fas fa-cog mr-3 w-4"></i>Settings</button>
                 <div class="flex-1 min-h-0"></div>
                 <div id="desktop-sidebar-playback" class="flex items-center justify-center flex-shrink-0 w-full">
@@ -304,6 +305,12 @@
                     </div>
                     <div id="desktop-playlist-list-container" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
                 </div>
+                <div id="desktop-view-search" class="desktop-view">
+                    <div class="glass-view rounded-2xl p-3 border border-[var(--glass-border)] mb-4">
+                        <input type="text" id="desktop-search-page-input" placeholder="Search library and ODST..." class="input-theme w-full min-h-[44px] rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium" />
+                    </div>
+                    <div id="desktop-search-page-results" class="space-y-2 min-h-[120px] mt-4"></div>
+                </div>
                 <div id="desktop-view-playlist-detail" class="desktop-view">
                     <button type="button" id="desktop-playlist-detail-back" class="flex items-center text-[var(--secondary)] font-bold mb-8 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" onclick="typeof DesktopUI!=='undefined'&&DesktopUI.navigateBack&&DesktopUI.navigateBack()">
                         <i class="fas fa-chevron-left mr-2"></i>Back
@@ -327,37 +334,78 @@
                     </div>
                     <div id="desktop-playlist-detail-tracks" class="space-y-2"></div>
                 </div>
-                <div id="desktop-view-downloader" class="desktop-view">
-                    <div class="space-y-6">
-                        <div class="glass-view rounded-2xl p-4 border border-[var(--glass-border)]">
-                            <div class="flex items-center gap-3 flex-wrap">
-                                <div class="flex items-stretch rounded-[var(--radius-omni-xs)] border border-[var(--accent)]/30 bg-[var(--input-bg)] overflow-hidden" role="group" aria-label="Search source">
-                                    <button type="button" id="desktop-dl-search-source-music" class="desktop-dl-search-source-btn min-h-[44px] px-4 py-2.5 text-sm font-bold bg-[var(--accent)] text-[var(--text-on-accent)] transition-colors hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-deep)]" aria-pressed="true">Music</button>
-                                    <button type="button" id="desktop-dl-search-source-youtube" class="desktop-dl-search-source-btn min-h-[44px] px-4 py-2.5 text-sm font-bold bg-[var(--accent)]/15 text-[var(--accent)] hover:bg-[var(--accent)]/25 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-deep)]" aria-pressed="false">YouTube</button>
-                                </div>
-                                <input type="text" id="desktop-dl-search-input" placeholder="Search or paste YouTube URLs..." class="flex-1 min-w-0 min-h-[44px] input-theme rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm" />
-                                <button type="button" id="desktop-dl-search-btn" class="bg-[var(--accent)] hover:opacity-90 text-[var(--text-on-accent)] min-h-[44px] px-5 py-3 rounded-[var(--radius-omni-xs)] font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-deep)]"><i class="fas fa-search"></i></button>
-                            </div>
-                            <p class="text-[10px] text-[var(--text-dim)] mt-2">URL input adds to queue. Plain text searches the selected source (Music or YouTube).</p>
-                        </div>
-                        <div id="desktop-dl-search-results" class="space-y-2 min-h-[120px]"></div>
+                <!-- YouTube preview modal (ODST result click from Search) -->
+                <div id="dl-preview-modal" class="fixed inset-0 z-[110] hidden flex-col backdrop-blur-sm" style="background-color: var(--overlay-bg);">
+                    <div class="flex justify-end p-4">
+                        <button type="button" id="dl-preview-close" class="w-12 h-12 flex items-center justify-center rounded-full bg-[var(--surface-overlay)] text-[var(--text-main)]"><i class="fas fa-times"></i></button>
                     </div>
-                    <!-- Download queue: FAB + popover (desktop, same as mobile) -->
-                    <div id="desktop-dl-queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[90] flex flex-col items-end pointer-events-none">
-                        <button id="desktop-dl-queue-fab" type="button" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)] relative">
-                            <i class="fas fa-list-ul"></i>
-                            <div id="desktop-dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)]">0</div>
-                        </button>
-                        <div id="desktop-dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
-                            <div class="p-5">
-                                <div class="flex justify-between items-center mb-4">
-                                    <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Download queue</h3>
-                                    <button type="button" id="desktop-dl-clear-queue-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-1 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
-                                    <button type="button" id="desktop-dl-submit-download-btn" class="w-9 h-9 rounded-full bg-[var(--accent)] text-[var(--text-on-accent)] flex items-center justify-center shadow-lg hover:opacity-90 active:scale-90 pointer-events-auto transition-all duration-300" aria-label="Start download"><i class="fas fa-download text-xs"></i></button>
-                                </div>
-                                <div id="desktop-dl-download-queue-list" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
-                            </div>
+                    <div class="flex-1 flex items-center justify-center p-4">
+                        <div id="dl-preview-iframe-wrap" class="w-full max-w-2xl aspect-video rounded-xl overflow-hidden bg-black"></div>
+                    </div>
+                </div>
+                <!-- Cover choice modal (when premium cover fails) -->
+                <div id="dl-cover-choice-modal" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4 backdrop-blur-[9.6px]" style="background-color: var(--overlay-bg);">
+                    <div class="glass-view rounded-[var(--radius-omni)] w-full max-w-md p-8 border border-[var(--glass-border)] shadow-2xl">
+                        <h3 class="text-xl font-bold mb-2 text-[var(--text-main)]">No Premium Cover Found</h3>
+                        <p class="text-sm text-[var(--text-dim)] mb-6">Choose how to handle the cover art for this track:</p>
+                        <div id="dl-cover-choice-track-info" class="mb-6 p-4 rounded-lg" style="background-color: var(--input-bg);">
+                            <div class="text-sm font-bold" id="dl-cover-choice-title"></div>
+                            <div class="text-xs text-[var(--text-dim)] mt-1" id="dl-cover-choice-artist"></div>
                         </div>
+                        <div class="space-y-3">
+                            <button id="dl-cover-choice-yt" class="w-full flex items-center space-x-3 p-4 bg-[var(--surface-overlay)] hover:opacity-80 rounded-lg transition-colors text-left">
+                                <i class="fas fa-image text-[var(--accent)]"></i>
+                                <div>
+                                    <div class="font-bold text-sm text-[var(--text-main)]">Use YouTube Cover</div>
+                                    <div class="text-xs text-[var(--text-dim)]">Use the YouTube thumbnail</div>
+                                </div>
+                            </button>
+                            <button id="dl-cover-choice-library" class="w-full flex items-center space-x-3 p-4 bg-[var(--surface-overlay)] hover:opacity-80 rounded-lg transition-colors text-left">
+                                <i class="fas fa-folder-open text-purple-400"></i>
+                                <div>
+                                    <div class="font-bold text-sm text-[var(--text-main)]">Choose from Library</div>
+                                    <div class="text-xs text-[var(--text-dim)]">Use cover from another song</div>
+                                </div>
+                            </button>
+                            <button id="dl-cover-choice-upload" class="w-full flex items-center space-x-3 p-4 bg-[var(--surface-overlay)] hover:opacity-80 rounded-lg transition-colors text-left">
+                                <i class="fas fa-upload text-blue-400"></i>
+                                <div>
+                                    <div class="font-bold text-sm text-[var(--text-main)]">Upload File</div>
+                                    <div class="text-xs text-[var(--text-dim)]">Upload your own cover image</div>
+                                </div>
+                            </button>
+                            <button id="dl-cover-choice-none" class="w-full flex items-center space-x-3 p-4 bg-[var(--surface-overlay)] hover:opacity-80 rounded-lg transition-colors text-left">
+                                <i class="fas fa-ban text-[var(--text-dim)]"></i>
+                                <div>
+                                    <div class="font-bold text-sm text-[var(--text-main)]">No Cover</div>
+                                    <div class="text-xs text-[var(--text-dim)]">Leave without cover art</div>
+                                </div>
+                            </button>
+                        </div>
+                        <button id="dl-cover-choice-close" class="w-full mt-6 py-3 text-[var(--text-dim)] font-bold hover:text-[var(--text-main)] transition-colors">Cancel</button>
+                    </div>
+                </div>
+                <!-- Download queue FAB + popover (Search view) -->
+                <div id="desktop-dl-queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[90] flex flex-col items-end pointer-events-none hidden">
+                    <button id="desktop-dl-queue-fab" type="button" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)] relative">
+                        <i class="fas fa-list-ul"></i>
+                        <div id="desktop-dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)]">0</div>
+                    </button>
+                    <div id="desktop-dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
+                        <div class="p-5">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Download queue</h3>
+                                <button type="button" id="desktop-dl-clear-queue-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-1 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
+                                <button type="button" id="desktop-dl-submit-download-btn" class="w-9 h-9 rounded-full bg-[var(--accent)] text-[var(--text-on-accent)] flex items-center justify-center shadow-lg hover:opacity-90 active:scale-90 pointer-events-auto transition-all duration-300" aria-label="Start download"><i class="fas fa-download text-xs"></i></button>
+                            </div>
+                            <div id="desktop-dl-download-queue-list" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="desktop-view-soundmash" class="desktop-view">
+                    <div class="flex flex-col items-center justify-center py-16 text-center">
+                        <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)] mb-4">SoundMash</h1>
+                        <p class="text-sm text-[var(--text-dim)]">Coming soon</p>
                     </div>
                 </div>
                 <div id="desktop-view-settings" class="desktop-view">
