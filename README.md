@@ -1,4 +1,4 @@
-# <img src="branding/rounded-logo-app.png" alt="Soundsible" width="54" height="54" align="center"> **Soundsible**
+# <img src="branding/rounded-logo-app.png" alt="Soundsible" width="52" height="52" align="center"> **Soundsible**
 
 **The Self-Hosted, full featured Music Environment.**
 
