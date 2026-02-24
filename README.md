@@ -2,7 +2,7 @@
 
 **The Self-Hosted, full featured Music Environment.**
 
-**Sounsible** is a, more or less complex piece of software that aims to **replicate how a high-end streaming music platform works**, and use that infrastructure to **download**, **manage** and **listen** to your **self-hosted** music, accesible from any device, anywhere in the world (with the aid of [Tailscale](https://github.com/tailscale/tailscale)).
+**Sounsible** is a piece of software that aims to **replicate how a high-end streaming music platform works**, and use that infrastructure to **download**, **manage** and **listen** to your **self-hosted** music, accesible from any device, anywhere in the world (with the aid of [Tailscale](https://github.com/tailscale/tailscale)).
 I'm fully concerned about getting the closest experience possible to a third provided music platform, and I'm working everyday on features and quality of life.
 This repository contains the full Soundsible ecosystem, with the Station as its core component.
 
