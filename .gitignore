@@ -16,6 +16,8 @@ node_modules/
 # IDEs
 .vscode/
 .idea/
+.cursor/
+.cursorignore
 *.swp
 *.swo
 *~
