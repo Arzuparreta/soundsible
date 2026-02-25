@@ -15,13 +15,17 @@ This repository contains the full Soundsible ecosystem, with the Station as its 
 ---
 
 ## The Station (Windows, Linux, Android, iOS)
-The **Station** is the primary, recommended interface for all users. It combines the precision of a dedicated hardware player with the ubiquity of the modern web, delivering a premium listening experience across all your devices.
-
-### Key Features:
+The **Station** is the primary, recommended interface for all users. It's a modern JavaScript UI that just works, and embeds the high quality audio processing from your running backend, with a full featured listening, library management, and most importantly, music downloading and finding.
+- Search within your **library** and the **internet** and download any music; **all from the same search bar**.
+- Select **search source**: Youtube Music / Youtube
+- Easy backend library management from the frontend: Edit metadata, refetch metadata, upload your own covers. Read music from 2 different APIs.
+  
+### Key backend features:
 - **Max quality**: Playback **engine** ensures **máximum quality**. Downloader tool defaults to **losless quality** and offer **manual quality selection**.
 - **Setup Wizard on app launcher**: Easy setup for setting absolutely every configuration needed for you to start streaming your music right now!
 - **ODST Downloader**: Embeded downloader that downloads music from youtube or yt-music. It automatically fetches all the metadata including covers, and uploads it to your previously configured NAS (or desktop local) storage or third provided cloud (setup for Cloudflare R2, Backblaze R2 and S2 users on **Setup Wizard**).
 - **Universal Sync**: Your library, playlists, queue, metadata, configurations... all synchronised along your devices.
+- **High grade cover fetching** with fallback to yt thumbnail for non-music tracks.
 
 ---
   
