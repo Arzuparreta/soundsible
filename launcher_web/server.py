@@ -113,7 +113,7 @@ def launch_ecosystem():
             [str(VENV_PYTHON), str(RUN_PY), "--daemon"],
             **popen_kw,
         )
-        return jsonify({"ok": True, "message": "Ecosystem is starting."}), 200
+        return jsonify({"ok": True, "message": "Ecosystem is starting!"}), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

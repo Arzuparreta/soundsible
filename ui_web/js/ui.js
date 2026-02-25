@@ -12,17 +12,9 @@ import { wireActionMenu } from './wires.js';
 window.audioEngine = audioEngine;
 
 export class UI {
-    /** When set, NP view shows this track (preview) without starting playback; cleared on hide or when user taps play. */
-    static _npDisplayTrack = null;
-    /** Last currentTrack.id we saw; used to detect "playing track changed" so we only clear _npDisplayTrack on skip, not on play/pause or seek. */
-    static _lastCurrentTrackId = null;
-    /** When set, apply this seek percent once on next timeupdate (after preview track starts). */
-    static _npPendingSeekPercent = null;
-
     static VIEW_LABELS = {
         'home': 'LIBRARY',
         'favourites': 'FAVORITES',
-        'artists': 'ARTISTS',
         'artist-detail': 'ARTIST',
         'playlists': 'PLAYLISTS',
         'playlist-detail': 'PLAYLIST',
@@ -120,7 +112,6 @@ export class UI {
         this.viewStack = [];
         this.currentView = 'home';
         this._npGesturesBound = false;
-        this._npCurrentTrackOpen = false; // true when NP is open for the *currently playing* track (labels fade out)
         this._npViewOpen = false; // true when Now Playing view is visible (omni label fades out)
         this.isIslandActive = false;
         this.isBlooming = false;
@@ -205,33 +196,14 @@ export class UI {
         // Omni-Island State Sync
         this.syncIsland(state);
 
-        if (state.currentTrack || UI._npDisplayTrack) {
+        if (state.currentTrack) {
             if (this.dom.nowPlayingView?.classList.contains('active')) {
-                // Clear preview only when the *playing* track actually changed (user skipped), not on play/pause or seek
-                const playingTrackJustChanged = state.currentTrack && UI._lastCurrentTrackId !== state.currentTrack.id;
-                if (UI._npDisplayTrack && playingTrackJustChanged && state.currentTrack.id !== UI._npDisplayTrack.id) {
-                    UI._npDisplayTrack = null;
-                    if (this.dom.nowPlayingView) this.dom.nowPlayingView.classList.remove('np-preview');
-                }
-                const displayTrack = UI._npDisplayTrack || state.currentTrack;
-                const isPlaying = UI._npDisplayTrack
-                    ? (state.currentTrack?.id === UI._npDisplayTrack.id && state.isPlaying)
-                    : state.isPlaying;
-                this.updateNowPlaying(displayTrack, isPlaying);
-                // Timeline expands only when current track's NP (not preview)
+                this.updateNowPlaying(state.currentTrack, state.isPlaying);
                 const npSeek = this.dom.npSeekContainer;
-                if (UI._npDisplayTrack) {
-                    if (npSeek) npSeek.classList.remove('np-timeline-expanded');
-                    document.body.classList.remove('np-timeline-expanded');
-                } else if (state.currentTrack) {
-                    if (npSeek) npSeek.classList.add('np-timeline-expanded');
-                    document.body.classList.add('np-timeline-expanded');
-                }
+                if (npSeek) npSeek.classList.add('np-timeline-expanded');
+                document.body.classList.add('np-timeline-expanded');
             }
             this.updateTransportControls(state.isPlaying);
-            UI._lastCurrentTrackId = state.currentTrack?.id ?? null;
-        } else {
-            UI._lastCurrentTrackId = null;
         }
 
         // Floating Queue
@@ -357,11 +329,11 @@ export class UI {
         }
     }
 
-    /** Omnibar metadata visible only when island expanded and not viewing current track's NP. */
+    /** Omnibar metadata visible when island expanded and NP view is closed. */
     static updateOmniMetadataVisibility() {
         const container = this.dom.omniMetadataContainer;
         if (!container) return;
-        const visible = this.isIslandActive && !this._npCurrentTrackOpen;
+        const visible = this.isIslandActive && !this._npViewOpen;
         container.style.opacity = visible ? '1' : '0';
     }
 
@@ -464,40 +436,29 @@ export class UI {
         this.updateTransportControls(isPlaying);
     }
 
-    static showNowPlaying(trackOrUndefined) {
-        const track = trackOrUndefined ?? store.state.currentTrack;
+    /** Opens Now Playing only for the currently playing track. No-op if nothing is playing. */
+    static showNowPlaying() {
+        const track = store.state.currentTrack;
         if (!track) return;
-
-        // Preview only when opening NP for a different track than the one playing
-        UI._npDisplayTrack = (trackOrUndefined !== undefined && store.state.currentTrack?.id !== track.id) ? track : null;
 
         const npView = this.dom.nowPlayingView;
         if (!npView) return;
 
-        const isPlaying = UI._npDisplayTrack
-            ? (store.state.currentTrack?.id === UI._npDisplayTrack.id && store.state.isPlaying)
-            : store.state.isPlaying;
-
         npView.classList.remove('hidden', 'np-closing');
-        if (UI._npDisplayTrack) npView.classList.add('np-preview');
-        else npView.classList.remove('np-preview');
-        this._npCurrentTrackOpen = !UI._npDisplayTrack; // hide omnibar labels only when viewing current track's NP
         this._npViewOpen = true;
         this.updateOmniMetadataVisibility();
         this.updateOmniLabelVisibility();
         document.body.classList.add('now-playing-open');
-        this.updateNowPlaying(track, isPlaying);
+        this.updateNowPlaying(track, store.state.isPlaying);
 
         setTimeout(() => {
             npView.classList.add('active');
-            Haptics.heavy(); // 30ms pulse for opening
-            if (!UI._npDisplayTrack) {
-                requestAnimationFrame(() => {
-                    const npSeek = this.dom.npSeekContainer;
-                    if (npSeek) npSeek.classList.add('np-timeline-expanded');
-                    document.body.classList.add('np-timeline-expanded');
-                });
-            }
+            Haptics.heavy();
+            requestAnimationFrame(() => {
+                const npSeek = this.dom.npSeekContainer;
+                if (npSeek) npSeek.classList.add('np-timeline-expanded');
+                document.body.classList.add('np-timeline-expanded');
+            });
         }, 10);
 
         if (!this._npGesturesBound) {
@@ -507,13 +468,9 @@ export class UI {
     }
 
     static hideNowPlaying() {
-        UI._npDisplayTrack = null;
-        UI._npCurrentTrackOpen = false;
         this._npViewOpen = false;
         this.updateOmniMetadataVisibility();
         this.updateOmniLabelVisibility();
-        UI._npPendingSeekPercent = null;
-        UI._lastCurrentTrackId = store.state.currentTrack?.id ?? null;
         const npView = this.dom.nowPlayingView;
         if (!npView) return;
 
@@ -525,7 +482,7 @@ export class UI {
 
         npView.classList.add('np-closing');
         npView.offsetHeight; /* force reflow so close transition is applied */
-        npView.classList.remove('active', 'np-preview');
+        npView.classList.remove('active');
         npView.style.transform = '';
         document.body.classList.remove('now-playing-open');
         setTimeout(() => {
@@ -600,6 +557,32 @@ export class UI {
         setTimeout(() => popover.classList.add('hidden'), 300);
     }
 
+    /**
+     * Slide direction from omnibar DOM order: views left of the blank slide from left, right of blank slide from right.
+     * Reordering ribbon items in HTML preserves this behavior. Stack views (artist-detail, playlist-detail) use their root view's side.
+     */
+    static getSlideClassForView(viewId) {
+        const ribbon = document.getElementById('omni-nav-ribbon');
+        if (!ribbon) return 'view-from-right';
+        const leftViews = [];
+        const rightViews = [];
+        let pastBlank = false;
+        for (const el of ribbon.children) {
+            if (el.hasAttribute('data-omni-blank')) {
+                pastBlank = true;
+                continue;
+            }
+            const v = el.getAttribute('data-view');
+            if (v) {
+                if (pastBlank) rightViews.push(v);
+                else leftViews.push(v);
+            }
+        }
+        const stackToRoot = { 'artist-detail': 'home', 'playlist-detail': 'playlists' };
+        const resolved = stackToRoot[viewId] || viewId;
+        return leftViews.includes(resolved) ? 'view-from-left' : 'view-from-right';
+    }
+
     static showView(viewId, saveToHistory = true) {
         // Auto-hide Now Playing if active (even if selecting the same view)
         if (this.dom.nowPlayingView?.classList.contains('active')) {
@@ -607,6 +590,8 @@ export class UI {
         }
 
         if (viewId === this.currentView) return;
+
+        if (viewId === 'home' && this.currentView === 'artist-detail') store.update({ libraryTab: 'artists' });
 
         UI._viewTransitionEnd = Date.now() + 520;
         this.updateLabel(viewId);
@@ -616,7 +601,7 @@ export class UI {
         if (!targetView) return;
 
         if (saveToHistory) {
-            const roots = ['home', 'favourites', 'playlists', 'artists', 'search', 'settings', 'soundmash'];
+            const roots = ['home', 'favourites', 'playlists', 'search', 'settings', 'soundmash'];
             if (roots.includes(this.currentView) && roots.includes(viewId)) this.viewStack = [];
             else this.viewStack.push(this.currentView);
         }
@@ -626,16 +611,14 @@ export class UI {
         // 1. Prepare Outgoing (stays in background with dim/scale)
         if (oldView) oldView.classList.add('view-outgoing');
 
-        // 2. Prepare Incoming — by omnibar position only: left of center → slide from left, right of center → slide from right (never direction-based)
-        const leftOfCenter = ['soundmash', 'search', 'settings'];
-        const rightOfCenter = ['playlists', 'home', 'favourites', 'artists', 'artist-detail', 'playlist-detail'];
-        const slideClass = leftOfCenter.includes(viewId) ? 'view-from-left' : 'view-from-right';
+        // 2. Prepare Incoming — slide direction from omnibar DOM order: views left of blank → slide from left, right of blank → slide from right (reorder ribbon = behavior follows)
+        const slideClass = UI.getSlideClassForView(viewId);
         targetView.classList.remove('hidden', 'view-warm-hidden-left', 'view-warm-hidden-right');
         targetView.classList.add('view-incoming');
         targetView.classList.add(slideClass);
         
         // Returning to artists from artist-detail: clear sticky :active from back button and suppress card feedback briefly
-        const fromArtistDetail = viewId === 'artists' && this.currentView === 'artist-detail';
+        const fromArtistDetail = viewId === 'home' && this.currentView === 'artist-detail';
         if (fromArtistDetail) {
             document.activeElement?.blur?.();
             targetView.classList.add('artist-just-returned');
@@ -657,7 +640,7 @@ export class UI {
                 window.clearContentForView(oldViewId);
             }
             if (oldView && oldView.id !== `view-${viewId}`) {
-                const warmViews = { 'view-home': 'view-warm-hidden-right', 'view-artists': 'view-warm-hidden-right' };
+                const warmViews = { 'view-home': 'view-warm-hidden-right' };
                 const warmClass = warmViews[oldView.id];
                 if (warmClass) {
                     oldView.classList.add(warmClass);
@@ -888,179 +871,207 @@ export class UI {
             if (e.touches.length > 1 && e.cancelable) e.preventDefault();
         }, { passive: false });
 
-        let startX = 0;
-        let startY = 0;
-        let activeRow = null;
-        let isHorizontal = false;
-        let isEdgeSwipe = false;
-        let isEdgeSwipeFromFullCover = false;
-        let longPressTimer = null;
-        let longPressTriggered = false;
+        const gesture = {
+            startX: 0,
+            startY: 0,
+            activeRow: null,
+            isHorizontal: false,
+            isEdgeSwipe: false,
+            isEdgeSwipeFromFullCover: false,
+            longPressTimer: null,
+            longPressTriggered: false,
+            releasedToNativeScroll: false,
+            touchMoveBound: false
+        };
+
+        function shouldAttachBlockingTouchMove() {
+            return gesture.isEdgeSwipe || !!gesture.activeRow;
+        }
+
+        function attachGestureTouchMove() {
+            if (gesture.touchMoveBound) return;
+            gesture.touchMoveBound = true;
+            document.addEventListener('touchmove', onGestureTouchMove, { passive: false });
+        }
+
+        function detachGestureTouchMove() {
+            if (!gesture.touchMoveBound) return;
+            gesture.touchMoveBound = false;
+            document.removeEventListener('touchmove', onGestureTouchMove, { passive: false });
+        }
+
+        function onGestureTouchMove(e) {
+            const touch = e.touches[0];
+            const diffX = touch.clientX - gesture.startX;
+            const diffY = Math.abs(touch.clientY - gesture.startY);
+
+            if (gesture.longPressTimer && (Math.abs(diffX) > 15 || diffY > 15)) {
+                clearTimeout(gesture.longPressTimer);
+                gesture.longPressTimer = null;
+            }
+
+            if (gesture.activeRow && !gesture.isEdgeSwipe && diffY > 10 && diffY > Math.abs(diffX)) {
+                detachGestureTouchMove();
+                gesture.releasedToNativeScroll = true;
+                return;
+            }
+
+            if (gesture.isEdgeSwipe) {
+                if (gesture.isEdgeSwipeFromFullCover) return;
+                if (this.currentView === 'home') return;
+                if (e.cancelable) e.preventDefault();
+                this.content.style.transform = `translateX(${Math.max(0, diffX)}px)`;
+                return;
+            }
+
+            if (!gesture.activeRow) return;
+
+            if (!gesture.isHorizontal && Math.abs(diffX) > diffY && Math.abs(diffX) > 10) {
+                gesture.isHorizontal = true;
+                if (gesture.longPressTimer) {
+                    clearTimeout(gesture.longPressTimer);
+                    gesture.longPressTimer = null;
+                }
+            }
+
+            if (gesture.isHorizontal) {
+                if (e.cancelable) e.preventDefault();
+                gesture.activeRow.style.transform = `translateX(${Math.max(Math.min(diffX, 100), -100)}px)`;
+                if (gesture.activeRow.parentElement) {
+                    gesture.activeRow.parentElement.classList.add('is-swiping');
+                }
+            }
+        }
 
         document.addEventListener('touchstart', (e) => {
             if (!e.touches.length) return;
-            // Desktop context (fine pointer + large width): no mobile swipe/long-press; use click-only behaviour
             if (this.dom.desktopApp || (window.matchMedia('(pointer: fine)').matches && window.matchMedia('(min-width: 1024px)').matches)) return;
             const touch = e.touches[0];
             const row = e.target.closest('.song-row');
-            
-            startX = touch.clientX;
-            startY = touch.clientY;
-            isHorizontal = false;
-            isEdgeSwipe = false;
-            isEdgeSwipeFromFullCover = false;
 
-            // Clear any existing long press timer
-            if (longPressTimer) {
-                clearTimeout(longPressTimer);
-                longPressTimer = null;
+            gesture.startX = touch.clientX;
+            gesture.startY = touch.clientY;
+            gesture.isHorizontal = false;
+            gesture.isEdgeSwipe = false;
+            gesture.isEdgeSwipeFromFullCover = false;
+            gesture.releasedToNativeScroll = false;
+
+            if (gesture.longPressTimer) {
+                clearTimeout(gesture.longPressTimer);
+                gesture.longPressTimer = null;
             }
-            longPressTriggered = false;
+            gesture.longPressTriggered = false;
 
-            // 1. Edge Swipe Detection (from left: close full-cover or go back). Capture phase so it works when touch starts on overlay.
-            if (startX < 40) {
-                isEdgeSwipe = true;
+            if (gesture.startX < 40) {
+                gesture.isEdgeSwipe = true;
                 const fullCoverEl = this.dom.fullCoverOverlay;
                 const fullCoverOpen = fullCoverEl && !fullCoverEl.classList.contains('hidden');
                 if (fullCoverOpen) {
-                    isEdgeSwipeFromFullCover = true;
+                    gesture.isEdgeSwipeFromFullCover = true;
                 } else if (this.currentView !== 'home') {
                     this.content.style.transition = 'none';
                 }
+                if (shouldAttachBlockingTouchMove()) attachGestureTouchMove();
                 return;
             }
 
-            const holdMsFull = 480;   /* hold anywhere on row */
-            const holdMsCover = Math.round(holdMsFull * 0.7); /* 70% when on cover */
+            const holdMsCover = 340;
 
-            // 2. Queue item: long-press is only for reorder (handled in app.js). Do not open NP or full-cover.
-            const queueItem = e.target.closest('.queue-item');
-            if (queueItem) return;
+            if (e.target.closest('.queue-item')) return;
 
-            // 3. Song row: long-press on cover -> full-resolution cover overlay; elsewhere -> Now Playing
-            if (row) {
-                activeRow = row;
+            const onCover = !!e.target.closest('.song-row-cover');
+            if (row && onCover) {
+                gesture.activeRow = row;
                 row.style.transition = 'none';
                 const trackId = row.getAttribute('data-id');
-                const onCover = !!e.target.closest('.song-row-cover');
-                const delay = onCover ? holdMsCover : holdMsFull;
-                longPressTimer = setTimeout(() => {
-                    if (!isHorizontal) {
-                        longPressTriggered = true;
+                gesture.longPressTimer = setTimeout(() => {
+                    if (!gesture.isHorizontal) {
+                        gesture.longPressTriggered = true;
                         const track = typeof window.getTrackFromCurrentContext === 'function' ? window.getTrackFromCurrentContext(trackId) : null;
-                        if (onCover && track) {
+                        if (track) {
                             this.showFullCoverView(Resolver.getCoverUrl(track));
                             Haptics.heavy();
-                        } else {
-                            this.showNowPlaying(track ?? undefined);
-                            Haptics.heavy();
                         }
-                        longPressTimer = null;
+                        gesture.longPressTimer = null;
                     }
-                }, delay);
+                }, holdMsCover);
+            } else if (row) {
+                gesture.activeRow = row;
+                row.style.transition = 'none';
             }
+
+            if (shouldAttachBlockingTouchMove()) attachGestureTouchMove();
         }, { passive: true, capture: true });
 
-        document.addEventListener('touchmove', (e) => {
-            const touch = e.touches[0];
-            const diffX = touch.clientX - startX;
-            const diffY = Math.abs(touch.clientY - startY);
-
-            // Cancel long-press on significant movement (e.g. queue item hold then drag)
-            if (longPressTimer && (Math.abs(diffX) > 15 || diffY > 15)) {
-                clearTimeout(longPressTimer);
-                longPressTimer = null;
-            }
-
-            // Edge Swipe Handling (on home we don't drag content so gesture can pass through for natural bounce)
-            if (isEdgeSwipe) {
-                if (isEdgeSwipeFromFullCover) return; // no visual drag for full-cover; just close on touchend
-                if (this.currentView === 'home') return; // no drag, no preventDefault — nothing to do on library
-                if (e.cancelable) e.preventDefault();
-                const move = Math.max(0, diffX);
-                this.content.style.transform = `translateX(${move}px)`;
-                return;
-            }
-
-            if (!activeRow) return;
-            
-            if (!isHorizontal && Math.abs(diffX) > diffY && Math.abs(diffX) > 10) {
-                isHorizontal = true;
-                // Cancel long press timer when swipe is detected
-                if (longPressTimer) {
-                    clearTimeout(longPressTimer);
-                    longPressTimer = null;
+        function cleanupGestureEnd() {
+            detachGestureTouchMove();
+            if (gesture.releasedToNativeScroll) {
+                if (gesture.activeRow && gesture.activeRow.parentElement) {
+                    gesture.activeRow.parentElement.classList.remove('is-swiping');
                 }
+                gesture.activeRow = null;
+                gesture.releasedToNativeScroll = false;
             }
-            
-            if (isHorizontal) {
-                if (e.cancelable) e.preventDefault();
-                const move = Math.max(Math.min(diffX, 100), -100);
-                activeRow.style.transform = `translateX(${move}px)`;
-                
-                // Show hints only when swiping horizontally
-                if (activeRow.parentElement) {
-                    activeRow.parentElement.classList.add('is-swiping');
-                }
-            }
-        }, { passive: false });
+        }
 
         document.addEventListener('touchend', (e) => {
-            // 1. End Edge Swipe
-            if (isEdgeSwipe) {
-                const diffX = e.changedTouches[0].clientX - startX;
+            const wasReleasedToScroll = gesture.releasedToNativeScroll;
+            cleanupGestureEnd();
+            if (wasReleasedToScroll) return;
+
+            if (gesture.isEdgeSwipe) {
+                const diffX = e.changedTouches[0].clientX - gesture.startX;
                 const threshold = window.innerWidth * 0.12;
 
-                if (isEdgeSwipeFromFullCover) {
+                if (gesture.isEdgeSwipeFromFullCover) {
                     if (diffX > threshold) {
                         this.vibrate(20);
                         this.hideFullCoverView();
                     }
                 } else {
-                    // Only reset content (transition + translateX(0)) when we actually dragged it (not on home)
                     if (this.currentView !== 'home') {
                         if (this.dom.content) this.dom.content.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
                         if (this.dom.content) this.dom.content.style.transform = 'translateX(0)';
                     }
                     if (diffX > threshold && this.currentView !== 'home') {
                         this.vibrate(20);
-                        if (this.currentView === 'artist-detail') this.showView('artists', false);
-                        else if (this.currentView === 'playlist-detail') this.showView('playlists', false);
+                        if (this.currentView === 'artist-detail') {
+                            store.update({ libraryTab: 'artists' });
+                            this.showView('home', false);
+                        } else if (this.currentView === 'playlist-detail') this.showView('playlists', false);
                         else if (this.currentView === 'soundmash') this.navigateBack();
                         else this.showView('home', false);
                     }
                 }
-                isEdgeSwipe = false;
-                isEdgeSwipeFromFullCover = false;
+                gesture.isEdgeSwipe = false;
+                gesture.isEdgeSwipeFromFullCover = false;
                 return;
             }
 
-            // 2. End Row Swipe
-            if (activeRow) {
-                const diff = e.changedTouches[0].clientX - startX;
-                const trackId = activeRow.getAttribute('data-id');
+            if (gesture.activeRow) {
+                const diff = e.changedTouches[0].clientX - gesture.startX;
+                const trackId = gesture.activeRow.getAttribute('data-id');
                 const isFav = trackId && store.state.favorites.includes(trackId);
-                const isFavFirstAdd = isHorizontal && diff < -70 && !isFav &&
+                const isFavFirstAdd = gesture.isHorizontal && diff < -70 && !isFav &&
                     this.currentView === 'home' && (store.state.libraryOrder || 'date_added') === 'favorites_first';
 
                 if (isFavFirstAdd) {
                     Haptics.tick();
                     this.showToast('Added to Favourites');
-                    if (typeof window.scheduleFavFirstAnimation === 'function') window.scheduleFavFirstAnimation(trackId, activeRow);
-                    activeRow = null;
+                    if (typeof window.scheduleFavFirstAnimation === 'function') window.scheduleFavFirstAnimation(trackId, gesture.activeRow);
+                    gesture.activeRow = null;
                 } else {
-                    const fastSwipeFavFirstAdd = !isHorizontal && diff < -70 && !isFav &&
+                    const fastSwipeFavFirstAdd = !gesture.isHorizontal && diff < -70 && !isFav &&
                         this.currentView === 'home' && (store.state.libraryOrder || 'date_added') === 'favorites_first';
                     if (fastSwipeFavFirstAdd) {
                         Haptics.tick();
                         this.showToast('Added to Favourites');
-                        if (typeof window.scheduleFavFirstAnimation === 'function') window.scheduleFavFirstAnimation(trackId, activeRow);
-                        activeRow = null;
+                        if (typeof window.scheduleFavFirstAnimation === 'function') window.scheduleFavFirstAnimation(trackId, gesture.activeRow);
+                        gesture.activeRow = null;
                     } else {
-                        // Standard behavior: return to 0 and optionally toggle
-                        activeRow.style.transition = 'transform 0.4s cubic-bezier(0.19, 1, 0.22, 1)';
-                        activeRow.style.transform = 'translateX(0)';
-                        if (isHorizontal) {
+                        gesture.activeRow.style.transition = 'transform 0.4s cubic-bezier(0.19, 1, 0.22, 1)';
+                        gesture.activeRow.style.transform = 'translateX(0)';
+                        if (gesture.isHorizontal) {
                             if (diff > 70) {
                                 const inQueue = store.state.queue.some(t => t.id === trackId);
                                 store.toggleQueue(trackId);
@@ -1072,34 +1083,37 @@ export class UI {
                                 this.showToast(isFav ? 'Removed from Favourites' : 'Added to Favourites');
                             }
                         }
-                        const rowToCleanup = activeRow;
+                        const rowToCleanup = gesture.activeRow;
                         setTimeout(() => {
                             if (rowToCleanup && rowToCleanup.parentElement) {
                                 rowToCleanup.parentElement.classList.remove('is-swiping');
                             }
                         }, 400);
-                        activeRow = null;
+                        gesture.activeRow = null;
                     }
                 }
             }
-            
-            // Clear long press timer on touch end
-            if (longPressTimer) {
-                clearTimeout(longPressTimer);
-                longPressTimer = null;
+
+            if (gesture.longPressTimer) {
+                clearTimeout(gesture.longPressTimer);
+                gesture.longPressTimer = null;
             }
+        }, { passive: true });
+
+        document.addEventListener('touchcancel', () => {
+            cleanupGestureEnd();
         }, { passive: true });
 
         // Prevent click events after long press (song row or queue item cover)
         document.addEventListener('click', (e) => {
-            if (longPressTriggered) {
+            if (gesture.longPressTriggered) {
                 const row = e.target.closest('.song-row');
                 const queueItem = e.target.closest('.queue-item');
                 if (row || queueItem) {
                     e.preventDefault();
                     e.stopPropagation();
                     e.stopImmediatePropagation();
-                    longPressTriggered = false;
+                    gesture.longPressTriggered = false;
                     return false;
                 }
             }
@@ -1162,56 +1176,6 @@ export class UI {
                 this.hideNowPlaying();
             }
         }, { passive: true });
-
-        const npArt = this.dom.npArt;
-        if (npArt) {
-            let coverStartTime = 0, coverStartX = 0, coverStartY = 0, coverMaxDelta = 0;
-            let coverTapHandled = false; /* avoid double-fire when touch triggers click */
-            const playPreviewTrackAndExpandTimeline = () => {
-                if (!UI._npDisplayTrack || store.state.currentTrack?.id === UI._npDisplayTrack.id) return false;
-                Haptics.tick();
-                window.playTrack(UI._npDisplayTrack.id);
-                UI._npDisplayTrack = null;
-                if (this.dom.nowPlayingView) this.dom.nowPlayingView.classList.remove('np-preview');
-                if (this.dom.npSeekContainer) this.dom.npSeekContainer.classList.add('np-timeline-expanded');
-                document.body.classList.add('np-timeline-expanded');
-                return true;
-            };
-            npArt.addEventListener('touchstart', (e) => {
-                const t = e.touches[0];
-                coverStartTime = Date.now();
-                coverStartX = t.clientX;
-                coverStartY = t.clientY;
-                coverMaxDelta = 0;
-            }, { passive: true });
-            npArt.addEventListener('touchmove', (e) => {
-                const t = e.touches[0];
-                const dx = t.clientX - coverStartX;
-                const dy = t.clientY - coverStartY;
-                coverMaxDelta = Math.max(coverMaxDelta, Math.hypot(dx, dy));
-            }, { passive: true });
-            npArt.addEventListener('touchend', (e) => {
-                const t = e.changedTouches[0];
-                const duration = Date.now() - coverStartTime;
-                const dx = t.clientX - coverStartX;
-                const dy = t.clientY - coverStartY;
-                const movement = Math.hypot(dx, dy);
-                const validTap = duration >= 100 && duration <= 450 && movement < 12 &&
-                    UI._npDisplayTrack && store.state.currentTrack?.id !== UI._npDisplayTrack.id;
-                if (!validTap) return;
-                if (playPreviewTrackAndExpandTimeline()) {
-                    coverTapHandled = true;
-                    setTimeout(() => { coverTapHandled = false; }, 300);
-                }
-            }, { passive: true });
-            npArt.addEventListener('click', (e) => {
-                if (coverTapHandled) return;
-                if (!UI._npDisplayTrack || store.state.currentTrack?.id === UI._npDisplayTrack.id) return;
-                e.preventDefault();
-                e.stopPropagation();
-                playPreviewTrackAndExpandTimeline();
-            });
-        }
     }
 
     static initOmniIsland() {
@@ -1322,7 +1286,7 @@ export class UI {
             if (this._omniHoldTimer) clearTimeout(this._omniHoldTimer);
             if (this._labelAnimTimer) clearTimeout(this._labelAnimTimer);
 
-            // 0. SWIPE GESTURES: up = NP / preview play; down = back to library (same as edge swipe from left)
+            // 0. SWIPE GESTURES: up = Now Playing (current track only); down = back to library
             const deadzone = 15;
             if (this._isHolding && !this.isBlooming && this._startedInside && isHorizontalValid) {
                 const isNPActive = this.dom.nowPlayingView?.classList.contains('active');
@@ -1332,20 +1296,16 @@ export class UI {
                     this.resetOmniIsland();
                     return;
                 }
-                if (deltaY < -deadzone && isNPActive && UI._npDisplayTrack) {
-                    window.playTrack(UI._npDisplayTrack.id);
-                    UI._npDisplayTrack = null;
-                    if (this.dom.nowPlayingView) this.dom.nowPlayingView.classList.remove('np-preview');
-                    if (this.dom.npSeekContainer) this.dom.npSeekContainer.classList.add('np-timeline-expanded');
-                    document.body.classList.add('np-timeline-expanded');
-                    this.resetOmniIsland();
-                    return;
-                }
-                // Swipe down: same as edge swipe from left — go back (artist-detail → artists, playlist-detail → playlists, else home)
+                // Swipe down: same as edge swipe from left — go back (artist-detail → home with Artists tab, playlist-detail → playlists, else home)
                 if (deltaY > deadzone) {
-                    const targetView = this.currentView === 'artist-detail' ? 'artists' : this.currentView === 'playlist-detail' ? 'playlists' : 'home';
-                    if (this.currentView !== targetView) this.vibrate(20);
-                    this.showView(targetView, false);
+                    if (this.currentView === 'artist-detail') {
+                        store.update({ libraryTab: 'artists' });
+                        this.showView('home', false);
+                    } else {
+                        const targetView = this.currentView === 'playlist-detail' ? 'playlists' : 'home';
+                        if (this.currentView !== targetView) this.vibrate(20);
+                        this.showView(targetView, false);
+                    }
                     this.resetOmniIsland();
                     return;
                 }
@@ -1367,13 +1327,7 @@ export class UI {
 
                 if (zone === 'prev') audioEngine.prev();
                 else if (zone === 'next') audioEngine.next();
-                else {
-                    if (UI._npDisplayTrack) {
-                        audioEngine.toggle();
-                    } else if (store.state.currentTrack) {
-                        audioEngine.toggle();
-                    }
-                }
+                else if (store.state.currentTrack) audioEngine.toggle();
             }
 
             // 2. NAV COMMIT — use _activeNavView, or _lastActiveNavView if finger released over blank (e.g. edge of Artists slot)
@@ -1712,10 +1666,10 @@ export class UI {
             b.classList.toggle('text-[var(--text-dim)]', mode === 'off');
         });
         const omniRepeatOne = this.dom.omniRepeatOneIndicator;
-        if (omniRepeatOne) omniRepeatOne.classList.toggle('hidden', mode !== 'one');
+        if (omniRepeatOne) omniRepeatOne.classList.toggle('hidden', mode !== 'once');
         
         const indMini = this.dom.miniRepeatOneIndicator;
-        if (indMini) indMini.classList.toggle('hidden', mode !== 'one');
+        if (indMini) indMini.classList.toggle('hidden', mode !== 'once');
 
         const shuffleBtns = [this.dom.miniShuffleBtn, this.dom.omniShuffleBtn].filter(b => b);
         shuffleBtns.forEach(b => {

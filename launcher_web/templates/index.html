@@ -208,11 +208,35 @@
     const btnLaunch = document.getElementById('btn-launch');
     const btnStop = document.getElementById('btn-stop');
     const toast = document.getElementById('toast');
+    const TOAST_DURATION = 3500;
+    const TOAST_TRANSITION_MS = 250;
+    let hideTimer = null;
 
     function showToast(message, isError) {
+      if (hideTimer) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+      }
+      const wasVisible = toast.classList.contains('visible');
+      if (wasVisible) {
+        toast.classList.remove('visible');
+        setTimeout(() => {
+          toast.textContent = message;
+          toast.className = isError ? 'error' : '';
+          requestAnimationFrame(() => toast.classList.add('visible'));
+          hideTimer = setTimeout(() => {
+            toast.classList.remove('visible');
+            hideTimer = null;
+          }, TOAST_DURATION);
+        }, TOAST_TRANSITION_MS);
+        return;
+      }
       toast.textContent = message;
-      toast.className = 'visible' + (isError ? ' error' : '');
-      setTimeout(() => toast.classList.remove('visible'), 3500);
+      toast.className = (isError ? 'error ' : '') + 'visible';
+      hideTimer = setTimeout(() => {
+        toast.classList.remove('visible');
+        hideTimer = null;
+      }, TOAST_DURATION);
     }
 
     function launchEcosystem() {
@@ -221,7 +245,7 @@
         .then(r => r.json())
         .then(data => {
           btnLaunch.disabled = false;
-          if (data.ok) showToast(data.message || 'Ecosystem is starting.');
+          if (data.ok) showToast(data.message || 'Ecosystem is starting!');
           else showToast(data.error || 'Failed to start.', true);
         })
         .catch(err => {

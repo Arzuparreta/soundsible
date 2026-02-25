@@ -10,6 +10,7 @@ import * as renderers from './renderers.js';
 import { scoreLibrary, scoreArtist, mergeAndSortByScore } from './search.js';
 import { wireSettings, wireActionMenu } from './wires.js';
 import { DesktopUI } from './ui_desktop.js';
+import { checkResumeFromOtherDevice } from './playback_resume.js';
 
 console.log('Soundsible Desktop initializing...');
 
@@ -835,7 +836,7 @@ async function init() {
 
         const endpoints = [...store.state.priorityList, window.location.hostname];
         await connectionManager.findActiveHost([...new Set(endpoints)].filter(Boolean));
-        store.syncLibrary();
+        store.syncLibrary().then(() => checkResumeFromOtherDevice());
 
         const songsViewModeToContainerClass = {
             list: 'songs-container-list space-y-2 transition-all duration-300',

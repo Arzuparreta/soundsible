@@ -230,7 +230,7 @@ class SoundsibleLauncher:
                 }
             subprocess.Popen([str(self.python_exe), str(self.root_dir / "run.py"), "--daemon"], **popen_args)
             console.print(Panel.fit(
-                "[bold green]Ecosystem is starting.[/bold green]\n\n"
+                "[bold green]Ecosystem is starting![/bold green]\n\n"
                 "Station: [bold cyan]http://localhost:5005/player/[/bold cyan]\n\n"
                 "[dim]Logs: logs/daemon.log[/dim]",
                 border_style="green"

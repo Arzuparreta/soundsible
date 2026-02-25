@@ -186,11 +186,13 @@
         
         .song-row {
             transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1), background-color 0.3s ease;
-            will-change: transform;
             background-color: var(--bg-card); /* Ensure solid background */
         }
+        .is-swiping .song-row {
+            will-change: transform;
+        }
 
-        /* Prevent browser long-press image preview (duplicate cover) when opening Now Playing via hold */
+        /* Prevent browser long-press image preview (duplicate cover) when opening full cover via hold */
         .song-row-cover-img,
         .queue-item-cover-img {
             pointer-events: none;
@@ -586,23 +588,42 @@
             will-change: transform;
         }
 
+        /* Library tab bar (mobile): sliding pill indicator, Apple-like animation */
+        .library-tab-bar-mobile {
+            --library-tab-gap: 6px;
+            --library-tab-pad: 4px;
+        }
+        .library-tab-indicator {
+            left: var(--library-tab-pad);
+            top: var(--library-tab-pad);
+            bottom: var(--library-tab-pad);
+            width: calc(50% - var(--library-tab-gap) / 2 - var(--library-tab-pad));
+            transition: transform 0.28s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+        .library-tab-bar-mobile[data-active-tab="artists"] .library-tab-indicator {
+            transform: translateX(calc(100% + var(--library-tab-gap)));
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .library-tab-indicator { transition-duration: 0.12s; }
+        }
+
         /* Artists: on touch, never use browser :hover/:active for card (wrong element gets selected). Only our .artist-card-tapped on real tap shows feedback. */
         @media (hover: none) {
-            #view-artists .artist-card-cover { transform: none !important; }
-            #view-artists .artist-card-overlay { opacity: 0 !important; }
-            #view-artists .artist-card-name { color: var(--text-main) !important; }
+            #library-artists .artist-card-cover { transform: none !important; }
+            #library-artists .artist-card-overlay { opacity: 0 !important; }
+            #library-artists .artist-card-name { color: var(--text-main) !important; }
         }
         /* Tap-driven selection: only the card that received the click gets this class (overrides touch suppress) */
-        #view-artists .artist-card.artist-card-tapped .artist-card-cover { transform: scale(0.95) !important; }
-        #view-artists .artist-card.artist-card-tapped .artist-card-overlay { opacity: 1 !important; }
-        #view-artists .artist-card.artist-card-tapped .artist-card-name { color: var(--accent) !important; }
+        #library-artists .artist-card.artist-card-tapped .artist-card-cover { transform: scale(0.95) !important; }
+        #library-artists .artist-card.artist-card-tapped .artist-card-overlay { opacity: 1 !important; }
+        #library-artists .artist-card.artist-card-tapped .artist-card-name { color: var(--accent) !important; }
         /* During/after scroll or just after return: keep suppress so no stray :active shows (backup) */
-        #view-artists.artist-scroll-active .artist-card-cover { transform: none !important; }
-        #view-artists.artist-scroll-active .artist-card-overlay { opacity: 0 !important; }
-        #view-artists.artist-scroll-active .artist-card-name { color: var(--text-main) !important; }
-        #view-artists.artist-just-returned .artist-card-cover { transform: none !important; }
-        #view-artists.artist-just-returned .artist-card-overlay { opacity: 0 !important; }
-        #view-artists.artist-just-returned .artist-card-name { color: var(--text-main) !important; }
+        #library-artists.artist-scroll-active .artist-card-cover { transform: none !important; }
+        #library-artists.artist-scroll-active .artist-card-overlay { opacity: 0 !important; }
+        #library-artists.artist-scroll-active .artist-card-name { color: var(--text-main) !important; }
+        #view-home.artist-just-returned .artist-card-cover { transform: none !important; }
+        #view-home.artist-just-returned .artist-card-overlay { opacity: 0 !important; }
+        #view-home.artist-just-returned .artist-card-name { color: var(--text-main) !important; }
 
         /* Artist detail: expandable album tracks */
         .artist-album-expanded .artist-album-tracks { display: block !important; }
@@ -617,15 +638,6 @@
             overflow: hidden;
         }
 
-        /* Now Playing: hide "Now Playing" label in preview (B's page while A is playing) */
-        #now-playing-view.np-preview #np-now-playing-label {
-            opacity: 0;
-            pointer-events: none;
-        }
-        /* NP timeline: hidden in preview (B's page while A plays); when current track's NP, unsticks and expands */
-        #now-playing-view.np-preview #np-seek-container {
-            display: none !important;
-        }
         #now-playing-view #np-seek-container {
             display: block;
             overflow: hidden;
@@ -636,8 +648,7 @@
                 opacity 0.35s ease-out,
                 transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
         }
-        #now-playing-view.active:not(.np-preview):not(.np-closing) #np-seek-container.np-timeline-expanded,
-        #now-playing-view.active:not(.np-preview) #np-seek-container.np-timeline-expanded {
+        #now-playing-view.active:not(.np-closing) #np-seek-container.np-timeline-expanded {
             max-height: 72px;
             opacity: 1;
             transform: translateY(0);
@@ -713,16 +724,24 @@
 
         <main id="content" class="flex-1 relative">
             <div id="view-home" class="view">
-                <div id="home-search-bar" class="glass-view rounded-[var(--radius-omni)] p-3 border border-[var(--glass-border)] mb-4">
-                    <input type="text" id="home-search-input" placeholder="Search library..." class="home-search-input input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium text-[var(--text-main)]" />
+                <div id="library-tab-bar" class="library-tab-bar-mobile relative flex gap-1.5 p-1 rounded-full border border-[var(--glass-border)] mb-4 w-fit ml-auto glass-view" style="background: var(--input-bg);" data-active-tab="songs">
+                    <div id="library-tab-indicator" class="library-tab-indicator absolute rounded-full bg-[var(--accent)] pointer-events-none z-0" aria-hidden="true"></div>
+                    <div id="library-tab-buttons" class="flex gap-1.5 flex-1 min-w-0 relative z-10">
+                        <!-- Tabs injected by app.js from LIBRARY_TABS -->
+                    </div>
                 </div>
-                <div id="all-songs" class="space-y-2"></div>
-            </div>
-            <div id="view-artists" class="view view-warm-hidden-right">
-                <div id="all-artists" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6"></div>
+                <div id="library-songs" class="library-panel">
+                    <div id="home-search-bar" class="glass-view rounded-[var(--radius-omni)] p-3 border border-[var(--glass-border)] mb-4">
+                        <input type="text" id="home-search-input" placeholder="Search library..." class="home-search-input input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium text-[var(--text-main)]" />
+                    </div>
+                    <div id="all-songs" class="space-y-2"></div>
+                </div>
+                <div id="library-artists" class="library-panel hidden">
+                    <div id="all-artists" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6"></div>
+                </div>
             </div>
             <div id="view-artist-detail" class="view hidden">
-                <button onclick="UI.showView('artists')" class="flex items-center text-[var(--secondary)] font-bold mb-8 group">
+                <button type="button" id="artist-detail-back" class="flex items-center text-[var(--secondary)] font-bold mb-8 group">
                     <i class="fas fa-chevron-left mr-2 group-active:-translate-x-1 transition-transform"></i>
                     <span>Back</span>
                 </button>
@@ -997,14 +1016,14 @@
                                 </div>
                             </div>
                             <div id="omni-nav-ribbon" class="absolute inset-0 flex items-center justify-between px-4 opacity-0 scale-95 transition-all pointer-events-none" style="transition-duration: 200ms;">
-                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="soundmash"><i class="fas fa-compact-disc text-base text-[var(--nav-icon)]"></i></div>
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="playlists"><i class="fas fa-layer-group text-base text-[var(--nav-icon)]"></i></div>
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="favourites"><i class="fas fa-heart text-base text-[var(--nav-icon)]"></i></div>
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="home"><i class="fas fa-box text-base text-[var(--nav-icon)]"></i></div>
+                                <!-- Middle blank: center of bar is icon-sized (data-omni-blank drives slide direction: views left of this slide from left, right slide from right) -->
+                                <div class="w-10 h-10 flex-shrink-0" data-omni-blank></div>
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="search"><i class="fas fa-search text-base text-[var(--nav-icon)]"></i></div>
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="settings"><i class="fas fa-cog text-base text-[var(--nav-icon)]"></i></div>
-                                <!-- Middle blank: center of bar is icon-sized -->
-                                <div class="w-10 h-10 flex-shrink-0"></div>
-                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="playlists"><i class="fas fa-layer-group text-base text-[var(--nav-icon)]"></i></div>
-                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="home"><i class="fas fa-record-vinyl text-base text-[var(--nav-icon)]"></i></div>
-                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="favourites"><i class="fas fa-heart text-base text-[var(--nav-icon)]"></i></div>
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="soundmash"><i class="fas fa-compact-disc text-base text-[var(--nav-icon)]"></i></div>
                             </div>
                         </div>
         
@@ -1043,7 +1062,7 @@
                     <div id="np-artist" class="text-sm text-[var(--accent)] font-bold uppercase tracking-widest truncate">Artist</div>
                 </div>
                 <div id="np-art" class="np-art-bg w-full aspect-square max-w-[340px] rounded-[var(--radius-omni)] shadow-[0_40px_80px_rgba(0,0,0,0.8)] border border-[var(--glass-border)] overflow-hidden bg-cover bg-center" role="img" aria-label="Album art"></div>
-                <!-- Flying timeline: seek bar under cover art (expands when current track's NP; hidden in preview) -->
+                <!-- Flying timeline: seek bar under cover art -->
                 <div id="np-seek-container" class="w-full max-w-[340px] mt-4 px-1 py-3 cursor-pointer touch-manipulation" role="slider" aria-label="Seek" tabindex="0">
                     <div class="relative min-h-[14px] mb-1">
                         <span id="np-time-current" class="absolute bottom-0 text-[11px] font-bold text-[var(--text-dim)] font-mono whitespace-nowrap" style="left: 0%; transform: translateX(-50%);" aria-hidden="true">0:00</span>
@@ -1159,7 +1178,7 @@
     </div>
 
     <!-- Search ODST source toggle: fixed overlay above bottom bar, visible only on Search view -->
-    <div id="search-odst-toggle-overlay" class="fixed left-4 z-[85] hidden flex gap-1.5 p-1 rounded-full border border-[var(--glass-border)] shadow-lg pointer-events-auto" style="bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem + 68px); background: var(--input-bg);">
+    <div id="search-odst-toggle-overlay" class="fixed left-4 z-[85] hidden flex gap-1.5 p-1 rounded-full border border-[var(--glass-border)] shadow-lg pointer-events-auto" style="bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem + 98px); background: var(--input-bg);">
         <button type="button" id="search-odst-music" class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-[var(--accent)] text-[var(--text-on-accent)]" aria-pressed="true">Music</button>
         <button type="button" id="search-odst-youtube" class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-[var(--accent)]/15 text-[var(--accent)]" aria-pressed="false">Youtube</button>
     </div>

@@ -6,6 +6,7 @@
 import { store } from './store.js';
 import { Haptics } from './haptics.js';
 import { formatTime } from './renderers.js';
+import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 
 function esc(str) {
     if (!str) return "";
@@ -142,7 +143,13 @@ export class Downloader {
         this.refreshStatus();
         if (this.confClientId) this.loadConfig();
         if (this.spotifyList) this.loadSpotifyPlaylists();
-        setInterval(() => this.refreshStatus(), 5000);
+        setInterval(() => {
+            if (!isVisible()) return;
+            this.refreshStatus();
+        }, 5000);
+        onVisibilityChange((visible) => {
+            if (visible) this.refreshStatus();
+        });
     }
 
     static bindEvents() {
@@ -619,6 +626,7 @@ export class Downloader {
         this.stopLibrarySyncFallback();
         this.librarySyncFallbackAttempts = 0;
         this.librarySyncFallbackTimer = setInterval(() => {
+            if (!isVisible()) return;
             this.librarySyncFallbackAttempts += 1;
             store.syncLibrary();
             const status = this.lastDownloaderStatus;

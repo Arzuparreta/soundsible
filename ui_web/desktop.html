@@ -111,6 +111,53 @@
         .swipe-hints { opacity: 0 !important; visibility: hidden; pointer-events: none; }
         #desktop-main .song-row { transform: none !important; }
         #desktop-now-playing button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        #desktop-now-playing #desktop-volume:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        /* Volume bubble: same size as shuffle/repeat when collapsed; expands on hover from left (icon stays fixed). */
+        .desktop-volume-bubble-wrap {
+            width: 120px;
+            min-width: 120px;
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            position: relative;
+        }
+        #desktop-volume-bubble {
+            width: 32px;
+            min-width: 32px;
+            height: 32px;
+            min-height: 32px;
+            overflow: hidden;
+            border-radius: 9999px;
+            transition: width 333ms cubic-bezier(0.19, 1, 0.22, 1);
+            transform: translateZ(0);
+        }
+        .desktop-volume-bubble-wrap:hover #desktop-volume-bubble {
+            width: 100px;
+        }
+        /* Volume handle: invisible by default; fades in over 333ms when bubble expands; fades out over 323ms on close (invisible 0.01s before bubble fully contracted). */
+        #desktop-volume::-webkit-slider-thumb {
+            opacity: 0;
+            transition: opacity 323ms cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        .desktop-volume-bubble-wrap:hover #desktop-volume::-webkit-slider-thumb {
+            opacity: 1;
+            transition: opacity 333ms cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        #desktop-volume::-moz-range-thumb {
+            opacity: 0;
+            transition: opacity 323ms cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        .desktop-volume-bubble-wrap:hover #desktop-volume::-moz-range-thumb {
+            opacity: 1;
+            transition: opacity 333ms cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #desktop-volume-bubble { transition-duration: 0.05s; }
+            #desktop-volume::-webkit-slider-thumb,
+            .desktop-volume-bubble-wrap:hover #desktop-volume::-webkit-slider-thumb,
+            #desktop-volume::-moz-range-thumb,
+            .desktop-volume-bubble-wrap:hover #desktop-volume::-moz-range-thumb { transition-duration: 0.05s; }
+        }
         #desktop-sidebar .desktop-nav-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         #desktop-sidebar-playback button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         /* Desktop logo-omnibar: circle (seed) / pill (expanded), same look as mobile omni-seed. */
@@ -273,13 +320,31 @@
                     <input type="range" id="desktop-np-seek" class="h-1.5 rounded-full accent-[var(--accent)] min-w-0" min="0" max="100" value="0" style="background: var(--seek-track);" />
                     <span id="desktop-np-time-duration" class="desktop-np-time-label text-[10px] font-mono text-[var(--text-dim)] text-right">0:00</span>
                 </div>
-                <div class="desktop-np-left">
-                    <div class="desktop-np-cover-wrap flex items-center">
-                        <div id="desktop-np-cover" class="w-14 h-14 rounded-xl bg-cover bg-center flex-shrink-0 border border-[var(--glass-border)] cursor-pointer bg-[var(--bg-card)]"></div>
+                <div class="desktop-np-left-cell flex items-center gap-3 min-w-0">
+                    <div class="desktop-np-left">
+                        <div class="desktop-np-cover-wrap flex items-center">
+                            <div id="desktop-np-cover" class="w-14 h-14 rounded-xl bg-cover bg-center flex-shrink-0 border border-[var(--glass-border)] cursor-pointer bg-[var(--bg-card)]"></div>
+                        </div>
+                        <div class="desktop-np-center flex flex-col gap-1.5 items-stretch justify-center min-h-0">
+                            <div id="desktop-np-title" class="font-bold text-sm truncate text-[var(--text-main)]"></div>
+                            <div id="desktop-np-artist" class="text-xs text-[var(--text-dim)] truncate"></div>
+                        </div>
                     </div>
-                    <div class="desktop-np-center flex flex-col gap-1.5 items-stretch justify-center min-h-0">
-                        <div id="desktop-np-title" class="font-bold text-sm truncate text-[var(--text-main)]"></div>
-                        <div id="desktop-np-artist" class="text-xs text-[var(--text-dim)] truncate"></div>
+                    <div id="desktop-np-bubbles" class="flex items-center gap-2 flex-shrink-0">
+                        <div class="desktop-np-bubble glass-view flex items-center justify-center rounded-full w-8 h-8 min-w-[32px] min-h-[32px]">
+                            <button type="button" id="desktop-shuffle-btn" class="w-full h-full flex items-center justify-center rounded-full text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] transition-colors focus:outline-none" aria-label="Shuffle"><i class="fas fa-shuffle text-xs"></i></button>
+                        </div>
+                        <div class="desktop-np-bubble glass-view flex items-center justify-center rounded-full w-8 h-8 min-w-[32px] min-h-[32px] relative">
+                            <button type="button" id="desktop-repeat-btn" class="w-full h-full flex items-center justify-center rounded-full text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] transition-colors focus:outline-none relative" aria-label="Repeat"><i class="fas fa-repeat text-xs"></i><span id="desktop-repeat-one-indicator" class="absolute bottom-0 right-0 text-[7px] font-black text-[var(--accent)] hidden">1</span></button>
+                        </div>
+                        <div class="desktop-volume-bubble-wrap">
+                            <div id="desktop-volume-bubble" class="desktop-np-bubble glass-view flex items-center gap-2 pl-0 pr-1.5">
+                                <button type="button" id="desktop-volume-mute-btn" class="desktop-volume-icon-wrap flex items-center justify-center w-8 h-8 min-w-[32px] min-h-[32px] flex-shrink-0 text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] rounded-full transition-colors focus:outline-none" aria-label="Mute">
+                                    <i id="desktop-volume-icon" class="fas fa-volume-high text-xs" aria-hidden="true"></i>
+                                </button>
+                                <input type="range" id="desktop-volume" class="h-1.5 flex-1 min-w-0 rounded-full accent-[var(--accent)]" min="0" max="100" value="100" style="background: var(--seek-track);" aria-label="Volume" />
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="desktop-np-playback-cell">
@@ -293,12 +358,7 @@
             </div>
             <div id="desktop-body-row">
             <aside id="desktop-sidebar" class="glass-view">
-                <div class="mb-4 flex justify-center">
-                    <button type="button" id="desktop-logo-omni" class="logo-omni-seed desktop-logo-omni glass-view flex items-center justify-center overflow-hidden pointer-events-auto cursor-pointer border-none outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-deep)]" aria-label="Soundsible menu" title="Soundsible">
-                        <img src="assets/icons/logo_sin_fondo.png" class="h-10 w-10 flex-shrink-0 object-contain pointer-events-none" alt="" aria-hidden="true">
-                    </button>
-                </div>
-                <button type="button" class="desktop-nav-btn active" data-view="home"><i class="fas fa-record-vinyl mr-3 w-4"></i>Library</button>
+                <button type="button" class="desktop-nav-btn active" data-view="home"><i class="fas fa-box mr-3 w-4"></i>Library</button>
                 <button type="button" class="desktop-nav-btn" data-view="favourites"><i class="fas fa-heart mr-3 w-4"></i>Favourites</button>
                 <button type="button" class="desktop-nav-btn" data-view="artists"><i class="fas fa-user mr-3 w-4"></i>Artists</button>
                 <button type="button" class="desktop-nav-btn" data-view="playlists"><i class="fas fa-layer-group mr-3 w-4"></i>Playlists</button>
@@ -317,6 +377,11 @@
                     <div id="desktop-queue-tracks" class="space-y-0 py-1"></div>
                 </div>
                 <div class="flex-1 min-h-0"></div>
+                <div class="flex justify-center flex-shrink-0 pt-2">
+                    <button type="button" id="desktop-logo-omni" class="logo-omni-seed desktop-logo-omni glass-view flex items-center justify-center overflow-hidden pointer-events-auto cursor-pointer border-none outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-deep)]" aria-label="Soundsible menu" title="Soundsible">
+                        <img src="assets/icons/logo_sin_fondo.png" class="h-10 w-10 flex-shrink-0 object-contain pointer-events-none" alt="" aria-hidden="true">
+                    </button>
+                </div>
             </aside>
 
             <main id="desktop-main">

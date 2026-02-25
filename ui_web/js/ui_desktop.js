@@ -88,6 +88,30 @@ export const DesktopUI = {
             const pct = track.duration > 0 ? (100 * ct / track.duration) : 0;
             seek.value = Math.min(100, Math.max(0, pct));
         }
+
+        const shuffleBtn = el('desktop-shuffle-btn');
+        const repeatBtn = el('desktop-repeat-btn');
+        const repeatOneInd = el('desktop-repeat-one-indicator');
+        const volumeInput = el('desktop-volume');
+        if (shuffleBtn) {
+            shuffleBtn.classList.toggle('text-[var(--accent)]', state.shuffleEnabled);
+            shuffleBtn.classList.toggle('text-[var(--text-dim)]', !state.shuffleEnabled);
+        }
+        if (repeatBtn) {
+            repeatBtn.classList.toggle('text-[var(--accent)]', state.repeatMode !== 'off');
+            repeatBtn.classList.toggle('text-[var(--text-dim)]', state.repeatMode === 'off');
+        }
+        if (repeatOneInd) repeatOneInd.classList.toggle('hidden', state.repeatMode !== 'once');
+        if (volumeInput) {
+            const vol = state.volume;
+            volumeInput.value = Math.round(Number.isFinite(vol) ? Math.min(100, Math.max(0, vol * 100)) : 100);
+        }
+        const volumeIcon = el('desktop-volume-icon');
+        const volumeMuteBtn = el('desktop-volume-mute-btn');
+        if (volumeIcon) {
+            volumeIcon.className = state.muted ? 'fas fa-volume-xmark text-xs' : 'fas fa-volume-high text-xs';
+        }
+        if (volumeMuteBtn) volumeMuteBtn.setAttribute('aria-label', state.muted ? 'Unmute' : 'Mute');
     },
 
     showToast(msg) {
@@ -456,6 +480,28 @@ export const DesktopUI = {
             npCover.addEventListener('click', () => {
                 const track = store.state.currentTrack;
                 if (track) this.showFullCoverView(Resolver.getCoverUrl(track));
+            });
+        }
+
+        const shuffleBtn = el('desktop-shuffle-btn');
+        const repeatBtn = el('desktop-repeat-btn');
+        const volumeInput = el('desktop-volume');
+        const volumeMuteBtn = el('desktop-volume-mute-btn');
+        if (shuffleBtn) shuffleBtn.addEventListener('click', () => store.toggleShuffle());
+        if (repeatBtn) repeatBtn.addEventListener('click', () => store.toggleRepeat());
+        if (volumeMuteBtn) {
+            volumeMuteBtn.addEventListener('click', () => {
+                store.toggleMute();
+                audioEngine.setVolume(store.state.muted ? 0 : store.state.volume);
+            });
+        }
+        if (volumeInput) {
+            volumeInput.addEventListener('input', () => {
+                const v = Number(volumeInput.value) / 100;
+                audioEngine.setVolume(v);
+                const patch = { volume: v };
+                if (store.state.muted && v > 0) patch.muted = false;
+                store.update(patch);
             });
         }
 

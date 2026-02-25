@@ -18,7 +18,7 @@ class Store {
             favorites: this.load('favorites', []),
             playlists: this.load('playlists', {}),
             queue: [],
-            repeatMode: 'off', // off, all, one
+            repeatMode: 'off', // off = no repeat, one = infinite repeat of current song, once = repeat current song one time then continue
             shuffleEnabled: false,
             currentTrack: null,
             isPlaying: false,
@@ -33,7 +33,10 @@ class Store {
             hapticsEnabled: this.load('haptics', true),
             libraryOrder: this.load('library_order', 'date_added'),
             songsViewMode: (() => { const v = this.load('songs_view_mode', 'list'); const valid = ['list', 'grid', 'gridCompact', 'gridLarge']; return valid.includes(v) ? v : (v === 'gridXLarge' ? 'gridLarge' : 'list'); })(),
-            artistViewMode: (() => { const v = this.load('artist_view_mode', 'gridCompact'); const valid = ['gridCompact', 'grid', 'gridLarge']; return valid.includes(v) ? v : (v === 'gridXLarge' ? 'gridLarge' : 'gridCompact'); })()
+            artistViewMode: (() => { const v = this.load('artist_view_mode', 'gridCompact'); const valid = ['gridCompact', 'grid', 'gridLarge']; return valid.includes(v) ? v : (v === 'gridXLarge' ? 'gridLarge' : 'gridCompact'); })(),
+            libraryTab: (() => { const v = this.load('library_tab', 'songs'); return v === 'artists' ? 'artists' : 'songs'; })(),
+            volume: (() => { const v = Number(this.load('volume', 1)); return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1; })(),
+            muted: this.load('muted', false)
         };
         this.subscribers = [];
         this.applyTheme(this.state.theme);
@@ -104,6 +107,12 @@ class Store {
         if (patch.appIcon !== undefined) this.save('app_icon', patch.appIcon);
         if (patch.songsViewMode !== undefined) this.save('songs_view_mode', patch.songsViewMode);
         if (patch.artistViewMode !== undefined) this.save('artist_view_mode', patch.artistViewMode);
+        if (patch.libraryTab !== undefined) {
+            const v = patch.libraryTab;
+            if (v === 'artists' || v === 'songs') this.save('library_tab', v);
+        }
+        if (patch.volume !== undefined) this.save('volume', patch.volume);
+        if (patch.muted !== undefined) this.save('muted', patch.muted);
         if (patch.playlists !== undefined) this.save('playlists', patch.playlists);
         console.log("State Update:", Object.keys(patch));
         this.subscribers.forEach(cb => cb(this.state));
@@ -118,6 +127,39 @@ class Store {
 
     get apiBase() {
         return `http://${this.state.activeHost}:5005`;
+    }
+
+    /** Stable device id for playback sync (persisted in localStorage). */
+    getDeviceId() {
+        let id = this.load('device_id', null);
+        if (!id) {
+            id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `dev-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+            this.save('device_id', id);
+        }
+        return id;
+    }
+
+    /** Short device name for "Resume from {device}?" (v1: Desktop vs Mobile from path). */
+    getDeviceName() {
+        return (typeof window !== 'undefined' && window.location.pathname.includes('/desktop/')) ? 'Desktop' : 'Mobile';
+    }
+
+    /** Push current playback state to server (for cross-device resume). Fire-and-forget. */
+    pushPlaybackState(trackId, positionSec, isPlaying) {
+        const deviceId = this.getDeviceId();
+        const deviceName = this.getDeviceName();
+        const body = JSON.stringify({
+            track_id: trackId || null,
+            position_sec: typeof positionSec === 'number' ? positionSec : 0,
+            is_playing: !!isPlaying,
+            device_id: deviceId,
+            device_name: deviceName
+        });
+        fetch(`${this.apiBase}/api/playback/state`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body
+        }).catch(() => {});
     }
 
     get placeholderCoverUrl() {
@@ -201,7 +243,7 @@ class Store {
     }
 
     async toggleRepeat() {
-        const modes = ['off', 'all', 'one'];
+        const modes = ['off', 'one', 'once']; // off → repeat (∞) → repeat(1) → off
         const nextMode = modes[(modes.indexOf(this.state.repeatMode) + 1) % modes.length];
         
         try {
@@ -219,6 +261,10 @@ class Store {
             console.error("Repeat toggle error:", err);
             return false;
         }
+    }
+
+    toggleMute() {
+        this.update({ muted: !this.state.muted });
     }
 
     async toggleFavourite(trackId) {
@@ -570,6 +616,12 @@ class Store {
             console.error("Clear queue error:", err);
             return false;
         }
+    }
+
+    /** Peek first track in queue without popping (for pre-buffering). */
+    peekNextFromQueue() {
+        const q = this.state.queue;
+        return q && q.length > 0 ? q[0] : null;
     }
 
     async popNextFromQueue() {

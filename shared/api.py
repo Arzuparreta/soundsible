@@ -12,13 +12,14 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, Response, send_from_directory
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room
 from flask_cors import CORS
 
 logger = logging.getLogger(__name__)
 
 from shared.models import PlayerConfig, Track, LibraryMetadata, StorageProvider
 from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, DEFAULT_CACHE_DIR
+from shared.playback_state import get_state as get_playback_state, put_state as put_playback_state, get_scope_from_request
 from player.library import LibraryManager
 from player.engine import PlaybackEngine
 from player.queue_manager import QueueManager
@@ -424,6 +425,18 @@ def get_active_endpoints():
 app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+
+@socketio.on('playback_register')
+def on_playback_register(data):
+    """Register this socket for playback stop requests. Join room playback:{scope}:{device_id}."""
+    device_id = (data or {}).get('device_id')
+    if not device_id:
+        return
+    scope = get_scope_from_request()
+    room = f"playback:{scope}:{device_id}"
+    join_room(room, sid=request.sid)
+
 
 # Path to the new Web UI and repo branding
 WEB_UI_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ui_web')
@@ -1477,7 +1490,7 @@ def shuffle_playback_queue():
 def set_playback_repeat():
     _, _, queue = get_core()
     data = request.json
-    mode = data.get('mode', 'off') # off, all, one
+    mode = data.get('mode', 'off')  # off, all, one, once
     queue.set_repeat_mode(mode)
     return jsonify({"status": "success", "mode": mode})
 
@@ -1565,6 +1578,40 @@ def toggle_playback():
         engine.pause()
         return jsonify({"status": "toggled", "is_playing": engine.is_playing})
     return jsonify({"error": "Engine not ready"}), 500
+
+
+@app.route('/api/playback/state', methods=['GET'])
+def playback_get_state():
+    """Return last playback state for this scope; optional exclude_device to prefer another device's state."""
+    scope = get_scope_from_request()
+    exclude_device = request.args.get('exclude_device') or None
+    state = get_playback_state(scope, exclude_device_id=exclude_device)
+    if not state:
+        return '', 204
+    return jsonify(state)
+
+
+@app.route('/api/playback/state', methods=['PUT'])
+def playback_put_state():
+    """Persist playback state and update active devices (scoped)."""
+    scope = get_scope_from_request()
+    data = request.json or {}
+    put_playback_state(scope, data)
+    return jsonify({"status": "ok"})
+
+
+@app.route('/api/playback/notify-stop', methods=['POST'])
+def playback_notify_stop():
+    """Notify the given device (in this scope) to stop playback. Emits playback_stop_requested via Socket.IO."""
+    scope = get_scope_from_request()
+    data = request.json or {}
+    device_id = data.get('device_id')
+    if not device_id:
+        return jsonify({"error": "device_id required"}), 400
+    room = f"playback:{scope}:{device_id}"
+    socketio.emit('playback_stop_requested', {}, room=room)
+    return jsonify({"status": "sent"})
+
 
 # --- Downloader Endpoints ---
 

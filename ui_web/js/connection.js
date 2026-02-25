@@ -3,6 +3,10 @@
  * Handles multi-path probing and hot-swap connectivity.
  */
 import { store } from './store.js';
+import { isVisible, onChange as onVisibilityChange } from './visibility.js';
+
+const RECONNECT_INTERVAL_VISIBLE_MS = 5000;
+const RECONNECT_INTERVAL_HIDDEN_MS = 20000;
 
 export class ConnectionManager {
     constructor() {
@@ -62,6 +66,10 @@ export class ConnectionManager {
         this.socket.on('connect', () => {
             console.log("✅ Socket Connected");
             store.update({ isOnline: true });
+            this.socket.emit('playback_register', {
+                device_id: store.getDeviceId(),
+                device_name: store.getDeviceName()
+            });
         });
 
         this.socket.on('disconnect', () => {
@@ -82,31 +90,58 @@ export class ConnectionManager {
         this.socket.on('library_updated', () => {
             store.syncLibrary();
         });
+
+        this.socket.on('playback_stop_requested', () => {
+            window.dispatchEvent(new CustomEvent('playback_stop_requested'));
+        });
     }
 
     startReconnectionLoop() {
         if (this.reconnectInterval) return;
-        
-        console.log("🔄 Starting Reconnection Loop...");
-        this.reconnectInterval = setInterval(async () => {
+
+        const runProbe = async () => {
             if (store.state.isOnline) {
-                clearInterval(this.reconnectInterval);
-                this.reconnectInterval = null;
+                this._clearReconnectLoop();
                 return;
             }
-
             console.log("📡 Probing for Station recovery...");
             const endpoints = [...store.state.priorityList, window.location.hostname];
             const uniqueEndpoints = [...new Set(endpoints)].filter(e => e);
-            
             const success = await this.findActiveHost(uniqueEndpoints);
             if (success) {
                 console.log("✨ Station Recovered!");
                 store.syncLibrary();
+                this._clearReconnectLoop();
+            }
+        };
+
+        this._clearReconnectLoop = () => {
+            if (this.reconnectInterval) {
                 clearInterval(this.reconnectInterval);
                 this.reconnectInterval = null;
             }
-        }, 5000); // Try every 5 seconds
+            if (this._unsubscribeVisibility) {
+                this._unsubscribeVisibility();
+                this._unsubscribeVisibility = null;
+            }
+        };
+
+        const startInterval = () => {
+            const ms = isVisible() ? RECONNECT_INTERVAL_VISIBLE_MS : RECONNECT_INTERVAL_HIDDEN_MS;
+            this.reconnectInterval = setInterval(runProbe, ms);
+        };
+
+        console.log("🔄 Starting Reconnection Loop...");
+        startInterval();
+
+        this._unsubscribeVisibility = onVisibilityChange((visible) => {
+            if (this.reconnectInterval) {
+                clearInterval(this.reconnectInterval);
+                this.reconnectInterval = null;
+            }
+            if (visible && !store.state.isOnline) runProbe();
+            startInterval();
+        });
     }
 
     async probe(host) {
