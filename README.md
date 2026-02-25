@@ -6,7 +6,7 @@
 I'm fully concerned about getting the closest experience possible to a third provided music platform, and I'm working everyday on features and quality of life.
 This repository contains the full Soundsible ecosystem, with the Station as its core component.
 
-## **Ways of using it:**
+## **Two ways:**
 - **Full environment experience**: [**Tailscale**](https://github.com/tailscale/tailscale) **(Recommended)**
    (Tailscale let's you access your running API from anywhere in the world, so you can listen to your streamed music anywhere) or;
 - Only local playback: No extra configuration needed.
