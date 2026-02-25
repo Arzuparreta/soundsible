@@ -63,7 +63,7 @@ After [installation](#-installation):
 ```bash
 python start_launcher.py
 ```
-The launcher runs at **http://localhost:5099** (you can bookmark it).
+The launcher runs at **http://localhost:5099** (you can bookmark it). The ecosystem runs in the background; you don't need to keep a terminal open. To stop it, use the **Stop** button on the same launcher page. Reopen the launcher anytime to start or stop.
 
 **Terminal / SSH:** Use the slim CLI for full control:
 ```bash
