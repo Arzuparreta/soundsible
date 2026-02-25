@@ -2,38 +2,56 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
 
 # Virtual environment
 venv/
 env/
 ENV/
+.venv/
+
+# Node (ui_web / tooling)
+node_modules/
 
 # IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
 
 # Testing
 .pytest_cache/
+.mypy_cache/
 .coverage
 htmlcov/
+.tox/
 
 # Build artifacts
 dist/
 build/
+*.egg
 *.egg-info/
+*.egg-info
 
 # Configuration files with secrets
 config.json
 *.key
 *.pem
 .env
+.env.local
+.env.*.local
 
 # Cache and temporary files
 *.log
 .cache/
 tmp/
+temp/
+.ruff_cache/
 
 # Music files (don't commit test libraries)
 *.mp3
@@ -42,5 +60,6 @@ tmp/
 *.m4a
 *.wav
 
+# Project-specific
 .gemini/
 gha-creds-*.json
