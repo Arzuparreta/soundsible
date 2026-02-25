@@ -27,6 +27,16 @@ function escapeCssUrl(url) {
     return String(url).replace(/"/g, '%22').replace(/'/g, '%27');
 }
 
+/** Play overlay for desktop: glass circle with play icon, shown on hover. No pointer-events so wrapper receives click. */
+function desktopPlayOverlayHtml() {
+    return `<div class="desktop-play-overlay absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"><span class="desktop-play-overlay-circle w-10 h-10 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm border border-white/10"><i class="fas fa-play text-white text-sm ml-0.5"></i></span></div>`;
+}
+
+/** Smaller overlay for queue/list row covers (w-12 h-12). Exported for search.js desktop rows. */
+export function desktopPlayOverlaySmallHtml() {
+    return `<div class="desktop-play-overlay absolute inset-0 flex items-center justify-center rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"><span class="desktop-play-overlay-circle w-8 h-8 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm border border-white/10"><i class="fas fa-play text-white text-[10px] ml-0.5"></i></span></div>`;
+}
+
 /**
  * Shared library search: filter tracks by query (title, artist, album).
  * Same engine used by Library and Search tab — single source of truth.
@@ -166,34 +176,40 @@ export function buildHomeArtistRowHtml(artistName, track, options = {}) {
 /**
  * Build HTML for song rows. Uses div + background-image for covers (no img) per project rule.
  * @param {Array} tracks
- * @param {Object} options - { activeTrackId, favIds, getCoverUrl, addDataIndex } (addDataIndex adds data-index for drag reorder)
+ * @param {Object} options - { activeTrackId, favIds, getCoverUrl, addDataIndex, desktopClickBehavior }
  */
 export function buildSongRowsHtml(tracks, options = {}) {
     const state = store.state;
     const activeId = options.activeTrackId ?? (state.currentTrack ? state.currentTrack.id : null);
     const favIds = options.favIds ?? (state.favorites || []);
     const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
+    const desktop = options.desktopClickBehavior === true;
+    const playOverlay = desktop ? desktopPlayOverlaySmallHtml() : '';
 
+    const isPlaying = options.isPlaying ?? (desktop ? store.state.isPlaying : true);
     return tracks.map((t, idx) => {
         const isActive = t.id === activeId;
+        const showPlayingIndicator = desktop ? (isActive && isPlaying) : isActive;
         const isFav = favIds.includes(t.id);
         const coverUrl = getCoverUrl(t);
         const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
         const dataIndexAttr = options.addDataIndex ? ` data-index="${idx}"` : '';
         const wrapperClass = options.addDataIndex ? ' playlist-detail-row' : '';
+        const rowOnclick = desktop ? '' : ` onclick="typeof playTrack==='function'&&playTrack('${t.id}')"`;
         return `
             <div class="relative overflow-hidden rounded-2xl mb-2 group bg-[var(--bg-card)]${wrapperClass}"${dataIndexAttr}>
                 <div class="swipe-hints absolute inset-0 flex items-center justify-between px-8 z-0 pointer-events-none">
                     <div class="text-[var(--secondary)] font-black text-[9px] uppercase tracking-[0.2em]">Queue</div>
                     <div class="text-[var(--accent)] font-black text-[9px] uppercase tracking-[0.2em]">Favourite</div>
                 </div>
-                <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] border-transparent'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}" onclick="typeof playTrack==='function'&&playTrack('${t.id}')">
-                    <div class="song-row-cover-wrapper relative w-12 h-12 flex-shrink-0">
+                <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] border-transparent'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}"${rowOnclick}>
+                    <div class="song-row-cover-wrapper relative w-12 h-12 flex-shrink-0${desktop ? ' group' : ''}">
                         <div class="song-row-cover absolute inset-0 rounded-xl overflow-hidden bg-cover bg-center border border-[var(--glass-border)] shadow-lg" style="${coverStyle}" role="img" aria-label="Cover">
-                            <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 rounded-xl backdrop-blur-[1.6px] transition-all duration-150 ease-out pointer-events-none ${isActive ? 'opacity-100 is-playing' : 'opacity-0'}">
+                            <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 rounded-xl backdrop-blur-[1.6px] pointer-events-none ${showPlayingIndicator ? 'opacity-100' + (desktop ? '' : ' is-playing') : 'opacity-0'}">
                                 <i class="playing-icon fas fa-volume-high text-[var(--accent)] text-[14.4px]"></i>
                             </div>
                         </div>
+                        ${playOverlay}
                         <div class="fav-indicator absolute -top-1 -right-1 w-3.5 h-3.5 bg-[var(--accent)] rounded-full border-2 border-[var(--bg-card)] shadow-lg z-10 ${isFav ? '' : 'hidden'}"></div>
                     </div>
                     <div class="ml-4 flex-1 truncate">
@@ -224,21 +240,27 @@ export function buildSongGridHtml(tracks, options = {}, gridSize = 'grid') {
     const favIds = options.favIds ?? (state.favorites || []);
     const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
     const isCompact = gridSize === 'gridCompact';
+    const desktop = options.desktopClickBehavior === true;
+    const playOverlay = desktop ? desktopPlayOverlayHtml() : '';
 
+    const isPlaying = options.isPlaying ?? (desktop ? store.state.isPlaying : true);
     return tracks.map(t => {
         const isActive = t.id === activeId;
+        const showPlayingIndicator = desktop ? (isActive && isPlaying) : isActive;
         const isFav = favIds.includes(t.id);
         const coverUrl = getCoverUrl(t);
         const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
         const cardClass = isCompact ? 'song-card song-card-compact' : 'song-card';
+        const cardOnclickAttr = desktop ? '' : ` onclick="typeof playTrack==='function'&&playTrack('${t.id}')"`;
         return `
-        <div class="${cardClass} group cursor-pointer rounded-2xl border border-[var(--glass-border)] bg-[var(--bg-card)] overflow-hidden transition-all duration-300 hover:border-[var(--accent)]/30 active:scale-[0.98]" data-id="${t.id}" onclick="typeof playTrack==='function'&&playTrack('${t.id}')">
-            <div class="song-card-cover-wrapper relative aspect-square w-full">
+        <div class="${cardClass} group cursor-pointer rounded-2xl border border-[var(--glass-border)] bg-[var(--bg-card)] overflow-hidden transition-all duration-300 hover:border-[var(--accent)]/30 active:scale-[0.98]" data-id="${t.id}"${cardOnclickAttr}>
+            <div class="song-card-cover-wrapper relative aspect-square w-full${desktop ? ' group' : ''}">
                 <div class="song-card-cover absolute inset-0 overflow-hidden bg-cover bg-center border-b border-[var(--glass-border)]" style="${coverStyle}" role="img" aria-label="Cover">
-                    <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 backdrop-blur-[1.6px] transition-all duration-150 ease-out pointer-events-none ${isActive ? 'opacity-100 is-playing' : 'opacity-0'}">
+                    <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 backdrop-blur-[1.6px] pointer-events-none ${showPlayingIndicator ? 'opacity-100' + (desktop ? '' : ' is-playing') : 'opacity-0'}">
                         <i class="playing-icon fas fa-volume-high text-[var(--accent)] ${isCompact ? 'text-xs' : 'text-sm'}"></i>
                     </div>
                 </div>
+                ${playOverlay}
                 <div class="fav-indicator absolute top-1 right-1 w-3 h-3 bg-[var(--accent)] rounded-full border-2 border-[var(--bg-card)] z-10 ${isFav ? '' : 'hidden'}"></div>
                 <button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}')" class="absolute bottom-1 right-1 w-8 h-8 flex items-center justify-center rounded-full bg-black/50 text-white/90 opacity-0 group-hover:opacity-100 transition-opacity focus:outline-none z-10">
                     <i class="fas fa-ellipsis-v text-[10px]"></i>
@@ -291,36 +313,60 @@ export function renderSongList(tracks, containerEl, options = {}) {
  * Render queue into one or more container elements. Scroll cue (mobile) is handled by caller if needed.
  * @param {Object} state - store.state
  * @param {HTMLElement|HTMLElement[]} queueContainerEls - container(s) to fill; single element or array
- * @param {Object} options - { getCoverUrl, onPlayId, onRemoveFromQueue } (onRemoveFromQueue receives index)
+ * @param {Object} options - { getCoverUrl, desktopHandle, desktopClickBehavior } (desktopClickBehavior: cover + overlay, no play btn, delegation plays)
  */
 export function renderQueue(state, queueContainerEls, options = {}) {
     const containers = (Array.isArray(queueContainerEls) ? queueContainerEls : [queueContainerEls]).filter(c => c);
     if (containers.length === 0) return;
 
     const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
+    const desktopHandle = options.desktopHandle === true;
+    const desktopClicks = options.desktopClickBehavior === true && desktopHandle;
 
     if (!state.queue || state.queue.length === 0) {
         containers.forEach(c => c.innerHTML = '<div class="text-gray-500 text-center py-10 italic text-xs">Queue is empty.</div>');
         return;
     }
 
+    const btnSize = desktopHandle ? 'w-6 h-6' : 'w-8 h-8';
+    const rowPadding = desktopHandle ? 'py-1.5 pl-2 pr-0.5' : 'p-2';
+    const metaMargin = desktopHandle ? 'mr-1' : 'mr-2';
+    const btnGap = desktopHandle ? 'gap-0.5' : 'gap-1';
     const html = state.queue.map((t, idx) => {
         const coverUrl = getCoverUrl(t);
         const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+        const handleHtml = desktopHandle
+            ? `<span class="queue-item-handle ${btnSize} flex items-center justify-center flex-shrink-0 text-[var(--text-dim)] rounded-[var(--radius-omni-xs)]" role="button" tabindex="0" aria-label="Drag to reorder" data-index="${idx}"><i class="fas fa-grip-vertical text-[10px]"></i></span>`
+            : '';
+        let coverHtml;
+        if (desktopClicks) {
+            coverHtml = `<div class="queue-item-cover-wrapper relative w-10 h-10 flex-shrink-0 rounded-xl overflow-hidden border border-[var(--glass-border)] shadow-lg group">
+                <div class="queue-item-cover absolute inset-0 bg-cover bg-center" style="${coverStyle}" role="img" aria-label=""></div>
+                ${desktopPlayOverlaySmallHtml()}
+            </div>`;
+        } else if (desktopHandle) {
+            coverHtml = '';
+        } else {
+            coverHtml = `<div class="queue-item-cover w-10 h-10 flex-shrink-0 rounded-xl overflow-hidden bg-cover bg-center border border-[var(--glass-border)] shadow-lg" style="${coverStyle}" role="img" aria-label=""></div>`;
+        }
+        const titleMargin = desktopHandle && !desktopClicks ? '' : 'ml-3';
+        const playBtnHtml = desktopClicks ? '' : `
+                <button onclick="typeof playTrack==='function'&&playTrack('${t.id}')" class="${btnSize} flex items-center justify-center bg-blue-500/10 text-blue-400 rounded-full hover:bg-blue-500/20 active:scale-90 transition-all">
+                    <i class="fas fa-play text-xs"></i>
+                </button>`;
         return `
-        <div class="queue-item flex items-center p-2 hover:bg-[var(--surface-overlay)] rounded-2xl transition-colors group" data-index="${idx}" data-id="${t.id}">
-            <div class="queue-item-cover w-10 h-10 flex-shrink-0 rounded-xl overflow-hidden bg-cover bg-center border border-[var(--glass-border)] shadow-lg" style="${coverStyle}" role="img" aria-label=""></div>
-            <div class="ml-3 flex-1 truncate pointer-events-none">
+        <div class="queue-item flex items-center ${rowPadding} hover:bg-[var(--surface-overlay)] rounded-2xl transition-colors group cursor-pointer" data-index="${idx}" data-id="${t.id}">
+            ${coverHtml}
+            <div class="${titleMargin} flex-1 truncate pointer-events-none min-w-0 ${metaMargin}">
                 <div class="font-bold text-[13px] truncate text-[var(--text-main)]">${esc(t.title)}</div>
                 <div class="text-[10px] text-[var(--text-dim)] truncate uppercase tracking-widest">${esc(t.artist)}</div>
             </div>
-            <div class="flex items-center space-x-2">
-                <button onclick="typeof playTrack==='function'&&playTrack('${t.id}')" class="w-10 h-10 flex items-center justify-center bg-blue-500/10 text-blue-400 rounded-full hover:bg-blue-500/20 active:scale-90 transition-all">
-                    <i class="fas fa-play text-xs"></i>
-                </button>
-                <button onclick="typeof store!==\"undefined\"&&store.removeFromQueue&&store.removeFromQueue(${idx})" class="w-10 h-10 flex items-center justify-center bg-[var(--surface-overlay)] text-[var(--text-dim)] rounded-full hover:bg-red-500/10 hover:text-red-400 active:scale-90 transition-all">
+            <div class="flex items-center flex-shrink-0 ml-auto ${btnGap}">
+                ${playBtnHtml}
+                <button type="button" class="queue-remove-btn ${btnSize} flex items-center justify-center bg-[var(--surface-overlay)] text-[var(--text-dim)] rounded-full hover:bg-red-500/10 hover:text-red-400 active:scale-90 transition-all" data-queue-index="${idx}" aria-label="Remove from queue">
                     <i class="fas fa-times text-xs"></i>
                 </button>
+                ${handleHtml}
             </div>
         </div>
     `;
@@ -552,7 +598,7 @@ export function renderPlaylistList(playlists, library, listContainerEl, options 
 /**
  * Build HTML for track rows inside a playlist (play + remove from playlist). Uses div + background-image for cover (no img).
  * @param {Array} tracks
- * @param {Object} options - { playlistName, activeTrackId, getCoverUrl }
+ * @param {Object} options - { playlistName, activeTrackId, getCoverUrl, desktopClickBehavior }
  */
 export function buildPlaylistTrackRowsHtml(tracks, options = {}) {
     const state = store.state;
@@ -560,19 +606,25 @@ export function buildPlaylistTrackRowsHtml(tracks, options = {}) {
     const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
     const playlistName = options.playlistName || '';
     const safeName = (playlistName || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const desktop = options.desktopClickBehavior === true;
+    const playOverlay = desktop ? desktopPlayOverlaySmallHtml() : '';
 
+    const isPlaying = options.isPlaying ?? (desktop ? store.state.isPlaying : true);
     return tracks.map((t, idx) => {
         const isActive = t.id === activeId;
+        const showPlayingIndicator = desktop ? (isActive && isPlaying) : isActive;
         const coverUrl = getCoverUrl(t);
         const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+        const rowOnclick = desktop ? '' : ` onclick="typeof playTrack==='function'&&playTrack('${t.id}')"`;
         return `
-        <div class="playlist-track-row flex items-center p-3 rounded-2xl border border-transparent ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] hover:bg-[var(--surface-overlay)]'} transition-all cursor-pointer group" data-id="${t.id}" data-index="${idx}" onclick="typeof playTrack==='function'&&playTrack('${t.id}')">
-            <div class="song-row-cover-wrapper relative w-12 h-12 flex-shrink-0">
+        <div class="playlist-track-row flex items-center p-3 rounded-2xl border border-transparent ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] hover:bg-[var(--surface-overlay)]'} transition-all cursor-pointer group" data-id="${t.id}" data-index="${idx}"${rowOnclick}>
+            <div class="song-row-cover-wrapper relative w-12 h-12 flex-shrink-0${desktop ? ' group' : ''}">
                 <div class="song-row-cover absolute inset-0 rounded-xl overflow-hidden bg-cover bg-center border border-[var(--glass-border)] shadow-lg" style="${coverStyle}" role="img" aria-label="Cover">
-                    <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 rounded-xl backdrop-blur-[1.6px] transition-all duration-150 ease-out pointer-events-none ${isActive ? 'opacity-100 is-playing' : 'opacity-0'}">
+                    <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 rounded-xl backdrop-blur-[1.6px] pointer-events-none ${showPlayingIndicator ? 'opacity-100' + (desktop ? '' : ' is-playing') : 'opacity-0'}">
                         <i class="playing-icon fas fa-volume-high text-[var(--accent)] text-[14.4px]"></i>
                     </div>
                 </div>
+                ${playOverlay}
             </div>
             <div class="ml-4 flex-1 truncate">
                 <div class="song-title font-bold text-sm truncate text-[var(--text-main)]">${esc(t.title)}</div>
@@ -617,6 +669,7 @@ export function renderPlaylistDetail(playlistName, trackIds, library, tracksCont
     }
     tracksContainerEl.innerHTML = buildSongRowsHtml(filtered, {
         getCoverUrl: options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver),
-        addDataIndex: true
+        addDataIndex: true,
+        desktopClickBehavior: options.desktopClickBehavior
     });
 }

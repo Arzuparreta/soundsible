@@ -93,7 +93,7 @@ function renderPlaylistDetail() {
         }
     }
     const searchQuery = searchInput?.value.trim() || '';
-    renderers.renderPlaylistDetail(name, trackIds, library, tracksEl, { searchQuery });
+    renderers.renderPlaylistDetail(name, trackIds, library, tracksEl, { searchQuery, desktopClickBehavior: true });
 }
 
 function showPlaylistDetail(name) {
@@ -146,6 +146,225 @@ window.deletePlaylistConfirm = () => {
 
 const PLAYLIST_HOLD_MS = 400;
 const PLAYLIST_CANCEL_THRESHOLD_PX = 24;
+
+const DESKTOP_QUEUE_MOVE_THRESHOLD_PX = 4;
+const DESKTOP_QUEUE_CANCEL_THRESHOLD_PX = 30;
+const DESKTOP_QUEUE_DROP_FADE_MS = 170;
+
+function initDesktopQueueDrag() {
+    const panel = document.getElementById('desktop-queue-panel');
+    if (!panel) return;
+
+    let clone = null;
+    let originalItem = null;
+    let fromIndex = 0;
+    let startX = 0;
+    let startY = 0;
+    let pointerId = null;
+    let hasMoved = false;
+    let currentDropTargetIndex = null;
+    let rafDropTarget = 0;
+
+    function getContainer() {
+        return document.getElementById('desktop-queue-tracks');
+    }
+
+    function getPointerCoords(e) {
+        if (e.clientX != null) return { x: e.clientX, y: e.clientY };
+        if (e.touches?.[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        return { x: 0, y: 0 };
+    }
+
+    function clearDropTarget() {
+        const container = getContainer();
+        if (!container) return;
+        container.querySelectorAll('.queue-item.queue-drop-target').forEach((el) => el.classList.remove('queue-drop-target'));
+    }
+
+    function setDropTarget(index) {
+        const container = getContainer();
+        if (index == null || !container) return;
+        const el = container.querySelector(`.queue-item[data-index="${index}"]`);
+        if (el) el.classList.add('queue-drop-target');
+    }
+
+    function getClosestSlotIndex() {
+        const container = getContainer();
+        if (!container || !clone || !originalItem) return fromIndex;
+        const cloneRect = clone.getBoundingClientRect();
+        const cx = cloneRect.left + cloneRect.width / 2;
+        const cy = cloneRect.top + cloneRect.height / 2;
+        const originalRect = originalItem.getBoundingClientRect();
+        const ox = originalRect.left + originalRect.width / 2;
+        const oy = originalRect.top + originalRect.height / 2;
+        if (Math.hypot(cx - ox, cy - oy) <= DESKTOP_QUEUE_CANCEL_THRESHOLD_PX) return fromIndex;
+        const children = Array.from(container.children).filter((el) => el.classList.contains('queue-item') && el !== originalItem);
+        if (children.length === 0) return fromIndex;
+        const sorted = children.map((el) => ({
+            idx: parseInt(el.getAttribute('data-index'), 10) || 0,
+            rect: el.getBoundingClientRect()
+        })).sort((a, b) => a.rect.top - b.rect.top);
+        let best = sorted[0];
+        let bestD = Infinity;
+        sorted.forEach((s) => {
+            const scx = s.rect.left + s.rect.width / 2;
+            const scy = s.rect.top + s.rect.height / 2;
+            const d = (cx - scx) ** 2 + (cy - scy) ** 2;
+            if (d < bestD) {
+                bestD = d;
+                best = s;
+            }
+        });
+        return best.idx;
+    }
+
+    function scheduleDropTargetUpdate() {
+        if (!clone || !hasMoved) return;
+        if (rafDropTarget) return;
+        rafDropTarget = requestAnimationFrame(() => {
+            rafDropTarget = 0;
+            const next = getClosestSlotIndex();
+            if (next !== currentDropTargetIndex) {
+                clearDropTarget();
+                currentDropTargetIndex = next;
+                if (next !== fromIndex) setDropTarget(next);
+            }
+        });
+    }
+
+    function cleanupDrag() {
+        if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
+        clone = null;
+        if (originalItem && originalItem.parentNode) {
+            originalItem.classList.remove('queue-drag-source');
+            originalItem.style.opacity = '';
+            originalItem.style.pointerEvents = '';
+        }
+        originalItem = null;
+        currentDropTargetIndex = null;
+        clearDropTarget();
+        hasMoved = false;
+        document.removeEventListener('pointermove', onDocMove, { capture: true });
+        document.removeEventListener('pointerup', onDocEnd, { capture: true });
+        document.removeEventListener('pointercancel', onDocEnd, { capture: true });
+    }
+
+    function updateClonePosition(x, y) {
+        if (clone) {
+            const w = clone.getBoundingClientRect().width;
+            const h = clone.getBoundingClientRect().height;
+            clone.style.left = `${x - w / 2}px`;
+            clone.style.top = `${y - h / 2}px`;
+        }
+    }
+
+    function flyToSlotAndCommit(toIndex) {
+        clearDropTarget();
+        if (clone) {
+            clone.style.transition = `opacity ${DESKTOP_QUEUE_DROP_FADE_MS}ms ease-out, transform ${DESKTOP_QUEUE_DROP_FADE_MS}ms cubic-bezier(0.19, 1, 0.22, 1)`;
+            clone.style.opacity = '0';
+            clone.style.transform = 'scale(0.985)';
+            const onDropFade = () => {
+                clone.removeEventListener('transitionend', onDropFade);
+                commitReorder(toIndex);
+            };
+            clone.addEventListener('transitionend', onDropFade);
+        } else {
+            commitReorder(toIndex);
+        }
+    }
+
+    function commitReorder(toIndex) {
+        const from = fromIndex;
+        cleanupDrag();
+        if (from !== toIndex) store.reorderQueue(from, toIndex);
+    }
+
+    function onDocMove(e) {
+        if (e.pointerId !== pointerId) return;
+        e.preventDefault();
+        const { x, y } = getPointerCoords(e);
+        if (!hasMoved) {
+            const distance = Math.hypot(x - startX, y - startY);
+            if (distance > DESKTOP_QUEUE_MOVE_THRESHOLD_PX) hasMoved = true;
+            else {
+                updateClonePosition(x, y);
+                return;
+            }
+        }
+        updateClonePosition(x, y);
+        scheduleDropTargetUpdate();
+    }
+
+    function onDocEnd(e) {
+        if (e.pointerId !== pointerId) return;
+        e.preventDefault();
+        if (!clone) {
+            cleanupDrag();
+            return;
+        }
+        if (!hasMoved) {
+            cleanupDrag();
+            return;
+        }
+        flyToSlotAndCommit(getClosestSlotIndex());
+    }
+
+    panel.addEventListener('pointerdown', (e) => {
+        const handle = e.target.closest('.queue-item-handle');
+        if (!handle) return;
+        const item = handle.closest('.queue-item');
+        if (!item) return;
+        e.preventDefault();
+        const idx = parseInt(item.getAttribute('data-index'), 10);
+        if (Number.isNaN(idx)) return;
+
+        const container = getContainer();
+        if (!container || !container.contains(item)) return;
+
+        const rect = item.getBoundingClientRect();
+        const { x, y } = getPointerCoords(e);
+        startX = x;
+        startY = y;
+        fromIndex = idx;
+        pointerId = e.pointerId;
+        hasMoved = false;
+        currentDropTargetIndex = null;
+
+        originalItem = item;
+        item.style.pointerEvents = 'none';
+        item.classList.add('queue-drag-source');
+        item.style.opacity = '0.2';
+
+        const cloneNode = item.cloneNode(true);
+        cloneNode.classList.add('queue-drag-clone');
+        cloneNode.classList.remove('queue-item');
+        cloneNode.querySelectorAll('button').forEach((b) => b.remove());
+        cloneNode.style.position = 'fixed';
+        cloneNode.style.left = `${rect.left}px`;
+        cloneNode.style.top = `${rect.top}px`;
+        cloneNode.style.width = `${rect.width}px`;
+        cloneNode.style.opacity = '1';
+        cloneNode.style.pointerEvents = 'none';
+        cloneNode.style.zIndex = '200';
+        cloneNode.style.transition = 'none';
+        document.body.appendChild(cloneNode);
+        clone = cloneNode;
+
+        document.addEventListener('pointermove', onDocMove, { passive: false, capture: true });
+        document.addEventListener('pointerup', onDocEnd, { passive: false, capture: true });
+        document.addEventListener('pointercancel', onDocEnd, { passive: false, capture: true });
+    });
+
+    panel.addEventListener('click', (e) => {
+        const btn = e.target.closest('.queue-remove-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const index = parseInt(btn.getAttribute('data-queue-index'), 10);
+        if (!Number.isNaN(index)) store.removeFromQueue(index);
+    });
+}
 
 function initPlaylistTrackDrag() {
     let holdTimer = null;
@@ -630,6 +849,12 @@ async function init() {
             gridLarge: 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 transition-all duration-300'
         };
 
+        const desktopSongOptions = () => ({
+            desktopClickBehavior: true,
+            activeTrackId: store.state.currentTrack?.id,
+            favIds: store.state.favorites || []
+        });
+
         function renderSongsInto(containerEl, tracks, viewMode) {
             if (!containerEl) return;
             const mode = viewMode || store.state.songsViewMode || 'list';
@@ -640,9 +865,9 @@ async function init() {
                 return;
             }
             if (mode === 'list') {
-                renderers.renderSongList(tracks, containerEl);
+                renderers.renderSongList(tracks, containerEl, desktopSongOptions());
             } else {
-                containerEl.innerHTML = renderers.buildSongGridHtml(tracks, {}, mode);
+                containerEl.innerHTML = renderers.buildSongGridHtml(tracks, desktopSongOptions(), mode);
                 renderers.enableMarqueeIfNeeded(containerEl);
             }
         }
@@ -682,7 +907,7 @@ async function init() {
                 return;
             }
             container.className = 'space-y-2';
-            const options = { favIds: store.state.favorites, activeTrackId: store.state.currentTrack?.id };
+            const options = desktopSongOptions();
             const html = merged.map(item =>
                 item.type === 'artist'
                     ? renderers.buildHomeArtistRowHtml(item.name, item.track, options)
@@ -701,8 +926,56 @@ async function init() {
             renderSongsInto(container, favTracks, store.state.songsViewMode);
         }
 
+        let prevTrackId = null;
+        let prevIsPlaying = undefined;
+
+        function syncDesktopPlayingIndicators(state) {
+            const app = document.getElementById('desktop-app');
+            if (!app) return;
+            const currentId = state.currentTrack?.id ?? null;
+            const isPlaying = state.isPlaying === true;
+            const showId = isPlaying ? currentId : null;
+            app.querySelectorAll('.song-row, .song-card, .playlist-track-row, .queue-item').forEach((row) => {
+                const id = row.getAttribute('data-id');
+                if (!id) return;
+                const show = id === showId;
+                row.classList.toggle('is-currently-playing', show);
+                const indicator = row.querySelector('.active-indicator-container');
+                if (indicator) {
+                    indicator.classList.toggle('opacity-100', show);
+                    indicator.classList.toggle('opacity-0', !show);
+                    indicator.classList.remove('is-playing');
+                }
+            });
+            const currentArtistNames = isPlaying && state.currentTrack
+                ? new Set(renderers.parseArtistNames(state.currentTrack.album_artist || state.currentTrack.artist).map((n) => renderers.normalizeArtistName(n)))
+                : new Set();
+            app.querySelectorAll('.artist-card').forEach((card) => {
+                const name = card.getAttribute('data-artist-name');
+                const indicator = card.querySelector('.active-indicator-container');
+                if (!indicator) return;
+                const show = currentArtistNames.has(renderers.normalizeArtistName(name));
+                indicator.classList.toggle('opacity-100', show);
+                indicator.classList.toggle('opacity-0', !show);
+                indicator.classList.remove('is-playing');
+            });
+        }
+
         store.subscribe((state) => {
-            renderers.renderQueue(state, [document.getElementById('desktop-queue-tracks')].filter(Boolean));
+            const currentId = state.currentTrack?.id ?? null;
+            const onlyPlayPauseToggled = prevIsPlaying !== undefined && prevTrackId === currentId && prevIsPlaying !== state.isPlaying;
+            prevTrackId = currentId;
+            prevIsPlaying = state.isPlaying;
+
+            syncDesktopPlayingIndicators(state);
+            DesktopUI.updatePlayer(state);
+
+            if (onlyPlayPauseToggled) return;
+
+            const desktopQueueTracks = document.getElementById('desktop-queue-tracks');
+            if (desktopQueueTracks) {
+                renderers.renderQueue(state, [desktopQueueTracks], { desktopHandle: true, desktopClickBehavior: true });
+            }
             if (DesktopUI.currentView === 'home') renderHomeSongs();
             if (DesktopUI.currentView === 'favourites') renderFavourites();
             if (DesktopUI.currentView === 'artists') {
@@ -718,11 +991,10 @@ async function init() {
                 const coverEl = document.getElementById('desktop-artist-detail-cover');
                 const tracksEl = document.getElementById('desktop-artist-tracks');
                 const albumsEl = document.getElementById('desktop-artist-albums');
-                renderers.renderArtistDetail(window._currentArtistName, state.library, { titleEl, coverEl }, tracksEl, albumsEl);
+                renderers.renderArtistDetail(window._currentArtistName, state.library, { titleEl, coverEl }, tracksEl, albumsEl, { desktopClickBehavior: true });
             }
             if (DesktopUI.currentView === 'playlists') renderPlaylists();
             if (DesktopUI.currentView === 'playlist-detail' && window._currentPlaylistName) renderPlaylistDetail();
-            DesktopUI.updatePlayer(state);
         });
 
         document.getElementById('desktop-home-search-input')?.addEventListener('input', renderHomeSongs);
@@ -748,6 +1020,38 @@ async function init() {
 
         initPlaylistTrackDrag();
         initPlaylistListDrag();
+        initDesktopQueueDrag();
+
+        (function initDesktopClickDelegation() {
+            const app = document.getElementById('desktop-app');
+            if (!app) return;
+            const PLAY_SELECTORS = '.song-row, .song-card, .playlist-track-row, .queue-item';
+            const COVER_SELECTORS = '.song-row-cover-wrapper, .song-card-cover-wrapper, .queue-item-cover-wrapper';
+
+            app.addEventListener('dblclick', (e) => {
+                const row = e.target.closest(PLAY_SELECTORS);
+                if (!row || e.target.closest('button')) return;
+                const id = row.getAttribute('data-id');
+                if (id) playTrack(id);
+            });
+
+            app.addEventListener('click', (e) => {
+                if (e.target.closest(COVER_SELECTORS)) {
+                    const row = e.target.closest(PLAY_SELECTORS);
+                    const id = row?.getAttribute('data-id');
+                    if (id) {
+                        playTrack(id);
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                    return;
+                }
+                const row = e.target.closest(PLAY_SELECTORS);
+                if (!row || e.target.closest('button') || e.target.closest(COVER_SELECTORS)) return;
+                const id = row.getAttribute('data-id');
+                if (id && typeof DesktopUI.setSelectedTrackId === 'function') DesktopUI.setSelectedTrackId(id);
+            });
+        })();
 
         (function bindSongViewWheel() {
             const STEP_THRESHOLD = 90;

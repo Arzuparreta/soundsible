@@ -126,7 +126,7 @@ class YouTubeDownloader:
             )
             track.review_candidates = clean_metadata.get("review_candidates") or {}
             track.premium_cover_failed = clean_metadata.get("premium_cover_failed", False)
-            track.fallback_cover_url = clean_metadata.get("fallback_cover_url")
+            track.fallback_cover_url = clean_metadata.get("fallback_cover_url") or clean_metadata.get("album_art_url")
             
             return track
             
@@ -221,12 +221,12 @@ class YouTubeDownloader:
         # Detect if content is music-specific (for cover art priority)
         is_music_content = self._is_music_specific_content(info, url)
         
-        # Initial raw dict
+        # Initial raw dict (prefer yt-dlp thumbnail to reduce maxresdefault 404s)
         raw_meta = {
             'title': title,
             'artist': artist,
             'album': album,
-            'album_art_url': MetadataHarmonizer.get_best_yt_thumbnail(video_id) if video_id else info.get('thumbnail'),
+            'album_art_url': info.get('thumbnail') or (MetadataHarmonizer.get_best_yt_thumbnail(video_id) if video_id else None),
             'duration_sec': duration,
             'release_date': info.get('upload_date'),
             'track_number': info.get('track_number', 1),
@@ -236,6 +236,7 @@ class YouTubeDownloader:
             'metadata_decision_id': uuid.uuid4().hex,
             'is_music_content': is_music_content
         }
+        raw_meta["thumbnail"] = info.get("thumbnail") or raw_meta.get("album_art_url")
         if isinstance(metadata_hint, dict):
             evidence_title = metadata_hint.get("title")
             evidence_artist = metadata_hint.get("artist") or metadata_hint.get("channel")
@@ -257,6 +258,10 @@ class YouTubeDownloader:
             raw_meta["title"] = video_title
             raw_meta["artist"] = channel
             raw_meta["album"] = "Downloaded from YouTube"
+            # Fallback: ensure normal YouTube downloads get a cover (YT miniature) so they are not saved without cover
+            yt_thumb = info.get("thumbnail") or (MetadataHarmonizer.get_best_yt_thumbnail(video_id) if video_id else None)
+            if yt_thumb:
+                raw_meta["album_art_url"] = yt_thumb
             clean_meta = raw_meta
         else:
             # Harmonize (Standardize + MusicBrainz/iTunes lookup)
@@ -319,8 +324,7 @@ class YouTubeDownloader:
             )
             track.review_candidates = clean_meta.get("review_candidates") or {}
             track.premium_cover_failed = clean_meta.get("premium_cover_failed", False)
-            track.fallback_cover_url = clean_meta.get("fallback_cover_url")
-            
+            track.fallback_cover_url = clean_meta.get("fallback_cover_url") or clean_meta.get("album_art_url")
             return track
 
         except Exception as e:

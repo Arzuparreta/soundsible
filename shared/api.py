@@ -658,55 +658,26 @@ def process_queue_background():
                         lib.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
                     
                     shared_track = Track.from_dict(track.to_dict())
-                    
-                    # Album-level cover consistency: check if another track in the same album has a premium cover
-                    if lib.db and shared_track.album:
-                        try:
-                            existing_album_tracks = lib.db.get_tracks_by_album(shared_track.album, shared_track.album_artist or shared_track.artist)
-                            # Find a track with premium cover_source
-                            for existing_track in existing_album_tracks:
-                                if existing_track.id != shared_track.id and existing_track.cover_source in ("spotify", "musicbrainz", "itunes", "youtube_music"):
-                                    # Reuse the premium cover from existing track
-                                    # Extract cover from existing track's file or cache
-                                    existing_local_path = resolve_local_track_path(existing_track)
-                                    if existing_local_path:
-                                        try:
-                                            from setup_tool.audio import AudioProcessor
-                                            cover_data = AudioProcessor.extract_cover_art(existing_local_path)
-                                            if cover_data:
-                                                # Update the new track's cover by re-embedding
-                                                local_track_path = resolve_local_track_path(shared_track)
-                                                if local_track_path:
-                                                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
-                                                        tmp.write(cover_data)
-                                                        tmp_path = tmp.name
-                                                    AudioProcessor.embed_artwork(local_track_path, tmp_path)
-                                                    os.remove(tmp_path)
-                                                    # Update track metadata
-                                                    shared_track.cover_source = existing_track.cover_source
-                                                    track.cover_source = existing_track.cover_source
-                                                    track.premium_cover_failed = False
-                                                    print(f"API: Reused premium cover from album '{shared_track.album}' (source: {existing_track.cover_source})")
-                                                    break
-                                        except Exception as e:
-                                            print(f"API: Could not extract cover from existing album track: {e}")
-                        except Exception as e:
-                            print(f"API: Album consistency check failed: {e}")
+                    if hasattr(track, 'fallback_cover_url') and track.fallback_cover_url:
+                        shared_track.fallback_cover_url = track.fallback_cover_url
+                    if hasattr(track, 'premium_cover_failed'):
+                        shared_track.premium_cover_failed = track.premium_cover_failed
                     if not lib.metadata.get_track_by_id(shared_track.id):
                         lib.metadata.add_track(shared_track)
                     # Pre-cache cover so first request serves it (avoids placeholder until second load)
                     local_track_path = resolve_local_track_path(shared_track)
-                    if local_track_path:
+                    covers_dir = os.path.join(os.path.expanduser(DEFAULT_CACHE_DIR), "covers")
+                    os.makedirs(covers_dir, exist_ok=True)
+                    cover_path = os.path.join(covers_dir, f"{shared_track.id}.jpg")
+                    if not os.path.exists(cover_path):
                         try:
                             from setup_tool.audio import AudioProcessor
-                            covers_dir = os.path.join(os.path.expanduser(DEFAULT_CACHE_DIR), "covers")
-                            os.makedirs(covers_dir, exist_ok=True)
-                            cover_path = os.path.join(covers_dir, f"{shared_track.id}.jpg")
-                            if not os.path.exists(cover_path):
-                                cover_data = AudioProcessor.extract_cover_art(local_track_path)
-                                if cover_data:
-                                    with open(cover_path, 'wb') as f:
-                                        f.write(cover_data)
+                            cover_data = AudioProcessor.extract_cover_art(local_track_path) if local_track_path else None
+                            if not cover_data and getattr(track, 'fallback_cover_url', None):
+                                cover_data = download_image(track.fallback_cover_url)
+                            if cover_data:
+                                with open(cover_path, 'wb') as f:
+                                    f.write(cover_data)
                         except Exception as e:
                             print(f"API: Pre-cache cover failed: {e}")
                     # Persist to DB and library.json (config dir) so API and frontends see the new track
@@ -1445,64 +1416,45 @@ def stream_local_track(track_id):
 
 @app.route('/api/static/cover/<track_id>', methods=['GET'])
 def get_track_cover(track_id):
-    """Serve album cover art, fetching it if missing."""
-    print(f"DEBUG: [Cover] Request for ID: {track_id}")
+    """Serve album cover art. If missing: extract from file or use fallback_cover_url (e.g. YT thumbnail)."""
     lib, _, _ = get_core()
-    
-    # Resolve track
-    track = None
-    if lib.metadata:
-        track = lib.metadata.get_track_by_id(track_id)
+    track = lib.metadata.get_track_by_id(track_id) if lib.metadata else None
+    if not track and lib.db:
+        track = next((t for t in lib.db.get_all_tracks() if t.id == track_id), None)
     if not track:
-        db_tracks = lib.db.get_all_tracks()
-        track = next((t for t in db_tracks if t.id == track_id), None)
-        
-    if not track:
-        print(f"DEBUG: [Cover] ❌ Track {track_id} not found")
         return jsonify({"error": "Track not found"}), 404
-        
-    # Use unified resolver
+
     path = lib.get_cover_url(track)
-    print(f"DEBUG: [Cover] Resolved path: {path}")
-    
-    # Sync fallback: if no cache yet, resolve local file and extract once
+    local_track_path = resolve_local_track_path(track) if not path else None
     if not path:
-        local_track_path = resolve_local_track_path(track)
-    else:
-        local_track_path = None
-    if not path and local_track_path and not str(local_track_path).startswith('http'):
         try:
             from setup_tool.audio import AudioProcessor
             covers_dir = os.path.join(os.path.expanduser(DEFAULT_CACHE_DIR), "covers")
             os.makedirs(covers_dir, exist_ok=True)
             cover_path = os.path.join(covers_dir, f"{track.id}.jpg")
             if not os.path.exists(cover_path):
-                cover_data = AudioProcessor.extract_cover_art(local_track_path)
+                cover_data = None
+                if local_track_path and not str(local_track_path).startswith("http"):
+                    cover_data = AudioProcessor.extract_cover_art(local_track_path)
+                if not cover_data and getattr(track, "fallback_cover_url", None):
+                    cover_data = download_image(track.fallback_cover_url)
                 if cover_data:
-                    with open(cover_path, 'wb') as f:
+                    with open(cover_path, "wb") as f:
                         f.write(cover_data)
             if os.path.exists(cover_path):
                 path = cover_path
         except Exception as e:
-            print(f"DEBUG: [Cover] Sync extract failed: {e}")
-    
+            print(f"[Cover] Failed for {track_id}: {e}")
+
     if path and os.path.exists(path):
-        # SECURITY: Path Jail Check with Smart Trust
         is_trusted = is_trusted_network(request.remote_addr)
         if not is_safe_path(path, is_trusted=is_trusted):
-            print(f"SECURITY: [Cover] ❌ Blocked unauthorized path access: {path}")
             return jsonify({"error": "Unauthorized path"}), 403
+        return send_file(path, mimetype="image/jpeg")
 
-        print(f"DEBUG: [Cover] ✅ Serving file: {path}")
-        return send_file(path, mimetype='image/jpeg')
-    
-    # Return placeholder while fetching
-    placeholder = os.path.join(WEB_UI_PATH, 'assets/icons/icon-192.png')
+    placeholder = os.path.join(WEB_UI_PATH, "assets/icons/icon-192.png")
     if os.path.exists(placeholder):
-        print(f"DEBUG: [Cover] ⏳ Returning placeholder for {track_id}")
-        return send_file(placeholder, mimetype='image/png')
-        
-    print(f"DEBUG: [Cover] ❌ No cover or placeholder found")
+        return send_file(placeholder, mimetype="image/png")
     return jsonify({"error": "Cover not ready"}), 404
 
 # --- Playback Endpoints ---

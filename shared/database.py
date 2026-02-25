@@ -139,6 +139,10 @@ class DatabaseManager:
                     conn.execute("ALTER TABLE tracks ADD COLUMN metadata_modified_by_user BOOLEAN DEFAULT 0")
                 if 'download_source' not in columns:
                     conn.execute("ALTER TABLE tracks ADD COLUMN download_source TEXT")
+                if 'fallback_cover_url' not in columns:
+                    conn.execute("ALTER TABLE tracks ADD COLUMN fallback_cover_url TEXT")
+                if 'premium_cover_failed' not in columns:
+                    conn.execute("ALTER TABLE tracks ADD COLUMN premium_cover_failed BOOLEAN DEFAULT 0")
 
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS metadata_migration_jobs (
@@ -202,8 +206,9 @@ class DatabaseManager:
                             format, cover_art_key, year, genre, track_number, 
                             is_local, local_path, musicbrainz_id, isrc, album_artist,
                             metadata_source_authority, metadata_confidence, metadata_decision_id,
-                            metadata_state, metadata_query_fingerprint, cover_source, metadata_modified_by_user, download_source
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            metadata_state, metadata_query_fingerprint, cover_source, metadata_modified_by_user, download_source,
+                            fallback_cover_url, premium_cover_failed
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             title=excluded.title,
                             artist=excluded.artist,
@@ -226,7 +231,9 @@ class DatabaseManager:
                             metadata_query_fingerprint=COALESCE(excluded.metadata_query_fingerprint, tracks.metadata_query_fingerprint),
                             cover_source=COALESCE(excluded.cover_source, tracks.cover_source),
                             metadata_modified_by_user=CASE WHEN excluded.metadata_modified_by_user THEN 1 ELSE tracks.metadata_modified_by_user END,
-                            download_source=COALESCE(excluded.download_source, tracks.download_source)
+                            download_source=COALESCE(excluded.download_source, tracks.download_source),
+                            fallback_cover_url=COALESCE(excluded.fallback_cover_url, tracks.fallback_cover_url),
+                            premium_cover_failed=CASE WHEN excluded.premium_cover_failed THEN 1 ELSE tracks.premium_cover_failed END
                     """, (
                         track.id, track.title, track.artist, track.album,
                         track.duration, track.file_hash, track.original_filename, 
@@ -237,7 +244,9 @@ class DatabaseManager:
                         track.metadata_confidence, track.metadata_decision_id,
                         track.metadata_state, track.metadata_query_fingerprint,
                         track.cover_source, track.metadata_modified_by_user,
-                        getattr(track, 'download_source', None)
+                        getattr(track, 'download_source', None),
+                        getattr(track, 'fallback_cover_url', None),
+                        1 if getattr(track, 'premium_cover_failed', False) else 0
                     ))
                 conn.execute("COMMIT")
             except Exception as e:

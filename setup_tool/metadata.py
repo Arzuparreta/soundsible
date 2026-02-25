@@ -83,10 +83,20 @@ def search_itunes(query: str, limit: int = 5) -> List[Dict[str, Any]]:
         print(f"Error searching iTunes: {e}")
         return []
 
+# YouTube thumbnail hosts often block default User-Agent; use browser-like header
+_YT_IMAGE_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0"
+)
+
 def download_image(url: str) -> Optional[bytes]:
-    """Download image data from URL."""
+    """Download image data from URL. Uses browser User-Agent for YouTube thumbnail hosts."""
     try:
-        response = _session.get(url, timeout=10)
+        parsed = urllib.parse.urlparse(url or "")
+        host = (parsed.netloc or "").lower()
+        headers = None
+        if "ytimg.com" in host or "youtube.com" in host or "img.youtube" in host:
+            headers = {"User-Agent": _YT_IMAGE_USER_AGENT}
+        response = _session.get(url, timeout=10, headers=headers)
         response.raise_for_status()
         return response.content
     except Exception as e:

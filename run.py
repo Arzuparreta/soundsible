@@ -188,28 +188,25 @@ class SoundsibleLauncher:
         table.add_column("Option", style="white")
 
         table.add_row("1", "Launch Music Player (GUI) [bold green](Recommended)[/bold green]")
-        table.add_row("2", "Launch Music Downloader (ODST Web UI)")
-        table.add_row("3", "Launch Web Player (PWA) [bold cyan](Android/Windows)[/bold cyan]")
-        table.add_row("4", "Search Library (Quick Discover)")
-        table.add_row("5", "Manage Storage / Sync")
-        table.add_row("6", "Advanced Options")
+        table.add_row("2", "Launch Web Player (PWA) [bold cyan](Android/Windows)[/bold cyan]")
+        table.add_row("3", "Search Library (Quick Discover)")
+        table.add_row("4", "Manage Storage / Sync")
+        table.add_row("5", "Advanced Options")
         table.add_row("q", "Quit")
 
         console.print(Panel(table, title="Main Menu", border_style="dim"))
 
-        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "5", "6", "q"], default="1")
+        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "5", "q"], default="1")
         
         if choice == "1":
             self.launch_player()
         elif choice == "2":
-            self.launch_downloader()
-        elif choice == "3":
             self.launch_web_player()
-        elif choice == "4":
+        elif choice == "3":
             self.search_ui()
-        elif choice == "5":
+        elif choice == "4":
             self.manage_storage()
-        elif choice == "6":
+        elif choice == "5":
             self.show_advanced_menu()
         elif choice == "q":
             console.print("[italic]Happy listening![/italic]")
@@ -286,22 +283,6 @@ class SoundsibleLauncher:
             time.sleep(2.0)
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
-
-    def launch_downloader(self):
-        """Launch the ODST Web Downloader."""
-        console.print("[green]Starting ODST Web Interface...[/green]")
-        try:
-            proc = subprocess.Popen(
-                [str(self.python_exe), "-m", "odst_tool.web_app"],
-                cwd=str(self.root_dir),
-                start_new_session=True
-            )
-            self.child_processes.append(proc)
-            console.print("[bold green]ODST Web UI is running at http://localhost:5000[/bold green]")
-            time.sleep(2.0)
-        except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            time.sleep(2.0)
 
     def launch_setup(self):
         """Run the setup wizard."""

@@ -924,7 +924,7 @@ export class UI {
                 const fullCoverOpen = fullCoverEl && !fullCoverEl.classList.contains('hidden');
                 if (fullCoverOpen) {
                     isEdgeSwipeFromFullCover = true;
-                } else {
+                } else if (this.currentView !== 'home') {
                     this.content.style.transition = 'none';
                 }
                 return;
@@ -972,10 +972,11 @@ export class UI {
                 longPressTimer = null;
             }
 
-            // Edge Swipe Handling
+            // Edge Swipe Handling (on home we don't drag content so gesture can pass through for natural bounce)
             if (isEdgeSwipe) {
-                if (e.cancelable) e.preventDefault();
                 if (isEdgeSwipeFromFullCover) return; // no visual drag for full-cover; just close on touchend
+                if (this.currentView === 'home') return; // no drag, no preventDefault — nothing to do on library
+                if (e.cancelable) e.preventDefault();
                 const move = Math.max(0, diffX);
                 this.content.style.transform = `translateX(${move}px)`;
                 return;
@@ -1016,9 +1017,12 @@ export class UI {
                         this.hideFullCoverView();
                     }
                 } else {
-                    if (this.dom.content) this.dom.content.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
-                    if (this.dom.content) this.dom.content.style.transform = 'translateX(0)';
-                    if (diffX > threshold) {
+                    // Only reset content (transition + translateX(0)) when we actually dragged it (not on home)
+                    if (this.currentView !== 'home') {
+                        if (this.dom.content) this.dom.content.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
+                        if (this.dom.content) this.dom.content.style.transform = 'translateX(0)';
+                    }
+                    if (diffX > threshold && this.currentView !== 'home') {
                         this.vibrate(20);
                         if (this.currentView === 'artist-detail') this.showView('artists', false);
                         else if (this.currentView === 'playlist-detail') this.showView('playlists', false);

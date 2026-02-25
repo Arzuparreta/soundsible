@@ -10,9 +10,20 @@ function el(id) {
     return document.getElementById(id);
 }
 
+const DESKTOP_PLAY_SELECTORS = '.song-row, .song-card, .playlist-track-row, .queue-item';
+
 export const DesktopUI = {
     currentView: 'home',
     currentActionTrack: null,
+    selectedTrackId: null,
+
+    setSelectedTrackId(id) {
+        this.selectedTrackId = id || null;
+        document.querySelectorAll(DESKTOP_PLAY_SELECTORS).forEach((el) => {
+            if (el.getAttribute('data-id') === id) el.classList.add('selected');
+            else el.classList.remove('selected');
+        });
+    },
 
     init() {
         this.applyTheme(store.state.theme);
@@ -55,9 +66,9 @@ export const DesktopUI = {
         const playIcon = playBtn?.querySelector('i');
         const track = state.currentTrack;
 
-        if (cover) cover.style.backgroundImage = track ? `url("${String(Resolver.getCoverUrl(track)).replace(/"/g, '%22')}")` : `url('${store.placeholderCoverUrl}')`;
-        if (title) title.textContent = track?.title ?? '—';
-        if (artist) artist.textContent = track?.artist ?? '—';
+        if (cover) cover.style.backgroundImage = track ? `url("${String(Resolver.getCoverUrl(track)).replace(/"/g, '%22')}")` : '';
+        if (title) title.textContent = track?.title ?? '';
+        if (artist) artist.textContent = track?.artist ?? '';
         if (playBtn && playIcon) {
             playIcon.className = state.isPlaying ? 'fas fa-pause' : 'fas fa-play';
         }
@@ -67,10 +78,12 @@ export const DesktopUI = {
 
         const timeCurrent = el('desktop-np-time-current');
         const timeDuration = el('desktop-np-time-duration');
+        const timebarRow = el('desktop-np-timebar-row');
         const seek = el('desktop-np-seek');
         const ct = audioEngine.audio?.currentTime ?? 0;
-        if (timeCurrent) timeCurrent.textContent = renderers.formatTime(ct);
-        if (timeDuration) timeDuration.textContent = renderers.formatTime(track?.duration ?? 0);
+        if (timebarRow) timebarRow.classList.toggle('has-track', !!track);
+        if (timeCurrent) timeCurrent.textContent = track ? renderers.formatTime(ct) : '0:00';
+        if (timeDuration) timeDuration.textContent = track ? renderers.formatTime(track.duration ?? 0) : '0:00';
         if (seek && track?.duration) {
             const pct = track.duration > 0 ? (100 * ct / track.duration) : 0;
             seek.value = Math.min(100, Math.max(0, pct));
@@ -397,7 +410,16 @@ export const DesktopUI = {
             btn.addEventListener('click', () => this.showView(btn.getAttribute('data-view')));
         });
         const queueBtn = el('desktop-queue-btn');
-        if (queueBtn) queueBtn.addEventListener('click', () => this.showView('queue'));
+        const queuePanel = el('desktop-queue-panel');
+        if (queueBtn && queuePanel) {
+            queueBtn.addEventListener('click', () => {
+                const isOpen = !queuePanel.classList.toggle('hidden');
+                queueBtn.setAttribute('aria-expanded', String(isOpen));
+                queueBtn.classList.toggle('queue-panel-open', isOpen);
+            });
+        }
+        const queueClearBtn = el('desktop-queue-clear-btn');
+        if (queueClearBtn) queueClearBtn.addEventListener('click', () => store.clearQueue());
 
         const logoOmni = el('desktop-logo-omni');
         if (logoOmni) {
@@ -471,6 +493,11 @@ export const DesktopUI = {
     bindKeyboard() {
         document.addEventListener('keydown', (e) => {
             if (e.target.closest('input, textarea, select')) return;
+            if (e.code === 'Enter' && this.selectedTrackId && typeof window.playTrack === 'function') {
+                e.preventDefault();
+                window.playTrack(this.selectedTrackId);
+                return;
+            }
             if (e.code === 'Space') {
                 e.preventDefault();
                 if (store.state.currentTrack) (store.state.isPlaying ? audioEngine.pause() : audioEngine.play());

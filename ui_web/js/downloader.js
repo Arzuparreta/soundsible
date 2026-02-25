@@ -72,6 +72,14 @@ const DEFAULT_DL_SELECTORS = {
     refetchMetadataStatus: 'refetch-metadata-status'
 };
 
+/** ODST search source (UI toggle). */
+const ODST_SOURCE_MUSIC = 'music';
+const ODST_SOURCE_YOUTUBE = 'youtube';
+/** Backend source_type values. */
+const SOURCE_TYPE_YTMUSIC_SEARCH = 'ytmusic_search';
+const SOURCE_TYPE_YOUTUBE_SEARCH = 'youtube_search';
+const SOURCE_TYPE_YOUTUBE_URL = 'youtube_url';
+
 export class Downloader {
     static downloadQueue = [];
     static lastSearchResults = [];
@@ -81,8 +89,8 @@ export class Downloader {
     static suppressResultClicksUntil = 0;
     /** Guard: ignore outside-click close for this many ms after opening (avoids mobile ghost tap closing the popover). */
     static _downloadQueueOpenedAt = 0;
-    /** Search source: 'music' = YouTube Music (default), 'youtube' = normal YouTube */
-    static searchSource = 'music';
+    /** Search source: ODST_SOURCE_MUSIC = YouTube Music (default), ODST_SOURCE_YOUTUBE = normal YouTube */
+    static searchSource = ODST_SOURCE_MUSIC;
 
     /** @param {Partial<typeof DEFAULT_DL_SELECTORS>} [selectors] - Override element IDs (e.g. desktop-dl-*). Omit for mobile. */
     static init(selectors) {
@@ -144,7 +152,7 @@ export class Downloader {
             if (e?.detail?.status === 'completed') {
                 store.syncLibrary();
                 const track = e?.detail?.track;
-                if (track?.download_source === 'youtube_search') return;
+                if (track?.download_source === SOURCE_TYPE_YOUTUBE_SEARCH) return;
                 if (track && (track.premium_cover_failed || (track.cover_source && !['spotify', 'musicbrainz', 'itunes', 'youtube_music'].includes(track.cover_source)))) {
                     this.showCoverChoiceModal(track);
                 }
@@ -182,10 +190,10 @@ export class Downloader {
 
         // Search source: Music | YouTube
         if (this.searchSourceMusicBtn) {
-            this.searchSourceMusicBtn.addEventListener('click', () => this.setSearchSource('music'));
+            this.searchSourceMusicBtn.addEventListener('click', () => this.setSearchSource(ODST_SOURCE_MUSIC));
         }
         if (this.searchSourceYoutubeBtn) {
-            this.searchSourceYoutubeBtn.addEventListener('click', () => this.setSearchSource('youtube'));
+            this.searchSourceYoutubeBtn.addEventListener('click', () => this.setSearchSource(ODST_SOURCE_YOUTUBE));
         }
 
         window.Downloader = this;
@@ -216,12 +224,12 @@ export class Downloader {
     }
 
     static setSearchSource(value) {
-        if (value !== 'music' && value !== 'youtube') return;
+        if (value !== ODST_SOURCE_MUSIC && value !== ODST_SOURCE_YOUTUBE) return;
         this.searchSource = value;
         const musicBtn = this.searchSourceMusicBtn;
         const youtubeBtn = this.searchSourceYoutubeBtn;
         if (musicBtn && youtubeBtn) {
-            if (value === 'music') {
+            if (value === ODST_SOURCE_MUSIC) {
                 musicBtn.classList.add('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
                 musicBtn.classList.remove('bg-[var(--accent)]/15', 'text-[var(--accent)]');
                 musicBtn.setAttribute('aria-pressed', 'true');
@@ -259,7 +267,7 @@ export class Downloader {
             if (existing.has(url)) continue;
             existing.add(url);
             this.downloadQueue.push({
-                source_type: 'youtube_url',
+                source_type: SOURCE_TYPE_YOUTUBE_URL,
                 song_str: url,
                 title: url,
                 channel: '',
@@ -280,7 +288,7 @@ export class Downloader {
         if (!q || !this.searchResults) return;
         this.searchResults.innerHTML = '<div class="text-center py-8 text-gray-500">Searching...</div>';
         this.searchBtn?.classList.add('opacity-70');
-        const sourceParam = this.searchSource === 'youtube' ? 'youtube' : 'ytmusic';
+        const sourceParam = this.searchSource === ODST_SOURCE_YOUTUBE ? 'youtube' : 'ytmusic';
         try {
             const resp = await fetch(`${store.apiBase}/api/downloader/youtube/search?q=${encodeURIComponent(q)}&limit=10&source=${sourceParam}`);
             const data = await resp.json();
@@ -349,7 +357,7 @@ export class Downloader {
     }
 
     static showCoverChoiceModal(track) {
-        if (track?.download_source === 'youtube_search') return;
+        if (track?.download_source === SOURCE_TYPE_YOUTUBE_SEARCH) return;
         const modal = document.getElementById('dl-cover-choice-modal');
         if (!modal || !track) return;
         
@@ -435,11 +443,12 @@ export class Downloader {
         }
     }
 
-    static addToDownloadQueue(result) {
+    static addToDownloadQueue(result, options = {}) {
         if (!result || !result.id) return;
         const canonicalUrl = normalizeYouTubeUrl(result.webpage_url || `https://www.youtube.com/watch?v=${result.id}`);
         if (!canonicalUrl) return;
-        const sourceType = this.searchSource === 'youtube' ? 'youtube_search' : 'ytmusic_search';
+        const effectiveSource = (options.source === ODST_SOURCE_YOUTUBE || options.source === ODST_SOURCE_MUSIC) ? options.source : this.searchSource;
+        const sourceType = effectiveSource === ODST_SOURCE_YOUTUBE ? SOURCE_TYPE_YOUTUBE_SEARCH : SOURCE_TYPE_YTMUSIC_SEARCH;
         this.downloadQueue.push({
             source_type: sourceType,
             song_str: canonicalUrl,
@@ -541,7 +550,7 @@ export class Downloader {
             return;
         }
         const items = this.downloadQueue.map((r) => ({
-            source_type: r.source_type || 'youtube_url',
+            source_type: r.source_type || SOURCE_TYPE_YOUTUBE_URL,
             song_str: r.song_str || normalizeYouTubeUrl(r.webpage_url || `https://www.youtube.com/watch?v=${r.video_id || r.id || ''}`),
             output_dir: r.output_dir,
             metadata_evidence: r.metadata_evidence || null

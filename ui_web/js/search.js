@@ -1,6 +1,6 @@
 /**
  * Unified Search: Library + ODST in one bar.
- * 1s debounce, auto-show results; library instant, ODST async; merge and rank; source labels.
+ * Library: instant filter on input. ODST: debounced so internet search runs after user pauses typing.
  * Link paste → add to download queue and clear input (only case we clear input).
  */
 import { store } from './store.js';
@@ -8,7 +8,7 @@ import * as renderers from './renderers.js';
 import { Resolver } from './resolver.js';
 import { Haptics } from './haptics.js';
 
-const DEBOUNCE_MS = 1000;
+const ODST_DEBOUNCE_MS = 350;
 
 function esc(str) {
     if (!str) return '';
@@ -29,6 +29,8 @@ let resultsEl = null;
 let lastLibraryItems = [];
 let lastOdstResults = [];
 let isMobile = true;
+/** When false (desktop), library rows use Spotify-style click (delegation); no single-click play on row. */
+let isDesktop = false;
 /** Search tab ODST source: 'music' = YouTube Music, 'youtube' = normal YouTube. */
 let odstSourceMode = 'music';
 
@@ -84,13 +86,14 @@ function buildLibraryRowHtml(track) {
     const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
     const state = store.state;
     const isActive = state.currentTrack && state.currentTrack.id === track.id;
-    const isFav = (state.favorites || []).includes(track.id);
+    const playOverlay = isDesktop ? renderers.desktopPlayOverlaySmallHtml() : '';
     return `
     <div class="search-result-item mb-2">
         <div class="text-[9px] font-black uppercase tracking-widest text-[var(--text-dim)] mb-0.5">Library</div>
-        <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] border-transparent'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${esc(track.id)}" data-source="library">
-            <div class="song-row-cover-wrapper relative w-12 h-12 flex-shrink-0">
+        <div class="song-row relative z-10 flex items-center p-3 group ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] border-transparent'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${esc(track.id)}" data-source="library">
+            <div class="song-row-cover-wrapper relative w-12 h-12 flex-shrink-0${isDesktop ? ' group' : ''}">
                 <div class="song-row-cover absolute inset-0 rounded-xl overflow-hidden bg-cover bg-center border border-[var(--glass-border)] shadow-lg" style="${coverStyle}" role="img" aria-label="Cover"></div>
+                ${playOverlay}
             </div>
             <div class="ml-4 flex-1 truncate">
                 <div class="song-title font-bold text-sm truncate text-[var(--text-main)]">${esc(track.title)}</div>
@@ -140,14 +143,16 @@ function render(merged) {
 
 function bindListeners(merged) {
     if (!resultsEl) return;
-    resultsEl.querySelectorAll('[data-source="library"]').forEach((row) => {
-        const id = row.getAttribute('data-id');
-        if (!id) return;
-        row.addEventListener('click', (e) => {
-            if (e.target.closest('.dl-add-one')) return;
-            if (typeof window.playTrack === 'function') window.playTrack(id);
+    if (!isDesktop) {
+        resultsEl.querySelectorAll('[data-source="library"]').forEach((row) => {
+            const id = row.getAttribute('data-id');
+            if (!id) return;
+            row.addEventListener('click', (e) => {
+                if (e.target.closest('.dl-add-one')) return;
+                if (typeof window.playTrack === 'function') window.playTrack(id);
+            });
         });
-    });
+    }
     const odstItems = merged.filter((m) => m.source === 'odst');
     resultsEl.querySelectorAll('[data-source="odst"]').forEach((row) => {
         const videoId = row.getAttribute('data-video-id');
@@ -163,7 +168,7 @@ function bindListeners(merged) {
         if (addBtn && item && typeof window.Downloader !== 'undefined' && window.Downloader.addToDownloadQueue) {
             addBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                window.Downloader.addToDownloadQueue(item);
+                window.Downloader.addToDownloadQueue(item, { source: odstSourceMode });
             });
         }
     });
@@ -262,7 +267,6 @@ function onInput() {
         resultsEl.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">Search library and ODST...</div>';
         lastLibraryItems = [];
         lastOdstResults = [];
-        lastMergedFull = [];
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = null;
         return;
@@ -283,7 +287,7 @@ function onInput() {
     }
     runLibraryOnly(raw);
     if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(onDebounceFire, DEBOUNCE_MS);
+    debounceTimer = setTimeout(onDebounceFire, ODST_DEBOUNCE_MS);
 }
 
 function onPaste() {
@@ -350,6 +354,7 @@ function setSearchOdstSource(value) {
 
 function init(opts = {}) {
     isMobile = opts.mobile !== false;
+    isDesktop = !isMobile;
     const inputId = isMobile ? 'search-page-input' : 'desktop-search-page-input';
     const resultsId = isMobile ? 'search-page-results' : 'desktop-search-page-results';
     inputEl = document.getElementById(inputId);

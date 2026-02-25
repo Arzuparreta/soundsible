@@ -78,6 +78,8 @@ class Track:
     cover_source: Optional[str] = None  # spotify | youtube_music | youtube | musicbrainz | itunes | manual | none
     metadata_modified_by_user: bool = False  # True if user manually edited metadata/cover
     download_source: Optional[str] = None  # youtube_search | ytmusic_search | youtube_url | spotify_track | manual
+    fallback_cover_url: Optional[str] = None  # YT thumbnail URL for "Use YouTube cover" / normal YouTube fallback
+    premium_cover_failed: bool = False
 
     @staticmethod
     def generate_id() -> str:

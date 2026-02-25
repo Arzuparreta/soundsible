@@ -1,6 +1,5 @@
 import sys
 import os
-import subprocess
 
 try:
     import tkinter as tk
@@ -9,22 +8,10 @@ except ImportError:
     print("\n" + "!"*60)
     print("CRITICAL ERROR: Desktop GUI libraries (tkinter) are missing.")
     print("This is common on some Linux setups.")
-    print("--> AUTO-SWITCHING TO WEB INTERFACE...")
+    print("--> Use the embedded downloader in the main webapp instead:")
+    print("    http://localhost:5005/player/")
+    print("    (Ensure the Soundsible API is running on port 5005.)")
     print("!"*60 + "\n")
-    
-    # Determine path to the web launcher script
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    web_script = os.path.join(current_dir, "downloader_web.sh")
-    
-    # Hand off execution to the web script
-    try:
-        # We use /bin/bash explicitly to run the shell script
-        # Check if we need to make it executable? It should be fine.
-        subprocess.check_call(["/bin/bash", web_script])
-    except Exception as e:
-        print(f"Failed to launch Web UI automatically: {e}")
-        print(f"Please try running: {web_script}")
-    
     sys.exit(1)
 import threading
 import sys

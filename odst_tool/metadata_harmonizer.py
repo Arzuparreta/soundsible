@@ -573,7 +573,7 @@ class MetadataHarmonizer:
             "metadata_decision_id": raw_data.get("metadata_decision_id"),
             "cover_source": cover_source,
             "premium_cover_failed": premium_cover_failed,
-            "fallback_cover_url": yt_thumbnail if not final_cover or cover_source == "youtube" else None,  # For "Use YouTube cover" option
+            "fallback_cover_url": final_cover if cover_source == "youtube" else (raw_data.get("thumbnail") or raw_data.get("album_art_url") if not final_cover else None),
         }
 
     @staticmethod

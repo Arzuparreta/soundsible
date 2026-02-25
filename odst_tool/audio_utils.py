@@ -6,7 +6,6 @@ import mutagen
 from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, TCON, APIC, COMM, USLT
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC, Picture
-import requests
 
 class AudioProcessor:
     """Utilities for audio file processing."""
@@ -24,17 +23,24 @@ class AudioProcessor:
     def embed_metadata(file_path: str, metadata: Dict[str, Any], cover_url: Optional[str] = None):
         """
         Embed ID3 tags/metadata into the file.
-        Supports MP3 and FLAC.
+        Supports MP3 and FLAC. Uses download_image for cover so YouTube thumbnails work (User-Agent).
         """
+        cover_data = None
+        if cover_url:
+            try:
+                from setup_tool.metadata import download_image
+                cover_data = download_image(cover_url)
+            except Exception:
+                pass
         path = Path(file_path)
         if path.suffix.lower() == '.mp3':
-            AudioProcessor._embed_mp3(str(path), metadata, cover_url)
+            AudioProcessor._embed_mp3(str(path), metadata, cover_data)
         elif path.suffix.lower() == '.flac':
-            AudioProcessor._embed_flac(str(path), metadata, cover_url)
+            AudioProcessor._embed_flac(str(path), metadata, cover_data)
 
     @staticmethod
-    def _embed_flac(file_path: str, metadata: Dict[str, Any], cover_url: Optional[str]):
-        """Embed metadata into FLAC file."""
+    def _embed_flac(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes]):
+        """Embed metadata into FLAC file. cover_data is image bytes (from download_image)."""
         try:
             audio = FLAC(file_path)
             
@@ -69,16 +75,14 @@ class AudioProcessor:
                 audio['metadata_query_fingerprint'] = str(metadata['metadata_query_fingerprint'])
                 
             # Cover Art
-            if cover_url:
+            if cover_data:
                 try:
-                    response = requests.get(cover_url, timeout=10)
-                    if response.status_code == 200:
-                        image = Picture()
-                        image.type = 3
-                        image.mime = 'image/jpeg'
-                        image.desc = u'Cover'
-                        image.data = response.content
-                        audio.add_picture(image)
+                    image = Picture()
+                    image.type = 3
+                    image.mime = 'image/jpeg'
+                    image.desc = u'Cover'
+                    image.data = cover_data
+                    audio.add_picture(image)
                 except Exception as e:
                     print(f"Failed to embed FLAC cover art: {e}")
             
@@ -87,8 +91,8 @@ class AudioProcessor:
             print(f"Error embedding FLAC metadata: {e}")
 
     @staticmethod
-    def _embed_mp3(file_path: str, metadata: Dict[str, Any], cover_url: Optional[str]):
-        """Embed metadata into MP3 file."""
+    def _embed_mp3(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes]):
+        """Embed metadata into MP3 file. cover_data is image bytes (from download_image)."""
         try:
             audio = MP3(file_path, ID3=ID3)
         except mutagen.MutagenError:
@@ -144,19 +148,17 @@ class AudioProcessor:
             audio.tags.add(TXXX(encoding=3, desc='METADATA_QUERY_FINGERPRINT', text=str(metadata['metadata_query_fingerprint'])))
             
         # Cover Art
-        if cover_url:
+        if cover_data:
             try:
-                response = requests.get(cover_url, timeout=10)
-                if response.status_code == 200:
-                    audio.tags.add(
-                        APIC(
-                            encoding=3, # 3 is UTF-8
-                            mime='image/jpeg', # assume jpeg usually
-                            type=3, # 3 is for the cover image
-                            desc=u'Cover',
-                            data=response.content
-                        )
+                audio.tags.add(
+                    APIC(
+                        encoding=3, # 3 is UTF-8
+                        mime='image/jpeg', # assume jpeg usually
+                        type=3, # 3 is for the cover image
+                        desc=u'Cover',
+                        data=cover_data
                     )
+                )
             except Exception as e:
                 print(f"Failed to embed cover art: {e}")
 

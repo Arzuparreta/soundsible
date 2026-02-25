@@ -80,9 +80,8 @@ class WindowsControlCenter:
         webbrowser.open("http://localhost:5005/player/")
 
     def open_downloader(self):
-        # Ensure server is running
-        self.launcher.launch_downloader()
-        webbrowser.open("http://localhost:5000")
+        """Open the embedded downloader in the main webapp (ensure API is running on 5005)."""
+        webbrowser.open("http://localhost:5005/player/")
 
     def show_sync_qr(self):
         """Show sync QR code using the same logic as the Linux app."""

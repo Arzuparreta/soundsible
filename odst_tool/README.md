@@ -2,6 +2,8 @@
 
 A powerful tool to download music from YouTube Music, YouTube, or Spotify links. Fully compatible with `Soundsible`.
 
+**The downloader is now embedded in the main Soundsible webapp.** Use the web player at `http://localhost:5005/player/` (ensure the API is running on port 5005) for the built-in downloader. For CLI usage, run `download.py` from the project root or use the scripts below.
+
 ## Features
 - **Flexible Selection**: Download everything, specific playlists, or liked songs
 - **Smart Search**: Uses YouTube "Topic" channels for highest quality audio
@@ -29,34 +31,30 @@ A powerful tool to download music from YouTube Music, YouTube, or Spotify links.
 
 ## Usage
 
-### Web App (Recommended)
+### Web (embedded)
 
-The easiest way to download music is through the web interface:
+Use the **main Soundsible webapp**: start the API (e.g. from `run.py` → Launch Web Player), then open `http://localhost:5005/player/`. The downloader is built into the player UI.
 
+### CLI
+
+From the **project root**:
 ```bash
-./downloader_web.sh
+python download.py "https://www.youtube.com/watch?v=..."
 ```
 
-Then open the displayed URL in your browser. Paste music links (one per line) from:
-- Spotify
-- YouTube  
-- YouTube Music
-
-You can mix links from different platforms in the same batch!
-
-> **Note:** Spotify API credentials are **only needed** if you want to auto-download your entire Spotify library/playlists. For simply pasting links, no credentials are required.
-
----
-
-### CLI Helper Script
-
-For command-line usage with your full Spotify library:
-
+Or use the ODST CLI helper (from this directory):
 ```bash
 ./downloader_cli.sh --help
 ```
 
-### Examples
+### Desktop GUI (legacy)
+
+```bash
+./downloader_gui.sh
+```
+Requires tkinter. If tkinter is missing, use the embedded downloader in the webapp instead.
+
+### CLI examples (downloader_cli.sh)
 
 **Download Everything (Liked + Playlists + Albums):**
 ```bash
@@ -66,11 +64,6 @@ For command-line usage with your full Spotify library:
 **Interactive Playlist Selection:**
 ```bash
 ./downloader_cli.sh --source playlists --interactive
-```
-
-**Download Specific Playlist:**
-```bash
-./downloader_cli.sh --source playlist --playlist-name "My Workout Mix"
 ```
 
 **Download a Direct URL (YouTube or Spotify):**
@@ -83,3 +76,4 @@ For command-line usage with your full Spotify library:
 ./downloader_cli.sh --output ~/Music/MyLibrary --workers 8 --source all
 ```
 
+> **Note:** Spotify API credentials are **only needed** if you want to auto-download your entire Spotify library/playlists. For simply pasting links, no credentials are required.
