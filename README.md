@@ -14,7 +14,7 @@ This repository contains the full Soundsible ecosystem, with the Station as its 
 
 ---
 
-## Station (Windows, Linux, Android, iOS)
+## The Station (Windows, Linux, Android, iOS)
 The **Station** is the primary, recommended interface for all users. It combines the precision of a dedicated hardware player with the ubiquity of the modern web, delivering a premium listening experience across all your devices.
 
 ### Key Features:
