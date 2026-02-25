@@ -57,12 +57,19 @@ python3 -m venv venv
    *On Windows use `venv\Scripts\pip.exe` instead of `./venv/bin/pip`.*
 
 ## Getting Started!:
-After [installation](#-installation), run the launcher and open the Station in your browser:
+After [installation](#-installation):
+
+**Easiest:** Run the launcher — your browser will open automatically. Click **Launch Ecosystem** to start the Station, or **Setup** when available.
+```bash
+python start_launcher.py
+```
+The launcher runs at **http://localhost:5099** (you can bookmark it).
+
+**Terminal / SSH:** Use the slim CLI for full control:
 ```bash
 python run.py
 ```
-- Then open **http://localhost:5005/player/** (or your server’s LAN IP).
-- If you used [**Tailscale**](https://github.com/tailscale/tailscale), for example, you open **http://[your-tailscale-ip]:5005/player/**
+Then open **http://localhost:5005/player/** (or your server’s LAN IP). If you used [**Tailscale**](https://github.com/tailscale/tailscale), open **http://[your-tailscale-ip]:5005/player/**.
 This links redirects automatically to mobile or desktop versions.
 
 ### Add as a webapp on desktop and mobile for the full inmersive experience:

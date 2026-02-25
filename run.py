@@ -187,34 +187,61 @@ class SoundsibleLauncher:
         table.add_column("Key", style="bold magenta")
         table.add_column("Option", style="white")
 
-        table.add_row("1", "Launch Music Player (GUI) [bold green](Recommended)[/bold green]")
-        table.add_row("2", "Launch Web Player (PWA) [bold cyan](Android/Windows)[/bold cyan]")
-        table.add_row("3", "Search Library (Quick Discover)")
-        table.add_row("4", "Manage Storage / Sync")
-        table.add_row("5", "Advanced Options")
-        table.add_row("q", "Quit")
+        table.add_row("1", "Launch Ecosystem (API + sync + watcher)")
+        table.add_row("2", "Launch Main App (Station / Web Player)")
+        table.add_row("3", "Launch Legacy App (GTK desktop player)")
+        table.add_row("4", "Quick Discover / Terminal Playback")
+        table.add_row("q", "Exit")
 
         console.print(Panel(table, title="Main Menu", border_style="dim"))
 
-        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "5", "q"], default="1")
+        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "q"], default="1")
         
         if choice == "1":
-            self.launch_player()
+            self.launch_ecosystem()
         elif choice == "2":
             self.launch_web_player()
         elif choice == "3":
-            self.search_ui()
+            self.launch_player()
         elif choice == "4":
-            self.manage_storage()
-        elif choice == "5":
-            self.show_advanced_menu()
+            self.search_ui()
         elif choice == "q":
             console.print("[italic]Happy listening![/italic]")
             sys.exit(0)
 
+    def launch_ecosystem(self):
+        """Start the daemon (API + sync + watcher) in a background subprocess."""
+        console.print("[bold green]Launching Ecosystem...[/bold green]")
+        try:
+            log_dir = self.root_dir / "logs"
+            log_dir.mkdir(exist_ok=True)
+            log_file = open(log_dir / "daemon.log", "a")
+            env = os.environ.copy()
+            env["PYTHONPATH"] = str(self.root_dir)
+            if platform.system() == "Windows":
+                popen_args = {"env": env, "cwd": str(self.root_dir), "creationflags": 0x00000010}
+            else:
+                popen_args = {
+                    "stdout": log_file,
+                    "stderr": log_file,
+                    "env": env,
+                    "cwd": str(self.root_dir),
+                    "start_new_session": True,
+                }
+            subprocess.Popen([str(self.python_exe), str(self.root_dir / "run.py"), "--daemon"], **popen_args)
+            console.print(Panel.fit(
+                "[bold green]Ecosystem is starting.[/bold green]\n\n"
+                "Station: [bold cyan]http://localhost:5005/player/[/bold cyan]\n\n"
+                "[dim]Logs: logs/daemon.log[/dim]",
+                border_style="green"
+            ))
+            time.sleep(1.5)
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
     def launch_player(self):
-        """Launch the Music Player component with logging."""
-        console.print("[green]Launching Soundsible Player...[/green]")
+        """Launch the Legacy GTK desktop player."""
+        console.print("[green]Launching Legacy Player...[/green]")
         if self.os_name == "Linux":
             try:
                 log_dir = self.root_dir / "logs"
@@ -283,155 +310,6 @@ class SoundsibleLauncher:
             time.sleep(2.0)
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
-
-    def launch_setup(self):
-        """Run the setup wizard."""
-        console.print("[cyan]Starting Setup Wizard...[/cyan]")
-        subprocess.run([str(self.python_exe), "-m", "setup_tool.cli", "init", "--guided"])
-        self._load_stats()
-
-    def launch_api(self):
-        """Launch the Core API Server."""
-        console.print("[bold green]Starting Soundsible Core API...[/bold green]")
-        try:
-            log_dir = self.root_dir / "logs"
-            log_dir.mkdir(exist_ok=True)
-            log_file = open(log_dir / "api.log", "a")
-            
-            proc = subprocess.Popen([str(self.python_exe), "-m", "shared.api"],
-                             stdout=log_file,
-                             stderr=log_file,
-                             start_new_session=True)
-            self.child_processes.append(proc)
-            console.print("[bold green]API Server is running on http://localhost:5005[/bold green]")
-            time.sleep(2.0)
-        except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-
-    def show_advanced_menu(self):
-        """Advanced tools and CLI configuration."""
-        console.clear()
-        console.print(Panel("[bold red]Advanced Options[/bold red]\n[dim]Use these tools for deep maintenance or CLI-based setup.[/dim]", border_style="red"))
-        
-        table = Table(show_header=False, box=None)
-        table.add_column("Key", style="bold magenta")
-        table.add_column("Option", style="white")
-        table.add_row("1", "Run CLI Setup Wizard (Guided)")
-        table.add_row("2", "Launch Core API Server")
-        table.add_row("3", "System Integrity Check")
-        table.add_row("b", "Back to Main Menu")
-        
-        console.print(Panel(table, border_style="dim"))
-        choice = Prompt.ask("Select an option", choices=["1", "2", "3", "b"], default="b")
-        
-        if choice == "1":
-            self.launch_setup()
-        elif choice == "2":
-            self.launch_api()
-        elif choice == "3":
-            subprocess.run([str(self.python_exe), "-m", "setup_tool.cli", "cleanup"])
-            Prompt.ask("Press Enter to continue")
-
-    def manage_storage(self):
-        """Storage management submenu."""
-        console.print("[bold yellow]Storage Management[/bold yellow]")
-        table = Table(show_header=False, box=None)
-        table.add_column("Key", style="bold magenta")
-        table.add_column("Option", style="white")
-        table.add_row("1", "Manual Sync")
-        table.add_row("2", "Deep Scan Folder")
-        table.add_row("3", "Cleanup/Janitor")
-        table.add_row("4", "Config Management")
-        table.add_row("5", "Watch Folders (Auto-Scan)")
-        table.add_row("6", "[bold yellow]Disconnect Storage (Reset)[/bold yellow]")
-        table.add_row("9", "[bold red]DELETE ALL CONTENT (Nuke)[/bold red]")
-        table.add_row("b", "Back")
-        
-        console.print(Panel(table, border_style="dim"))
-        choice = Prompt.ask("Choose an action", choices=["1", "2", "3", "4", "5", "6", "9", "b"], default="b")
-        
-        if choice == "1":
-            from player.library import LibraryManager
-            lib = LibraryManager()
-            lib.sync_library()
-            self._load_stats()
-            Prompt.ask("Press Enter")
-        elif choice == "2":
-            path = Prompt.ask("Enter music path", default=str(Path.home() / "Music"))
-            subprocess.run([str(self.python_exe), "-m", "setup_tool.cli", "scan", path])
-            self._load_stats()
-            Prompt.ask("Press Enter")
-        elif choice == "3":
-            subprocess.run([str(self.python_exe), "-m", "setup_tool.cli", "cleanup"])
-            Prompt.ask("Press Enter")
-        elif choice == "4":
-             console.print("1. Export Config (QR)")
-             console.print("2. Import Config (Token)")
-             sub = Prompt.ask("Action", choices=["1", "2", "b"], default="b")
-             if sub == "1":
-                 subprocess.run([str(self.python_exe), "-m", "setup_tool.cli", "export-config"])
-             elif sub == "2":
-                 token = Prompt.ask("Enter token")
-                 subprocess.run([str(self.python_exe), "-m", "setup_tool.cli", "import-config", token])
-             Prompt.ask("Press Enter")
-        elif choice == "5":
-            self.manage_watch_folders()
-        elif choice == "6":
-             from rich.prompt import Confirm
-             if Confirm.ask("Disconnect from current cloud service?"):
-                 wipe = Confirm.ask("Also wipe local library metadata and cache?")
-                 from player.library import LibraryManager
-                 lib = LibraryManager()
-                 if lib.disconnect_storage(wipe_local=wipe):
-                     self._load_stats()
-                     console.print("[green]Disconnected. Restart app to setup again.[/green]")
-                 else:
-                     console.print("[red]Failed to disconnect.[/red]")
-             Prompt.ask("Press Enter")
-        elif choice == "9":
-            from rich.prompt import Confirm
-            if Confirm.ask("[bold red]ARE YOU SURE?[/bold red] This will permanently delete ALL tracks!"):
-                from player.library import LibraryManager
-                lib = LibraryManager()
-                if lib.nuke_library():
-                    self._load_stats()
-                    console.print("[bold green]Library has been wiped clean.[/bold green]")
-                else:
-                    console.print("[bold red]Failed to fully wipe library.[/bold red]")
-                Prompt.ask("Press Enter")
-
-    def manage_watch_folders(self):
-        """Configure which folders are monitored for changes."""
-        from player.library import LibraryManager
-        lib = LibraryManager()
-        if not lib.config: return
-        
-        console.print("[bold cyan]Currently Watched Folders:[/bold cyan]")
-        if not lib.config.watch_folders:
-            console.print("  None")
-        else:
-            for f in lib.config.watch_folders:
-                console.print(f"  - {f}")
-        
-        action = Prompt.ask("\n[bold]Action[/bold]", choices=["a", "c", "b"], default="b", show_choices=False)
-        console.print("(a) Add Folder  (c) Clear All  (b) Back")
-        
-        if action == "a":
-            path = Prompt.ask("Enter folder path to watch")
-            if os.path.exists(path):
-                if path not in lib.config.watch_folders:
-                    lib.config.watch_folders.append(path)
-                    with open(CONFIG_PATH, 'w') as f:
-                        f.write(lib.config.to_json())
-                    console.print("[green]Folder added.[/green]")
-            else:
-                console.print("[red]Path does not exist.[/red]")
-        elif action == "c":
-            lib.config.watch_folders = []
-            with open(CONFIG_PATH, 'w') as f:
-                f.write(lib.config.to_json())
-            console.print("[yellow]Watch folders cleared.[/yellow]")
-        Prompt.ask("Press Enter")
 
     def search_ui(self):
         """Interactive search TUI using high-speed SQLite."""

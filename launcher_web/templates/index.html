@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Soundsible</title>
+  <style>
+    :root {
+      --bg: #1c1c1e;
+      --glass-bg: rgba(0, 0, 0, 0.25);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --text: #f5f5f7;
+      --text-dim: rgba(245, 245, 247, 0.72);
+      --accent: #0a84ff;
+      --radius: 16px;
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 17px;
+      line-height: 1.45;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin: 0 0 8px 0;
+    }
+    .subtitle {
+      color: var(--text-dim);
+      font-size: 15px;
+      margin-bottom: 48px;
+    }
+    .cards {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      max-width: 420px;
+      width: 100%;
+    }
+    .card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(24px) saturate(150%);
+      -webkit-backdrop-filter: blur(24px) saturate(150%);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 24px;
+      transition: transform 0.2s ease-out, border-color 0.2s ease-out;
+    }
+    @supports not (backdrop-filter: blur(1px)) {
+      .card { background: rgba(30, 30, 30, 0.95); }
+    }
+    .card:hover {
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+    .card.clickable {
+      cursor: pointer;
+    }
+    .card.clickable:active {
+      transform: scale(0.99);
+    }
+    .card h2 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin: 0 0 8px 0;
+    }
+    .card p, .card ul {
+      margin: 0 0 0.5em 0;
+      color: var(--text-dim);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .card ul { padding-left: 1.25em; }
+    .card li { margin-bottom: 0.35em; }
+    .card li .note { font-style: italic; }
+    .card code { font-size: 12px; opacity: 0.95; }
+    .card a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .card a:hover { text-decoration: underline; }
+    .card.disabled {
+      opacity: 0.85;
+      cursor: default;
+    }
+    .card .badge {
+      display: inline-block;
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 12px;
+    }
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 12px 20px;
+      font-size: 14px;
+      opacity: 0;
+      transition: transform 0.25s ease-out, opacity 0.25s ease-out;
+    }
+    #toast.visible {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+    #toast.error { color: #ff453a; }
+    .local-ip-link { color: var(--accent); text-decoration: none; cursor: help; border-bottom: 1px dotted var(--accent); }
+    .local-ip-link:hover { text-decoration: none; }
+    .tooltip {
+      position: fixed;
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-family: var(--font);
+      color: var(--text);
+      pointer-events: none;
+      z-index: 1000;
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+    }
+    .tooltip.visible { opacity: 1; transform: translateY(0); }
+    .card-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .card-actions .btn {
+      font-family: var(--font);
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: 10px;
+      border: 1px solid var(--glass-border);
+      cursor: pointer;
+      transition: background 0.2s ease-out, border-color 0.2s ease-out;
+    }
+    .card-actions .btn-launch {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      padding: 10px 18px;
+    }
+    .card-actions .btn-launch:hover { filter: brightness(1.1); }
+    .card-actions .btn-stop {
+      background: transparent;
+      color: var(--text-dim);
+      padding: 8px 14px;
+      font-size: 13px;
+    }
+    .card-actions .btn-stop:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.15);
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <h1>Soundsible</h1>
+  <p class="subtitle">Your self-hosted music ecosystem</p>
+
+  <div class="cards">
+    <div class="card" id="launch-ecosystem-card">
+      <h2>Launch Ecosystem</h2>
+      <p>Starts Soundsible. Your station will be available on:</p>
+      <ul>
+        <li><code>http://{your-tailscale-ip}:5005/player</code> <span class="note">— Access it from all around the world. You need <a href="https://tailscale.com/download" target="_blank" rel="noopener">Tailscale</a> installed; find your IP on the <a href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener">Machines dashboard</a>.</span></li>
+        <li><code>http://localhost:5005/player</code> <span class="note">— Only from the main machine.</span></li>
+        <li><code>http://<a href="#" class="local-ip-link" id="local-ip-link">{your-local-ip}</a>:5005/player</code> <span class="note">— Only from your home network.</span></li>
+      </ul>
+      <div class="card-actions">
+        <button type="button" class="btn btn-launch" id="btn-launch">Launch</button>
+        <button type="button" class="btn btn-stop" id="btn-stop">Stop</button>
+      </div>
+    </div>
+
+    <div class="card disabled">
+      <h2>Setup</h2>
+      <p>Configure storage, cloud, and library.</p>
+      <span class="badge">Coming soon</span>
+    </div>
+  </div>
+
+  <div id="toast" aria-live="polite"></div>
+  <div id="local-ip-tooltip" class="tooltip" aria-hidden="true"></div>
+
+  <script>
+    const btnLaunch = document.getElementById('btn-launch');
+    const btnStop = document.getElementById('btn-stop');
+    const toast = document.getElementById('toast');
+
+    function showToast(message, isError) {
+      toast.textContent = message;
+      toast.className = 'visible' + (isError ? ' error' : '');
+      setTimeout(() => toast.classList.remove('visible'), 3500);
+    }
+
+    function launchEcosystem() {
+      btnLaunch.disabled = true;
+      fetch('/api/launch-ecosystem', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+        .then(r => r.json())
+        .then(data => {
+          btnLaunch.disabled = false;
+          if (data.ok) showToast(data.message || 'Ecosystem is starting.');
+          else showToast(data.error || 'Failed to start.', true);
+        })
+        .catch(err => {
+          btnLaunch.disabled = false;
+          showToast(err.message || 'Request failed.', true);
+        });
+    }
+
+    function stopEcosystem() {
+      btnStop.disabled = true;
+      fetch('/api/stop-ecosystem', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+        .then(r => r.json())
+        .then(data => {
+          btnStop.disabled = false;
+          if (data.ok) showToast(data.message || 'Ecosystem stopped.');
+          else showToast(data.error || 'Failed to stop.', true);
+        })
+        .catch(err => {
+          btnStop.disabled = false;
+          showToast(err.message || 'Request failed.', true);
+        });
+    }
+
+    btnLaunch.addEventListener('click', launchEcosystem);
+    btnStop.addEventListener('click', stopEcosystem);
+
+    (function () {
+      const link = document.getElementById('local-ip-link');
+      const tooltip = document.getElementById('local-ip-tooltip');
+      let cachedIp = null;
+
+      function placeTooltip(e) {
+        const x = e.clientX;
+        const y = e.clientY;
+        const gap = 10;
+        tooltip.style.left = Math.min(x + gap, window.innerWidth - tooltip.offsetWidth - 8) + 'px';
+        tooltip.style.top = (y + gap) + 'px';
+      }
+
+      function showTooltip(text) {
+        tooltip.textContent = text;
+        tooltip.classList.add('visible');
+        tooltip.setAttribute('aria-hidden', 'false');
+      }
+
+      function hideTooltip() {
+        tooltip.classList.remove('visible');
+        tooltip.setAttribute('aria-hidden', 'true');
+      }
+
+      link.addEventListener('mouseenter', function (e) {
+        e.preventDefault();
+        placeTooltip(e);
+        if (cachedIp !== null) {
+          showTooltip(cachedIp);
+        } else {
+          showTooltip('Loading…');
+          fetch('/api/local-ip')
+            .then(r => r.json())
+            .then(data => { cachedIp = data.ip; showTooltip(data.ip); })
+            .catch(() => { showTooltip('Unavailable'); });
+        }
+      });
+
+      link.addEventListener('mousemove', placeTooltip);
+      link.addEventListener('mouseleave', hideTooltip);
+      link.addEventListener('click', function (e) { e.preventDefault(); });
+    })();
+  </script>
+</body>
+</html>
