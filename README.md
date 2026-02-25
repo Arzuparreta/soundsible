@@ -15,7 +15,6 @@ The **Station** is the primary, recommended interface for all users. It combines
 - **Setup Wizard on app launch**: Easy setup for setting absolutely every configuration needed for you to start streaming your music right now!
 - **ODST Downloader**: Embeded downloader that downloads music from youtube or yt-music. It automatically fetches all the metadata including covers, and uploads it to your previously configured NAS (or desktop local) storage or third provided cloud (setup for Cloudflare R2, Backblaze R2 and S2 users on **Setup Wizard**).
 - **Universal Sync**: Your library, playlists, queue, metadata, configurations... all synchronised along your devices.
-- **Omni-Island Control**: A unified, gesture-driven navigation hub that seamlessly blends transport controls with deep-link navigation.
 
 ### Use cases:
 - Full environment experience: [**Tailscale**](https://github.com/tailscale/tailscale) **(Recommended)**
