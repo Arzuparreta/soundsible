@@ -6,6 +6,13 @@
 I'm fully concerned about getting the closest experience possible to a third provided music platform, and I'm working everyday on features and quality of life.
 This repository contains the full Soundsible ecosystem, with the Station as its core component.
 
+## **Use cases**:
+- **Full environment experience**: [**Tailscale**](https://github.com/tailscale/tailscale) **(Recommended)**
+   (Tailscale let's you access your running API from anywhere in the world, so you can listen to your streamed music anywhere) or;
+- Only local playback: No extra configuration needed.
+   (Just download and enjoy your local music)
+
+---
 
 ## Station (Windows, Linux, Android, iOS)
 The **Station** is the primary, recommended interface for all users. It combines the precision of a dedicated hardware player with the ubiquity of the modern web, delivering a premium listening experience across all your devices.
@@ -16,14 +23,8 @@ The **Station** is the primary, recommended interface for all users. It combines
 - **ODST Downloader**: Embeded downloader that downloads music from youtube or yt-music. It automatically fetches all the metadata including covers, and uploads it to your previously configured NAS (or desktop local) storage or third provided cloud (setup for Cloudflare R2, Backblaze R2 and S2 users on **Setup Wizard**).
 - **Universal Sync**: Your library, playlists, queue, metadata, configurations... all synchronised along your devices.
 
-### **Use cases**:
-- **Full environment experience**: [**Tailscale**](https://github.com/tailscale/tailscale) **(Recommended)**
-   (Tailscale let's you access your running API from anywhere in the world, so you can listen to your streamed music anywhere) or;
-- Only local playback: No extra configuration needed.
-   (Just download and enjoy your local music)
-
 ---
-
+  
 ## 📦 Installation:
 
 **Requirements:** Python 3.10+ and `git`. On Linux you may need system packages (e.g. `python3-venv`, `python3-pip`).
