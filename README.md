@@ -16,7 +16,7 @@ The **Station** is the primary, recommended interface for all users. It combines
 - **ODST Downloader**: Embeded downloader that downloads music from youtube or yt-music. It automatically fetches all the metadata including covers, and uploads it to your previously configured NAS (or desktop local) storage or third provided cloud (setup for Cloudflare R2, Backblaze R2 and S2 users on **Setup Wizard**).
 - **Universal Sync**: Your library, playlists, queue, metadata, configurations... all synchronised along your devices.
 
-### Use cases:
+### **Use cases**:
 - Full environment experience: [**Tailscale**](https://github.com/tailscale/tailscale) **(Recommended)**
    (Tailscale let's you access your running API from anywhere in the world, so you can listen to your streamed music anywhere) or;
 - Only local playback: No extra configuration needed.
