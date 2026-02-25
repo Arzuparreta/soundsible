@@ -55,7 +55,7 @@ python3 -m venv venv
    ```
    *On Windows use `venv\Scripts\pip.exe` instead of `./venv/bin/pip`.*
 
-## Getting Started!:
+## Getting Started!
 After [installation](#-installation):
 
 **Easiest:** Run the launcher — your browser will open automatically. Click **Launch Ecosystem** to start the Station, or **Setup** when available.
@@ -87,7 +87,7 @@ A lightweight native client for **low-end or resource-constrained devices** (e.g
 *First run will create the venv and install dependencies; on some distros you may need system packages (GTK, mpv, LibAdwaita) — the script will prompt.*
 
 
-## Architecture:
+## Architecture
 
 - **Backend**: Python/Flask (Metadata, Indexing, Audio Stream)
 - **Frontend**: Vanilla JS / Tailwind CSS (Zero-dependency, high-performance)
