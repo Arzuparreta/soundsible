@@ -14,6 +14,7 @@
       --accent: #0a84ff;
       --radius: 16px;
       --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+      color-scheme: dark;
     }
     * { box-sizing: border-box; }
     body {
@@ -176,34 +177,35 @@
   </style>
 </head>
 <body>
-  <h1>Soundsible</h1>
-  <p class="subtitle">Your self-hosted music ecosystem</p>
+  <h1 data-i18n="index.title">Soundsible</h1>
+  <p class="subtitle" data-i18n="index.subtitle">Your self-hosted music ecosystem</p>
 
   <div class="cards">
     <div class="card" id="launch-ecosystem-card">
-      <h2>Launch Ecosystem</h2>
-      <p>Starts Soundsible. Your station will be available on:</p>
+      <h2 data-i18n="index.launch.title">Launch Ecosystem</h2>
+      <p data-i18n="index.launch.intro">Starts Soundsible. Your station will be available on:</p>
       <ul>
-        <li><code>http://{your-tailscale-ip}:5005/player</code> <span class="note">— Access it from all around the world. You need <a href="https://tailscale.com/download" target="_blank" rel="noopener">Tailscale</a> installed; find your IP on the <a href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener">Machines dashboard</a>.</span></li>
-        <li><code>http://localhost:5005/player</code> <span class="note">— Only from the main machine.</span></li>
-        <li><code>http://<a href="#" class="local-ip-link" id="local-ip-link">{your-local-ip}</a>:5005/player</code> <span class="note">— Only from your home network.</span></li>
+        <li><code>http://{your-tailscale-ip}:5005/player</code> <span class="note" data-i18n="index.launch.bullet1Note">— Access it from all around the world. You need <a href="https://tailscale.com/download" target="_blank" rel="noopener">Tailscale</a> installed; find your IP on the <a href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener">Machines dashboard</a>.</span></li>
+        <li><code>http://localhost:5005/player</code> <span class="note" data-i18n="index.launch.bullet2Note">— Only from the main machine.</span></li>
+        <li><code>http://<a href="#" class="local-ip-link" id="local-ip-link">{your-local-ip}</a>:5005/player</code> <span class="note" data-i18n="index.launch.bullet3Note">— Only from your home network.</span></li>
       </ul>
       <div class="card-actions">
-        <button type="button" class="btn btn-launch" id="btn-launch">Launch</button>
-        <button type="button" class="btn btn-stop" id="btn-stop">Stop</button>
+        <button type="button" class="btn btn-launch" id="btn-launch" data-i18n="index.launch.btnLaunch">Launch</button>
+        <button type="button" class="btn btn-stop" id="btn-stop" data-i18n="index.launch.btnStop">Stop</button>
       </div>
     </div>
 
-    <div class="card disabled">
-      <h2>Setup</h2>
-      <p>Configure storage, cloud, and library.</p>
-      <span class="badge">Coming soon</span>
-    </div>
+    <a href="/setup" class="card clickable" style="text-decoration: none; color: inherit;">
+      <h2 data-i18n="index.setup.title">Setup</h2>
+      <p data-i18n="index.setup.desc">Configure storage, cloud, and library.</p>
+    </a>
   </div>
 
   <div id="toast" aria-live="polite"></div>
   <div id="local-ip-tooltip" class="tooltip" aria-hidden="true"></div>
 
+  <script src="/static/js/translations.js"></script>
+  <script src="/static/js/i18n.js"></script>
   <script>
     const btnLaunch = document.getElementById('btn-launch');
     const btnStop = document.getElementById('btn-stop');
@@ -245,12 +247,12 @@
         .then(r => r.json())
         .then(data => {
           btnLaunch.disabled = false;
-          if (data.ok) showToast(data.message || 'Ecosystem is starting!');
-          else showToast(data.error || 'Failed to start.', true);
+          if (data.ok) showToast(I18n.t('index.toast.ecosystemStarting'));
+          else showToast(data.error || I18n.t('index.toast.failedStart'), true);
         })
         .catch(err => {
           btnLaunch.disabled = false;
-          showToast(err.message || 'Request failed.', true);
+          showToast(err.message || I18n.t('index.toast.requestFailed'), true);
         });
     }
 
@@ -260,12 +262,12 @@
         .then(r => r.json())
         .then(data => {
           btnStop.disabled = false;
-          if (data.ok) showToast(data.message || 'Ecosystem stopped.');
-          else showToast(data.error || 'Failed to stop.', true);
+          if (data.ok) showToast(I18n.t('index.toast.ecosystemStopped'));
+          else showToast(data.error || I18n.t('index.toast.failedStop'), true);
         })
         .catch(err => {
           btnStop.disabled = false;
-          showToast(err.message || 'Request failed.', true);
+          showToast(err.message || I18n.t('index.toast.requestFailed'), true);
         });
     }
 
@@ -302,11 +304,11 @@
         if (cachedIp !== null) {
           showTooltip(cachedIp);
         } else {
-          showTooltip('Loading…');
+          showTooltip(I18n.t('index.toast.loading'));
           fetch('/api/local-ip')
             .then(r => r.json())
             .then(data => { cachedIp = data.ip; showTooltip(data.ip); })
-            .catch(() => { showTooltip('Unavailable'); });
+            .catch(() => { showTooltip(I18n.t('index.toast.unavailable')); });
         }
       });
 

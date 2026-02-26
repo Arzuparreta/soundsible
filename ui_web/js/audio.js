@@ -101,11 +101,13 @@ class AudioEngine {
         });
         
         this.audio.addEventListener('play', () => {
+            if (store.state.resumeSyncActive) return;
             store.update({ isPlaying: true });
             store.pushPlaybackState(store.state.currentTrack?.id, this.audio.currentTime, true);
             Haptics.heavy();
         });
         this.audio.addEventListener('pause', () => {
+            if (store.state.resumeSyncActive) return;
             store.update({ isPlaying: false });
             store.pushPlaybackState(store.state.currentTrack?.id, this.audio.currentTime, false);
             Haptics.lock();
@@ -122,6 +124,7 @@ class AudioEngine {
         }
 
         setInterval(() => {
+            if (store.state.resumeSyncActive) return;
             if (isVisible() && typeof document !== 'undefined' && document.hasFocus() && store.state.currentTrack) {
                 store.pushPlaybackState(store.state.currentTrack.id, this.audio.currentTime, !this.audio.paused);
             }
@@ -130,6 +133,18 @@ class AudioEngine {
         // Stop when another device resumes (server sends playback_stop_requested)
         if (typeof window !== 'undefined') {
             window.addEventListener('playback_stop_requested', () => this.pause());
+        }
+
+        // Persist playback state on close so same-device resume works after reload
+        const pushStateOnUnload = () => {
+            if (store.state.currentTrack) {
+                const time = Number.isFinite(this.audio.currentTime) ? this.audio.currentTime : 0;
+                store.pushPlaybackState(store.state.currentTrack.id, time, false);
+            }
+        };
+        if (typeof window !== 'undefined') {
+            window.addEventListener('beforeunload', pushStateOnUnload);
+            window.addEventListener('pagehide', pushStateOnUnload);
         }
     }
 
@@ -309,6 +324,13 @@ class AudioEngine {
         const duration = this.audio.duration || 0;
         const currentTime = this.audio.currentTime || 0;
         const progress = (currentTime / duration) * 100 || 0;
+        if (store.state.resumeSyncActive) {
+            this.currentPosition = currentTime;
+            if (isVisible()) {
+                window.dispatchEvent(new CustomEvent('audio:timeupdate', { detail: { progress, currentTime, duration } }));
+            }
+            return;
+        }
         const visible = isVisible();
         const pushDebounceSec = visible ? PUSH_DEBOUNCE_VISIBLE_SEC : PUSH_DEBOUNCE_HIDDEN_SEC;
 

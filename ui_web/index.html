@@ -30,6 +30,7 @@
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         
         :root {
+            color-scheme: dark;
             --bg-deep: #0d0d0f;
             --bg-surface: rgba(30, 31, 34, 0.85);
             --bg-card: #1e1f22;
@@ -67,6 +68,7 @@
         }
 
         [data-theme="light"] {
+            color-scheme: light;
             --bg-deep: #f5f5f5;
             --bg-surface: rgba(255, 255, 255, 0.85);
             --bg-card: #ffffff;
@@ -99,6 +101,7 @@
         }
 
         [data-theme="odst"] {
+            color-scheme: dark;
             /* Content (e.g. under "Library") = card/surface; background = slightly darker + very subtle gradient to ODST orange */
             --bg-deep: #1c2026;
             --bg-deep-mid: #1d1f24;
@@ -574,6 +577,25 @@
         }
         .input-theme::placeholder {
             color: var(--placeholder);
+        }
+        select.input-theme {
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23dfe1e5' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 36px;
+        }
+        [data-theme="light"] select.input-theme {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231c1c1c' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        }
+        [data-theme="odst"] select.input-theme {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23e8e6e3' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        }
+        select.input-theme option {
+            background: var(--bg-card);
+            color: var(--text-main);
         }
 
         /* Keyboard Animation: Platform-specific */

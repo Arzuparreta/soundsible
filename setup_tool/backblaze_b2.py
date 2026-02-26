@@ -89,6 +89,20 @@ class BackblazeB2Provider(S3StorageProvider):
             return True
         except Exception:
             return False
+
+    def list_buckets(self) -> List[Dict[str, Any]]:
+        """List all buckets in the B2 account."""
+        try:
+            buckets = []
+            for b in self.api.list_buckets():
+                buckets.append({
+                    'name': b.name,
+                    'id_': b.id_,
+                })
+            return buckets
+        except Exception as e:
+            print(f"List buckets failed: {e}")
+            return []
     
     def upload_file(self, local_path: str, remote_key: str,
                    metadata: Optional[Dict[str, str]] = None,

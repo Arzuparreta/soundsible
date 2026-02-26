@@ -12,7 +12,9 @@ const RESUME_DIALOG_SUPPRESS_KEY = 'resume_dialog_suppress_until';
 const RESUME_DIALOG_COOLDOWN_SET_AT_KEY = 'resume_dialog_cooldown_set_at';
 const RESUME_SEEKED_FALLBACK_MS = 3000;
 const RESUME_SYNC_PLAY_MAX_MS = 5000;
+const RESUME_SYNC_SETTLE_MS = 1200;
 const RESUME_MAX_WAIT_MS = 8000;
+const RESUME_AFTER_PAUSE_MS = 150;
 let resumeModalEl = null;
 
 function getResumeModal() {
@@ -97,45 +99,56 @@ function showResumeModal(state) {
     modal.classList.add('flex');
 }
 
-function onResumeYes(state) {
+function onResumeYes(state, opts = {}) {
+    const isSameDevice = opts.isSameDevice === true;
     const trackId = state.track_id;
     const positionSec = Number(state.position_sec) || 0;
     const otherDeviceId = state.device_id;
     if (!trackId) return;
     const track = store.state.library.find(t => t.id === trackId);
     if (!track) return;
-    store.update({ currentTrack: track, isPlaying: false });
-    const url = Resolver.getTrackUrl(track);
+    audioEngine.pause();
     const audio = audioEngine.audio;
+    const savedVolumeAtStart = audio.volume;
+    audio.volume = 0;
+    store.update({ currentTrack: track, isPlaying: false, resumeSyncActive: true });
+    const url = Resolver.getTrackUrl(track);
     audio.src = url;
     audio.load();
 
-    // Flow: canplay → applySeek (currentTime) → seeked → brief muted play until timeupdate
-    // reaches position (or timeouts) → pause, notify-stop, push state. Ensures decode position
-    // matches UI on mobile where seeked can fire before the pipeline has caught up.
+    // canplay → applySeek → seeked → sync-play (play to position, then pause) → complete.
+    // Mobile browsers often don't move decode on seek alone; playing does. Same flow on all devices.
     let done = false;
     let fallbackTimeoutId = null;
     let maxWaitTimeoutId = null;
     let syncPlayTimeoutId = null;
-    let savedVolumeBeforeSync = null;
     let syncTimeupdateBound = null;
+    let afterPauseTimeoutId = null;
     const complete = () => {
         if (done) return;
         done = true;
-        if (fallbackTimeoutId) clearTimeout(fallbackTimeoutId);
-        if (maxWaitTimeoutId) clearTimeout(maxWaitTimeoutId);
+        store.update({ resumeSyncActive: false });
         if (syncPlayTimeoutId) clearTimeout(syncPlayTimeoutId);
+        syncPlayTimeoutId = null;
         if (syncTimeupdateBound) audio.removeEventListener('timeupdate', syncTimeupdateBound);
-        if (savedVolumeBeforeSync !== null) audio.volume = savedVolumeBeforeSync;
+        syncTimeupdateBound = null;
         audio.removeEventListener('error', onError);
         audioEngine.pause();
-        fetch(`${store.apiBase}/api/playback/notify-stop`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ device_id: otherDeviceId })
-        }).catch(() => {});
-        store.pushPlaybackState(track.id, positionSec, false);
-        setResumeDialogCooldown();
+        afterPauseTimeoutId = setTimeout(() => {
+            afterPauseTimeoutId = null;
+            audio.volume = savedVolumeAtStart;
+            store.update({ isPlaying: false });
+            if (!isSameDevice) {
+                fetch(`${store.apiBase}/api/playback/notify-stop`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_id: otherDeviceId })
+                }).catch(() => {});
+                setResumeDialogCooldown();
+            }
+            store.pushPlaybackState(track.id, positionSec, false);
+            store.syncQueue().catch(() => {});
+        }, RESUME_AFTER_PAUSE_MS);
     };
 
     const startSeekedFallback = () => {
@@ -167,8 +180,6 @@ function onResumeYes(state) {
         syncPlayTimeoutId = null;
         if (syncTimeupdateBound) audio.removeEventListener('timeupdate', syncTimeupdateBound);
         syncTimeupdateBound = null;
-        if (savedVolumeBeforeSync !== null) audio.volume = savedVolumeBeforeSync;
-        savedVolumeBeforeSync = null;
         complete();
     };
 
@@ -181,11 +192,17 @@ function onResumeYes(state) {
         if (fallbackTimeoutId) clearTimeout(fallbackTimeoutId);
         fallbackTimeoutId = null;
         audio.currentTime = Math.min(positionSec, duration);
-        savedVolumeBeforeSync = audio.volume;
-        audio.volume = 0;
         audio.play().catch(finishSyncPlay);
         syncTimeupdateBound = () => {
-            if (audio.currentTime >= positionSec - 0.5) finishSyncPlay();
+            if (audio.currentTime >= positionSec - 0.5) {
+                if (syncTimeupdateBound) audio.removeEventListener('timeupdate', syncTimeupdateBound);
+                syncTimeupdateBound = null;
+                if (syncPlayTimeoutId) clearTimeout(syncPlayTimeoutId);
+                syncPlayTimeoutId = null;
+                const d = audio.duration;
+                if (Number.isFinite(d) && d > 0) audio.currentTime = Math.min(positionSec, d);
+                syncPlayTimeoutId = setTimeout(finishSyncPlay, RESUME_SYNC_SETTLE_MS);
+            }
         };
         audio.addEventListener('timeupdate', syncTimeupdateBound);
         syncPlayTimeoutId = setTimeout(finishSyncPlay, RESUME_SYNC_PLAY_MAX_MS);
@@ -203,8 +220,8 @@ function onResumeYes(state) {
 }
 
 /**
- * Call after sync (library + queue) so we can resolve track_id. GETs playback state with exclude_device;
- * if state from another device and recent, shows "Resume from {device}?" dialog.
+ * Call after sync (library + queue) so we can resolve track_id. GETs playback state with exclude_device.
+ * Same device: auto-restore track, position, queue (paused). Other device: show "Resume from {device}?" dialog.
  */
 export async function checkResumeFromOtherDevice() {
     const deviceId = store.getDeviceId();
@@ -212,9 +229,14 @@ export async function checkResumeFromOtherDevice() {
         const res = await fetch(`${store.apiBase}/api/playback/state?exclude_device=${encodeURIComponent(deviceId)}`);
         if (res.status === 204 || res.status === 404) return;
         const state = await res.json();
-        if (!state || state.device_id === deviceId) return;
+        if (!state || !state.track_id) return;
         const updatedAt = Number(state.updated_at) || 0;
         if (updatedAt && (Date.now() / 1000 - updatedAt) > RESUME_STATE_TTL_SEC) return;
+
+        if (state.device_id === deviceId) {
+            onResumeYes(state, { isSameDevice: true });
+            return;
+        }
 
         const now = Date.now();
         const suppressUntil = Number(localStorage.getItem(RESUME_DIALOG_SUPPRESS_KEY));

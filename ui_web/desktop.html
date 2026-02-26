@@ -15,6 +15,7 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         :root {
+            color-scheme: dark;
             --bg-deep: #0d0d0f;
             --bg-surface: rgba(30, 31, 34, 0.85);
             --bg-card: #1e1f22;
@@ -36,6 +37,7 @@
             --seek-track: rgba(255, 255, 255, 0.1);
         }
         [data-theme="light"] {
+            color-scheme: light;
             --bg-deep: #f5f5f5;
             --bg-surface: rgba(255, 255, 255, 0.85);
             --bg-card: #ffffff;
@@ -52,6 +54,7 @@
             --seek-track: rgba(0, 0, 0, 0.12);
         }
         [data-theme="odst"] {
+            color-scheme: dark;
             /* Content (e.g. under "Library") = card/surface; background = slightly darker + very subtle gradient to ODST orange */
             --bg-deep: #1c2026;
             --bg-deep-mid: #1d1f24;
@@ -91,6 +94,25 @@
         html, body { background-color: var(--bg-deep); color: var(--text-main); font-family: 'Plus Jakarta Sans', sans-serif; margin: 0; height: 100%; overflow: hidden; }
         .glass-view { background: var(--bg-surface); backdrop-filter: blur(32px); -webkit-backdrop-filter: blur(32px); border: 1px solid var(--glass-border); }
         .input-theme { background: var(--input-bg); border: 1px solid var(--input-border); color: var(--text-main); }
+        select.input-theme {
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23dfe1e5' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 36px;
+        }
+        [data-theme="light"] select.input-theme {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231c1c1c' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        }
+        [data-theme="odst"] select.input-theme {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23e8e6e3' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        }
+        select.input-theme option {
+            background: var(--bg-card);
+            color: var(--text-main);
+        }
         #desktop-app { display: flex; flex-direction: column; height: 100vh; }
         #desktop-body { display: flex; flex-direction: column; flex: 1; min-height: 0; position: relative; }
         #desktop-now-playing { --desktop-np-bar-height: 104px; --desktop-np-bar-padding-y: 0.5rem; min-height: var(--desktop-np-bar-height); flex-shrink: 0; border-bottom: 1px solid var(--glass-border); background: var(--bg-surface); backdrop-filter: blur(24px); display: grid; grid-template-columns: 1fr auto 1fr; grid-template-rows: auto 1fr; align-items: center; gap: 0 1rem; row-gap: 0.25rem; padding: var(--desktop-np-bar-padding-y) 1rem; }
@@ -187,10 +209,11 @@
             border-radius: var(--radius-omni);
             box-shadow: var(--shadow-omni);
         }
-        #desktop-now-playing .desktop-np-timebar-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+        #desktop-now-playing .desktop-np-timebar-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
         #desktop-now-playing .desktop-np-timebar-row #desktop-np-seek { flex: 1; min-width: 0; }
-        #desktop-now-playing .desktop-np-timebar-row .desktop-np-time-label { min-width: 2.5rem; width: 2.5rem; flex-shrink: 0; }
-        #desktop-now-playing .desktop-np-timebar-row:not(.has-track) .desktop-np-time-label { visibility: hidden; }
+        #desktop-now-playing .desktop-np-timebar-row .desktop-np-time-label { min-width: 2.5rem; width: 2.5rem; flex-shrink: 0; transform: translateY(2px); }
+        #desktop-now-playing:not(.has-track) .desktop-np-timebar-row .desktop-np-time-label { visibility: hidden; }
+        #desktop-now-playing:not(.has-track) .desktop-np-cover-wrap { display: none; }
         #desktop-now-playing .desktop-np-left { display: flex; align-items: center; gap: 1rem; min-width: 0; }
         #desktop-now-playing .desktop-np-cover-wrap { width: 3.5rem; min-width: 3.5rem; flex-shrink: 0; }
         #desktop-now-playing .desktop-np-center { flex: 1; min-width: 0; }
@@ -315,11 +338,6 @@
     <div id="desktop-app" class="hidden">
             <div id="desktop-body">
             <div id="desktop-now-playing" class="glass-view">
-                <div id="desktop-np-timebar-row" class="desktop-np-timebar-row">
-                    <span id="desktop-np-time-current" class="desktop-np-time-label text-[10px] font-mono text-[var(--text-dim)]">0:00</span>
-                    <input type="range" id="desktop-np-seek" class="h-1.5 rounded-full accent-[var(--accent)] min-w-0" min="0" max="100" value="0" style="background: var(--seek-track);" />
-                    <span id="desktop-np-time-duration" class="desktop-np-time-label text-[10px] font-mono text-[var(--text-dim)] text-right">0:00</span>
-                </div>
                 <div class="desktop-np-left-cell flex items-center gap-3 min-w-0">
                     <div class="desktop-np-left">
                         <div class="desktop-np-cover-wrap flex items-center">
@@ -355,6 +373,11 @@
                     </div>
                 </div>
                 <div></div>
+                <div id="desktop-np-timebar-row" class="desktop-np-timebar-row">
+                    <span id="desktop-np-time-current" class="desktop-np-time-label text-[12px] font-semibold font-mono text-[var(--text-dim)]">0:00</span>
+                    <input type="range" id="desktop-np-seek" class="h-1.5 rounded-full accent-[var(--accent)] min-w-0" min="0" max="100" value="0" style="background: var(--seek-track);" />
+                    <span id="desktop-np-time-duration" class="desktop-np-time-label text-[12px] font-semibold font-mono text-[var(--text-dim)] text-right">0:00</span>
+                </div>
             </div>
             <div id="desktop-body-row">
             <aside id="desktop-sidebar" class="glass-view">

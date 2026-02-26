@@ -47,6 +47,16 @@ class LocalStorageProvider(S3StorageProvider):
     def bucket_exists(self, bucket_name: str) -> bool:
         return (self.base_path / bucket_name).exists()
 
+    def list_buckets(self) -> List[Dict[str, Any]]:
+        """List direct subdirs of base_path as bucket names."""
+        if not self.base_path or not self.base_path.exists():
+            return []
+        buckets = []
+        for p in sorted(self.base_path.iterdir()):
+            if p.is_dir() and not p.name.startswith('.'):
+                buckets.append({'name': p.name})
+        return buckets
+
     def _get_path(self, remote_key: str) -> Path:
         """Get absolute local path for a remote key."""
         if not self.bucket_name:

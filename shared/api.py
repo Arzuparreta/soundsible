@@ -1855,18 +1855,34 @@ def get_config():
 
 @app.route('/api/config', methods=['POST'])
 def update_config():
-    data = request.json
+    data = request.json or {}
     config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    with open(config_path, 'w') as f:
-        json.dump(data, f, indent=2)
-    
+
+    # Merge with existing config so partial updates preserve credentials
+    if config_path.exists():
+        try:
+            with open(config_path, 'r') as f:
+                existing = json.load(f)
+            for k, v in data.items():
+                if v is not None:
+                    existing[k] = v
+            data = existing
+        except Exception:
+            pass
+
+    try:
+        config = PlayerConfig.from_dict(data)
+        with open(config_path, 'w') as f:
+            f.write(config.to_json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
     # Reload core
     global library_manager
-    library_manager = None 
+    library_manager = None
     get_core()
-    
+
     return jsonify({"status": "updated"})
 
 # --- Server Management ---

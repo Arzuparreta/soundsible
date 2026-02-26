@@ -296,7 +296,6 @@ class PlayerConfig:
     public: bool = False
     cache_max_size_gb: int = 50
     cache_location: str = "~/.cache/musicplayer/"
-    sync_interval_minutes: int = 18
     last_sync: Optional[str] = None
     quality_preference: str = "high"  # standard, high, ultra
     watch_folders: List[str] = field(default_factory=list)

@@ -82,7 +82,7 @@ def get_state(scope: str, exclude_device_id: Optional[str] = None) -> Optional[d
             if best:
                 return best
 
-        # Fall back to persisted file (and only use if from another device when excluding)
+        # Fall back to persisted file (same device or other; client decides dialog vs auto-restore)
         path = _state_path(scope)
         if not path.exists():
             return None
@@ -90,8 +90,6 @@ def get_state(scope: str, exclude_device_id: Optional[str] = None) -> Optional[d
             raw = path.read_text(encoding="utf-8")
             state = json.loads(raw)
         except (json.JSONDecodeError, OSError):
-            return None
-        if exclude_device_id and state.get("device_id") == exclude_device_id:
             return None
         updated = state.get("updated_at") or 0
         if STATE_TTL_SEC and (now - updated) > STATE_TTL_SEC:

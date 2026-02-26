@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Setup — Soundsible</title>
+  <style>
+    :root {
+      --bg: #1c1c1e;
+      --glass-bg: rgba(0, 0, 0, 0.25);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --text: #f5f5f7;
+      --text-dim: rgba(245, 245, 247, 0.72);
+      --accent: #0a84ff;
+      --radius: 16px;
+      --radius-sm: 12px;
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 17px;
+      line-height: 1.45;
+      padding: 24px 16px 48px;
+    }
+    .setup-header {
+      max-width: 560px;
+      margin: 0 auto 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .setup-header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin: 0;
+    }
+    .setup-header a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 15px;
+    }
+    .setup-header a:hover { color: var(--accent); }
+    .progress-bar {
+      max-width: 560px;
+      margin: 0 auto 24px;
+      height: 4px;
+      background: var(--glass-border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-bar-inner {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.25s ease-out;
+    }
+    .setup-content {
+      max-width: 560px;
+      margin: 0 auto;
+    }
+    .card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(24px) saturate(150%);
+      -webkit-backdrop-filter: blur(24px) saturate(150%);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    @supports not (backdrop-filter: blur(1px)) {
+      .card { background: rgba(30, 30, 30, 0.95); }
+    }
+    .card h2 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin: 0 0 8px 0;
+    }
+    .card .caption {
+      color: var(--text-dim);
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+    .card .help {
+      color: var(--text-dim);
+      font-size: 13px;
+      line-height: 1.5;
+      margin: -8px 0 16px 0;
+    }
+    .form-group .hint {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 6px;
+      font-weight: 400;
+    }
+    .badge-rec {
+      font-size: 11px;
+      color: var(--accent);
+      margin-left: 6px;
+      font-weight: 500;
+    }
+    .provider-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .provider-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: border-color 0.2s ease-out, background 0.2s ease-out;
+    }
+    .provider-card:hover {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--glass-border);
+    }
+    .provider-card.selected {
+      border-color: var(--accent);
+      background: rgba(10, 132, 255, 0.08);
+    }
+    .provider-card input { margin-top: 3px; }
+    .provider-card label {
+      flex: 1;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .provider-card .desc {
+      display: block;
+      font-size: 13px;
+      color: var(--text-dim);
+      font-weight: 400;
+      margin-top: 4px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group:last-child { margin-bottom: 0; }
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 12px 16px;
+      font-family: var(--font);
+      font-size: 15px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+    }
+    .form-group select {
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23f5f5f7' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 40px;
+    }
+    .form-group select option {
+      background: var(--bg);
+      color: var(--text);
+    }
+    .form-group input::placeholder {
+      color: var(--text-dim);
+    }
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .cred-section { display: none; }
+    .cred-section.active { display: block; }
+    .btn {
+      font-family: var(--font);
+      font-size: 15px;
+      font-weight: 500;
+      padding: 12px 20px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--glass-border);
+      cursor: pointer;
+      transition: background 0.2s ease-out, border-color 0.2s ease-out;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .btn-primary:hover { filter: brightness(1.1); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-dim);
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+    }
+    .nav-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 24px;
+      gap: 12px;
+    }
+    .step-section { display: none; }
+    .step-section.active { display: block; }
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+      padding: 12px 20px;
+      font-size: 14px;
+      opacity: 0;
+      transition: transform 0.25s ease-out, opacity 0.25s ease-out;
+      z-index: 1000;
+    }
+    #toast.visible {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+    #toast.error { color: #ff453a; }
+    .conn-status {
+      font-size: 14px;
+      color: var(--text-dim);
+      margin-top: 12px;
+    }
+    .conn-status.ok { color: #32d74b; }
+    .conn-status.err { color: #ff453a; }
+    .options-toggle {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-size: 14px;
+      cursor: pointer;
+      padding: 0;
+      margin-bottom: 16px;
+    }
+    .options-toggle:hover { text-decoration: underline; }
+    .success-state {
+      text-align: center;
+      padding: 32px 24px;
+    }
+    .success-state h2 { margin-bottom: 12px; }
+    .success-state p { color: var(--text-dim); margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+  <header class="setup-header">
+    <h1 data-i18n="index.setup.title">Setup</h1>
+    <a href="/" data-i18n="setup.back">&larr; Back to launcher</a>
+  </header>
+  <div class="progress-bar">
+    <div class="progress-bar-inner" id="progress" style="width: 20%;"></div>
+  </div>
+  <main class="setup-content">
+    <div id="step1" class="step-section active card">
+      <h2 data-i18n="setup.step1.title">Where is your music?</h2>
+      <p class="caption" data-i18n="setup.step1.caption">Pick the option that matches how you keep your music files.</p>
+      <div class="provider-cards">
+        <label class="provider-card" data-provider="local">
+          <input type="radio" name="provider" value="local">
+          <span>
+            <strong data-i18n="setup.step1.local">On this computer or a shared folder</strong>
+            <span class="desc" data-i18n="setup.step1.localDesc">My music is in a folder on this PC, or on a drive/NAS that this PC can see (e.g. a Samba share). Nothing is stored online.</span>
+          </span>
+        </label>
+        <label class="provider-card" data-provider="r2">
+          <input type="radio" name="provider" value="r2">
+          <span>
+            <strong data-i18n="setup.step1.r2">In the cloud (Cloudflare R2)</strong>
+            <span class="desc" data-i18n="setup.step1.r2Desc">My music is stored online with Cloudflare. Good if you want to stream from anywhere. You’ll need a free R2 account.</span>
+          </span>
+        </label>
+        <label class="provider-card" data-provider="b2">
+          <input type="radio" name="provider" value="b2">
+          <span>
+            <strong data-i18n="setup.step1.b2">In the cloud (Backblaze B2)</strong>
+            <span class="desc" data-i18n="setup.step1.b2Desc">My music is stored online with Backblaze. Similar to R2; 10GB free, no credit card needed.</span>
+          </span>
+        </label>
+      </div>
+      <div class="nav-row">
+        <span></span>
+        <button type="button" class="btn btn-primary" id="next1" data-i18n="setup.btnNext">Next</button>
+      </div>
+    </div>
+
+    <div id="step2" class="step-section card">
+      <h2 data-i18n="setup.step2.title">Connect your account or folder</h2>
+      <p class="caption" id="credCaption" data-i18n="setup.step2.caption">We need permission to read your music. Enter the details below.</p>
+      <div id="credR2" class="cred-section">
+        <p class="help" data-i18n="setup.step2.r2Help">You’ll find these in the Cloudflare dashboard: go to R2 → Manage R2 API Tokens, then create a token with read/write access.</p>
+        <div class="form-group">
+          <label for="r2_account_id" data-i18n="setup.step2.r2AccountId">Account ID</label>
+          <input type="text" id="r2_account_id" data-i18n-ph="setup.step2.r2Ph1" placeholder="Your Cloudflare account ID">
+        </div>
+        <div class="form-group">
+          <label for="r2_access_key" data-i18n="setup.step2.r2AccessKey">Access Key ID</label>
+          <input type="text" id="r2_access_key" data-i18n-ph="setup.step2.r2Ph2" placeholder="From your R2 API token">
+        </div>
+        <div class="form-group">
+          <label for="r2_secret" data-i18n="setup.step2.r2Secret">Secret Access Key</label>
+          <input type="password" id="r2_secret" data-i18n-ph="setup.step2.r2Ph2" placeholder="From your R2 API token">
+        </div>
+      </div>
+      <div id="credB2" class="cred-section">
+        <p class="help" data-i18n="setup.step2.b2Help">You’ll find these in the Backblaze B2 dashboard: go to Application Keys and create a key with read/write access.</p>
+        <div class="form-group">
+          <label for="b2_key_id" data-i18n="setup.step2.b2KeyId">Application Key ID</label>
+          <input type="text" id="b2_key_id" data-i18n-ph="setup.step2.b2Ph1" placeholder="From your B2 Application Key">
+        </div>
+        <div class="form-group">
+          <label for="b2_key" data-i18n="setup.step2.b2Key">Application Key (secret)</label>
+          <input type="password" id="b2_key" data-i18n-ph="setup.step2.b2Ph2" placeholder="The secret part of your B2 key">
+        </div>
+      </div>
+      <div id="credLocal" class="cred-section">
+        <p class="help" data-i18n="setup.step2.localHelp">The full path to the folder where your music files live. This can be on this computer or a network drive (e.g. a Samba share) that this PC can access.</p>
+        <div class="form-group">
+          <label for="local_path" data-i18n="setup.step2.localPath">Music folder path</label>
+          <input type="text" id="local_path" data-i18n-ph="setup.step2.localPh" placeholder="e.g. /home/you/Music or /mnt/nas/Music">
+          <span class="hint" data-i18n="setup.step2.localHint">Use the path as this computer sees it (e.g. /home/username/Music or a mounted network path).</span>
+        </div>
+      </div>
+      <div class="nav-row">
+        <button type="button" class="btn btn-secondary" id="back2" data-i18n="setup.btnBack">Back</button>
+        <button type="button" class="btn btn-primary" id="next2" data-i18n="setup.btnNext">Next</button>
+      </div>
+    </div>
+
+    <div id="step3" class="step-section card">
+      <h2 data-i18n="setup.step3.title">Choose your music space</h2>
+      <p class="caption" data-i18n="setup.step3.caption">In the cloud, your library lives in a “bucket” — think of it as a named folder. We’ll check your connection, then you pick an existing one or type a new name.</p>
+      <button type="button" class="btn btn-primary" id="testConn" data-i18n="setup.step3.testBtn">Check connection and load my spaces</button>
+      <p class="conn-status" id="connStatus"></p>
+      <div class="form-group" id="bucketGroup" style="display: none;">
+        <label for="bucketSelect" data-i18n="setup.step3.useExisting">Use an existing space</label>
+        <select id="bucketSelect">
+          <option value="" data-i18n="setup.step3BucketSelectDefault">— Or type a new name below —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="bucketNew" data-i18n="setup.step3BucketNewLabel">Or type a new name</label>
+        <input type="text" id="bucketNew" data-i18n-ph="setup.step3BucketNewPh" placeholder="e.g. my-music">
+        <span class="hint" data-i18n="setup.step3BucketNewHint">If the name doesn’t exist yet, it will be created when you save.</span>
+      </div>
+      <div class="form-group">
+        <label class="provider-card" style="cursor: pointer; padding: 12px 0;">
+          <input type="checkbox" id="bucketPublic">
+          <span data-i18n="setup.step3.publicLabel">Make files publicly accessible (anyone with a link could open them). Most people leave this off.</span>
+        </label>
+      </div>
+      <div class="nav-row">
+        <button type="button" class="btn btn-secondary" id="back3" data-i18n="setup.btnBack">Back</button>
+        <button type="button" class="btn btn-primary" id="next3" data-i18n="setup.btnNext">Next</button>
+      </div>
+    </div>
+
+    <div id="step4" class="step-section card">
+      <h2 data-i18n="setup.step4.title">Optional settings</h2>
+      <p class="caption" data-i18n="setup.step4.caption">You can leave everything here as it is. Change only if you know what you want.</p>
+
+      <p class="help" id="cacheHelpR2B2" data-i18n="setup.step4.cacheHelpR2B2">If your music is in the cloud, this computer keeps temporary copies of played tracks so streaming is smooth. When the limit is reached, the oldest played tracks are removed automatically. Your phone and other devices do not store copies — they just stream from this server.</p>
+      <p class="help" id="cacheHelpLocal" style="display: none;" data-i18n="setup.step4.cacheHelpLocal">Choose how often we check your folder for new music and the streaming quality. The defaults work well for most people.</p>
+
+      <div id="step4CloudCache">
+        <div class="form-group">
+          <label for="cache_location" data-i18n="setup.step4.cacheLocation">Where to keep temporary copies (on this PC only)</label>
+          <input type="text" id="cache_location" data-i18n-ph="setup.step4.cacheLocationPh" placeholder="Leave blank for default">
+          <span class="hint" data-i18n="setup.step4.cacheLocationHint">Only used for cloud storage. Leave blank to use the default.</span>
+        </div>
+        <div class="form-group">
+          <label for="cache_max_gb">Max size for temporary copies (GB)<span class="badge-rec" data-i18n="setup.badgeRec50">Recommended: 50</span></label>
+          <input type="number" id="cache_max_gb" min="1" max="500" value="50">
+          <span class="hint" data-i18n="setup.step4.cacheMaxHint">When full, the least recently played tracks are removed to make room. Your music in the cloud is never deleted.</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="quality">Sound quality<span class="badge-rec" data-i18n="setup.badgeRecHigh">Recommended: High</span></label>
+        <select id="quality">
+          <option value="standard" data-i18n="setup.step4.qualityStandard">Standard (smaller files, good for slow connections)</option>
+          <option value="high" selected data-i18n="setup.step4.qualityHigh">High (best for most people)</option>
+          <option value="ultra" data-i18n="setup.step4.qualityUltra">Ultra (best quality, needs more space and bandwidth)</option>
+        </select>
+      </div>
+      <div class="nav-row">
+        <button type="button" class="btn btn-secondary" id="back4" data-i18n="setup.btnBack">Back</button>
+        <button type="button" class="btn btn-primary" id="next4" data-i18n="setup.btnNext">Next</button>
+      </div>
+    </div>
+
+    <div id="step5" class="step-section card">
+      <h2 data-i18n="setup.step5.title">Almost done</h2>
+      <p class="caption" data-i18n="setup.step5.caption">Review the summary below, then save. You can change these later by running setup again.</p>
+      <div class="form-group">
+        <p><strong data-i18n="setup.step5.summaryWhere">Where your music lives:</strong> <span id="summaryProvider"></span></p>
+        <p id="step5BucketRow"><strong data-i18n="setup.step5.summaryName">Music space name:</strong> <span id="summaryBucket"></span></p>
+        <p id="step5PathRow" style="display: none;"><strong data-i18n="setup.step5.summaryFolder">Music folder:</strong> <span id="summaryPath"></span></p>
+      </div>
+      <div class="nav-row">
+        <button type="button" class="btn btn-secondary" id="back5" data-i18n="setup.btnBack">Back</button>
+        <button type="button" class="btn btn-primary" id="saveConfig" data-i18n="setup.step5.saveBtn">Save and finish</button>
+      </div>
+    </div>
+
+    <div id="stepSuccess" class="step-section card success-state" style="display: none;">
+      <h2 data-i18n="setup.success.title">You’re all set</h2>
+      <p data-i18n="setup.success.text">Your station is configured. Go back to the launcher and tap <strong>Launch</strong> to start your music station. Then open the station URL on your phone (e.g. via Tailscale) to stream.</p>
+      <a href="/" class="btn btn-primary" data-i18n="setup.success.back">Back to launcher</a>
+    </div>
+  </main>
+  <div id="toast" aria-live="polite"></div>
+
+  <script src="/static/js/translations.js"></script>
+  <script src="/static/js/i18n.js"></script>
+  <script>
+    const TOTAL_STEPS = 5;
+    const progressEl = document.getElementById('progress');
+    const steps = [1, 2, 3, 4, 5].map(i => document.getElementById('step' + i));
+    const stepSuccess = document.getElementById('stepSuccess');
+    const toast = document.getElementById('toast');
+    let currentStep = 1;
+    let existingConfig = null;
+
+    function showStep(step) {
+      if (step === 'success') {
+        steps.forEach(s => s.classList.remove('active'));
+        stepSuccess.style.display = 'block';
+        progressEl.style.width = '100%';
+        return;
+      }
+      stepSuccess.style.display = 'none';
+      steps.forEach((s, i) => {
+        s.classList.toggle('active', i + 1 === step);
+      });
+      currentStep = step;
+      progressEl.style.width = (step / TOTAL_STEPS * 100) + '%';
+      if (step === 4) {
+        var provider = document.querySelector('input[name="provider"]:checked');
+        var isLocal = provider && provider.value === 'local';
+        document.getElementById('cacheHelpR2B2').style.display = isLocal ? 'none' : 'block';
+        document.getElementById('cacheHelpLocal').style.display = isLocal ? 'block' : 'none';
+        document.getElementById('step4CloudCache').style.display = isLocal ? 'none' : 'block';
+      }
+    }
+
+    function updateStep5Summary() {
+      var provider = document.querySelector('input[name="provider"]:checked');
+      if (!provider) return;
+      var providerLabel = provider.closest('.provider-card').querySelector('strong').textContent;
+      document.getElementById('summaryProvider').textContent = providerLabel;
+      if (provider.value === 'local') {
+        document.getElementById('summaryPath').textContent = document.getElementById('local_path').value.trim() || '—';
+        document.getElementById('step5BucketRow').style.display = 'none';
+        document.getElementById('step5PathRow').style.display = 'block';
+      } else {
+        document.getElementById('summaryBucket').textContent = getBucketValue() || '—';
+        document.getElementById('step5BucketRow').style.display = 'block';
+        document.getElementById('step5PathRow').style.display = 'none';
+      }
+    }
+
+    function showToast(msg, isError) {
+      toast.textContent = msg;
+      toast.className = isError ? 'error visible' : 'visible';
+      toast.setAttribute('aria-live', 'polite');
+      setTimeout(() => toast.classList.remove('visible'), 3500);
+    }
+
+    document.querySelectorAll('.provider-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        var radio = card.querySelector('input[name="provider"]');
+        if (radio) radio.checked = true;
+        const provider = card.dataset.provider;
+        document.querySelectorAll('.cred-section').forEach(s => s.classList.remove('active'));
+        document.getElementById('cred' + (provider === 'r2' ? 'R2' : provider === 'b2' ? 'B2' : 'Local')).classList.add('active');
+      });
+    });
+
+    document.getElementById('next1').addEventListener('click', () => {
+      if (!document.querySelector('input[name="provider"]:checked')) {
+        showToast(I18n.t('setup.toast.chooseProvider'), true);
+        return;
+      }
+      showStep(2);
+    });
+    document.getElementById('back2').addEventListener('click', () => showStep(1));
+    document.getElementById('next2').addEventListener('click', () => {
+      const provider = document.querySelector('input[name="provider"]:checked').value;
+      if (provider === 'local') {
+        if (!document.getElementById('local_path').value.trim()) {
+          showToast(I18n.t('setup.toast.enterPath'), true);
+          return;
+        }
+      } else {
+        if (provider === 'r2') {
+          if (!document.getElementById('r2_account_id').value.trim() || !document.getElementById('r2_access_key').value.trim() || !document.getElementById('r2_secret').value.trim()) {
+            showToast(I18n.t('setup.toast.fillR2'), true);
+            return;
+          }
+        } else {
+          if (!document.getElementById('b2_key_id').value.trim() || !document.getElementById('b2_key').value.trim()) {
+            showToast(I18n.t('setup.toast.fillB2'), true);
+            return;
+          }
+        }
+      }
+      if (provider === 'local') {
+        showStep(4);
+      } else {
+        showStep(3);
+      }
+    });
+    document.getElementById('testConn').addEventListener('click', async () => {
+      const btn = document.getElementById('testConn');
+      const status = document.getElementById('connStatus');
+      const bucketSelect = document.getElementById('bucketSelect');
+      const bucketGroup = document.getElementById('bucketGroup');
+      btn.disabled = true;
+      status.textContent = I18n.t('setup.status.testing');
+      status.className = 'conn-status';
+      const payload = getCredentialsPayload();
+      try {
+        const res = await fetch('/api/setup/test-connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.ok && data.buckets) {
+          status.textContent = I18n.t('setup.connectedSpaces', { count: data.buckets.length });
+          status.className = 'conn-status ok';
+          bucketSelect.innerHTML = '';
+          const defOpt = document.createElement('option');
+          defOpt.value = '';
+          defOpt.textContent = I18n.t('setup.step3BucketSelectDefault');
+          bucketSelect.appendChild(defOpt);
+          data.buckets.forEach(b => {
+            const opt = document.createElement('option');
+            opt.value = b.name;
+            opt.textContent = b.name;
+            bucketSelect.appendChild(opt);
+          });
+          bucketGroup.style.display = data.buckets.length ? 'block' : 'none';
+        } else {
+          status.textContent = data.error || I18n.t('setup.status.error');
+          status.className = 'conn-status err';
+        }
+      } catch (e) {
+        status.textContent = e.message || I18n.t('setup.status.requestFailed');
+        status.className = 'conn-status err';
+      }
+      btn.disabled = false;
+    });
+    document.getElementById('back3').addEventListener('click', () => showStep(2));
+    document.getElementById('next3').addEventListener('click', () => {
+      const selected = document.getElementById('bucketSelect').value;
+      const newName = document.getElementById('bucketNew').value.trim();
+      if (!selected && !newName) {
+        showToast(I18n.t('setup.toast.pickOrType'), true);
+        return;
+      }
+      document.getElementById('summaryBucket').textContent = selected || newName;
+      document.getElementById('summaryProvider').textContent =
+        document.querySelector('input[name="provider"]:checked').nextElementSibling.querySelector('strong').textContent;
+      showStep(4);
+    });
+    document.getElementById('back4').addEventListener('click', () => {
+      var provider = document.querySelector('input[name="provider"]:checked').value;
+      if (provider === 'local') showStep(2);
+      else showStep(3);
+    });
+    document.getElementById('next4').addEventListener('click', () => {
+      updateStep5Summary();
+      showStep(5);
+    });
+    document.getElementById('back5').addEventListener('click', () => showStep(4));
+
+    function getCredentialsPayload() {
+      const provider = document.querySelector('input[name="provider"]:checked').value;
+      const payload = { provider };
+      if (provider === 'r2') {
+        payload.account_id = document.getElementById('r2_account_id').value.trim();
+        payload.access_key_id = document.getElementById('r2_access_key').value.trim();
+        payload.secret_access_key = document.getElementById('r2_secret').value.trim();
+      } else if (provider === 'b2') {
+        payload.application_key_id = document.getElementById('b2_key_id').value.trim();
+        payload.application_key = document.getElementById('b2_key').value.trim();
+        payload.access_key_id = payload.application_key_id;
+        payload.secret_access_key = payload.application_key;
+      } else {
+        payload.endpoint = document.getElementById('local_path').value.trim();
+      }
+      return payload;
+    }
+
+    function getBucketValue() {
+      const selected = document.getElementById('bucketSelect').value;
+      const newName = document.getElementById('bucketNew').value.trim();
+      return selected || newName || 'music-library';
+    }
+
+    function getEndpointForSave(provider) {
+      if (provider === 'r2') {
+        const accountId = document.getElementById('r2_account_id').value.trim();
+        return accountId ? 'https://' + accountId + '.r2.cloudflarestorage.com' : '';
+      }
+      if (provider === 'local') return document.getElementById('local_path').value.trim();
+      return '';
+    }
+
+    document.getElementById('saveConfig').addEventListener('click', async () => {
+      const provider = document.querySelector('input[name="provider"]:checked').value;
+      const bucket = getBucketValue();
+      const endpoint = getEndpointForSave(provider);
+      const payload = {
+        provider,
+        bucket,
+        endpoint,
+        public: document.getElementById('bucketPublic').checked,
+        cache_location: document.getElementById('cache_location').value.trim() || '~/.cache/musicplayer/',
+        cache_max_size_gb: parseInt(document.getElementById('cache_max_gb').value, 10) || 50,
+        quality_preference: document.getElementById('quality').value || 'high',
+        watch_folders: []
+      };
+      if (provider === 'r2') {
+        payload.account_id = document.getElementById('r2_account_id').value.trim();
+        payload.access_key_id = document.getElementById('r2_access_key').value.trim();
+        payload.secret_access_key = document.getElementById('r2_secret').value.trim();
+      } else if (provider === 'b2') {
+        payload.access_key_id = document.getElementById('b2_key_id').value.trim();
+        payload.secret_access_key = document.getElementById('b2_key').value.trim();
+      }
+      try {
+        const res = await fetch('/api/setup/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(I18n.t('setup.toast.saved'));
+          showStep('success');
+        } else {
+          showToast(data.error || I18n.t('setup.toast.saveFailed'), true);
+        }
+      } catch (e) {
+        showToast(e.message || I18n.t('setup.toast.requestFailed'), true);
+      }
+    });
+
+    (async function loadExisting() {
+      try {
+        const res = await fetch('/api/setup/config');
+        const data = await res.json();
+        if (data.configured) {
+          existingConfig = data;
+          document.querySelector('input[name="provider"][value="' + data.provider + '"]')?.closest('.provider-card')?.click();
+          if (data.provider === 'r2') {
+            document.getElementById('r2_account_id').placeholder = data.credentials_set ? '••••••••' : I18n.t('setup.step2.r2Ph1');
+            document.getElementById('r2_access_key').placeholder = data.credentials_set ? '••••••••' : I18n.t('setup.step2.r2Ph2');
+            document.getElementById('r2_secret').placeholder = data.credentials_set ? '••••••••' : I18n.t('setup.step2.r2Ph2');
+          } else if (data.provider === 'b2') {
+            document.getElementById('b2_key_id').placeholder = data.credentials_set ? '••••••••' : I18n.t('setup.step2.b2Ph1');
+            document.getElementById('b2_key').placeholder = data.credentials_set ? '••••••••' : I18n.t('setup.step2.b2Ph2');
+          }
+          document.getElementById('local_path').value = data.endpoint || '';
+          document.getElementById('bucketNew').value = data.bucket || 'music-library';
+          document.getElementById('bucketPublic').checked = !!data.public;
+          document.getElementById('cache_location').value = data.cache_location || '';
+          document.getElementById('cache_max_gb').value = data.cache_max_size_gb || 50;
+          document.getElementById('quality').value = data.quality_preference || 'high';
+        }
+      } catch (_) {}
+    })();
+  </script>
+</body>
+</html>

@@ -81,7 +81,8 @@ export const DesktopUI = {
         const timebarRow = el('desktop-np-timebar-row');
         const seek = el('desktop-np-seek');
         const ct = audioEngine.audio?.currentTime ?? 0;
-        if (timebarRow) timebarRow.classList.toggle('has-track', !!track);
+        const nowPlayingBar = el('desktop-now-playing');
+        if (nowPlayingBar) nowPlayingBar.classList.toggle('has-track', !!track);
         if (timeCurrent) timeCurrent.textContent = track ? renderers.formatTime(ct) : '0:00';
         if (timeDuration) timeDuration.textContent = track ? renderers.formatTime(track.duration ?? 0) : '0:00';
         if (seek && track?.duration) {
