@@ -54,7 +54,7 @@ function filterPlaylistsBySearch(playlists, query) {
 
 function renderPlaylists() {
     const state = store.state;
-    const input = document.getElementById('desktop-playlist-search-input');
+    const input = document.getElementById('desktop-global-search-input');
     const container = document.getElementById('desktop-playlist-list-container');
     if (!container) return;
     const query = input?.value.trim() || '';
@@ -79,7 +79,7 @@ function renderPlaylistDetail() {
     const coverEl = document.getElementById('desktop-playlist-detail-cover');
     const iconEl = document.getElementById('desktop-playlist-detail-cover-icon');
     const tracksEl = document.getElementById('desktop-playlist-detail-tracks');
-    const searchInput = document.getElementById('desktop-playlist-detail-search-input');
+    const searchInput = document.getElementById('desktop-global-search-input');
     if (titleEl) titleEl.textContent = name;
     if (metaEl) metaEl.textContent = tracks.length === 1 ? '1 track' : `${tracks.length} tracks`;
     if (coverEl) {
@@ -874,7 +874,7 @@ async function init() {
         }
 
         function renderHomeSongs() {
-            const input = document.getElementById('desktop-home-search-input');
+            const input = document.getElementById('desktop-global-search-input');
             const container = document.getElementById('desktop-all-songs');
             const q = input?.value.trim() || '';
             const library = store.state.library || [];
@@ -918,7 +918,7 @@ async function init() {
         }
 
         function renderFavourites() {
-            const input = document.getElementById('desktop-fav-search-input');
+            const input = document.getElementById('desktop-global-search-input');
             const container = document.getElementById('desktop-fav-tracks');
             const full = (store.state.favorites || []).map((id) => store.state.library.find((t) => t.id === id)).filter(Boolean);
             const q = input?.value.trim().toLowerCase() || '';
@@ -998,17 +998,97 @@ async function init() {
             if (DesktopUI.currentView === 'playlist-detail' && window._currentPlaylistName) renderPlaylistDetail();
         });
 
-        document.getElementById('desktop-home-search-input')?.addEventListener('input', renderHomeSongs);
-        document.getElementById('desktop-fav-search-input')?.addEventListener('input', renderFavourites);
-        document.getElementById('desktop-playlist-search-input')?.addEventListener('input', renderPlaylists);
-        document.getElementById('desktop-playlist-detail-search-input')?.addEventListener('input', renderPlaylistDetail);
+        function initDesktopGlobalSearch() {
+            const input = document.getElementById('desktop-global-search-input');
+            const clearBtn = document.getElementById('desktop-global-search-clear');
+            if (!input) return;
 
-        document.getElementById('desktop-artist-back')?.addEventListener('click', () => DesktopUI.navigateBack());
-        document.getElementById('desktop-playlist-detail-back')?.addEventListener('click', () => DesktopUI.navigateBack());
+            input.addEventListener('input', () => {
+                const query = input.value.trim();
+                if (clearBtn) clearBtn.classList.toggle('hidden', !query);
+
+                const view = DesktopUI.currentView;
+                if (view === 'home') renderHomeSongs();
+                else if (view === 'favourites') renderFavourites();
+                else if (view === 'playlists') renderPlaylists();
+                else if (view === 'playlist-detail') renderPlaylistDetail();
+                else if (view === 'search' && typeof window.unifiedSearch !== 'undefined') {
+                    // Search page uses its own debounced listener, but we might need to trigger something
+                }
+            });
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    input.blur();
+                    input.value = '';
+                    if (clearBtn) clearBtn.classList.add('hidden');
+                    const view = DesktopUI.currentView;
+                    if (view === 'home') renderHomeSongs();
+                    else if (view === 'favourites') renderFavourites();
+                    else if (view === 'playlists') renderPlaylists();
+                    else if (view === 'playlist-detail') renderPlaylistDetail();
+                }
+            });
+
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    input.value = '';
+                    input.dispatchEvent(new Event('input'));
+                    input.focus();
+                });
+            }
+        }
+
+        function initDesktopScrollTracking() {
+            const main = document.getElementById('desktop-main');
+            if (!main) return;
+            main.addEventListener('scroll', () => {
+                const container = document.getElementById('desktop-global-search-container');
+                if (!container) return;
+                if (main.scrollTop > 20) {
+                    container.classList.add('scrolled');
+                } else {
+                    container.classList.remove('scrolled');
+                }
+            }, { passive: true });
+        }
+
+        initDesktopGlobalSearch();
+        initDesktopScrollTracking();
 
         const origShowView = DesktopUI.showView.bind(DesktopUI);
         DesktopUI.showView = (viewId) => {
             origShowView(viewId);
+            
+            const input = document.getElementById('desktop-global-search-input');
+            const container = document.getElementById('desktop-global-search-container');
+            const clearBtn = document.getElementById('desktop-global-search-clear');
+            
+            if (input) {
+                input.value = '';
+                if (clearBtn) clearBtn.classList.add('hidden');
+            }
+            if (container) container.classList.remove('scrolled');
+
+            const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'search'];
+            if (container) {
+                if (searchVisibleViews.includes(viewId)) {
+                    container.classList.remove('opacity-0', 'pointer-events-none');
+                } else {
+                    container.classList.add('opacity-0', 'pointer-events-none');
+                }
+            }
+
+            if (input) {
+                switch (viewId) {
+                    case 'home': input.placeholder = 'Search library...'; break;
+                    case 'favourites': input.placeholder = 'Search favorites...'; break;
+                    case 'playlists': input.placeholder = 'Search playlists...'; break;
+                    case 'playlist-detail': input.placeholder = 'Search in playlist...'; break;
+                    case 'search': input.placeholder = 'Search library and ODST...'; break;
+                }
+            }
+
             if (viewId === 'playlists') renderPlaylists();
             if (viewId === 'playlist-detail' && window._currentPlaylistName) renderPlaylistDetail();
             if (viewId === 'search') {
@@ -1018,6 +1098,9 @@ async function init() {
                 });
             }
         };
+
+        document.getElementById('desktop-artist-back')?.addEventListener('click', () => DesktopUI.navigateBack());
+        document.getElementById('desktop-playlist-detail-back')?.addEventListener('click', () => DesktopUI.navigateBack());
 
         initPlaylistTrackDrag();
         initPlaylistListDrag();

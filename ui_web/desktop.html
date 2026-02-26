@@ -118,7 +118,60 @@
         #desktop-now-playing { --desktop-np-bar-height: 104px; --desktop-np-bar-padding-y: 0.5rem; min-height: var(--desktop-np-bar-height); flex-shrink: 0; border-bottom: 1px solid var(--glass-border); background: var(--bg-surface); backdrop-filter: blur(24px); display: grid; grid-template-columns: 1fr auto 1fr; grid-template-rows: auto 1fr; align-items: center; gap: 0 1rem; row-gap: 0.25rem; padding: var(--desktop-np-bar-padding-y) 1rem; }
         #desktop-body-row { display: flex; flex: 1; min-height: 0; }
         #desktop-sidebar { width: 240px; flex-shrink: 0; padding: 1rem; border-right: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: 0.5rem; }
-        #desktop-main { flex: 1; overflow: auto; padding: 1.5rem; }
+        #desktop-main { flex: 1; overflow: auto; padding: 1.5rem; position: relative; }
+        
+        /* Desktop Global Search */
+        #desktop-global-search-container {
+            position: sticky;
+            top: -1.5rem; /* account for main padding */
+            z-index: 100;
+            margin: 0 -1.5rem 1.5rem -1.5rem;
+            padding: 1.5rem;
+            background: linear-gradient(to bottom, var(--bg-deep) 60%, transparent);
+            transition: all 0.3s ease;
+        }
+
+        #desktop-global-search-container.scrolled {
+            background: var(--bg-deep);
+            border-bottom: 1px solid var(--glass-border);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+
+        .desktop-global-search-inner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--input-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-omni-xs);
+            padding: 8px 16px;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .desktop-global-search-inner:focus-within {
+            border-color: var(--accent);
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 0 2px rgba(249, 122, 18, 0.2);
+        }
+
+        #desktop-global-search-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-main);
+            font-size: 14px;
+            font-weight: 500;
+            padding: 8px 0;
+        }
+
+        #desktop-global-search-input::placeholder {
+            color: var(--placeholder);
+        }
+
         .desktop-view { display: none; }
         .desktop-view.active { display: block; }
         #desktop-now-playing .desktop-queue-status-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -408,16 +461,21 @@
             </aside>
 
             <main id="desktop-main">
-                <div id="desktop-view-home" class="desktop-view active">
-                    <div class="glass-view rounded-2xl p-3 border border-[var(--glass-border)] mb-4">
-                        <input type="text" id="desktop-home-search-input" placeholder="Search library..." class="input-theme w-full min-h-[44px] rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium" />
+                <!-- Global Desktop Search -->
+                <div id="desktop-global-search-container">
+                    <div class="desktop-global-search-inner">
+                        <i class="fas fa-search text-[var(--placeholder)] text-sm"></i>
+                        <input type="text" id="desktop-global-search-input" placeholder="Search library..." autocomplete="off" spellcheck="false" />
+                        <button id="desktop-global-search-clear" class="hidden text-[var(--placeholder)] hover:text-[var(--text-main)] transition-colors">
+                            <i class="fas fa-times-circle"></i>
+                        </button>
                     </div>
+                </div>
+
+                <div id="desktop-view-home" class="desktop-view active">
                     <div id="desktop-all-songs" class="space-y-2 mt-4"></div>
                 </div>
                 <div id="desktop-view-favourites" class="desktop-view">
-                    <div class="glass-view rounded-2xl p-3 border border-[var(--glass-border)] mb-4">
-                        <input type="text" id="desktop-fav-search-input" placeholder="Search favorites..." class="input-theme w-full min-h-[44px] rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium" />
-                    </div>
                     <div id="desktop-fav-tracks" class="space-y-2 mt-4"></div>
                 </div>
                 <div id="desktop-view-artists" class="desktop-view">
@@ -442,15 +500,12 @@
                 </div>
                 <div id="desktop-view-playlists" class="desktop-view">
                     <div class="glass-view rounded-2xl p-3 border border-[var(--glass-border)] mb-4 flex gap-3 items-center">
-                        <input type="text" id="desktop-playlist-search-input" placeholder="Search playlists..." class="input-theme flex-1 min-h-[44px] rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium" />
+                        <div class="flex-1"></div>
                         <button type="button" id="desktop-playlist-create-btn" class="desktop-create-playlist-btn flex-shrink-0 min-h-[44px] px-4 py-3 rounded-[var(--radius-omni-xs)] bg-[var(--accent)] text-[var(--text-on-accent)] font-bold text-sm transition-all hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" onclick="typeof createPlaylistPrompt==='function'&&createPlaylistPrompt()"><i class="fas fa-plus mr-2"></i>Create playlist</button>
                     </div>
                     <div id="desktop-playlist-list-container" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
                 </div>
                 <div id="desktop-view-search" class="desktop-view">
-                    <div class="glass-view rounded-2xl p-3 border border-[var(--glass-border)] mb-4">
-                        <input type="text" id="desktop-search-page-input" placeholder="Search library and ODST..." class="input-theme w-full min-h-[44px] rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium" />
-                    </div>
                     <div id="desktop-search-page-results" class="space-y-2 min-h-[120px] mt-4"></div>
                     <!-- Music/Youtube toggle: relative to #desktop-view-search bottom (one button height raised) -->
                     <div id="search-odst-toggle-overlay" class="absolute right-6 z-10 flex gap-1.5 p-1 rounded-full border border-[var(--glass-border)] shadow-lg pointer-events-auto" style="bottom: var(--search-odst-toggle-offset); background: var(--input-bg);">
@@ -475,9 +530,6 @@
                                 <button type="button" id="desktop-playlist-detail-delete-btn" class="px-3 py-1.5 rounded-lg bg-red-500/15 text-red-400 text-xs font-bold hover:bg-red-500/25 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400" onclick="typeof deletePlaylistConfirm==='function'&&deletePlaylistConfirm()">Delete</button>
                             </div>
                         </div>
-                    </div>
-                    <div class="glass-view rounded-2xl p-3 border border-[var(--glass-border)] mb-4">
-                        <input type="text" id="desktop-playlist-detail-search-input" placeholder="Search in playlist..." class="input-theme w-full min-h-[44px] rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium" />
                     </div>
                     <div id="desktop-playlist-detail-tracks" class="space-y-2"></div>
                 </div>

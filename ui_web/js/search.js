@@ -355,7 +355,7 @@ function setSearchOdstSource(value) {
 function init(opts = {}) {
     isMobile = opts.mobile !== false;
     isDesktop = !isMobile;
-    const inputId = isMobile ? 'search-page-input' : 'desktop-search-page-input';
+    const inputId = isMobile ? 'global-search-input' : 'desktop-global-search-input';
     const resultsId = isMobile ? 'search-page-results' : 'desktop-search-page-results';
     inputEl = document.getElementById(inputId);
     resultsEl = document.getElementById(resultsId);

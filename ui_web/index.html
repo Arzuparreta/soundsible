@@ -234,7 +234,7 @@
             height: 100%;
             overflow-y: auto;
             overscroll-behavior: contain;
-            padding: max(1.5rem, env(safe-area-inset-top)) 1.25rem 12rem 1.25rem;
+            padding: calc(max(1.5rem, env(safe-area-inset-top)) + 76px) 1.25rem 12rem 1.25rem;
             background-color: var(--bg-deep);
             transition: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, filter 0.5s ease;
             will-change: transform, opacity, filter;
@@ -243,9 +243,70 @@
         }
 
         .is-ios .view {
-            padding-top: max(3.5rem, env(safe-area-inset-top));
+            padding-top: calc(max(3.5rem, env(safe-area-inset-top)) + 76px);
         }
         
+        /* Global Search Bar */
+        #global-search-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: max(1.5rem, env(safe-area-inset-top)) 1.25rem 0.75rem 1.25rem;
+            background: linear-gradient(to bottom, var(--bg-deep) 60%, transparent);
+            transition: transform 0.3s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        #global-search-container .global-search-inner {
+            pointer-events: auto;
+        }
+
+        .is-ios #global-search-container {
+            padding-top: max(3.5rem, env(safe-area-inset-top));
+        }
+
+        #global-search-container.scrolled {
+            background: var(--bg-deep);
+            border-bottom: 1px solid var(--glass-border);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+
+        .global-search-inner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--input-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-omni);
+            padding: 8px 16px;
+            transition: all 0.3s ease;
+        }
+
+        .global-search-inner:focus-within {
+            border-color: var(--accent);
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 0 2px rgba(249, 122, 18, 0.2);
+        }
+
+        #global-search-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-main);
+            font-size: 14px;
+            font-weight: 500;
+            padding: 8px 0;
+        }
+
+        #global-search-input::placeholder {
+            color: var(--placeholder);
+        }
+
         .view.hidden {
             display: none;
             opacity: 0;
@@ -562,15 +623,6 @@
             overflow: visible;
         }
 
-        /* Home search bar + theme-aware inputs */
-        .home-search-input {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            font-size: 14px;
-            letter-spacing: -0.01em;
-        }
-        .home-search-input::placeholder {
-            color: var(--placeholder);
-        }
         .input-theme {
             background-color: var(--input-bg);
             border-color: var(--input-border);
@@ -745,6 +797,17 @@
         </div>
 
         <main id="content" class="flex-1 relative">
+            <!-- Global Search -->
+            <div id="global-search-container" class="opacity-0 pointer-events-none transition-opacity duration-300">
+                <div class="global-search-inner">
+                    <i class="fas fa-search text-[var(--placeholder)] text-sm"></i>
+                    <input type="text" id="global-search-input" placeholder="Search library..." autocomplete="off" spellcheck="false" />
+                    <button id="global-search-clear" class="hidden text-[var(--placeholder)] hover:text-[var(--text-main)] transition-colors">
+                        <i class="fas fa-times-circle"></i>
+                    </button>
+                </div>
+            </div>
+
             <div id="view-home" class="view">
                 <div id="library-tab-bar" class="library-tab-bar-mobile relative flex gap-1.5 p-1 rounded-full border border-[var(--glass-border)] mb-4 w-fit ml-auto glass-view" style="background: var(--input-bg);" data-active-tab="songs">
                     <div id="library-tab-indicator" class="library-tab-indicator absolute rounded-full bg-[var(--accent)] pointer-events-none z-0" aria-hidden="true"></div>
@@ -753,9 +816,6 @@
                     </div>
                 </div>
                 <div id="library-songs" class="library-panel">
-                    <div id="home-search-bar" class="glass-view rounded-[var(--radius-omni)] p-3 border border-[var(--glass-border)] mb-4">
-                        <input type="text" id="home-search-input" placeholder="Search library..." class="home-search-input input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium text-[var(--text-main)]" />
-                    </div>
                     <div id="all-songs" class="space-y-2"></div>
                 </div>
                 <div id="library-artists" class="library-panel hidden">
@@ -782,7 +842,7 @@
             </div>
             <div id="view-playlists" class="view hidden">
                 <div class="glass-view rounded-[var(--radius-omni)] p-3 border border-[var(--glass-border)] mb-4 flex gap-2 items-center">
-                    <input type="text" id="playlist-search-input" placeholder="Search playlists..." class="playlist-search-input input-theme flex-1 rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium text-[var(--text-main)]" />
+                    <div class="flex-1"></div>
                     <button type="button" id="playlist-create-btn" class="create-playlist-btn flex-shrink-0 px-4 py-3 rounded-[var(--radius-omni-xs)] bg-[var(--accent)] text-[var(--text-on-accent)] font-bold text-sm transition-all active:scale-95" onclick="typeof createPlaylistPrompt==='function'&&createPlaylistPrompt()"><i class="fas fa-plus mr-1"></i>New</button>
                 </div>
                 <div id="playlist-list-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4"></div>
@@ -805,21 +865,12 @@
                         </div>
                     </div>
                 </div>
-                <div class="glass-view rounded-[var(--radius-omni)] p-3 border border-[var(--glass-border)] mb-4">
-                    <input type="text" id="playlist-detail-search-input" placeholder="Search in playlist..." class="playlist-detail-search-input input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium text-[var(--text-main)]" />
-                </div>
                 <div id="playlist-detail-tracks" class="space-y-2"></div>
             </div>
             <div id="view-favourites" class="view hidden">
-                <div id="fav-search-bar" class="glass-view rounded-[var(--radius-omni)] p-3 border border-[var(--glass-border)] mb-4">
-                    <input type="text" id="fav-search-input" placeholder="Search favorites..." class="home-search-input input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium text-[var(--text-main)]" />
-                </div>
                 <div id="fav-tracks" class="space-y-2"></div>
             </div>
             <div id="view-search" class="view hidden">
-                <div class="glass-view rounded-[var(--radius-omni)] p-3 border border-[var(--glass-border)] mb-4">
-                    <input type="text" id="search-page-input" placeholder="Search library and ODST..." class="input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-3 focus:outline-none focus:border-[var(--accent)] text-sm font-medium text-[var(--text-main)]" />
-                </div>
                 <div id="search-page-results" class="space-y-2 min-h-[120px]"></div>
             </div>
             <div id="view-soundmash" class="view hidden">

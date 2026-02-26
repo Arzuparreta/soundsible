@@ -56,10 +56,10 @@ const MOBILE_SETTINGS_IDS = {
 
 function renderFavourites(state) {
     if (!dom) return;
-    renderers.renderFavourites(state, dom.favSearchInput, dom.favTracks);
+    const q = dom.globalSearchInput?.value.trim().toLowerCase() || '';
+    renderers.renderFavourites(state, dom.globalSearchInput, dom.favTracks);
     viewContext.favTracks = (state.favorites || []).map(id => state.library.find(t => t.id === id)).filter(t => t);
-    if (dom.favSearchInput && dom.favSearchInput.value.trim()) {
-        const q = dom.favSearchInput.value.trim().toLowerCase();
+    if (q) {
         viewContext.favTracks = viewContext.favTracks.filter(t =>
             t.title.toLowerCase().includes(q) || t.artist.toLowerCase().includes(q) || t.album.toLowerCase().includes(q));
     }
@@ -601,8 +601,9 @@ async function init() {
     dom = {
         floatingQueue: document.getElementById('floating-queue-tracks'),
         allSongs: document.getElementById('all-songs'),
-        homeSearchInput: document.getElementById('home-search-input'),
-        favSearchInput: document.getElementById('fav-search-input'),
+        globalSearchContainer: document.getElementById('global-search-container'),
+        globalSearchInput: document.getElementById('global-search-input'),
+        globalSearchClear: document.getElementById('global-search-clear'),
         favTracks: document.getElementById('fav-tracks'),
         libraryTabBar: document.getElementById('library-tab-bar'),
         libraryTabButtons: document.getElementById('library-tab-buttons'),
@@ -613,26 +614,23 @@ async function init() {
         artistDetailCover: document.getElementById('artist-detail-cover'),
         artistTracks: document.getElementById('artist-tracks'),
         artistAlbums: document.getElementById('artist-albums'),
-        playlistSearchInput: document.getElementById('playlist-search-input'),
         playlistListContainer: document.getElementById('playlist-list-container'),
         playlistDetailTitle: document.getElementById('playlist-detail-title'),
         playlistDetailCover: document.getElementById('playlist-detail-cover'),
         playlistDetailCoverIcon: document.getElementById('playlist-detail-cover-icon'),
         playlistDetailMeta: document.getElementById('playlist-detail-meta'),
         playlistDetailTracks: document.getElementById('playlist-detail-tracks'),
-        playlistDetailSearchInput: document.getElementById('playlist-detail-search-input'),
         initialLoader: document.getElementById('initial-loader')
     };
     try {
         // 1. Initialize UI First (Navigation, Player Bar)
         console.log("UI: Initializing...");
         UI.init();
-        initSearch();
-        initFavSearch();
-        initPlaylistSearch();
+        initGlobalSearch();
         initArtistScrollSuppress();
         initArtistDetailBack();
         initQueueDrag();
+        initScrollTracking();
 
         wireSettings(MOBILE_SETTINGS_IDS, { store, showToast: (msg) => UI.showToast(msg), onLibraryOrderChange: () => renderLibraryContent(), subscribeIndicators: false });
 
@@ -829,7 +827,7 @@ function renderLibraryTabBar() {
 
 function renderLibraryArtists() {
     if (!dom?.allArtists) return;
-    const q = (dom.homeSearchInput?.value.trim() || '').toLowerCase();
+    const q = (dom.globalSearchInput?.value.trim() || '').toLowerCase();
     const library = store.state.library || [];
     const filtered = !q
         ? library
@@ -845,7 +843,7 @@ function renderHomeContent() {
     if (!dom?.allSongs) return;
     const state = store.state;
     const library = state.library || [];
-    const homeQuery = dom.homeSearchInput ? dom.homeSearchInput.value.trim() : '';
+    const homeQuery = dom.globalSearchInput ? dom.globalSearchInput.value.trim() : '';
     if (!homeQuery) {
         viewContext.homeTracks = null;
         renderHomeSongs(library);
@@ -888,7 +886,7 @@ function filterPlaylistsBySearch(playlists, query) {
 
 function renderPlaylistList(state) {
     if (!dom || !dom.playlistListContainer) return;
-    const query = dom.playlistSearchInput ? dom.playlistSearchInput.value.trim() : '';
+    const query = dom.globalSearchInput ? dom.globalSearchInput.value.trim() : '';
     const filtered = filterPlaylistsBySearch(state.playlists || {}, query);
     const hasAny = Object.keys(state.playlists || {}).length > 0;
     const options = hasAny && Object.keys(filtered).length === 0 && query ? { emptyMessage: 'No playlists match your search.' } : {};
@@ -923,7 +921,7 @@ function renderPlaylistDetail(playlistName) {
             }
         }
     }
-    const searchQuery = dom.playlistDetailSearchInput ? dom.playlistDetailSearchInput.value.trim() : '';
+    const searchQuery = dom.globalSearchInput ? dom.globalSearchInput.value.trim() : '';
     renderers.renderPlaylistDetail(playlistName, trackIds, library, dom.playlistDetailTracks, { searchQuery });
 }
 
@@ -969,12 +967,80 @@ window.deletePlaylistConfirm = () => {
     }
 };
 
-function initPlaylistSearch() {
-    if (!dom) return;
-    const listInput = dom.playlistSearchInput;
-    const detailInput = dom.playlistDetailSearchInput;
-    if (listInput) listInput.addEventListener('input', () => { if (UI.currentView === 'playlists') renderPlaylistList(store.state); });
-    if (detailInput) detailInput.addEventListener('input', () => { if (UI.currentView === 'playlist-detail' && viewContext.currentPlaylistName) renderPlaylistDetail(viewContext.currentPlaylistName); });
+function initGlobalSearch() {
+    if (!dom || !dom.globalSearchInput) return;
+    const input = dom.globalSearchInput;
+    const clearBtn = dom.globalSearchClear;
+
+    input.addEventListener('input', () => {
+        const query = input.value.trim();
+        if (clearBtn) clearBtn.classList.toggle('hidden', !query);
+
+        const view = UI.currentView;
+        if (view === 'home') {
+            if ((store.state.libraryTab || 'songs') === 'artists') renderLibraryArtists();
+            else renderHomeContent();
+        } else if (view === 'favourites') {
+            const state = store.state;
+            const fullFavTracks = state.favorites.map(id => state.library.find(t => t.id === id)).filter(t => t);
+            const q = query.toLowerCase();
+            if (!q) {
+                viewContext.favTracks = fullFavTracks;
+                renderSongList(fullFavTracks, 'fav-tracks');
+            } else {
+                const results = fullFavTracks.filter(t =>
+                    t.title.toLowerCase().includes(q) ||
+                    t.artist.toLowerCase().includes(q) ||
+                    t.album.toLowerCase().includes(q)
+                );
+                viewContext.favTracks = results;
+                renderSongList(results, 'fav-tracks');
+            }
+        } else if (view === 'playlists') {
+            renderPlaylistList(store.state);
+        } else if (view === 'playlist-detail') {
+            if (viewContext.currentPlaylistName) renderPlaylistDetail(viewContext.currentPlaylistName);
+        }
+    });
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            input.blur();
+            input.value = '';
+            if (clearBtn) clearBtn.classList.add('hidden');
+            const view = UI.currentView;
+            if (view === 'home') renderLibraryContent();
+            else if (view === 'favourites') renderFavourites(store.state);
+            else if (view === 'playlists') renderPlaylistList(store.state);
+            else if (view === 'playlist-detail') renderPlaylistDetail(viewContext.currentPlaylistName);
+        }
+    });
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            input.value = '';
+            input.dispatchEvent(new Event('input'));
+            input.focus();
+        });
+    }
+
+    input.addEventListener('blur', () => UI.handleKeyboardClose());
+}
+
+function initScrollTracking() {
+    // Mobile views scroll individually
+    const views = document.querySelectorAll('.view');
+    views.forEach(view => {
+        view.addEventListener('scroll', () => {
+            const container = dom?.globalSearchContainer;
+            if (!container) return;
+            if (view.scrollTop > 10) {
+                container.classList.add('scrolled');
+            } else {
+                container.classList.remove('scrolled');
+            }
+        }, { passive: true });
+    });
 }
 
 window.showAddToPlaylistPicker = (trackId) => {
@@ -1038,7 +1104,6 @@ function clearContentForView(viewId) {
             break;
         case 'playlists':
             if (dom.playlistListContainer) dom.playlistListContainer.innerHTML = '';
-            if (dom.playlistSearchInput) dom.playlistSearchInput.value = '';
             break;
         case 'playlist-detail':
             viewContext.currentPlaylistName = null;
@@ -1048,7 +1113,6 @@ function clearContentForView(viewId) {
             if (dom.playlistDetailCover) dom.playlistDetailCover.style.backgroundImage = '';
             if (dom.playlistDetailCoverIcon) dom.playlistDetailCoverIcon.classList.add('hidden');
             if (dom.playlistDetailTracks) dom.playlistDetailTracks.innerHTML = '';
-            if (dom.playlistDetailSearchInput) dom.playlistDetailSearchInput.value = '';
             break;
         case 'search':
             if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) window.unifiedSearch.clear();
@@ -1066,11 +1130,38 @@ function clearContentForView(viewId) {
  */
 function renderContentForView(viewId) {
     const state = store.state;
+    const input = dom?.globalSearchInput;
+    const container = dom?.globalSearchContainer;
+
+    // Reset search state for new view
+    if (input) input.value = '';
+    if (dom?.globalSearchClear) dom.globalSearchClear.classList.add('hidden');
+    if (container) container.classList.remove('scrolled');
+
+    const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'search'];
+    if (container) {
+        if (searchVisibleViews.includes(viewId)) {
+            container.classList.remove('opacity-0', 'pointer-events-none');
+        } else {
+            container.classList.add('opacity-0', 'pointer-events-none');
+        }
+    }
+
+    if (input) {
+        switch (viewId) {
+            case 'home': input.placeholder = 'Search library...'; break;
+            case 'favourites': input.placeholder = 'Search favorites...'; break;
+            case 'playlists': input.placeholder = 'Search playlists...'; break;
+            case 'playlist-detail': input.placeholder = 'Search in playlist...'; break;
+            case 'search': input.placeholder = 'Search library and ODST...'; break;
+        }
+    }
+
     switch (viewId) {
         case 'home':
             syncLibraryPanels();
             renderLibraryTabBar();
-            renderLibraryContent();
+            renderHomeContent();
             break;
         case 'favourites':
             renderFavourites(state);
@@ -1175,71 +1266,6 @@ function initArtistDetailBack() {
         store.update({ libraryTab: 'artists' });
         UI.showView('home', false);
     });
-}
-
-async function initSearch() {
-    if (!dom) { setTimeout(initSearch, 100); return; }
-    const input = dom.homeSearchInput;
-    if (!input) {
-        setTimeout(initSearch, 100);
-        return;
-    }
-
-    input.oninput = () => {
-        if ((store.state.libraryTab || 'songs') === 'artists') {
-            renderLibraryArtists();
-            return;
-        }
-        renderHomeContent();
-    };
-
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            input.blur();
-            input.value = '';
-            viewContext.homeTracks = null;
-            renderLibraryContent();
-        }
-    });
-
-    input.addEventListener('blur', () => UI.handleKeyboardClose());
-}
-
-async function initFavSearch() {
-    if (!dom) { setTimeout(initFavSearch, 100); return; }
-    const input = dom.favSearchInput;
-    if (!input) {
-        setTimeout(initFavSearch, 100);
-        return;
-    }
-
-    input.oninput = () => {
-        const state = store.state;
-        const fullFavTracks = state.favorites.map(id => state.library.find(t => t.id === id)).filter(t => t);
-        const query = input.value.trim().toLowerCase();
-        if (!query) {
-            viewContext.favTracks = fullFavTracks;
-            renderSongList(fullFavTracks, 'fav-tracks');
-            return;
-        }
-        const results = fullFavTracks.filter(t =>
-            t.title.toLowerCase().includes(query) ||
-            t.artist.toLowerCase().includes(query) ||
-            t.album.toLowerCase().includes(query)
-        );
-        viewContext.favTracks = results;
-        renderSongList(results, 'fav-tracks');
-    };
-
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            input.blur();
-            input.value = '';
-            renderFavourites(store.state);
-        }
-    });
-
-    input.addEventListener('blur', () => UI.handleKeyboardClose());
 }
 
 function getCurrentTrackList() {
