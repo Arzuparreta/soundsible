@@ -20,6 +20,7 @@ export const Discover = {
     _results: [],
     _cachedResponse: null,
     _cachedReason: null,
+    _hasFetchedThisSession: false,
 
     init(options = {}) {
         this._mobile = options.mobile !== false;
@@ -46,10 +47,6 @@ export const Discover = {
         }
         this._bindPullToRefresh();
         if (this._hasLibrary()) {
-            if (this._cachedResponse !== null) {
-                this._renderResults(this._cachedResponse, this._cachedReason);
-                return;
-            }
             this._fetchRecommendations();
         }
     },
@@ -235,9 +232,20 @@ export const Discover = {
             if (!item) return;
             playBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
+                this._notifyPlayed(item);
                 if (typeof window.playPreview === 'function') window.playPreview(item);
             });
         });
+    },
+
+    _notifyPlayed(item) {
+        if (!item || !item.id) return;
+        const apiBase = (typeof store !== 'undefined' && store.apiBase) ? store.apiBase : '';
+        fetch(`${apiBase}/api/discover/played`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: item.id }),
+        }).catch(() => {});
     },
 
     async _updateConfigVisibility() {
@@ -297,19 +305,22 @@ export const Discover = {
         if (this._mainEl) this._mainEl.classList.remove('hidden');
         if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
         this._renderSkeleton();
+        const newSession = !this._hasFetchedThisSession;
         const apiBase = (typeof store !== 'undefined' && store.apiBase) ? store.apiBase : '';
         try {
             const res = await fetch(`${apiBase}/api/discover/recommendations`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ limit: DEFAULT_LIMIT }),
+                body: JSON.stringify({ limit: DEFAULT_LIMIT, new_session: newSession }),
             });
             const data = await res.json().catch(() => ({}));
             const reason = data.reason || null;
+            this._hasFetchedThisSession = true;
             this._cachedResponse = data;
             this._cachedReason = reason;
             this._renderResults(data, reason);
         } catch (err) {
+            this._hasFetchedThisSession = true;
             this._renderResults({ results: [] }, 'error');
             if (this._noResultsEl) {
                 this._noResultsEl.textContent = 'Network error. Try again.';

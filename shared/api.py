@@ -33,6 +33,7 @@ from setup_tool.metadata import search_itunes, download_image
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
+import random
 import socket
 import requests
 import re
@@ -1693,18 +1694,31 @@ def youtube_search():
         return jsonify({"results": [], "error": str(e)}), 500
 
 LIBRARY_SEED_CAP = 50
+DISCOVER_SESSION_REQUEST_CAP = 100  # max batch size when requesting more to compensate for session exclusions
+
+# In-memory discover session: shared across clients; cleared when new_session=true.
+_session_shown_ids = set()
+_session_played_ids = set()
+
 
 @app.route('/api/discover/recommendations', methods=['POST'])
 def discover_recommendations():
     """Get recommendations from Spotify/Last.fm and resolve to YouTube via ODST.
-    Body: seed_track_ids (list, optional), limit (optional, default 20).
-    When seed_track_ids is missing or empty, seeds are built from full library minus recommendation exclusions."""
+    Body: seed_track_ids (list, optional), limit (optional, default 20), new_session (bool, optional).
+    When seed_track_ids is missing or empty, seeds are built from full library minus recommendation exclusions.
+    If new_session is true, session state (shown/played) is cleared. Results are filtered by session so no repeats."""
+    global _session_shown_ids, _session_played_ids
     try:
         data = request.json or {}
         seed_ids = data.get("seed_track_ids")
         if seed_ids is not None and not isinstance(seed_ids, list):
             seed_ids = []
         limit = min(30, max(1, data.get("limit", 20)))
+        new_session = bool(data.get("new_session", False))
+        if new_session:
+            _session_shown_ids = set()
+            _session_played_ids = set()
+
         lib, _, _ = get_core()
         if not lib.metadata:
             lib.sync_library()
@@ -1731,6 +1745,8 @@ def discover_recommendations():
         from recommendations.providers import SpotifyRecommendationProvider, LastFmRecommendationProvider
         from recommendations.providers.base import Seed
         seed_objs = [Seed(artist=s["artist"], title=s["title"]) for s in seeds]
+        if new_session:
+            random.shuffle(seed_objs)
         dl = get_downloader(open_browser=False)
         spotify_provider = SpotifyRecommendationProvider(dl.spotify.client if dl.spotify else None)
         from dotenv import dotenv_values
@@ -1739,9 +1755,20 @@ def discover_recommendations():
         lastfm_key = os.getenv("LASTFM_API_KEY") or _env_vars.get("LASTFM_API_KEY")
         lastfm_provider = LastFmRecommendationProvider(lastfm_key)
         svc = RecommendationsService(spotify_provider, lastfm_provider, dl.downloader)
-        results, reason = svc.get_recommendations(seed_objs, limit=limit, library_tracks=library_tracks)
-        out = {"results": results}
-        if reason:
+        request_limit = min(DISCOVER_SESSION_REQUEST_CAP, limit + len(_session_shown_ids) + len(_session_played_ids))
+        request_limit = max(limit, request_limit)
+        results, reason = svc.get_recommendations(seed_objs, limit=request_limit, library_tracks=library_tracks)
+        if reason and not results:
+            return jsonify({"results": [], "reason": reason}), 200
+        excluded_ids = _session_shown_ids | _session_played_ids
+        filtered = [r for r in results if r.get("id") and r["id"] not in excluded_ids]
+        for r in filtered[:limit]:
+            vid = r.get("id")
+            if vid:
+                _session_shown_ids.add(vid)
+        out_results = filtered[:limit]
+        out = {"results": out_results}
+        if reason and not out_results:
             out["reason"] = reason
         return jsonify(out)
     except Exception as e:
@@ -1749,6 +1776,20 @@ def discover_recommendations():
         import traceback
         traceback.print_exc()
         return jsonify({"results": [], "reason": "error", "error": str(e)}), 500
+
+
+@app.route('/api/discover/played', methods=['POST'])
+def discover_played():
+    """Register a recommended item as played this session; next recommendation fetch will exclude it."""
+    global _session_played_ids
+    try:
+        data = request.json or {}
+        vid = data.get("id")
+        if vid and isinstance(vid, str):
+            _session_played_ids.add(vid.strip())
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 @app.route('/api/downloader/queue', methods=['POST'])
 def add_to_downloader_queue():

@@ -1321,9 +1321,37 @@ export class UI {
                 else if (store.state.currentTrack) audioEngine.toggle();
             }
 
-            // 2. NAV COMMIT — use _activeNavView, or _lastActiveNavView if finger released over blank (e.g. edge of Artists slot)
+            // 2. NAV COMMIT — only navigate when finger is released over a nav item; release over center/blank must not navigate
             const viewToShow = this._activeNavView || this._lastActiveNavView;
-            if (this.isBlooming && viewToShow) {
+            let releaseOverNavItem = false;
+            if (this.isBlooming && ribbon) {
+                const rx = touch.clientX;
+                const ry = touch.clientY;
+                const islandRect = island.getBoundingClientRect();
+                if (ry >= islandRect.top - 40) {
+                    for (const child of ribbon.children) {
+                        if (!child.classList.contains('omni-nav-item')) continue;
+                        const r = child.getBoundingClientRect();
+                        const pad = 8;
+                        if (rx >= r.left - pad && rx <= r.right + pad && ry >= r.top - pad && ry <= r.bottom + pad) {
+                            releaseOverNavItem = true;
+                            break;
+                        }
+                    }
+                    if (!releaseOverNavItem) {
+                        const ribbonRect = ribbon.getBoundingClientRect();
+                        if (ribbonRect.width > 0 && ribbon.children.length) {
+                            const x = Math.max(ribbonRect.left, Math.min(ribbonRect.right, rx));
+                            const t = (x - ribbonRect.left) / ribbonRect.width;
+                            let idx = Math.floor(t * ribbon.children.length);
+                            idx = Math.max(0, Math.min(ribbon.children.length - 1, idx));
+                            const child = ribbon.children[idx];
+                            if (child.classList.contains('omni-nav-item')) releaseOverNavItem = true;
+                        }
+                    }
+                }
+            }
+            if (this.isBlooming && viewToShow && releaseOverNavItem) {
                 Haptics.lock();
                 if (viewToShow !== this.currentView) this.showView(viewToShow);
                 label.classList.remove('hovered');

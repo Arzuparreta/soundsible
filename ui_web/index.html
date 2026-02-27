@@ -729,11 +729,7 @@
         #view-home.artist-just-returned .artist-card-overlay { opacity: 0 !important; }
         #view-home.artist-just-returned .artist-card-name { color: var(--text-main) !important; }
 
-        /* List scroll safety (same pattern as library artists): suppress ghost :active during scroll on all list views */
-        #view-home.list-scroll-active .song-row,
-        #view-favourites.list-scroll-active .song-row,
-        #view-playlist-detail.list-scroll-active .song-row,
-        #view-artist-detail.list-scroll-active .song-row { transform: none !important; }
+        /* List scroll safety (same pattern as library artists): keep, but do not disable song-row transforms so swipe animations still work */
         #view-artist-detail.list-scroll-active .artist-album-header { transform: none !important; }
         #view-playlists.list-scroll-active .playlist-card { transform: none !important; }
         /* Discover: suppress card/play button active during scroll */
