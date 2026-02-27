@@ -597,11 +597,13 @@ export class Downloader {
         const ring = this.dlQueueProgressRing;
         const badge = this.dlQueueBadge;
         if (ring) {
-            const pct = total > 0 ? Math.min(1, completed / total) : 0;
-            const circumference = 2 * Math.PI * (ring.r?.baseVal?.value ?? 22);
-            const offset = circumference * (1 - pct);
-            ring.style.strokeDashoffset = String(offset);
-            ring.classList.toggle('dl-ring-active', isProcessing && total > 0);
+            // Simple on/off indicator: show full circle while backend has active downloads.
+            const isActive = isProcessing && total > 0;
+            const radius = (ring.r && ring.r.baseVal && ring.r.baseVal.value) || 22;
+            const circumference = 2 * Math.PI * radius;
+            ring.style.strokeDasharray = String(circumference);
+            ring.style.strokeDashoffset = isActive ? '0' : String(circumference);
+            ring.style.opacity = isActive ? '1' : '0';
         }
         if (badge && isProcessing && total > 0) {
             const remaining = Math.max(0, total - completed);

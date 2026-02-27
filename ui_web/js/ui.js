@@ -660,11 +660,6 @@ export class UI {
 
         const queueContainer = this.dom.queueContainer;
         if (queueContainer) queueContainer.classList.remove('hidden');
-        const dlQueueContainer = this.dom.dlQueueContainer;
-        if (dlQueueContainer) {
-            if (viewId === 'discover') dlQueueContainer.classList.remove('hidden');
-            else dlQueueContainer.classList.add('hidden');
-        }
 
         // ODST Music/YouTube toggle is now embedded in the search bar; visibility controlled by show-discover-odst on container (app.js)
 

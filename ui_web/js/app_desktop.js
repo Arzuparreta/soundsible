@@ -789,7 +789,6 @@ async function init() {
             queueContainer: 'desktop-dl-queue-container',
             dlQueueFab: 'desktop-dl-queue-fab',
             dlQueueBadge: 'desktop-dl-queue-badge',
-            dlQueueProgressRing: 'desktop-dl-queue-progress-ring',
             downloadQueuePopover: 'desktop-dl-download-queue-popover',
             downloadsSection: 'desktop-downloads-section',
             downloadsPanel: 'desktop-downloads-panel',
