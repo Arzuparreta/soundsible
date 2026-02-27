@@ -11,6 +11,7 @@ import { scoreLibrary, scoreArtist, mergeAndSortByScore } from './search.js';
 import { wireSettings, wireActionMenu } from './wires.js';
 import { DesktopUI } from './ui_desktop.js';
 import { checkResumeFromOtherDevice } from './playback_resume.js';
+import { playPreview } from './preview_playback.js';
 
 console.log('Soundsible Desktop initializing...');
 
@@ -22,7 +23,7 @@ function playTrack(trackId) {
     } else if (DesktopUI.currentView === 'favourites') context = window._currentFavTracks ?? context;
     else if (DesktopUI.currentView === 'artist-detail') context = window._currentArtistTracks ?? context;
     else if (DesktopUI.currentView === 'playlist-detail') context = window._currentPlaylistTracks ?? context;
-    else if (DesktopUI.currentView === 'search') context = window._currentSearchTracks ?? context;
+    else if (DesktopUI.currentView === 'discover') context = window._currentSearchTracks ?? context;
     const track = context?.find((t) => t.id === trackId);
     if (track) {
         audioEngine.setContext(context);
@@ -34,11 +35,6 @@ function playTrack(trackId) {
 function showArtistDetail(artistName) {
     window._currentArtistName = artistName;
     window._currentArtistTracks = renderers.getArtistTracks(artistName, store.state.library);
-    const titleEl = document.getElementById('desktop-artist-detail-title');
-    const coverEl = document.getElementById('desktop-artist-detail-cover');
-    const tracksEl = document.getElementById('desktop-artist-tracks');
-    const albumsEl = document.getElementById('desktop-artist-albums');
-    renderers.renderArtistDetail(artistName, store.state.library, { titleEl, coverEl }, tracksEl, albumsEl);
     DesktopUI.showView('artist-detail');
 }
 
@@ -56,10 +52,19 @@ function renderPlaylists() {
     const state = store.state;
     const input = document.getElementById('desktop-global-search-input');
     const container = document.getElementById('desktop-playlist-list-container');
+    const emptyState = document.getElementById('desktop-playlist-empty-state');
+    const hasList = document.getElementById('desktop-playlist-has-list');
     if (!container) return;
     const query = input?.value.trim() || '';
     const filtered = filterPlaylistsBySearch(state.playlists || {}, query);
     const hasAny = Object.keys(state.playlists || {}).length > 0;
+    const showEmptyState = !hasAny;
+    if (emptyState) emptyState.classList.toggle('hidden', !showEmptyState);
+    if (hasList) hasList.classList.toggle('hidden', showEmptyState);
+    if (showEmptyState) {
+        container.innerHTML = '';
+        return;
+    }
     const options = hasAny && Object.keys(filtered).length === 0 && query ? { emptyMessage: 'No playlists match your search.' } : {};
     options.preserveOrder = !query;
     renderers.renderPlaylistList(filtered, state.library || [], container, options);
@@ -358,12 +363,26 @@ function initDesktopQueueDrag() {
     });
 
     panel.addEventListener('click', (e) => {
-        const btn = e.target.closest('.queue-remove-btn');
-        if (!btn) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const index = parseInt(btn.getAttribute('data-queue-index'), 10);
-        if (!Number.isNaN(index)) store.removeFromQueue(index);
+        const removeBtn = e.target.closest('.queue-remove-btn');
+        if (removeBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const index = parseInt(removeBtn.getAttribute('data-queue-index'), 10);
+            if (!Number.isNaN(index)) store.removeFromQueue(index);
+            return;
+        }
+        const moveBtn = e.target.closest('.queue-move-btn');
+        if (moveBtn && !moveBtn.disabled) {
+            e.preventDefault();
+            e.stopPropagation();
+            const index = parseInt(moveBtn.getAttribute('data-queue-index'), 10);
+            const direction = moveBtn.getAttribute('data-queue-move');
+            if (Number.isNaN(index) || !direction) return;
+            const toIndex = direction === 'up' ? index - 1 : index + 1;
+            if (toIndex >= 0 && toIndex < (store.state.queue?.length ?? 0)) {
+                store.reorderQueue(index, toIndex);
+            }
+        }
     });
 }
 
@@ -692,6 +711,7 @@ function initPlaylistListDrag() {
 }
 
 window.playTrack = playTrack;
+window.playPreview = playPreview;
 window.showArtistDetail = showArtistDetail;
 window.showPlaylistDetail = showPlaylistDetail;
 
@@ -769,7 +789,11 @@ async function init() {
             queueContainer: 'desktop-dl-queue-container',
             dlQueueFab: 'desktop-dl-queue-fab',
             dlQueueBadge: 'desktop-dl-queue-badge',
+            dlQueueProgressRing: 'desktop-dl-queue-progress-ring',
             downloadQueuePopover: 'desktop-dl-download-queue-popover',
+            downloadsSection: 'desktop-downloads-section',
+            downloadsPanel: 'desktop-downloads-panel',
+            downloadsList: 'desktop-downloads-list',
             downloadQueueList: 'desktop-dl-download-queue-list',
             clearQueueBtn: 'desktop-dl-clear-queue-btn',
             submitDownloadBtn: 'desktop-dl-submit-download-btn',
@@ -780,7 +804,7 @@ async function init() {
         });
 
         window.addEventListener('click', (e) => {
-            if (DesktopUI.currentView !== 'search') return;
+            if (DesktopUI.currentView !== 'discover') return;
             const dlq = document.getElementById('desktop-dl-queue-container');
             if (dlq && !dlq.contains(e.target)) Downloader.hideDownloadQueue?.();
         });
@@ -797,7 +821,10 @@ async function init() {
             statusLed: null,
             statusPulse: null,
             serverStatus: 'desktop-server-status',
-            hostDisplay: 'desktop-active-host-display'
+            hostDisplay: 'desktop-active-host-display',
+            lastfmInput: 'desktop-settings-lastfm-api-key',
+            lastfmSave: 'desktop-settings-lastfm-save',
+            lastfmStatus: 'desktop-settings-lastfm-status',
         }, { store, showToast: (m) => DesktopUI.showToast(m), onLibraryOrderChange: () => renderHomeSongs() });
 
         const themeSelect = document.getElementById('desktop-settings-theme-select');
@@ -833,6 +860,86 @@ async function init() {
                 DesktopUI.hideActionMenu();
             }
         });
+
+        async function loadRecommendationExclusions() {
+            const listEl = document.getElementById('desktop-settings-exclusions-list');
+            const addSelect = document.getElementById('desktop-settings-exclusions-add');
+            const statusEl = document.getElementById('desktop-settings-exclusions-status');
+            if (!listEl || !addSelect) return;
+            const apiBase = store.apiBase || '';
+            try {
+                const res = await fetch(`${apiBase}/api/settings/recommendation-exclusions`);
+                const data = await res.json().catch(() => ({}));
+                const excludedIds = data.excluded_track_ids || [];
+                const library = store.state.library || [];
+                const trackById = Object.fromEntries(library.map((t) => [t.id, t]));
+                listEl.innerHTML = excludedIds.map((id) => {
+                    const t = trackById[id];
+                    const title = t ? (t.title || id) : id;
+                    const artist = t ? (t.artist || '') : '';
+                    return `<li class="flex items-center justify-between gap-2 py-2 px-3 rounded-xl bg-[var(--surface-overlay)] border border-[var(--glass-border)]">
+                        <span class="truncate text-[var(--text-main)]" title="${renderers.esc(title)} · ${renderers.esc(artist)}">${renderers.esc(title)}${artist ? ` · ${renderers.esc(artist)}` : ''}</span>
+                        <button type="button" class="desktop-settings-exclusion-remove flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:bg-red-500/10 hover:text-red-400 transition-colors" data-track-id="${renderers.esc(id)}" aria-label="Remove from exclusions"><i class="fas fa-times text-xs"></i></button>
+                    </li>`;
+                }).join('');
+                const notExcluded = library.filter((t) => !excludedIds.includes(t.id)).slice(0, 200);
+                addSelect.innerHTML = '<option value="">Choose a track…</option>' + notExcluded.map((t) => `<option value="${renderers.esc(t.id)}">${renderers.esc(t.title)} · ${renderers.esc(t.artist)}</option>`).join('');
+                if (statusEl) { statusEl.classList.add('hidden'); statusEl.textContent = ''; }
+            } catch (err) {
+                if (statusEl) { statusEl.textContent = 'Could not load exclusions.'; statusEl.classList.remove('hidden'); }
+            }
+        }
+
+        function initRecommendationExclusions() {
+            const addBtn = document.getElementById('desktop-settings-exclusions-add-btn');
+            const listEl = document.getElementById('desktop-settings-exclusions-list');
+            const addSelect = document.getElementById('desktop-settings-exclusions-add');
+            const statusEl = document.getElementById('desktop-settings-exclusions-status');
+            if (!addBtn || !listEl) return;
+            addBtn.addEventListener('click', async () => {
+                const id = addSelect?.value;
+                if (!id) return;
+                const apiBase = store.apiBase || '';
+                try {
+                    const res = await fetch(`${apiBase}/api/settings/recommendation-exclusions`);
+                    const data = await res.json().catch(() => ({}));
+                    const ids = data.excluded_track_ids || [];
+                    if (ids.includes(id)) return;
+                    const putRes = await fetch(`${apiBase}/api/settings/recommendation-exclusions`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ excluded_track_ids: [...ids, id] })
+                    });
+                    if (putRes.ok) await loadRecommendationExclusions();
+                    else if (statusEl) { statusEl.textContent = 'Failed to add.'; statusEl.classList.remove('hidden'); }
+                } catch (err) {
+                    if (statusEl) { statusEl.textContent = 'Network error.'; statusEl.classList.remove('hidden'); }
+                }
+            });
+            listEl.addEventListener('click', async (e) => {
+                const btn = e.target.closest('.desktop-settings-exclusion-remove');
+                if (!btn) return;
+                const id = btn.getAttribute('data-track-id');
+                if (!id) return;
+                const apiBase = store.apiBase || '';
+                try {
+                    const res = await fetch(`${apiBase}/api/settings/recommendation-exclusions`);
+                    const data = await res.json().catch(() => ({}));
+                    const ids = (data.excluded_track_ids || []).filter((x) => x !== id);
+                    const putRes = await fetch(`${apiBase}/api/settings/recommendation-exclusions`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ excluded_track_ids: ids })
+                    });
+                    if (putRes.ok) await loadRecommendationExclusions();
+                    else if (statusEl) { statusEl.textContent = 'Failed to remove.'; statusEl.classList.remove('hidden'); }
+                } catch (err) {
+                    if (statusEl) { statusEl.textContent = 'Network error.'; statusEl.classList.remove('hidden'); }
+                }
+            });
+        }
+
+        initRecommendationExclusions();
 
         const endpoints = [...store.state.priorityList, window.location.hostname];
         await connectionManager.findActiveHost([...new Set(endpoints)].filter(Boolean));
@@ -927,6 +1034,34 @@ async function init() {
             renderSongsInto(container, favTracks, store.state.songsViewMode);
         }
 
+        function renderDesktopArtists() {
+            const input = document.getElementById('desktop-global-search-input');
+            const artistsContainer = document.getElementById('desktop-all-artists');
+            if (!artistsContainer) return;
+            const q = (input?.value.trim() || '').toLowerCase();
+            const library = store.state.library || [];
+            const filtered = !q
+                ? library
+                : library.filter((t) => {
+                    const names = renderers.parseArtistNames(t.album_artist || t.artist);
+                    return names.some((n) => n.toLowerCase().includes(q));
+                });
+            const mode = store.state.artistViewMode || 'gridCompact';
+            artistsContainer.className = artistViewModeToContainerClass[mode] || artistViewModeToContainerClass.gridCompact;
+            renderers.renderArtistList(filtered, artistsContainer);
+        }
+
+        function renderDesktopArtistDetail() {
+            if (!window._currentArtistName) return;
+            const input = document.getElementById('desktop-global-search-input');
+            const searchQuery = input?.value.trim() || '';
+            const titleEl = document.getElementById('desktop-artist-detail-title');
+            const coverEl = document.getElementById('desktop-artist-detail-cover');
+            const tracksEl = document.getElementById('desktop-artist-tracks');
+            const albumsEl = document.getElementById('desktop-artist-albums');
+            renderers.renderArtistDetail(window._currentArtistName, store.state.library, { titleEl, coverEl }, tracksEl, albumsEl, { desktopClickBehavior: true, searchQuery });
+        }
+
         let prevTrackId = null;
         let prevIsPlaying = undefined;
 
@@ -979,21 +1114,8 @@ async function init() {
             }
             if (DesktopUI.currentView === 'home') renderHomeSongs();
             if (DesktopUI.currentView === 'favourites') renderFavourites();
-            if (DesktopUI.currentView === 'artists') {
-                const artistsContainer = document.getElementById('desktop-all-artists');
-                if (artistsContainer) {
-                    const mode = state.artistViewMode || 'gridCompact';
-                    artistsContainer.className = artistViewModeToContainerClass[mode] || artistViewModeToContainerClass.gridCompact;
-                    renderers.renderArtistList(state.library, artistsContainer);
-                }
-            }
-            if (DesktopUI.currentView === 'artist-detail' && window._currentArtistName) {
-                const titleEl = document.getElementById('desktop-artist-detail-title');
-                const coverEl = document.getElementById('desktop-artist-detail-cover');
-                const tracksEl = document.getElementById('desktop-artist-tracks');
-                const albumsEl = document.getElementById('desktop-artist-albums');
-                renderers.renderArtistDetail(window._currentArtistName, state.library, { titleEl, coverEl }, tracksEl, albumsEl, { desktopClickBehavior: true });
-            }
+            if (DesktopUI.currentView === 'artists') renderDesktopArtists();
+            if (DesktopUI.currentView === 'artist-detail' && window._currentArtistName) renderDesktopArtistDetail();
             if (DesktopUI.currentView === 'playlists') renderPlaylists();
             if (DesktopUI.currentView === 'playlist-detail' && window._currentPlaylistName) renderPlaylistDetail();
         });
@@ -1012,21 +1134,23 @@ async function init() {
                 else if (view === 'favourites') renderFavourites();
                 else if (view === 'playlists') renderPlaylists();
                 else if (view === 'playlist-detail') renderPlaylistDetail();
-                else if (view === 'search' && typeof window.unifiedSearch !== 'undefined') {
-                    // Search page uses its own debounced listener, but we might need to trigger something
+                else if (view === 'artists') renderDesktopArtists();
+                else if (view === 'artist-detail' && window._currentArtistName) renderDesktopArtistDetail();
+                else if (view === 'discover' && typeof window.unifiedSearch !== 'undefined') {
+                    // Discover search uses its own debounced listener
                 }
             });
 
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') {
-                    input.blur();
-                    input.value = '';
-                    if (clearBtn) clearBtn.classList.add('hidden');
-                    const view = DesktopUI.currentView;
-                    if (view === 'home') renderHomeSongs();
-                    else if (view === 'favourites') renderFavourites();
-                    else if (view === 'playlists') renderPlaylists();
-                    else if (view === 'playlist-detail') renderPlaylistDetail();
+                    if (input.value.trim()) {
+                        input.value = '';
+                        input.dispatchEvent(new Event('input'));
+                        input.focus();
+                        e.preventDefault();
+                    } else {
+                        input.blur();
+                    }
                 }
             });
 
@@ -1070,13 +1194,14 @@ async function init() {
             }
             if (container) container.classList.remove('scrolled');
 
-            const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'search'];
+            const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'podcast', 'discover', 'artists', 'artist-detail'];
             if (container) {
                 if (searchVisibleViews.includes(viewId)) {
                     container.classList.remove('opacity-0', 'pointer-events-none');
                 } else {
                     container.classList.add('opacity-0', 'pointer-events-none');
                 }
+                container.classList.toggle('show-discover-odst', viewId === 'discover');
             }
 
             if (input) {
@@ -1085,17 +1210,30 @@ async function init() {
                     case 'favourites': input.placeholder = 'Search favorites...'; break;
                     case 'playlists': input.placeholder = 'Search playlists...'; break;
                     case 'playlist-detail': input.placeholder = 'Search in playlist...'; break;
-                    case 'search': input.placeholder = 'Search library and ODST...'; break;
+                    case 'discover': input.placeholder = 'Search library and ODST...'; break;
+                    case 'artists': input.placeholder = 'Search artists...'; break;
+                    case 'artist-detail': input.placeholder = 'Search songs & albums...'; break;
+                    case 'podcast': input.placeholder = 'Search podcasts...'; break;
                 }
             }
 
+            if (viewId !== 'discover' && typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) {
+                window.unifiedSearch.clear();
+            }
+            if (viewId === 'home') renderHomeSongs();
+            if (viewId === 'favourites') renderFavourites();
             if (viewId === 'playlists') renderPlaylists();
             if (viewId === 'playlist-detail' && window._currentPlaylistName) renderPlaylistDetail();
-            if (viewId === 'search') {
+            if (viewId === 'artists') renderDesktopArtists();
+            if (viewId === 'artist-detail' && window._currentArtistName) renderDesktopArtistDetail();
+            if (viewId === 'discover') {
                 import('./search.js').then((m) => {
                     window.unifiedSearch = m.unifiedSearch;
-                    m.unifiedSearch.init({ mobile: false });
+                    m.unifiedSearch.init({ mobile: false, resultsContainerId: 'desktop-discover-search-results' });
                 });
+            }
+            if (viewId === 'settings' && typeof loadRecommendationExclusions === 'function') {
+                loadRecommendationExclusions();
             }
         };
 

@@ -11,7 +11,7 @@ import uuid
 import logging
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify, send_file, Response, send_from_directory
+from flask import Flask, request, jsonify, send_file, Response, send_from_directory, stream_with_context
 from flask_socketio import SocketIO, emit, join_room
 from flask_cors import CORS
 
@@ -1427,6 +1427,66 @@ def stream_local_track(track_id):
         print(f"DEBUG: [Stream] ❌ Error: {e}")
         return jsonify({"error": str(e)}), 500
 
+
+def _validate_youtube_video_id(video_id: str) -> bool:
+    """Allow only safe YouTube video id (11 chars, alphanumeric + -_)."""
+    if not video_id or len(video_id) != 11:
+        return False
+    return all(c.isalnum() or c in '-_' for c in video_id)
+
+
+# Rate limit for preview stream: per-IP, 30 requests per 60 seconds
+_preview_stream_timestamps: dict = {}
+_preview_stream_lock = threading.Lock()
+PREVIEW_STREAM_LIMIT = 30
+PREVIEW_STREAM_WINDOW_SEC = 60
+
+
+def _preview_stream_rate_limit(ip: str) -> bool:
+    """Return True if request is allowed, False if rate limited."""
+    now = time.time()
+    with _preview_stream_lock:
+        timestamps = _preview_stream_timestamps.get(ip, [])
+        timestamps = [t for t in timestamps if now - t < PREVIEW_STREAM_WINDOW_SEC]
+        if len(timestamps) >= PREVIEW_STREAM_LIMIT:
+            return False
+        timestamps.append(now)
+        _preview_stream_timestamps[ip] = timestamps
+    return True
+
+
+@app.route('/api/preview/stream/<video_id>', methods=['GET'])
+def stream_preview_audio(video_id):
+    """Stream YouTube audio for in-app preview (no embed, no video). Proxies via yt-dlp."""
+    if not _validate_youtube_video_id(video_id):
+        return jsonify({"error": "Invalid video id"}), 400
+    if not _preview_stream_rate_limit(request.remote_addr or 'unknown'):
+        return jsonify({"error": "Too many requests"}), 429
+    try:
+        dl = get_downloader(open_browser=False)
+        generator = dl.downloader.stream_audio_generator(video_id, timeout=60)
+        def stream():
+            for chunk in generator:
+                yield chunk
+        response = Response(stream_with_context(stream()), mimetype='audio/mpeg')
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Range, Content-Length, Accept-Ranges'
+        return response
+    except Exception as e:
+        print(f"API: [Preview stream] Error for {video_id}: {e}")
+        return jsonify({"error": "Preview unavailable"}), 502
+
+
+@app.route('/api/preview/cover/<video_id>', methods=['GET'])
+def preview_cover_redirect(video_id):
+    """Redirect to YouTube thumbnail for preview cover (optional; frontend may use thumbnail URL directly)."""
+    if not _validate_youtube_video_id(video_id):
+        return jsonify({"error": "Invalid video id"}), 400
+    from flask import redirect
+    return redirect(f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg", code=302)
+
+
 @app.route('/api/static/cover/<track_id>', methods=['GET'])
 def get_track_cover(track_id):
     """Serve album cover art. If missing: extract from file or use fallback_cover_url (e.g. YT thumbnail)."""
@@ -1632,6 +1692,64 @@ def youtube_search():
         print(f"API: YouTube search error: {e}")
         return jsonify({"results": [], "error": str(e)}), 500
 
+LIBRARY_SEED_CAP = 50
+
+@app.route('/api/discover/recommendations', methods=['POST'])
+def discover_recommendations():
+    """Get recommendations from Spotify/Last.fm and resolve to YouTube via ODST.
+    Body: seed_track_ids (list, optional), limit (optional, default 20).
+    When seed_track_ids is missing or empty, seeds are built from full library minus recommendation exclusions."""
+    try:
+        data = request.json or {}
+        seed_ids = data.get("seed_track_ids")
+        if seed_ids is not None and not isinstance(seed_ids, list):
+            seed_ids = []
+        limit = min(30, max(1, data.get("limit", 20)))
+        lib, _, _ = get_core()
+        if not lib.metadata:
+            lib.sync_library()
+        library_tracks = [t.to_dict() for t in (lib.metadata.tracks or [])]
+        track_by_id = {t["id"]: t for t in library_tracks}
+        seeds = []
+        if seed_ids:
+            for tid in seed_ids[:10]:
+                t = track_by_id.get(str(tid))
+                if t and t.get("artist") is not None and t.get("title") is not None:
+                    seeds.append({"artist": t["artist"], "title": t["title"]})
+        else:
+            excluded = set(_load_recommendation_exclusions())
+            for t in library_tracks:
+                if len(seeds) >= LIBRARY_SEED_CAP:
+                    break
+                if t.get("id") in excluded:
+                    continue
+                if t.get("artist") is not None and t.get("title") is not None:
+                    seeds.append({"artist": t["artist"], "title": t["title"]})
+        if not seeds:
+            return jsonify({"results": [], "reason": "no_seeds"}), 200
+        from recommendations.service import RecommendationsService
+        from recommendations.providers import SpotifyRecommendationProvider, LastFmRecommendationProvider
+        from recommendations.providers.base import Seed
+        seed_objs = [Seed(artist=s["artist"], title=s["title"]) for s in seeds]
+        dl = get_downloader(open_browser=False)
+        spotify_provider = SpotifyRecommendationProvider(dl.spotify.client if dl.spotify else None)
+        from dotenv import dotenv_values
+        _env_path = Path("odst_tool/.env")
+        _env_vars = dotenv_values(_env_path) if _env_path.exists() else {}
+        lastfm_key = os.getenv("LASTFM_API_KEY") or _env_vars.get("LASTFM_API_KEY")
+        lastfm_provider = LastFmRecommendationProvider(lastfm_key)
+        svc = RecommendationsService(spotify_provider, lastfm_provider, dl.downloader)
+        results, reason = svc.get_recommendations(seed_objs, limit=limit, library_tracks=library_tracks)
+        out = {"results": results}
+        if reason:
+            out["reason"] = reason
+        return jsonify(out)
+    except Exception as e:
+        print(f"API: Discover recommendations error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"results": [], "reason": "error", "error": str(e)}), 500
+
 @app.route('/api/downloader/queue', methods=['POST'])
 def add_to_downloader_queue():
     try:
@@ -1793,12 +1911,13 @@ def get_downloader_config():
         "r2_account_id": env_vars.get("R2_ACCOUNT_ID", os.getenv("R2_ACCOUNT_ID", "")),
         "r2_access_key": mask(env_vars.get("R2_ACCESS_KEY_ID", os.getenv("R2_ACCESS_KEY_ID", ""))),
         "r2_secret_key": mask(env_vars.get("R2_SECRET_ACCESS_KEY", os.getenv("R2_SECRET_ACCESS_KEY", ""))),
-        "r2_bucket": env_vars.get("R2_BUCKET_NAME", os.getenv("R2_BUCKET_NAME", ""))
+        "r2_bucket": env_vars.get("R2_BUCKET_NAME", os.getenv("R2_BUCKET_NAME", "")),
+        "lastfm_api_key": mask(env_vars.get("LASTFM_API_KEY", os.getenv("LASTFM_API_KEY", ""))),
     }
     
     # If not on a trusted network, strip ALL sensitive info (even masked ones)
     if not is_trusted:
-        sensitive_keys = ["spotify_client_id", "spotify_client_secret", "r2_account_id", "r2_access_key", "r2_secret_key", "r2_bucket"]
+        sensitive_keys = ["spotify_client_id", "spotify_client_secret", "r2_account_id", "r2_access_key", "r2_secret_key", "r2_bucket", "lastfm_api_key"]
         for key in sensitive_keys: config[key] = "HIDDEN (Connect to Tailscale/LAN to view)"
 
     return jsonify(config)
@@ -1827,7 +1946,8 @@ def update_downloader_config():
         "r2_account_id": "R2_ACCOUNT_ID",
         "r2_access_key": "R2_ACCESS_KEY_ID",
         "r2_secret_key": "R2_SECRET_ACCESS_KEY",
-        "r2_bucket": "R2_BUCKET_NAME"
+        "r2_bucket": "R2_BUCKET_NAME",
+        "lastfm_api_key": "LASTFM_API_KEY",
     }
     
     for key, env_key in key_map.items():
@@ -1845,6 +1965,44 @@ def update_downloader_config():
     downloader_service = None
     
     return jsonify({"status": "updated"})
+
+RECOMMENDATION_EXCLUSIONS_FILENAME = "recommendation_exclusions.json"
+
+def _recommendation_exclusions_path():
+    return Path(DEFAULT_CONFIG_DIR).expanduser() / RECOMMENDATION_EXCLUSIONS_FILENAME
+
+def _load_recommendation_exclusions():
+    path = _recommendation_exclusions_path()
+    if not path.exists():
+        return []
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+        ids = data.get("excluded_track_ids") or []
+        return [str(x) for x in ids] if isinstance(ids, list) else []
+    except Exception:
+        return []
+
+def _save_recommendation_exclusions(excluded_track_ids):
+    path = _recommendation_exclusions_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump({"excluded_track_ids": list(excluded_track_ids)}, f, indent=2)
+
+@app.route('/api/settings/recommendation-exclusions', methods=['GET'])
+def get_recommendation_exclusions():
+    ids = _load_recommendation_exclusions()
+    return jsonify({"excluded_track_ids": ids})
+
+@app.route('/api/settings/recommendation-exclusions', methods=['POST'])
+def update_recommendation_exclusions():
+    data = request.json or {}
+    ids = data.get("excluded_track_ids")
+    if ids is not None and not isinstance(ids, list):
+        return jsonify({"error": "excluded_track_ids must be a list"}), 400
+    ids = [str(x) for x in (ids or [])]
+    _save_recommendation_exclusions(ids)
+    return jsonify({"excluded_track_ids": ids})
 
 @app.route('/api/config', methods=['GET'])
 def get_config():

@@ -51,6 +51,7 @@ const DEFAULT_DL_SELECTORS = {
     previewModal: 'dl-preview-modal',
     previewClose: 'dl-preview-close',
     previewIframeWrap: 'dl-preview-iframe-wrap',
+    previewAddToQueue: 'dl-preview-add-to-queue',
     coverChoiceModal: 'dl-cover-choice-modal',
     queueList: 'dl-queue-list',
     logs: 'dl-logs',
@@ -70,7 +71,11 @@ const DEFAULT_DL_SELECTORS = {
     searchSourceMusicBtn: 'dl-search-source-music',
     searchSourceYoutubeBtn: 'dl-search-source-youtube',
     refetchMetadataBtn: 'refetch-metadata-btn',
-    refetchMetadataStatus: 'refetch-metadata-status'
+    refetchMetadataStatus: 'refetch-metadata-status',
+    dlQueueProgressRing: 'dl-queue-progress-ring',
+    downloadsSection: 'desktop-downloads-section',
+    downloadsPanel: 'desktop-downloads-panel',
+    downloadsList: 'desktop-downloads-list'
 };
 
 /** ODST search source (UI toggle). */
@@ -92,6 +97,8 @@ export class Downloader {
     static _downloadQueueOpenedAt = 0;
     /** Search source: ODST_SOURCE_MUSIC = YouTube Music (default), ODST_SOURCE_YOUTUBE = normal YouTube */
     static searchSource = ODST_SOURCE_MUSIC;
+    /** Batch total at start of current processing run (for ring progress). Reset when idle. */
+    static _batchTotal = 0;
 
     /** @param {Partial<typeof DEFAULT_DL_SELECTORS>} [selectors] - Override element IDs (e.g. desktop-dl-*). Omit for mobile. */
     static init(selectors) {
@@ -105,16 +112,23 @@ export class Downloader {
         this.queueContainer = document.getElementById(sel.queueContainer);
         this.dlQueueFab = document.getElementById(sel.dlQueueFab);
         this.dlQueueBadge = document.getElementById(sel.dlQueueBadge);
+        this.dlQueueProgressRing = document.getElementById(sel.dlQueueProgressRing);
         this.downloadQueuePopover = document.getElementById(sel.downloadQueuePopover);
+        this.downloadsSection = document.getElementById(sel.downloadsSection);
+        this.downloadsPanel = document.getElementById(sel.downloadsPanel);
+        this.downloadsList = document.getElementById(sel.downloadsList);
         this.downloadQueueList = document.getElementById(sel.downloadQueueList);
         this.clearQueueBtn = document.getElementById(sel.clearQueueBtn);
         this.submitDownloadBtn = document.getElementById(sel.submitDownloadBtn);
         this.previewModal = document.getElementById(sel.previewModal);
         this.previewClose = document.getElementById(sel.previewClose);
         this.previewIframeWrap = document.getElementById(sel.previewIframeWrap);
+        this.previewAddToQueue = document.getElementById(sel.previewAddToQueue);
         this.coverChoiceModal = document.getElementById(sel.coverChoiceModal);
         this.coverChoiceBound = false;
         this.currentCoverChoiceTrack = null;
+        this.currentPreviewItem = null;
+        this.currentPreviewSource = null;
 
         this.queueList = document.getElementById(sel.queueList);
         this.logs = document.getElementById(sel.logs);
@@ -183,6 +197,15 @@ export class Downloader {
         });
         if (this.dlQueueFab) this.dlQueueFab.addEventListener('click', () => this.toggleDownloadQueue());
         if (this.previewClose) this.previewClose.addEventListener('click', () => this.hidePreview());
+        if (this.previewAddToQueue) {
+            this.previewAddToQueue.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (this.currentPreviewItem) {
+                    this.addToDownloadQueue(this.currentPreviewItem, { source: this.currentPreviewSource });
+                    this.openDownloadQueue();
+                }
+            });
+        }
 
         if (this.startBtn) this.startBtn.addEventListener('click', () => this.startProcessing());
 
@@ -328,7 +351,7 @@ export class Downloader {
                 <div class="text-sm font-bold truncate text-[var(--text-main)]">${esc(r.title)}</div>
                 <div class="text-xs text-[var(--text-dim)] truncate">${esc(r.channel)} ${duration ? ' · ' + duration : ''}</div>
             </div>
-            <button type="button" class="dl-add-one w-10 h-10 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 opacity-100 transition-all" data-video-id="${esc(r.id)}" aria-label="Add to download queue"><i class="fas fa-plus text-sm"></i></button>
+            <button type="button" class="dl-add-one w-10 h-10 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 opacity-100 transition-all" data-video-id="${esc(r.id)}" aria-label="Add to download queue"><i class="fas fa-cloud-download-alt text-sm"></i></button>
         </div>`;
     }
 
@@ -348,8 +371,18 @@ export class Downloader {
         });
     }
 
-    static playPreview(videoId) {
+    static playPreview(videoId, context) {
         if (!this.previewModal || !this.previewIframeWrap) return;
+        if (context && typeof context === 'object') {
+            this.currentPreviewItem = context.item ?? null;
+            this.currentPreviewSource = context.source ?? null;
+        } else {
+            this.currentPreviewItem = null;
+            this.currentPreviewSource = null;
+        }
+        if (this.previewAddToQueue) {
+            this.previewAddToQueue.classList.toggle('hidden', !this.currentPreviewItem);
+        }
         const url = `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1`;
         this.previewIframeWrap.innerHTML = `<iframe width="100%" height="100%" src="${esc(url)}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen class="w-full h-full min-h-[200px]"></iframe>`;
         this.previewModal.classList.remove('hidden');
@@ -361,6 +394,23 @@ export class Downloader {
         this.previewIframeWrap.innerHTML = '';
         this.previewModal.classList.add('hidden');
         this.previewModal.classList.remove('flex');
+        this.currentPreviewItem = null;
+        this.currentPreviewSource = null;
+    }
+
+    /** Opens the download queue popover without toggling (so it stays open when adding from preview). */
+    static openDownloadQueue() {
+        const popover = this.downloadQueuePopover;
+        if (!popover || !popover.classList.contains('hidden')) return;
+        this._downloadQueueOpenedAt = Date.now();
+        popover.classList.remove('hidden');
+        setTimeout(() => {
+            popover.classList.remove('pointer-events-none');
+            popover.style.pointerEvents = 'auto';
+            popover.classList.replace('scale-95', 'scale-100');
+            popover.classList.replace('opacity-0', 'opacity-100');
+        }, 10);
+        this.renderDownloadQueueList();
     }
 
     static showCoverChoiceModal(track) {
@@ -466,11 +516,11 @@ export class Downloader {
             thumbnail: result.thumbnail || '',
             metadata_evidence: {
                 title: result.title || '',
-                artist: result.channel || '',
+                artist: result.artist ?? result.channel ?? '',
                 duration_sec: result.duration || 0,
                 source: sourceType,
                 video_id: result.id,
-                channel: result.channel || ''
+                channel: result.channel || result.artist || ''
             }
         });
         this.renderDownloadQueueList();
@@ -506,19 +556,56 @@ export class Downloader {
 
     static updateFabAndPopover() {
         const n = this.downloadQueue.length;
+        const status = this.lastDownloaderStatus;
+        const backendActive = status && (status.queue?.length > 0 || status.is_processing);
+        const showFab = n > 0 || backendActive;
         const fab = this.dlQueueFab;
         const badge = this.dlQueueBadge;
         if (fab && badge) {
-            if (n > 0) {
+            if (showFab) {
                 fab.classList.replace('scale-0', 'scale-100');
                 fab.classList.replace('opacity-0', 'opacity-100');
-                badge.textContent = String(n);
+                if (backendActive && status.queue) {
+                    const total = Math.max(this._batchTotal, status.queue.length);
+                    const completed = Math.max(0, total - status.queue.length);
+                    this.updateFabProgress(completed, total, true);
+                } else {
+                    badge.textContent = String(n);
+                    this.updateFabProgress(0, 1, false);
+                }
             } else {
                 fab.classList.replace('scale-100', 'scale-0');
                 fab.classList.replace('opacity-100', 'opacity-0');
                 badge.textContent = '0';
+                this.updateFabProgress(0, 1, false);
                 this.hideDownloadQueue();
             }
+        }
+        if (this.queueContainer) {
+            const showContainer = showFab || (window.UI?.currentView === 'discover');
+            this.queueContainer.classList.toggle('hidden', !showContainer);
+        }
+    }
+
+    /**
+     * Updates FAB circular progress ring and badge when backend is processing.
+     * @param {number} completed - Completed items in current batch
+     * @param {number} total - Total items in batch
+     * @param {boolean} isProcessing - Whether backend is actively processing
+     */
+    static updateFabProgress(completed, total, isProcessing) {
+        const ring = this.dlQueueProgressRing;
+        const badge = this.dlQueueBadge;
+        if (ring) {
+            const pct = total > 0 ? Math.min(1, completed / total) : 0;
+            const circumference = 2 * Math.PI * (ring.r?.baseVal?.value ?? 22);
+            const offset = circumference * (1 - pct);
+            ring.style.strokeDashoffset = String(offset);
+            ring.classList.toggle('dl-ring-active', isProcessing && total > 0);
+        }
+        if (badge && isProcessing && total > 0) {
+            const remaining = Math.max(0, total - completed);
+            badge.textContent = String(remaining);
         }
     }
 
@@ -579,6 +666,7 @@ export class Downloader {
             }
             this.downloadQueue = [];
             this.renderDownloadQueueList();
+            this._batchTotal = items.length;
             this.updateFabAndPopover();
             await fetch(`${store.apiBase}/api/downloader/start`, { method: 'POST' });
             this.startLibrarySyncFallback();
@@ -610,10 +698,12 @@ export class Downloader {
             const resp = await fetch(`${store.apiBase}/api/downloader/queue/status`);
             const data = await resp.json();
             this.lastDownloaderStatus = data;
+            if (!data.is_processing) this._batchTotal = 0;
             this.renderQueue(data.queue, data.is_processing);
             this.renderLogs(data.logs);
+            this.updateFabAndPopover();
+            this.renderDesktopDownloadsPanel(data.queue, data.is_processing);
             if (!data.is_processing && this.librarySyncFallbackTimer) {
-                // Final forced sync once processing is idle, then stop fallback loop.
                 store.syncLibrary();
                 this.stopLibrarySyncFallback();
             }
@@ -697,6 +787,39 @@ export class Downloader {
         `).join('');
 
         if (this.queueList) this.queueList.innerHTML = html;
+    }
+
+    static renderDesktopDownloadsPanel(queue, isProcessing) {
+        const section = this.downloadsSection;
+        const list = this.downloadsList;
+        if (!section || !list) return;
+        const hasItems = queue?.length > 0 || isProcessing;
+        section.classList.toggle('hidden', !hasItems);
+        if (!hasItems) return;
+        if (!queue || queue.length === 0) {
+            list.innerHTML = '<div class="text-center text-[var(--text-dim)] py-4 italic text-xs">No active downloads</div>';
+            return;
+        }
+        const sortedQueue = [...queue].reverse();
+        list.innerHTML = sortedQueue.map(item => {
+            const name = esc(item.song_str) || 'Track';
+            const status = item.status || 'pending';
+            const isIndeterminate = status === 'downloading';
+            const pct = status === 'completed' ? 100 : status === 'failed' ? 0 : 0;
+            const barClass = status === 'failed'
+                ? 'bg-red-500/60'
+                : 'bg-[var(--accent)]';
+            const barInner = isIndeterminate
+                ? `<div class="h-full w-[40%] rounded-full ${barClass}" style="animation: dl-progress-indeterminate 1.2s ease-in-out infinite;"></div>`
+                : `<div class="h-full rounded-full ${barClass}" style="width: ${pct}%; transition: width 0.2s ease;"></div>`;
+            return `
+            <div class="desktop-download-item flex flex-col gap-1.5 py-2 px-2 rounded-[var(--radius-omni-xs)] hover:bg-[var(--surface-overlay)] min-w-0">
+                <div class="text-xs font-semibold truncate text-[var(--text-main)]">${name}</div>
+                <div class="h-1 rounded-full overflow-hidden bg-[var(--input-bg)]" role="progressbar" aria-valuenow="${isIndeterminate ? '' : pct}" aria-valuemin="0" aria-valuemax="100">
+                    ${barInner}
+                </div>
+            </div>`;
+        }).join('');
     }
 
     static getStatusBadge(status) {

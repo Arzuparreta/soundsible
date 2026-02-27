@@ -4,9 +4,10 @@ import time
 import re
 import uuid
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Iterator
 from urllib.parse import quote
 import yt_dlp
+import requests
 from .config import (
     DEFAULT_OUTPUT_DIR,
     SEARCH_STRATEGY_PRIMARY,
@@ -603,3 +604,48 @@ class YouTubeDownloader:
             else:
                 print(f"YouTube search error: {e}")
         return out
+
+    def stream_audio_generator(self, video_id: str, timeout: int = 60) -> Iterator[bytes]:
+        """
+        Yield audio bytes for a YouTube video (for in-app preview streaming).
+        Uses bestaudio format and streams via the direct URL; no file written.
+        """
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'quiet': True,
+            'no_warnings': True,
+            'extractor_args': {
+                'youtube': {'player_client': ['web', 'android', 'mweb']}
+            }
+        }
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            ydl_opts['cookiefile'] = self.cookie_file
+        elif self.cookie_browser:
+            ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
+
+        stream_url = None
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            if not info:
+                return
+            stream_url = info.get('url')
+            if not stream_url and info.get('formats'):
+                for f in info.get('formats', []):
+                    if f.get('vcodec') == 'none' and f.get('url'):
+                        stream_url = f['url']
+                        break
+            if not stream_url:
+                return
+        except Exception:
+            return
+
+        try:
+            with requests.get(stream_url, stream=True, timeout=timeout) as resp:
+                resp.raise_for_status()
+                for chunk in resp.iter_content(chunk_size=65536):
+                    if chunk:
+                        yield chunk
+        except Exception:
+            return

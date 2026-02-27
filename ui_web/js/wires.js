@@ -109,6 +109,40 @@ export function wireSettings(selectors, deps) {
         store.subscribe(updateIndicators);
     }
 
+    const lastfmInput = getElement(root, selectors.lastfmInput);
+    const lastfmSave = getElement(root, selectors.lastfmSave);
+    const lastfmStatus = getElement(root, selectors.lastfmStatus);
+    if (lastfmSave && lastfmInput) {
+        lastfmSave.addEventListener('click', async () => {
+            const key = (lastfmInput.value || '').trim();
+            if (!key) {
+                if (lastfmStatus) { lastfmStatus.textContent = 'Enter an API key.'; lastfmStatus.classList.remove('hidden'); }
+                return;
+            }
+            lastfmSave.disabled = true;
+            if (lastfmStatus) { lastfmStatus.textContent = 'Saving…'; lastfmStatus.classList.remove('hidden'); }
+            try {
+                const apiBase = store.apiBase || '';
+                const res = await fetch(`${apiBase}/api/downloader/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lastfm_api_key: key }),
+                });
+                if (res.ok) {
+                    if (lastfmStatus) { lastfmStatus.textContent = 'Saved.'; lastfmStatus.classList.remove('hidden'); }
+                    lastfmInput.value = '';
+                    showToast?.('Last.fm key saved');
+                } else {
+                    const d = await res.json().catch(() => ({}));
+                    if (lastfmStatus) { lastfmStatus.textContent = d.error || 'Save failed.'; lastfmStatus.classList.remove('hidden'); }
+                }
+            } catch (err) {
+                if (lastfmStatus) { lastfmStatus.textContent = 'Network error.'; lastfmStatus.classList.remove('hidden'); }
+            }
+            lastfmSave.disabled = false;
+        });
+    }
+
     const refetchBtn = getElement(root, selectors.refetchBtn);
     const refetchStatus = getElement(root, selectors.refetchStatus);
     if (refetchBtn && refetchStatus) {

@@ -15,7 +15,12 @@ const RESUME_SYNC_PLAY_MAX_MS = 5000;
 const RESUME_SYNC_SETTLE_MS = 1200;
 const RESUME_MAX_WAIT_MS = 8000;
 const RESUME_AFTER_PAUSE_MS = 150;
+const RESUME_MODAL_LOCK_CLASS = 'resume-modal-lock';
 let resumeModalEl = null;
+
+function isMobile() {
+    return typeof window !== 'undefined' && !window.location.pathname.includes('/desktop/');
+}
 
 function getResumeModal() {
     if (resumeModalEl) return resumeModalEl;
@@ -53,7 +58,7 @@ function getResumeModal() {
     btnWrap.appendChild(yesBtn);
     overlay.appendChild(panel);
     overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) {
+        if (!panel.contains(e.target)) {
             setResumeDialogCooldown();
             hideResumeModal();
         }
@@ -84,6 +89,7 @@ function hideResumeModal() {
     if (resumeModalEl) {
         resumeModalEl.classList.add('hidden');
         resumeModalEl._resumeState = null;
+        if (isMobile()) document.body.classList.remove(RESUME_MODAL_LOCK_CLASS);
     }
 }
 
@@ -97,6 +103,7 @@ function showResumeModal(state) {
     modal._resumeState = state;
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+    if (isMobile()) document.body.classList.add(RESUME_MODAL_LOCK_CLASS);
 }
 
 function onResumeYes(state, opts = {}) {

@@ -18,9 +18,9 @@ export class UI {
         'artist-detail': 'ARTIST',
         'playlists': 'PLAYLISTS',
         'playlist-detail': 'PLAYLIST',
-        'search': 'SEARCH',
+        'podcast': 'PODCASTS',
         'settings': 'CONFIG',
-        'soundmash': 'SOUNDMASH'
+        'discover': 'DISCOVER'
     };
 
     static init() {
@@ -519,13 +519,13 @@ export class UI {
         });
     }
 
-    /** SoundMash is a full content view; kept for any external callers (e.g. gestures). */
-    static showSoundMash() {
-        this.showView('soundmash');
+    /** Discover is a full content view; kept for any external callers (e.g. gestures). */
+    static showDiscover() {
+        this.showView('discover');
     }
 
-    static hideSoundMash() {
-        if (this.currentView === 'soundmash') this.navigateBack();
+    static hideDiscover() {
+        if (this.currentView === 'discover') this.navigateBack();
     }
 
     static toggleQueue() {
@@ -601,7 +601,7 @@ export class UI {
         if (!targetView) return;
 
         if (saveToHistory) {
-            const roots = ['home', 'favourites', 'playlists', 'search', 'settings', 'soundmash'];
+            const roots = ['home', 'favourites', 'playlists', 'podcast', 'settings', 'discover'];
             if (roots.includes(this.currentView) && roots.includes(viewId)) this.viewStack = [];
             else this.viewStack.push(this.currentView);
         }
@@ -662,15 +662,11 @@ export class UI {
         if (queueContainer) queueContainer.classList.remove('hidden');
         const dlQueueContainer = this.dom.dlQueueContainer;
         if (dlQueueContainer) {
-            if (viewId === 'search') dlQueueContainer.classList.remove('hidden');
+            if (viewId === 'discover') dlQueueContainer.classList.remove('hidden');
             else dlQueueContainer.classList.add('hidden');
         }
 
-        const searchOdstOverlay = document.getElementById('search-odst-toggle-overlay');
-        if (searchOdstOverlay) {
-            if (viewId === 'search') searchOdstOverlay.classList.remove('hidden');
-            else searchOdstOverlay.classList.add('hidden');
-        }
+        // ODST Music/YouTube toggle is now embedded in the search bar; visibility controlled by show-discover-odst on container (app.js)
 
         // syncArtistGridIndicators deferred to 500ms cleanup so we don't touch sliding view DOM in same turn
     }
@@ -691,7 +687,7 @@ export class UI {
 
         // Global Clicks
         window.addEventListener('click', (e) => {
-            if (this.currentView === 'search') {
+            if (this.currentView === 'discover') {
                 const dlq = this.dom.dlQueueContainer;
                 if (dlq && !dlq.contains(e.target)) Downloader.hideDownloadQueue?.();
             } else {
@@ -1039,7 +1035,7 @@ export class UI {
                             store.update({ libraryTab: 'artists' });
                             this.showView('home', false);
                         } else if (this.currentView === 'playlist-detail') this.showView('playlists', false);
-                        else if (this.currentView === 'soundmash') this.navigateBack();
+                        else if (this.currentView === 'discover') this.navigateBack();
                         else this.showView('home', false);
                     }
                 }
@@ -1230,7 +1226,7 @@ export class UI {
                     label.classList.add('hovered');
                     label.style.opacity = '1';
                 }
-            }, 67);
+            }, 33);
 
             this._omniHoldTimer = setTimeout(() => {
                 // Only bloom if we haven't swiped up significantly
@@ -1269,7 +1265,7 @@ export class UI {
                     ribbon.style.filter = 'blur(0px)';
                     this.updateOmniLabelVisibility();
                 }
-            }, 180);
+            }, 100);
         };
 
         const endHold = (e) => {
@@ -1361,19 +1357,35 @@ export class UI {
                 const isVerticalValid = touch.clientY >= islandRect.top - 40;
                 let item = null;
 
-                if (isVerticalValid) {
-                    const itemsArr = Array.from(items);
-                    
-                    // Full viewport width for X mapping (same idea as bottom not losing control: extremes register)
-                    const trackLeft = 0;
-                    const trackWidth = window.innerWidth || document.documentElement.clientWidth;
-                    const touchX = touch.clientX - trackLeft;
-                    const slotWidth = trackWidth / 7;
-                    let index = Math.floor(touchX / slotWidth);
-                    index = Math.max(0, Math.min(6, index));
-                    // Order: soundmash(0), search(1), settings(2), blank(3), playlists(4), home(5), favourites(6) → itemsArr has 6 items
-                    const itemIndex = index === 3 ? -1 : index < 3 ? index : index - 1;
-                    if (itemIndex >= 0 && itemIndex < itemsArr.length) item = itemsArr[itemIndex];
+                if (isVerticalValid && ribbon) {
+                    const touchX = touch.clientX;
+                    const touchY = touch.clientY;
+                    let hitChild = false;
+                    // 1) Hit-test over ribbon children so behaviour is identical for every item when finger is on the bar
+                    for (const child of ribbon.children) {
+                        const r = child.getBoundingClientRect();
+                        const padding = 8;
+                        if (touchX >= r.left - padding && touchX <= r.right + padding && touchY >= r.top - padding && touchY <= r.bottom + padding) {
+                            hitChild = true;
+                            if (child.hasAttribute('data-omni-blank')) item = null;
+                            else if (child.classList.contains('omni-nav-item')) item = child;
+                            break;
+                        }
+                    }
+                    // 2) Finger in valid vertical band but not over a child (e.g. space below the omnibar): project X onto ribbon width so grabbing continues to work
+                    if (!hitChild) {
+                        const ribbonRect = ribbon.getBoundingClientRect();
+                        const ribbonWidth = ribbonRect.width;
+                        if (ribbonWidth > 0 && ribbon.children.length) {
+                            const x = Math.max(ribbonRect.left, Math.min(ribbonRect.right, touchX));
+                            const t = (x - ribbonRect.left) / ribbonWidth;
+                            let index = Math.floor(t * ribbon.children.length);
+                            index = Math.max(0, Math.min(ribbon.children.length - 1, index));
+                            const child = ribbon.children[index];
+                            if (child.hasAttribute('data-omni-blank')) item = null;
+                            else if (child.classList.contains('omni-nav-item')) item = child;
+                        }
+                    }
                 }
 
                 if (item) {

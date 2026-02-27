@@ -44,8 +44,11 @@ export const DesktopUI = {
         if (btnEl) btnEl.classList.add('active');
         const dlQueueContainer = el('desktop-dl-queue-container');
         if (dlQueueContainer) {
-            if (viewId === 'search') dlQueueContainer.classList.remove('hidden');
+            if (viewId === 'discover') dlQueueContainer.classList.remove('hidden');
             else dlQueueContainer.classList.add('hidden');
+        }
+        if (viewId === 'discover') {
+            import('./discover.js').then((m) => m.Discover && m.Discover.init({ mobile: false }));
         }
     },
 
@@ -57,7 +60,11 @@ export const DesktopUI = {
 
     updatePlayer(state) {
         const fab = el('desktop-queue-count');
-        if (fab) fab.textContent = state.queue?.length ?? 0;
+        if (fab) {
+            const count = state.queue?.length ?? 0;
+            fab.textContent = count;
+            fab.classList.toggle('queue-has-items', count > 0);
+        }
 
         const cover = el('desktop-np-cover');
         const title = el('desktop-np-title');

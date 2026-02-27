@@ -15,6 +15,7 @@ import { wireSettings } from './wires.js';
 import { LIBRARY_TABS } from './library_tabs.js';
 import { checkResumeFromOtherDevice } from './playback_resume.js';
 import { isVisible, onChange as onVisibilityChange } from './visibility.js';
+import { playPreview } from './preview_playback.js';
 
 const LIBRARY_SYNC_INTERVAL_MS = 300000;
 
@@ -51,7 +52,10 @@ const MOBILE_SETTINGS_IDS = {
     statusLed: 'status-led',
     statusPulse: 'status-led-pulse',
     serverStatus: 'server-status',
-    hostDisplay: 'active-host-display'
+    hostDisplay: 'active-host-display',
+    lastfmInput: 'settings-lastfm-api-key',
+    lastfmSave: 'settings-lastfm-save',
+    lastfmStatus: 'settings-lastfm-status',
 };
 
 function renderFavourites(state) {
@@ -605,7 +609,7 @@ async function init() {
         globalSearchInput: document.getElementById('global-search-input'),
         globalSearchClear: document.getElementById('global-search-clear'),
         favTracks: document.getElementById('fav-tracks'),
-        libraryTabBar: document.getElementById('library-tab-bar'),
+        libraryTabBar: document.getElementById('library-tab-bar-inline'),
         libraryTabButtons: document.getElementById('library-tab-buttons'),
         librarySongs: document.getElementById('library-songs'),
         libraryArtists: document.getElementById('library-artists'),
@@ -615,6 +619,8 @@ async function init() {
         artistTracks: document.getElementById('artist-tracks'),
         artistAlbums: document.getElementById('artist-albums'),
         playlistListContainer: document.getElementById('playlist-list-container'),
+        playlistEmptyState: document.getElementById('playlist-empty-state'),
+        playlistHasList: document.getElementById('playlist-has-list'),
         playlistDetailTitle: document.getElementById('playlist-detail-title'),
         playlistDetailCover: document.getElementById('playlist-detail-cover'),
         playlistDetailCoverIcon: document.getElementById('playlist-detail-cover-icon'),
@@ -627,6 +633,8 @@ async function init() {
         console.log("UI: Initializing...");
         UI.init();
         initGlobalSearch();
+        // Initial view is home but we never call showView(); ensure search bar is visible.
+        if (typeof window.renderContentForView === 'function') window.renderContentForView('home');
         initArtistScrollSuppress();
         initArtistDetailBack();
         initQueueDrag();
@@ -787,7 +795,8 @@ function renderArtistDetail(artistName) {
     viewContext.artistTracks = renderers.getArtistTracks(artistName, store.state.library);
     viewContext.artistName = artistName;
     if (!dom) return;
-    renderers.renderArtistDetail(artistName, store.state.library, { titleEl: dom.artistDetailTitle, coverEl: dom.artistDetailCover }, dom.artistTracks, dom.artistAlbums);
+    const searchQuery = dom.globalSearchInput?.value.trim() || '';
+    renderers.renderArtistDetail(artistName, store.state.library, { titleEl: dom.artistDetailTitle, coverEl: dom.artistDetailCover }, dom.artistTracks, dom.artistAlbums, { searchQuery });
 }
 
 function renderArtistList(library) {
@@ -808,7 +817,7 @@ function renderLibraryTabBar() {
     bar.setAttribute('data-active-tab', tab);
     buttonsEl.innerHTML = LIBRARY_TABS.map((t) => {
         const active = t.id === tab;
-        return `<button type="button" class="library-tab-btn flex-1 min-w-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-transparent ${active ? 'text-[var(--text-on-accent)]' : 'text-[var(--accent)] active:opacity-80'}" data-library-tab="${t.id}" aria-pressed="${active}"><i class="fas ${t.icon} mr-2"></i>${t.label}</button>`;
+        return `<button type="button" class="library-tab-btn px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors ${active ? 'bg-[var(--accent)] text-[var(--text-on-accent)]' : 'bg-[var(--accent)]/15 text-[var(--accent)]'}" data-library-tab="${t.id}" aria-pressed="${active}">${t.label}</button>`;
     }).join('');
     buttonsEl.querySelectorAll('.library-tab-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -817,6 +826,7 @@ function renderLibraryTabBar() {
                 store.update({ libraryTab: id });
                 renderLibraryTabBar();
                 syncLibraryPanels();
+                if (dom?.globalSearchInput) dom.globalSearchInput.placeholder = id === 'artists' ? 'Search artists...' : 'Search library...';
                 if (id === 'songs') renderHomeContent();
                 else renderLibraryArtists();
                 if (id === 'artists' && typeof window.syncArtistGridIndicators === 'function') window.syncArtistGridIndicators(store.state);
@@ -889,7 +899,15 @@ function renderPlaylistList(state) {
     const query = dom.globalSearchInput ? dom.globalSearchInput.value.trim() : '';
     const filtered = filterPlaylistsBySearch(state.playlists || {}, query);
     const hasAny = Object.keys(state.playlists || {}).length > 0;
-    const options = hasAny && Object.keys(filtered).length === 0 && query ? { emptyMessage: 'No playlists match your search.' } : {};
+    const hasFiltered = Object.keys(filtered).length > 0;
+    const showEmptyState = !hasAny;
+    if (dom.playlistEmptyState) dom.playlistEmptyState.classList.toggle('hidden', !showEmptyState);
+    if (dom.playlistHasList) dom.playlistHasList.classList.toggle('hidden', showEmptyState);
+    if (showEmptyState) {
+        dom.playlistListContainer.innerHTML = '';
+        return;
+    }
+    const options = hasAny && !hasFiltered && query ? { emptyMessage: 'No playlists match your search.' } : {};
     renderers.renderPlaylistList(filtered, state.library || [], dom.playlistListContainer, options);
 }
 
@@ -1000,19 +1018,21 @@ function initGlobalSearch() {
             renderPlaylistList(store.state);
         } else if (view === 'playlist-detail') {
             if (viewContext.currentPlaylistName) renderPlaylistDetail(viewContext.currentPlaylistName);
+        } else if (view === 'artist-detail' && viewContext.artistName) {
+            renderArtistDetail(viewContext.artistName);
         }
     });
 
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            input.blur();
-            input.value = '';
-            if (clearBtn) clearBtn.classList.add('hidden');
-            const view = UI.currentView;
-            if (view === 'home') renderLibraryContent();
-            else if (view === 'favourites') renderFavourites(store.state);
-            else if (view === 'playlists') renderPlaylistList(store.state);
-            else if (view === 'playlist-detail') renderPlaylistDetail(viewContext.currentPlaylistName);
+            if (input.value.trim()) {
+                input.value = '';
+                input.dispatchEvent(new Event('input'));
+                input.focus();
+                e.preventDefault();
+            } else {
+                input.blur();
+            }
         }
     });
 
@@ -1114,7 +1134,7 @@ function clearContentForView(viewId) {
             if (dom.playlistDetailCoverIcon) dom.playlistDetailCoverIcon.classList.add('hidden');
             if (dom.playlistDetailTracks) dom.playlistDetailTracks.innerHTML = '';
             break;
-        case 'search':
+        case 'discover':
             if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) window.unifiedSearch.clear();
             break;
         case 'settings':
@@ -1138,22 +1158,25 @@ function renderContentForView(viewId) {
     if (dom?.globalSearchClear) dom.globalSearchClear.classList.add('hidden');
     if (container) container.classList.remove('scrolled');
 
-    const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'search'];
+    const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'discover', 'artist-detail'];
     if (container) {
         if (searchVisibleViews.includes(viewId)) {
             container.classList.remove('opacity-0', 'pointer-events-none');
         } else {
             container.classList.add('opacity-0', 'pointer-events-none');
         }
+        container.classList.toggle('show-library-tabs', viewId === 'home');
+        container.classList.toggle('show-discover-odst', viewId === 'discover');
     }
 
     if (input) {
         switch (viewId) {
-            case 'home': input.placeholder = 'Search library...'; break;
+            case 'home': input.placeholder = (store.state.libraryTab || 'songs') === 'artists' ? 'Search artists...' : 'Search library...'; break;
             case 'favourites': input.placeholder = 'Search favorites...'; break;
             case 'playlists': input.placeholder = 'Search playlists...'; break;
             case 'playlist-detail': input.placeholder = 'Search in playlist...'; break;
-            case 'search': input.placeholder = 'Search library and ODST...'; break;
+            case 'discover': input.placeholder = 'Search library and ODST...'; break;
+            case 'artist-detail': input.placeholder = 'Search songs & albums...'; break;
         }
     }
 
@@ -1169,10 +1192,6 @@ function renderContentForView(viewId) {
         case 'artist-detail':
             if (viewContext.artistName) renderArtistDetail(viewContext.artistName);
             break;
-        case 'search':
-            import('./downloader.js').then((dm) => { dm.Downloader.init(); });
-            import('./search.js').then(m => { window.unifiedSearch = m.unifiedSearch; m.unifiedSearch.init({ mobile: true }); });
-            break;
         case 'playlists':
             renderPlaylistList(state);
             viewContext.currentPlaylistName = null;
@@ -1180,6 +1199,14 @@ function renderContentForView(viewId) {
             break;
         case 'playlist-detail':
             if (viewContext.currentPlaylistName) renderPlaylistDetail(viewContext.currentPlaylistName);
+            break;
+        case 'discover':
+            import('./downloader.js').then((dm) => { dm.Downloader.init(); });
+            import('./discover.js').then((m) => { if (m.Discover) m.Discover.init({ mobile: true }); });
+            import('./search.js').then((searchMod) => {
+                window.unifiedSearch = searchMod.unifiedSearch;
+                searchMod.unifiedSearch.init({ mobile: true, resultsContainerId: 'discover-search-results' });
+            });
             break;
         case 'settings':
             break;
@@ -1241,22 +1268,35 @@ window.toggleArtistAlbum = (ev) => {
     card.classList.toggle('artist-album-expanded', !wasExpanded);
 };
 
-function initArtistScrollSuppress() {
-    const artistsPanel = dom?.libraryArtists || document.getElementById('library-artists');
-    if (!artistsPanel) return;
+/**
+ * Same scroll/touch safety as library artists: touchstart/touchmove/touchend + class flag
+ * so list items don't show ghost :active during scroll. Call for every view that has a scrollable list.
+ */
+function initListScrollSuppress(containerEl, activeClass) {
+    if (!containerEl) return;
     let scrollActive = false;
-    artistsPanel.addEventListener('touchstart', () => {
+    containerEl.addEventListener('touchstart', () => {
         scrollActive = false;
     }, { passive: true });
-    artistsPanel.addEventListener('touchmove', () => {
+    containerEl.addEventListener('touchmove', () => {
         if (!scrollActive) {
             scrollActive = true;
-            artistsPanel.classList.add('artist-scroll-active');
+            containerEl.classList.add(activeClass);
         }
     }, { passive: true });
-    artistsPanel.addEventListener('touchend', () => {
-        if (scrollActive) setTimeout(() => { artistsPanel.classList.remove('artist-scroll-active'); scrollActive = false; }, 180);
+    containerEl.addEventListener('touchend', () => {
+        if (scrollActive) setTimeout(() => { containerEl.classList.remove(activeClass); scrollActive = false; }, 180);
     }, { passive: true });
+}
+
+function initArtistScrollSuppress() {
+    initListScrollSuppress(dom?.libraryArtists || document.getElementById('library-artists'), 'artist-scroll-active');
+    initListScrollSuppress(document.getElementById('view-home'), 'list-scroll-active');
+    initListScrollSuppress(document.getElementById('view-favourites'), 'list-scroll-active');
+    initListScrollSuppress(document.getElementById('view-discover'), 'list-scroll-active');
+    initListScrollSuppress(document.getElementById('view-playlists'), 'list-scroll-active');
+    initListScrollSuppress(document.getElementById('view-playlist-detail'), 'list-scroll-active');
+    initListScrollSuppress(document.getElementById('view-artist-detail'), 'list-scroll-active');
 }
 
 function initArtistDetailBack() {
@@ -1275,7 +1315,7 @@ function getCurrentTrackList() {
     if (UI.currentView === 'favourites') return viewContext.favTracks || store.state.library;
     if (UI.currentView === 'playlists' || UI.currentView === 'playlist-detail') return window._currentPlaylistTracks || store.state.library;
     if (UI.currentView === 'artist-detail') return viewContext.artistTracks || store.state.library;
-    if (UI.currentView === 'search' && viewContext.searchTracks) return viewContext.searchTracks;
+    if (UI.currentView === 'discover' && viewContext.searchTracks) return viewContext.searchTracks;
     return store.state.library;
 }
 
@@ -1297,6 +1337,8 @@ window.playTrack = (trackId) => {
         audioEngine.playTrack(track);
     }
 };
+
+window.playPreview = playPreview;
 
 // RELIABLE INIT: Run immediately if DOM is already ready
 if (document.readyState === 'loading') {

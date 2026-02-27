@@ -64,6 +64,7 @@ class AudioEngine {
 
     _preloadTrack(track) {
         if (!track?.id) return;
+        if (track.source === 'preview') return; // avoid hitting preview stream until user actually plays next
         const url = Resolver.getTrackUrl(track);
         const el = this._getPreloadAudio();
         el.src = url;
@@ -115,8 +116,12 @@ class AudioEngine {
         
         this.audio.addEventListener('error', (e) => {
             console.error("Playback error:", this.audio.error);
+            const track = store.state.currentTrack;
             store.update({ isPlaying: false });
             Haptics.error();
+            if (track?.source === 'preview' && typeof window.showToast === 'function') {
+                window.showToast('Preview unavailable');
+            }
         });
 
         if ('mediaSession' in navigator) {

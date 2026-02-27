@@ -335,8 +335,13 @@ export function renderQueue(state, queueContainerEls, options = {}) {
     const html = state.queue.map((t, idx) => {
         const coverUrl = getCoverUrl(t);
         const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+        const queueLen = state.queue.length;
         const handleHtml = desktopHandle
-            ? `<span class="queue-item-handle ${btnSize} flex items-center justify-center flex-shrink-0 text-[var(--text-dim)] rounded-[var(--radius-omni-xs)]" role="button" tabindex="0" aria-label="Drag to reorder" data-index="${idx}"><i class="fas fa-grip-vertical text-[10px]"></i></span>`
+            ? `<div class="queue-item-handle-wrap flex flex-col items-center flex-shrink-0 gap-0">
+                <button type="button" class="queue-move-btn queue-move-up w-5 h-4 flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--accent)] disabled:opacity-30 disabled:pointer-events-none rounded transition-colors" data-queue-index="${idx}" data-queue-move="up" aria-label="Move up" ${idx === 0 ? ' disabled' : ''}><i class="fas fa-chevron-up text-[8px]"></i></button>
+                <span class="queue-item-handle ${btnSize} flex items-center justify-center text-[var(--text-dim)] rounded-[var(--radius-omni-xs)]" role="button" tabindex="0" aria-label="Drag to reorder" data-index="${idx}"><i class="fas fa-grip-vertical text-[10px]"></i></span>
+                <button type="button" class="queue-move-btn queue-move-down w-5 h-4 flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--accent)] disabled:opacity-30 disabled:pointer-events-none rounded transition-colors" data-queue-index="${idx}" data-queue-move="down" aria-label="Move down" ${idx === queueLen - 1 ? ' disabled' : ''}><i class="fas fa-chevron-down text-[8px]"></i></button>
+            </div>`
             : '';
         let coverHtml;
         if (desktopClicks) {
@@ -354,8 +359,9 @@ export function renderQueue(state, queueContainerEls, options = {}) {
                 <button onclick="typeof playTrack==='function'&&playTrack('${t.id}')" class="${btnSize} flex items-center justify-center bg-blue-500/10 text-blue-400 rounded-full hover:bg-blue-500/20 active:scale-90 transition-all">
                     <i class="fas fa-play text-xs"></i>
                 </button>`;
+        const isSecondInQueue = desktopHandle && idx === 1;
         return `
-        <div class="queue-item flex items-center ${rowPadding} hover:bg-[var(--surface-overlay)] rounded-2xl transition-colors group cursor-pointer" data-index="${idx}" data-id="${t.id}">
+        <div class="queue-item flex items-center ${rowPadding} hover:bg-[var(--surface-overlay)] rounded-2xl transition-colors group cursor-pointer ${isSecondInQueue ? 'queue-item-second' : ''}" data-index="${idx}" data-id="${t.id}">
             ${coverHtml}
             <div class="${titleMargin} flex-1 truncate pointer-events-none min-w-0 ${metaMargin}">
                 <div class="font-bold text-[13px] truncate text-[var(--text-main)]">${esc(t.title)}</div>
@@ -464,15 +470,23 @@ export function renderArtistList(library, containerEl, options = {}) {
  * @param {Object} heroElements - { titleEl, coverEl } (optional; coverEl can be img or div with background)
  * @param {HTMLElement|null} tracksEl
  * @param {HTMLElement|null} albumsEl
- * @param {Object} options - passed to buildSongRowsHtml
+ * @param {Object} options - passed to buildSongRowsHtml; searchQuery filters tracks/albums by title/album
  */
 export function renderArtistDetail(artistName, library, heroElements, tracksEl, albumsEl, options = {}) {
-    const tracks = getArtistTracks(artistName, library);
+    let tracks = getArtistTracks(artistName, library);
+    const q = (options.searchQuery || '').trim().toLowerCase();
+    if (q) {
+        tracks = tracks.filter((t) =>
+            (t.title || '').toLowerCase().includes(q) ||
+            (t.album || '').toLowerCase().includes(q)
+        );
+    }
     const { titleEl, coverEl } = heroElements || {};
+    const displayTracks = tracks;
 
     if (titleEl) titleEl.textContent = artistName;
     if (coverEl) {
-        const firstTrack = tracks[0];
+        const firstTrack = getArtistTracks(artistName, library)[0];
         if (firstTrack) {
             const url = (options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver))(firstTrack);
             if (coverEl.tagName === 'IMG') {
@@ -489,9 +503,11 @@ export function renderArtistDetail(artistName, library, heroElements, tracksEl, 
     }
 
     if (albumsEl) {
-        const albums = getArtistAlbums(artistName, library);
+        const albums = q ? getArtistAlbums(artistName, displayTracks) : getArtistAlbums(artistName, library);
         if (albums.length === 0) {
-            albumsEl.innerHTML = '<div class="col-span-full text-[var(--text-dim)] text-center py-8 text-sm">No albums</div>';
+            albumsEl.innerHTML = q
+                ? '<div class="col-span-full text-[var(--text-dim)] text-center py-8 text-sm">No songs or albums match</div>'
+                : '<div class="col-span-full text-[var(--text-dim)] text-center py-8 text-sm">No albums</div>';
         } else {
             const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
             albumsEl.innerHTML = albums.map(({ album, tracks: albumTracks, coverTrack }) => {
@@ -522,10 +538,12 @@ export function renderArtistDetail(artistName, library, heroElements, tracksEl, 
     }
 
     if (tracksEl) {
-        if (tracks.length === 0) {
-            tracksEl.innerHTML = '<div class="text-[var(--text-dim)] text-center py-10 italic text-sm">No tracks</div>';
+        if (displayTracks.length === 0) {
+            tracksEl.innerHTML = q
+                ? '<div class="text-[var(--text-dim)] text-center py-10 italic text-sm">No songs or albums match</div>'
+                : '<div class="text-[var(--text-dim)] text-center py-10 italic text-sm">No tracks</div>';
         } else {
-            const sorted = [...tracks].sort((a, b) => {
+            const sorted = [...displayTracks].sort((a, b) => {
                 const albumCmp = (a.album || '').localeCompare(b.album || '');
                 if (albumCmp !== 0) return albumCmp;
                 return (a.track_number ?? 999) - (b.track_number ?? 999);
@@ -583,11 +601,10 @@ export function renderPlaylistList(playlists, library, listContainerEl, options 
     if (!html) {
         const msg = options.emptyMessage || 'No playlists yet. Create one or add tracks from Library.';
         listContainerEl.innerHTML = `
-            <div class="flex flex-col items-center justify-center py-16 text-center">
+            <div class="flex flex-col items-center justify-center py-16 text-center col-span-full">
                 <i class="fas fa-layer-group text-4xl text-[var(--text-dim)]/50 mb-4"></i>
                 <p class="text-[var(--text-dim)] font-bold text-sm uppercase tracking-widest mb-2">${options.emptyMessage ? 'No matches' : 'No playlists yet'}</p>
-                <p class="text-[var(--text-dim)] text-xs mb-6">${esc(msg)}</p>
-                ${!options.emptyMessage ? '<button type="button" class="create-playlist-btn px-6 py-3 rounded-xl bg-[var(--accent)] text-[var(--text-on-accent)] font-bold text-sm transition-all active:scale-95" onclick="typeof createPlaylistPrompt===\'function\'&&createPlaylistPrompt()"><i class="fas fa-plus mr-2"></i>Create playlist</button>' : ''}
+                <p class="text-[var(--text-dim)] text-xs">${esc(msg)}</p>
             </div>
         `;
         return;

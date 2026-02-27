@@ -245,7 +245,13 @@
         .is-ios .view {
             padding-top: calc(max(3.5rem, env(safe-area-inset-top)) + 76px);
         }
-        
+
+        /* Resume playback dialog open: prevent list scroll on mobile */
+        body.resume-modal-lock .view {
+            overflow: hidden !important;
+            touch-action: none;
+        }
+
         /* Global Search Bar */
         #global-search-container {
             position: absolute;
@@ -269,7 +275,7 @@
 
         #global-search-container.scrolled {
             background: var(--bg-deep);
-            border-bottom: 1px solid var(--glass-border);
+            border-bottom: 1px solid var(--bg-deep);
             box-shadow: 0 4px 20px rgba(0,0,0,0.4);
         }
 
@@ -294,6 +300,7 @@
 
         #global-search-input {
             flex: 1;
+            min-width: 0;
             background: transparent;
             border: none;
             outline: none;
@@ -495,6 +502,25 @@
             transition: opacity 0.18s ease-out;
         }
 
+        /* Discover: grid layout, no horizontal scroll */
+        .discover-section { margin-bottom: 1.5rem; flex-shrink: 0; }
+        .discover-section h2 { font-size: 0.625rem; font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.75rem; }
+        .discover-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 0.75rem; }
+        .discover-card { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 1rem; background: var(--surface-overlay); border: 1px solid var(--glass-border); transition: background 0.2s, border-color 0.2s; min-width: 0; }
+        .discover-card:hover { background: var(--bg-card); }
+        .discover-card-cover { width: 48px; height: 48px; flex-shrink: 0; border-radius: 0.75rem; background-size: cover; background-position: center; background-color: var(--input-bg); }
+        .discover-card-meta { flex: 1; min-width: 0; }
+        .discover-card-title { font-size: 0.8125rem; font-weight: 600; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .discover-card-artist { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .discover-skeleton { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 1rem; background: var(--surface-overlay); border: 1px solid var(--glass-border); min-width: 0; }
+        .discover-skeleton-cover { width: 48px; height: 48px; flex-shrink: 0; border-radius: 0.75rem; background: var(--input-bg); }
+        .discover-skeleton-text { flex: 1; min-width: 0; }
+        .discover-skeleton-line { height: 12px; border-radius: 4px; background: var(--text-dim); opacity: 0.3; margin-bottom: 6px; }
+        .discover-skeleton-line:last-child { width: 60%; margin-bottom: 0; }
+        @keyframes discover-shimmer { 0% { opacity: 0.3; } 50% { opacity: 0.5; } 100% { opacity: 0.3; } }
+        .discover-skeleton-cover, .discover-skeleton-line { animation: discover-shimmer 1.5s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .discover-skeleton-cover, .discover-skeleton-line { animation: none; } }
+
         /* Omnibar root: pinned to layout viewport (100dvh) so the bar does not move when the keyboard opens (different layer from keyboard). */
         #omni-bar-root {
             position: fixed;
@@ -662,7 +688,11 @@
             will-change: transform;
         }
 
-        /* Library tab bar (mobile): sliding pill indicator, Apple-like animation */
+        /* Library tab bar (mobile): sliding pill indicator, Apple-like animation. Inline toggle only on home (single bar, different per tab). */
+        #global-search-container .library-tabs-inline { display: none; }
+        #global-search-container.show-library-tabs .library-tabs-inline { display: flex; }
+        #global-search-container .discover-odst-inline { display: none; }
+        #global-search-container.show-discover-odst .discover-odst-inline { display: flex; }
         .library-tab-bar-mobile {
             --library-tab-gap: 6px;
             --library-tab-pad: 4px;
@@ -698,6 +728,17 @@
         #view-home.artist-just-returned .artist-card-cover { transform: none !important; }
         #view-home.artist-just-returned .artist-card-overlay { opacity: 0 !important; }
         #view-home.artist-just-returned .artist-card-name { color: var(--text-main) !important; }
+
+        /* List scroll safety (same pattern as library artists): suppress ghost :active during scroll on all list views */
+        #view-home.list-scroll-active .song-row,
+        #view-favourites.list-scroll-active .song-row,
+        #view-playlist-detail.list-scroll-active .song-row,
+        #view-artist-detail.list-scroll-active .song-row { transform: none !important; }
+        #view-artist-detail.list-scroll-active .artist-album-header { transform: none !important; }
+        #view-playlists.list-scroll-active .playlist-card { transform: none !important; }
+        /* Discover: suppress card/play button active during scroll */
+        #view-discover.list-scroll-active .discover-card { background: var(--surface-overlay) !important; }
+        #view-discover.list-scroll-active .discover-card-play { background: transparent !important; }
 
         /* Artist detail: expandable album tracks */
         .artist-album-expanded .artist-album-tracks { display: block !important; }
@@ -805,16 +846,19 @@
                     <button id="global-search-clear" class="hidden text-[var(--placeholder)] hover:text-[var(--text-main)] transition-colors">
                         <i class="fas fa-times-circle"></i>
                     </button>
+                    <div id="library-tab-bar-inline" class="library-tab-bar-mobile library-tabs-inline flex gap-1.5 p-1 rounded-full border border-[var(--glass-border)] flex-shrink-0" style="background: var(--input-bg);" data-active-tab="songs">
+                        <div id="library-tab-buttons" class="flex gap-1.5 flex-1 min-w-0">
+                            <!-- Tabs injected by app.js from LIBRARY_TABS -->
+                        </div>
+                    </div>
+                    <div id="discover-odst-inline" class="discover-odst-inline flex gap-1.5 p-1 rounded-full border border-[var(--glass-border)] flex-shrink-0" style="background: var(--input-bg);">
+                        <button type="button" id="search-odst-music" class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-[var(--accent)] text-[var(--text-on-accent)]" aria-pressed="true">Music</button>
+                        <button type="button" id="search-odst-youtube" class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-[var(--accent)]/15 text-[var(--accent)]" aria-pressed="false">Youtube</button>
+                    </div>
                 </div>
             </div>
 
             <div id="view-home" class="view">
-                <div id="library-tab-bar" class="library-tab-bar-mobile relative flex gap-1.5 p-1 rounded-full border border-[var(--glass-border)] mb-4 w-fit ml-auto glass-view" style="background: var(--input-bg);" data-active-tab="songs">
-                    <div id="library-tab-indicator" class="library-tab-indicator absolute rounded-full bg-[var(--accent)] pointer-events-none z-0" aria-hidden="true"></div>
-                    <div id="library-tab-buttons" class="flex gap-1.5 flex-1 min-w-0 relative z-10">
-                        <!-- Tabs injected by app.js from LIBRARY_TABS -->
-                    </div>
-                </div>
                 <div id="library-songs" class="library-panel">
                     <div id="all-songs" class="space-y-2"></div>
                 </div>
@@ -840,12 +884,19 @@
                     <div id="artist-albums" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6"></div>
                 </section>
             </div>
-            <div id="view-playlists" class="view hidden">
-                <div class="glass-view rounded-[var(--radius-omni)] p-3 border border-[var(--glass-border)] mb-4 flex gap-2 items-center">
-                    <div class="flex-1"></div>
-                    <button type="button" id="playlist-create-btn" class="create-playlist-btn flex-shrink-0 px-4 py-3 rounded-[var(--radius-omni-xs)] bg-[var(--accent)] text-[var(--text-on-accent)] font-bold text-sm transition-all active:scale-95" onclick="typeof createPlaylistPrompt==='function'&&createPlaylistPrompt()"><i class="fas fa-plus mr-1"></i>New</button>
+            <div id="view-playlists" class="view hidden flex flex-col min-h-0">
+                <div id="playlist-empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-center">
+                    <i class="fas fa-layer-group text-4xl text-[var(--text-dim)]/50 mb-4"></i>
+                    <p class="text-[var(--text-dim)] font-bold text-sm uppercase tracking-widest mb-2">No playlists yet</p>
+                    <p class="text-[var(--text-dim)] text-xs mb-6">Create one or add tracks from Library.</p>
+                    <button type="button" id="playlist-create-btn" class="create-playlist-btn px-6 py-3 rounded-xl bg-[var(--accent)] text-[var(--text-on-accent)] font-bold text-sm transition-all active:scale-95" onclick="typeof createPlaylistPrompt==='function'&&createPlaylistPrompt()"><i class="fas fa-plus mr-2"></i>Create playlist</button>
                 </div>
-                <div id="playlist-list-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4"></div>
+                <div id="playlist-has-list" class="hidden flex flex-col flex-1 min-h-0 relative">
+                    <div class="flex justify-center mb-4 flex-shrink-0">
+                        <button type="button" id="playlist-create-btn-has" class="create-playlist-btn px-6 py-3 rounded-xl bg-[var(--accent)] text-[var(--text-on-accent)] font-bold text-sm transition-all active:scale-95" onclick="typeof createPlaylistPrompt==='function'&&createPlaylistPrompt()"><i class="fas fa-plus mr-2"></i>Create playlist</button>
+                    </div>
+                    <div id="playlist-list-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start"></div>
+                </div>
             </div>
             <div id="view-playlist-detail" class="view hidden">
                 <button type="button" id="playlist-detail-back" class="flex items-center text-[var(--secondary)] font-bold mb-4 hover:underline focus:outline-none" onclick="typeof UI!=='undefined'&&UI.navigateBack&&UI.navigateBack()">
@@ -870,28 +921,53 @@
             <div id="view-favourites" class="view hidden">
                 <div id="fav-tracks" class="space-y-2"></div>
             </div>
-            <div id="view-search" class="view hidden">
-                <div id="search-page-results" class="space-y-2 min-h-[120px]"></div>
-            </div>
-            <div id="view-soundmash" class="view hidden">
+            <div id="view-discover" class="view hidden">
                 <div class="flex flex-col flex-1 min-h-0 px-8 pb-8">
-                    <div class="flex justify-between items-center pt-4">
-                        <button type="button" onclick="typeof UI!=='undefined'&&UI.navigateBack&&UI.navigateBack()" class="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-[var(--surface-overlay)] rounded-full active:scale-90 text-[var(--text-main)]" aria-label="Back"><i class="fas fa-chevron-down"></i></button>
-                        <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)]">SoundMash</h1>
-                        <div class="w-12"></div>
-                    </div>
-                    <div class="flex-1 flex items-center justify-center">
-                        <!-- Blank for later -->
+                    <div id="discover-search-results" class="hidden flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2 min-h-[120px]"></div>
+                    <div id="discover-content-panel" class="flex flex-col flex-1 min-h-0">
+                        <div class="flex justify-between items-center pt-4">
+                            <button type="button" onclick="typeof UI!=='undefined'&&UI.navigateBack&&UI.navigateBack()" class="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-[var(--surface-overlay)] rounded-full active:scale-90 text-[var(--text-main)]" aria-label="Back"><i class="fas fa-chevron-down"></i></button>
+                            <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)]">Discover</h1>
+                            <div class="w-12"></div>
+                        </div>
+                        <p id="discover-empty-library" class="hidden text-sm text-[var(--text-dim)] py-4 px-1">Search and download a song in the bar above to get recommendations!</p>
+                        <div id="discover-config-wrap" class="mb-4 p-4 rounded-2xl border border-[var(--glass-border)] flex-shrink-0" style="background: var(--surface-overlay);">
+                            <p class="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-dim)] mb-2">Recommendations configuration</p>
+                            <p class="text-xs text-[var(--text-dim)] mb-2">Last.fm improves recommendations. <a id="discover-lastfm-link" href="https://www.last.fm/api/account/create" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] font-bold underline hover:no-underline">https://www.last.fm/api/account/create</a></p>
+                            <details class="mb-3 text-[11px] text-[var(--text-dim)]">
+                                <summary class="cursor-pointer font-semibold text-[var(--text-main)]">How to get your API key</summary>
+                                <ol class="mt-2 space-y-1.5 list-decimal list-inside">
+                                    <li><strong>Register first.</strong> You need a Last.fm account. Sign up at <a href="https://www.last.fm/join" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] underline">last.fm/join</a> (free) if you don’t have one.</li>
+                                    <li>Open the link above and create an application. Use: <strong>Contact email</strong> — your email; <strong>Application name</strong> — e.g. Soundsible; <strong>Application description</strong> — e.g. Music recommendations; <strong>Callback URL</strong> — leave blank or <code class="text-[10px] bg-[var(--input-bg)] px-1 rounded">https://localhost</code> (not used); <strong>Application homepage</strong> — leave blank or your site URL.</li>
+                                    <li>After submitting, copy the <strong>API Key</strong> and paste it below.</li>
+                                </ol>
+                            </details>
+                            <div class="flex gap-2">
+                                <input type="password" id="discover-lastfm-input" class="input-theme flex-1 rounded-[var(--radius-omni-xs)] px-3 py-2 text-sm" placeholder="Last.fm API key" autocomplete="off">
+                                <button type="button" id="discover-lastfm-save" class="px-4 py-2 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]/40 hover:opacity-90 transition-opacity">Save</button>
+                            </div>
+                            <p id="discover-lastfm-status" class="mt-2 text-xs text-[var(--text-dim)] hidden"></p>
+                        </div>
+                        <div id="discover-main" class="flex flex-col flex-1 min-h-0 hidden">
+                            <div class="flex items-center justify-between gap-4 mb-4 flex-shrink-0">
+                                <button type="button" id="discover-refresh-btn" class="px-4 py-2 rounded-xl text-sm font-semibold bg-[var(--surface-overlay)] active:bg-[var(--accent)]/20 text-[var(--text-main)] border border-[var(--glass-border)] transition-colors">Refresh</button>
+                            </div>
+                            <div id="discover-no-results" class="hidden text-center py-6 text-sm text-[var(--text-dim)]">No recommendations right now. Try again later.</div>
+                            <div id="discover-sections" class="flex-1 min-h-0"></div>
+                        </div>
                     </div>
                 </div>
             </div>
             <!-- YouTube preview modal (ODST result click; used from Search) -->
             <div id="dl-preview-modal" class="fixed inset-0 z-[110] hidden flex-col backdrop-blur-sm" style="background-color: var(--overlay-bg);">
-                <div class="flex justify-end p-4">
-                    <button type="button" id="dl-preview-close" class="w-12 h-12 flex items-center justify-center rounded-full bg-[var(--surface-overlay)] text-[var(--text-main)]"><i class="fas fa-times"></i></button>
-                </div>
-                <div class="flex-1 flex items-center justify-center p-4">
-                    <div id="dl-preview-iframe-wrap" class="w-full max-w-2xl aspect-video rounded-xl overflow-hidden bg-black"></div>
+                <div class="flex-1 flex items-center justify-center p-4 flex-col">
+                    <div class="relative w-full max-w-2xl">
+                        <div id="dl-preview-iframe-wrap" class="w-full aspect-video rounded-xl overflow-hidden bg-black"></div>
+                        <button type="button" id="dl-preview-close" class="absolute top-3 right-3 z-10 w-12 h-12 flex items-center justify-center rounded-full bg-[var(--surface-overlay)] text-[var(--text-main)] shadow-lg hover:bg-black/40 transition-colors" aria-label="Close"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="flex justify-center pt-3">
+                        <button type="button" id="dl-preview-add-to-queue" class="w-12 h-12 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--accent)] text-[var(--text-main)] flex items-center justify-center transition-all hidden" aria-label="Add to download queue"><i class="fas fa-cloud-download-alt text-sm"></i></button>
+                    </div>
                 </div>
             </div>
             <!-- Cover choice modal (when premium cover fails; used from Search) -->
@@ -937,10 +1013,14 @@
                 </div>
             </div>
             <!-- Download queue FAB + popover (Search view) -->
-            <div id="dl-queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[90] flex flex-col items-end pointer-events-none hidden">
+            <div id="dl-queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[120] flex flex-col items-end pointer-events-none hidden">
                 <button id="dl-queue-fab" type="button" onclick="typeof Downloader!=='undefined'&&Downloader.toggleDownloadQueue()" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)] relative">
-                    <i class="fas fa-list-ul"></i>
-                    <div id="dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)]">0</div>
+                    <svg class="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 48 48" aria-hidden="true">
+                        <circle cx="24" cy="24" r="22" fill="none" stroke="currentColor" stroke-width="2" class="text-[var(--bg-deep)]/30" />
+                        <circle id="dl-queue-progress-ring" cx="24" cy="24" r="22" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="138.23" stroke-dashoffset="138.23" stroke-linecap="round" style="transition: stroke-dashoffset 0.25s ease;" />
+                    </svg>
+                    <i class="fas fa-list-ul relative z-[1]"></i>
+                    <div id="dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)] z-[2]">0</div>
                 </button>
                 <div id="dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
                     <div class="p-5">
@@ -951,6 +1031,12 @@
                         </div>
                         <div id="dl-download-queue-list" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
                     </div>
+                </div>
+            </div>
+            <div id="view-podcast" class="view hidden">
+                <div class="flex flex-col flex-1 min-h-0 px-8 pb-8">
+                    <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)] pt-4">Podcasts</h1>
+                    <p class="text-sm text-[var(--text-dim)] mt-4">Listen to your podcasts.</p>
                 </div>
             </div>
             <div id="view-settings" class="view hidden">
@@ -1042,6 +1128,25 @@
                         </div>
                     </div>
 
+                    <!-- Recommendations (Discover / Last.fm) -->
+                    <div class="glass-view rounded-[var(--radius-omni)] p-6 border border-[var(--glass-border)] transition-all duration-200">
+                        <h2 class="text-lg font-bold tracking-tight mb-2" style="letter-spacing: -0.02em;">Recommendations</h2>
+                        <p class="text-xs text-[var(--text-dim)] mb-2">Last.fm API key improves Discover. <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] font-bold underline hover:no-underline">https://www.last.fm/api/account/create</a></p>
+                        <details class="mb-3 text-[11px] text-[var(--text-dim)]">
+                            <summary class="cursor-pointer font-semibold text-[var(--text-main)]">How to get your API key</summary>
+                            <ol class="mt-2 space-y-1.5 list-decimal list-inside">
+                                <li><strong>Register first.</strong> You need a Last.fm account. Sign up at <a href="https://www.last.fm/join" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] underline">last.fm/join</a> (free) if you don’t have one.</li>
+                                <li>Open the link above and create an application. Use: <strong>Contact email</strong> — your email; <strong>Application name</strong> — e.g. Soundsible; <strong>Application description</strong> — e.g. Music recommendations; <strong>Callback URL</strong> — leave blank or <code class="text-[10px] bg-[var(--input-bg)] px-1 rounded">https://localhost</code> (not used); <strong>Application homepage</strong> — leave blank or your site URL.</li>
+                                <li>After submitting, copy the <strong>API Key</strong> and paste it below.</li>
+                            </ol>
+                        </details>
+                        <div class="flex gap-2 mb-2">
+                            <input type="password" id="settings-lastfm-api-key" class="input-theme flex-1 rounded-[var(--radius-omni-xs)] px-4 py-2.5 text-sm" placeholder="Last.fm API key" autocomplete="off">
+                            <button type="button" id="settings-lastfm-save" class="px-4 py-2.5 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]/40 hover:opacity-90 transition-opacity">Save</button>
+                        </div>
+                        <p id="settings-lastfm-status" class="text-xs text-[var(--text-dim)] hidden"></p>
+                    </div>
+
                     <!-- Library -->
                     <div class="glass-view rounded-[var(--radius-omni)] p-6 border border-[var(--glass-border)] transition-all duration-200">
                         <h2 class="text-lg font-bold tracking-tight mb-2" style="letter-spacing: -0.02em;">Library</h2>
@@ -1094,9 +1199,9 @@
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="home"><i class="fas fa-box text-base text-[var(--nav-icon)]"></i></div>
                                 <!-- Middle blank: center of bar is icon-sized (data-omni-blank drives slide direction: views left of this slide from left, right slide from right) -->
                                 <div class="w-10 h-10 flex-shrink-0" data-omni-blank></div>
-                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="search"><i class="fas fa-search text-base text-[var(--nav-icon)]"></i></div>
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="discover"><i class="fas fa-globe text-base text-[var(--nav-icon)]"></i></div>
+                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="podcast"><i class="fas fa-podcast text-base text-[var(--nav-icon)]"></i></div>
                                 <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="settings"><i class="fas fa-cog text-base text-[var(--nav-icon)]"></i></div>
-                                <div class="omni-nav-item w-10 h-10 flex items-center justify-center rounded-full transition-all" data-view="soundmash"><i class="fas fa-compact-disc text-base text-[var(--nav-icon)]"></i></div>
                             </div>
                         </div>
         
@@ -1251,11 +1356,6 @@
     </div>
 
     <!-- Search ODST source toggle: fixed overlay above bottom bar, visible only on Search view -->
-    <div id="search-odst-toggle-overlay" class="fixed left-4 z-[85] hidden flex gap-1.5 p-1 rounded-full border border-[var(--glass-border)] shadow-lg pointer-events-auto" style="bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem + 98px); background: var(--input-bg);">
-        <button type="button" id="search-odst-music" class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-[var(--accent)] text-[var(--text-on-accent)]" aria-pressed="true">Music</button>
-        <button type="button" id="search-odst-youtube" class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-[var(--accent)]/15 text-[var(--accent)]" aria-pressed="false">Youtube</button>
-    </div>
-
     <!-- Toasts -->
     <div id="toast-container" class="fixed bottom-32 left-1/2 -translate-x-1/2 z-[400] flex flex-col items-center space-y-4 pointer-events-none w-full max-w-xs"></div>
 

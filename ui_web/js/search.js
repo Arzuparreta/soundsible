@@ -8,7 +8,7 @@ import * as renderers from './renderers.js';
 import { Resolver } from './resolver.js';
 import { Haptics } from './haptics.js';
 
-const ODST_DEBOUNCE_MS = 350;
+const ODST_DEBOUNCE_MS = 0;
 
 function esc(str) {
     if (!str) return '';
@@ -26,6 +26,9 @@ let debounceTimer = null;
 let odstAbortController = null;
 let inputEl = null;
 let resultsEl = null;
+/** When init is called with resultsContainerId (Discover), we toggle content vs search results panels. */
+let contentPanelEl = null;
+let searchResultsPanelEl = null;
 let lastLibraryItems = [];
 let lastOdstResults = [];
 let isMobile = true;
@@ -33,6 +36,11 @@ let isMobile = true;
 let isDesktop = false;
 /** Search tab ODST source: 'music' = YouTube Music, 'youtube' = normal YouTube. */
 let odstSourceMode = 'music';
+
+function updateDiscoverPanels(showSearchResults) {
+    if (contentPanelEl) contentPanelEl.classList.toggle('hidden', !!showSearchResults);
+    if (searchResultsPanelEl) searchResultsPanelEl.classList.toggle('hidden', !showSearchResults);
+}
 
 function scoreLibrary(track, query) {
     const q = query.toLowerCase();
@@ -118,7 +126,7 @@ function buildOdstRowHtml(r) {
                 <div class="text-sm font-bold truncate text-[var(--text-main)]">${esc(r.title)}</div>
                 <div class="text-xs text-[var(--text-dim)] truncate">${esc(r.channel)} ${duration ? ' · ' + duration : ''}</div>
             </div>
-            <button type="button" class="dl-add-one w-10 h-10 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 opacity-100 transition-all" data-video-id="${esc(r.id)}" aria-label="Add to download queue"><i class="fas fa-plus text-sm"></i></button>
+            <button type="button" class="dl-add-one w-10 h-10 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 opacity-100 transition-all" data-video-id="${esc(r.id)}" aria-label="Add to download queue"><i class="fas fa-cloud-download-alt text-sm"></i></button>
         </div>
     </div>`;
 }
@@ -160,8 +168,8 @@ function bindListeners(merged) {
         const item = odstItems.find((o) => o.id === videoId) || null;
         row.addEventListener('click', (e) => {
             if (e.target.closest('.dl-add-one')) return;
-            if (typeof window.Downloader !== 'undefined' && window.Downloader.playPreview) {
-                window.Downloader.playPreview(videoId);
+            if (item && typeof window.playPreview === 'function') {
+                window.playPreview(item);
             }
         });
         const addBtn = row.querySelector('.dl-add-one');
@@ -198,7 +206,7 @@ function runLibraryOnly(raw) {
     resultsEl.appendChild(loadingOdstEl);
 }
 
-/** Only ODST fetch; merges with lastLibraryItems when done. Called when 1s debounce fires. */
+/** Only ODST fetch; merges with lastLibraryItems when done. Called when debounce fires (or immediately if ODST_DEBOUNCE_MS is 0). */
 function runOdstFetch(raw) {
     if (!resultsEl || !raw) {
         const loading = resultsEl?.querySelector('.search-odst-loading');
@@ -264,6 +272,7 @@ function onInput() {
     const raw = (inputEl && inputEl.value) ? inputEl.value.trim() : '';
     if (!resultsEl) return;
     if (!raw) {
+        updateDiscoverPanels(false);
         resultsEl.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">Search library and ODST...</div>';
         lastLibraryItems = [];
         lastOdstResults = [];
@@ -271,6 +280,7 @@ function onInput() {
         debounceTimer = null;
         return;
     }
+    updateDiscoverPanels(true);
     const Downloader = window.Downloader;
     if (Downloader && typeof Downloader.parseUrlLines === 'function') {
         const parsed = Downloader.parseUrlLines(raw);
@@ -318,6 +328,7 @@ function clear() {
         odstAbortController.abort();
         odstAbortController = null;
     }
+    updateDiscoverPanels(false);
     if (resultsEl) resultsEl.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">Search library and ODST...</div>';
     lastLibraryItems = [];
     lastOdstResults = [];
@@ -356,13 +367,18 @@ function init(opts = {}) {
     isMobile = opts.mobile !== false;
     isDesktop = !isMobile;
     const inputId = isMobile ? 'global-search-input' : 'desktop-global-search-input';
-    const resultsId = isMobile ? 'search-page-results' : 'desktop-search-page-results';
+    const resultsId = opts.resultsContainerId || (isMobile ? 'discover-search-results' : 'desktop-discover-search-results');
     inputEl = document.getElementById(inputId);
     resultsEl = document.getElementById(resultsId);
     if (!inputEl || !resultsEl) return;
 
+    contentPanelEl = document.getElementById(isMobile ? 'discover-content-panel' : 'desktop-discover-content-panel');
+    searchResultsPanelEl = document.getElementById(resultsId);
+
     clear();
     resultsEl.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">Search library and ODST...</div>';
+    const hasInput = (inputEl.value || '').trim().length > 0;
+    updateDiscoverPanels(!!hasInput);
 
     const musicBtn = document.getElementById('search-odst-music');
     const youtubeBtn = document.getElementById('search-odst-youtube');

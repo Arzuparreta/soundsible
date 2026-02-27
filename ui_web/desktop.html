@@ -115,10 +115,10 @@
         }
         #desktop-app { display: flex; flex-direction: column; height: 100vh; }
         #desktop-body { display: flex; flex-direction: column; flex: 1; min-height: 0; position: relative; }
-        #desktop-now-playing { --desktop-np-bar-height: 104px; --desktop-np-bar-padding-y: 0.5rem; min-height: var(--desktop-np-bar-height); flex-shrink: 0; border-bottom: 1px solid var(--glass-border); background: var(--bg-surface); backdrop-filter: blur(24px); display: grid; grid-template-columns: 1fr auto 1fr; grid-template-rows: auto 1fr; align-items: center; gap: 0 1rem; row-gap: 0.25rem; padding: var(--desktop-np-bar-padding-y) 1rem; }
+        #desktop-now-playing { --desktop-np-bar-height: 64px; --desktop-np-bar-padding-y: 0.375rem; min-height: var(--desktop-np-bar-height); flex-shrink: 0; border-bottom: 1px solid var(--glass-border); background: var(--bg-surface); backdrop-filter: blur(24px); display: grid; grid-template-columns: 1fr auto 1fr; grid-template-rows: auto auto; align-items: center; gap: 0 1rem; row-gap: 0.25rem; padding: var(--desktop-np-bar-padding-y) 1rem; }
         #desktop-body-row { display: flex; flex: 1; min-height: 0; }
         #desktop-sidebar { width: 240px; flex-shrink: 0; padding: 1rem; border-right: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: 0.5rem; }
-        #desktop-main { flex: 1; overflow: auto; padding: 1.5rem; position: relative; }
+        #desktop-main { flex: 1; overflow: auto; padding: 1.5rem; position: relative; background-color: var(--bg-deep); }
         
         /* Desktop Global Search */
         #desktop-global-search-container {
@@ -128,12 +128,12 @@
             margin: 0 -1.5rem 1.5rem -1.5rem;
             padding: 1.5rem;
             background: linear-gradient(to bottom, var(--bg-deep) 60%, transparent);
-            transition: all 0.3s ease;
+            transition: box-shadow 0.3s ease;
         }
 
         #desktop-global-search-container.scrolled {
             background: var(--bg-deep);
-            border-bottom: 1px solid var(--glass-border);
+            border-bottom: 1px solid var(--bg-deep);
             box-shadow: 0 4px 20px rgba(0,0,0,0.4);
         }
 
@@ -172,27 +172,33 @@
             color: var(--placeholder);
         }
 
+        #desktop-global-search-container .desktop-discover-odst-inline { display: none; }
+        #desktop-global-search-container.show-discover-odst .desktop-discover-odst-inline { display: flex; }
+
         .desktop-view { display: none; }
         .desktop-view.active { display: block; }
+        #desktop-view-playlists:not(.active) { display: none !important; }
+        #desktop-view-discover.active { min-height: 100%; display: flex; flex-direction: column; }
+        #desktop-view-discover.active > div { flex: 1; min-height: 0; }
         #desktop-now-playing .desktop-queue-status-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         #desktop-sidebar .desktop-queue-status-btn.queue-panel-open { background: var(--surface-overlay); color: var(--text-main); }
+        #desktop-queue-count.queue-has-items { color: var(--accent); opacity: 1; }
         .desktop-nav-btn { width: 100%; text-align: left; padding: 0.6rem 0.75rem; border-radius: var(--radius-omni-xs); color: var(--text-dim); font-weight: 600; font-size: 0.875rem; border: none; background: transparent; cursor: pointer; transition: background 0.2s, color 0.2s; }
         .desktop-nav-btn:hover { background: var(--surface-overlay); color: var(--text-main); }
         .desktop-nav-btn.active { background: var(--bg-selection); color: var(--accent); }
         .song-row { transition: background-color 0.2s; }
         /* Search view: positioning context for ODST toggle (one button height from bottom) */
-        #desktop-view-search { position: relative; --search-odst-toggle-offset: 2rem; }
         /* Desktop: no mobile swipe/long-press; hide swipe hints so Favourite/Queue labels never show */
         .swipe-hints { opacity: 0 !important; visibility: hidden; pointer-events: none; }
         #desktop-main .song-row { transform: none !important; }
         #desktop-now-playing button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         #desktop-now-playing #desktop-volume:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-        /* Volume bubble: same size as shuffle/repeat when collapsed; expands on hover from left (icon stays fixed). */
+        /* Volume bubble: same size as shuffle/repeat when collapsed; expands on hover to the left (icon stays on right). */
         .desktop-volume-bubble-wrap {
             width: 120px;
             min-width: 120px;
             display: flex;
-            justify-content: flex-start;
+            justify-content: flex-end;
             align-items: center;
             position: relative;
         }
@@ -205,9 +211,13 @@
             border-radius: 9999px;
             transition: width 333ms cubic-bezier(0.19, 1, 0.22, 1);
             transform: translateZ(0);
+            gap: 0;
+            justify-content: center;
         }
         .desktop-volume-bubble-wrap:hover #desktop-volume-bubble {
             width: 100px;
+            gap: 0.5rem;
+            justify-content: flex-end;
         }
         /* Volume handle: invisible by default; fades in over 333ms when bubble expands; fades out over 323ms on close (invisible 0.01s before bubble fully contracted). */
         #desktop-volume::-webkit-slider-thumb {
@@ -262,7 +272,8 @@
             border-radius: var(--radius-omni);
             box-shadow: var(--shadow-omni);
         }
-        #desktop-now-playing .desktop-np-timebar-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
+        #desktop-now-playing .desktop-np-timebar-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.25rem; min-width: 0; max-height: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: max-height 0.25s ease-out, opacity 0.2s ease-out; }
+        #desktop-now-playing.has-track .desktop-np-timebar-row { max-height: 2.5rem; opacity: 1; visibility: visible; }
         #desktop-now-playing .desktop-np-timebar-row #desktop-np-seek { flex: 1; min-width: 0; }
         #desktop-now-playing .desktop-np-timebar-row .desktop-np-time-label { min-width: 2.5rem; width: 2.5rem; flex-shrink: 0; transform: translateY(2px); }
         #desktop-now-playing:not(.has-track) .desktop-np-timebar-row .desktop-np-time-label { visibility: hidden; }
@@ -307,19 +318,45 @@
         #desktop-queue-panel { flex-shrink: 0; background: transparent; border: none; box-sizing: border-box; }
         #desktop-queue-panel .queue-item { border: none; width: 100%; min-width: 0; box-sizing: border-box; }
         #desktop-queue-panel .queue-item:hover { background: var(--surface-overlay); }
+        #desktop-queue-panel .queue-item.queue-item-second { opacity: 0.6; }
         #desktop-queue-panel::-webkit-scrollbar { width: 6px; }
         #desktop-queue-panel::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 3px; opacity: 0.4; }
+        #desktop-downloads-panel { background: transparent; border: none; box-sizing: border-box; }
+        #desktop-downloads-panel::-webkit-scrollbar { width: 6px; }
+        #desktop-downloads-panel::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 3px; opacity: 0.4; }
+        @keyframes dl-progress-indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
         /* Queue row handle: visible on hover, no highlight on hover/focus/active */
-        .queue-item-handle { opacity: 0; cursor: grab; transition: opacity 0.2s; }
+        .queue-item-handle-wrap { opacity: 0; transition: opacity 0.2s; }
+        .group:hover .queue-item-handle-wrap { opacity: 1; }
+        .queue-item-handle { cursor: grab; }
         .queue-item-handle:hover,
         .queue-item-handle:focus,
         .queue-item-handle:active { background: transparent !important; outline: none; box-shadow: none; }
         .queue-item-handle:active { cursor: grabbing; }
-        .group:hover .queue-item-handle { opacity: 1; }
+        .queue-move-btn:focus { outline: none; }
         /* Desktop queue reorder drag */
         .queue-drag-clone { position: fixed; z-index: 200; pointer-events: none; border-radius: var(--radius-omni-xs); box-shadow: var(--shadow-omni); border: 1px solid var(--glass-border); background: var(--bg-surface); }
         .queue-item.queue-drop-target { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-omni-xs); }
         .queue-item.queue-drag-source { opacity: 0.2; pointer-events: none; }
+        /* Discover: grid layout, no horizontal scroll */
+        .discover-section { margin-bottom: 1.5rem; flex-shrink: 0; }
+        .discover-section h2 { font-size: 0.625rem; font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.75rem; }
+        .discover-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 0.75rem; }
+        .discover-card { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 1rem; background: var(--surface-overlay); border: 1px solid var(--glass-border); transition: background 0.2s, border-color 0.2s; min-width: 0; }
+        .discover-card:hover { background: var(--bg-card); }
+        .discover-card-cover { width: 48px; height: 48px; flex-shrink: 0; border-radius: 0.75rem; background-size: cover; background-position: center; background-color: var(--input-bg); }
+        .discover-card-meta { flex: 1; min-width: 0; }
+        .discover-card-title { font-size: 0.8125rem; font-weight: 600; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .discover-card-artist { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .discover-skeleton { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 1rem; background: var(--surface-overlay); border: 1px solid var(--glass-border); min-width: 0; }
+        .discover-skeleton-cover { width: 48px; height: 48px; flex-shrink: 0; border-radius: 0.75rem; background: var(--input-bg); }
+        .discover-skeleton-text { flex: 1; min-width: 0; }
+        .discover-skeleton-line { height: 12px; border-radius: 4px; background: var(--text-dim); opacity: 0.3; margin-bottom: 6px; }
+        .discover-skeleton-line:last-child { width: 60%; margin-bottom: 0; }
+        @keyframes discover-shimmer { 0% { opacity: 0.3; } 50% { opacity: 0.5; } 100% { opacity: 0.3; } }
+        .discover-skeleton-cover { animation: discover-shimmer 1.5s ease-in-out infinite; }
+        .discover-skeleton-line { animation: discover-shimmer 1.5s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .discover-skeleton-cover, .discover-skeleton-line { animation: none; } }
         @keyframes song-marquee {
             0%, 15% { transform: translateX(0); }
             85%, 100% { transform: translateX(var(--marquee-offset, -100%)); }
@@ -328,6 +365,7 @@
         @media (prefers-reduced-motion: reduce) {
             .artist-marquee .song-card-artist-text { animation: none; }
             .artist-marquee { overflow: hidden; text-overflow: ellipsis; }
+            #desktop-now-playing .desktop-np-timebar-row { transition: none; }
         }
         /* Right-click context menu: compact glass panel, theme-aware */
         #desktop-context-menu {
@@ -401,22 +439,6 @@
                             <div id="desktop-np-artist" class="text-xs text-[var(--text-dim)] truncate"></div>
                         </div>
                     </div>
-                    <div id="desktop-np-bubbles" class="flex items-center gap-2 flex-shrink-0">
-                        <div class="desktop-np-bubble glass-view flex items-center justify-center rounded-full w-8 h-8 min-w-[32px] min-h-[32px]">
-                            <button type="button" id="desktop-shuffle-btn" class="w-full h-full flex items-center justify-center rounded-full text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] transition-colors focus:outline-none" aria-label="Shuffle"><i class="fas fa-shuffle text-xs"></i></button>
-                        </div>
-                        <div class="desktop-np-bubble glass-view flex items-center justify-center rounded-full w-8 h-8 min-w-[32px] min-h-[32px] relative">
-                            <button type="button" id="desktop-repeat-btn" class="w-full h-full flex items-center justify-center rounded-full text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] transition-colors focus:outline-none relative" aria-label="Repeat"><i class="fas fa-repeat text-xs"></i><span id="desktop-repeat-one-indicator" class="absolute bottom-0 right-0 text-[7px] font-black text-[var(--accent)] hidden">1</span></button>
-                        </div>
-                        <div class="desktop-volume-bubble-wrap">
-                            <div id="desktop-volume-bubble" class="desktop-np-bubble glass-view flex items-center gap-2 pl-0 pr-1.5">
-                                <button type="button" id="desktop-volume-mute-btn" class="desktop-volume-icon-wrap flex items-center justify-center w-8 h-8 min-w-[32px] min-h-[32px] flex-shrink-0 text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] rounded-full transition-colors focus:outline-none" aria-label="Mute">
-                                    <i id="desktop-volume-icon" class="fas fa-volume-high text-xs" aria-hidden="true"></i>
-                                </button>
-                                <input type="range" id="desktop-volume" class="h-1.5 flex-1 min-w-0 rounded-full accent-[var(--accent)]" min="0" max="100" value="100" style="background: var(--seek-track);" aria-label="Volume" />
-                            </div>
-                        </div>
-                    </div>
                 </div>
                 <div class="desktop-np-playback-cell">
                     <div id="desktop-omni-island">
@@ -425,7 +447,22 @@
                         <button type="button" id="desktop-omni-next" class="desktop-omni-btn-side flex items-center justify-center rounded-full hover:bg-[var(--surface-overlay)] text-[var(--text-main)] transition-colors" aria-label="Next"><i class="fas fa-forward-step text-xs"></i></button>
                     </div>
                 </div>
-                <div></div>
+                <div id="desktop-np-bubbles" class="desktop-np-right-cell flex items-center justify-end gap-2 flex-shrink-0">
+                    <div class="desktop-volume-bubble-wrap">
+                        <div id="desktop-volume-bubble" class="desktop-np-bubble glass-view flex items-center pl-0 pr-1.5 flex-row-reverse">
+                            <button type="button" id="desktop-volume-mute-btn" class="desktop-volume-icon-wrap flex items-center justify-center w-8 h-8 min-w-[32px] min-h-[32px] flex-shrink-0 text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] rounded-full transition-colors focus:outline-none" aria-label="Mute">
+                                <i id="desktop-volume-icon" class="fas fa-volume-high text-xs" aria-hidden="true"></i>
+                            </button>
+                            <input type="range" id="desktop-volume" class="h-1.5 flex-1 min-w-0 rounded-full accent-[var(--accent)]" min="0" max="100" value="100" style="background: var(--seek-track);" aria-label="Volume" />
+                        </div>
+                    </div>
+                    <div class="desktop-np-bubble glass-view flex items-center justify-center rounded-full w-8 h-8 min-w-[32px] min-h-[32px]">
+                        <button type="button" id="desktop-shuffle-btn" class="w-full h-full flex items-center justify-center rounded-full text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] transition-colors focus:outline-none" aria-label="Shuffle"><i class="fas fa-shuffle text-xs"></i></button>
+                    </div>
+                    <div class="desktop-np-bubble glass-view flex items-center justify-center rounded-full w-8 h-8 min-w-[32px] min-h-[32px] relative">
+                        <button type="button" id="desktop-repeat-btn" class="w-full h-full flex items-center justify-center rounded-full text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] transition-colors focus:outline-none relative" aria-label="Repeat"><i class="fas fa-repeat text-xs"></i><span id="desktop-repeat-one-indicator" class="absolute bottom-0 right-0 text-[7px] font-black text-[var(--accent)] hidden">1</span></button>
+                    </div>
+                </div>
                 <div id="desktop-np-timebar-row" class="desktop-np-timebar-row">
                     <span id="desktop-np-time-current" class="desktop-np-time-label text-[12px] font-semibold font-mono text-[var(--text-dim)]">0:00</span>
                     <input type="range" id="desktop-np-seek" class="h-1.5 rounded-full accent-[var(--accent)] min-w-0" min="0" max="100" value="0" style="background: var(--seek-track);" />
@@ -434,12 +471,12 @@
             </div>
             <div id="desktop-body-row">
             <aside id="desktop-sidebar" class="glass-view">
+                <button type="button" class="desktop-nav-btn" data-view="discover"><i class="fas fa-globe mr-3 w-4"></i>Discover</button>
                 <button type="button" class="desktop-nav-btn active" data-view="home"><i class="fas fa-box mr-3 w-4"></i>Library</button>
                 <button type="button" class="desktop-nav-btn" data-view="favourites"><i class="fas fa-heart mr-3 w-4"></i>Favourites</button>
-                <button type="button" class="desktop-nav-btn" data-view="artists"><i class="fas fa-user mr-3 w-4"></i>Artists</button>
                 <button type="button" class="desktop-nav-btn" data-view="playlists"><i class="fas fa-layer-group mr-3 w-4"></i>Playlists</button>
-                <button type="button" class="desktop-nav-btn" data-view="search"><i class="fas fa-search mr-3 w-4"></i>Search</button>
-                <button type="button" class="desktop-nav-btn" data-view="soundmash"><i class="fas fa-compact-disc mr-3 w-4"></i>SoundMash</button>
+                <button type="button" class="desktop-nav-btn" data-view="artists"><i class="fas fa-user mr-3 w-4"></i>Artists</button>
+                <button type="button" class="desktop-nav-btn" data-view="podcast"><i class="fas fa-podcast mr-3 w-4"></i>Podcasts</button>
                 <button type="button" class="desktop-nav-btn" data-view="settings"><i class="fas fa-cog mr-3 w-4"></i>Settings</button>
                 <div class="flex items-center justify-between w-full mt-2 gap-2 flex-shrink-0">
                     <button type="button" id="desktop-queue-btn" class="desktop-queue-status-btn flex items-center gap-2 px-3 py-2 rounded-[var(--radius-omni-xs)] hover:bg-[var(--surface-overlay)] text-[var(--text-dim)] hover:text-[var(--text-main)] font-semibold text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" aria-label="Queue" aria-expanded="false">
@@ -451,6 +488,14 @@
                 </div>
                 <div id="desktop-queue-panel" class="hidden overflow-y-auto min-h-0" style="max-height: 40vh;">
                     <div id="desktop-queue-tracks" class="space-y-0 py-1"></div>
+                </div>
+                <div id="desktop-downloads-section" class="hidden flex-shrink-0 mt-2">
+                    <div class="flex items-center justify-between w-full mb-1 px-1">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Downloads</span>
+                    </div>
+                    <div id="desktop-downloads-panel" class="overflow-y-auto min-h-0 space-y-0 py-1" style="max-height: 40vh;">
+                        <div id="desktop-downloads-list" class="space-y-0"></div>
+                    </div>
                 </div>
                 <div class="flex-1 min-h-0"></div>
                 <div class="flex justify-center flex-shrink-0 pt-2">
@@ -469,6 +514,10 @@
                         <button id="desktop-global-search-clear" class="hidden text-[var(--placeholder)] hover:text-[var(--text-main)] transition-colors">
                             <i class="fas fa-times-circle"></i>
                         </button>
+                        <div id="desktop-discover-odst-inline" class="desktop-discover-odst-inline flex gap-1.5 p-1 rounded-full border border-[var(--glass-border)] flex-shrink-0" style="background: var(--input-bg);">
+                            <button type="button" id="search-odst-music" class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-[var(--accent)] text-[var(--text-on-accent)]" aria-pressed="true">Music</button>
+                            <button type="button" id="search-odst-youtube" class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-[var(--accent)]/15 text-[var(--accent)]" aria-pressed="false">Youtube</button>
+                        </div>
                     </div>
                 </div>
 
@@ -498,19 +547,18 @@
                         <div id="desktop-artist-albums" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6"></div>
                     </section>
                 </div>
-                <div id="desktop-view-playlists" class="desktop-view">
-                    <div class="glass-view rounded-2xl p-3 border border-[var(--glass-border)] mb-4 flex gap-3 items-center">
-                        <div class="flex-1"></div>
-                        <button type="button" id="desktop-playlist-create-btn" class="desktop-create-playlist-btn flex-shrink-0 min-h-[44px] px-4 py-3 rounded-[var(--radius-omni-xs)] bg-[var(--accent)] text-[var(--text-on-accent)] font-bold text-sm transition-all hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" onclick="typeof createPlaylistPrompt==='function'&&createPlaylistPrompt()"><i class="fas fa-plus mr-2"></i>Create playlist</button>
+                <div id="desktop-view-playlists" class="desktop-view flex flex-col min-h-[60vh]">
+                    <div id="desktop-playlist-empty-state" class="flex-1 flex flex-col items-center justify-center text-center min-h-[min(70vh,600px)]">
+                        <i class="fas fa-layer-group text-4xl text-[var(--text-dim)]/50 mb-4"></i>
+                        <p class="text-[var(--text-dim)] font-bold text-sm uppercase tracking-widest mb-2">No playlists yet</p>
+                        <p class="text-[var(--text-dim)] text-xs mb-6">Create one or add tracks from Library.</p>
+                        <button type="button" id="desktop-playlist-create-btn" class="desktop-create-playlist-btn min-h-[44px] px-6 py-3 rounded-xl bg-[var(--accent)] text-[var(--text-on-accent)] font-bold text-sm transition-all hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" onclick="typeof createPlaylistPrompt==='function'&&createPlaylistPrompt()"><i class="fas fa-plus mr-2"></i>Create playlist</button>
                     </div>
-                    <div id="desktop-playlist-list-container" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
-                </div>
-                <div id="desktop-view-search" class="desktop-view">
-                    <div id="desktop-search-page-results" class="space-y-2 min-h-[120px] mt-4"></div>
-                    <!-- Music/Youtube toggle: relative to #desktop-view-search bottom (one button height raised) -->
-                    <div id="search-odst-toggle-overlay" class="absolute right-6 z-10 flex gap-1.5 p-1 rounded-full border border-[var(--glass-border)] shadow-lg pointer-events-auto" style="bottom: var(--search-odst-toggle-offset); background: var(--input-bg);">
-                        <button type="button" id="search-odst-music" class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-[var(--accent)] text-[var(--text-on-accent)]" aria-pressed="true">Music</button>
-                        <button type="button" id="search-odst-youtube" class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors bg-[var(--accent)]/15 text-[var(--accent)]" aria-pressed="false">Youtube</button>
+                    <div id="desktop-playlist-has-list" class="hidden flex flex-col flex-1">
+                        <div class="flex justify-center mb-4 flex-shrink-0">
+                            <button type="button" id="desktop-playlist-create-btn-has" class="desktop-create-playlist-btn min-h-[44px] px-6 py-3 rounded-xl bg-[var(--accent)] text-[var(--text-on-accent)] font-bold text-sm transition-all hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" onclick="typeof createPlaylistPrompt==='function'&&createPlaylistPrompt()"><i class="fas fa-plus mr-2"></i>Create playlist</button>
+                        </div>
+                        <div id="desktop-playlist-list-container" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 content-start"></div>
                     </div>
                 </div>
                 <div id="desktop-view-playlist-detail" class="desktop-view">
@@ -535,11 +583,14 @@
                 </div>
                 <!-- YouTube preview modal (ODST result click from Search) -->
                 <div id="dl-preview-modal" class="fixed inset-0 z-[110] hidden flex-col backdrop-blur-sm" style="background-color: var(--overlay-bg);">
-                    <div class="flex justify-end p-4">
-                        <button type="button" id="dl-preview-close" class="w-12 h-12 flex items-center justify-center rounded-full bg-[var(--surface-overlay)] text-[var(--text-main)]"><i class="fas fa-times"></i></button>
-                    </div>
-                    <div class="flex-1 flex items-center justify-center p-4">
-                        <div id="dl-preview-iframe-wrap" class="w-full max-w-2xl aspect-video rounded-xl overflow-hidden bg-black"></div>
+                    <div class="flex-1 flex items-center justify-center p-4 flex-col">
+                        <div class="relative w-full max-w-2xl">
+                            <div id="dl-preview-iframe-wrap" class="w-full aspect-video rounded-xl overflow-hidden bg-black"></div>
+                            <button type="button" id="dl-preview-close" class="absolute top-3 right-3 z-10 w-12 h-12 flex items-center justify-center rounded-full bg-[var(--surface-overlay)] text-[var(--text-main)] shadow-lg hover:bg-black/40 transition-colors" aria-label="Close"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="flex justify-center pt-3">
+                            <button type="button" id="dl-preview-add-to-queue" class="w-12 h-12 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--accent)] text-[var(--text-main)] flex items-center justify-center transition-all hidden" aria-label="Add to download queue"><i class="fas fa-cloud-download-alt text-sm"></i></button>
+                        </div>
                     </div>
                 </div>
                 <!-- Cover choice modal (when premium cover fails) -->
@@ -585,10 +636,14 @@
                     </div>
                 </div>
                 <!-- Download queue FAB + popover (Search view) -->
-                <div id="desktop-dl-queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[90] flex flex-col items-end pointer-events-none hidden">
+                <div id="desktop-dl-queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[120] flex flex-col items-end pointer-events-none hidden">
                     <button id="desktop-dl-queue-fab" type="button" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)] relative">
-                        <i class="fas fa-list-ul"></i>
-                        <div id="desktop-dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)]">0</div>
+                        <svg class="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 48 48" aria-hidden="true">
+                            <circle cx="24" cy="24" r="22" fill="none" stroke="currentColor" stroke-width="2" class="text-[var(--bg-deep)]/30" />
+                            <circle id="desktop-dl-queue-progress-ring" cx="24" cy="24" r="22" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="138.23" stroke-dashoffset="138.23" stroke-linecap="round" style="transition: stroke-dashoffset 0.25s ease;" />
+                        </svg>
+                        <i class="fas fa-list-ul relative z-[1]"></i>
+                        <div id="desktop-dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)] z-[2]">0</div>
                     </button>
                     <div id="desktop-dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
                         <div class="p-5">
@@ -601,10 +656,43 @@
                         </div>
                     </div>
                 </div>
-                <div id="desktop-view-soundmash" class="desktop-view">
-                    <div class="flex flex-col items-center justify-center py-16 text-center">
-                        <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)] mb-4">SoundMash</h1>
-                        <p class="text-sm text-[var(--text-dim)]">Coming soon</p>
+                <div id="desktop-view-podcast" class="desktop-view">
+                    <div class="flex flex-col h-full w-full overflow-hidden p-6">
+                        <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)]">Podcasts</h1>
+                        <p class="text-sm text-[var(--text-dim)] mt-4">Listen to your podcasts.</p>
+                    </div>
+                </div>
+                <div id="desktop-view-discover" class="desktop-view">
+                    <div class="flex flex-col h-full w-full overflow-hidden p-6">
+                        <div id="desktop-discover-search-results" class="hidden flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2 min-h-[120px]"></div>
+                        <div id="desktop-discover-content-panel" class="flex flex-col flex-1 min-h-0 w-full overflow-y-auto custom-scrollbar">
+                            <p id="desktop-discover-empty-library" class="hidden text-sm text-[var(--text-dim)] py-4 px-1">Search and download a song in the bar above to get recommendations!</p>
+                            <div id="desktop-discover-config-wrap" class="p-4 rounded-2xl border border-[var(--glass-border)] mb-4 flex-shrink-0" style="background: var(--surface-overlay);">
+                                    <p class="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-dim)] mb-2">Recommendations configuration</p>
+                                    <p class="text-xs text-[var(--text-dim)] mb-2">Last.fm improves recommendations. <a id="desktop-discover-lastfm-link" href="https://www.last.fm/api/account/create" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] font-bold underline hover:no-underline">https://www.last.fm/api/account/create</a></p>
+                                    <details class="mb-3 text-[11px] text-[var(--text-dim)]">
+                                        <summary class="cursor-pointer font-semibold text-[var(--text-main)]">How to get your API key</summary>
+                                        <ol class="mt-2 space-y-1.5 list-decimal list-inside">
+                                            <li><strong>Register first.</strong> You need a Last.fm account. Sign up at <a href="https://www.last.fm/join" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] underline">last.fm/join</a> (free) if you don’t have one.</li>
+                                            <li>Open the link above and create an application. Use: <strong>Contact email</strong> — your email; <strong>Application name</strong> — e.g. Soundsible; <strong>Application description</strong> — e.g. Music recommendations; <strong>Callback URL</strong> — leave blank or <code class="text-[10px] bg-[var(--input-bg)] px-1 rounded">https://localhost</code> (not used); <strong>Application homepage</strong> — leave blank or your site URL.</li>
+                                            <li>After submitting, copy the <strong>API Key</strong> and paste it below.</li>
+                                        </ol>
+                                    </details>
+                                    <div class="flex gap-2">
+                                        <input type="password" id="desktop-discover-lastfm-input" class="input-theme flex-1 rounded-[var(--radius-omni-xs)] px-3 py-2 text-sm" placeholder="Last.fm API key" autocomplete="off">
+                                        <button type="button" id="desktop-discover-lastfm-save" class="px-4 py-2 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]/40 hover:opacity-90 transition-opacity">Save</button>
+                                    </div>
+                                    <p id="desktop-discover-lastfm-status" class="mt-2 text-xs text-[var(--text-dim)] hidden"></p>
+                            </div>
+                            <div id="desktop-discover-main" class="flex flex-col flex-1 min-h-0 hidden">
+                                <div class="flex items-center justify-between gap-4 mb-4 flex-shrink-0">
+                                    <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)]">Discover</h1>
+                                    <button type="button" id="desktop-discover-refresh-btn" class="px-4 py-2 rounded-xl text-sm font-semibold bg-[var(--surface-overlay)] hover:bg-[var(--accent)]/20 text-[var(--text-main)] hover:text-[var(--accent)] border border-[var(--glass-border)] transition-colors">Refresh</button>
+                                </div>
+                                <div id="desktop-discover-no-results" class="hidden text-center py-6 text-sm text-[var(--text-dim)]">No recommendations right now. Try again later.</div>
+                                <div id="desktop-discover-sections" class="flex-1 min-h-0"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div id="desktop-view-settings" class="desktop-view">
@@ -642,6 +730,31 @@
                             <option value="alphabetical">Alphabetical</option>
                             <option value="favorites_first">Favorites first</option>
                         </select>
+                        <h2 class="text-lg font-bold pt-4">Recommendations</h2>
+                        <p class="text-xs text-[var(--text-dim)] mb-2">Last.fm API key improves Discover. <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] font-bold underline hover:no-underline">https://www.last.fm/api/account/create</a></p>
+                        <details class="mb-3 text-[11px] text-[var(--text-dim)]">
+                            <summary class="cursor-pointer font-semibold text-[var(--text-main)]">How to get your API key</summary>
+                            <ol class="mt-2 space-y-1.5 list-decimal list-inside">
+                                <li><strong>Register first.</strong> You need a Last.fm account. Sign up at <a href="https://www.last.fm/join" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] underline">last.fm/join</a> (free) if you don’t have one.</li>
+                                <li>Open the link above and create an application. Use: <strong>Contact email</strong> — your email; <strong>Application name</strong> — e.g. Soundsible; <strong>Application description</strong> — e.g. Music recommendations; <strong>Callback URL</strong> — leave blank or <code class="text-[10px] bg-[var(--input-bg)] px-1 rounded">https://localhost</code> (not used); <strong>Application homepage</strong> — leave blank or your site URL.</li>
+                                <li>After submitting, copy the <strong>API Key</strong> and paste it below.</li>
+                            </ol>
+                        </details>
+                        <div class="flex gap-2">
+                            <input type="password" id="desktop-settings-lastfm-api-key" class="input-theme flex-1 rounded-[var(--radius-omni-xs)] px-4 py-2 text-sm" placeholder="Last.fm API key" autocomplete="off">
+                            <button type="button" id="desktop-settings-lastfm-save" class="px-4 py-2 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]/40 hover:opacity-90 transition-opacity">Save</button>
+                        </div>
+                        <p id="desktop-settings-lastfm-status" class="mt-2 text-xs text-[var(--text-dim)] hidden"></p>
+                        <h2 class="text-lg font-bold pt-4">Excluded from recommendation seeds</h2>
+                        <p class="text-xs text-[var(--text-dim)] mb-2">Tracks in this list are not used to generate Discover recommendations.</p>
+                        <div class="flex gap-2 mb-2">
+                            <select id="desktop-settings-exclusions-add" class="input-theme flex-1 rounded-[var(--radius-omni-xs)] px-4 py-2 text-sm font-medium min-w-0" aria-label="Add track to exclusions">
+                                <option value="">Choose a track…</option>
+                            </select>
+                            <button type="button" id="desktop-settings-exclusions-add-btn" class="px-4 py-2 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]/40 hover:opacity-90 transition-opacity flex-shrink-0">Add</button>
+                        </div>
+                        <ul id="desktop-settings-exclusions-list" class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar text-sm"></ul>
+                        <p id="desktop-settings-exclusions-status" class="mt-2 text-xs text-[var(--text-dim)] hidden"></p>
                         <h2 class="text-lg font-bold pt-4">Metadata</h2>
                         <button type="button" id="desktop-refetch-metadata-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 text-[var(--text-on-accent)] font-bold py-3 rounded-[var(--radius-omni-xs)]">Re-fetch Metadata</button>
                         <div id="desktop-refetch-metadata-status" class="mt-2 text-xs text-[var(--text-dim)] hidden"></div>
