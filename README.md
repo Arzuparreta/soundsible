@@ -16,13 +16,15 @@ This repository contains the full Soundsible ecosystem, with the Station as its 
 
 ## The Station (Windows, Linux, Android, iOS)
 The **Station** is the primary, recommended interface for all users. It's a modern JavaScript UI that just works, and embeds the high quality audio processing from your running backend, with a full featured listening, library management, and **most importantly**, **music discovery and downloading** (Recommendations API is configurable in settings and completely optional).
-- Search within your **library** and the **internet** and download any music; **all from the same search bar**.
-- Select **search source**: Youtube Music / Youtube
-- Easy backend library management from the frontend: Edit metadata, refetch metadata, upload your own covers.
+**You can**:
+- Search within your **library** and the **internet** and **download any music**; all from the same search bar.
+- Choose **search & download source**: Youtube Music / Youtube.
+- Resume playback and queue on other devices. (Just open a second device and you will see the dialog).
+- Easily **manage your library from the frontend**: Edit metadata, refetch metadata, upload your own covers; all within the station app.
+- Easily setup your ecosystem with the embeded **guided setup**. (Read the dialogs!)
   
 ### Key backend features:
 - **Max quality**: Playback **engine** ensures **maximum quality**. Downloader tool defaults to **losless quality** and offer **manual quality selection**.
-- **Setup Wizard on app launcher**: Easy setup for setting absolutely every configuration needed for you to start streaming your music right now!
 - **ODST Downloader**: Embeded downloader that downloads music from youtube or yt-music. It automatically fetches all the metadata including covers, and uploads it to your previously configured NAS (or desktop local) storage or third provided cloud (setup for Cloudflare R2, Backblaze R2 and S2 users on **Setup Wizard**).
 - **Universal Sync**: Your library, playlists, metadata, configurations... all synchronised along your devices. 
 - **High grade cover fetching** with fallback to yt thumbnail for non-music tracks.
