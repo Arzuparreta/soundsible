@@ -15,7 +15,7 @@ This repository contains the full Soundsible ecosystem, with the Station as its 
 ---
 
 ## The Station (Windows, Linux, Android, iOS)
-The **Station** is the primary, recommended interface for all users. It's a modern JavaScript UI that just works, and embeds the high quality audio processing from your running backend, with a full featured listening, library management, and most importantly, music downloading and finding.
+The **Station** is the primary, recommended interface for all users. It's a modern JavaScript UI that just works, and embeds the high quality audio processing from your running backend, with a full featured listening, library management, and **most importantly**, **music discovery and downloading** (Recommendations API is configurable in settings and completely optional).
 - Search within your **library** and the **internet** and download any music; **all from the same search bar**.
 - Select **search source**: Youtube Music / Youtube
 - Easy backend library management from the frontend: Edit metadata, refetch metadata, upload your own covers.
