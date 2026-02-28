@@ -74,6 +74,12 @@ const DEFAULT_DL_SELECTORS = {
     downloadsList: 'desktop-downloads-list'
 };
 
+/** Safe API base: same-origin when app is served from API (e.g. :5005/player/), else store.apiBase. */
+function getApiBase() {
+    if (typeof store !== 'undefined' && store.state?.activeHost) return store.apiBase;
+    return (typeof window !== 'undefined' && window.location?.origin) ? window.location.origin : '';
+}
+
 /** ODST search source (UI toggle). */
 const ODST_SOURCE_MUSIC = 'music';
 const ODST_SOURCE_YOUTUBE = 'youtube';
@@ -645,8 +651,9 @@ export class Downloader {
             this.addLog('No valid items to send (missing URL).');
             return;
         }
+        const apiBase = getApiBase();
         try {
-            const resp = await fetch(`${store.apiBase}/api/downloader/queue`, {
+            const resp = await fetch(`${apiBase}/api/downloader/queue`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ items })
@@ -660,13 +667,14 @@ export class Downloader {
             this.renderDownloadQueueList();
             this._batchTotal = items.length;
             this.updateFabAndPopover();
-            await fetch(`${store.apiBase}/api/downloader/start`, { method: 'POST' });
+            await fetch(`${apiBase}/api/downloader/start`, { method: 'POST' });
             this.startLibrarySyncFallback();
             this.refreshStatus();
             this.addLog(`Queued ${items.length} item(s).`);
             Haptics.tick();
         } catch (err) {
             this.addLog(`Submit failed: ${err.message}`);
+            if (typeof window.showToast === 'function') window.showToast(`Download queue: ${err.message}`);
             Haptics.error();
         }
     }
@@ -685,9 +693,10 @@ export class Downloader {
     }
 
     static async refreshStatus() {
-        if (!store.state.activeHost) return;
+        const apiBase = getApiBase();
+        if (!apiBase) return;
         try {
-            const resp = await fetch(`${store.apiBase}/api/downloader/queue/status`);
+            const resp = await fetch(`${apiBase}/api/downloader/queue/status`);
             const data = await resp.json();
             this.lastDownloaderStatus = data;
             if (!data.is_processing) this._batchTotal = 0;
@@ -835,9 +844,10 @@ export class Downloader {
     }
 
     static async loadConfig() {
-        if (!store.state.activeHost) return;
+        const apiBase = getApiBase();
+        if (!apiBase) return;
         try {
-            const resp = await fetch(`${store.apiBase}/api/downloader/config`);
+            const resp = await fetch(`${apiBase}/api/downloader/config`);
             const data = await resp.json();
             this.confPath.value = data.output_dir || '';
             

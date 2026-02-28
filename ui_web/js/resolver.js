@@ -9,7 +9,7 @@ export class Resolver {
         const port = store.state.config.port;
         const protocol = window.location.protocol;
         const baseUrl = `${protocol}//${host}:${port}`;
-        // Preview playback URL is resolved in audio.js via stream-url API; do not use server proxy.
+        // Preview playback is handled in audio.js via GET /api/preview/stream/<id> (server proxy).
         if (track && track.source === 'preview') {
             return '';
         }

@@ -10,6 +10,12 @@ const DEFAULT_LIMIT = 8;
 const SKELETON_CARD_COUNT = 6;
 const LIST_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+/** Safe API base: prefer store.apiBase when activeHost is set, else same-origin (e.g. app and API on same host:port). */
+function getApiBase() {
+    if (typeof store !== 'undefined' && store.apiBase && store.state && store.state.activeHost) return store.apiBase;
+    return window.location.origin || '';
+}
+
 function escapeCssUrl(url) {
     if (!url) return '';
     return String(url).replace(/"/g, '%22').replace(/'/g, '%27');
@@ -138,7 +144,10 @@ export const Discover = {
         const rawCover = r.cover_url || r.thumbnail || '';
         const cover_url = ensureHttpsImageUrl(rawCover);
         const thumb = cover_url ? cover_url.replace(/"/g, '%22') : '';
-        const coverStyle = cover_url ? `background-image: url("${escapeCssUrl(cover_url)}")` : '';
+        const placeholder = (store.placeholderCoverUrl || '').replace(/"/g, '%22');
+        const coverStyle = cover_url
+            ? `background-image: url("${escapeCssUrl(cover_url)}")`
+            : (placeholder ? `background-image: url("${escapeCssUrl(placeholder)}")` : 'background-color: var(--surface-overlay);');
         const richMetaStr = escape(JSON.stringify({
             title: r.title,
             artist: r.artist,
@@ -158,7 +167,7 @@ export const Discover = {
                 <button type="button" class="discover-card-play absolute inset-0 z-[1] flex items-center justify-center rounded-xl bg-black/0 hover:bg-black/30 active:bg-black/40 transition-colors group focus:outline-none focus:ring-2 focus:ring-[var(--accent)]" aria-label="Play preview">
                     <span class="opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity w-12 h-12 flex items-center justify-center rounded-full bg-[var(--accent)]/90 text-[var(--text-on-accent)]"><i class="fas fa-play text-lg ml-0.5"></i></span>
                 </button>
-                <div class="discover-card-cover" style="${coverStyle}" role="img" aria-label=""></div>
+                <div class="discover-card-cover ${!cover_url ? 'discover-card-cover-placeholder' : ''}" style="${coverStyle}" role="img" aria-label="${cover_url ? '' : 'No cover'}"></div>
                 <div class="discover-card-meta">
                     <div class="discover-card-title">${esc(r.title)}</div>
                     <div class="discover-card-artist">${esc(r.artist || r.channel || '')}</div>
@@ -265,7 +274,7 @@ export const Discover = {
 
     _bindResultButtons() {
         if (!this._sectionsEl) return;
-        const apiBase = (typeof store !== 'undefined' && store.apiBase) ? store.apiBase : '';
+        const apiBase = getApiBase();
 
         const resolveItem = async (item, row) => {
             if (item.webpage_url && item.id) return item;
@@ -336,8 +345,14 @@ export const Discover = {
                 if (!item) return;
 
                 item = await resolveItem(item, row);
-                if (!item) return;
-
+                if (!item) {
+                    if (typeof window.showToast === 'function') window.showToast('Could not find track');
+                    return;
+                }
+                if (!item.id || String(item.id).startsWith('raw-')) {
+                    if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
+                    return;
+                }
                 this._notifyPlayed(item);
                 if (typeof window.playPreview === 'function') window.playPreview(item);
             });
@@ -346,7 +361,7 @@ export const Discover = {
 
     _notifyPlayed(item) {
         if (!item || !item.id) return;
-        const apiBase = (typeof store !== 'undefined' && store.apiBase) ? store.apiBase : '';
+        const apiBase = getApiBase();
         fetch(`${apiBase}/api/discover/played`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -356,7 +371,7 @@ export const Discover = {
 
     async _updateConfigVisibility() {
         if (!this._configWrap) return;
-        const apiBase = (typeof store !== 'undefined' && store.apiBase) ? store.apiBase : '';
+        const apiBase = getApiBase();
         try {
             const res = await fetch(`${apiBase}/api/downloader/config`);
             const data = await res.json().catch(() => ({}));
@@ -374,7 +389,7 @@ export const Discover = {
         const saveBtn = document.getElementById(prefix + 'discover-lastfm-save');
         const statusEl = document.getElementById(prefix + 'discover-lastfm-status');
         if (!saveBtn || !input) return;
-        const apiBase = (typeof store !== 'undefined' && store.apiBase) ? store.apiBase : '';
+        const apiBase = getApiBase();
         saveBtn.addEventListener('click', async () => {
             const key = (input.value || '').trim();
             if (!key) {
@@ -412,7 +427,7 @@ export const Discover = {
         if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
         this._renderSkeleton();
         const newSession = !this._hasFetchedThisSession;
-        const apiBase = (typeof store !== 'undefined' && store.apiBase) ? store.apiBase : '';
+        const apiBase = getApiBase();
         try {
             const res = await fetch(`${apiBase}/api/discover/recommendations`, {
                 method: 'POST',

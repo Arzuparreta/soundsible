@@ -10,7 +10,6 @@ import { isVisible } from './visibility.js';
 const PRELOAD_THRESHOLD_SEC = 45;
 const PUSH_DEBOUNCE_VISIBLE_SEC = 5;
 const PUSH_DEBOUNCE_HIDDEN_SEC = 15;
-
 class AudioEngine {
     constructor() {
         this.audio = new Audio();
@@ -171,8 +170,8 @@ class AudioEngine {
     }
 
     /**
-     * Preview tracks use the stream-url API and play from the returned URL so bytes do not
-     * go through the server. Single path for all in-app preview (Discover, Search, queue, context).
+     * Preview tracks use GET /api/preview/stream/<id> (server proxies YT audio; same-origin so playback works).
+     * Single path for all in-app preview (Discover, Search, queue, context).
      */
     async playTrack(track) {
         // Any song change (different track) resets repeat
@@ -189,20 +188,17 @@ class AudioEngine {
 
         this._invalidatePreload();
 
-        // Client-driven preview: fetch direct stream URL from API; do not use server proxy.
+        // Preview: stream through our server (same-origin) so playback works. Direct YT URLs are CORS-blocked.
         if (track.source === 'preview') {
-            const apiBase = (typeof store !== 'undefined' && store.apiBase) ? store.apiBase : '';
-            const streamUrlEndpoint = apiBase ? `${apiBase}/api/preview/stream-url/${track.id}` : `${window.location.origin}/api/preview/stream-url/${track.id}`;
+            const ytId = track.id && !String(track.id).startsWith('raw-') && String(track.id).length === 11 ? track.id : null;
+            if (!ytId) {
+                if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
+                return;
+            }
+            const apiBase = (typeof store !== 'undefined' && store.apiBase && store.state && store.state.activeHost) ? store.apiBase : (window.location.origin || '');
+            const streamUrl = `${apiBase.replace(/\/$/, '')}/api/preview/stream/${encodeURIComponent(ytId)}`;
             try {
-                const res = await fetch(streamUrlEndpoint);
-                const data = await res.json().catch(() => ({}));
-                const url = data && data.url;
-                if (!url) {
-                    store.update({ isPlaying: false });
-                    if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
-                    return;
-                }
-                this.audio.src = url;
+                this.audio.src = streamUrl;
                 this.audio.load();
                 await this.audio.play();
                 store.update({ currentTrack: track, isPlaying: true });

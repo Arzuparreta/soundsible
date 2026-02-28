@@ -712,6 +712,7 @@ function initPlaylistListDrag() {
 
 window.playTrack = playTrack;
 window.playPreview = playPreview;
+window.showToast = (msg) => { if (typeof DesktopUI !== 'undefined' && DesktopUI.showToast) DesktopUI.showToast(msg); };
 window.showArtistDetail = showArtistDetail;
 window.showPlaylistDetail = showPlaylistDetail;
 

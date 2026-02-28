@@ -1340,6 +1340,7 @@ window.playTrack = (trackId) => {
 };
 
 window.playPreview = playPreview;
+window.showToast = (msg) => { if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(msg); };
 
 // RELIABLE INIT: Run immediately if DOM is already ready
 if (document.readyState === 'loading') {

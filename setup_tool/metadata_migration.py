@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 from shared.models import Track
-from odst_tool.metadata_harmonizer import MetadataHarmonizer
 
 
 class MetadataMigrationManager:
@@ -85,7 +84,8 @@ class MetadataMigrationManager:
                     return
                 old_payload = track.to_dict()
                 try:
-                    harmonized = MetadataHarmonizer.harmonize(track.to_dict(), source="migration")
+                    # Raw metadata pass-through; no harmonizer.
+                    harmonized = track.to_dict()
                     confidence = float(harmonized.get("metadata_confidence") or 0.0)
                     metadata_state = harmonized.get("metadata_state") or "fallback_youtube"
                     new_payload = {

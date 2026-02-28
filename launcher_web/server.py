@@ -98,14 +98,9 @@ def launch_ecosystem():
     if not RUN_PY.exists():
         return jsonify({"ok": False, "error": "run.py not found."}), 500
     try:
-        log_dir = ROOT_DIR / "logs"
-        log_dir.mkdir(exist_ok=True)
-        log_file = open(log_dir / "daemon.log", "a")
         env = os.environ.copy()
         env["PYTHONPATH"] = str(ROOT_DIR)
         popen_kw = {
-            "stdout": log_file,
-            "stderr": log_file,
             "cwd": str(ROOT_DIR),
             "env": env,
         }
@@ -113,6 +108,7 @@ def launch_ecosystem():
             popen_kw["creationflags"] = subprocess.CREATE_NO_WINDOW
         else:
             popen_kw["start_new_session"] = True
+        # No stdout/stderr redirect: daemon output goes to the terminal that started this server
         subprocess.Popen(
             [str(VENV_PYTHON), str(RUN_PY), "--daemon"],
             **popen_kw,

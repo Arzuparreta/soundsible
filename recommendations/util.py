@@ -24,7 +24,9 @@ def raw_stable_id(artist: str, title: str) -> str:
 
 def raw_to_dict(r, stable_id: str) -> dict:
     """Turn a RawRecommendation or dict into a serializable dict with the given stable id."""
-    if hasattr(r, "__dict__"):
+    if isinstance(r, dict):
+        d = dict(r)
+    elif hasattr(r, "__dict__"):
         d = {k: v for k, v in r.__dict__.items() if not k.startswith("_")}
     else:
         d = dict(r)

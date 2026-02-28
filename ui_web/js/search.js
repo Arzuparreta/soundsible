@@ -10,6 +10,12 @@ import { Haptics } from './haptics.js';
 
 const ODST_DEBOUNCE_MS = 0;
 
+function getApiBase() {
+    if (store && store.apiBase && store.state && store.state.activeHost) return store.apiBase;
+    if (typeof window !== 'undefined' && window.location && window.location.origin) return window.location.origin;
+    return '';
+}
+
 function esc(str) {
     if (!str) return '';
     const div = document.createElement('div');
@@ -116,12 +122,14 @@ function buildLibraryRowHtml(track) {
 
 function buildOdstRowHtml(r) {
     const thumbUrl = (r.thumbnail || '').replace(/"/g, '%22').replace(/'/g, '%27');
+    const placeholderUrl = (store.placeholderCoverUrl || '').replace(/"/g, '%22').replace(/'/g, '%27');
+    const thumbStyle = thumbUrl ? `background-image:url('${thumbUrl}');` : (placeholderUrl ? `background-image:url('${placeholderUrl}');` : '');
     const duration = renderers.formatTime(r.duration);
     return `
     <div class="search-result-item mb-2">
         <div class="text-[9px] font-black uppercase tracking-widest text-[var(--text-dim)] mb-0.5">ODST</div>
         <div class="flex items-center gap-3 p-3 rounded-xl border border-[var(--input-border)] transition-colors group cursor-pointer hover:bg-[var(--surface-overlay)]" style="background-color: var(--input-bg);" data-video-id="${esc(r.id)}" data-source="odst">
-            <div class="w-12 h-12 rounded-lg flex-shrink-0 dl-result-thumb bg-cover bg-center" style="background-image:url('${thumbUrl}'); background-color: var(--input-bg);"></div>
+            <div class="w-12 h-12 rounded-lg flex-shrink-0 dl-result-thumb bg-cover bg-center" style="${thumbStyle} background-color: var(--input-bg);"></div>
             <div class="flex-1 min-w-0">
                 <div class="text-sm font-bold truncate text-[var(--text-main)]">${esc(r.title)}</div>
                 <div class="text-xs text-[var(--text-dim)] truncate">${esc(r.channel)} ${duration ? ' · ' + duration : ''}</div>
@@ -225,10 +233,15 @@ function runOdstFetch(raw) {
     const sourceParam = (odstSourceMode === 'youtube') ? 'youtube' : 'ytmusic';
     if (odstAbortController) odstAbortController.abort();
     odstAbortController = new AbortController();
-    fetch(`${store.apiBase}/api/downloader/youtube/search?q=${encodeURIComponent(raw)}&limit=10&source=${sourceParam}`, {
+    fetch(`${getApiBase()}/api/downloader/youtube/search?q=${encodeURIComponent(raw)}&limit=10&source=${sourceParam}`, {
         signal: odstAbortController.signal
     })
-        .then((resp) => resp.json())
+        .then((resp) => {
+            if (!resp.ok) {
+                throw new Error(resp.status === 500 ? (resp.statusText || 'Server error') : `HTTP ${resp.status}`);
+            }
+            return resp.json();
+        })
         .then((data) => {
             const results = data.results || [];
             lastOdstResults = results;
@@ -243,6 +256,8 @@ function runOdstFetch(raw) {
                 return (a.sortTitle || '').localeCompare(b.sortTitle || '');
             });
             render(merged);
+            const loading = resultsEl?.querySelector('.search-odst-loading');
+            if (loading) loading.remove();
         })
         .catch((err) => {
             if (err.name === 'AbortError') return;
@@ -253,12 +268,14 @@ function runOdstFetch(raw) {
             render(sorted);
             const loading = resultsEl?.querySelector('.search-odst-loading');
             if (loading) loading.remove();
+            const errMsg = err.message || 'ODST search unavailable';
             if (resultsEl) {
                 const msg = document.createElement('div');
-                msg.className = 'text-center py-2 text-red-400/80 text-sm';
-                msg.textContent = 'ODST search unavailable';
+                msg.className = 'text-center py-3 text-[var(--text-dim)] text-sm';
+                msg.textContent = errMsg;
                 resultsEl.appendChild(msg);
             }
+            if (typeof window.showToast === 'function') window.showToast(errMsg);
         });
 }
 

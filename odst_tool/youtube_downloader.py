@@ -23,10 +23,29 @@ from .config import (
 import difflib
 from .audio_utils import AudioProcessor
 from .models import Track
-from .metadata_harmonizer import MetadataHarmonizer
 
-# Only this source skips harmonization; all others use canonical metadata (MusicBrainz/iTunes).
+# Raw metadata only; no harmonizer. Kept for any legacy source checks.
 SOURCE_RAW_YOUTUBE = "youtube_search"
+
+
+def _yt_thumbnail_url(video_id: Optional[str]) -> Optional[str]:
+    """YouTube thumbnail URL (mqdefault). Returns None if video_id is falsy."""
+    if not video_id:
+        return None
+    return f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
+
+
+def _is_valid_youtube_video_id(video_id: Optional[str]) -> bool:
+    """True if this looks like a YouTube video id (11 chars, alphanumeric + -_). Filters RDAM*, channel IDs, etc."""
+    if not video_id or not isinstance(video_id, str):
+        return False
+    s = video_id.strip()
+    if len(s) != 11:
+        return False
+    return all(c.isalnum() or c in "-_" for c in s)
+
+# Prefer audio-only; fallbacks for YouTube format changes.
+YDL_FORMAT_AUDIO = "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best/worstaudio"
 
 
 class YouTubeDownloader:
@@ -55,14 +74,17 @@ class YouTubeDownloader:
 
     def process_track(self, metadata: Dict[str, Any], source: str = "spotify") -> Optional[Track]:
         """
-        Full workflow for a single track: Search -> Download -> Process -> Return Track
+        Full workflow for a single track: Search -> Download -> Process -> Return Track.
+        Uses raw metadata as-is (no harmonizer).
         """
-        # 1. Harmonize metadata (Standardize source)
         metadata = dict(metadata or {})
         metadata.setdefault("metadata_decision_id", uuid.uuid4().hex)
-        clean_metadata = MetadataHarmonizer.harmonize(metadata, source=source)
-        
-        # 2. Search for video
+        metadata.setdefault("title", "Unknown Title")
+        metadata.setdefault("artist", "Unknown Artist")
+        metadata.setdefault("album", "")
+        clean_metadata = metadata
+
+        # Search for video
         video_info = self._search_youtube(clean_metadata)
         
         if not video_info:
@@ -168,7 +190,7 @@ class YouTubeDownloader:
         if channel.endswith('- topic') or channel.endswith(' - topic'):
             return True
         
-        # Known music labels/collectives (from MetadataHarmonizer.COLLECTIVES)
+        # Known music labels/collectives
         music_keywords = [
             'records', 'music', 'official', 'oficial', 'label',
             '88rising', 'trap nation', 'proximity', 'monstercat',
@@ -231,7 +253,7 @@ class YouTubeDownloader:
             'title': title,
             'artist': artist,
             'album': album,
-            'album_art_url': info.get('thumbnail') or (MetadataHarmonizer.get_best_yt_thumbnail(video_id) if video_id else None),
+            'album_art_url': info.get('thumbnail') or _yt_thumbnail_url(video_id),
             'duration_sec': duration,
             'release_date': info.get('upload_date'),
             'track_number': info.get('track_number', 1),
@@ -255,20 +277,8 @@ class YouTubeDownloader:
                 raw_meta["album"] = metadata_hint.get("album")
             if metadata_hint.get("metadata_decision_id"):
                 raw_meta["metadata_decision_id"] = metadata_hint.get("metadata_decision_id")
-        # Raw YouTube path: only SOURCE_RAW_YOUTUBE skips harmonization (user chose "YouTube" toggle).
-        # All other sources (ytmusic_search, youtube_url, etc.) use canonical metadata below.
-        if source == SOURCE_RAW_YOUTUBE:
-            raw_meta["title"] = video_title
-            raw_meta["artist"] = channel
-            raw_meta["album"] = "Downloaded from YouTube"
-            # Fallback: ensure normal YouTube downloads get a cover (YT miniature) so they are not saved without cover
-            yt_thumb = info.get("thumbnail") or (MetadataHarmonizer.get_best_yt_thumbnail(video_id) if video_id else None)
-            if yt_thumb:
-                raw_meta["album_art_url"] = yt_thumb
-            clean_meta = raw_meta
-        else:
-            # Harmonize (Standardize + MusicBrainz/iTunes lookup)
-            clean_meta = MetadataHarmonizer.harmonize(raw_meta, source=source)
+        # Raw metadata only; no harmonizer.
+        clean_meta = raw_meta
         
         # 2. Download
         temp_file = self._download_audio(url)
@@ -321,7 +331,7 @@ class YouTubeDownloader:
                 metadata_decision_id=clean_meta.get("metadata_decision_id"),
                 metadata_state=clean_meta.get("metadata_state"),
                 metadata_query_fingerprint=clean_meta.get("metadata_query_fingerprint"),
-                cover_source=clean_meta.get("cover_source") if source != SOURCE_RAW_YOUTUBE else "youtube",
+                cover_source="youtube",
                 metadata_modified_by_user=False,
                 download_source=source
             )
@@ -455,9 +465,9 @@ class YouTubeDownloader:
         
         profile = QUALITY_PROFILES.get(self.quality, QUALITY_PROFILES[DEFAULT_QUALITY])
         
-        # Base options
+        # Base options (use same permissive format as validation/stream)
         ydl_opts = {
-            'format': 'ba/b',
+            'format': YDL_FORMAT_AUDIO,
             'retries': 10,
             'fragment_retries': 10,
             'outtmpl': output_template,
@@ -495,7 +505,7 @@ class YouTubeDownloader:
             try:
                 print(f"Primary download failed, retrying with simplified options: {e}")
                 simple_opts = {
-                    'format': 'bestaudio/best',
+                    'format': YDL_FORMAT_AUDIO,
                     'outtmpl': output_template,
                     'quiet': True,
                     'no_warnings': True,
@@ -568,7 +578,7 @@ class YouTubeDownloader:
                 if not entry:
                     continue
                 video_id = entry.get('id')
-                if not video_id:
+                if not _is_valid_youtube_video_id(video_id):
                     continue
                 webpage_url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
                 out.append({
@@ -589,7 +599,7 @@ class YouTubeDownloader:
                             if not entry:
                                 continue
                             video_id = entry.get('id')
-                            if not video_id:
+                            if not _is_valid_youtube_video_id(video_id):
                                 continue
                             webpage_url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
                             out.append({
@@ -607,79 +617,106 @@ class YouTubeDownloader:
                 print(f"YouTube search error: {e}")
         return out
 
+    def _extract_info_for_validation(self, url: str, ydl_opts: dict) -> Optional[Dict[str, Any]]:
+        """Run extract_info and return info if thumbnail and playable audio URL present."""
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+        except Exception:
+            return None
+        if not info:
+            return None
+        thumb = info.get('thumbnail') or (f"https://img.youtube.com/vi/{info.get('id')}/mqdefault.jpg" if info.get('id') else None)
+        if not thumb:
+            return None
+        stream_url = info.get('url')
+        if not stream_url and info.get('formats'):
+            for f in info.get('formats', []):
+                if f.get('vcodec') == 'none' and f.get('url'):
+                    stream_url = f['url']
+                    break
+        if not stream_url:
+            return None
+        return info
+
     def validate_and_get_info(self, video_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Extract full info for a video. Return the info dict only if the video has
-        a thumbnail and playable audio (so we can skip dead/restricted/fake results).
-        """
+        """Extract full info for a video; return only if thumbnail and playable audio. Retry with worstaudio, then no format (pick from list)."""
         if not video_id or not str(video_id).strip():
             return None
         url = f"https://www.youtube.com/watch?v={video_id}"
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'quiet': True,
-            'no_warnings': True,
-            'extractor_args': {
-                'youtube': {'player_client': ['web', 'android', 'mweb']}
-            }
-        }
+        base_opts = {'quiet': True, 'no_warnings': True}
         if self.cookie_file and os.path.exists(self.cookie_file):
-            ydl_opts['cookiefile'] = self.cookie_file
+            base_opts['cookiefile'] = self.cookie_file
         elif self.cookie_browser:
-            ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
+            base_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
+
+        # No player_client restriction so yt-dlp uses default (same as CLI; includes android_vr).
+        # Try permissive format first (bestaudio/best), then strict, then worstaudio, then no format
+        for fmt in ('bestaudio/best', YDL_FORMAT_AUDIO, 'worstaudio'):
+            info = self._extract_info_for_validation(url, {**base_opts, 'format': fmt})
+            if info:
+                return info
+        # Last resort: no format selector so yt-dlp returns all formats; pick first audio-only
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            with yt_dlp.YoutubeDL(base_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-            if not info:
-                return None
-            thumb = info.get('thumbnail') or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else None)
-            if not thumb:
-                return None
-            stream_url = info.get('url')
-            if not stream_url and info.get('formats'):
-                for f in info.get('formats', []):
-                    if f.get('vcodec') == 'none' and f.get('url'):
-                        stream_url = f['url']
-                        break
-            if not stream_url:
-                return None
-            return info
         except Exception:
             return None
+        if not info:
+            return None
+        thumb = info.get('thumbnail') or (f"https://img.youtube.com/vi/{info.get('id')}/mqdefault.jpg" if info.get('id') else None)
+        if not thumb:
+            return None
+        stream_url = info.get('url')
+        if not stream_url and info.get('formats'):
+            for f in info.get('formats', []):
+                if f.get('vcodec') == 'none' and f.get('url'):
+                    stream_url = f['url']
+                    break
+        return info if stream_url else None
 
     def get_stream_url(self, video_id: str) -> Optional[str]:
-        """
-        Return the direct audio stream URL for a YouTube video (no bytes streamed).
-        Used for client-driven preview: client fetches this URL and plays it directly.
-        Same extract_info logic as stream_audio_generator; no file written, no requests.get.
-        """
+        """Return direct audio stream URL. Tries format strings, then no format (pick first audio from list)."""
+        if not video_id or not str(video_id).strip():
+            return None
         url = f"https://www.youtube.com/watch?v={video_id}"
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'quiet': True,
-            'no_warnings': True,
-            'extractor_args': {
-                'youtube': {'player_client': ['web', 'android', 'mweb']}
-            }
-        }
+        base_opts = {'quiet': True, 'no_warnings': True}
         if self.cookie_file and os.path.exists(self.cookie_file):
-            ydl_opts['cookiefile'] = self.cookie_file
+            base_opts['cookiefile'] = self.cookie_file
         elif self.cookie_browser:
-            ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
+            base_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
+
+        # No player_client restriction so yt-dlp uses default (same as CLI).
+        for fmt in ('bestaudio/best', YDL_FORMAT_AUDIO, 'worstaudio'):
+            try:
+                with yt_dlp.YoutubeDL({**base_opts, 'format': fmt}) as ydl:
+                    info = ydl.extract_info(url, download=False)
+            except Exception:
+                continue
             if not info:
-                return None
+                continue
             stream_url = info.get('url')
             if not stream_url and info.get('formats'):
                 for f in info.get('formats', []):
                     if f.get('vcodec') == 'none' and f.get('url'):
                         stream_url = f['url']
                         break
-            return stream_url
+            if stream_url:
+                return stream_url
+        # Last resort: no format selector; yt-dlp returns all formats, pick first audio-only
+        try:
+            with yt_dlp.YoutubeDL(base_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
         except Exception:
             return None
+        if not info:
+            return None
+        stream_url = info.get('url')
+        if not stream_url and info.get('formats'):
+            for f in info.get('formats', []):
+                if f.get('vcodec') == 'none' and f.get('url'):
+                    return f['url']
+        return stream_url
 
     def stream_audio_generator(self, video_id: str, timeout: int = 60) -> Iterator[bytes]:
         """

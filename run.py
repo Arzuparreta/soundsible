@@ -9,19 +9,68 @@ import sys
 import subprocess
 import platform
 import shutil
+import socket
 import threading
 import time
+import webbrowser
 import json
 import atexit
 import signal
 from datetime import datetime
 from pathlib import Path
 
+STATION_PORT = 5005
+PLAYER_URL = "http://localhost:5005/player/"
+
 # --- VENV BOOTSTRAP ---
 ROOT_DIR = Path(__file__).parent.absolute()
 VENV_DIR = ROOT_DIR / "venv"
 PYTHON_EXE = VENV_DIR / ("Scripts\\python.exe" if platform.system() == "Windows" else "bin/python")
 CONFIG_PATH = Path("~/.config/soundsible/config.json").expanduser()
+
+
+def _is_port_in_use(port: int) -> bool:
+    """Return True if something is listening on the given port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _kill_station_process(port: int = STATION_PORT) -> tuple[bool, str]:
+    """Kill the process listening on the station port. Returns (success, message)."""
+    if not _is_port_in_use(port):
+        return True, "Station was not running."
+    try:
+        if platform.system() == "Windows":
+            out = subprocess.run(
+                ["netstat", "-ano"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if out.returncode != 0:
+                return False, "Could not list processes."
+            for line in out.stdout.splitlines():
+                if f":{port}" in line and "LISTENING" in line:
+                    parts = line.split()
+                    if len(parts) >= 5:
+                        pid = parts[-1]
+                        subprocess.run(
+                            ["taskkill", "/PID", pid, "/F"],
+                            capture_output=True,
+                            timeout=5,
+                        )
+                        return True, "Station stopped."
+            return False, "Process on port not found."
+        subprocess.run(
+            ["fuser", "-k", f"{port}/tcp"],
+            stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            timeout=5,
+        )
+        return True, "Station stopped."
+    except Exception as e:
+        return False, str(e)
+
 
 def bootstrap():
     """Ensure we are running inside the virtual environment."""
@@ -118,11 +167,11 @@ class SoundsibleLauncher:
             except:
                 pass
         
-        # Final safety check: kill anything on port 5005 (always run this)
+        # Final safety check: kill anything on station port
         try:
-            if self.os_name == "Linux":
-                subprocess.run(["fuser", "-k", "5005/tcp"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-        except: pass
+            _kill_station_process(STATION_PORT)
+        except Exception:
+            pass
 
     def _start_watcher(self):
         """Initialize and start the background file watcher."""
@@ -187,57 +236,64 @@ class SoundsibleLauncher:
         table.add_column("Key", style="bold magenta")
         table.add_column("Option", style="white")
 
-        table.add_row("1", "Launch Ecosystem (API + sync + watcher)")
-        table.add_row("2", "Launch Main App (Station / Web Player)")
-        table.add_row("3", "Launch Legacy App (GTK desktop player)")
-        table.add_row("4", "Quick Discover / Terminal Playback")
+        table.add_row("1", "Start Station & Open Player")
+        table.add_row("2", "Open Player (station must be running)")
+        table.add_row("3", "Stop Station")
+        table.add_row("4", "Launch Legacy App (GTK desktop player)")
+        table.add_row("5", "Quick Discover / Terminal Playback")
         table.add_row("q", "Exit")
 
         console.print(Panel(table, title="Main Menu", border_style="dim"))
 
-        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "q"], default="1")
+        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "5", "q"], default="1")
         
         if choice == "1":
             self.launch_ecosystem()
         elif choice == "2":
             self.launch_web_player()
         elif choice == "3":
-            self.launch_player()
+            self.stop_station()
         elif choice == "4":
+            self.launch_player()
+        elif choice == "5":
             self.search_ui()
         elif choice == "q":
             console.print("[italic]Happy listening![/italic]")
             sys.exit(0)
 
     def launch_ecosystem(self):
-        """Start the daemon (API + sync + watcher) in a background subprocess."""
-        console.print("[bold green]Launching Ecosystem...[/bold green]")
+        """Start the daemon (API + sync + watcher) and open the player in the browser."""
+        console.print("[bold green]Starting Station...[/bold green]")
         try:
-            log_dir = self.root_dir / "logs"
-            log_dir.mkdir(exist_ok=True)
-            log_file = open(log_dir / "daemon.log", "a")
             env = os.environ.copy()
             env["PYTHONPATH"] = str(self.root_dir)
             if platform.system() == "Windows":
                 popen_args = {"env": env, "cwd": str(self.root_dir), "creationflags": 0x00000010}
             else:
                 popen_args = {
-                    "stdout": log_file,
-                    "stderr": log_file,
                     "env": env,
                     "cwd": str(self.root_dir),
                     "start_new_session": True,
                 }
             subprocess.Popen([str(self.python_exe), str(self.root_dir / "run.py"), "--daemon"], **popen_args)
             console.print(Panel.fit(
-                "[bold green]Ecosystem is starting![/bold green]\n\n"
-                "Station: [bold cyan]http://localhost:5005/player/[/bold cyan]\n\n"
-                "[dim]Logs: logs/daemon.log[/dim]",
+                "[bold green]Station started. Player opened in browser.[/bold green]\n\n"
+                "[dim]Station output appears in this terminal.[/dim]",
                 border_style="green"
             ))
             time.sleep(1.5)
+            webbrowser.open(PLAYER_URL)
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
+
+    def stop_station(self):
+        """Kill the process listening on the station port (5005)."""
+        ok, msg = _kill_station_process(STATION_PORT)
+        if ok:
+            console.print(f"[green]{msg}[/green]")
+        else:
+            console.print(f"[red]{msg}[/red]")
+        time.sleep(0.5)
 
     def launch_player(self):
         """Launch the Legacy GTK desktop player."""
@@ -265,51 +321,14 @@ class SoundsibleLauncher:
             Prompt.ask("Press Enter to return")
 
     def launch_web_player(self):
-        """Launch the Web Player (PWA) interface in background."""
-        console.print("[cyan]Starting Web Player Host...[/cyan]")
-        try:
-            log_dir = self.root_dir / "logs"
-            log_dir.mkdir(exist_ok=True)
-            log_file = open(log_dir / "api.log", "a")
-            
-            # Prepare environment to ensure venv and root are in path
-            env = os.environ.copy()
-            env["PYTHONPATH"] = str(self.root_dir)
-            
-            # On Windows, we want the output in the new console window for visibility
-            if platform.system() == "Windows":
-                popen_args = {
-                    "env": env,
-                    "cwd": str(self.root_dir),
-                    "creationflags": 0x00000010 # CREATE_NEW_CONSOLE
-                }
-            else:
-                popen_args = {
-                    "stdout": log_file,
-                    "stderr": log_file,
-                    "env": env,
-                    "cwd": str(self.root_dir),
-                    "start_new_session": True
-                }
-
-            proc = subprocess.Popen([str(self.python_exe), "-m", "shared.api"], **popen_args)
-            self.child_processes.append(proc)
-            
-            # Detect IPs for display
-            from shared.api import get_active_endpoints
-            endpoints = get_active_endpoints()
-            local_ip = endpoints[0] if endpoints else "localhost"
-            
-            console.print(Panel.fit(
-                f"[bold green]Web Player is ONLINE![/bold green]\n\n"
-                f"Local: [bold cyan]http://localhost:5005/player/[/bold cyan]\n"
-                f"Mobile: [bold cyan]http://{local_ip}:5005/player/[/bold cyan]\n\n"
-                "[dim]Server is running in a new window. You can minimize it.[/dim]",
-                border_style="green"
-            ))
-            time.sleep(2.0)
-        except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
+        """Open the Web Player in the default browser (station must already be running)."""
+        if not _is_port_in_use(STATION_PORT):
+            console.print("[yellow]Station not running. Use option 1 to start it.[/yellow]")
+            time.sleep(1.0)
+            return
+        webbrowser.open(PLAYER_URL)
+        console.print("[green]Player opened in browser.[/green]")
+        time.sleep(0.5)
 
     def search_ui(self):
         """Interactive search TUI using high-speed SQLite."""

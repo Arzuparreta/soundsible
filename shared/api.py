@@ -11,7 +11,7 @@ import uuid
 import logging
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify, send_file, send_from_directory
+from flask import Flask, request, jsonify, send_file, send_from_directory, Response, stream_with_context
 from flask_socketio import SocketIO, emit, join_room
 from flask_cors import CORS
 
@@ -390,6 +390,10 @@ def get_active_endpoints():
 app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Suppress engineio/socketio INFO logs (e.g. "Invalid session" when browser reconnects with stale sid)
+logging.getLogger("engineio").setLevel(logging.WARNING)
+logging.getLogger("socketio").setLevel(logging.WARNING)
 
 
 @socketio.on('playback_register')
@@ -951,9 +955,8 @@ def refetch_metadata():
     if not lib.metadata:
         return jsonify({"error": "No library metadata found"}), 404
     
-    from odst_tool.metadata_harmonizer import MetadataHarmonizer
     from odst_tool.youtube_downloader import YouTubeDownloader
-    
+
     updated_count = 0
     skipped_count = 0
     error_count = 0
@@ -985,13 +988,13 @@ def refetch_metadata():
                 'is_music_content': False,  # Assume not music-specific for refetch
             }
             
-            # Harmonize metadata
-            clean_meta = MetadataHarmonizer.harmonize(raw_meta, source="refetch")
-            
-            # Update track if metadata changed
+            # Raw metadata only; no harmonizer. Refetch keeps existing values (no external lookup).
+            clean_meta = raw_meta
+
+            # Update track if metadata changed (compare to current; with no harmonizer, clean_meta == raw_meta from track, so no change unless we add logic later)
             new_meta = {}
             changed = False
-            
+
             if clean_meta.get('title') != track.title:
                 new_meta['title'] = clean_meta['title']
                 changed = True
@@ -1369,11 +1372,31 @@ def _preview_stream_rate_limit(ip: str) -> bool:
     return True
 
 
-# Preview playback is client-driven: server only returns stream URL; client plays it directly.
-# Library streaming and download remain server-handled.
+# Preview playback: stream bytes through our server so the client can play (same-origin; no CORS).
+# Direct googlevideo.com URLs are cross-origin and blocked by the browser for playback.
+@app.route('/api/preview/stream/<video_id>', methods=['GET'])
+def preview_stream_proxy(video_id):
+    """Stream YouTube audio through the server so the client can play it (avoids CORS)."""
+    if not _validate_youtube_video_id(video_id):
+        return jsonify({"error": "Invalid video id"}), 400
+    if not _preview_stream_rate_limit(request.remote_addr or 'unknown'):
+        return jsonify({"error": "Too many requests"}), 429
+    try:
+        dl = get_downloader(open_browser=False)
+        gen = dl.downloader.stream_audio_generator(video_id, timeout=90)
+        return Response(
+            stream_with_context(gen),
+            mimetype="audio/mpeg",
+            direct_passthrough=True,
+        )
+    except Exception as e:
+        print(f"API: [Preview stream] Error for {video_id}: {e}")
+        return jsonify({"error": "Preview unavailable"}), 502
+
+
 @app.route('/api/preview/stream-url/<video_id>', methods=['GET'])
 def get_preview_stream_url(video_id):
-    """Return direct YouTube audio stream URL for client-driven preview playback. No byte streaming."""
+    """Return direct YouTube audio stream URL (kept for compatibility; client should use /stream/ for playback)."""
     if not _validate_youtube_video_id(video_id):
         return jsonify({"error": "Invalid video id"}), 400
     if not _preview_stream_rate_limit(request.remote_addr or 'unknown'):
@@ -1604,6 +1627,8 @@ def youtube_search():
         return jsonify({"results": [], "error": str(e)}), 500
 
 LIBRARY_SEED_CAP = 50
+# Fewer seeds for discover so the request returns quickly and does not block the server (Last.fm calls are 5 at a time).
+DISCOVER_SEED_CAP = 12
 
 # In-memory discover session: stable raw ids we've shown (same artist+title => same id); cleared when new_session=true.
 _session_shown_ids = set()
@@ -1641,9 +1666,8 @@ def discover_recommendations():
                 if t and t.get("artist") is not None and t.get("title") is not None:
                     seeds.append({"artist": t["artist"], "title": t["title"]})
         else:
-            # Exclusions are unused for seed building (kept in API for future use).
             for t in library_tracks:
-                if len(seeds) >= LIBRARY_SEED_CAP:
+                if len(seeds) >= DISCOVER_SEED_CAP:
                     break
                 if t.get("artist") is not None and t.get("title") is not None:
                     seeds.append({"artist": t["artist"], "title": t["title"]})
@@ -1662,13 +1686,13 @@ def discover_recommendations():
         from recommendations.cache import ProviderCache
         cache_path = Path(os.path.expanduser("~/.config/soundsible/recommendation_cache.json"))
         provider_cache = ProviderCache(cache_path)
-        dl = get_downloader(open_browser=False)
         from dotenv import dotenv_values
         _env_path = Path("odst_tool/.env")
         _env_vars = dotenv_values(_env_path) if _env_path.exists() else {}
         lastfm_key = os.getenv("LASTFM_API_KEY") or _env_vars.get("LASTFM_API_KEY")
         lastfm_provider = LastFmRecommendationProvider(lastfm_key, provider_cache)
-        svc = RecommendationsService(lastfm_provider, dl.downloader)
+        # resolve=False: we only need Last.fm raw results; do NOT call get_downloader() here (avoids lock + yt-dlp init and prevents blocking the server).
+        svc = RecommendationsService(lastfm_provider, None)
         request_limit = limit + len(_session_shown_ids) + 20
         request_limit = min(100, max(limit, request_limit))
         raw_list, reason = svc.get_recommendations(
@@ -1699,9 +1723,11 @@ def discover_recommendations():
         traceback.print_exc()
         return jsonify({"results": [], "reason": "error", "error": str(e)}), 500
 
-@app.route('/api/discover/resolve', methods=['POST'])
+@app.route('/api/discover/resolve', methods=['GET', 'POST'])
 def discover_resolve():
     """Lazily resolve a recommendation to a YouTube video via ODSTDownloader."""
+    if request.method == 'GET':
+        return jsonify({"ok": True, "message": "discover resolve route is registered"}), 200
     try:
         data = request.json or {}
         artist = data.get("artist") or ""
@@ -1720,7 +1746,7 @@ def discover_resolve():
             info = None
             for candidate in results:
                 video_id = candidate.get("id")
-                if not video_id:
+                if not video_id or not _validate_youtube_video_id(str(video_id)):
                     continue
                 info = dl.downloader.validate_and_get_info(video_id)
                 if info:
@@ -1729,30 +1755,16 @@ def discover_resolve():
             if not entry or not info:
                 return jsonify({"error": "No playable video found"}), 404
             video_id = entry.get("id")
-            # Metadata enrichment for discover uses only public APIs (MusicBrainz, iTunes); no auth required.
-            from odst_tool.metadata_harmonizer import MetadataHarmonizer
-            harmonized = MetadataHarmonizer.harmonize({
-                "title": entry.get("title") or title,
-                "artist": artist,
-                "duration_sec": entry.get("duration") or info.get("duration") or 0,
-                "thumbnail": info.get("thumbnail") or entry.get("thumbnail") or "",
-                "is_music_content": True
-            })
-
-            # Prefer canonical cover (iTunes/MusicBrainz); fallback to validated YouTube thumbnail
-            canonical_cover = harmonized.get("album_art_url")
             yt_thumb = info.get("thumbnail") or entry.get("thumbnail") or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else "")
-            cover = canonical_cover or yt_thumb
             return jsonify({
                 "id": video_id,
-                "title": harmonized.get("title") or entry.get("title") or title,
-                "duration": harmonized.get("duration_sec") or entry.get("duration") or info.get("duration") or 0,
-                "thumbnail": cover,
-                "cover_url": cover,
-                "album": harmonized.get("album"),
+                "title": entry.get("title") or title,
+                "duration": entry.get("duration") or info.get("duration") or 0,
+                "thumbnail": yt_thumb,
+                "cover_url": yt_thumb,
                 "webpage_url": entry.get("webpage_url") or info.get("webpage_url") or f"https://www.youtube.com/watch?v={video_id}",
                 "channel": entry.get("channel") or info.get("uploader") or "",
-                "artist": harmonized.get("artist") or artist
+                "artist": artist or entry.get("channel") or info.get("uploader") or ""
             })
         except Exception as e:
             print(f"API: Discover resolve error: {e}")
@@ -2023,6 +2035,7 @@ def start_api(port=5005, debug=False):
     print(f"--- Soundsible API Boot Sequence ---")
     print(f"Target Port: {port}")
     print(f"CWD: {os.getcwd()}")
+    print("For full startup (sync + watcher) use: python run.py --daemon")
     
     try:
         lib, _, _ = get_core()
@@ -2037,9 +2050,23 @@ def start_api(port=5005, debug=False):
             if _auto:
                 def _run_ytdlp_update():
                     import subprocess
+                    # Use project venv's pip to avoid system externally-managed-environment (e.g. Arch)
+                    pip_cmd = None
+                    try:
+                        root = Path(__file__).resolve().parent.parent
+                        if os.name == "nt":
+                            pip_exe = root / "venv" / "Scripts" / "pip.exe"
+                        else:
+                            pip_exe = root / "venv" / "bin" / "pip"
+                        if pip_exe.exists():
+                            pip_cmd = [str(pip_exe), "install", "-U", "yt-dlp"]
+                    except Exception:
+                        pass
+                    if not pip_cmd:
+                        pip_cmd = [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"]
                     try:
                         result = subprocess.run(
-                            [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"],
+                            pip_cmd,
                             capture_output=True,
                             text=True,
                             timeout=120,
@@ -2069,6 +2096,14 @@ def start_api(port=5005, debug=False):
         print(f"FATAL: Core initialization failed: {e}")
         import traceback
         traceback.print_exc()
+
+    # Diagnose: ensure discover routes are registered (helps debug 404 on resolve)
+    try:
+        from flask import url_for
+        rules = [r.rule for r in app.url_map.iter_rules() if 'discover' in r.rule]
+        print(f"API: Discover routes registered: {rules}")
+    except Exception as e:
+        print(f"API: Could not list routes: {e}")
 
     # Access Summary
     print("\n" + "="*40)

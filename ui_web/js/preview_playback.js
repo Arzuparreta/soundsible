@@ -1,6 +1,7 @@
 /**
  * In-app preview playback for YouTube items (Discover, search ODST).
- * Plays via backend proxy stream; same now-playing UX as library tracks.
+ * Audio is client-driven: audio.js fetches the stream URL from the API and plays it directly
+ * from the CDN; bytes do not go through our server.
  */
 import { store } from './store.js';
 import { audioEngine } from './audio.js';
