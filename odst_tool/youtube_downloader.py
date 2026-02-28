@@ -647,10 +647,11 @@ class YouTubeDownloader:
         except Exception:
             return None
 
-    def stream_audio_generator(self, video_id: str, timeout: int = 60) -> Iterator[bytes]:
+    def get_stream_url(self, video_id: str) -> Optional[str]:
         """
-        Yield audio bytes for a YouTube video (for in-app preview streaming).
-        Uses bestaudio format and streams via the direct URL; no file written.
+        Return the direct audio stream URL for a YouTube video (no bytes streamed).
+        Used for client-driven preview: client fetches this URL and plays it directly.
+        Same extract_info logic as stream_audio_generator; no file written, no requests.get.
         """
         url = f"https://www.youtube.com/watch?v={video_id}"
         ydl_opts = {
@@ -665,24 +666,29 @@ class YouTubeDownloader:
             ydl_opts['cookiefile'] = self.cookie_file
         elif self.cookie_browser:
             ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
-
-        stream_url = None
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
             if not info:
-                return
+                return None
             stream_url = info.get('url')
             if not stream_url and info.get('formats'):
                 for f in info.get('formats', []):
                     if f.get('vcodec') == 'none' and f.get('url'):
                         stream_url = f['url']
                         break
-            if not stream_url:
-                return
+            return stream_url
         except Exception:
-            return
+            return None
 
+    def stream_audio_generator(self, video_id: str, timeout: int = 60) -> Iterator[bytes]:
+        """
+        Yield audio bytes for a YouTube video (for in-app preview streaming).
+        Uses bestaudio format and streams via the direct URL; no file written.
+        """
+        stream_url = self.get_stream_url(video_id)
+        if not stream_url:
+            return
         try:
             with requests.get(stream_url, stream=True, timeout=timeout) as resp:
                 resp.raise_for_status()

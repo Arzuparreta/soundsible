@@ -6,8 +6,9 @@ import { store } from './store.js';
 import { Resolver } from './resolver.js';
 import { esc } from './renderers.js';
 
-const DEFAULT_LIMIT = 20;
+const DEFAULT_LIMIT = 8;
 const SKELETON_CARD_COUNT = 6;
+const LIST_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 function escapeCssUrl(url) {
     if (!url) return '';
@@ -28,6 +29,7 @@ export const Discover = {
     _results: [],
     _cachedResponse: null,
     _cachedReason: null,
+    _cacheTimestamp: 0,
     _hasFetchedThisSession: false,
 
     init(options = {}) {
@@ -42,7 +44,6 @@ export const Discover = {
         this._contentPanel = document.getElementById(prefix + 'discover-content-panel');
         this._pageEl = document.getElementById(this._mobile ? 'view-discover' : 'desktop-view-discover');
         this._scrollEl = this._mobile ? this._pageEl : this._contentPanel;
-        this._setupObserver();
         this._bindLastfmConfig();
         this._updateConfigVisibility();
         this._syncVisibility();
@@ -56,8 +57,17 @@ export const Discover = {
         }
         this._bindPullToRefresh();
         if (this._hasLibrary()) {
+            if (this._isListCacheValid()) {
+                this._renderResults(this._cachedResponse, this._cachedReason);
+                return;
+            }
             this._fetchRecommendations();
         }
+    },
+
+    _isListCacheValid() {
+        if (!this._cachedResponse || !this._cacheTimestamp) return false;
+        return (Date.now() - this._cacheTimestamp) <= LIST_CACHE_TTL_MS;
     },
 
     _bindPullToRefresh() {
@@ -116,30 +126,6 @@ export const Discover = {
         this._sectionsEl.innerHTML = sectionHtml;
     },
 
-    _setupObserver() {
-        // Use scroll container as root so cards resolve when they enter the visible scroll area (not just viewport)
-        const root = this._scrollEl || null;
-        this._observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const row = entry.target;
-                    const item = this._itemFromRow(row);
-                    if (item && !item.webpage_url && item.id && (item.id.startsWith('unresolved-') || item.id.startsWith('raw-'))) {
-                        this._resolveRow(row);
-                    }
-                    this._observer.unobserve(row);
-                }
-            });
-        }, { root, rootMargin: '150px', threshold: 0.01 });
-    },
-
-    _observeCards() {
-        if (!this._observer) return;
-        this._sectionsEl.querySelectorAll('.discover-result-row').forEach(card => {
-            this._observer.observe(card);
-        });
-    },
-
     _sectionsFromResponse(data) {
         if (data.sections && Array.isArray(data.sections) && data.sections.length > 0) {
             return data.sections.map(s => ({ id: s.id || '', name: s.name || 'For you', results: s.results || [] }));
@@ -193,7 +179,6 @@ export const Discover = {
             </section>
         `).join('');
         this._sectionsEl.innerHTML = html;
-        this._observeCards();
         this._bindResultButtons();
     },
 
@@ -322,8 +307,10 @@ export const Discover = {
             }
         };
 
+        this._resolveItem = resolveItem;
         this._resolveRow = (row) => {
             const item = this._itemFromRow(row);
+            if (item && item.webpage_url && item.id) return Promise.resolve(item);
             return resolveItem(item, row);
         };
 
@@ -437,6 +424,7 @@ export const Discover = {
             this._hasFetchedThisSession = true;
             this._cachedResponse = data;
             this._cachedReason = reason;
+            this._cacheTimestamp = Date.now();
             this._renderResults(data, reason);
         } catch (err) {
             this._hasFetchedThisSession = true;
@@ -450,6 +438,8 @@ export const Discover = {
 
     refresh() {
         this._hasFetchedThisSession = false;
+        this._cachedResponse = null;
+        this._cacheTimestamp = 0;
         if (this._hasLibrary()) this._fetchRecommendations();
     },
 

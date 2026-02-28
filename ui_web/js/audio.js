@@ -170,6 +170,10 @@ class AudioEngine {
         } catch (_) { /* seekbackward/seekforward not supported */ }
     }
 
+    /**
+     * Preview tracks use the stream-url API and play from the returned URL so bytes do not
+     * go through the server. Single path for all in-app preview (Discover, Search, queue, context).
+     */
     async playTrack(track) {
         // Any song change (different track) resets repeat
         if (store.state.currentTrack && track.id !== store.state.currentTrack.id) {
@@ -185,9 +189,56 @@ class AudioEngine {
 
         this._invalidatePreload();
 
+        // Client-driven preview: fetch direct stream URL from API; do not use server proxy.
+        if (track.source === 'preview') {
+            const apiBase = (typeof store !== 'undefined' && store.apiBase) ? store.apiBase : '';
+            const streamUrlEndpoint = apiBase ? `${apiBase}/api/preview/stream-url/${track.id}` : `${window.location.origin}/api/preview/stream-url/${track.id}`;
+            try {
+                const res = await fetch(streamUrlEndpoint);
+                const data = await res.json().catch(() => ({}));
+                const url = data && data.url;
+                if (!url) {
+                    store.update({ isPlaying: false });
+                    if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
+                    return;
+                }
+                this.audio.src = url;
+                this.audio.load();
+                await this.audio.play();
+                store.update({ currentTrack: track, isPlaying: true });
+                store.pushPlaybackState(track.id, 0, true);
+                if ('mediaSession' in navigator) {
+                    const coverUrl = track?.id ? Resolver.getCoverUrl(track) : null;
+                    const sizes = ['96x96', '128x128', '192x192', '256x256', '384x384', '512x512'];
+                    const artwork = coverUrl
+                        ? [
+                            ...sizes.map(size => ({ src: coverUrl, sizes: size, type: 'image/jpeg' })),
+                            { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+                            { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
+                        ]
+                        : [
+                            { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+                            { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
+                        ];
+                    navigator.mediaSession.metadata = new MediaMetadata({
+                        title: track.title,
+                        artist: track.artist,
+                        album: track.album,
+                        artwork
+                    });
+                    this.setMediaSessionHandlers();
+                }
+            } catch (err) {
+                store.update({ isPlaying: false });
+                if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
+                console.error("Preview playback failed:", err);
+            }
+            return;
+        }
+
         const url = Resolver.getTrackUrl(track);
         console.log("Playing URL:", url);
-        
+
         try {
             this.audio.src = url;
             this.audio.load();

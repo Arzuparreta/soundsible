@@ -11,7 +11,7 @@ import uuid
 import logging
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify, send_file, Response, send_from_directory, stream_with_context
+from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_socketio import SocketIO, emit, join_room
 from flask_cors import CORS
 
@@ -431,6 +431,7 @@ playback_engine = None
 queue_manager = None
 favourites_manager = None
 downloader_service = None
+_downloader_lock = threading.Lock()  # Prevent concurrent init when many discover/resolve requests hit at once
 queue_manager_dl = DownloadQueueManager()
 metadata_migration_manager = None
 api_observer = None  # Store Observer reference for cleanup in daemon mode
@@ -459,55 +460,52 @@ def get_core():
 
 def get_downloader(output_dir=None, open_browser=False, log_callback=None):
     global downloader_service
-    
+
     def _log(msg):
         print(f"API: {msg}")
         if log_callback:
             log_callback(msg)
 
-    _log("Downloader: Entering setup...")
-
-    # 1. Determine the target output directory
+    # 1. Determine the target output directory (outside lock)
     from dotenv import dotenv_values
     env_path = Path('odst_tool/.env')
     env_vars = dotenv_values(env_path) if env_path.exists() else {}
-    
     target_dir = output_dir or env_vars.get("OUTPUT_DIR") or os.getenv("OUTPUT_DIR")
     if not target_dir:
         from odst_tool.config import DEFAULT_OUTPUT_DIR
         target_dir = str(DEFAULT_OUTPUT_DIR)
-    
     target_path = Path(target_dir).expanduser().absolute()
 
-    # 2. Check if we need to (re)initialize
-    should_init = False
-    if not downloader_service:
-        should_init = True
-    elif downloader_service.output_dir != target_path:
-        _log(f"Path changed to {target_path}. Re-initializing...")
-        should_init = True
+    with _downloader_lock:
+        should_init = False
+        if not downloader_service:
+            should_init = True
+        elif downloader_service.output_dir != target_path:
+            _log(f"Path changed to {target_path}. Re-initializing...")
+            should_init = True
 
-    if should_init:
-        _log(f"Step 1/3: Accessing storage at {target_path}...")
-        try:
-            target_path.mkdir(parents=True, exist_ok=True)
-            _log("Step 1.1: Path is accessible.")
-        except Exception as e:
-            _log(f"⚠️ Step 1 Warning: NAS/Path issue: {e}")
+        if should_init:
+            _log("Downloader: Entering setup...")
+            _log(f"Step 1/3: Accessing storage at {target_path}...")
+            try:
+                target_path.mkdir(parents=True, exist_ok=True)
+                _log("Step 1.1: Path is accessible.")
+            except Exception as e:
+                _log(f"⚠️ Step 1 Warning: NAS/Path issue: {e}")
 
-        _log("Step 2/3: Loading Soundsible core...")
-        lib_core, _, _ = get_core()
-        
-        _log("Step 3/3: Starting Engine...")
-        quality = env_vars.get("DEFAULT_QUALITY", lib_core.config.quality_preference if lib_core.config else "high")
-        from odst_tool.config import DEFAULT_WORKERS, DEFAULT_COOKIE_BROWSER
-        cookie_browser = env_vars.get("COOKIE_BROWSER") or os.getenv("COOKIE_BROWSER") or DEFAULT_COOKIE_BROWSER
-        _log(f"Initializing Downloader (Quality: {quality})...")
-        downloader_service = ODSTDownloader(
-            target_path, DEFAULT_WORKERS, cookie_browser=cookie_browser, quality=quality
-        )
-        _log("✅ Downloader Engine Ready.")
-        
+            _log("Step 2/3: Loading Soundsible core...")
+            lib_core, _, _ = get_core()
+
+            _log("Step 3/3: Starting Engine...")
+            quality = env_vars.get("DEFAULT_QUALITY", lib_core.config.quality_preference if lib_core.config else "high")
+            from odst_tool.config import DEFAULT_WORKERS, DEFAULT_COOKIE_BROWSER
+            cookie_browser = env_vars.get("COOKIE_BROWSER") or os.getenv("COOKIE_BROWSER") or DEFAULT_COOKIE_BROWSER
+            _log(f"Initializing Downloader (Quality: {quality})...")
+            downloader_service = ODSTDownloader(
+                target_path, DEFAULT_WORKERS, cookie_browser=cookie_browser, quality=quality
+            )
+            _log("✅ Downloader Engine Ready.")
+
     return downloader_service
 
 
@@ -1371,26 +1369,23 @@ def _preview_stream_rate_limit(ip: str) -> bool:
     return True
 
 
-@app.route('/api/preview/stream/<video_id>', methods=['GET'])
-def stream_preview_audio(video_id):
-    """Stream YouTube audio for in-app preview (no embed, no video). Proxies via yt-dlp."""
+# Preview playback is client-driven: server only returns stream URL; client plays it directly.
+# Library streaming and download remain server-handled.
+@app.route('/api/preview/stream-url/<video_id>', methods=['GET'])
+def get_preview_stream_url(video_id):
+    """Return direct YouTube audio stream URL for client-driven preview playback. No byte streaming."""
     if not _validate_youtube_video_id(video_id):
         return jsonify({"error": "Invalid video id"}), 400
     if not _preview_stream_rate_limit(request.remote_addr or 'unknown'):
         return jsonify({"error": "Too many requests"}), 429
     try:
         dl = get_downloader(open_browser=False)
-        generator = dl.downloader.stream_audio_generator(video_id, timeout=60)
-        def stream():
-            for chunk in generator:
-                yield chunk
-        response = Response(stream_with_context(stream()), mimetype='audio/mpeg')
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-        response.headers['Access-Control-Expose-Headers'] = 'Content-Range, Content-Length, Accept-Ranges'
-        return response
+        url = dl.downloader.get_stream_url(video_id)
+        if not url:
+            return jsonify({"error": "Stream URL unavailable"}), 404
+        return jsonify({"url": url})
     except Exception as e:
-        print(f"API: [Preview stream] Error for {video_id}: {e}")
+        print(f"API: [Preview stream-url] Error for {video_id}: {e}")
         return jsonify({"error": "Preview unavailable"}), 502
 
 
