@@ -19,8 +19,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 from .config import DEFAULT_OUTPUT_DIR, DEFAULT_WORKERS, DEFAULT_COOKIE_BROWSER
-from spotify_youtube_dl import SpotifyYouTubeDL
-from .spotify_library import SpotifyLibrary
+from .odst_downloader import ODSTDownloader
 from .cloud_sync import CloudSync
 import shutil
 import os
@@ -28,7 +27,7 @@ import os
 class DownloaderGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Spotify to YouTube Downloader")
+        self.root.title("Music Downloader")
         self.root.geometry("600x500")
         
         # Initialize Backend
@@ -40,13 +39,10 @@ class DownloaderGUI:
         self._setup_ui()
         
     def _init_backend(self):
-        # Initialize with skip_auth=True for now since we rely on manual input mostly
-        # Pass cookie_browser to handle age restricted/bot access
-        return SpotifyYouTubeDL(
-            DEFAULT_OUTPUT_DIR, 
-            DEFAULT_WORKERS, 
-            skip_auth=True, 
-            cookie_browser=DEFAULT_COOKIE_BROWSER
+        return ODSTDownloader(
+            DEFAULT_OUTPUT_DIR,
+            DEFAULT_WORKERS,
+            cookie_browser=DEFAULT_COOKIE_BROWSER,
         )
 
     def _setup_ui(self):
@@ -67,18 +63,13 @@ class DownloaderGUI:
         manual_frame = ttk.Frame(self.notebook, padding="5")
         self.notebook.add(manual_frame, text="Manual Input")
         
-        ttk.Label(manual_frame, text="Enter URL (YouTube/Spotify) or Song Name:").pack(anchor="w")
+        ttk.Label(manual_frame, text="Enter YouTube URL or Song Name (Artist - Title):").pack(anchor="w")
         self.manual_entry = ttk.Entry(manual_frame, width=50)
         self.manual_entry.pack(fill=tk.X, pady=5)
         self.manual_entry.bind("<Return>", lambda e: self.add_to_queue())
         
         ttk.Button(manual_frame, text="Add to Queue", command=self.add_to_queue).pack(anchor="e")
 
-        # Spotify Tab (Disabled logic if needed, but keeping for UI)
-        spotify_frame = ttk.Frame(self.notebook, padding="5")
-        self.notebook.add(spotify_frame, text="Spotify (Requires API Key)")
-        ttk.Label(spotify_frame, text="Feature temporarily unavailable due to missing keys.").pack(pady=10)
-        
         # Settings Tab
         settings_frame = ttk.Frame(self.notebook, padding="5")
         self.notebook.add(settings_frame, text="Settings")

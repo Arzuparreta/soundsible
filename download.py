@@ -13,7 +13,7 @@ console = Console()
 
 def main():
     parser = argparse.ArgumentParser(description="Download and Upload Music")
-    parser.add_argument("query", help="Song name, Spotify URL, or YouTube URL")
+    parser.add_argument("query", help="Song name or YouTube URL")
     args = parser.parse_args()
     
     # Custom logger for CLI

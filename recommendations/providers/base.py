@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 
 @dataclass
@@ -14,9 +14,16 @@ class Seed:
 
 @dataclass
 class RawRecommendation:
-    """A recommended track from a provider (artist + title, no YouTube ID yet)."""
+    """A recommended track from a provider (artist + title). May contain rich metadata."""
     artist: str
     title: str
+    album: Optional[str] = None
+    album_artist: Optional[str] = None
+    duration_sec: Optional[int] = None
+    cover_url: Optional[str] = None
+    isrc: Optional[str] = None
+    year: Optional[int] = None
+    track_number: Optional[int] = None
 
 
 class RecommendationProvider(ABC):

@@ -12,8 +12,6 @@ AUTO_THRESHOLD = 0.90
 REVIEW_THRESHOLD = 0.72
 PROVIDER_WEIGHTS = {
     "musicbrainz": 1.0,
-    "spotify_web": 0.94,
-    "spotify_api": 0.96,
     "itunes": 0.82,
 }
 
@@ -86,7 +84,7 @@ def _provider_weight(provider_name: str) -> float:
 
 def _provider_authority(provider_name: str) -> str:
     p = (provider_name or "").strip().lower()
-    if p in {"musicbrainz", "spotify_web", "spotify_api"}:
+    if p == "musicbrainz":
         return "hybrid_consensus"
     if p == "itunes":
         return "catalog_consensus"

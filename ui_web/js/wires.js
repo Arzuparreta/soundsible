@@ -156,7 +156,7 @@ export function wireSettings(selectors, deps) {
                 const res = await fetch(`${base}/api/library/refetch-metadata`, { method: 'POST' });
                 const data = await res.json();
                 if (res.ok) {
-                    refetchStatus.textContent = `✓ Updated: ${data.updated || 0}, Skipped: ${data.skipped || 0}, Errors: ${data.errors || 0}`;
+                    refetchStatus.textContent = `✓ Updated: ${data.updated || 0}, Skipped: ${data.skipped || 0}, Errors: ${data.errors || 0}. Raw-YouTube tracks are not refetched.`;
                     refetchStatus.classList.remove('text-red-400');
                     refetchStatus.classList.add('text-green-400');
                     await store.syncLibrary();

@@ -8,7 +8,6 @@ from typing import Dict, Any, List, Tuple
 from .metadata_scorer import decide_consensus, metadata_query_fingerprint
 from .musicbrainz_provider import search_candidates as mb_search_candidates
 from .itunes_provider import search_candidates as itunes_search_candidates
-from .spotify_web_provider import search_candidates as spotify_web_search_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +248,7 @@ class MetadataHarmonizer:
 
     @classmethod
     def _gather_provider_candidates(cls, artist: str, title: str, original_artist: str = None) -> Dict[str, List[Dict[str, Any]]]:
-        provider_candidates = {"musicbrainz": [], "itunes": [], "spotify_web": []}
+        provider_candidates = {"musicbrainz": [], "itunes": []}
         queries = cls._build_lookup_queries(title, artist, original_artist=original_artist)
         logger.debug(f"_gather_provider_candidates: queries={queries}")
         seen_ids = {name: set() for name in provider_candidates.keys()}
@@ -257,11 +256,9 @@ class MetadataHarmonizer:
         for q_artist, q_title in queries:
             mb_items = mb_search_candidates(q_artist, q_title, limit=6)
             it_items = itunes_search_candidates(q_artist, q_title, limit=6)
-            sw_items = spotify_web_search_candidates(q_artist, q_title, limit=6)
             for provider_name, items in (
                 ("musicbrainz", mb_items),
                 ("itunes", it_items),
-                ("spotify_web", sw_items),
             ):
                 for item in items:
                     key = item.get("catalog_id") or f"{item.get('title','')}|{item.get('artist','')}|{item.get('duration_sec',0)}"
@@ -380,30 +377,6 @@ class MetadataHarmonizer:
         # Log candidate counts
         candidate_counts = {k: len(v) for k, v in provider_candidates.items()}
         logger.debug(f"harmonize: provider_candidates counts: {candidate_counts}")
-        if raw_data.get("_spotify_client") is not None:
-            # Optional API-based source if present, but never required.
-            try:
-                spotify_api_items = []
-                query = f"track:{title} artist:{artist}"
-                resp = raw_data["_spotify_client"].search(q=query, type="track", limit=6)
-                for item in ((resp or {}).get("tracks") or {}).get("items", []):
-                    spotify_api_items.append(
-                        {
-                            "title": item.get("name") or "",
-                            "artist": (item.get("artists") or [{}])[0].get("name") or "",
-                            "album": ((item.get("album") or {}).get("name") or ""),
-                            "duration_sec": int((item.get("duration_ms") or 0) / 1000),
-                            "isrc": ((item.get("external_ids") or {}).get("isrc")),
-                            "album_artist": (((item.get("album") or {}).get("artists") or [{}])[0].get("name") or ""),
-                            "cover_url": (((item.get("album") or {}).get("images") or [{}])[0].get("url")),
-                            "catalog_source": "spotify_api",
-                            "catalog_id": item.get("id"),
-                            "spotify_id": item.get("id"),
-                        }
-                    )
-                provider_candidates["spotify_api"] = spotify_api_items
-            except Exception:
-                provider_candidates["spotify_api"] = []
 
         decision = decide_consensus(
             {
@@ -500,34 +473,26 @@ class MetadataHarmonizer:
         candidate_isrc = canonical.get("isrc") or enrichment_candidate.get("isrc")
 
         # Determine cover source and premium status
-        # Premium sources: spotify, spotify_api, musicbrainz, itunes
-        # YouTube Music: youtube_music (when is_music_content=True)
-        # Regular YouTube: youtube (fallback)
+        # Premium: musicbrainz, itunes. YouTube Music: youtube_music. Fallback: youtube.
         is_music_content = raw_data.get("is_music_content", False)
         cover_source = None
         premium_cover_failed = False
         final_cover = None
-        
-        # Determine which provider gave us the cover
+
         if candidate_cover:
-            # Check which provider provided the cover
             if canonical:
                 catalog_source = canonical.get("catalog_source", "")
-                if catalog_source == "spotify_api" or catalog_source == "spotify_web":
-                    cover_source = "spotify"
-                elif catalog_source == "musicbrainz":
+                if catalog_source == "musicbrainz":
                     cover_source = "musicbrainz"
                 elif catalog_source == "itunes":
                     cover_source = "itunes"
             elif enrichment_candidate:
                 catalog_source = enrichment_candidate.get("catalog_source", "")
-                if catalog_source == "spotify_api" or catalog_source == "spotify_web":
-                    cover_source = "spotify"
-                elif catalog_source == "musicbrainz":
+                if catalog_source == "musicbrainz":
                     cover_source = "musicbrainz"
                 elif catalog_source == "itunes":
                     cover_source = "itunes"
-            
+
             if cover_source:
                 final_cover = candidate_cover
             else:
@@ -547,9 +512,7 @@ class MetadataHarmonizer:
                 cover_source = "youtube" if final_cover else "none"
         
         # Determine if premium cover failed
-        # Premium sources: spotify, musicbrainz, itunes, youtube_music
-        # Non-premium: youtube (non-music), none
-        if cover_source in ("spotify", "musicbrainz", "itunes", "youtube_music"):
+        if cover_source in ("musicbrainz", "itunes", "youtube_music"):
             premium_cover_failed = False
         else:
             premium_cover_failed = True

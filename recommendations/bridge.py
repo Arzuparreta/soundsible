@@ -32,11 +32,19 @@ def _resolve_one(
         return {
             "id": video_id,
             "title": entry.get("title") or raw.title,
-            "duration": entry.get("duration") or 0,
-            "thumbnail": entry.get("thumbnail") or "",
+            "duration": entry.get("duration") or raw.duration_sec or 0,
+            "thumbnail": entry.get("thumbnail") or "", # keep YouTube thumbnail as a fallback
             "webpage_url": entry.get("webpage_url") or f"https://www.youtube.com/watch?v={video_id}",
             "channel": entry.get("channel") or "",
             "artist": raw.artist,
+            # Preserving rich metadata from the provider
+            "album": raw.album,
+            "album_artist": raw.album_artist,
+            "duration_sec": raw.duration_sec,
+            "cover_url": raw.cover_url,
+            "isrc": raw.isrc,
+            "year": raw.year,
+            "track_number": raw.track_number,
         }
     return None
 

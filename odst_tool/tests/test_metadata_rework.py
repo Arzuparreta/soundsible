@@ -49,6 +49,12 @@ def test_parse_intake_item_requires_ytmusic_snapshot():
     assert "requires metadata_evidence" in err
 
 
+def test_parse_intake_item_rejects_spotify():
+    item, err = parse_intake_item({"song_str": "https://open.spotify.com/track/abc123"})
+    assert item is None
+    assert "Spotify" in err and "not supported" in err
+
+
 def test_metadata_query_fingerprint_is_deterministic():
     fp1 = metadata_query_fingerprint("Numb", "Linkin Park", 185)
     fp2 = metadata_query_fingerprint(" numb ", "LINKIN PARK", 185)
@@ -57,19 +63,19 @@ def test_metadata_query_fingerprint_is_deterministic():
 
 def test_consensus_pending_review_when_single_source():
     base = {"title": "Numb", "artist": "Linkin Park", "album": "", "duration_sec": 185}
-    spotify = [{"title": "Numb", "artist": "Linkin Park", "album": "Meteora", "duration_sec": 186, "catalog_source": "spotify_web"}]
-    result = decide_consensus(base, spotify_web_candidates=spotify)
+    itunes = [{"title": "Numb", "artist": "Linkin Park", "album": "Meteora", "duration_sec": 186, "catalog_source": "itunes"}]
+    result = decide_consensus(base, itunes_candidates=itunes)
     assert result["metadata_state"] in {"pending_review", "fallback_youtube"}
 
 
 def test_consensus_auto_resolved_on_multi_provider_agreement():
     base = {"title": "Basureta (Tiempos Raros)", "artist": "Kase.O", "album": "", "duration_sec": 371}
-    spotify = [{
+    itunes_cands = [{
         "title": "Basureta (Tiempos Raros)",
         "artist": "Kase.O",
-        "album": "El Círculo (Versión Exclusiva de Spotify)",
+        "album": "El Círculo",
         "duration_sec": 371,
-        "catalog_source": "spotify_web",
+        "catalog_source": "itunes",
     }]
     mb = [{
         "title": "Basureta (Tiempos Raros)",
@@ -78,7 +84,7 @@ def test_consensus_auto_resolved_on_multi_provider_agreement():
         "duration_sec": 371,
         "catalog_source": "musicbrainz",
     }]
-    result = decide_consensus(base, spotify_web_candidates=spotify, musicbrainz_candidates=mb)
+    result = decide_consensus(base, itunes_candidates=itunes_cands, musicbrainz_candidates=mb)
     assert result["metadata_state"] == "auto_resolved"
 
 
@@ -124,15 +130,14 @@ def test_harmonizer_parses_noisy_youtube_title_and_channel(monkeypatch):
                 "catalog_source": "musicbrainz",
                 "catalog_id": "mb_1",
             }],
-            "spotify_web": [{
+            "itunes": [{
                 "title": "Basureta (Tiempos Raros)",
                 "artist": "Kase.O",
-                "album": "El Círculo (Versión Exclusiva de Spotify)",
+                "album": "El Círculo",
                 "duration_sec": 371,
-                "catalog_source": "spotify_web",
-                "catalog_id": "sp_1",
+                "catalog_source": "itunes",
+                "catalog_id": "it_1",
             }],
-            "itunes": [],
         }
 
     monkeypatch.setattr(MetadataHarmonizer, "_gather_provider_candidates", fake_candidates)
@@ -153,16 +158,15 @@ def test_harmonizer_enriches_album_without_core_overwrite(monkeypatch):
     def fake_candidates(_cls, _artist, _title):
         return {
             "musicbrainz": [],
-            "spotify_web": [{
+            "itunes": [{
                 "title": "Basureta (Tiempos Raros)",
                 "artist": "Kase.O",
-                "album": "El Círculo (Versión Exclusiva de Spotify)",
+                "album": "El Círculo",
                 "duration_sec": 371,
-                "catalog_source": "spotify_web",
-                "catalog_id": "sp_2",
+                "catalog_source": "itunes",
+                "catalog_id": "it_2",
                 "cover_url": "https://example.com/cover.jpg",
             }],
-            "itunes": [],
         }
 
     monkeypatch.setattr(MetadataHarmonizer, "_gather_provider_candidates", fake_candidates)
@@ -217,18 +221,17 @@ def test_channel_variants_resolve_album_when_title_has_no_artist(monkeypatch):
                     "catalog_id": "mb_3",
                     "cover_url": "https://coverartarchive.org/release/mb_3/front",
                 }],
-                "spotify_web": [{
+                "itunes": [{
                     "title": "Basureta (Tiempos Raros)",
                     "artist": "Kase.O",
                     "album": "El Círculo",
                     "duration_sec": 371,
-                    "catalog_source": "spotify_web",
-                    "catalog_id": "sp_3",
+                    "catalog_source": "itunes",
+                    "catalog_id": "it_3",
                     "cover_url": "https://example.com/el_circulo.jpg",
                 }],
-                "itunes": [],
             }
-        return {"musicbrainz": [], "spotify_web": [], "itunes": []}
+        return {"musicbrainz": [], "itunes": []}
 
     monkeypatch.setattr(MetadataHarmonizer, "_gather_provider_candidates", fake_candidates)
     out = MetadataHarmonizer.harmonize(raw, source="youtube_url")
@@ -242,7 +245,7 @@ def test_channel_variants_resolve_album_when_title_has_no_artist(monkeypatch):
 
 
 def test_cover_priority_premium_over_youtube(monkeypatch):
-    """Test that premium cover sources (MusicBrainz, Spotify) are preferred over YouTube thumbnails."""
+    """Test that premium cover sources (MusicBrainz, iTunes) are preferred over YouTube thumbnails."""
     raw = {
         "title": "Test Song",
         "artist": "Test Artist",
@@ -263,13 +266,11 @@ def test_cover_priority_premium_over_youtube(monkeypatch):
                 "catalog_id": "mb_4",
                 "cover_url": "https://coverartarchive.org/release/mb_4/front",
             }],
-            "spotify_web": [],
             "itunes": [],
         }
 
     monkeypatch.setattr(MetadataHarmonizer, "_gather_provider_candidates", fake_candidates)
     out = MetadataHarmonizer.harmonize(raw, source="youtube_url")
-    
     # Should use premium cover, not YouTube thumbnail
     assert "coverartarchive.org" in out["album_art_url"]
     assert "youtube.com" not in out["album_art_url"]
@@ -296,7 +297,7 @@ def test_cover_priority_youtube_only_if_music_specific(monkeypatch):
     }
 
     def fake_candidates(_cls, _artist, _title):
-        return {"musicbrainz": [], "spotify_web": [], "itunes": []}
+        return {"musicbrainz": [], "itunes": []}
 
     monkeypatch.setattr(MetadataHarmonizer, "_gather_provider_candidates", fake_candidates)
     
@@ -376,18 +377,17 @@ def test_kase_o_outro_metadata_matching(monkeypatch):
                     "catalog_id": "mb_outro",
                     "cover_url": "https://coverartarchive.org/release/mb_outro/front",
                 }],
-                "spotify_web": [{
+                "itunes": [{
                     "title": "Outro",
                     "artist": "Kase.O",
                     "album": "El Círculo",
                     "duration_sec": 196,
-                    "catalog_source": "spotify_web",
-                    "catalog_id": "sp_outro",
+                    "catalog_source": "itunes",
+                    "catalog_id": "it_outro",
                     "cover_url": "https://example.com/el_circulo.jpg",
                 }],
-                "itunes": [],
             }
-        return {"musicbrainz": [], "spotify_web": [], "itunes": []}
+        return {"musicbrainz": [], "itunes": []}
 
     monkeypatch.setattr(MetadataHarmonizer, "_gather_provider_candidates", fake_candidates)
     out = MetadataHarmonizer.harmonize(raw, source="youtube_url")

@@ -24,7 +24,7 @@ from player.library import LibraryManager
 from player.engine import PlaybackEngine
 from player.queue_manager import QueueManager
 from player.favourites_manager import FavouritesManager
-from odst_tool.spotify_youtube_dl import SpotifyYouTubeDL
+from odst_tool.odst_downloader import ODSTDownloader
 from odst_tool.cloud_sync import CloudSync
 from odst_tool.optimize_library import optimize_library
 from setup_tool.uploader import UploadEngine
@@ -102,18 +102,10 @@ def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
 
     source_type = (item.get("source_type") or item.get("type") or "").strip() or None
     song_str = (item.get("song_str") or "").strip()
-    spotify_data = item.get("spotify_data")
     metadata_evidence = item.get("metadata_evidence") if isinstance(item.get("metadata_evidence"), dict) else None
     output_dir = item.get("output_dir")
-
-    if isinstance(spotify_data, dict) and spotify_data.get("type") == "playlist":
-        return {
-            "source_type": "spotify_playlist",
-            "song_str": song_str or f"Playlist: {spotify_data.get('id', 'unknown')}",
-            "spotify_data": spotify_data,
-            "output_dir": output_dir,
-            "metadata_evidence": metadata_evidence,
-        }, None
+    if item.get("spotify_data") or (song_str and "spotify.com" in song_str):
+        return None, "Spotify links are not supported"
 
     if source_type in {"youtube_url", "ytmusic_search", "youtube_search"}:
         normalized = normalize_youtube_url(song_str)
@@ -153,13 +145,6 @@ def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
                 "output_dir": output_dir,
                 "metadata_evidence": metadata_evidence,
                 "metadata_query_fingerprint": metadata_query_fingerprint(normalized, "", 0),
-            }, None
-        if "spotify.com" in song_str:
-            return {
-                "source_type": "spotify_url",
-                "song_str": song_str,
-                "output_dir": output_dir,
-                "metadata_evidence": metadata_evidence,
             }, None
         return {
             "source_type": "manual",
@@ -219,27 +204,6 @@ def is_safe_path(file_path, is_trusted=False):
         print(f"SECURITY: Error validating path {file_path}: {e}")
         
     return False
-
-def resolve_spotify_url(url):
-    """
-    Scrapes the public Spotify page title to get 'Song - Artist'.
-    Fallback since API is restricted.
-    """
-    try:
-        # User-Agent is required to get the real page
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        r = requests.get(url, headers=headers, timeout=5)
-        if r.status_code == 200:
-            # Extract title: <title>Song - Artist | Spotify</title>
-            match = re.search(r'<title>(.*?)</title>', r.text)
-            if match:
-                title_text = match.group(1)
-                # Remove suffix
-                title_text = title_text.replace(" | Spotify", "").replace(" - song and lyrics by ", " - ")
-                return title_text
-    except Exception as e:
-        print(f"Error resolving URL: {e}")
-    return None
 
 def resolve_local_track_path(track):
     """
@@ -534,24 +498,14 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
         _log("Step 2/3: Loading Soundsible core...")
         lib_core, _, _ = get_core()
         
-        _log("Step 3/3: Loading credentials & Starting Engine...")
-        token = env_vars.get("SPOTIFY_ACCESS_TOKEN") or os.getenv("SPOTIFY_ACCESS_TOKEN")
-        client_id = env_vars.get("SPOTIFY_CLIENT_ID") or os.getenv("SPOTIFY_CLIENT_ID")
-        client_secret = env_vars.get("SPOTIFY_CLIENT_SECRET") or os.getenv("SPOTIFY_CLIENT_SECRET")
+        _log("Step 3/3: Starting Engine...")
         quality = env_vars.get("DEFAULT_QUALITY", lib_core.config.quality_preference if lib_core.config else "high")
-        from odst_tool.config import DEFAULT_WORKERS
-        
+        from odst_tool.config import DEFAULT_WORKERS, DEFAULT_COOKIE_BROWSER
+        cookie_browser = env_vars.get("COOKIE_BROWSER") or os.getenv("COOKIE_BROWSER") or DEFAULT_COOKIE_BROWSER
         _log(f"Initializing Downloader (Quality: {quality})...")
-        if token:
-            _log("   - Mode: Spotify Token")
-            downloader_service = SpotifyYouTubeDL(target_path, DEFAULT_WORKERS, access_token=token, quality=quality, open_browser=open_browser)
-        elif client_id and client_secret:
-            _log("   - Mode: Spotify API Keys")
-            downloader_service = SpotifyYouTubeDL(target_path, DEFAULT_WORKERS, skip_auth=False, quality=quality, client_id=client_id, client_secret=client_secret, open_browser=open_browser)
-        else:
-            _log("   - Mode: Direct Download Only")
-            downloader_service = SpotifyYouTubeDL(target_path, DEFAULT_WORKERS, skip_auth=True, quality=quality, open_browser=open_browser)
-            
+        downloader_service = ODSTDownloader(
+            target_path, DEFAULT_WORKERS, cookie_browser=cookie_browser, quality=quality
+        )
         _log("✅ Downloader Engine Ready.")
         
     return downloader_service
@@ -583,9 +537,8 @@ def process_queue_background():
             item = pending[0]
             item_id = item['id']
             song_str = item.get('song_str')
-            spotify_data = item.get('spotify_data')
             output_dir = item.get('output_dir')
-            source_type = item.get('source_type') or ('spotify_track' if spotify_data else 'manual')
+            source_type = item.get('source_type') or 'manual'
             metadata_evidence = item.get('metadata_evidence') if isinstance(item.get('metadata_evidence'), dict) else {}
             
             queue_manager_dl.add_log(f"Preparing: {song_str or item_id}...")
@@ -596,52 +549,14 @@ def process_queue_background():
             try:
                 dl = get_downloader(output_dir, log_callback=queue_manager_dl.add_log)
                 queue_manager_dl.add_log(f"Processing: {song_str or item_id}...")
-                
-                # Resolve Spotify URL if needed
-                if song_str and "spotify.com" in song_str:
-                    queue_manager_dl.add_log(f"🔎 Resolving Spotify Link...")
-                    resolved_name = resolve_spotify_url(song_str)
-                    if resolved_name:
-                        queue_manager_dl.add_log(f"   Identified as: {resolved_name}")
-                        song_str = resolved_name
-                    else:
-                        queue_manager_dl.add_log(f"⚠️ Could not resolve Spotify link. Trying direct download.")
 
-                # Handle Playlist Fetching
-                if spotify_data and spotify_data.get('type') == 'playlist':
-                    queue_manager_dl.add_log(f"Fetching tracks for playlist {spotify_data['id']}...")
-                    tracks = dl.spotify.get_playlist_tracks(spotify_data['id'])
-                    
-                    # Add all tracks as new pending items
-                    for t in tracks:
-                        name = t['name']
-                        artist = t['artists'][0]['name']
-                        queue_manager_dl.add({
-                            'song_str': f"{artist} - {name}",
-                            'spotify_data': t,
-                            'output_dir': output_dir
-                        })
-                    
-                    queue_manager_dl.update_status(item_id, 'completed')
-                    with app.app_context():
-                        socketio.emit('downloader_update', {'id': item_id, 'status': 'completed'})
-                    queue_manager_dl.add_log(f"✅ Queued {len(tracks)} tracks from playlist.")
-                    continue # Move to next item in while loop
-                
                 track = None
-                if spotify_data:
-                    meta = dl.spotify.extract_track_metadata(spotify_data)
-                    if metadata_evidence:
-                        meta.update({k: v for k, v in metadata_evidence.items() if v is not None})
-                    track = dl.downloader.process_track(meta, source="spotify_track")
-                elif song_str:
+                if song_str:
                     # Direct URL or simple string (typed intake contract)
                     if source_type in {"youtube_url", "ytmusic_search", "youtube_search"} or "youtube.com" in song_str or "youtu.be" in song_str:
                         song_str = normalize_youtube_url(song_str)
                         queue_manager_dl.add_log(f"Downloading direct YouTube: {song_str}...")
                         runtime_hint = dict(metadata_evidence or {})
-                        if getattr(dl.spotify, "client", None):
-                            runtime_hint["_spotify_client"] = dl.spotify.client
                         track = dl.downloader.process_video(song_str, metadata_hint=runtime_hint, source=source_type)
                     else:
                         # Manual search
@@ -1052,7 +967,7 @@ def refetch_metadata():
         if track.metadata_modified_by_user:
             skipped_count += 1
             continue
-        # Skip normal-YouTube downloads (no harmonization; do not re-fetch)
+        # Refetch skips raw-YouTube tracks (youtube_search) so they stay non-harmonized.
         if getattr(track, 'download_source', None) == 'youtube_search':
             skipped_count += 1
             continue
@@ -1694,19 +1609,18 @@ def youtube_search():
         return jsonify({"results": [], "error": str(e)}), 500
 
 LIBRARY_SEED_CAP = 50
-DISCOVER_SESSION_REQUEST_CAP = 100  # max batch size when requesting more to compensate for session exclusions
 
-# In-memory discover session: shared across clients; cleared when new_session=true.
+# In-memory discover session: stable raw ids we've shown (same artist+title => same id); cleared when new_session=true.
 _session_shown_ids = set()
 _session_played_ids = set()
 
 
 @app.route('/api/discover/recommendations', methods=['POST'])
 def discover_recommendations():
-    """Get recommendations from Spotify/Last.fm and resolve to YouTube via ODST.
+    """Get raw recommendations from Last.fm. Build from raw: stable ids, filter by session shown, return.
     Body: seed_track_ids (list, optional), limit (optional, default 20), new_session (bool, optional).
-    When seed_track_ids is missing or empty, seeds are built from full library minus recommendation exclusions.
-    If new_session is true, session state (shown/played) is cleared. Results are filtered by session so no repeats."""
+    Seeds: from seed_track_ids or from library (excluding recommendation_exclusions = tracks not used as seeds).
+    Raw items get a stable id (same artist+title => same id) so we can dedupe across requests."""
     global _session_shown_ids, _session_played_ids
     try:
         data = request.json or {}
@@ -1724,6 +1638,8 @@ def discover_recommendations():
             lib.sync_library()
         library_tracks = [t.to_dict() for t in (lib.metadata.tracks or [])]
         track_by_id = {t["id"]: t for t in library_tracks}
+
+        # 1. Build seeds: explicit list or from library (excluding seed exclusions)
         seeds = []
         if seed_ids:
             for tid in seed_ids[:10]:
@@ -1731,53 +1647,114 @@ def discover_recommendations():
                 if t and t.get("artist") is not None and t.get("title") is not None:
                     seeds.append({"artist": t["artist"], "title": t["title"]})
         else:
-            excluded = set(_load_recommendation_exclusions())
+            # Exclusions are unused for seed building (kept in API for future use).
             for t in library_tracks:
                 if len(seeds) >= LIBRARY_SEED_CAP:
                     break
-                if t.get("id") in excluded:
-                    continue
                 if t.get("artist") is not None and t.get("title") is not None:
                     seeds.append({"artist": t["artist"], "title": t["title"]})
         if not seeds:
             return jsonify({"results": [], "reason": "no_seeds"}), 200
+
+        # 2. Get raw from Last.fm (request extra so we have enough after session filter)
         from recommendations.service import RecommendationsService
-        from recommendations.providers import SpotifyRecommendationProvider, LastFmRecommendationProvider
+        from recommendations.providers import LastFmRecommendationProvider
         from recommendations.providers.base import Seed
+        from recommendations.util import raw_stable_id, raw_to_dict
+
         seed_objs = [Seed(artist=s["artist"], title=s["title"]) for s in seeds]
         if new_session:
             random.shuffle(seed_objs)
+        from recommendations.cache import ProviderCache
+        cache_path = Path(os.path.expanduser("~/.config/soundsible/recommendation_cache.json"))
+        provider_cache = ProviderCache(cache_path)
         dl = get_downloader(open_browser=False)
-        spotify_provider = SpotifyRecommendationProvider(dl.spotify.client if dl.spotify else None)
         from dotenv import dotenv_values
         _env_path = Path("odst_tool/.env")
         _env_vars = dotenv_values(_env_path) if _env_path.exists() else {}
         lastfm_key = os.getenv("LASTFM_API_KEY") or _env_vars.get("LASTFM_API_KEY")
-        lastfm_provider = LastFmRecommendationProvider(lastfm_key)
-        svc = RecommendationsService(spotify_provider, lastfm_provider, dl.downloader)
-        request_limit = min(DISCOVER_SESSION_REQUEST_CAP, limit + len(_session_shown_ids) + len(_session_played_ids))
-        request_limit = max(limit, request_limit)
-        results, reason = svc.get_recommendations(seed_objs, limit=request_limit, library_tracks=library_tracks)
-        if reason and not results:
+        lastfm_provider = LastFmRecommendationProvider(lastfm_key, provider_cache)
+        svc = RecommendationsService(lastfm_provider, dl.downloader)
+        request_limit = limit + len(_session_shown_ids) + 20
+        request_limit = min(100, max(limit, request_limit))
+        raw_list, reason = svc.get_recommendations(
+            seed_objs, limit=request_limit, library_tracks=library_tracks, resolve=False
+        )
+        if reason and not raw_list:
             return jsonify({"results": [], "reason": reason}), 200
-        excluded_ids = _session_shown_ids | _session_played_ids
-        filtered = [r for r in results if r.get("id") and r["id"] not in excluded_ids]
-        for r in filtered[:limit]:
-            vid = r.get("id")
-            if vid:
-                _session_shown_ids.add(vid)
-        out_results = filtered[:limit]
-        out = {"results": out_results}
-        if reason and not out_results:
-            out["reason"] = reason
-        return jsonify(out)
+
+        # 3. Convert to dicts with stable id; filter out already-shown
+        results = []
+        for r in raw_list:
+            artist = r.get("artist") or getattr(r, "artist", "") or ""
+            title = r.get("title") or getattr(r, "title", "") or ""
+            sid = raw_stable_id(artist, title)
+            if sid in _session_shown_ids:
+                continue
+            d = raw_to_dict(r, sid)
+            results.append(d)
+
+        # 4. Take up to limit, mark as shown
+        out_results = results[:limit]
+        for r in out_results:
+            _session_shown_ids.add(r["id"])
+        return jsonify({"results": out_results})
     except Exception as e:
         print(f"API: Discover recommendations error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"results": [], "reason": "error", "error": str(e)}), 500
 
+@app.route('/api/discover/resolve', methods=['POST'])
+def discover_resolve():
+    """Lazily resolve a recommendation to a YouTube video via ODSTDownloader."""
+    try:
+        data = request.json or {}
+        artist = data.get("artist") or ""
+        title = data.get("title") or ""
+        if not title:
+            return jsonify({"error": "Missing title"}), 400
+            
+        dl = get_downloader(open_browser=False)
+        query = f"{artist} {title}".strip()
+        try:
+            results = dl.downloader.search_youtube(query, max_results=1, use_ytmusic=True)
+            if results and len(results) > 0:
+                entry = results[0]
+                video_id = entry.get("id")
+                if video_id:
+                    # Metadata enrichment for discover uses only public APIs (MusicBrainz, iTunes); no auth required.
+                    from odst_tool.metadata_harmonizer import MetadataHarmonizer
+                    harmonized = MetadataHarmonizer.harmonize({
+                        "title": entry.get("title") or title,
+                        "artist": artist,
+                        "duration_sec": entry.get("duration") or 0,
+                        "thumbnail": entry.get("thumbnail") or "",
+                        "is_music_content": True
+                    })
 
+                    # Prefer canonical cover (iTunes/MusicBrainz); fallback to YouTube thumbnail
+                    canonical_cover = harmonized.get("album_art_url")
+                    yt_thumb = entry.get("thumbnail") or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else "")
+                    cover = canonical_cover or yt_thumb
+                    return jsonify({
+                        "id": video_id,
+                        "title": harmonized.get("title") or entry.get("title") or title,
+                        "duration": harmonized.get("duration_sec") or entry.get("duration") or 0,
+                        "thumbnail": cover,
+                        "cover_url": cover,
+                        "album": harmonized.get("album"),
+                        "webpage_url": entry.get("webpage_url") or f"https://www.youtube.com/watch?v={video_id}",
+                        "channel": entry.get("channel") or "",
+                        "artist": harmonized.get("artist") or artist
+                    })
+        except Exception as e:
+            print(f"API: Discover resolve search error: {e}")
+            
+        return jsonify({"error": "Resolution failed"}), 404
+    except Exception as e:
+        print(f"API: Discover resolve unhandled error: {e}")
+        return jsonify({"error": str(e)}), 500
 @app.route('/api/discover/played', methods=['POST'])
 def discover_played():
     """Register a recommended item as played this session; next recommendation fetch will exclude it."""
@@ -1850,18 +1827,6 @@ def trigger_downloader():
         threading.Thread(target=process_queue_background, daemon=True).start()
         return jsonify({"status": "started"})
     return jsonify({"status": "already_running"})
-
-@app.route('/api/downloader/spotify/playlists', methods=['GET'])
-def get_spotify_playlists():
-    dl = get_downloader(open_browser=False)
-    if not dl.spotify.client:
-        return jsonify({"error": "Spotify not authenticated"}), 401
-    
-    try:
-        playlists = dl.spotify.get_user_playlists()
-        return jsonify({"playlists": playlists})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 # --- Station Admin Endpoints (Parity with Original ODST) ---
 
@@ -1945,9 +1910,7 @@ def get_downloader_config():
         return f"{s[:4]}...{s[-4:]}****"
 
     config = {
-        "spotify_client_id": env_vars.get("SPOTIFY_CLIENT_ID", os.getenv("SPOTIFY_CLIENT_ID", "")),
-        "spotify_client_secret": mask(env_vars.get("SPOTIFY_CLIENT_SECRET", os.getenv("SPOTIFY_CLIENT_SECRET", ""))),
-        "output_dir": env_vars.get("OUTPUT_DIR", os.getenv("OUTPUT_DIR", str(Path.home() / "Music" / "Spotify"))),
+        "output_dir": env_vars.get("OUTPUT_DIR", os.getenv("OUTPUT_DIR", str(Path.home() / "Music" / "Soundsible"))),
         "quality": env_vars.get("DEFAULT_QUALITY", os.getenv("DEFAULT_QUALITY", "high")),
         "r2_account_id": env_vars.get("R2_ACCOUNT_ID", os.getenv("R2_ACCOUNT_ID", "")),
         "r2_access_key": mask(env_vars.get("R2_ACCESS_KEY_ID", os.getenv("R2_ACCESS_KEY_ID", ""))),
@@ -1958,7 +1921,7 @@ def get_downloader_config():
     
     # If not on a trusted network, strip ALL sensitive info (even masked ones)
     if not is_trusted:
-        sensitive_keys = ["spotify_client_id", "spotify_client_secret", "r2_account_id", "r2_access_key", "r2_secret_key", "r2_bucket", "lastfm_api_key"]
+        sensitive_keys = ["r2_account_id", "r2_access_key", "r2_secret_key", "r2_bucket", "lastfm_api_key"]
         for key in sensitive_keys: config[key] = "HIDDEN (Connect to Tailscale/LAN to view)"
 
     return jsonify(config)
@@ -1980,8 +1943,6 @@ def update_downloader_config():
     
     # Mapping keys
     key_map = {
-        "spotify_client_id": "SPOTIFY_CLIENT_ID",
-        "spotify_client_secret": "SPOTIFY_CLIENT_SECRET",
         "output_dir": "OUTPUT_DIR",
         "quality": "DEFAULT_QUALITY",
         "r2_account_id": "R2_ACCOUNT_ID",
@@ -2007,6 +1968,8 @@ def update_downloader_config():
     
     return jsonify({"status": "updated"})
 
+# Recommendation exclusions: track IDs to exclude only from *seed* building (they are not used as "based on" tracks).
+# They do not filter the recommendation results.
 RECOMMENDATION_EXCLUSIONS_FILENAME = "recommendation_exclusions.json"
 
 def _recommendation_exclusions_path():
@@ -2032,6 +1995,7 @@ def _save_recommendation_exclusions(excluded_track_ids):
 
 @app.route('/api/settings/recommendation-exclusions', methods=['GET'])
 def get_recommendation_exclusions():
+    """Excluded track IDs are only used when building seeds: those tracks are not used as 'based on' for Last.fm."""
     ids = _load_recommendation_exclusions()
     return jsonify({"excluded_track_ids": ids})
 

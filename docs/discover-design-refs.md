@@ -34,4 +34,4 @@ Short design research for the Discover recommendations UI. Implement to match pr
 - Seeds: subtitle + selectable library rows (or chips) + optional "Use current track" chip.
 - One primary CTA: "Get recommendations" (disabled when 0 seeds).
 - Results: list of rows — div cover, title, artist, Add-to-queue button (same pattern as ODST search).
-- Empty states: "Pick at least one track" when no seeds; "No recommendations" when API returns empty; "Connect Spotify in Settings" when service unavailable.
+- Empty states: "Pick at least one track" when no seeds; "No recommendations" when API returns empty; "Add Last.fm API key in Settings" when service unavailable.

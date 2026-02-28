@@ -110,7 +110,7 @@ class DownloadDialog(Adw.Window):
         content_box.append(title_label)
         
         # Description
-        desc_label = Gtk.Label(label="Enter a song name, YouTube URL, or Spotify URL.")
+        desc_label = Gtk.Label(label="Enter a song name or YouTube URL.")
         desc_label.add_css_class("dim-label")
         content_box.append(desc_label)
         

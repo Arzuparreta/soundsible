@@ -170,6 +170,22 @@ class DatabaseManager:
                         created_at TEXT
                     )
                 """)
+                
+                # 4. YouTube Resolution Cache
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS youtube_resolution_cache (
+                        artist TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        youtube_id TEXT NOT NULL,
+                        duration INTEGER,
+                        thumbnail TEXT,
+                        webpage_url TEXT,
+                        channel TEXT,
+                        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (artist, title)
+                    )
+                """)
+                
                 conn.execute("COMMIT")
             except Exception as e:
                 conn.execute("ROLLBACK")
@@ -365,3 +381,50 @@ class DatabaseManager:
             except Exception as e:
                 conn.execute("ROLLBACK")
                 raise e
+
+    # --- YouTube Resolution Cache ---
+
+    def get_cached_resolution(self, artist: str, title: str) -> Optional[Dict[str, Any]]:
+        """Fetch a cached YouTube resolution by artist and title."""
+        if not artist or not title:
+            return None
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("""
+                SELECT youtube_id as id, duration, thumbnail, webpage_url, channel, artist, title
+                FROM youtube_resolution_cache
+                WHERE artist = ? AND title = ?
+            """, (artist, title)).fetchone()
+            return dict(row) if row else None
+
+    def set_cached_resolution(self, artist: str, title: str, result: Dict[str, Any]):
+        """Save a YouTube resolution to the cache."""
+        if not artist or not title or not result or not result.get("id"):
+            return
+        with self._get_connection() as conn:
+            conn.execute("BEGIN TRANSACTION")
+            try:
+                conn.execute("""
+                    INSERT INTO youtube_resolution_cache 
+                    (artist, title, youtube_id, duration, thumbnail, webpage_url, channel, last_updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(artist, title) DO UPDATE SET
+                    youtube_id=excluded.youtube_id,
+                    duration=excluded.duration,
+                    thumbnail=excluded.thumbnail,
+                    webpage_url=excluded.webpage_url,
+                    channel=excluded.channel,
+                    last_updated=CURRENT_TIMESTAMP
+                """, (
+                    artist,
+                    title,
+                    result.get("id"),
+                    result.get("duration") or 0,
+                    result.get("thumbnail") or "",
+                    result.get("webpage_url") or "",
+                    result.get("channel") or ""
+                ))
+                conn.execute("COMMIT")
+            except Exception as e:
+                conn.execute("ROLLBACK")
+                print(f"Error caching YouTube resolution: {e}")

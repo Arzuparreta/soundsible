@@ -56,8 +56,6 @@ const DEFAULT_DL_SELECTORS = {
     queueList: 'dl-queue-list',
     logs: 'dl-logs',
     startBtn: 'dl-start-btn',
-    confClientId: 'dl-conf-client-id',
-    confClientSecret: 'dl-conf-client-secret',
     confPath: 'dl-conf-path',
     confR2Acc: 'dl-conf-r2-acc',
     confR2Bucket: 'dl-conf-r2-bucket',
@@ -66,8 +64,6 @@ const DEFAULT_DL_SELECTORS = {
     saveConfBtn: 'dl-save-conf-btn',
     optimizeBtn: 'dl-optimize-btn',
     syncBtn: 'dl-sync-btn',
-    spotifyList: 'dl-spotify-playlists',
-    refreshSpotifyBtn: 'dl-refresh-spotify-btn',
     searchSourceMusicBtn: 'dl-search-source-music',
     searchSourceYoutubeBtn: 'dl-search-source-youtube',
     refetchMetadataBtn: 'refetch-metadata-btn',
@@ -134,8 +130,6 @@ export class Downloader {
         this.logs = document.getElementById(sel.logs);
         this.startBtn = document.getElementById(sel.startBtn);
 
-        this.confClientId = document.getElementById(sel.confClientId);
-        this.confClientSecret = document.getElementById(sel.confClientSecret);
         this.confPath = document.getElementById(sel.confPath);
         this.confR2Acc = document.getElementById(sel.confR2Acc);
         this.confR2Bucket = document.getElementById(sel.confR2Bucket);
@@ -144,8 +138,6 @@ export class Downloader {
         this.saveConfBtn = document.getElementById(sel.saveConfBtn);
         this.optimizeBtn = document.getElementById(sel.optimizeBtn);
         this.syncBtn = document.getElementById(sel.syncBtn);
-        this.spotifyList = document.getElementById(sel.spotifyList);
-        this.refreshSpotifyBtn = document.getElementById(sel.refreshSpotifyBtn);
         this.searchSourceMusicBtn = document.getElementById(sel.searchSourceMusicBtn);
         this.searchSourceYoutubeBtn = document.getElementById(sel.searchSourceYoutubeBtn);
         this.refetchBtn = document.getElementById(sel.refetchMetadataBtn);
@@ -155,8 +147,7 @@ export class Downloader {
         this.bindEvents();
         this.updateFabAndPopover();
         this.refreshStatus();
-        if (this.confClientId) this.loadConfig();
-        if (this.spotifyList) this.loadSpotifyPlaylists();
+        if (this.confPath) this.loadConfig();
         setInterval(() => {
             if (!isVisible()) return;
             this.refreshStatus();
@@ -210,7 +201,6 @@ export class Downloader {
         if (this.startBtn) this.startBtn.addEventListener('click', () => this.startProcessing());
 
         if (this.saveConfBtn) this.saveConfBtn.addEventListener('click', () => this.saveConfig());
-        if (this.refreshSpotifyBtn) this.refreshSpotifyBtn.addEventListener('click', () => this.loadSpotifyPlaylists());
         if (this.optimizeBtn) this.optimizeBtn.addEventListener('click', () => this.triggerOptimize());
         if (this.syncBtn) this.syncBtn.addEventListener('click', () => this.triggerSync());
 
@@ -776,7 +766,7 @@ export class Downloader {
         const html = sortedQueue.map(item => `
             <div class="bg-gray-900/50 p-3 rounded-xl border border-gray-700/50 flex items-center justify-between group">
                 <div class="truncate flex-1 mr-4">
-                    <div class="text-xs font-bold truncate">${esc(item.song_str) || 'Spotify Track'}</div>
+                    <div class="text-xs font-bold truncate">${esc(item.song_str) || 'Track'}</div>
                     <div class="text-[9px] text-gray-500 mt-0.5">${new Date(item.added_at).toLocaleString()}${item.metadata_state ? ` · ${esc(item.metadata_state)}` : ''}</div>
                 </div>
                 <div class="flex items-center space-x-2">
@@ -849,8 +839,6 @@ export class Downloader {
         try {
             const resp = await fetch(`${store.apiBase}/api/downloader/config`);
             const data = await resp.json();
-            this.confClientId.value = data.spotify_client_id || '';
-            this.confClientSecret.value = data.spotify_client_secret || '';
             this.confPath.value = data.output_dir || '';
             
             this.confR2Acc.value = data.r2_account_id || '';
@@ -864,8 +852,6 @@ export class Downloader {
 
     static async saveConfig() {
         const data = {
-            spotify_client_id: this.confClientId.value,
-            spotify_client_secret: this.confClientSecret.value,
             output_dir: this.confPath.value,
             r2_account_id: this.confR2Acc.value,
             r2_bucket: this.confR2Bucket.value,
@@ -912,65 +898,6 @@ export class Downloader {
         }
     }
 
-    static async loadSpotifyPlaylists() {
-        if (!store.state.activeHost) return;
-        try {
-            const resp = await fetch(`${store.apiBase}/api/downloader/spotify/playlists`);
-            if (!resp.ok) {
-                if (resp.status === 401) {
-                    this.spotifyList.innerHTML = '<div class="col-span-full text-center py-10 text-gray-500 italic text-sm">Spotify not authenticated. Update settings below.</div>';
-                }
-                return;
-            }
-            const data = await resp.json();
-            this.renderSpotifyPlaylists(data.playlists);
-        } catch (err) {
-            console.error("Spotify load failed:", err);
-        }
-    }
-
-    static renderSpotifyPlaylists(playlists) {
-        if (!playlists || playlists.length === 0) {
-            this.spotifyList.innerHTML = '<div class="col-span-full text-center py-10 text-gray-500">No playlists found.</div>';
-            return;
-        }
-
-        const html = playlists.map(p => `
-            <div class="bg-gray-900 border border-gray-700 p-3 rounded-xl hover:bg-gray-700 cursor-pointer transition-colors group" onclick="Downloader.addSpotifyPlaylist('${p.id}', '${p.name.replace(/'/g, "\\'")}')">
-                <div class="aspect-square bg-gray-800 rounded-lg mb-2 flex items-center justify-center overflow-hidden">
-                    ${p.images && p.images[0] ? `<img src="${p.images[0].url}" class="w-full h-full object-cover">` : '<i class="fas fa-music text-gray-600"></i>'}
-                </div>
-                <div class="text-[10px] font-bold truncate">${esc(p.name)}</div>
-                <div class="text-[8px] text-gray-500">${p.tracks.total} tracks</div>
-            </div>
-        `).join('');
-
-        this.spotifyList.innerHTML = html;
-        window.Downloader = Downloader; // Ensure it's globally accessible for onclick
-    }
-
-    static async addSpotifyPlaylist(id, name) {
-        if (!confirm(`Add all tracks from "${name}" to download queue?`)) return;
-        
-        this.addLog(`Fetching tracks for playlist: ${name}...`);
-        
-        try {
-            const resp = await fetch(`${store.apiBase}/api/downloader/queue`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    items: [{ source_type: 'spotify_playlist', type: 'playlist', id: id, song_str: `Playlist: ${name}`, spotify_data: { type: 'playlist', id: id } }] 
-                })
-            });
-            if (resp.ok) {
-                this.refreshStatus();
-                this.addLog(`Queued playlist: ${name}`);
-            }
-        } catch (err) {
-            console.error("Playlist queue failed:", err);
-        }
-    }
-
     static async refetchMetadata() {
         const btn = this.refetchBtn;
         const status = this.refetchStatusEl;
@@ -988,7 +915,7 @@ export class Downloader {
             const data = await res.json();
 
             if (res.ok) {
-                status.textContent = `✓ Updated: ${data.updated || 0}, Skipped: ${data.skipped || 0}, Errors: ${data.errors || 0}`;
+                status.textContent = `✓ Updated: ${data.updated || 0}, Skipped: ${data.skipped || 0}, Errors: ${data.errors || 0}. Raw-YouTube tracks are not refetched.`;
                 status.classList.remove('text-red-400');
                 status.classList.add('text-green-400');
                 await store.syncLibrary();

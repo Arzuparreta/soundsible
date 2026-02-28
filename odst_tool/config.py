@@ -7,40 +7,18 @@ except ImportError:
     pass
 
 # App Configuration
-APP_NAME = "SpotifyYouTubeDL"
+APP_NAME = "ODST"
 VERSION = "1.0.0"
 
 # Paths
 BASE_DIR = Path(__file__).parent.absolute()
-DEFAULT_OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(Path.home() / "Music" / "Spotify")))
-CACHE_DIR = Path.home() / ".cache" / "spotify-youtube-dl"
-CREDENTIALS_DIR = Path.home() / ".config" / "spotify-youtube-dl"
+DEFAULT_OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(Path.home() / "Music" / "Soundsible")))
+CACHE_DIR = Path.home() / ".cache" / "soundsible-odst"
+CREDENTIALS_DIR = Path.home() / ".config" / "soundsible"
 
 # Create directories if they don't exist
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
-
-# Spotify Settings
-SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
-SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
-
-# Fallback to soundsible env if not found
-if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
-    try:
-        # Check sibling directory
-        sibling_env = BASE_DIR.parent / "soundsible" / ".env"
-        if sibling_env.exists():
-            from dotenv import dotenv_values
-            env_vars = dotenv_values(sibling_env)
-            if not SPOTIFY_CLIENT_ID:
-                SPOTIFY_CLIENT_ID = env_vars.get("SPOTIFY_CLIENT_ID")
-            if not SPOTIFY_CLIENT_SECRET:
-                SPOTIFY_CLIENT_SECRET = env_vars.get("SPOTIFY_CLIENT_SECRET")
-    except Exception:
-        pass
-
-SPOTIFY_REDIRECT_URI = "http://localhost:8888/callback"
-SPOTIFY_SCOPE = "user-library-read playlist-read-private playlist-read-collaborative user-read-private"
 
 # Download Settings
 DEFAULT_FORMAT = "mp3"

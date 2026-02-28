@@ -43,7 +43,7 @@ class Track:
     metadata_query_fingerprint: Optional[str] = None
     cover_source: Optional[str] = None  # spotify | youtube_music | youtube | musicbrainz | itunes | manual | none
     metadata_modified_by_user: bool = False  # True if user manually edited metadata/cover
-    download_source: Optional[str] = None  # youtube_search | ytmusic_search | youtube_url | spotify_track | manual
+    download_source: Optional[str] = None  # Only youtube_search = raw YouTube (no harmonization); others use canonical metadata
     fallback_cover_url: Optional[str] = None  # YT thumbnail URL for cover when no embedded/premium
     premium_cover_failed: bool = False
 

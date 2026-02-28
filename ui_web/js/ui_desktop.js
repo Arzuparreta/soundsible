@@ -306,6 +306,17 @@ export const DesktopUI = {
         el('edit-album').value = t.album;
         el('edit-cover-preview').src = Resolver.getCoverUrl(t);
 
+        const rawNote = el('edit-raw-youtube-note');
+        if (rawNote) {
+            if (t.download_source === 'youtube_search') {
+                rawNote.textContent = 'This track was downloaded as raw YouTube. Auto-fetch can replace with canonical metadata if you want.';
+                rawNote.classList.remove('hidden');
+            } else {
+                rawNote.textContent = '';
+                rawNote.classList.add('hidden');
+            }
+        }
+
         if (modal) modal.classList.remove('hidden');
         setTimeout(() => {
             if (content) {

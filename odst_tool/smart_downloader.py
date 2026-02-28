@@ -20,8 +20,7 @@ class SmartDownloader:
             
         self.staging_dir.mkdir(parents=True, exist_ok=True)
         self.downloader = None
-        self.spotify = None
-        self._log_callback = print # Default to print
+        self._log_callback = print  # Default to print
         
     def set_log_callback(self, callback):
         """Set a callback for log messages (msg, level)."""
@@ -39,28 +38,20 @@ class SmartDownloader:
              
         self.log("Initializing downloader engine...", "info")
         try:
-            # Import ODST-Tool components here to avoid startup hangs
             from odst_tool.youtube_downloader import YouTubeDownloader
-            from odst_tool.spotify_auth import SpotifyAuth
-            from odst_tool.spotify_library import SpotifyLibrary
             from shared.constants import DEFAULT_CONFIG_DIR
             from odst_tool.config import DEFAULT_QUALITY
-            
-            # Cookie logic
+
             cookie_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "cookies.txt"
             cookie_file = str(cookie_path) if cookie_path.exists() else None
-            
-            # Browser fallback REMOVED to prevent conflict with Android client workaround
-            # The android client workaround is robust enough without cookies.
-            browser = None 
-            
+            browser = None
+
             self.downloader = YouTubeDownloader(
-                self.staging_dir, 
+                self.staging_dir,
                 cookie_file=cookie_file,
                 cookie_browser=browser,
-                quality=DEFAULT_QUALITY
-            )
-            self.spotify = SpotifyLibrary(skip_auth=False) 
+                quality=DEFAULT_QUALITY,
+            ) 
         except ImportError as e:
             self.log(f"Failed to load downloader modules: {e}", "error")
             raise e
@@ -92,18 +83,8 @@ class SmartDownloader:
              track = self.downloader.process_video(query)
              
         elif "spotify.com" in query:
-             self.log("Detected Spotify URL...", "info")
-             try:
-                 track_id = query.split("/track/")[1].split("?")[0]
-                 if self.spotify.client:
-                     sp_track = self.spotify.client.track(track_id)
-                     meta = self.spotify.extract_track_metadata(sp_track)
-                     track = self.downloader.process_track(meta)
-                 else:
-                     self.log("Spotify credentials missing in .env. Cannot resolve Spotify URL.", "error")
-             except Exception as e:
-                 self.log(f"Error processing Spotify URL: {e}", "error")
-                 return None
+            self.log("Spotify links are not supported. Use a YouTube URL or search by song name.", "error")
+            return None
 
         else:
              # Manual search: Pass the whole query as title, let harmonizer resolve it.

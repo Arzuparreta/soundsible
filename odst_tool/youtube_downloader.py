@@ -25,6 +25,10 @@ from .audio_utils import AudioProcessor
 from .models import Track
 from .metadata_harmonizer import MetadataHarmonizer
 
+# Only this source skips harmonization; all others use canonical metadata (MusicBrainz/iTunes).
+SOURCE_RAW_YOUTUBE = "youtube_search"
+
+
 class YouTubeDownloader:
     """Handles searching and downloading from YouTube."""
     
@@ -251,11 +255,9 @@ class YouTubeDownloader:
                 raw_meta["album"] = metadata_hint.get("album")
             if metadata_hint.get("metadata_decision_id"):
                 raw_meta["metadata_decision_id"] = metadata_hint.get("metadata_decision_id")
-            if metadata_hint.get("_spotify_client") is not None:
-                raw_meta["_spotify_client"] = metadata_hint.get("_spotify_client")
-        
-        # Normal-YouTube path: no harmonization; fixed metadata only
-        if source == "youtube_search":
+        # Raw YouTube path: only SOURCE_RAW_YOUTUBE skips harmonization (user chose "YouTube" toggle).
+        # All other sources (ytmusic_search, youtube_url, etc.) use canonical metadata below.
+        if source == SOURCE_RAW_YOUTUBE:
             raw_meta["title"] = video_title
             raw_meta["artist"] = channel
             raw_meta["album"] = "Downloaded from YouTube"
@@ -319,7 +321,7 @@ class YouTubeDownloader:
                 metadata_decision_id=clean_meta.get("metadata_decision_id"),
                 metadata_state=clean_meta.get("metadata_state"),
                 metadata_query_fingerprint=clean_meta.get("metadata_query_fingerprint"),
-                cover_source=clean_meta.get("cover_source") if source != "youtube_search" else "youtube",
+                cover_source=clean_meta.get("cover_source") if source != SOURCE_RAW_YOUTUBE else "youtube",
                 metadata_modified_by_user=False,
                 download_source=source
             )
