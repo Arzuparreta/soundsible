@@ -97,5 +97,6 @@ A lightweight native client for **low-end or resource-constrained devices** (e.g
 ## Architecture
 
 - **Backend**: Python/Flask (Metadata, Indexing, Audio Stream)
+- **Database**: SQLite (library metadata in `library.db`, FTS5 full-text search; cache index for playback)
 - **Frontend**: Vanilla JS / Tailwind CSS (Zero-dependency, high-performance)
-- **Storage**: Local Filesystem + Optional Cloud Sync (Backblaze B2 / Cloudflare R2)
+- **Storage**: Local Filesystem + Optional Cloud Sync (Backblaze B2 / Cloudflare R2 / S2)
