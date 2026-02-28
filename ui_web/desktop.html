@@ -345,6 +345,7 @@
         .discover-card { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 1rem; background: var(--surface-overlay); border: 1px solid var(--glass-border); transition: background 0.2s, border-color 0.2s; min-width: 0; }
         .discover-card:hover { background: var(--bg-card); }
         .discover-card-cover { width: 48px; height: 48px; flex-shrink: 0; border-radius: 0.75rem; background-size: cover; background-position: center; background-color: var(--input-bg); }
+        .discover-card.discover-card-resolving .discover-card-cover { opacity: 0.85; }
         .discover-card-meta { flex: 1; min-width: 0; }
         .discover-card-title { font-size: 0.8125rem; font-weight: 600; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .discover-card-artist { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

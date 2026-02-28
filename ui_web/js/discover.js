@@ -29,6 +29,12 @@ function ensureHttpsImageUrl(url) {
     return t;
 }
 
+/** Placeholder for discover cards when no cover: same as store or inline fallback so cover area is never empty. */
+function getDiscoverPlaceholderUrl() {
+    if (typeof store !== 'undefined' && store.placeholderCoverUrl) return store.placeholderCoverUrl;
+    return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>');
+}
+
 export const Discover = {
     _mobile: true,
     _loading: false,
@@ -144,10 +150,10 @@ export const Discover = {
         const rawCover = r.cover_url || r.thumbnail || '';
         const cover_url = ensureHttpsImageUrl(rawCover);
         const thumb = cover_url ? cover_url.replace(/"/g, '%22') : '';
-        const placeholder = (store.placeholderCoverUrl || '').replace(/"/g, '%22');
+        const placeholder = getDiscoverPlaceholderUrl().replace(/"/g, '%22');
         const coverStyle = cover_url
             ? `background-image: url("${escapeCssUrl(cover_url)}")`
-            : (placeholder ? `background-image: url("${escapeCssUrl(placeholder)}")` : 'background-color: var(--surface-overlay);');
+            : `background-image: url("${escapeCssUrl(placeholder)}"); background-color: var(--input-bg);`;
         const richMetaStr = escape(JSON.stringify({
             title: r.title,
             artist: r.artist,
@@ -277,41 +283,63 @@ export const Discover = {
         const apiBase = getApiBase();
 
         const resolveItem = async (item, row) => {
-            if (item.webpage_url && item.id) return item;
+            if (item.webpage_url && item.id && !String(item.id).startsWith('raw-')) return item;
 
-            // Show loading state
-            row.style.opacity = '0.5';
+            row.classList.add('discover-card-resolving');
+            row.style.opacity = '0.7';
+            const applyResult = (data) => {
+                if (!data) return;
+                row.setAttribute('data-video-id', data.id);
+                row.setAttribute('data-webpage-url', data.webpage_url || '');
+                row.setAttribute('data-duration', data.duration || 0);
+                const rawCover = data.cover_url || data.thumbnail;
+                const coverUrl = ensureHttpsImageUrl(rawCover);
+                if (coverUrl) {
+                    const coverEl = row.querySelector('.discover-card-cover');
+                    if (coverEl) coverEl.style.backgroundImage = `url("${escapeCssUrl(coverUrl)}")`;
+                    row.setAttribute('data-thumbnail', coverUrl.replace(/"/g, '%22'));
+                }
+            };
             try {
                 const res = await fetch(`${apiBase}/api/discover/resolve`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ artist: item.artist, title: item.title }),
                 });
-                if (!res.ok) throw new Error('Resolution failed');
-                const data = await res.json();
-
-                // Update DOM so we don't resolve again
-                row.setAttribute('data-video-id', data.id);
-                row.setAttribute('data-webpage-url', data.webpage_url);
-                row.setAttribute('data-duration', data.duration);
-
-                // Update cover whenever we have a URL from resolve (overwrite placeholder or failed initial load)
-                const rawCover = data.cover_url || data.thumbnail;
-                const coverUrl = ensureHttpsImageUrl(rawCover);
-                if (coverUrl) {
-                    const coverEl = row.querySelector('.discover-card-cover');
-                    if (coverEl) {
-                        coverEl.style.backgroundImage = `url("${escapeCssUrl(coverUrl)}")`;
-                    }
-                    row.setAttribute('data-thumbnail', coverUrl.replace(/"/g, '%22'));
+                const data = await res.json().catch(() => ({}));
+                if (res.status === 200 && data.result) {
+                    applyResult(data.result);
+                    row.classList.remove('discover-card-resolving');
+                    row.style.opacity = '1';
+                    return { ...item, ...data.result };
                 }
-
-                // Merge resolved data into item object
-                return { ...item, ...data };
+                if (res.status === 202 && data.job_id) {
+                    const jobId = data.job_id;
+                    const pollMs = 600;
+                    const maxAttempts = 80;
+                    for (let i = 0; i < maxAttempts; i++) {
+                        await new Promise((r) => setTimeout(r, pollMs));
+                        const st = await fetch(`${apiBase}/api/discover/resolve/status/${jobId}`);
+                        const stData = await st.json().catch(() => ({}));
+                        if (stData.status === 'completed' && stData.result) {
+                            applyResult(stData.result);
+                            row.classList.remove('discover-card-resolving');
+                            row.style.opacity = '1';
+                            return { ...item, ...stData.result };
+                        }
+                        if (stData.status === 'failed') {
+                            throw new Error(stData.error || 'Resolution failed');
+                        }
+                    }
+                    throw new Error('Resolution timed out');
+                }
+                if (res.status === 404) throw new Error(data.error || 'Resolution failed');
+                throw new Error(data.error || 'Resolution failed');
             } catch (err) {
                 console.error('Failed to resolve recommendation:', err);
                 return null;
             } finally {
+                row.classList.remove('discover-card-resolving');
                 row.style.opacity = '1';
             }
         };

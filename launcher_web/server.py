@@ -1,10 +1,9 @@
 """
-Launcher web server: serves the entry-point UI and API to start the ecosystem daemon.
+Launcher web server: serves the entry-point UI and API to start the Station Engine daemon.
 """
 import os
 import sys
 import socket
-import subprocess
 import json
 from pathlib import Path
 
@@ -13,15 +12,14 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from flask import Flask, render_template, jsonify, request
-VENV_PYTHON = ROOT_DIR / "venv" / ("Scripts\\python.exe" if os.name == "nt" else "bin/python")
-RUN_PY = ROOT_DIR / "run.py"
+from shared.daemon_launcher import (
+    start_daemon_process,
+    stop_daemon_process,
+    is_port_in_use,
+    STATION_PORT,
+)
+
 DEFAULT_PORT = 5099
-API_PORT = 5005
-
-
-def is_port_in_use(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(("127.0.0.1", port)) == 0
 
 
 def get_local_ipv4() -> str:
@@ -47,43 +45,9 @@ def local_ip():
     return jsonify({"ip": get_local_ipv4()})
 
 
-def stop_ecosystem_process() -> tuple[bool, str]:
-    """Kill the process listening on API_PORT. Returns (success, message)."""
-    if not is_port_in_use(API_PORT):
-        return True, "Ecosystem was not running."
-    try:
-        if os.name == "nt":
-            out = subprocess.run(
-                ["netstat", "-ano"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if out.returncode != 0:
-                return False, "Could not list processes."
-            for line in out.stdout.splitlines():
-                if f":{API_PORT}" in line and "LISTENING" in line:
-                    parts = line.split()
-                    if len(parts) >= 5:
-                        pid = parts[-1]
-                        subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True, timeout=5)
-                        return True, "Ecosystem stopped."
-            return False, "Process on port not found."
-        else:
-            subprocess.run(
-                ["fuser", "-k", f"{API_PORT}/tcp"],
-                stderr=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                timeout=5,
-            )
-            return True, "Ecosystem stopped."
-    except Exception as e:
-        return False, str(e)
-
-
 @app.route("/api/stop-ecosystem", methods=["POST"])
 def stop_ecosystem():
-    ok, message = stop_ecosystem_process()
+    ok, message = stop_daemon_process(STATION_PORT)
     if ok:
         return jsonify({"ok": True, "message": message}), 200
     return jsonify({"ok": False, "error": message}), 500
@@ -91,31 +55,13 @@ def stop_ecosystem():
 
 @app.route("/api/launch-ecosystem", methods=["POST"])
 def launch_ecosystem():
-    if is_port_in_use(API_PORT):
-        return jsonify({"ok": True, "message": "Ecosystem is already running."}), 200
-    if not VENV_PYTHON.exists():
-        return jsonify({"ok": False, "error": "Virtual environment not found."}), 500
-    if not RUN_PY.exists():
-        return jsonify({"ok": False, "error": "run.py not found."}), 500
-    try:
-        env = os.environ.copy()
-        env["PYTHONPATH"] = str(ROOT_DIR)
-        popen_kw = {
-            "cwd": str(ROOT_DIR),
-            "env": env,
-        }
-        if os.name == "nt":
-            popen_kw["creationflags"] = subprocess.CREATE_NO_WINDOW
-        else:
-            popen_kw["start_new_session"] = True
-        # No stdout/stderr redirect: daemon output goes to the terminal that started this server
-        subprocess.Popen(
-            [str(VENV_PYTHON), str(RUN_PY), "--daemon"],
-            **popen_kw,
-        )
-        return jsonify({"ok": True, "message": "Ecosystem is starting!"}), 200
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+    ok, message = start_daemon_process(ROOT_DIR, env_extra={"SOUNDSIBLE_LAUNCHED_FROM": "web"}, detach=False)
+    if ok:
+        return jsonify({"ok": True, "message": message}), 200
+    # Already running is not an error; report as success with that message
+    if "already running" in message.lower():
+        return jsonify({"ok": True, "message": message}), 200
+    return jsonify({"ok": False, "error": message}), 500
 
 
 # --- Setup API (config + test connection + buckets) ---

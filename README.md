@@ -20,7 +20,7 @@ The **Station** is the primary, recommended interface for all users. It's a mode
 - Search within your **library** and the **internet** and **download any music**; all from the same search bar.
 - Choose **search & download source**: Youtube Music / Youtube.
 - Resume playback and queue on other devices. (Just open a second device and you will see the dialog).
-- Easily **manage your library from the frontend**: Edit metadata, refetch metadata, upload your own covers; all within the station app.
+- Easily **manage your library from the frontend**: Edit metadata, refetch metadata, upload your own covers; all within the Station app.
 - Easily setup your ecosystem with the embeded **guided setup**. (Read the dialogs!)
   
 ### Key backend features:
@@ -65,17 +65,18 @@ python3 -m venv venv
 ## Getting Started!
 After [installation](#-installation):
 
-**Easiest:** Run the launcher — your browser will open automatically. Click **Launch Ecosystem** to start the Station, or **Setup** when available.
+**Easiest:** Run the launcher from the project folder — your browser will open automatically. Click **Launch Ecosystem** to start the Station Engine and open the Station, or **Setup** when available.
 ```bash
 python start_launcher.py
 ```
-The launcher runs at **http://localhost:5099** (you can bookmark it). The ecosystem runs in the background; you don't need to keep a terminal open. To stop it, use the **Stop** button on the same launcher page. Reopen the launcher anytime to start or stop.
+- Keep the terminal open after clicking Launch so the Station Engine keeps running.
+The launcher runs at **http://localhost:5099** (you can bookmark it). **Keep the terminal open** after you click Launch — the Station Engine runs in that terminal; closing it will stop the Station Engine. To stop the Station Engine, use the **Stop** button on the same launcher page. Reopen the launcher anytime to start or stop.
 
 **Terminal / SSH:** Use the slim CLI for full control:
 ```bash
 python run.py
 ```
-Then open **http://localhost:5005/player/** (or your server’s LAN IP). If you used [**Tailscale**](https://github.com/tailscale/tailscale), open **http://[your-tailscale-ip]:5005/player/**.
+Choose **Start Station Engine & Open Station**; then **keep that terminal open** — the Station Engine runs there. Open **http://localhost:5005/player/** (or your server’s LAN IP) to use the Station. If you used [**Tailscale**](https://github.com/tailscale/tailscale), open **http://[your-tailscale-ip]:5005/player/**.
 This links redirects automatically to mobile or desktop versions.
 
 ### Add as a webapp on desktop and mobile for the full inmersive experience:

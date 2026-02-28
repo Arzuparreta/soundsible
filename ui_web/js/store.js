@@ -297,7 +297,7 @@ class Store {
                 method: 'DELETE'
             });
             if (res.ok) {
-                console.log("✓ Track deleted from Station");
+                console.log("✓ Track deleted from Station Engine");
                 await this.syncLibrary();
                 return true;
             }

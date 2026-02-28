@@ -334,7 +334,7 @@ export class Downloader {
             Haptics.tick();
         } catch (err) {
             this.searchBtn?.classList.remove('opacity-70');
-            this.searchResults.innerHTML = '<div class="text-center py-8 text-red-400">Could not reach Station.</div>';
+            this.searchResults.innerHTML = '<div class="text-center py-8 text-red-400">Could not reach Station Engine.</div>';
         }
     }
 
@@ -876,7 +876,7 @@ export class Downloader {
                 body: JSON.stringify(data)
             });
             if (resp.ok) {
-                this.addLog("Settings updated on Station.");
+                this.addLog("Settings updated on Station Engine.");
                 this.loadConfig(); // Refresh to see masks
             }
         } catch (err) {

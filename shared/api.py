@@ -173,7 +173,7 @@ def is_trusted_network(remote_addr):
 
 def is_safe_path(file_path, is_trusted=False):
     """
-    Ensures the Station only serves files from approved music or cache folders.
+    Ensures the Station Engine only serves files from approved music or cache folders.
     If is_trusted is True (LAN/Tailscale), all paths are allowed for maximum flexibility.
     """
     if is_trusted:
@@ -266,7 +266,7 @@ class LibraryFileWatcher(FileSystemEventHandler):
             socketio.emit('library_updated')
 
 class DownloadQueueManager:
-    """Manages the download queue for the Station."""
+    """Manages the download queue for the Station Engine."""
     def __init__(self, storage_path=None):
         if storage_path is None:
             storage_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "download_queue.json"
@@ -389,7 +389,7 @@ def get_active_endpoints():
 
 app = Flask(__name__)
 CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
 
 # Suppress engineio/socketio INFO logs (e.g. "Invalid session" when browser reconnects with stale sid)
 logging.getLogger("engineio").setLevel(logging.WARNING)
@@ -451,15 +451,11 @@ def get_core():
             cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
             library_manager._load_from_cache(cache_path)
             
-        print("API: Initializing Queue, Playback Engine and Favourites...")
+        print("API: Initializing Queue, Playback Engine and Favourites...", flush=True)
         queue_manager = QueueManager()
         favourites_manager = FavouritesManager()
-        # Note: PlaybackEngine requires an active MPV instance which might need a display.
-        # For headless/server mode, we might need to handle this carefully.
-        try:
-            playback_engine = PlaybackEngine(queue_manager=queue_manager)
-        except Exception as e:
-            print(f"Warning: Could not initialize playback engine: {e}")
+        # API server runs headless; web player uses browser for playback. Skip MPV to avoid blocking on display/audio.
+        playback_engine = None
     return library_manager, playback_engine, queue_manager
 
 def get_downloader(output_dir=None, open_browser=False, log_callback=None):
@@ -527,13 +523,13 @@ def process_queue_background():
         return
         
     queue_manager_dl.is_processing = True
-    queue_manager_dl.add_log("Station: Background processor started.")
+    queue_manager_dl.add_log("Station Engine: Background processor started.")
     
     try:
         while True:
             pending = queue_manager_dl.get_pending()
             if not pending:
-                queue_manager_dl.add_log("Station: Queue empty, idling.")
+                queue_manager_dl.add_log("Station Engine: Queue empty, idling.")
                 break
                 
             item = pending[0]
@@ -1627,19 +1623,80 @@ def youtube_search():
         return jsonify({"results": [], "error": str(e)}), 500
 
 LIBRARY_SEED_CAP = 50
-# Fewer seeds for discover so the request returns quickly and does not block the server (Last.fm calls are 5 at a time).
-DISCOVER_SEED_CAP = 12
 
-# In-memory discover session: stable raw ids we've shown (same artist+title => same id); cleared when new_session=true.
+# --- Discover: keep this path fast and non-blocking ---
+# Do NOT call get_downloader() here: we only need Last.fm raw results (resolve=False). Downloader init holds a
+# global lock and does yt-dlp setup; calling it here would block the request thread and freeze the whole server.
+# Use DISCOVER_SEED_CAP so we do at most ~12 Last.fm requests (5 concurrent) and return in a few seconds.
+DISCOVER_SEED_CAP = 12
 _session_shown_ids = set()
 _session_played_ids = set()
+
+# Async resolve: avoid blocking the request thread with yt-dlp (15–40s). Jobs run in a thread pool.
+_resolve_jobs: dict = {}
+_resolve_jobs_lock = threading.Lock()
+_resolve_job_ttl_sec = 300
+_resolve_executor = None
+
+def _get_resolve_executor():
+    global _resolve_executor
+    if _resolve_executor is None:
+        from concurrent.futures import ThreadPoolExecutor
+        _resolve_executor = ThreadPoolExecutor(max_workers=3)
+    return _resolve_executor
+
+def _resolve_worker(job_id: str, artist: str, title: str):
+    """Run in thread: get_downloader + search + validate. Updates job in _resolve_jobs."""
+    result = None
+    error = None
+    try:
+        dl = get_downloader(open_browser=False)
+        query = f"{artist} {title}".strip()
+        results = dl.downloader.search_youtube(query, max_results=5, use_ytmusic=True)
+        if not results:
+            error = "Resolution failed"
+        else:
+            entry = None
+            info = None
+            for candidate in results:
+                video_id = candidate.get("id")
+                if not video_id or not _validate_youtube_video_id(str(video_id)):
+                    continue
+                info = dl.downloader.validate_and_get_info(video_id)
+                if info:
+                    entry = candidate
+                    break
+            if not entry or not info:
+                error = "No playable video found"
+            else:
+                video_id = entry.get("id")
+                yt_thumb = info.get("thumbnail") or entry.get("thumbnail") or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else "")
+                result = {
+                    "id": video_id,
+                    "title": entry.get("title") or title,
+                    "duration": entry.get("duration") or info.get("duration") or 0,
+                    "thumbnail": yt_thumb,
+                    "cover_url": yt_thumb,
+                    "webpage_url": entry.get("webpage_url") or info.get("webpage_url") or f"https://www.youtube.com/watch?v={video_id}",
+                    "channel": entry.get("channel") or info.get("uploader") or "",
+                    "artist": artist or entry.get("channel") or info.get("uploader") or ""
+                }
+    except Exception as e:
+        print(f"API: Discover resolve worker error: {e}")
+        error = "Resolution failed"
+    with _resolve_jobs_lock:
+        if job_id in _resolve_jobs:
+            _resolve_jobs[job_id]["status"] = "completed" if result else "failed"
+            _resolve_jobs[job_id]["result"] = result
+            _resolve_jobs[job_id]["error"] = error
+            _resolve_jobs[job_id]["finished_at"] = time.time()
 
 
 @app.route('/api/discover/recommendations', methods=['POST'])
 def discover_recommendations():
-    """Get raw recommendations from Last.fm. Build from raw: stable ids, filter by session shown, return.
+    """Return raw Last.fm recommendations only (no YouTube resolve). Fast path: no get_downloader(), capped seeds.
     Body: seed_track_ids (list, optional), limit (optional, default 20), new_session (bool, optional).
-    Seeds: from seed_track_ids or from library. Raw items get a stable id (same artist+title => same id) for dedupe."""
+    Resolve to YouTube happens on demand via /api/discover/resolve when the user clicks play/add."""
     global _session_shown_ids, _session_played_ids
     try:
         data = request.json or {}
@@ -1674,25 +1731,24 @@ def discover_recommendations():
         if not seeds:
             return jsonify({"results": [], "reason": "no_seeds"}), 200
 
-        # 2. Get raw from Last.fm (request extra so we have enough after session filter)
+        # 2. Raw from Last.fm only (no get_downloader; resolve happens on click via /api/discover/resolve)
         from recommendations.service import RecommendationsService
         from recommendations.providers import LastFmRecommendationProvider
         from recommendations.providers.base import Seed
         from recommendations.util import raw_stable_id, raw_to_dict
+        from recommendations.cache import ProviderCache
+        from dotenv import dotenv_values
 
         seed_objs = [Seed(artist=s["artist"], title=s["title"]) for s in seeds]
         if new_session:
             random.shuffle(seed_objs)
-        from recommendations.cache import ProviderCache
         cache_path = Path(os.path.expanduser("~/.config/soundsible/recommendation_cache.json"))
         provider_cache = ProviderCache(cache_path)
-        from dotenv import dotenv_values
         _env_path = Path("odst_tool/.env")
         _env_vars = dotenv_values(_env_path) if _env_path.exists() else {}
         lastfm_key = os.getenv("LASTFM_API_KEY") or _env_vars.get("LASTFM_API_KEY")
         lastfm_provider = LastFmRecommendationProvider(lastfm_key, provider_cache)
-        # resolve=False: we only need Last.fm raw results; do NOT call get_downloader() here (avoids lock + yt-dlp init and prevents blocking the server).
-        svc = RecommendationsService(lastfm_provider, None)
+        svc = RecommendationsService(lastfm_provider, None)  # downloader=None: resolve=False, do not init ODST here
         request_limit = limit + len(_session_shown_ids) + 20
         request_limit = min(100, max(limit, request_limit))
         raw_list, reason = svc.get_recommendations(
@@ -1723,9 +1779,12 @@ def discover_recommendations():
         traceback.print_exc()
         return jsonify({"results": [], "reason": "error", "error": str(e)}), 500
 
+def _resolve_job_key(artist: str, title: str) -> str:
+    return f"{ (artist or '').strip().lower() }|{ (title or '').strip().lower() }"
+
 @app.route('/api/discover/resolve', methods=['GET', 'POST'])
 def discover_resolve():
-    """Lazily resolve a recommendation to a YouTube video via ODSTDownloader."""
+    """Start async resolve (POST) or health check (GET). Returns 202 + job_id; client polls status."""
     if request.method == 'GET':
         return jsonify({"ok": True, "message": "discover resolve route is registered"}), 200
     try:
@@ -1734,44 +1793,53 @@ def discover_resolve():
         title = data.get("title") or ""
         if not title:
             return jsonify({"error": "Missing title"}), 400
-            
-        dl = get_downloader(open_browser=False)
-        query = f"{artist} {title}".strip()
-        try:
-            # Fetch several results; validate each (thumbnail + playable audio) to skip dead/restricted/fake videos.
-            results = dl.downloader.search_youtube(query, max_results=5, use_ytmusic=True)
-            if not results:
-                return jsonify({"error": "Resolution failed"}), 404
-            entry = None
-            info = None
-            for candidate in results:
-                video_id = candidate.get("id")
-                if not video_id or not _validate_youtube_video_id(str(video_id)):
+        key = _resolve_job_key(artist, title)
+        now = time.time()
+        with _resolve_jobs_lock:
+            # Reuse existing job if same (artist, title)
+            for jid, job in list(_resolve_jobs.items()):
+                if job.get("key") != key:
                     continue
-                info = dl.downloader.validate_and_get_info(video_id)
-                if info:
-                    entry = candidate
-                    break
-            if not entry or not info:
-                return jsonify({"error": "No playable video found"}), 404
-            video_id = entry.get("id")
-            yt_thumb = info.get("thumbnail") or entry.get("thumbnail") or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else "")
-            return jsonify({
-                "id": video_id,
-                "title": entry.get("title") or title,
-                "duration": entry.get("duration") or info.get("duration") or 0,
-                "thumbnail": yt_thumb,
-                "cover_url": yt_thumb,
-                "webpage_url": entry.get("webpage_url") or info.get("webpage_url") or f"https://www.youtube.com/watch?v={video_id}",
-                "channel": entry.get("channel") or info.get("uploader") or "",
-                "artist": artist or entry.get("channel") or info.get("uploader") or ""
-            })
-        except Exception as e:
-            print(f"API: Discover resolve error: {e}")
-            return jsonify({"error": "Resolution failed"}), 404
+                if job.get("status") == "pending":
+                    return jsonify({"job_id": jid, "status": "pending"}), 202
+                if job.get("status") == "completed" and job.get("result") and (now - job.get("finished_at", 0)) < _resolve_job_ttl_sec:
+                    return jsonify({"job_id": jid, "status": "completed", "result": job["result"]}), 200
+                if job.get("status") == "failed" and (now - job.get("finished_at", 0)) < _resolve_job_ttl_sec:
+                    return jsonify({"job_id": jid, "status": "failed", "error": job.get("error", "Resolution failed")}), 404
+                break
+            job_id = uuid.uuid4().hex[:12]
+            _resolve_jobs[job_id] = {"key": key, "status": "pending", "result": None, "error": None, "finished_at": None}
+        _get_resolve_executor().submit(_resolve_worker, job_id, artist, title)
+        return jsonify({"job_id": job_id, "status": "pending"}), 202
     except Exception as e:
-        print(f"API: Discover resolve unhandled error: {e}")
+        print(f"API: Discover resolve error: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/discover/resolve/status/<job_id>', methods=['GET'])
+def discover_resolve_status(job_id):
+    """Poll for async resolve result. Returns status (pending|completed|failed) and result or error."""
+    if not job_id:
+        return jsonify({"error": "Missing job_id"}), 400
+    now = time.time()
+    with _resolve_jobs_lock:
+        # Prune expired jobs to avoid unbounded growth
+        for jid in list(_resolve_jobs):
+            j = _resolve_jobs[jid]
+            if j.get("finished_at") and (now - j["finished_at"]) > _resolve_job_ttl_sec:
+                del _resolve_jobs[jid]
+        job = _resolve_jobs.get(job_id)
+        if not job:
+            return jsonify({"status": "failed", "error": "Unknown job"}), 404
+        if job.get("finished_at") and (now - job["finished_at"]) > _resolve_job_ttl_sec:
+            del _resolve_jobs[job_id]
+            return jsonify({"status": "failed", "error": "Expired"}), 404
+        status = job.get("status", "pending")
+        out = {"job_id": job_id, "status": status}
+        if status == "completed" and job.get("result"):
+            out["result"] = job["result"]
+        if status == "failed":
+            out["error"] = job.get("error", "Resolution failed")
+        return jsonify(out), 200
 @app.route('/api/discover/played', methods=['POST'])
 def discover_played():
     """Register a recommended item as played this session; next recommendation fetch will exclude it."""
@@ -1845,7 +1913,7 @@ def trigger_downloader():
         return jsonify({"status": "started"})
     return jsonify({"status": "already_running"})
 
-# --- Station Admin Endpoints (Parity with Original ODST) ---
+# --- Station Engine Admin Endpoints (Parity with Original ODST) ---
 
 @app.route('/api/downloader/optimize', methods=['POST'])
 def trigger_downloader_optimize():
@@ -2036,12 +2104,15 @@ def start_api(port=5005, debug=False):
     print(f"Target Port: {port}")
     print(f"CWD: {os.getcwd()}")
     print("For full startup (sync + watcher) use: python run.py --daemon")
-    
+
+    _defer_ytdlp_thread = False
+    _run_ytdlp_update = None
+
     try:
         lib, _, _ = get_core()
-        print("API: Core services initialized successfully.")
+        print("API: Core services initialized successfully.", flush=True)
 
-        # Optional: auto-update yt-dlp in background if user enabled it
+        # Optional: auto-update yt-dlp in background if user enabled it (thread started after terminal message)
         try:
             from dotenv import dotenv_values
             _env_path = Path("odst_tool/.env")
@@ -2050,7 +2121,6 @@ def start_api(port=5005, debug=False):
             if _auto:
                 def _run_ytdlp_update():
                     import subprocess
-                    # Use project venv's pip to avoid system externally-managed-environment (e.g. Arch)
                     pip_cmd = None
                     try:
                         root = Path(__file__).resolve().parent.parent
@@ -2077,8 +2147,7 @@ def start_api(port=5005, debug=False):
                             print(f"API: yt-dlp auto-update failed: {result.stderr or result.stdout or 'unknown'}")
                     except Exception as e:
                         print(f"API: yt-dlp auto-update error: {e}")
-                _t = threading.Thread(target=_run_ytdlp_update, daemon=True)
-                _t.start()
+                _defer_ytdlp_thread = True
         except Exception:
             pass
 
@@ -2090,7 +2159,7 @@ def start_api(port=5005, debug=False):
         api_observer = Observer()
         api_observer.schedule(event_handler, str(config_dir), recursive=False)
         api_observer.start()
-        print(f"API: Library File Watcher started on {config_dir}")
+        print(f"API: Library File Watcher started on {config_dir}", flush=True)
 
     except Exception as e:
         print(f"FATAL: Core initialization failed: {e}")
@@ -2116,7 +2185,21 @@ def start_api(port=5005, debug=False):
         print(f"Remote: http://{ip}:{port}/player/")
     print("="*40 + "\n")
 
-    print(f"API: Starting SocketIO server on 0.0.0.0:{port}...")
+    try:
+        import gevent
+        print("API: gevent active — concurrent request handling enabled")
+    except ImportError:
+        print("API: gevent not installed — single-threaded (long requests may block others)")
+    print(f"API: Starting SocketIO server on 0.0.0.0:{port}...", flush=True)
+
+    from shared.daemon_launcher import MSG_KEEP_TERMINAL_OPEN
+    _terminal_msg = MSG_KEEP_TERMINAL_OPEN
+    print("", flush=True)
+    print("\033[1m" + f"API: {_terminal_msg}" + "\033[0m", flush=True)
+    if _defer_ytdlp_thread and _run_ytdlp_update:
+        threading.Thread(target=_run_ytdlp_update, daemon=True).start()
+    sys.stdout.flush()
+    sys.stderr.flush()
     socketio.run(app, host='0.0.0.0', port=port, debug=debug)
 
 if __name__ == '__main__':

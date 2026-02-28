@@ -85,6 +85,12 @@
     .card ul { padding-left: 1.25em; }
     .card li { margin-bottom: 0.35em; }
     .card li .note { font-style: italic; }
+    .card .launch-tip {
+      margin: 12px 0 0 0;
+      font-size: 13px;
+      color: var(--text-dim);
+      opacity: 0.9;
+    }
     .card code { font-size: 12px; opacity: 0.95; }
     .card a {
       color: var(--accent);
@@ -183,7 +189,7 @@
   <div class="cards">
     <div class="card" id="launch-ecosystem-card">
       <h2 data-i18n="index.launch.title">Launch Ecosystem</h2>
-      <p data-i18n="index.launch.intro">Starts Soundsible. Your station will be available on:</p>
+      <p data-i18n="index.launch.intro">Starts the Station Engine. The Station will be available on:</p>
       <ul>
         <li><code>http://{your-tailscale-ip}:5005/player</code> <span class="note" data-i18n="index.launch.bullet1Note">— Access it from all around the world. You need <a href="https://tailscale.com/download" target="_blank" rel="noopener">Tailscale</a> installed; find your IP on the <a href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener">Machines dashboard</a>.</span></li>
         <li><code>http://localhost:5005/player</code> <span class="note" data-i18n="index.launch.bullet2Note">— Only from the main machine.</span></li>
@@ -193,6 +199,7 @@
         <button type="button" class="btn btn-launch" id="btn-launch" data-i18n="index.launch.btnLaunch">Launch</button>
         <button type="button" class="btn btn-stop" id="btn-stop" data-i18n="index.launch.btnStop">Stop</button>
       </div>
+      <p class="launch-tip" data-i18n="index.launch.terminalTip">After you click Launch, keep the terminal window where you started this launcher open. That is where the Station Engine runs.</p>
     </div>
 
     <a href="/setup" class="card clickable" style="text-decoration: none; color: inherit;">
@@ -247,7 +254,7 @@
         .then(r => r.json())
         .then(data => {
           btnLaunch.disabled = false;
-          if (data.ok) showToast(I18n.t('index.toast.ecosystemStarting'));
+          if (data.ok) showToast(data.message || I18n.t('index.toast.ecosystemStarting'));
           else showToast(data.error || I18n.t('index.toast.failedStart'), true);
         })
         .catch(err => {
@@ -262,7 +269,7 @@
         .then(r => r.json())
         .then(data => {
           btnStop.disabled = false;
-          if (data.ok) showToast(I18n.t('index.toast.ecosystemStopped'));
+          if (data.ok) showToast(data.message || I18n.t('index.toast.ecosystemStopped'));
           else showToast(data.error || I18n.t('index.toast.failedStop'), true);
         })
         .catch(err => {

@@ -509,6 +509,7 @@
         .discover-card { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 1rem; background: var(--surface-overlay); border: 1px solid var(--glass-border); transition: background 0.2s, border-color 0.2s; min-width: 0; }
         .discover-card:hover { background: var(--bg-card); }
         .discover-card-cover { width: 48px; height: 48px; flex-shrink: 0; border-radius: 0.75rem; background-size: cover; background-position: center; background-color: var(--input-bg); }
+        .discover-card.discover-card-resolving .discover-card-cover { opacity: 0.85; }
         .discover-card-meta { flex: 1; min-width: 0; }
         .discover-card-title { font-size: 0.8125rem; font-weight: 600; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .discover-card-artist { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1098,13 +1099,13 @@
                         <h2 class="text-lg font-bold tracking-tight mb-4" style="letter-spacing: -0.02em;">Sync & connection</h2>
                         <div class="mb-4">
                             <div class="text-sm font-medium text-[var(--text-main)] mb-1">Link library</div>
-                            <p class="text-xs text-[var(--text-dim)] mb-3">Paste a sync token to link this app to your Station.</p>
+                            <p class="text-xs text-[var(--text-dim)] mb-3">Paste a sync token to link this app to your Station Engine.</p>
                             <textarea id="sync-token-input" rows="4" class="input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-3 text-[var(--secondary)] font-mono text-xs focus:outline-none focus:border-[var(--accent)] transition-colors" placeholder="Paste token..."></textarea>
                         </div>
                         <button id="import-token-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 text-[var(--text-on-accent)] font-black py-4 rounded-[var(--radius-omni-xs)] transition-all duration-200 active:scale-[0.98] mb-6">Import Token</button>
                         <div class="space-y-3 pt-4 border-t border-[var(--glass-border)]">
                             <div class="settings-row flex justify-between items-center min-h-[44px]">
-                                <span class="text-sm text-[var(--text-dim)]">Station status</span>
+                                <span class="text-sm text-[var(--text-dim)]">Station Engine status</span>
                                 <div class="flex items-center gap-2">
                                     <div class="relative flex items-center justify-center">
                                         <div id="status-led-pulse" class="absolute inset-0 w-2 h-2 rounded-full bg-green-500 status-pulse"></div>

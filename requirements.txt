@@ -44,5 +44,6 @@ mypy>=1.5.0                # Type checking
 spotipy>=2.23.0            # Spotify Web API
 yt-dlp==2026.2.21         # YouTube Downloader (update manually when needed)
 python-dotenv>=1.0.0       # Environment variables
-eventlet>=0.30.0           # Async networking for SocketIO
+gevent>=24.2.0            # Async networking for SocketIO (concurrent requests)
+gevent-websocket>=0.10.1   # WebSocket support for Flask-SocketIO
 musicbrainzngs>=0.7.1      # High-fidelity metadata resolver

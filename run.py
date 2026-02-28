@@ -3,11 +3,37 @@
 Soundsible Universal Launcher
 The single entry point for all Soundsible components (Player, Downloader, Setup).
 """
-
-import os
+# Prepend venv site-packages so "python3 run.py" finds gevent and other deps (same as using ./venv/bin/python).
 import sys
 import subprocess
+import hashlib
+from pathlib import Path
 import platform
+_run_dir = Path(__file__).resolve().parent
+_venv = _run_dir / "venv"
+if _venv.exists():
+    import site
+    _sp = _venv / ("Lib/site-packages" if platform.system() == "Windows" else f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages")
+    if _sp.exists():
+        site.addsitedir(str(_sp))
+    # Install/update requirements (including gevent) before importing gevent, so first-time run works.
+    _req_file = _run_dir / "requirements.txt"
+    _marker = _venv / ".installed_requirements_hash"
+    _py = _venv / ("Scripts/python.exe" if platform.system() == "Windows" else "bin/python")
+    if _req_file.exists() and _py.exists():
+        _current_hash = hashlib.md5(_req_file.read_bytes()).hexdigest()
+        if not _marker.exists() or _marker.read_text() != _current_hash:
+            print("Installing/Updating requirements...")
+            _r = subprocess.run([str(_py), "-m", "pip", "install", "-r", str(_req_file)], capture_output=True, text=True)
+            if _r.returncode != 0:
+                print("Requirement installation failed:", _r.stderr or _r.stdout)
+                sys.exit(1)
+            _marker.write_text(_current_hash)
+# Gevent must patch before any other imports that use socket/threading (so the API can handle multiple requests concurrently).
+from gevent import monkey
+monkey.patch_all()
+
+import os
 import shutil
 import socket
 import threading
@@ -28,6 +54,13 @@ VENV_DIR = ROOT_DIR / "venv"
 PYTHON_EXE = VENV_DIR / ("Scripts\\python.exe" if platform.system() == "Windows" else "bin/python")
 CONFIG_PATH = Path("~/.config/soundsible/config.json").expanduser()
 
+from shared.daemon_launcher import (
+    start_daemon_process,
+    stop_daemon_process,
+    MSG_KEEP_TERMINAL_OPEN,
+    MSG_CONFIG_MISSING,
+)
+
 
 def _is_port_in_use(port: int) -> bool:
     """Return True if something is listening on the given port."""
@@ -36,40 +69,8 @@ def _is_port_in_use(port: int) -> bool:
 
 
 def _kill_station_process(port: int = STATION_PORT) -> tuple[bool, str]:
-    """Kill the process listening on the station port. Returns (success, message)."""
-    if not _is_port_in_use(port):
-        return True, "Station was not running."
-    try:
-        if platform.system() == "Windows":
-            out = subprocess.run(
-                ["netstat", "-ano"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if out.returncode != 0:
-                return False, "Could not list processes."
-            for line in out.stdout.splitlines():
-                if f":{port}" in line and "LISTENING" in line:
-                    parts = line.split()
-                    if len(parts) >= 5:
-                        pid = parts[-1]
-                        subprocess.run(
-                            ["taskkill", "/PID", pid, "/F"],
-                            capture_output=True,
-                            timeout=5,
-                        )
-                        return True, "Station stopped."
-            return False, "Process on port not found."
-        subprocess.run(
-            ["fuser", "-k", f"{port}/tcp"],
-            stderr=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            timeout=5,
-        )
-        return True, "Station stopped."
-    except Exception as e:
-        return False, str(e)
+    """Kill the process listening on the Station Engine port. Returns (success, message)."""
+    return stop_daemon_process(port)
 
 
 def bootstrap():
@@ -167,7 +168,7 @@ class SoundsibleLauncher:
             except:
                 pass
         
-        # Final safety check: kill anything on station port
+        # Final safety check: kill anything on Station Engine port
         try:
             _kill_station_process(STATION_PORT)
         except Exception:
@@ -236,59 +237,74 @@ class SoundsibleLauncher:
         table.add_column("Key", style="bold magenta")
         table.add_column("Option", style="white")
 
-        table.add_row("1", "Start Station & Open Player")
-        table.add_row("2", "Open Player (station must be running)")
-        table.add_row("3", "Stop Station")
-        table.add_row("4", "Launch Legacy App (GTK desktop player)")
-        table.add_row("5", "Quick Discover / Terminal Playback")
+        table.add_row("1", "Start Station Engine & Open Station")
+        table.add_row("2", "Start Station Engine only (no browser)")
+        table.add_row("3", "Open Station (Station Engine must be running)")
+        table.add_row("4", "Stop Station Engine")
+        table.add_row("5", "Launch Legacy App (GTK desktop player)")
+        table.add_row("6", "Quick Discover / Terminal Playback")
         table.add_row("q", "Exit")
 
         console.print(Panel(table, title="Main Menu", border_style="dim"))
 
-        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "5", "q"], default="1")
+        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "5", "6", "q"], default="1")
         
         if choice == "1":
             self.launch_ecosystem()
         elif choice == "2":
-            self.launch_web_player()
+            self.launch_station_only()
         elif choice == "3":
-            self.stop_station()
+            self.launch_web_player()
         elif choice == "4":
-            self.launch_player()
+            self.stop_station()
         elif choice == "5":
+            self.launch_player()
+        elif choice == "6":
             self.search_ui()
         elif choice == "q":
             console.print("[italic]Happy listening![/italic]")
             sys.exit(0)
 
     def launch_ecosystem(self):
-        """Start the daemon (API + sync + watcher) and open the player in the browser."""
-        console.print("[bold green]Starting Station...[/bold green]")
-        try:
-            env = os.environ.copy()
-            env["PYTHONPATH"] = str(self.root_dir)
-            if platform.system() == "Windows":
-                popen_args = {"env": env, "cwd": str(self.root_dir), "creationflags": 0x00000010}
+        """Start the Station Engine and open the Station (web player) in the browser."""
+        console.print("[bold green]Starting Station Engine...[/bold green]")
+        ok, msg = start_daemon_process(self.root_dir)
+        if not ok:
+            if "already running" in msg.lower():
+                console.print(f"[green]{msg}[/green]")
+                webbrowser.open(PLAYER_URL)
             else:
-                popen_args = {
-                    "env": env,
-                    "cwd": str(self.root_dir),
-                    "start_new_session": True,
-                }
-            subprocess.Popen([str(self.python_exe), str(self.root_dir / "run.py"), "--daemon"], **popen_args)
-            console.print(Panel.fit(
-                "[bold green]Station started. Player opened in browser.[/bold green]\n\n"
-                "[dim]Station output appears in this terminal.[/dim]",
-                border_style="green"
-            ))
-            time.sleep(1.5)
-            webbrowser.open(PLAYER_URL)
-        except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
+                console.print(f"[red]{msg}[/red]")
+            return
+        console.print(Panel.fit(
+            "[bold green]Station Engine started. Station opened in browser.[/bold green]\n\n"
+            "[bold]" + MSG_KEEP_TERMINAL_OPEN + "[/bold]",
+            border_style="green"
+        ))
+        time.sleep(1.5)
+        webbrowser.open(PLAYER_URL)
+
+    def launch_station_only(self):
+        """Start the Station Engine (API + sync + watcher) without opening the browser."""
+        console.print("[bold green]Starting Station Engine...[/bold green]")
+        ok, msg = start_daemon_process(self.root_dir)
+        if not ok:
+            if "already running" in msg.lower():
+                console.print(f"[green]{msg}[/green]")
+            else:
+                console.print(f"[red]{msg}[/red]")
+            return
+        console.print(Panel.fit(
+            "[bold green]Station Engine started.[/bold green]\n\n"
+            "[bold]" + MSG_KEEP_TERMINAL_OPEN + "[/bold]\n\n"
+            "[dim]Open the Station at http://localhost:5005/player/ when ready.[/dim]",
+            border_style="green"
+        ))
+        time.sleep(0.5)
 
     def stop_station(self):
-        """Kill the process listening on the station port (5005)."""
-        ok, msg = _kill_station_process(STATION_PORT)
+        """Kill the process listening on the Station Engine port (5005)."""
+        ok, msg = stop_daemon_process(STATION_PORT)
         if ok:
             console.print(f"[green]{msg}[/green]")
         else:
@@ -321,13 +337,13 @@ class SoundsibleLauncher:
             Prompt.ask("Press Enter to return")
 
     def launch_web_player(self):
-        """Open the Web Player in the default browser (station must already be running)."""
+        """Open the Station (web player) in the default browser (Station Engine must already be running)."""
         if not _is_port_in_use(STATION_PORT):
-            console.print("[yellow]Station not running. Use option 1 to start it.[/yellow]")
+            console.print("[yellow]Station Engine not running. Use option 1 or 2 to start it.[/yellow]")
             time.sleep(1.0)
             return
         webbrowser.open(PLAYER_URL)
-        console.print("[green]Player opened in browser.[/green]")
+        console.print("[green]Station opened in browser.[/green]")
         time.sleep(0.5)
 
     def search_ui(self):
@@ -366,7 +382,8 @@ class SoundsibleLauncher:
 
         if not self.is_configured():
             if "--daemon" in sys.argv:
-                print("Daemon: Configuration missing. Please run 'run.py' manually first.")
+                print(f"Daemon: {MSG_CONFIG_MISSING}")
+                print("Run without --daemon once to complete setup: python run.py")
                 return
             console.print(Panel("[bold yellow]First Run Detected![/bold yellow]\nWelcome! Launching setup...", border_style="yellow"))
             self.launch_player()

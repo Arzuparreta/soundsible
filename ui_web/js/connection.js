@@ -104,12 +104,12 @@ export class ConnectionManager {
                 this._clearReconnectLoop();
                 return;
             }
-            console.log("📡 Probing for Station recovery...");
+            console.log("📡 Probing for Station Engine recovery...");
             const endpoints = [...store.state.priorityList, window.location.hostname];
             const uniqueEndpoints = [...new Set(endpoints)].filter(e => e);
             const success = await this.findActiveHost(uniqueEndpoints);
             if (success) {
-                console.log("✨ Station Recovered!");
+                console.log("✨ Station Engine recovered!");
                 store.syncLibrary();
                 this._clearReconnectLoop();
             }

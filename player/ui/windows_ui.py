@@ -43,7 +43,7 @@ class WindowsControlCenter:
         main.pack(fill=tk.BOTH, expand=True)
         
         # Header
-        header = ttk.Label(main, text="Soundsible Station", style="Header.TLabel")
+        header = ttk.Label(main, text="Soundsible", style="Header.TLabel")
         header.pack(pady=(0, 20))
         
         # Status Card
