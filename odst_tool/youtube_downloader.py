@@ -607,6 +607,46 @@ class YouTubeDownloader:
                 print(f"YouTube search error: {e}")
         return out
 
+    def validate_and_get_info(self, video_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Extract full info for a video. Return the info dict only if the video has
+        a thumbnail and playable audio (so we can skip dead/restricted/fake results).
+        """
+        if not video_id or not str(video_id).strip():
+            return None
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'quiet': True,
+            'no_warnings': True,
+            'extractor_args': {
+                'youtube': {'player_client': ['web', 'android', 'mweb']}
+            }
+        }
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            ydl_opts['cookiefile'] = self.cookie_file
+        elif self.cookie_browser:
+            ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            if not info:
+                return None
+            thumb = info.get('thumbnail') or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else None)
+            if not thumb:
+                return None
+            stream_url = info.get('url')
+            if not stream_url and info.get('formats'):
+                for f in info.get('formats', []):
+                    if f.get('vcodec') == 'none' and f.get('url'):
+                        stream_url = f['url']
+                        break
+            if not stream_url:
+                return None
+            return info
+        except Exception:
+            return None
+
     def stream_audio_generator(self, video_id: str, timeout: int = 60) -> Iterator[bytes]:
         """
         Yield audio bytes for a YouTube video (for in-app preview streaming).

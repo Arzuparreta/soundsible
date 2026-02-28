@@ -56,6 +56,7 @@ const MOBILE_SETTINGS_IDS = {
     lastfmInput: 'settings-lastfm-api-key',
     lastfmSave: 'settings-lastfm-save',
     lastfmStatus: 'settings-lastfm-status',
+    ytdlpAutoUpdate: 'settings-ytdlp-auto-update',
 };
 
 function renderFavourites(state) {

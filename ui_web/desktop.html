@@ -741,16 +741,12 @@
                             <button type="button" id="desktop-settings-lastfm-save" class="px-4 py-2 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]/40 hover:opacity-90 transition-opacity">Save</button>
                         </div>
                         <p id="desktop-settings-lastfm-status" class="mt-2 text-xs text-[var(--text-dim)] hidden"></p>
-                        <h2 class="text-lg font-bold pt-4">Excluded from recommendation seeds</h2>
-                        <p class="text-xs text-[var(--text-dim)] mb-2">Tracks in this list are not used to generate Discover recommendations.</p>
-                        <div class="flex gap-2 mb-2">
-                            <select id="desktop-settings-exclusions-add" class="input-theme flex-1 rounded-[var(--radius-omni-xs)] px-4 py-2 text-sm font-medium min-w-0" aria-label="Add track to exclusions">
-                                <option value="">Choose a track…</option>
-                            </select>
-                            <button type="button" id="desktop-settings-exclusions-add-btn" class="px-4 py-2 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]/40 hover:opacity-90 transition-opacity flex-shrink-0">Add</button>
-                        </div>
-                        <ul id="desktop-settings-exclusions-list" class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar text-sm"></ul>
-                        <p id="desktop-settings-exclusions-status" class="mt-2 text-xs text-[var(--text-dim)] hidden"></p>
+                        <h2 class="text-lg font-bold pt-4">YouTube engine</h2>
+                        <label class="flex items-center gap-3 cursor-pointer group">
+                            <input type="checkbox" id="desktop-settings-ytdlp-auto-update" class="rounded border-[var(--input-border)] text-[var(--accent)] focus:ring-[var(--accent)]">
+                            <span class="text-sm text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">Automatically update yt-dlp on startup</span>
+                        </label>
+                        <p class="text-xs text-[var(--text-dim)] mt-1">When enabled, the app will check for and install yt-dlp updates when it starts.</p>
                         <h2 class="text-lg font-bold pt-4">Metadata</h2>
                         <button type="button" id="desktop-refetch-metadata-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 text-[var(--text-on-accent)] font-bold py-3 rounded-[var(--radius-omni-xs)]">Re-fetch Metadata</button>
                         <div id="desktop-refetch-metadata-status" class="mt-2 text-xs text-[var(--text-dim)] hidden"></div>

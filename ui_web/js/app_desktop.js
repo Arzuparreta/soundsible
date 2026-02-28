@@ -824,6 +824,7 @@ async function init() {
             lastfmInput: 'desktop-settings-lastfm-api-key',
             lastfmSave: 'desktop-settings-lastfm-save',
             lastfmStatus: 'desktop-settings-lastfm-status',
+            ytdlpAutoUpdate: 'desktop-settings-ytdlp-auto-update',
         }, { store, showToast: (m) => DesktopUI.showToast(m), onLibraryOrderChange: () => renderHomeSongs() });
 
         const themeSelect = document.getElementById('desktop-settings-theme-select');
@@ -859,86 +860,6 @@ async function init() {
                 DesktopUI.hideActionMenu();
             }
         });
-
-        async function loadRecommendationExclusions() {
-            const listEl = document.getElementById('desktop-settings-exclusions-list');
-            const addSelect = document.getElementById('desktop-settings-exclusions-add');
-            const statusEl = document.getElementById('desktop-settings-exclusions-status');
-            if (!listEl || !addSelect) return;
-            const apiBase = store.apiBase || '';
-            try {
-                const res = await fetch(`${apiBase}/api/settings/recommendation-exclusions`);
-                const data = await res.json().catch(() => ({}));
-                const excludedIds = data.excluded_track_ids || [];
-                const library = store.state.library || [];
-                const trackById = Object.fromEntries(library.map((t) => [t.id, t]));
-                listEl.innerHTML = excludedIds.map((id) => {
-                    const t = trackById[id];
-                    const title = t ? (t.title || id) : id;
-                    const artist = t ? (t.artist || '') : '';
-                    return `<li class="flex items-center justify-between gap-2 py-2 px-3 rounded-xl bg-[var(--surface-overlay)] border border-[var(--glass-border)]">
-                        <span class="truncate text-[var(--text-main)]" title="${renderers.esc(title)} · ${renderers.esc(artist)}">${renderers.esc(title)}${artist ? ` · ${renderers.esc(artist)}` : ''}</span>
-                        <button type="button" class="desktop-settings-exclusion-remove flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-[var(--text-dim)] hover:bg-red-500/10 hover:text-red-400 transition-colors" data-track-id="${renderers.esc(id)}" aria-label="Remove from exclusions"><i class="fas fa-times text-xs"></i></button>
-                    </li>`;
-                }).join('');
-                const notExcluded = library.filter((t) => !excludedIds.includes(t.id)).slice(0, 200);
-                addSelect.innerHTML = '<option value="">Choose a track…</option>' + notExcluded.map((t) => `<option value="${renderers.esc(t.id)}">${renderers.esc(t.title)} · ${renderers.esc(t.artist)}</option>`).join('');
-                if (statusEl) { statusEl.classList.add('hidden'); statusEl.textContent = ''; }
-            } catch (err) {
-                if (statusEl) { statusEl.textContent = 'Could not load exclusions.'; statusEl.classList.remove('hidden'); }
-            }
-        }
-
-        function initRecommendationExclusions() {
-            const addBtn = document.getElementById('desktop-settings-exclusions-add-btn');
-            const listEl = document.getElementById('desktop-settings-exclusions-list');
-            const addSelect = document.getElementById('desktop-settings-exclusions-add');
-            const statusEl = document.getElementById('desktop-settings-exclusions-status');
-            if (!addBtn || !listEl) return;
-            addBtn.addEventListener('click', async () => {
-                const id = addSelect?.value;
-                if (!id) return;
-                const apiBase = store.apiBase || '';
-                try {
-                    const res = await fetch(`${apiBase}/api/settings/recommendation-exclusions`);
-                    const data = await res.json().catch(() => ({}));
-                    const ids = data.excluded_track_ids || [];
-                    if (ids.includes(id)) return;
-                    const putRes = await fetch(`${apiBase}/api/settings/recommendation-exclusions`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ excluded_track_ids: [...ids, id] })
-                    });
-                    if (putRes.ok) await loadRecommendationExclusions();
-                    else if (statusEl) { statusEl.textContent = 'Failed to add.'; statusEl.classList.remove('hidden'); }
-                } catch (err) {
-                    if (statusEl) { statusEl.textContent = 'Network error.'; statusEl.classList.remove('hidden'); }
-                }
-            });
-            listEl.addEventListener('click', async (e) => {
-                const btn = e.target.closest('.desktop-settings-exclusion-remove');
-                if (!btn) return;
-                const id = btn.getAttribute('data-track-id');
-                if (!id) return;
-                const apiBase = store.apiBase || '';
-                try {
-                    const res = await fetch(`${apiBase}/api/settings/recommendation-exclusions`);
-                    const data = await res.json().catch(() => ({}));
-                    const ids = (data.excluded_track_ids || []).filter((x) => x !== id);
-                    const putRes = await fetch(`${apiBase}/api/settings/recommendation-exclusions`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ excluded_track_ids: ids })
-                    });
-                    if (putRes.ok) await loadRecommendationExclusions();
-                    else if (statusEl) { statusEl.textContent = 'Failed to remove.'; statusEl.classList.remove('hidden'); }
-                } catch (err) {
-                    if (statusEl) { statusEl.textContent = 'Network error.'; statusEl.classList.remove('hidden'); }
-                }
-            });
-        }
-
-        initRecommendationExclusions();
 
         const endpoints = [...store.state.priorityList, window.location.hostname];
         await connectionManager.findActiveHost([...new Set(endpoints)].filter(Boolean));

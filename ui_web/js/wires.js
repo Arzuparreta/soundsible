@@ -109,6 +109,26 @@ export function wireSettings(selectors, deps) {
         store.subscribe(updateIndicators);
     }
 
+    const ytdlpAutoUpdate = getElement(root, selectors.ytdlpAutoUpdate);
+    if (ytdlpAutoUpdate) {
+        const apiBase = store.apiBase || '';
+        fetch(`${apiBase}/api/downloader/config`)
+            .then((r) => r.json())
+            .then((c) => {
+                ytdlpAutoUpdate.checked = c.auto_update_ytdlp === true;
+            })
+            .catch(() => {});
+        ytdlpAutoUpdate.addEventListener('change', () => {
+            fetch(`${apiBase}/api/downloader/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ auto_update_ytdlp: ytdlpAutoUpdate.checked }),
+            })
+                .then((r) => (r.ok ? showToast?.('Setting saved') : null))
+                .catch(() => {});
+        });
+    }
+
     const lastfmInput = getElement(root, selectors.lastfmInput);
     const lastfmSave = getElement(root, selectors.lastfmSave);
     const lastfmStatus = getElement(root, selectors.lastfmStatus);

@@ -1,5 +1,5 @@
 spotipy>=2.23.0
-yt-dlp>=2023.0.0
+yt-dlp==2026.2.21
 mutagen>=1.47.0
 rich>=13.0.0
 python-dotenv>=1.0.0

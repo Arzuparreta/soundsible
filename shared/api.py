@@ -1619,8 +1619,7 @@ _session_played_ids = set()
 def discover_recommendations():
     """Get raw recommendations from Last.fm. Build from raw: stable ids, filter by session shown, return.
     Body: seed_track_ids (list, optional), limit (optional, default 20), new_session (bool, optional).
-    Seeds: from seed_track_ids or from library (excluding recommendation_exclusions = tracks not used as seeds).
-    Raw items get a stable id (same artist+title => same id) so we can dedupe across requests."""
+    Seeds: from seed_track_ids or from library. Raw items get a stable id (same artist+title => same id) for dedupe."""
     global _session_shown_ids, _session_played_ids
     try:
         data = request.json or {}
@@ -1639,7 +1638,7 @@ def discover_recommendations():
         library_tracks = [t.to_dict() for t in (lib.metadata.tracks or [])]
         track_by_id = {t["id"]: t for t in library_tracks}
 
-        # 1. Build seeds: explicit list or from library (excluding seed exclusions)
+        # 1. Build seeds: explicit list or from library
         seeds = []
         if seed_ids:
             for tid in seed_ids[:10]:
@@ -1718,40 +1717,51 @@ def discover_resolve():
         dl = get_downloader(open_browser=False)
         query = f"{artist} {title}".strip()
         try:
-            results = dl.downloader.search_youtube(query, max_results=1, use_ytmusic=True)
-            if results and len(results) > 0:
-                entry = results[0]
-                video_id = entry.get("id")
-                if video_id:
-                    # Metadata enrichment for discover uses only public APIs (MusicBrainz, iTunes); no auth required.
-                    from odst_tool.metadata_harmonizer import MetadataHarmonizer
-                    harmonized = MetadataHarmonizer.harmonize({
-                        "title": entry.get("title") or title,
-                        "artist": artist,
-                        "duration_sec": entry.get("duration") or 0,
-                        "thumbnail": entry.get("thumbnail") or "",
-                        "is_music_content": True
-                    })
+            # Fetch several results; validate each (thumbnail + playable audio) to skip dead/restricted/fake videos.
+            results = dl.downloader.search_youtube(query, max_results=5, use_ytmusic=True)
+            if not results:
+                return jsonify({"error": "Resolution failed"}), 404
+            entry = None
+            info = None
+            for candidate in results:
+                video_id = candidate.get("id")
+                if not video_id:
+                    continue
+                info = dl.downloader.validate_and_get_info(video_id)
+                if info:
+                    entry = candidate
+                    break
+            if not entry or not info:
+                return jsonify({"error": "No playable video found"}), 404
+            video_id = entry.get("id")
+            # Metadata enrichment for discover uses only public APIs (MusicBrainz, iTunes); no auth required.
+            from odst_tool.metadata_harmonizer import MetadataHarmonizer
+            harmonized = MetadataHarmonizer.harmonize({
+                "title": entry.get("title") or title,
+                "artist": artist,
+                "duration_sec": entry.get("duration") or info.get("duration") or 0,
+                "thumbnail": info.get("thumbnail") or entry.get("thumbnail") or "",
+                "is_music_content": True
+            })
 
-                    # Prefer canonical cover (iTunes/MusicBrainz); fallback to YouTube thumbnail
-                    canonical_cover = harmonized.get("album_art_url")
-                    yt_thumb = entry.get("thumbnail") or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else "")
-                    cover = canonical_cover or yt_thumb
-                    return jsonify({
-                        "id": video_id,
-                        "title": harmonized.get("title") or entry.get("title") or title,
-                        "duration": harmonized.get("duration_sec") or entry.get("duration") or 0,
-                        "thumbnail": cover,
-                        "cover_url": cover,
-                        "album": harmonized.get("album"),
-                        "webpage_url": entry.get("webpage_url") or f"https://www.youtube.com/watch?v={video_id}",
-                        "channel": entry.get("channel") or "",
-                        "artist": harmonized.get("artist") or artist
-                    })
+            # Prefer canonical cover (iTunes/MusicBrainz); fallback to validated YouTube thumbnail
+            canonical_cover = harmonized.get("album_art_url")
+            yt_thumb = info.get("thumbnail") or entry.get("thumbnail") or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else "")
+            cover = canonical_cover or yt_thumb
+            return jsonify({
+                "id": video_id,
+                "title": harmonized.get("title") or entry.get("title") or title,
+                "duration": harmonized.get("duration_sec") or entry.get("duration") or info.get("duration") or 0,
+                "thumbnail": cover,
+                "cover_url": cover,
+                "album": harmonized.get("album"),
+                "webpage_url": entry.get("webpage_url") or info.get("webpage_url") or f"https://www.youtube.com/watch?v={video_id}",
+                "channel": entry.get("channel") or info.get("uploader") or "",
+                "artist": harmonized.get("artist") or artist
+            })
         except Exception as e:
-            print(f"API: Discover resolve search error: {e}")
-            
-        return jsonify({"error": "Resolution failed"}), 404
+            print(f"API: Discover resolve error: {e}")
+            return jsonify({"error": "Resolution failed"}), 404
     except Exception as e:
         print(f"API: Discover resolve unhandled error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1909,6 +1919,7 @@ def get_downloader_config():
         if len(s) <= 8: return "****"
         return f"{s[:4]}...{s[-4:]}****"
 
+    auto_update = (env_vars.get("YTDLP_AUTO_UPDATE", os.getenv("YTDLP_AUTO_UPDATE", "false")) or "false").strip().lower() in ("true", "1")
     config = {
         "output_dir": env_vars.get("OUTPUT_DIR", os.getenv("OUTPUT_DIR", str(Path.home() / "Music" / "Soundsible"))),
         "quality": env_vars.get("DEFAULT_QUALITY", os.getenv("DEFAULT_QUALITY", "high")),
@@ -1917,6 +1928,7 @@ def get_downloader_config():
         "r2_secret_key": mask(env_vars.get("R2_SECRET_ACCESS_KEY", os.getenv("R2_SECRET_ACCESS_KEY", ""))),
         "r2_bucket": env_vars.get("R2_BUCKET_NAME", os.getenv("R2_BUCKET_NAME", "")),
         "lastfm_api_key": mask(env_vars.get("LASTFM_API_KEY", os.getenv("LASTFM_API_KEY", ""))),
+        "auto_update_ytdlp": auto_update,
     }
     
     # If not on a trusted network, strip ALL sensitive info (even masked ones)
@@ -1950,64 +1962,25 @@ def update_downloader_config():
         "r2_secret_key": "R2_SECRET_ACCESS_KEY",
         "r2_bucket": "R2_BUCKET_NAME",
         "lastfm_api_key": "LASTFM_API_KEY",
+        "auto_update_ytdlp": "YTDLP_AUTO_UPDATE",
     }
-    
+
     for key, env_key in key_map.items():
         val = data.get(key)
         if val is not None:
             # Check if it's a masked value
             if isinstance(val, str) and val.endswith("****"):
-                continue # Skip updating this one
-            
-            set_key(str(env_path), env_key, val)
-            os.environ[env_key] = val
+                continue  # Skip updating this one
+            if key == "auto_update_ytdlp":
+                val = "true" if (val is True or (isinstance(val, str) and val.strip().lower() in ("true", "1"))) else "false"
+            set_key(str(env_path), env_key, str(val))
+            os.environ[env_key] = str(val)
             
     # Restart downloader to pick up changes
     global downloader_service
     downloader_service = None
     
     return jsonify({"status": "updated"})
-
-# Recommendation exclusions: track IDs to exclude only from *seed* building (they are not used as "based on" tracks).
-# They do not filter the recommendation results.
-RECOMMENDATION_EXCLUSIONS_FILENAME = "recommendation_exclusions.json"
-
-def _recommendation_exclusions_path():
-    return Path(DEFAULT_CONFIG_DIR).expanduser() / RECOMMENDATION_EXCLUSIONS_FILENAME
-
-def _load_recommendation_exclusions():
-    path = _recommendation_exclusions_path()
-    if not path.exists():
-        return []
-    try:
-        with open(path, "r") as f:
-            data = json.load(f)
-        ids = data.get("excluded_track_ids") or []
-        return [str(x) for x in ids] if isinstance(ids, list) else []
-    except Exception:
-        return []
-
-def _save_recommendation_exclusions(excluded_track_ids):
-    path = _recommendation_exclusions_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        json.dump({"excluded_track_ids": list(excluded_track_ids)}, f, indent=2)
-
-@app.route('/api/settings/recommendation-exclusions', methods=['GET'])
-def get_recommendation_exclusions():
-    """Excluded track IDs are only used when building seeds: those tracks are not used as 'based on' for Last.fm."""
-    ids = _load_recommendation_exclusions()
-    return jsonify({"excluded_track_ids": ids})
-
-@app.route('/api/settings/recommendation-exclusions', methods=['POST'])
-def update_recommendation_exclusions():
-    data = request.json or {}
-    ids = data.get("excluded_track_ids")
-    if ids is not None and not isinstance(ids, list):
-        return jsonify({"error": "excluded_track_ids must be a list"}), 400
-    ids = [str(x) for x in (ids or [])]
-    _save_recommendation_exclusions(ids)
-    return jsonify({"excluded_track_ids": ids})
 
 @app.route('/api/config', methods=['GET'])
 def get_config():
@@ -2059,17 +2032,44 @@ def start_api(port=5005, debug=False):
     try:
         lib, _, _ = get_core()
         print("API: Core services initialized successfully.")
-        
+
+        # Optional: auto-update yt-dlp in background if user enabled it
+        try:
+            from dotenv import dotenv_values
+            _env_path = Path("odst_tool/.env")
+            _env = dotenv_values(_env_path) if _env_path.exists() else {}
+            _auto = (_env.get("YTDLP_AUTO_UPDATE", os.getenv("YTDLP_AUTO_UPDATE", "false")) or "false").strip().lower() in ("true", "1")
+            if _auto:
+                def _run_ytdlp_update():
+                    import subprocess
+                    try:
+                        result = subprocess.run(
+                            [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"],
+                            capture_output=True,
+                            text=True,
+                            timeout=120,
+                        )
+                        if result.returncode == 0:
+                            print("API: yt-dlp auto-update completed.")
+                        else:
+                            print(f"API: yt-dlp auto-update failed: {result.stderr or result.stdout or 'unknown'}")
+                    except Exception as e:
+                        print(f"API: yt-dlp auto-update error: {e}")
+                _t = threading.Thread(target=_run_ytdlp_update, daemon=True)
+                _t.start()
+        except Exception:
+            pass
+
         # Start Library File Watcher
         config_dir = Path(DEFAULT_CONFIG_DIR).expanduser()
         config_dir.mkdir(parents=True, exist_ok=True)
-        
+
         event_handler = LibraryFileWatcher(lib)
         api_observer = Observer()
         api_observer.schedule(event_handler, str(config_dir), recursive=False)
         api_observer.start()
         print(f"API: Library File Watcher started on {config_dir}")
-        
+
     except Exception as e:
         print(f"FATAL: Core initialization failed: {e}")
         import traceback
