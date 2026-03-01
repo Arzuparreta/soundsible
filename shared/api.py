@@ -1443,7 +1443,7 @@ def _get_resolve_executor():
 
 
 def _warm_downloader():
-    """Run in a worker thread: call get_downloader() so it is ready for enrichment/cover.
+    """Run in a worker thread: call get_downloader() so it is ready for resolve/enrichment.
     Do not call get_downloader() from the request thread."""
     try:
         get_downloader(open_browser=False)
@@ -1451,74 +1451,48 @@ def _warm_downloader():
         pass
 
 
-def _enrich_recommendations_with_covers(out_results: list):
-    """Run in a worker thread: get_downloader + per-item cover fetch. Mutates out_results in place.
-    Do not call get_downloader() from the request thread; only this helper (in executor) should."""
-    try:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        dl = get_downloader(open_browser=False)
-        max_cover_workers = 5
-        cover_timeout_sec = 12
-        with ThreadPoolExecutor(max_workers=max_cover_workers) as pool:
-            def fetch_cover(item):
-                artist = (item.get("artist") or "").strip()
-                title = (item.get("title") or "").strip()
-                if not title:
-                    return
-                try:
-                    thumb = dl.downloader.get_cover_for_query(artist, title)
-                    if thumb:
-                        item["thumbnail"] = thumb
-                        item["cover_url"] = thumb
-                except Exception:
-                    pass
-            futures = [pool.submit(fetch_cover, item) for item in out_results]
-            for future in as_completed(futures, timeout=cover_timeout_sec):
-                try:
-                    future.result(timeout=1)
-                except Exception:
-                    pass
-    except Exception:
-        pass
-
-
-def _resolve_worker(job_id: str, artist: str, title: str):
-    """Run in thread: get_downloader + search. Use first search result; no playability check. Updates job in _resolve_jobs."""
-    result = None
-    error = None
+def _resolve_artist_title_to_youtube(artist: str, title: str):
+    """Resolve (artist, title) to one YouTube result (id, thumbnail, webpage_url, etc.).
+    Call from a worker thread only (uses get_downloader). Returns dict or None."""
     try:
         dl = get_downloader(open_browser=False)
-        query = f"{artist} {title}".strip()
+        query = f"{artist or ''} {title or ''}".strip()
+        if not query:
+            return None
         results = dl.downloader.search_youtube(query, max_results=5, use_ytmusic=True)
         if not results:
             results = dl.downloader.search_youtube(query, max_results=5, use_ytmusic=False)
         if not results:
-            error = "Resolution failed"
-        else:
-            entry = None
-            for candidate in results:
-                video_id = candidate.get("id")
-                if video_id and _validate_youtube_video_id(str(video_id)):
-                    entry = candidate
-                    break
-            if not entry:
-                error = "No video found"
-            else:
-                video_id = entry.get("id")
-                yt_thumb = entry.get("thumbnail") or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else "")
-                result = {
-                    "id": video_id,
-                    "title": entry.get("title") or title,
-                    "duration": entry.get("duration") or 0,
-                    "thumbnail": yt_thumb,
-                    "cover_url": yt_thumb,
-                    "webpage_url": entry.get("webpage_url") or (f"https://www.youtube.com/watch?v={video_id}" if video_id else ""),
-                    "channel": entry.get("channel") or "",
-                    "artist": artist or entry.get("channel") or ""
-                }
+            return None
+        entry = None
+        for candidate in results:
+            video_id = candidate.get("id")
+            if video_id and _validate_youtube_video_id(str(video_id)):
+                entry = candidate
+                break
+        if not entry:
+            return None
+        video_id = entry.get("id")
+        yt_thumb = entry.get("thumbnail") or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else "")
+        return {
+            "id": video_id,
+            "title": entry.get("title") or title,
+            "duration": entry.get("duration") or 0,
+            "thumbnail": yt_thumb,
+            "cover_url": yt_thumb,
+            "webpage_url": entry.get("webpage_url") or (f"https://www.youtube.com/watch?v={video_id}" if video_id else ""),
+            "channel": entry.get("channel") or "",
+            "artist": (artist or "").strip() or entry.get("channel") or ""
+        }
     except Exception as e:
-        print(f"API: Discover resolve worker error: {e}")
-        error = "Resolution failed"
+        print(f"API: Discover resolve artist/title error: {e}")
+        return None
+
+
+def _resolve_worker(job_id: str, artist: str, title: str):
+    """Run in thread: resolve (artist, title) to YouTube and store in job. Updates _resolve_jobs."""
+    result = _resolve_artist_title_to_youtube(artist, title)
+    error = None if result else "Resolution failed"
     with _resolve_jobs_lock:
         if job_id in _resolve_jobs:
             _resolve_jobs[job_id]["status"] = "completed" if result else "failed"
@@ -1527,11 +1501,37 @@ def _resolve_worker(job_id: str, artist: str, title: str):
             _resolve_jobs[job_id]["finished_at"] = time.time()
 
 
+def _resolve_recommendations_items(out_results: list):
+    """Run in a worker thread: full resolve for each item. Mutates out_results in place.
+    Max 2 concurrent resolves, total timeout 25s. Do not call get_downloader() from request thread."""
+    try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        resolve_timeout_sec = 25
+        max_workers = 2
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            def resolve_one(item):
+                artist = (item.get("artist") or "").strip()
+                title = (item.get("title") or "").strip()
+                if not title:
+                    return
+                res = _resolve_artist_title_to_youtube(artist, title)
+                if res:
+                    item.update(res)
+            futures = [pool.submit(resolve_one, item) for item in out_results]
+            for future in as_completed(futures, timeout=resolve_timeout_sec):
+                try:
+                    future.result(timeout=1)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
 @app.route('/api/discover/recommendations', methods=['POST'])
 def discover_recommendations():
-    """Return raw Last.fm recommendations only (no YouTube resolve). Fast path: no get_downloader(), capped seeds.
+    """Return Last.fm recommendations with each item fully resolved to YouTube (id, thumbnail, webpage_url, etc.).
     Body: seed_track_ids (list, optional), limit (optional, default 20), exclude_ids (list, optional).
-    Resolve to YouTube happens on demand via /api/discover/resolve when the user clicks play/add."""
+    Resolve runs in a worker with max 2 parallel; items may be raw if resolve fails or times out."""
     try:
         data = request.json or {}
         seed_ids = data.get("seed_track_ids")
@@ -1600,7 +1600,7 @@ def discover_recommendations():
             results.append(d)
 
         out_results = results[:limit]
-        # Warm downloader first so enrichment (and first card) get covers; then enrich in worker thread.
+        # Warm downloader then full resolve per item (max 2 parallel, 25s total). Run in executor.
         try:
             executor = _get_resolve_executor()
             warm_future = executor.submit(_warm_downloader)
@@ -1608,8 +1608,8 @@ def discover_recommendations():
         except Exception:
             pass
         try:
-            future = executor.submit(_enrich_recommendations_with_covers, out_results)
-            future.result(timeout=15)
+            future = executor.submit(_resolve_recommendations_items, out_results)
+            future.result(timeout=30)
         except Exception:
             pass
         return jsonify({"results": out_results})
@@ -1654,22 +1654,9 @@ def discover_resolve():
         title = data.get("title") or ""
         if not title:
             return jsonify({"error": "Missing title"}), 400
-        key = _resolve_job_key(artist, title)
-        now = time.time()
+        job_id = uuid.uuid4().hex[:12]
         with _resolve_jobs_lock:
-            # Reuse existing job if same (artist, title)
-            for jid, job in list(_resolve_jobs.items()):
-                if job.get("key") != key:
-                    continue
-                if job.get("status") == "pending":
-                    return jsonify({"job_id": jid, "status": "pending"}), 202
-                if job.get("status") == "completed" and job.get("result") and (now - job.get("finished_at", 0)) < _resolve_job_ttl_sec:
-                    return jsonify({"job_id": jid, "status": "completed", "result": job["result"]}), 200
-                if job.get("status") == "failed" and (now - job.get("finished_at", 0)) < _resolve_job_ttl_sec:
-                    return jsonify({"job_id": jid, "status": "failed", "error": job.get("error", "Resolution failed")}), 404
-                break
-            job_id = uuid.uuid4().hex[:12]
-            _resolve_jobs[job_id] = {"key": key, "status": "pending", "result": None, "error": None, "finished_at": None}
+            _resolve_jobs[job_id] = {"key": _resolve_job_key(artist, title), "status": "pending", "result": None, "error": None, "finished_at": None}
         _get_resolve_executor().submit(_resolve_worker, job_id, artist, title)
         return jsonify({"job_id": job_id, "status": "pending"}), 202
     except Exception as e:

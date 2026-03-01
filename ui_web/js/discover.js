@@ -1,14 +1,13 @@
 /**
  * Discover: recommendations UI (mobile + desktop).
- * Tinder-style single card stack; Skip / Play / Add; next batch when stack < 2.
+ * Buffer of 3 resolved items; API returns already-resolved items. Skip / Play / Add. Refill when <=2 remaining.
  */
 import { store } from './store.js';
 import { Resolver } from './resolver.js';
 import { esc } from './renderers.js';
 
-const DEFAULT_LIMIT = 5;
-const NEXT_BATCH_LIMIT = 5;
-const LIST_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const INITIAL_BUFFER_LIMIT = 3;
+const REFILL_LIMIT = 1;
 
 /** Safe API base: prefer store.apiBase when activeHost is set, else same-origin (e.g. app and API on same host:port). */
 function getApiBase() {
@@ -38,15 +37,9 @@ function getDiscoverPlaceholderUrl() {
 export const Discover = {
     _mobile: true,
     _loading: false,
-    _results: [],
-    _stack: [],
-    _stackIndex: 0,
-    _resolvedMap: {},
-    _resolveInFlight: null,
-    _cachedResponse: null,
-    _cachedReason: null,
-    _cacheTimestamp: 0,
-    _hasFetchedThisSession: false,
+    _buffer: [],
+    _bufferIndex: 0,
+    _refillInFlight: false,
 
     init(options = {}) {
         this._mobile = options.mobile !== false;
@@ -72,18 +65,7 @@ export const Discover = {
             searchResultsPanel.classList.add('hidden');
         }
         this._bindPullToRefresh();
-        if (this._hasLibrary()) {
-            if (this._isListCacheValid()) {
-                this._renderResults(this._cachedResponse, this._cachedReason);
-                return;
-            }
-            this._fetchRecommendations();
-        }
-    },
-
-    _isListCacheValid() {
-        if (!this._cachedResponse || !this._cacheTimestamp) return false;
-        return (Date.now() - this._cacheTimestamp) <= LIST_CACHE_TTL_MS;
+        if (this._hasLibrary()) this._fetchRecommendations();
     },
 
     _bindPullToRefresh() {
@@ -156,9 +138,10 @@ export const Discover = {
         const cover_url = ensureHttpsImageUrl(rawCover);
         const thumb = cover_url ? cover_url.replace(/"/g, '%22') : '';
         const placeholder = getDiscoverPlaceholderUrl().replace(/"/g, '%22');
+        // Single quotes in url() so style="..." attribute is not broken by inner "
         const coverStyle = cover_url
-            ? `background-image: url("${escapeCssUrl(cover_url)}")`
-            : `background-image: url("${escapeCssUrl(placeholder)}"); background-color: var(--input-bg);`;
+            ? `background-image: url('${escapeCssUrl(cover_url)}')`
+            : `background-image: url('${escapeCssUrl(placeholder)}'); background-color: var(--input-bg);`;
         const richMetaStr = escape(JSON.stringify({
             title: r.title,
             artist: r.artist,
@@ -208,8 +191,9 @@ export const Discover = {
         if (!this._hasLibrary()) return;
         if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
         if (reason === 'no_seeds') {
-            this._stack = [];
-            this._stackIndex = 0;
+            if (this._pendingRefill) { this._pendingRefill = false; this._refillInFlight = false; }
+            this._buffer = [];
+            this._bufferIndex = 0;
             if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
             this._renderTinderStack();
             return;
@@ -227,33 +211,40 @@ export const Discover = {
             return;
         }
         if (reason && reason !== 'no_seeds' && reason !== 'providers_unavailable') {
-            this._results = [];
-            this._stack = [];
-            this._stackIndex = 0;
+            if (this._pendingRefill) { this._pendingRefill = false; this._refillInFlight = false; }
+            this._buffer = [];
+            this._bufferIndex = 0;
             if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
             this._renderTinderStack();
             return;
         }
         const sections = this._sectionsFromResponse(data);
-        this._results = sections.flatMap(s => s.results || []);
-        if (sections.every(s => !(s.results && s.results.length))) {
-            this._stack = [];
-            this._stackIndex = 0;
+        const results = sections.flatMap(s => s.results || []);
+        if (sections.every(s => !(s.results && s.results.length)) || !results.length) {
+            const wasRefill = this._pendingRefill;
+            if (this._pendingRefill) { this._pendingRefill = false; this._refillInFlight = false; }
+            if (!wasRefill) { this._buffer = []; this._bufferIndex = 0; }
             if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
             this._renderTinderStack();
             return;
         }
         if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
-        this._stack = this._results.slice();
-        this._stackIndex = 0;
+        if (this._pendingRefill) {
+            this._pendingRefill = false;
+            this._refillInFlight = false;
+            if (results.length > 0) this._buffer.push(results[0]);
+        } else {
+            this._buffer = results.slice();
+            this._bufferIndex = 0;
+        }
         this._renderTinderStack();
     },
 
     _renderTinderStack() {
         if (!this._sectionsEl) return;
-        const r = this._stack[this._stackIndex];
+        const r = this._buffer[this._bufferIndex];
         if (!r) {
-            const msg = this._stack.length === 0
+            const msg = this._buffer.length === 0
                 ? 'No recommendations right now. Try again later.'
                 : 'No more cards. Pull to refresh or tap Refresh.';
             this._sectionsEl.innerHTML = `
@@ -285,10 +276,10 @@ export const Discover = {
         if (!wrap || !row) return;
 
         const advance = () => {
-            this._stackIndex++;
-            const remaining = this._stack.length - this._stackIndex;
-            if (remaining < 2 && this._stack.length > 0) this._fetchNextBatch();
-            else this._renderTinderStack();
+            this._bufferIndex++;
+            const remaining = this._buffer.length - this._bufferIndex;
+            if (remaining <= 2 && !this._refillInFlight) this._refill();
+            this._renderTinderStack();
         };
 
         const skipBtn = wrap.querySelector('.discover-tinder-skip');
@@ -344,55 +335,6 @@ export const Discover = {
         });
 
         this._bindTinderSwipe(cardWrap, row, advance, addBtn);
-
-        // Fallback: when enrichment didn't provide a cover, fetch on show (e.g. first load or next batch).
-        const r = this._stack[this._stackIndex];
-        if (r && (!(r.cover_url || r.thumbnail) || String(r.id || '').startsWith('raw-'))) {
-            const isFirstCard = this._stackIndex === 0;
-            this._fetchDiscoverCover(r, isFirstCard);
-        }
-    },
-
-    async _fetchDiscoverCover(r, retryOnceIfFailed = false) {
-        const apiBase = getApiBase();
-        const artist = (r.artist || r.channel || '').trim();
-        const title = (r.title || '').trim();
-        if (!title) return;
-        try {
-            const res = await fetch(`${apiBase}/api/discover/cover`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ artist, title }),
-            });
-            const data = await res.json().catch(() => ({}));
-            const thumbnail = res.status === 200 && data.thumbnail && ensureHttpsImageUrl(data.thumbnail);
-            if (thumbnail) {
-                const row = this._sectionsEl?.querySelector('.discover-result-row');
-                if (!row) return;
-                const currentTitle = (row.getAttribute('data-title') || '').trim();
-                const currentArtist = (row.getAttribute('data-artist') || '').trim();
-                if (currentTitle !== title || currentArtist !== artist) return;
-                const coverEl = row.querySelector('.discover-card-cover');
-                if (coverEl) {
-                    coverEl.style.backgroundImage = `url("${escapeCssUrl(thumbnail)}")`;
-                    coverEl.classList.remove('discover-card-cover-placeholder');
-                }
-                row.setAttribute('data-thumbnail', thumbnail.replace(/"/g, '%22'));
-                const idx = this._stack.findIndex((x) => (x.title || '').trim() === title && (x.artist || x.channel || '').trim() === artist);
-                if (idx >= 0) {
-                    this._stack[idx].thumbnail = thumbnail;
-                    this._stack[idx].cover_url = thumbnail;
-                }
-                return;
-            }
-            if (retryOnceIfFailed) {
-                setTimeout(() => this._fetchDiscoverCover(r, false), 2000);
-            }
-        } catch (_) {
-            if (retryOnceIfFailed) {
-                setTimeout(() => this._fetchDiscoverCover(r, false), 2000);
-            }
-        }
     },
 
     _bindTinderSwipe(cardWrap, row, onSkip, onAdd) {
@@ -464,23 +406,7 @@ export const Discover = {
 
     async _resolveItemCached(item, row) {
         if (item.webpage_url && item.id && !String(item.id).startsWith('raw-')) return item;
-        const cached = this._resolvedMap[item.id];
-        if (cached) {
-            this._applyResolvedToRow(row, cached);
-            return { ...item, ...cached };
-        }
-        if (this._resolveInFlight) await this._resolveInFlight;
-        const p = this._resolveItemRaw(item, row);
-        this._resolveInFlight = p;
-        try {
-            const resolved = await p;
-            if (resolved && resolved.id && !String(resolved.id).startsWith('raw-')) {
-                this._resolvedMap[item.id] = resolved;
-            }
-            return resolved;
-        } finally {
-            if (this._resolveInFlight === p) this._resolveInFlight = null;
-        }
+        return this._resolveItemRaw(item, row);
     },
 
     _applyResolvedToRow(row, data) {
@@ -497,26 +423,30 @@ export const Discover = {
         }
     },
 
-    _fetchNextBatch() {
-        if (this._loading) return;
+    _refill() {
+        if (this._refillInFlight || !this._hasLibrary()) return;
+        const remaining = this._buffer.length - this._bufferIndex;
+        if (remaining > 2) return;
+        if (this._bufferIndex > 0) {
+            this._buffer = this._buffer.slice(this._bufferIndex);
+            this._bufferIndex = 0;
+        }
+        const exclude_ids = this._buffer.map((i) => i.id).filter(Boolean);
+        this._pendingRefill = true;
+        this._refillInFlight = true;
         const apiBase = getApiBase();
-        const exclude_ids = this._stack.map((x) => x.id).filter(Boolean);
-        this._loading = true;
         fetch(`${apiBase}/api/discover/recommendations`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ limit: NEXT_BATCH_LIMIT, exclude_ids }),
+            body: JSON.stringify({ limit: REFILL_LIMIT, exclude_ids }),
         })
             .then((res) => res.json().catch(() => ({})))
             .then((data) => {
-                this._loading = false;
-                const next = data.results || [];
-                this._stack.push(...next);
-                this._renderTinderStack();
+                this._renderResults(data, data.reason || null);
             })
             .catch(() => {
-                this._loading = false;
-                this._renderTinderStack();
+                this._pendingRefill = false;
+                this._refillInFlight = false;
             });
     },
 
@@ -711,7 +641,7 @@ export const Discover = {
         });
     },
 
-    async _fetchRecommendations() {
+    async _fetchRecommendations(limit = INITIAL_BUFFER_LIMIT, excludeIds = []) {
         if (!this._hasLibrary()) return;
         if (this._loading) return;
         this._loading = true;
@@ -723,18 +653,13 @@ export const Discover = {
             const res = await fetch(`${apiBase}/api/discover/recommendations`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ limit: DEFAULT_LIMIT }),
+                body: JSON.stringify({ limit, exclude_ids: excludeIds }),
             });
             const data = await res.json().catch(() => ({}));
             const reason = data.reason || null;
-            this._hasFetchedThisSession = true;
-            this._cachedResponse = data;
-            this._cachedReason = reason;
-            this._cacheTimestamp = Date.now();
             this._loading = false;
             this._renderResults(data, reason);
         } catch (err) {
-            this._hasFetchedThisSession = true;
             this._loading = false;
             this._renderResults({ results: [] }, 'error');
             if (this._noResultsEl) {
@@ -745,10 +670,12 @@ export const Discover = {
     },
 
     refresh() {
-        this._hasFetchedThisSession = false;
-        this._cachedResponse = null;
-        this._cacheTimestamp = 0;
-        if (this._hasLibrary()) this._fetchRecommendations();
+        if (!this._hasLibrary()) return;
+        this._buffer = [];
+        this._bufferIndex = 0;
+        this._pendingRefill = false;
+        this._refillInFlight = false;
+        this._fetchRecommendations(INITIAL_BUFFER_LIMIT, []);
     },
 
     _addToQueue(item) {
