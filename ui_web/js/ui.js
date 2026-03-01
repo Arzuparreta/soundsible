@@ -330,11 +330,11 @@ export class UI {
         }
     }
 
-    /** Omnibar metadata visible when island expanded and NP view is closed. */
+    /** Omnibar metadata visible when island expanded, NP view closed, and not in bloom (hold) so track changes don't show playback UI behind the ribbon. */
     static updateOmniMetadataVisibility() {
         const container = this.dom.omniMetadataContainer;
         if (!container) return;
-        const visible = this.isIslandActive && !this._npViewOpen;
+        const visible = this.isIslandActive && !this._npViewOpen && !this.isBlooming;
         container.style.opacity = visible ? '1' : '0';
     }
 
@@ -1581,6 +1581,8 @@ export class UI {
         this._isHolding = false;
         this._activeNavView = null;
         this._lastActiveNavView = null;
+
+        this.updateOmniMetadataVisibility();
     }
 
     static showActionMenu(trackId) {
