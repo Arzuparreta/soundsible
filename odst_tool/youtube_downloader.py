@@ -473,9 +473,7 @@ class YouTubeDownloader:
             video_id = entry.get('id')
             if not video_id:
                 return None
-            title = (entry.get('title') or '').strip()
-            if not title:
-                return None
+            title = (entry.get('title') or '').strip() or 'Unknown'
             webpage_url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
             return {
                 'id': video_id,
@@ -520,17 +518,17 @@ class YouTubeDownloader:
         return out
 
     def get_stream_url(self, video_id: str) -> Optional[str]:
-        """Return direct audio stream URL via yt-dlp CLI (-g). Same process model as download."""
+        """Return direct audio stream URL via yt-dlp CLI (-g). Same format and cookie-retry as downloads."""
         if not video_id or not str(video_id).strip():
             return None
-        url = f"https://www.youtube.com/watch?v={video_id}"
+        yt_url = f"https://www.youtube.com/watch?v={video_id}"
         args = [
             sys.executable, "-m", "yt_dlp",
             "-g",
-            "-f", "bestaudio/best",
+            "-f", YDL_FORMAT_AUDIO,
             "--no-warnings",
             "--quiet",
-            url,
+            yt_url,
         ]
         if self.cookie_file and os.path.exists(self.cookie_file):
             args.extend(["--cookies", self.cookie_file])
@@ -543,11 +541,55 @@ class YouTubeDownloader:
                 text=True,
                 timeout=30,
             )
+            # Same as download: if "Requested format is not available", retry without cookies
+            if result.returncode != 0 and "Requested format is not available" in (result.stderr or result.stdout or ""):
+                if self.cookie_file or self.cookie_browser:
+                    no_cookies = []
+                    i = 0
+                    while i < len(args):
+                        if args[i] in ("--cookies", "--cookies-from-browser") and i + 1 < len(args):
+                            i += 2
+                            continue
+                        no_cookies.append(args[i])
+                        i += 1
+                    result = subprocess.run(
+                        no_cookies,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
             if result.returncode != 0:
+                stderr = (result.stderr or "").strip() or "(no stderr)"
+                print(f"[Preview] yt-dlp -g failed for {video_id}: returncode={result.returncode}, stderr={stderr[:500]}")
                 return None
             line = (result.stdout or "").strip().splitlines()
-            return line[0] if line else None
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+            stream_url = line[0] if line else None
+            if not stream_url:
+                print(f"[Preview] yt-dlp -g returned no URL for {video_id}")
+            return stream_url
+        except subprocess.TimeoutExpired:
+            print(f"[Preview] yt-dlp -g timed out for {video_id}")
+            return None
+        except FileNotFoundError:
+            print(f"[Preview] yt-dlp not found (python -m yt_dlp) for {video_id}")
+            return None
+
+    def get_cover_for_query(self, artist: str, title: str) -> Optional[str]:
+        """Fetch only cover (thumbnail) for a track via yt-dlp search. No audio download.
+        Returns thumbnail URL or None. Uses extract_info(download=False) so no media is downloaded."""
+        if not title or not str(title).strip():
+            return None
+        query = f"{artist or ''} {title}".strip()
+        if not query:
+            return None
+        try:
+            results = self.search_youtube(query, max_results=1, use_ytmusic=True)
+            if not results:
+                results = self.search_youtube(query, max_results=1, use_ytmusic=False)
+            if results and results[0].get("thumbnail"):
+                return results[0]["thumbnail"]
+            return None
+        except Exception:
             return None
 
     def stream_audio_generator(self, video_id: str, timeout: int = 60) -> Iterator[bytes]:
@@ -557,6 +599,7 @@ class YouTubeDownloader:
         """
         stream_url = self.get_stream_url(video_id)
         if not stream_url:
+            print(f"[Preview] No stream URL for {video_id}; response will be empty")
             return
         try:
             with requests.get(stream_url, stream=True, timeout=timeout) as resp:
@@ -564,5 +607,5 @@ class YouTubeDownloader:
                 for chunk in resp.iter_content(chunk_size=65536):
                     if chunk:
                         yield chunk
-        except Exception:
-            return
+        except Exception as e:
+            print(f"[Preview] Stream fetch failed for {video_id}: {e}")

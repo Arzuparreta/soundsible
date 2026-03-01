@@ -47,11 +47,10 @@ class RecommendationsService:
                     "album": r.album,
                     "album_artist": r.album_artist,
                     "duration_sec": r.duration_sec,
-                    "cover_url": r.cover_url,
                     "isrc": r.isrc,
                     "year": r.year,
                     "track_number": r.track_number,
-                    "id": "", # To be resolved later
+                    "id": "",  # To be resolved later; cover from /api/discover/cover (YouTube)
                 }
                 raw_dicts.append(r_dict)
             return raw_dicts, None

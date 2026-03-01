@@ -1148,16 +1148,38 @@ def _preview_stream_rate_limit(ip: str) -> bool:
 # Direct googlevideo.com URLs are cross-origin and blocked by the browser for playback.
 @app.route('/api/preview/stream/<video_id>', methods=['GET'])
 def preview_stream_proxy(video_id):
-    """Stream YouTube audio through the server so the client can play it (avoids CORS)."""
+    """Stream YouTube audio through the server so the client can play it (avoids CORS). Supports Range for seek and forwards Content-Length/Content-Range for duration."""
     if not _validate_youtube_video_id(video_id):
         return jsonify({"error": "Invalid video id"}), 400
     if not _preview_stream_rate_limit(request.remote_addr or 'unknown'):
         return jsonify({"error": "Too many requests"}), 429
     try:
         dl = get_downloader(open_browser=False)
-        gen = dl.downloader.stream_audio_generator(video_id, timeout=90)
+        stream_url = dl.downloader.get_stream_url(video_id)
+        if not stream_url:
+            return jsonify({"error": "Preview unavailable"}), 502
+        range_header = request.headers.get("Range")
+        req_headers = {"Range": range_header} if range_header else {}
+        resp = requests.get(stream_url, stream=True, headers=req_headers, timeout=90)
+        resp.raise_for_status()
+        status_code = resp.status_code
+        content_length = resp.headers.get("Content-Length")
+        content_range = resp.headers.get("Content-Range")
+        response_headers = {"Content-Type": "audio/mpeg"}
+        if content_range:
+            response_headers["Content-Range"] = content_range
+        if content_length:
+            response_headers["Content-Length"] = content_length
+
+        def iter_chunks():
+            for chunk in resp.iter_content(chunk_size=65536):
+                if chunk:
+                    yield chunk
+
         return Response(
-            stream_with_context(gen),
+            stream_with_context(iter_chunks()),
+            status=status_code,
+            headers=response_headers,
             mimetype="audio/mpeg",
             direct_passthrough=True,
         )
@@ -1391,6 +1413,8 @@ def youtube_search():
     try:
         dl = get_downloader(open_browser=False)
         results = dl.downloader.search_youtube(q, max_results=limit, use_ytmusic=use_ytmusic)
+        # Hide entries that have no real title (yt-dlp sometimes returns id but no title; we use "Unknown" for resolve but don't show in search)
+        results = [r for r in results if (r.get("title") or "").strip() and (r.get("title") or "").strip() != "Unknown"]
         return jsonify({"results": results})
     except Exception as e:
         print(f"API: YouTube search error: {e}")
@@ -1403,8 +1427,6 @@ LIBRARY_SEED_CAP = 50
 # global lock and does yt-dlp setup; calling it here would block the request thread and freeze the whole server.
 # Use DISCOVER_SEED_CAP so we do at most ~12 Last.fm requests (5 concurrent) and return in a few seconds.
 DISCOVER_SEED_CAP = 12
-_session_shown_ids = set()
-_session_played_ids = set()
 
 # Async resolve: avoid blocking the request thread with yt-dlp (15–40s). Jobs run in a thread pool.
 _resolve_jobs: dict = {}
@@ -1427,6 +1449,8 @@ def _resolve_worker(job_id: str, artist: str, title: str):
         dl = get_downloader(open_browser=False)
         query = f"{artist} {title}".strip()
         results = dl.downloader.search_youtube(query, max_results=5, use_ytmusic=True)
+        if not results:
+            results = dl.downloader.search_youtube(query, max_results=5, use_ytmusic=False)
         if not results:
             error = "Resolution failed"
         else:
@@ -1465,19 +1489,17 @@ def _resolve_worker(job_id: str, artist: str, title: str):
 @app.route('/api/discover/recommendations', methods=['POST'])
 def discover_recommendations():
     """Return raw Last.fm recommendations only (no YouTube resolve). Fast path: no get_downloader(), capped seeds.
-    Body: seed_track_ids (list, optional), limit (optional, default 20), new_session (bool, optional).
+    Body: seed_track_ids (list, optional), limit (optional, default 20), exclude_ids (list, optional).
     Resolve to YouTube happens on demand via /api/discover/resolve when the user clicks play/add."""
-    global _session_shown_ids, _session_played_ids
     try:
         data = request.json or {}
         seed_ids = data.get("seed_track_ids")
         if seed_ids is not None and not isinstance(seed_ids, list):
             seed_ids = []
+        exclude_ids = data.get("exclude_ids")
+        if not isinstance(exclude_ids, list):
+            exclude_ids = []
         limit = min(30, max(1, data.get("limit", 20)))
-        new_session = bool(data.get("new_session", False))
-        if new_session:
-            _session_shown_ids = set()
-            _session_played_ids = set()
 
         lib, _, _ = get_core()
         if not lib.metadata:
@@ -1485,7 +1507,7 @@ def discover_recommendations():
         library_tracks = [t.to_dict() for t in (lib.metadata.tracks or [])]
         track_by_id = {t["id"]: t for t in library_tracks}
 
-        # 1. Build seeds: explicit list or from library
+        # 1. Build seeds: explicit list or from library (shuffle so refresh gets different seeds)
         seeds = []
         if seed_ids:
             for tid in seed_ids[:10]:
@@ -1493,7 +1515,9 @@ def discover_recommendations():
                 if t and t.get("artist") is not None and t.get("title") is not None:
                     seeds.append({"artist": t["artist"], "title": t["title"]})
         else:
-            for t in library_tracks:
+            shuffled = list(library_tracks)
+            random.shuffle(shuffled)
+            for t in shuffled:
                 if len(seeds) >= DISCOVER_SEED_CAP:
                     break
                 if t.get("artist") is not None and t.get("title") is not None:
@@ -1506,48 +1530,62 @@ def discover_recommendations():
         from recommendations.providers import LastFmRecommendationProvider
         from recommendations.providers.base import Seed
         from recommendations.util import raw_stable_id, raw_to_dict
-        from recommendations.cache import ProviderCache
         from dotenv import dotenv_values
 
         seed_objs = [Seed(artist=s["artist"], title=s["title"]) for s in seeds]
-        if new_session:
-            random.shuffle(seed_objs)
-        cache_path = Path(os.path.expanduser("~/.config/soundsible/recommendation_cache.json"))
-        provider_cache = ProviderCache(cache_path)
-        _env_path = Path("odst_tool/.env")
-        _env_vars = dotenv_values(_env_path) if _env_path.exists() else {}
+        random.shuffle(seed_objs)
+        _ODST_ENV_PATH = Path(__file__).resolve().parent.parent / "odst_tool" / ".env"
+        _env_vars = dotenv_values(_ODST_ENV_PATH) if _ODST_ENV_PATH.exists() else {}
         lastfm_key = os.getenv("LASTFM_API_KEY") or _env_vars.get("LASTFM_API_KEY")
-        lastfm_provider = LastFmRecommendationProvider(lastfm_key, provider_cache)
+        lastfm_provider = LastFmRecommendationProvider(lastfm_key, None)
         svc = RecommendationsService(lastfm_provider, None)  # downloader=None: resolve=False, do not init ODST here
-        request_limit = limit + len(_session_shown_ids) + 20
-        request_limit = min(100, max(limit, request_limit))
+        request_limit = min(100, limit + 20)
         raw_list, reason = svc.get_recommendations(
             seed_objs, limit=request_limit, library_tracks=library_tracks, resolve=False
         )
         if reason and not raw_list:
             return jsonify({"results": [], "reason": reason}), 200
 
-        # 3. Convert to dicts with stable id; filter out already-shown
+        # 3. Convert to dicts with stable id; filter by client-sent exclude_ids only
+        exclude_set = {str(x) for x in exclude_ids if x}
         results = []
         for r in raw_list:
             artist = r.get("artist") or getattr(r, "artist", "") or ""
             title = r.get("title") or getattr(r, "title", "") or ""
             sid = raw_stable_id(artist, title)
-            if sid in _session_shown_ids:
+            if sid in exclude_set:
                 continue
             d = raw_to_dict(r, sid)
             results.append(d)
 
-        # 4. Take up to limit, mark as shown
         out_results = results[:limit]
-        for r in out_results:
-            _session_shown_ids.add(r["id"])
         return jsonify({"results": out_results})
     except Exception as e:
         print(f"API: Discover recommendations error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"results": [], "reason": "error", "error": str(e)}), 500
+
+
+@app.route('/api/discover/cover', methods=['POST'])
+def discover_cover():
+    """Fetch only cover (thumbnail) for a recommendation via yt-dlp. No audio download.
+    Body: { artist, title }. Returns { thumbnail: "url" } or 404 if not found."""
+    try:
+        data = request.json or {}
+        artist = (data.get("artist") or "").strip()
+        title = (data.get("title") or "").strip()
+        if not title:
+            return jsonify({"error": "Missing title"}), 400
+        dl = get_downloader(open_browser=False)
+        thumbnail = dl.downloader.get_cover_for_query(artist, title)
+        if not thumbnail:
+            return jsonify({"error": "No cover found"}), 404
+        return jsonify({"thumbnail": thumbnail})
+    except Exception as e:
+        print(f"API: Discover cover error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 def _resolve_job_key(artist: str, title: str) -> str:
     return f"{ (artist or '').strip().lower() }|{ (title or '').strip().lower() }"
@@ -1610,19 +1648,6 @@ def discover_resolve_status(job_id):
         if status == "failed":
             out["error"] = job.get("error", "Resolution failed")
         return jsonify(out), 200
-@app.route('/api/discover/played', methods=['POST'])
-def discover_played():
-    """Register a recommended item as played this session; next recommendation fetch will exclude it."""
-    global _session_played_ids
-    try:
-        data = request.json or {}
-        vid = data.get("id")
-        if vid and isinstance(vid, str):
-            _session_played_ids.add(vid.strip())
-        return jsonify({"status": "ok"})
-    except Exception as e:
-        return jsonify({"status": "error", "error": str(e)}), 500
-
 @app.route('/api/downloader/queue', methods=['POST'])
 def add_to_downloader_queue():
     try:

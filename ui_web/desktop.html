@@ -355,6 +355,21 @@
         .discover-skeleton-cover { animation: discover-shimmer 1.5s ease-in-out infinite; }
         .discover-skeleton-line { animation: discover-shimmer 1.5s ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce) { .discover-skeleton-cover, .discover-skeleton-line { animation: none; } }
+        /* Discover tinder — desktop: phone aspect ratio (9:16) */
+        #desktop-view-discover #desktop-discover-sections { display: flex; flex-direction: column; min-height: 0; align-items: center; justify-content: center; }
+        .discover-tinder-wrap { display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; justify-content: center; padding: 1rem 0; }
+        .discover-tinder-card-wrap { position: relative; width: 320px; aspect-ratio: 9/16; max-height: 85vh; flex-shrink: 0; overflow: hidden; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.4); background: var(--surface-overlay); }
+        .discover-tinder-card-wrap .discover-card { flex: 1; min-height: 0; flex-direction: column; padding: 1rem; text-align: center; display: flex; background: transparent; }
+        .discover-tinder-card-wrap .discover-card-cover { width: 100%; flex: 1; min-height: 0; aspect-ratio: 1; border-radius: 1rem; }
+        .discover-tinder-card-wrap .discover-card-meta { width: 100%; margin-top: 0.75rem; flex-shrink: 0; }
+        .discover-tinder-card-wrap .discover-card-play { border-radius: 1rem; }
+        .discover-tinder-actions { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin-top: 1rem; flex-shrink: 0; }
+        .discover-tinder-btn { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: none; font-size: 1.25rem; transition: transform 0.2s, background 0.2s; }
+        .discover-tinder-btn:active { transform: scale(0.95); }
+        .discover-tinder-skip { background: var(--surface-overlay); color: var(--text-dim); border: 2px solid var(--glass-border); }
+        .discover-tinder-play { background: var(--accent); color: var(--text-on-accent); }
+        .discover-tinder-add { background: var(--surface-overlay); color: var(--accent); border: 2px solid var(--glass-border); }
+        .discover-tinder-empty { text-align: center; padding: 2rem 1rem; color: var(--text-dim); font-size: 0.875rem; }
         @keyframes song-marquee {
             0%, 15% { transform: translateX(0); }
             85%, 100% { transform: translateX(var(--marquee-offset, -100%)); }

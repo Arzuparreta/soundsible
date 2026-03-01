@@ -521,6 +521,21 @@
         @keyframes discover-shimmer { 0% { opacity: 0.3; } 50% { opacity: 0.5; } 100% { opacity: 0.3; } }
         .discover-skeleton-cover, .discover-skeleton-line { animation: discover-shimmer 1.5s ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce) { .discover-skeleton-cover, .discover-skeleton-line { animation: none; } }
+        /* Tinder-style single card stack — mobile: card fills screen */
+        #view-discover #discover-sections { display: flex; flex-direction: column; min-height: 0; }
+        .discover-tinder-wrap { display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; justify-content: center; padding: 0.5rem 0; }
+        .discover-tinder-card-wrap { position: relative; width: 100%; max-width: min(400px, 95vw); flex: 1; min-height: 0; display: flex; flex-direction: column; }
+        .discover-tinder-card-wrap .discover-card { flex: 1; min-height: 0; flex-direction: column; padding: 1rem; text-align: center; display: flex; }
+        .discover-tinder-card-wrap .discover-card-cover { width: 100%; flex: 1; min-height: 0; aspect-ratio: 1; border-radius: 1rem; }
+        .discover-tinder-card-wrap .discover-card-meta { width: 100%; margin-top: 0.75rem; flex-shrink: 0; }
+        .discover-tinder-card-wrap .discover-card-play { border-radius: 1rem; }
+        .discover-tinder-actions { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin-top: 1rem; flex-shrink: 0; }
+        .discover-tinder-btn { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: none; font-size: 1.25rem; transition: transform 0.2s, background 0.2s; }
+        .discover-tinder-btn:active { transform: scale(0.95); }
+        .discover-tinder-skip { background: var(--surface-overlay); color: var(--text-dim); border: 2px solid var(--glass-border); }
+        .discover-tinder-play { background: var(--accent); color: var(--text-on-accent); }
+        .discover-tinder-add { background: var(--surface-overlay); color: var(--accent); border: 2px solid var(--glass-border); }
+        .discover-tinder-empty { text-align: center; padding: 2rem 1rem; color: var(--text-dim); font-size: 0.875rem; }
 
         /* Omnibar root: pinned to layout viewport (100dvh) so the bar does not move when the keyboard opens (different layer from keyboard). */
         #omni-bar-root {
@@ -734,6 +749,7 @@
         #view-artist-detail.list-scroll-active .artist-album-header { transform: none !important; }
         #view-playlists.list-scroll-active .playlist-card { transform: none !important; }
         /* Discover: suppress card/play button active during scroll */
+        #view-discover { display: flex; flex-direction: column; }
         #view-discover.list-scroll-active .discover-card { background: var(--surface-overlay) !important; }
         #view-discover.list-scroll-active .discover-card-play { background: transparent !important; }
 

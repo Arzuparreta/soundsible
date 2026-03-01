@@ -1149,9 +1149,6 @@ async function init() {
                     m.unifiedSearch.init({ mobile: false, resultsContainerId: 'desktop-discover-search-results' });
                 });
             }
-            if (viewId === 'settings' && typeof loadRecommendationExclusions === 'function') {
-                loadRecommendationExclusions();
-            }
         };
 
         document.getElementById('desktop-artist-back')?.addEventListener('click', () => DesktopUI.navigateBack());

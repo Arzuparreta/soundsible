@@ -226,7 +226,7 @@ class AudioEngine {
                 }
             } catch (err) {
                 store.update({ isPlaying: false });
-                if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
+                // Don't toast here: the audio 'error' listener already shows "Preview unavailable" when load fails
                 console.error("Preview playback failed:", err);
             }
             return;

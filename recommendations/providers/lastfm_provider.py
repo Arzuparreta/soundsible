@@ -22,24 +22,6 @@ class LastFmRecommendationProvider(RecommendationProvider):
         return bool(self._api_key)
 
     def _fetch_similar(self, s: Seed, limit: int, per_seed: int) -> List[RawRecommendation]:
-        if self._cache:
-            cached = self._cache.get_lastfm_similar(s.artist, s.title)
-            if cached is not None:
-                out = []
-                for d in cached:
-                    out.append(RawRecommendation(
-                        title=d.get("title", ""),
-                        artist=d.get("artist", ""),
-                        album=d.get("album"),
-                        album_artist=d.get("album_artist"),
-                        duration_sec=d.get("duration_sec"),
-                        cover_url=d.get("cover_url"),
-                        isrc=d.get("isrc"),
-                        year=d.get("year"),
-                        track_number=d.get("track_number")
-                    ))
-                return out
-
         try:
             params = {
                 "method": "track.getSimilar",
@@ -72,14 +54,6 @@ class LastFmRecommendationProvider(RecommendationProvider):
             if not name and not artist:
                 continue
 
-            images = t.get("image") or []
-            cover_url = None
-            if isinstance(images, list):
-                for img in reversed(images):
-                    if img.get("#text"):
-                        cover_url = img.get("#text")
-                        break
-                        
             dur = t.get("duration")
             try:
                 duration_sec = int(dur) if dur else None
@@ -90,14 +64,9 @@ class LastFmRecommendationProvider(RecommendationProvider):
                 title=name,
                 artist=artist,
                 duration_sec=duration_sec,
-                cover_url=cover_url
             )
             fetched.append(raw)
 
-        if self._cache:
-            # Save raw recommendations as dicts for Json serialization
-            self._cache.set_lastfm_similar(s.artist, s.title, [f.__dict__ for f in fetched])
-            
         return fetched
 
     def get_recommendations(self, seeds: List[Seed], limit: int) -> List[RawRecommendation]:
