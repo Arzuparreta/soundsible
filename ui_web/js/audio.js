@@ -189,14 +189,16 @@ class AudioEngine {
         this._invalidatePreload();
 
         // Preview: stream through our server (same-origin) so playback works. Direct YT URLs are CORS-blocked.
+        // Always use HTTP; app and API are never HTTPS.
         if (track.source === 'preview') {
             const ytId = track.id && !String(track.id).startsWith('raw-') && String(track.id).length === 11 ? track.id : null;
             if (!ytId) {
                 if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
                 return;
             }
-            const apiBase = (typeof store !== 'undefined' && store.apiBase && store.state && store.state.activeHost) ? store.apiBase : (window.location.origin || '');
-            const streamUrl = `${apiBase.replace(/\/$/, '')}/api/preview/stream/${encodeURIComponent(ytId)}`;
+            const host = (typeof store !== 'undefined' && store.state && store.state.activeHost) ? store.state.activeHost : (typeof window !== 'undefined' && window.location ? window.location.hostname : 'localhost');
+            const apiBase = `http://${host}:5005`;
+            const streamUrl = `${apiBase}/api/preview/stream/${encodeURIComponent(ytId)}`;
             try {
                 this.audio.src = streamUrl;
                 this.audio.load();
@@ -335,7 +337,12 @@ class AudioEngine {
 
         console.log("Playback sequence finished.");
         this._invalidatePreload();
-        store.update({ isPlaying: false, currentTrack: null });
+        const isPreview = currentTrack?.source === 'preview';
+        if (isPreview) {
+            store.update({ isPlaying: false });
+        } else {
+            store.update({ isPlaying: false, currentTrack: null });
+        }
     }
 
     async prev() {
