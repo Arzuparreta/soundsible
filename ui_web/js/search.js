@@ -245,16 +245,12 @@ function runOdstFetch(raw) {
         .then((data) => {
             const results = data.results || [];
             lastOdstResults = results;
-            const odstItems = results.map((r) => ({
-                source: 'odst',
-                ...r,
-                score: scoreOdst(r, raw),
-                sortTitle: (r.title || '').toLowerCase()
-            }));
-            const merged = [...lastLibraryItems, ...odstItems].sort((a, b) => {
+            const odstItems = results.map((r) => ({ source: 'odst', ...r }));
+            const librarySorted = [...lastLibraryItems].sort((a, b) => {
                 if (b.score !== a.score) return b.score - a.score;
                 return (a.sortTitle || '').localeCompare(b.sortTitle || '');
             });
+            const merged = [...odstItems, ...librarySorted];
             render(merged);
             const loading = resultsEl?.querySelector('.search-odst-loading');
             if (loading) loading.remove();
