@@ -15,8 +15,8 @@ function getElement(root, selector) {
 }
 
 /**
- * Wire settings panel: token import, library order, theme, haptics, refetch metadata, status display.
- * @param {Object} selectors - { root?, tokenInput, importBtn, libraryOrderSelect?, themeSelect?, appIconSelect?, hapticsToggle?, themeIndicator?, hapticsIndicator?, refetchBtn?, refetchStatus?, statusLed?, statusPulse?, serverStatus?, hostDisplay? }
+ * Wire settings panel: token import, library order, theme, haptics, status display.
+ * @param {Object} selectors - { root?, tokenInput, importBtn, libraryOrderSelect?, themeSelect?, appIconSelect?, hapticsToggle?, themeIndicator?, hapticsIndicator?, statusLed?, statusPulse?, serverStatus?, hostDisplay? }
  * @param {Object} deps - { store, showToast, onLibraryOrderChange?, subscribeIndicators? }
  *   subscribeIndicators: if false, do not subscribe to store for theme/status (caller e.g. UI owns updates).
  */
@@ -163,38 +163,6 @@ export function wireSettings(selectors, deps) {
         });
     }
 
-    const refetchBtn = getElement(root, selectors.refetchBtn);
-    const refetchStatus = getElement(root, selectors.refetchStatus);
-    if (refetchBtn && refetchStatus) {
-        refetchBtn.addEventListener('click', async () => {
-            refetchBtn.disabled = true;
-            refetchBtn.textContent = 'Refetching...';
-            refetchStatus.classList.remove('hidden');
-            refetchStatus.textContent = 'Starting metadata refetch...';
-            try {
-                const base = store.apiBase || `${window.location.protocol}//${store.state.activeHost}:${store.state.config?.port || 7390}`;
-                const res = await fetch(`${base}/api/library/refetch-metadata`, { method: 'POST' });
-                const data = await res.json();
-                if (res.ok) {
-                    refetchStatus.textContent = `✓ Updated: ${data.updated || 0}, Skipped: ${data.skipped || 0}, Errors: ${data.errors || 0}. Raw-YouTube tracks are not refetched.`;
-                    refetchStatus.classList.remove('text-red-400');
-                    refetchStatus.classList.add('text-green-400');
-                    await store.syncLibrary();
-                } else {
-                    refetchStatus.textContent = `✗ Error: ${data.error || 'Unknown error'}`;
-                    refetchStatus.classList.remove('text-green-400');
-                    refetchStatus.classList.add('text-red-400');
-                }
-            } catch (err) {
-                refetchStatus.textContent = `✗ Failed: ${err.message}`;
-                refetchStatus.classList.remove('text-green-400');
-                refetchStatus.classList.add('text-red-400');
-            } finally {
-                refetchBtn.disabled = false;
-                refetchBtn.textContent = 'Re-fetch Metadata';
-            }
-        });
-    }
 }
 
 /**

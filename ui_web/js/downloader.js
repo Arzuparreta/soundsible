@@ -66,8 +66,6 @@ const DEFAULT_DL_SELECTORS = {
     syncBtn: 'dl-sync-btn',
     searchSourceMusicBtn: 'dl-search-source-music',
     searchSourceYoutubeBtn: 'dl-search-source-youtube',
-    refetchMetadataBtn: 'refetch-metadata-btn',
-    refetchMetadataStatus: 'refetch-metadata-status',
     dlQueueProgressRing: 'dl-queue-progress-ring',
     downloadsSection: 'desktop-downloads-section',
     downloadsPanel: 'desktop-downloads-panel',
@@ -146,8 +144,6 @@ export class Downloader {
         this.syncBtn = document.getElementById(sel.syncBtn);
         this.searchSourceMusicBtn = document.getElementById(sel.searchSourceMusicBtn);
         this.searchSourceYoutubeBtn = document.getElementById(sel.searchSourceYoutubeBtn);
-        this.refetchBtn = document.getElementById(sel.refetchMetadataBtn);
-        this.refetchStatusEl = document.getElementById(sel.refetchMetadataStatus);
 
         if (this.queueContainer) this.queueContainer.style.transform = '';
         this.bindEvents();
@@ -204,10 +200,6 @@ export class Downloader {
         if (this.saveConfBtn) this.saveConfBtn.addEventListener('click', () => this.saveConfig());
         if (this.optimizeBtn) this.optimizeBtn.addEventListener('click', () => this.triggerOptimize());
         if (this.syncBtn) this.syncBtn.addEventListener('click', () => this.triggerSync());
-
-        if (this.refetchBtn) {
-            this.refetchBtn.addEventListener('click', () => this.refetchMetadata());
-        }
 
         // Search source: Music | YouTube
         if (this.searchSourceMusicBtn) {
@@ -898,43 +890,6 @@ export class Downloader {
             this.addLog("Cloud Sync started...");
         } catch (err) {
             console.error("Sync failed:", err);
-        }
-    }
-
-    static async refetchMetadata() {
-        const btn = this.refetchBtn;
-        const status = this.refetchStatusEl;
-        if (!btn || !status) return;
-
-        btn.disabled = true;
-        btn.textContent = 'Refetching...';
-        status.classList.remove('hidden');
-        status.textContent = 'Starting metadata refetch...';
-
-        try {
-            const res = await fetch(`${store.apiBase}/api/library/refetch-metadata`, {
-                method: 'POST'
-            });
-            const data = await res.json();
-
-            if (res.ok) {
-                status.textContent = `✓ Updated: ${data.updated || 0}, Skipped: ${data.skipped || 0}, Errors: ${data.errors || 0}. Raw-YouTube tracks are not refetched.`;
-                status.classList.remove('text-red-400');
-                status.classList.add('text-green-400');
-                await store.syncLibrary();
-                this.addLog(`Metadata refetch completed: ${data.updated} updated, ${data.skipped} skipped`);
-            } else {
-                status.textContent = `✗ Error: ${data.error || 'Unknown error'}`;
-                status.classList.remove('text-green-400');
-                status.classList.add('text-red-400');
-            }
-        } catch (err) {
-            status.textContent = `✗ Failed: ${err.message}`;
-            status.classList.remove('text-green-400');
-            status.classList.add('text-red-400');
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Re-fetch Metadata';
         }
     }
 }

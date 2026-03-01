@@ -47,8 +47,6 @@ const MOBILE_SETTINGS_IDS = {
     appIconSelect: 'settings-app-icon-select',
     hapticsToggle: 'haptics-indicator',
     hapticsIndicator: 'haptics-indicator',
-    refetchBtn: 'refetch-metadata-btn',
-    refetchStatus: 'refetch-metadata-status',
     statusLed: 'status-led',
     statusPulse: 'status-led-pulse',
     serverStatus: 'server-status',

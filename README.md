@@ -20,7 +20,7 @@ The **Station** is the primary, recommended interface for all users. It's a mode
 - Search within your **library** and the **internet** and **download any music**; all from the same search bar.
 - Choose **search & download source**: Youtube Music / Youtube.
 - Resume playback and queue on other devices. (Just open a second device and you will see the dialog).
-- Easily **manage your library from the frontend**: Edit metadata, refetch metadata, upload your own covers; all within the Station app.
+- Easily **manage your library from the frontend**: Edit metadata, upload your own covers; all within the Station app.
 - Easily setup your ecosystem with the embeded **guided setup**. (Read the dialogs!)
   
 ### Key backend features:

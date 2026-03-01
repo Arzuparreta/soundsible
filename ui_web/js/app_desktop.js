@@ -799,8 +799,6 @@ async function init() {
             submitDownloadBtn: 'desktop-dl-submit-download-btn',
             searchSourceMusicBtn: 'desktop-dl-search-source-music',
             searchSourceYoutubeBtn: 'desktop-dl-search-source-youtube',
-            refetchMetadataBtn: 'desktop-refetch-metadata-btn',
-            refetchMetadataStatus: 'desktop-refetch-metadata-status'
         });
 
         window.addEventListener('click', (e) => {
@@ -816,8 +814,6 @@ async function init() {
             themeSelect: 'desktop-settings-theme-select',
             appIconSelect: 'desktop-settings-app-icon-select',
             hapticsIndicator: null,
-            refetchBtn: 'desktop-refetch-metadata-btn',
-            refetchStatus: 'desktop-refetch-metadata-status',
             statusLed: null,
             statusPulse: null,
             serverStatus: 'desktop-server-status',

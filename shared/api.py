@@ -906,96 +906,6 @@ def clear_track_cover(track_id):
         return jsonify({"error": f"Failed to clear cover: {str(e)}"}), 500
 
 
-@app.route('/api/library/refetch-metadata', methods=['POST'])
-def refetch_metadata():
-    """Re-fetch metadata for all tracks that haven't been manually edited."""
-    if not is_trusted_network(request.remote_addr):
-        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
-
-    lib, _, _ = get_core()
-    if not lib.metadata:
-        return jsonify({"error": "No library metadata found"}), 404
-    
-    from odst_tool.youtube_downloader import YouTubeDownloader
-
-    updated_count = 0
-    skipped_count = 0
-    error_count = 0
-    
-    all_tracks = lib.metadata.tracks.copy()
-    
-    for track in all_tracks:
-        # Skip tracks modified by user
-        if track.metadata_modified_by_user:
-            skipped_count += 1
-            continue
-
-        try:
-            raw_meta = {
-                'title': track.title,
-                'artist': track.artist,
-                'album': track.album,
-                'album_artist': track.album_artist,
-                'duration_sec': track.duration,
-                'year': track.year,
-                'track_number': track.track_number,
-                'isrc': track.isrc,
-                'musicbrainz_id': track.musicbrainz_id,
-                'is_music_content': False,  # Assume not music-specific for refetch
-            }
-            clean_meta = raw_meta
-
-            new_meta = {}
-            changed = False
-
-            if clean_meta.get('title') != track.title:
-                new_meta['title'] = clean_meta['title']
-                changed = True
-            if clean_meta.get('artist') != track.artist:
-                new_meta['artist'] = clean_meta['artist']
-                changed = True
-            if clean_meta.get('album') != track.album:
-                new_meta['album'] = clean_meta['album']
-                changed = True
-            if clean_meta.get('album_artist') != track.album_artist:
-                new_meta['album_artist'] = clean_meta.get('album_artist')
-                changed = True
-            
-            cover_path = None
-
-            if changed:
-                # Update track
-                success = lib.update_track(track, new_meta, cover_path)
-                
-                if cover_path and os.path.exists(cover_path):
-                    os.remove(cover_path)
-                
-                if success:
-                    updated_track = lib.metadata.get_track_by_id(track.id)
-                    if updated_track:
-                        updated_track.cover_source = clean_meta.get('cover_source')
-                        updated_track.metadata_modified_by_user = False
-                        updated_track.musicbrainz_id = clean_meta.get('musicbrainz_id') or updated_track.musicbrainz_id
-                        updated_track.isrc = clean_meta.get('isrc') or updated_track.isrc
-                    updated_count += 1
-                else:
-                    error_count += 1
-        except Exception as e:
-            print(f"Error refetching metadata for {track.title}: {e}")
-            error_count += 1
-    
-    # Save changes
-    if updated_count > 0:
-        lib._save_metadata()
-        socketio.emit('library_updated')
-    
-    return jsonify({
-        "status": "success",
-        "updated": updated_count,
-        "skipped": skipped_count,
-        "errors": error_count
-    })
-
 # --- Favourites Endpoints ---
 
 @app.route('/api/library/favourites', methods=['GET'])
@@ -1510,7 +1420,7 @@ def _get_resolve_executor():
     return _resolve_executor
 
 def _resolve_worker(job_id: str, artist: str, title: str):
-    """Run in thread: get_downloader + search + validate. Updates job in _resolve_jobs."""
+    """Run in thread: get_downloader + search. Use first search result; no playability check. Updates job in _resolve_jobs."""
     result = None
     error = None
     try:
@@ -1521,29 +1431,25 @@ def _resolve_worker(job_id: str, artist: str, title: str):
             error = "Resolution failed"
         else:
             entry = None
-            info = None
             for candidate in results:
                 video_id = candidate.get("id")
-                if not video_id or not _validate_youtube_video_id(str(video_id)):
-                    continue
-                info = dl.downloader.validate_and_get_info(video_id)
-                if info:
+                if video_id and _validate_youtube_video_id(str(video_id)):
                     entry = candidate
                     break
-            if not entry or not info:
-                error = "No playable video found"
+            if not entry:
+                error = "No video found"
             else:
                 video_id = entry.get("id")
-                yt_thumb = info.get("thumbnail") or entry.get("thumbnail") or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else "")
+                yt_thumb = entry.get("thumbnail") or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else "")
                 result = {
                     "id": video_id,
                     "title": entry.get("title") or title,
-                    "duration": entry.get("duration") or info.get("duration") or 0,
+                    "duration": entry.get("duration") or 0,
                     "thumbnail": yt_thumb,
                     "cover_url": yt_thumb,
-                    "webpage_url": entry.get("webpage_url") or info.get("webpage_url") or f"https://www.youtube.com/watch?v={video_id}",
-                    "channel": entry.get("channel") or info.get("uploader") or "",
-                    "artist": artist or entry.get("channel") or info.get("uploader") or ""
+                    "webpage_url": entry.get("webpage_url") or (f"https://www.youtube.com/watch?v={video_id}" if video_id else ""),
+                    "channel": entry.get("channel") or "",
+                    "artist": artist or entry.get("channel") or ""
                 }
     except Exception as e:
         print(f"API: Discover resolve worker error: {e}")

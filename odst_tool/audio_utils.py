@@ -163,3 +163,42 @@ class AudioProcessor:
             print(f"Error reading audio details: {e}")
             
         return duration, bitrate, size
+
+    @staticmethod
+    def get_metadata_from_file(file_path: str) -> Dict[str, Any]:
+        """Read embedded metadata from an audio file (MP3 or FLAC). Returns dict with title, artist, album, etc."""
+        path = Path(file_path)
+        out = {'title': '', 'artist': '', 'album': '', 'album_artist': None, 'year': None, 'track_number': None}
+        try:
+            if path.suffix.lower() == '.flac':
+                audio = FLAC(file_path)
+                out['title'] = (audio.get('title') or [''])[0]
+                out['artist'] = (audio.get('artist') or [''])[0]
+                out['album'] = (audio.get('album') or [''])[0]
+                out['album_artist'] = (audio.get('albumartist') or [None])[0]
+                date = (audio.get('date') or [''])[0]
+                out['year'] = int(date[:4]) if date and date[:4].isdigit() else None
+                tn = (audio.get('tracknumber') or [''])[0]
+                out['track_number'] = int(tn) if tn and str(tn).isdigit() else None
+            elif path.suffix.lower() == '.mp3':
+                audio = MP3(file_path)
+                if audio.tags:
+                    def _txt(f):
+                        return f.text[0] if f and getattr(f, 'text', None) else ''
+                    def _txt_opt(f):
+                        return f.text[0] if f and getattr(f, 'text', None) else None
+                    out['title'] = _txt(audio.tags.get('TIT2')) or ''
+                    out['artist'] = _txt(audio.tags.get('TPE1')) or ''
+                    out['album'] = _txt(audio.tags.get('TALB')) or ''
+                    out['album_artist'] = _txt_opt(audio.tags.get('TPE2'))
+                    tdrc = audio.tags.get('TDRC')
+                    if tdrc and getattr(tdrc, 'text', None):
+                        s = str(tdrc.text[0])[:4]
+                        out['year'] = int(s) if s.isdigit() else None
+                    trck = audio.tags.get('TRCK')
+                    if trck and getattr(trck, 'text', None):
+                        tn = str(trck.text[0]).split('/')[0].strip()
+                        out['track_number'] = int(tn) if tn.isdigit() else None
+        except Exception as e:
+            print(f"Error reading metadata from file: {e}")
+        return out
