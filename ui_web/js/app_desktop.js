@@ -12,6 +12,7 @@ import { wireSettings, wireActionMenu } from './wires.js';
 import { DesktopUI } from './ui_desktop.js';
 import { checkResumeFromOtherDevice } from './playback_resume.js';
 import { playPreview } from './preview_playback.js';
+import { initHoverTooltip } from './tooltip.js';
 
 console.log('Soundsible Desktop initializing...');
 
@@ -869,6 +870,7 @@ async function init() {
     try {
         registerServiceWorker();
         DesktopUI.init();
+        initHoverTooltip();
 
         Downloader.init({
             searchInput: 'desktop-dl-search-input',

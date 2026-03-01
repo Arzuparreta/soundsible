@@ -520,13 +520,15 @@
         .discover-tinder-card-wrap.is-skeleton .discover-card-artist { color: transparent; background: var(--text-dim); opacity: 0.35; border-radius: 4px; min-height: 0.8125em; animation: skeleton-shimmer 1.5s ease-in-out infinite; }
         .discover-tinder-card-wrap.is-skeleton .discover-card-artist { min-height: 0.625em; }
         @media (prefers-reduced-motion: reduce) { .discover-tinder-card-wrap.is-skeleton .discover-card-cover, .discover-tinder-card-wrap.is-skeleton .discover-card-title, .discover-tinder-card-wrap.is-skeleton .discover-card-artist { animation: none; } }
-        /* Tinder-style single card stack — mobile: card fills screen */
-        #view-discover #discover-sections { display: flex; flex-direction: column; min-height: 0; }
-        .discover-tinder-outer { display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex: 1; min-height: 0; width: 100%; padding: 0.5rem 0; }
+        /* Tinder-style single card stack — mobile: centered in content area below header */
+        #view-discover #discover-sections { display: flex; flex-direction: column; min-height: 0; align-items: center; justify-content: center; }
+        .discover-tinder-outer { position: relative; display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex: 1; min-height: 0; width: 100%; }
+        .discover-tinder-refresh-overlay { position: absolute; top: -2.5rem; left: 50%; transform: translateX(-50%); z-index: 2; padding: 0.5rem 1rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; background: var(--surface-overlay); color: var(--text-main); border: 1px solid var(--glass-border); box-shadow: 0 2px 8px rgba(0,0,0,0.2); pointer-events: auto; transition: background 0.2s, color 0.2s; }
+        .discover-tinder-refresh-overlay:active { background: var(--accent); color: var(--text-on-accent); }
         .discover-tinder-side-btn { width: 48px; height: 48px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid var(--glass-border); background: var(--surface-overlay); color: var(--text-main); font-size: 1rem; transition: transform 0.2s, background 0.2s, opacity 0.2s; }
         .discover-tinder-side-btn:not(:disabled):active { transform: scale(0.95); }
         .discover-tinder-side-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        .discover-tinder-wrap { display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; justify-content: center; min-width: 0; }
+        .discover-tinder-wrap { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; justify-content: center; min-width: 0; }
         .discover-tinder-card-wrap { position: relative; width: 100%; max-width: min(400px, 95vw); display: flex; flex-direction: column; border-radius: 24px; overflow: hidden; background: var(--surface-overlay); box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
         .discover-tinder-card-wrap .discover-card { flex-direction: column; padding: 1rem; text-align: center; display: flex; background: transparent; }
         .discover-tinder-card-wrap .discover-card-cover { width: 100%; height: auto; aspect-ratio: 1; border-radius: 1rem; background-size: cover; background-position: center; }
@@ -750,8 +752,9 @@
         /* List scroll safety (same pattern as library artists): keep, but do not disable song-row transforms so swipe animations still work */
         #view-artist-detail.list-scroll-active .artist-album-header { transform: none !important; }
         #view-playlists.list-scroll-active .playlist-card { transform: none !important; }
-        /* Discover: suppress card/play button active during scroll */
-        #view-discover { display: flex; flex-direction: column; }
+        /* Discover: no padding/chrome — tinder only (search bar is global). */
+        #view-discover { display: flex; flex-direction: column; padding: 0; }
+        .is-ios #view-discover { padding: 0; }
         #view-discover.list-scroll-active .discover-card { background: var(--surface-overlay) !important; }
         #view-discover.list-scroll-active .discover-card-play { background: transparent !important; }
 
@@ -958,14 +961,9 @@
                 <div id="fav-tracks" class="space-y-2"></div>
             </div>
             <div id="view-discover" class="view hidden">
-                <div class="flex flex-col flex-1 min-h-0 px-8 pb-8">
+                <div class="flex flex-col flex-1 min-h-0">
                     <div id="discover-search-results" class="hidden flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2 min-h-[120px]"></div>
                     <div id="discover-content-panel" class="flex flex-col flex-1 min-h-0">
-                        <div class="flex justify-between items-center pt-4">
-                            <button type="button" onclick="typeof UI!=='undefined'&&UI.navigateBack&&UI.navigateBack()" class="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-[var(--surface-overlay)] rounded-full active:scale-90 text-[var(--text-main)]" aria-label="Back"><i class="fas fa-chevron-down"></i></button>
-                            <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)]">Discover</h1>
-                            <div class="w-12"></div>
-                        </div>
                         <p id="discover-empty-library" class="hidden text-sm text-[var(--text-dim)] py-4 px-1">Search and download a song in the bar above to get recommendations!</p>
                         <div id="discover-config-wrap" class="mb-4 p-4 rounded-2xl border border-[var(--glass-border)] flex-shrink-0" style="background: var(--surface-overlay);">
                             <p class="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-dim)] mb-2">Recommendations configuration</p>
@@ -985,9 +983,6 @@
                             <p id="discover-lastfm-status" class="mt-2 text-xs text-[var(--text-dim)] hidden"></p>
                         </div>
                         <div id="discover-main" class="flex flex-col flex-1 min-h-0 hidden">
-                            <div class="flex items-center justify-between gap-4 mb-4 flex-shrink-0">
-                                <button type="button" id="discover-refresh-btn" class="px-4 py-2 rounded-xl text-sm font-semibold bg-[var(--surface-overlay)] active:bg-[var(--accent)]/20 text-[var(--text-main)] border border-[var(--glass-border)] transition-colors">Refresh</button>
-                            </div>
                             <div id="discover-no-results" class="hidden text-center py-6 text-sm text-[var(--text-dim)]">No recommendations right now. Try again later.</div>
                             <div id="discover-sections" class="flex-1 min-h-0"></div>
                         </div>

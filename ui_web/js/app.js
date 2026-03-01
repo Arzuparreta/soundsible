@@ -16,6 +16,7 @@ import { LIBRARY_TABS } from './library_tabs.js';
 import { checkResumeFromOtherDevice } from './playback_resume.js';
 import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 import { playPreview } from './preview_playback.js';
+import { initHoverTooltip } from './tooltip.js';
 
 const LIBRARY_SYNC_INTERVAL_MS = 300000;
 
@@ -721,6 +722,7 @@ async function init() {
         // 1. Initialize UI First (Navigation, Player Bar)
         console.log("UI: Initializing...");
         UI.init();
+        initHoverTooltip();
         initGlobalSearch();
         // Initial view is home but we never call showView(); ensure search bar is visible.
         if (typeof window.renderContentForView === 'function') window.renderContentForView('home');

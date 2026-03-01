@@ -20,6 +20,10 @@ function escapeCssUrl(url) {
     return String(url).replace(/"/g, '%22').replace(/'/g, '%27');
 }
 
+function isYoutubeId(id) {
+    return id && typeof id === 'string' && id.length === 11 && !String(id).startsWith('raw-');
+}
+
 /** Prefer HTTPS for image URLs so they load on HTTPS pages (e.g. Last.fm often returns http). */
 function ensureHttpsImageUrl(url) {
     if (!url || typeof url !== 'string') return url || '';
@@ -49,7 +53,6 @@ export const Discover = {
         this._mainEl = document.getElementById(prefix + 'discover-main');
         this._noResultsEl = document.getElementById(prefix + 'discover-no-results');
         this._sectionsEl = document.getElementById(prefix + 'discover-sections');
-        this._refreshBtn = document.getElementById(prefix + 'discover-refresh-btn');
         this._contentPanel = document.getElementById(prefix + 'discover-content-panel');
         this._pageEl = document.getElementById(this._mobile ? 'view-discover' : 'desktop-view-discover');
         this._scrollEl = this._mobile ? this._pageEl : this._contentPanel;
@@ -106,15 +109,17 @@ export const Discover = {
     _renderSkeleton() {
         if (!this._sectionsEl) return;
         const cardHtml = this._renderShelfCard(null, { skeleton: true });
+        const refreshId = (this._mobile ? '' : 'desktop-') + 'discover-refresh-btn';
         this._sectionsEl.innerHTML = `
             <div class="discover-tinder-outer">
                 <button type="button" class="discover-tinder-side-btn discover-tinder-prev" disabled aria-hidden="true"><i class="fas fa-chevron-left"></i></button>
                 <div class="discover-tinder-wrap" aria-busy="true">
+                    <button type="button" id="${refreshId}" class="discover-tinder-refresh-overlay" aria-label="Refresh">Refresh</button>
                     <div class="discover-tinder-card-wrap is-skeleton" aria-busy="true">
                         ${cardHtml}
                         <div class="discover-tinder-actions">
-                            <button type="button" class="discover-tinder-btn discover-tinder-play" disabled aria-hidden="true"><i class="fas fa-play"></i></button>
                             <button type="button" class="discover-tinder-btn discover-tinder-add" disabled aria-hidden="true"><i class="fas fa-cloud-download-alt"></i></button>
+                            <button type="button" class="discover-tinder-btn discover-tinder-play" disabled aria-hidden="true"><i class="fas fa-play"></i></button>
                         </div>
                     </div>
                 </div>
@@ -251,27 +256,38 @@ export const Discover = {
             const msg = this._buffer.length === 0
                 ? 'No recommendations right now. Try again later.'
                 : 'No more cards. Pull to refresh or tap Refresh.';
+            const refreshId = (this._mobile ? '' : 'desktop-') + 'discover-refresh-btn';
             this._sectionsEl.innerHTML = `
-                <div class="discover-tinder-wrap">
-                    <div class="discover-tinder-empty">${esc(msg)}</div>
+                <div class="discover-tinder-outer">
+                    <div class="discover-tinder-wrap">
+                        <button type="button" id="${refreshId}" class="discover-tinder-refresh-overlay" aria-label="Refresh">Refresh</button>
+                        <div class="discover-tinder-empty">${esc(msg)}</div>
+                    </div>
                 </div>`;
             return;
         }
         const cardHtml = this._renderShelfCard(r);
+        const ids = store.state.libraryYoutubeIds || [];
+        const inLibrary = isYoutubeId(r.id) && ids.includes(r.id);
+        const dlIcon = inLibrary ? 'fa-sync-alt' : 'fa-cloud-download-alt';
+        const dlAria = inLibrary ? 'Re-download' : 'Add to queue';
+        const tooltipAttrs = inLibrary ? ' data-hover-tooltip="Download again" data-hover-tooltip-delay="1000"' : '';
+        const refreshId = (this._mobile ? '' : 'desktop-') + 'discover-refresh-btn';
         this._sectionsEl.innerHTML = `
             <div class="discover-tinder-outer">
                 <button type="button" class="discover-tinder-side-btn discover-tinder-prev" aria-label="Previous" ${this._bufferIndex === 0 ? ' disabled' : ''}><i class="fas fa-chevron-left"></i></button>
                 <div class="discover-tinder-wrap">
+                    <button type="button" id="${refreshId}" class="discover-tinder-refresh-overlay" aria-label="Refresh">Refresh</button>
                     <div class="discover-tinder-card-wrap">
                         ${cardHtml}
                         <div class="discover-tinder-actions">
+                            <button type="button" class="discover-tinder-btn discover-tinder-add" aria-label="${esc(dlAria)}"${tooltipAttrs}><i class="fas ${dlIcon}"></i></button>
                             <button type="button" class="discover-tinder-btn discover-tinder-play" aria-label="Play"><i class="fas fa-play"></i></button>
-                            <button type="button" class="discover-tinder-btn discover-tinder-add" aria-label="Add to queue"><i class="fas fa-cloud-download-alt"></i></button>
                         </div>
                     </div>
                 </div>
                 <button type="button" class="discover-tinder-side-btn discover-tinder-next" aria-label="Next"><i class="fas fa-chevron-right"></i></button>
-            </div>`;
+            </div>        `;
         this._bindTinderActions();
     },
 
@@ -461,8 +477,11 @@ export const Discover = {
     },
 
     _bindRefresh() {
-        if (!this._refreshBtn) return;
-        this._refreshBtn.addEventListener('click', () => this.refresh());
+        if (!this._sectionsEl) return;
+        const refreshId = (this._mobile ? '' : 'desktop-') + 'discover-refresh-btn';
+        this._sectionsEl.addEventListener('click', (e) => {
+            if (e.target.closest('#' + refreshId)) this.refresh();
+        });
     },
 
     _itemFromRow(row) {

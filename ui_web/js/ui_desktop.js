@@ -460,12 +460,6 @@ export const DesktopUI = {
         const queueClearBtn = el('desktop-queue-clear-btn');
         if (queueClearBtn) queueClearBtn.addEventListener('click', () => store.clearQueue());
 
-        const logoOmni = el('desktop-logo-omni');
-        if (logoOmni) {
-            logoOmni.addEventListener('click', () => {
-                logoOmni.classList.toggle('logo-omni-seed');
-            });
-        }
     },
 
     bindNowPlayingBar() {

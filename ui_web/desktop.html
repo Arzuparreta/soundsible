@@ -265,20 +265,9 @@
         }
         #desktop-sidebar .desktop-nav-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         #desktop-sidebar-playback button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-        /* Desktop logo-omnibar: circle (seed) / pill (expanded), same look as mobile omni-seed. */
-        #desktop-logo-omni {
-            height: 56px;
-            min-height: 56px;
-            border-radius: var(--radius-omni);
-            box-shadow: 0 0 28px rgba(0, 0, 0, 0.45);
-            transition: width 333ms cubic-bezier(0.19, 1, 0.22, 1);
-            transform: translateZ(0);
-            isolation: isolate;
-        }
-        [data-theme="light"] #desktop-logo-omni { box-shadow: 0 0 24px rgba(0, 0, 0, 0.2); }
-        [data-theme="odst"] #desktop-logo-omni { box-shadow: 0 0 20px rgba(0, 0, 0, 0.3); }
-        #desktop-logo-omni.logo-omni-seed { width: 56px; }
-        #desktop-logo-omni:not(.logo-omni-seed) { width: 250px; }
+        /* Desktop app logo: decorative only, no interaction (paint on sidebar bottom) */
+        #desktop-body-logo { display: flex; justify-content: center; padding-top: 0.5rem; flex-shrink: 0; pointer-events: none; user-select: none; -webkit-user-select: none; }
+        #desktop-body-logo img { width: 40px; height: 40px; object-fit: contain; pointer-events: none; user-select: none; -webkit-user-select: none; }
         /* Desktop playback controls: centered in status bar. */
         #desktop-omni-island {
             display: flex;
@@ -378,12 +367,15 @@
         @media (prefers-reduced-motion: reduce) { .discover-tinder-card-wrap.is-skeleton .discover-card-cover, .discover-tinder-card-wrap.is-skeleton .discover-card-title, .discover-tinder-card-wrap.is-skeleton .discover-card-artist { animation: none; } }
         /* Discover tinder — desktop */
         #desktop-view-discover #desktop-discover-sections { display: flex; flex-direction: column; min-height: 0; align-items: center; justify-content: center; }
-        .discover-tinder-outer { display: flex; align-items: center; justify-content: center; gap: 1rem; flex: 1; min-height: 0; width: 100%; padding: 1rem 0; }
+        .discover-tinder-outer { position: relative; display: flex; align-items: center; justify-content: center; gap: 1rem; flex: 1; min-height: 0; width: 100%; }
+        .discover-tinder-refresh-overlay { position: absolute; top: -2.5rem; left: 50%; transform: translateX(-50%); z-index: 2; padding: 0.5rem 1rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; background: var(--surface-overlay); color: var(--text-main); border: 1px solid var(--glass-border); box-shadow: 0 2px 8px rgba(0,0,0,0.2); pointer-events: auto; transition: background 0.2s, color 0.2s; }
+        .discover-tinder-refresh-overlay:hover { background: var(--accent); color: var(--text-on-accent); }
+        .discover-tinder-refresh-overlay:active { background: var(--accent); color: var(--text-on-accent); }
         .discover-tinder-side-btn { width: 52px; height: 52px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid var(--glass-border); background: var(--surface-overlay); color: var(--text-main); font-size: 1rem; transition: transform 0.2s, background 0.2s, opacity 0.2s; }
         .discover-tinder-side-btn:not(:disabled):hover { background: var(--bg-card); }
         .discover-tinder-side-btn:not(:disabled):active { transform: scale(0.95); }
         .discover-tinder-side-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        .discover-tinder-wrap { display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; justify-content: center; min-width: 0; padding: 0 0.25rem; }
+        .discover-tinder-wrap { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; justify-content: center; min-width: 0; }
         .discover-tinder-card-wrap { position: relative; width: 320px; flex-shrink: 0; overflow: hidden; border-radius: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); background: var(--surface-overlay); }
         .discover-tinder-card-wrap .discover-card { flex-direction: column; padding: 1rem; text-align: center; display: flex; background: transparent; }
         .discover-tinder-card-wrap .discover-card-cover { width: 100%; height: auto; aspect-ratio: 1; border-radius: 1rem; background-size: cover; background-position: center; }
@@ -532,11 +524,7 @@
                     </div>
                 </div>
                 <div class="flex-1 min-h-0"></div>
-                <div class="flex justify-center flex-shrink-0 pt-2">
-                    <button type="button" id="desktop-logo-omni" class="logo-omni-seed desktop-logo-omni glass-view flex items-center justify-center overflow-hidden pointer-events-auto cursor-pointer border-none outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-deep)]" aria-label="Soundsible menu" title="Soundsible">
-                        <img src="assets/icons/logo_sin_fondo.png" class="h-10 w-10 flex-shrink-0 object-contain pointer-events-none" alt="" aria-hidden="true">
-                    </button>
-                </div>
+                <div id="desktop-body-logo" aria-hidden="true"><img src="assets/icons/logo_sin_fondo.png" alt="" draggable="false" /></div>
             </aside>
 
             <main id="desktop-main">
@@ -676,7 +664,7 @@
                     </div>
                 </div>
                 <div id="desktop-view-discover" class="desktop-view">
-                    <div class="flex flex-col h-full w-full overflow-hidden p-6">
+                    <div class="flex flex-col h-full w-full overflow-hidden">
                         <div id="desktop-discover-search-results" class="hidden flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2 min-h-[120px]"></div>
                         <div id="desktop-discover-content-panel" class="flex flex-col flex-1 min-h-0 w-full overflow-y-auto custom-scrollbar">
                             <p id="desktop-discover-empty-library" class="hidden text-sm text-[var(--text-dim)] py-4 px-1">Search and download a song in the bar above to get recommendations!</p>
@@ -698,10 +686,6 @@
                                     <p id="desktop-discover-lastfm-status" class="mt-2 text-xs text-[var(--text-dim)] hidden"></p>
                             </div>
                             <div id="desktop-discover-main" class="flex flex-col flex-1 min-h-0 hidden">
-                                <div class="flex items-center justify-between gap-4 mb-4 flex-shrink-0">
-                                    <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)]">Discover</h1>
-                                    <button type="button" id="desktop-discover-refresh-btn" class="px-4 py-2 rounded-xl text-sm font-semibold bg-[var(--surface-overlay)] hover:bg-[var(--accent)]/20 text-[var(--text-main)] hover:text-[var(--accent)] border border-[var(--glass-border)] transition-colors">Refresh</button>
-                                </div>
                                 <div id="desktop-discover-no-results" class="hidden text-center py-6 text-sm text-[var(--text-dim)]">No recommendations right now. Try again later.</div>
                                 <div id="desktop-discover-sections" class="flex-1 min-h-0"></div>
                             </div>

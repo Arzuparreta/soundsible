@@ -146,6 +146,7 @@ function buildOdstRowHtml(r, opts = {}) {
         : `<div class="text-sm font-bold truncate text-[var(--text-main)]">${esc(r.title)}</div>`;
     const dlIcon = inLibrary ? 'fa-sync-alt' : 'fa-cloud-download-alt';
     const dlAria = inLibrary ? 'Re-download' : 'Add to download queue';
+    const tooltipAttrs = inLibrary ? ' data-hover-tooltip="Download again" data-hover-tooltip-delay="1000"' : '';
     const labelBlock = omitSourceLabel ? '' : `<div class="text-[9px] font-black uppercase tracking-widest text-[var(--text-dim)] mb-0.5">ODST</div>`;
     const thumbHtml = isDesktop
         ? `<div class="song-row-cover-wrapper relative w-12 h-12 flex-shrink-0 group rounded-xl overflow-hidden">
@@ -162,7 +163,7 @@ function buildOdstRowHtml(r, opts = {}) {
                 ${titleLine}
                 <div class="text-xs text-[var(--text-dim)] truncate">${esc(r.channel)} ${duration ? ' · ' + duration : ''}</div>
             </div>
-            <button type="button" class="dl-add-one w-10 h-10 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 opacity-100 transition-all" data-video-id="${esc(r.id)}" aria-label="${esc(dlAria)}"><i class="fas ${dlIcon} text-sm"></i></button>
+            <button type="button" class="dl-add-one w-10 h-10 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 opacity-100 transition-all" data-video-id="${esc(r.id)}" aria-label="${esc(dlAria)}"${tooltipAttrs}><i class="fas ${dlIcon} text-sm"></i></button>
         </div>
     </div>`;
 }
