@@ -1729,13 +1729,8 @@ export class UI {
 
         const rawNote = this.dom.editRawYoutubeNote;
         if (rawNote) {
-            if (t.download_source === 'youtube_search') {
-                rawNote.textContent = 'This track was downloaded as raw YouTube. Auto-fetch can replace with canonical metadata if you want.';
-                rawNote.classList.remove('hidden');
-            } else {
-                rawNote.textContent = '';
-                rawNote.classList.add('hidden');
-            }
+            rawNote.textContent = '';
+            rawNote.classList.add('hidden');
         }
 
         if (modal) modal.classList.remove('hidden');

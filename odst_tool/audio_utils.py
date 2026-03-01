@@ -63,17 +63,7 @@ class AudioProcessor:
             
             if metadata.get('isrc'):
                 audio['isrc'] = metadata['isrc']
-            if metadata.get('metadata_source_authority'):
-                audio['metadata_source_authority'] = str(metadata['metadata_source_authority'])
-            if metadata.get('metadata_confidence') is not None:
-                audio['metadata_confidence'] = str(metadata['metadata_confidence'])
-            if metadata.get('metadata_decision_id'):
-                audio['metadata_decision_id'] = str(metadata['metadata_decision_id'])
-            if metadata.get('metadata_state'):
-                audio['metadata_state'] = str(metadata['metadata_state'])
-            if metadata.get('metadata_query_fingerprint'):
-                audio['metadata_query_fingerprint'] = str(metadata['metadata_query_fingerprint'])
-                
+
             # Cover Art
             if cover_data:
                 try:
@@ -128,25 +118,9 @@ class AudioProcessor:
             
         # ISRC
         if metadata.get('isrc'):
-            # Custom TXXX frame for ISRC
             from mutagen.id3 import TXXX
             audio.tags.add(TXXX(encoding=3, desc='ISRC', text=metadata['isrc']))
-        if metadata.get('metadata_source_authority'):
-            from mutagen.id3 import TXXX
-            audio.tags.add(TXXX(encoding=3, desc='METADATA_SOURCE_AUTHORITY', text=str(metadata['metadata_source_authority'])))
-        if metadata.get('metadata_confidence') is not None:
-            from mutagen.id3 import TXXX
-            audio.tags.add(TXXX(encoding=3, desc='METADATA_CONFIDENCE', text=str(metadata['metadata_confidence'])))
-        if metadata.get('metadata_decision_id'):
-            from mutagen.id3 import TXXX
-            audio.tags.add(TXXX(encoding=3, desc='METADATA_DECISION_ID', text=str(metadata['metadata_decision_id'])))
-        if metadata.get('metadata_state'):
-            from mutagen.id3 import TXXX
-            audio.tags.add(TXXX(encoding=3, desc='METADATA_STATE', text=str(metadata['metadata_state'])))
-        if metadata.get('metadata_query_fingerprint'):
-            from mutagen.id3 import TXXX
-            audio.tags.add(TXXX(encoding=3, desc='METADATA_QUERY_FINGERPRINT', text=str(metadata['metadata_query_fingerprint'])))
-            
+
         # Cover Art
         if cover_data:
             try:

@@ -70,16 +70,8 @@ class Track:
     local_path: Optional[str] = None
     musicbrainz_id: Optional[str] = None
     isrc: Optional[str] = None
-    metadata_source_authority: Optional[str] = None
-    metadata_confidence: Optional[float] = None
-    metadata_decision_id: Optional[str] = None
-    metadata_state: Optional[str] = None
-    metadata_query_fingerprint: Optional[str] = None
-    cover_source: Optional[str] = None  # spotify | youtube_music | youtube | musicbrainz | itunes | manual | none
-    metadata_modified_by_user: bool = False  # True if user manually edited metadata/cover
-    download_source: Optional[str] = None  # Only youtube_search = raw YouTube (no harmonization); others use canonical metadata
-    fallback_cover_url: Optional[str] = None  # YT thumbnail URL for "Use YouTube cover" / normal YouTube fallback
-    premium_cover_failed: bool = False
+    cover_source: Optional[str] = None
+    metadata_modified_by_user: bool = False
 
     @staticmethod
     def generate_id() -> str:

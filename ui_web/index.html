@@ -818,6 +818,27 @@
             <div class="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-[var(--secondary)]/10 blur-[120px] rounded-full"></div>
         </div>
 
+        <!-- Download queue FAB: app-root layer so it shows over every view -->
+        <div id="dl-queue-container" class="fixed top-[calc(max(1.5rem,env(safe-area-inset-top))+3.5rem)] right-6 z-[5000] flex flex-col items-end pointer-events-none hidden">
+            <button id="dl-queue-fab" type="button" onclick="typeof Downloader!=='undefined'&&Downloader.toggleDownloadQueue()" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)] relative">
+                <svg class="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 48 48" aria-hidden="true">
+                    <circle cx="24" cy="24" r="22" fill="none" stroke="currentColor" stroke-width="2" class="text-[var(--bg-deep)]/30" />
+                    <circle id="dl-queue-progress-ring" cx="24" cy="24" r="22" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="138.23" stroke-dashoffset="138.23" stroke-linecap="round" style="transition: stroke-dashoffset 0.25s ease;" />
+                </svg>
+                <i class="fas fa-list-ul relative z-[1]"></i>
+                <div id="dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)] z-[2]">0</div>
+            </button>
+            <div id="dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
+                <div class="p-5">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Download queue</h3>
+                        <button type="button" id="dl-clear-queue-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-1 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
+                        <button type="button" id="dl-submit-download-btn" class="w-9 h-9 rounded-full bg-[var(--accent)] text-[var(--text-on-accent)] flex items-center justify-center shadow-lg hover:opacity-90 active:scale-90 pointer-events-auto transition-all duration-300" aria-label="Start download"><i class="fas fa-download text-xs"></i></button>
+                    </div>
+                    <div id="dl-download-queue-list" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
+                </div>
+            </div>
+        </div>
         <div id="queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[140] flex flex-col items-end pointer-events-none">
             <button id="queue-fab" onclick="UI.toggleQueue()" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)]">
                 <i class="fas fa-list-ul"></i>
@@ -1007,27 +1028,6 @@
                         </button>
                     </div>
                     <button id="dl-cover-choice-close" class="w-full mt-6 py-3 text-[var(--text-dim)] font-bold hover:text-[var(--text-main)] transition-colors">Cancel</button>
-                </div>
-            </div>
-            <!-- Download queue FAB + popover (always available; visibility controlled by Downloader) -->
-            <div id="dl-queue-container" class="fixed top-[calc(max(1.5rem,env(safe-area-inset-top))+3.5rem)] right-6 z-[120] flex flex-col items-end pointer-events-none hidden">
-                <button id="dl-queue-fab" type="button" onclick="typeof Downloader!=='undefined'&&Downloader.toggleDownloadQueue()" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)] relative">
-                    <svg class="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 48 48" aria-hidden="true">
-                        <circle cx="24" cy="24" r="22" fill="none" stroke="currentColor" stroke-width="2" class="text-[var(--bg-deep)]/30" />
-                        <circle id="dl-queue-progress-ring" cx="24" cy="24" r="22" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="138.23" stroke-dashoffset="138.23" stroke-linecap="round" style="transition: stroke-dashoffset 0.25s ease;" />
-                    </svg>
-                    <i class="fas fa-list-ul relative z-[1]"></i>
-                    <div id="dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)] z-[2]">0</div>
-                </button>
-                <div id="dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
-                    <div class="p-5">
-                        <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Download queue</h3>
-                            <button type="button" id="dl-clear-queue-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-1 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
-                            <button type="button" id="dl-submit-download-btn" class="w-9 h-9 rounded-full bg-[var(--accent)] text-[var(--text-on-accent)] flex items-center justify-center shadow-lg hover:opacity-90 active:scale-90 pointer-events-auto transition-all duration-300" aria-label="Start download"><i class="fas fa-download text-xs"></i></button>
-                        </div>
-                        <div id="dl-download-queue-list" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
-                    </div>
                 </div>
             </div>
             <div id="view-podcast" class="view hidden">

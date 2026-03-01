@@ -193,14 +193,11 @@
         #desktop-main .song-row { transform: none !important; }
         #desktop-now-playing button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         #desktop-now-playing #desktop-volume:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-        /* Volume bubble: same size as shuffle/repeat when collapsed; expands on hover to the left (icon stays on right). */
+        /* Volume bubble: same as shuffle/repeat when collapsed (32px circle); expands on hover, icon stays right. */
         .desktop-volume-bubble-wrap {
-            width: 120px;
-            min-width: 120px;
             display: flex;
             justify-content: flex-end;
             align-items: center;
-            position: relative;
         }
         #desktop-volume-bubble {
             width: 32px;
@@ -212,12 +209,12 @@
             transition: width 333ms cubic-bezier(0.19, 1, 0.22, 1);
             transform: translateZ(0);
             gap: 0;
-            justify-content: center;
+            justify-content: flex-end;
+            align-items: center;
         }
         .desktop-volume-bubble-wrap:hover #desktop-volume-bubble {
             width: 100px;
             gap: 0.5rem;
-            justify-content: flex-end;
         }
         /* Volume handle: invisible by default; fades in over 333ms when bubble expands; fades out over 323ms on close (invisible 0.01s before bubble fully contracted). */
         #desktop-volume::-webkit-slider-thumb {
@@ -450,7 +447,7 @@
                 </div>
                 <div id="desktop-np-bubbles" class="desktop-np-right-cell flex items-center justify-end gap-2 flex-shrink-0">
                     <div class="desktop-volume-bubble-wrap">
-                        <div id="desktop-volume-bubble" class="desktop-np-bubble glass-view flex items-center pl-0 pr-1.5 flex-row-reverse">
+                        <div id="desktop-volume-bubble" class="desktop-np-bubble glass-view flex items-center flex-row-reverse rounded-full">
                             <button type="button" id="desktop-volume-mute-btn" class="desktop-volume-icon-wrap flex items-center justify-center w-8 h-8 min-w-[32px] min-h-[32px] flex-shrink-0 text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] rounded-full transition-colors focus:outline-none" aria-label="Mute">
                                 <i id="desktop-volume-icon" class="fas fa-volume-high text-xs" aria-hidden="true"></i>
                             </button>
@@ -636,23 +633,6 @@
                         <button id="dl-cover-choice-close" class="w-full mt-6 py-3 text-[var(--text-dim)] font-bold hover:text-[var(--text-main)] transition-colors">Cancel</button>
                     </div>
                 </div>
-                <!-- Download queue FAB + popover (Search view, no progress ring on desktop) -->
-                <div id="desktop-dl-queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[120] flex flex-col items-end pointer-events-none hidden">
-                    <button id="desktop-dl-queue-fab" type="button" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)] relative">
-                        <i class="fas fa-list-ul"></i>
-                        <div id="desktop-dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)]">0</div>
-                    </button>
-                    <div id="desktop-dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
-                        <div class="p-5">
-                            <div class="flex justify-between items-center mb-4">
-                                <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Download queue</h3>
-                                <button type="button" id="desktop-dl-clear-queue-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-1 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
-                                <button type="button" id="desktop-dl-submit-download-btn" class="w-9 h-9 rounded-full bg-[var(--accent)] text-[var(--text-on-accent)] flex items-center justify-center shadow-lg hover:opacity-90 active:scale-90 pointer-events-auto transition-all duration-300" aria-label="Start download"><i class="fas fa-download text-xs"></i></button>
-                            </div>
-                            <div id="desktop-dl-download-queue-list" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
-                        </div>
-                    </div>
-                </div>
                 <div id="desktop-view-podcast" class="desktop-view">
                     <div class="flex flex-col h-full w-full overflow-hidden p-6">
                         <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)]">Podcasts</h1>
@@ -754,6 +734,24 @@
                     </div>
                 </div>
             </main>
+            </div>
+        </div>
+    </div>
+
+    <!-- Download queue FAB + popover: fixed to viewport, above all app content -->
+    <div id="desktop-dl-queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[5000] flex flex-col items-end pointer-events-none hidden">
+        <button id="desktop-dl-queue-fab" type="button" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)] relative">
+            <i class="fas fa-list-ul"></i>
+            <div id="desktop-dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)]">0</div>
+        </button>
+        <div id="desktop-dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
+            <div class="p-5">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Download queue</h3>
+                    <button type="button" id="desktop-dl-clear-queue-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-1 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
+                    <button type="button" id="desktop-dl-submit-download-btn" class="w-9 h-9 rounded-full bg-[var(--accent)] text-[var(--text-on-accent)] flex items-center justify-center shadow-lg hover:opacity-90 active:scale-90 pointer-events-auto transition-all duration-300" aria-label="Start download"><i class="fas fa-download text-xs"></i></button>
+                </div>
+                <div id="desktop-dl-download-queue-list" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
             </div>
         </div>
     </div>

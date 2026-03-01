@@ -87,19 +87,16 @@ class SmartDownloader:
             return None
 
         else:
-             # Manual search: Pass the whole query as title, let harmonizer resolve it.
+             # Manual search: pass query as title; process_track searches YT and downloads.
              self.log(f"Searching for: {query}", "info")
-             
              meta = {
                  'artist': 'Unknown',
                  'title': query.strip(),
-                 'duration_sec': 0, 
+                 'duration_sec': 0,
                  'album': 'Manual',
                  'track_number': 1,
                  'id': f"manual_{int(time.time())}"
              }
-             
-             # Unified Path: process_track handles harmonization (API search) and YouTube download
              track = self.downloader.process_track(meta, source="manual")
              if not track:
                  self.log("No matching video found or resolution failed.", "warning")

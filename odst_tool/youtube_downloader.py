@@ -24,10 +24,6 @@ import difflib
 from .audio_utils import AudioProcessor
 from .models import Track
 
-# Raw metadata only; no harmonizer. Kept for any legacy source checks.
-SOURCE_RAW_YOUTUBE = "youtube_search"
-
-
 def _yt_thumbnail_url(video_id: Optional[str]) -> Optional[str]:
     """YouTube thumbnail URL (mqdefault). Returns None if video_id is falsy."""
     if not video_id:
@@ -75,10 +71,8 @@ class YouTubeDownloader:
     def process_track(self, metadata: Dict[str, Any], source: str = "spotify") -> Optional[Track]:
         """
         Full workflow for a single track: Search -> Download -> Process -> Return Track.
-        Uses raw metadata as-is (no harmonizer).
         """
         metadata = dict(metadata or {})
-        metadata.setdefault("metadata_decision_id", uuid.uuid4().hex)
         metadata.setdefault("title", "Unknown Title")
         metadata.setdefault("artist", "Unknown Artist")
         metadata.setdefault("album", "")
@@ -143,18 +137,9 @@ class YouTubeDownloader:
                 local_path=str(final_path.absolute()),
                 musicbrainz_id=clean_metadata.get("musicbrainz_id"),
                 isrc=clean_metadata.get("isrc"),
-                metadata_source_authority=clean_metadata.get("metadata_source_authority"),
-                metadata_confidence=clean_metadata.get("metadata_confidence"),
-                metadata_decision_id=clean_metadata.get("metadata_decision_id"),
-                metadata_state=clean_metadata.get("metadata_state"),
-                metadata_query_fingerprint=clean_metadata.get("metadata_query_fingerprint"),
                 cover_source=clean_metadata.get("cover_source"),
                 metadata_modified_by_user=False
             )
-            track.review_candidates = clean_metadata.get("review_candidates") or {}
-            track.premium_cover_failed = clean_metadata.get("premium_cover_failed", False)
-            track.fallback_cover_url = clean_metadata.get("fallback_cover_url") or clean_metadata.get("album_art_url")
-            
             return track
             
         except Exception as e:
@@ -249,6 +234,7 @@ class YouTubeDownloader:
         is_music_content = self._is_music_specific_content(info, url)
         
         # Initial raw dict (prefer yt-dlp thumbnail to reduce maxresdefault 404s)
+        track_number = info.get('track_number') or info.get('playlist_index') or 1
         raw_meta = {
             'title': title,
             'artist': artist,
@@ -256,11 +242,10 @@ class YouTubeDownloader:
             'album_art_url': info.get('thumbnail') or _yt_thumbnail_url(video_id),
             'duration_sec': duration,
             'release_date': info.get('upload_date'),
-            'track_number': info.get('track_number', 1),
+            'track_number': track_number,
             'channel': channel,
             'uploader': uploader,
             'description': info.get('description') or "",
-            'metadata_decision_id': uuid.uuid4().hex,
             'is_music_content': is_music_content
         }
         raw_meta["thumbnail"] = info.get("thumbnail") or raw_meta.get("album_art_url")
@@ -275,9 +260,6 @@ class YouTubeDownloader:
                 raw_meta["duration_sec"] = metadata_hint.get("duration_sec")
             if metadata_hint.get("album"):
                 raw_meta["album"] = metadata_hint.get("album")
-            if metadata_hint.get("metadata_decision_id"):
-                raw_meta["metadata_decision_id"] = metadata_hint.get("metadata_decision_id")
-        # Raw metadata only; no harmonizer.
         clean_meta = raw_meta
         
         # 2. Download
@@ -287,25 +269,16 @@ class YouTubeDownloader:
             raise Exception("Download failed: Audio file was not created by yt-dlp. Check if ffmpeg is installed.")
             
         try:
-            # 3. Process
+            # 3. Process: file already has metadata and thumbnail from yt-dlp postprocessors
             file_hash = AudioProcessor.calculate_hash(str(temp_file))
             extension = temp_file.suffix[1:]
             final_path = self.tracks_dir / f"{file_hash}.{extension}"
-            
-            # Embed metadata
-            AudioProcessor.embed_metadata(
-                str(temp_file), 
-                clean_meta, 
-                clean_meta.get('album_art_url')
-            )
-            
-            # Verify audio details
+
             duration, bitrate, size = AudioProcessor.get_audio_details(str(temp_file))
-            
-            # Move
+
             shutil.move(str(temp_file), str(final_path))
-            
-            # Create Track
+
+            # Create Track from info (tags are already in file from yt-dlp)
             track = Track(
                 id=file_hash, 
                 title=clean_meta['title'],
@@ -326,18 +299,9 @@ class YouTubeDownloader:
                 local_path=str(final_path.absolute()),
                 musicbrainz_id=clean_meta.get("musicbrainz_id"),
                 isrc=clean_meta.get("isrc"),
-                metadata_source_authority=clean_meta.get("metadata_source_authority"),
-                metadata_confidence=clean_meta.get("metadata_confidence"),
-                metadata_decision_id=clean_meta.get("metadata_decision_id"),
-                metadata_state=clean_meta.get("metadata_state"),
-                metadata_query_fingerprint=clean_meta.get("metadata_query_fingerprint"),
                 cover_source="youtube",
-                metadata_modified_by_user=False,
-                download_source=source
+                metadata_modified_by_user=False
             )
-            track.review_candidates = clean_meta.get("review_candidates") or {}
-            track.premium_cover_failed = clean_meta.get("premium_cover_failed", False)
-            track.fallback_cover_url = clean_meta.get("fallback_cover_url") or clean_meta.get("album_art_url")
             return track
 
         except Exception as e:
@@ -465,7 +429,7 @@ class YouTubeDownloader:
         
         profile = QUALITY_PROFILES.get(self.quality, QUALITY_PROFILES[DEFAULT_QUALITY])
         
-        # Base options (use same permissive format as validation/stream)
+        # Base options: YT Music metadata via add-metadata + embed-thumbnail (Gemini-style)
         ydl_opts = {
             'format': YDL_FORMAT_AUDIO,
             'retries': 10,
@@ -473,24 +437,33 @@ class YouTubeDownloader:
             'outtmpl': output_template,
             'quiet': True,
             'no_warnings': True,
+            'writethumbnail': True,  # Required for EmbedThumbnail
+            'parse_metadata': [
+                'playlist_index:%(track_number)s',
+                '%(track|title)s:%(title)s',
+            ],
             'extractor_args': {
                 'youtube': {
                     'player_client': ['web', 'android', 'mweb'],
                 }
             }
         }
-        
+
         if profile['bitrate'] > 0:
-            ydl_opts['postprocessors'] = [{
+            extract_pp = {
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': profile['format'],
                 'preferredquality': str(profile['bitrate']),
-            }]
+            }
         else:
-            ydl_opts['postprocessors'] = [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'flac',
-            }]
+            extract_pp = {'key': 'FFmpegExtractAudio', 'preferredcodec': 'flac'}
+
+        # Order: extract audio -> add metadata (title, artist, album, etc.) -> embed thumbnail
+        ydl_opts['postprocessors'] = [
+            extract_pp,
+            {'key': 'FFmpegMetadata', 'add_metadata': True},
+            {'key': 'EmbedThumbnail', 'already_have_thumbnail': False},
+        ]
         
         if self.cookie_file and os.path.exists(self.cookie_file):
             ydl_opts['cookiefile'] = self.cookie_file
@@ -534,10 +507,10 @@ class YouTubeDownloader:
 
     def search_youtube(self, query: str, max_results: int = 10, use_ytmusic: bool = True) -> List[Dict[str, Any]]:
         """
-        Search YouTube or YouTube Music with plain text. Returns a list of
-        minimal entries for UI: id, title, duration, thumbnail, webpage_url, channel.
-        use_ytmusic=True: uses URL that triggers yt-dlp extractor "youtube:music:search_url" (see --list-extractors).
-        use_ytmusic=False: uses "youtube:search" via ytsearch prefix.
+        Search YouTube or YouTube Music with plain text. Returns raw yt-dlp entries
+        as minimal dicts: id, title, duration, thumbnail, webpage_url, channel.
+        No filtering — pass-through for UI; a proper search layer can be added later.
+        use_ytmusic=True: youtube:music:search_url. use_ytmusic=False: ytsearch prefix.
         """
         if not query or not query.strip():
             return []
@@ -555,12 +528,26 @@ class YouTubeDownloader:
         elif self.cookie_browser:
             ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
 
-        # youtube:music:search_url (from yt-dlp --list-extractors) is triggered by this URL
         if use_ytmusic:
             search_input = f"https://music.youtube.com/search?q={quote(query)}"
         else:
-            # youtube:search via ytsearchN:query
             search_input = f"ytsearch{max_results}:{query}"
+
+        def to_item(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            if not entry:
+                return None
+            video_id = entry.get('id')
+            if not video_id:
+                return None
+            webpage_url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
+            return {
+                'id': video_id,
+                'title': entry.get('title') or 'Unknown',
+                'duration': entry.get('duration') or 0,
+                'thumbnail': entry.get('thumbnail') or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else ''),
+                'webpage_url': webpage_url,
+                'channel': entry.get('channel') or entry.get('uploader') or ''
+            }
 
         out: List[Dict[str, Any]] = []
         try:
@@ -575,20 +562,9 @@ class YouTubeDownloader:
             if use_ytmusic:
                 entries_list = entries_list[:max_results]
             for entry in entries_list:
-                if not entry:
-                    continue
-                video_id = entry.get('id')
-                if not _is_valid_youtube_video_id(video_id):
-                    continue
-                webpage_url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
-                out.append({
-                    'id': video_id,
-                    'title': entry.get('title') or 'Unknown',
-                    'duration': entry.get('duration') or 0,
-                    'thumbnail': entry.get('thumbnail') or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else ''),
-                    'webpage_url': webpage_url,
-                    'channel': entry.get('channel') or entry.get('uploader') or ''
-                })
+                item = to_item(entry)
+                if item is not None:
+                    out.append(item)
         except Exception as e:
             if use_ytmusic:
                 try:
@@ -596,20 +572,9 @@ class YouTubeDownloader:
                         result = ydl.extract_info(f"ytsearch{max_results}:{query}", download=False)
                     if result and 'entries' in result:
                         for entry in result['entries']:
-                            if not entry:
-                                continue
-                            video_id = entry.get('id')
-                            if not _is_valid_youtube_video_id(video_id):
-                                continue
-                            webpage_url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
-                            out.append({
-                                'id': video_id,
-                                'title': entry.get('title') or 'Unknown',
-                                'duration': entry.get('duration') or 0,
-                                'thumbnail': entry.get('thumbnail') or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else ''),
-                                'webpage_url': webpage_url,
-                                'channel': entry.get('channel') or entry.get('uploader') or ''
-                            })
+                            item = to_item(entry)
+                            if item is not None:
+                                out.append(item)
                     print(f"YouTube Music search failed, used YouTube fallback: {e}")
                 except Exception as e2:
                     print(f"YouTube search error (fallback): {e2}")

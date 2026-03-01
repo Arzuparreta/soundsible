@@ -180,7 +180,7 @@ class EditTrackDialog(Gtk.Window):
         new_album = self.album_entry.get_text()
         album_artist = self.track.album_artist
         if new_album != self.track.album:
-            album_artist = None # Reset so it can be re-harmonized or unified later
+            album_artist = None  # Reset when album changes
             
         new_meta = {
             'title': self.title_entry.get_text(),

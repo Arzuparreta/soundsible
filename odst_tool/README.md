@@ -2,7 +2,7 @@
 
 A powerful tool to download music from YouTube Music, YouTube, or Spotify links. Fully compatible with `Soundsible`.
 
-**The downloader is now embedded in the main Soundsible webapp.** Use the web player at `http://localhost:5005/player/` (ensure the API is running on port 5005) for the built-in downloader. For CLI usage, run `download.py` from the project root or use the scripts below.
+**The downloader is now embedded in the main Soundsible webapp.** Use the web player at `http://localhost:5005/player/` (ensure the API is running on port 5005) for the built-in downloader.
 
 ## Features
 - **Flexible Selection**: Download everything, specific playlists, or liked songs
@@ -35,45 +35,11 @@ A powerful tool to download music from YouTube Music, YouTube, or Spotify links.
 
 Use the **main Soundsible webapp**: start the API (e.g. from `run.py` → Launch Web Player), then open `http://localhost:5005/player/`. The downloader is built into the player UI.
 
-### CLI
-
-From the **project root**:
-```bash
-python download.py "https://www.youtube.com/watch?v=..."
-```
-
-Or use the ODST CLI helper (from this directory):
-```bash
-./downloader_cli.sh --help
-```
-
 ### Desktop GUI (legacy)
 
 ```bash
 ./downloader_gui.sh
 ```
 Requires tkinter. If tkinter is missing, use the embedded downloader in the webapp instead.
-
-### CLI examples (downloader_cli.sh)
-
-**Download Everything (Liked + Playlists + Albums):**
-```bash
-./downloader_cli.sh --source all
-```
-
-**Interactive Playlist Selection:**
-```bash
-./downloader_cli.sh --source playlists --interactive
-```
-
-**Download a Direct URL (YouTube or Spotify):**
-```bash
-./downloader_cli.sh --url "https://open.spotify.com/track/..."
-```
-
-**Advanced Usage (Custom output, more workers):**
-```bash
-./downloader_cli.sh --output ~/Music/MyLibrary --workers 8 --source all
-```
 
 > **Note:** Spotify API credentials are **only needed** if you want to auto-download your entire Spotify library/playlists. For simply pasting links, no credentials are required.

@@ -59,11 +59,8 @@ class DatabaseManager:
                         musicbrainz_id TEXT,
                         isrc TEXT,
                         album_artist TEXT,
-                        metadata_source_authority TEXT,
-                        metadata_confidence REAL,
-                        metadata_decision_id TEXT,
-                        metadata_state TEXT,
-                        metadata_query_fingerprint TEXT
+                        cover_source TEXT,
+                        metadata_modified_by_user BOOLEAN DEFAULT 0
                     )
                 """)
                 
@@ -123,54 +120,11 @@ class DatabaseManager:
                     conn.execute("ALTER TABLE tracks ADD COLUMN isrc TEXT")
                 if 'album_artist' not in columns:
                     conn.execute("ALTER TABLE tracks ADD COLUMN album_artist TEXT")
-                if 'metadata_source_authority' not in columns:
-                    conn.execute("ALTER TABLE tracks ADD COLUMN metadata_source_authority TEXT")
-                if 'metadata_confidence' not in columns:
-                    conn.execute("ALTER TABLE tracks ADD COLUMN metadata_confidence REAL")
-                if 'metadata_decision_id' not in columns:
-                    conn.execute("ALTER TABLE tracks ADD COLUMN metadata_decision_id TEXT")
-                if 'metadata_state' not in columns:
-                    conn.execute("ALTER TABLE tracks ADD COLUMN metadata_state TEXT")
-                if 'metadata_query_fingerprint' not in columns:
-                    conn.execute("ALTER TABLE tracks ADD COLUMN metadata_query_fingerprint TEXT")
                 if 'cover_source' not in columns:
                     conn.execute("ALTER TABLE tracks ADD COLUMN cover_source TEXT")
                 if 'metadata_modified_by_user' not in columns:
                     conn.execute("ALTER TABLE tracks ADD COLUMN metadata_modified_by_user BOOLEAN DEFAULT 0")
-                if 'download_source' not in columns:
-                    conn.execute("ALTER TABLE tracks ADD COLUMN download_source TEXT")
-                if 'fallback_cover_url' not in columns:
-                    conn.execute("ALTER TABLE tracks ADD COLUMN fallback_cover_url TEXT")
-                if 'premium_cover_failed' not in columns:
-                    conn.execute("ALTER TABLE tracks ADD COLUMN premium_cover_failed BOOLEAN DEFAULT 0")
 
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS metadata_migration_jobs (
-                        id TEXT PRIMARY KEY,
-                        status TEXT NOT NULL,
-                        total_tracks INTEGER DEFAULT 0,
-                        processed_tracks INTEGER DEFAULT 0,
-                        applied_tracks INTEGER DEFAULT 0,
-                        failed_tracks INTEGER DEFAULT 0,
-                        dry_run BOOLEAN DEFAULT 1,
-                        created_at TEXT,
-                        updated_at TEXT
-                    )
-                """)
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS metadata_migration_audit (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        job_id TEXT NOT NULL,
-                        track_id TEXT NOT NULL,
-                        status TEXT NOT NULL,
-                        confidence REAL,
-                        old_metadata_json TEXT,
-                        new_metadata_json TEXT,
-                        error TEXT,
-                        created_at TEXT
-                    )
-                """)
-                
                 # 4. YouTube Resolution Cache
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS youtube_resolution_cache (
@@ -221,10 +175,8 @@ class DatabaseManager:
                             original_filename, compressed, file_size, bitrate, 
                             format, cover_art_key, year, genre, track_number, 
                             is_local, local_path, musicbrainz_id, isrc, album_artist,
-                            metadata_source_authority, metadata_confidence, metadata_decision_id,
-                            metadata_state, metadata_query_fingerprint, cover_source, metadata_modified_by_user, download_source,
-                            fallback_cover_url, premium_cover_failed
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            cover_source, metadata_modified_by_user
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             title=excluded.title,
                             artist=excluded.artist,
@@ -240,29 +192,16 @@ class DatabaseManager:
                             musicbrainz_id=COALESCE(excluded.musicbrainz_id, tracks.musicbrainz_id),
                             isrc=COALESCE(excluded.isrc, tracks.isrc),
                             album_artist=excluded.album_artist,
-                            metadata_source_authority=COALESCE(excluded.metadata_source_authority, tracks.metadata_source_authority),
-                            metadata_confidence=COALESCE(excluded.metadata_confidence, tracks.metadata_confidence),
-                            metadata_decision_id=COALESCE(excluded.metadata_decision_id, tracks.metadata_decision_id),
-                            metadata_state=COALESCE(excluded.metadata_state, tracks.metadata_state),
-                            metadata_query_fingerprint=COALESCE(excluded.metadata_query_fingerprint, tracks.metadata_query_fingerprint),
                             cover_source=COALESCE(excluded.cover_source, tracks.cover_source),
-                            metadata_modified_by_user=CASE WHEN excluded.metadata_modified_by_user THEN 1 ELSE tracks.metadata_modified_by_user END,
-                            download_source=COALESCE(excluded.download_source, tracks.download_source),
-                            fallback_cover_url=COALESCE(excluded.fallback_cover_url, tracks.fallback_cover_url),
-                            premium_cover_failed=CASE WHEN excluded.premium_cover_failed THEN 1 ELSE tracks.premium_cover_failed END
+                            metadata_modified_by_user=CASE WHEN excluded.metadata_modified_by_user THEN 1 ELSE tracks.metadata_modified_by_user END
                     """, (
                         track.id, track.title, track.artist, track.album,
                         track.duration, track.file_hash, track.original_filename, 
                         track.compressed, track.file_size, track.bitrate, track.format, 
                         track.cover_art_key, track.year, track.genre, track.track_number, 
                         track.is_local, track.local_path, track.musicbrainz_id, 
-                        track.isrc, track.album_artist, track.metadata_source_authority,
-                        track.metadata_confidence, track.metadata_decision_id,
-                        track.metadata_state, track.metadata_query_fingerprint,
-                        track.cover_source, track.metadata_modified_by_user,
-                        getattr(track, 'download_source', None),
-                        getattr(track, 'fallback_cover_url', None),
-                        1 if getattr(track, 'premium_cover_failed', False) else 0
+                        track.isrc, track.album_artist,
+                        track.cover_source, track.metadata_modified_by_user
                     ))
                 conn.execute("COMMIT")
             except Exception as e:

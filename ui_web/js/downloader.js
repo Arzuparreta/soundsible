@@ -169,11 +169,6 @@ export class Downloader {
             this.refreshStatus();
             if (e?.detail?.status === 'completed') {
                 store.syncLibrary();
-                const track = e?.detail?.track;
-                if (track?.download_source === SOURCE_TYPE_YOUTUBE_SEARCH) return;
-                if (track && (track.premium_cover_failed || (track.cover_source && !['spotify', 'musicbrainz', 'itunes', 'youtube_music'].includes(track.cover_source)))) {
-                    this.showCoverChoiceModal(track);
-                }
             }
         });
 
@@ -410,7 +405,6 @@ export class Downloader {
     }
 
     static showCoverChoiceModal(track) {
-        if (track?.download_source === SOURCE_TYPE_YOUTUBE_SEARCH) return;
         const modal = document.getElementById('dl-cover-choice-modal');
         if (!modal || !track) return;
         
@@ -578,8 +572,7 @@ export class Downloader {
             }
         }
         if (this.queueContainer) {
-            const showContainer = showFab || (window.UI?.currentView === 'discover');
-            this.queueContainer.classList.toggle('hidden', !showContainer);
+            this.queueContainer.classList.toggle('hidden', !showFab);
         }
     }
 
@@ -776,7 +769,7 @@ export class Downloader {
             <div class="bg-gray-900/50 p-3 rounded-xl border border-gray-700/50 flex items-center justify-between group">
                 <div class="truncate flex-1 mr-4">
                     <div class="text-xs font-bold truncate">${esc(item.song_str) || 'Track'}</div>
-                    <div class="text-[9px] text-gray-500 mt-0.5">${new Date(item.added_at).toLocaleString()}${item.metadata_state ? ` · ${esc(item.metadata_state)}` : ''}</div>
+                    <div class="text-[9px] text-gray-500 mt-0.5">${new Date(item.added_at).toLocaleString()}</div>
                 </div>
                 <div class="flex items-center space-x-2">
                     ${this.getStatusBadge(item.status)}

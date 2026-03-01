@@ -42,11 +42,6 @@ export const DesktopUI = {
         const btnEl = document.querySelector(`.desktop-nav-btn[data-view="${viewId}"]`);
         if (viewEl) viewEl.classList.add('active');
         if (btnEl) btnEl.classList.add('active');
-        const dlQueueContainer = el('desktop-dl-queue-container');
-        if (dlQueueContainer) {
-            if (viewId === 'discover') dlQueueContainer.classList.remove('hidden');
-            else dlQueueContainer.classList.add('hidden');
-        }
         if (viewId === 'discover') {
             import('./discover.js').then((m) => m.Discover && m.Discover.init({ mobile: false }));
         }
@@ -308,13 +303,8 @@ export const DesktopUI = {
 
         const rawNote = el('edit-raw-youtube-note');
         if (rawNote) {
-            if (t.download_source === 'youtube_search') {
-                rawNote.textContent = 'This track was downloaded as raw YouTube. Auto-fetch can replace with canonical metadata if you want.';
-                rawNote.classList.remove('hidden');
-            } else {
-                rawNote.textContent = '';
-                rawNote.classList.add('hidden');
-            }
+            rawNote.textContent = '';
+            rawNote.classList.add('hidden');
         }
 
         if (modal) modal.classList.remove('hidden');
