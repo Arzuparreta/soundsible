@@ -6,9 +6,8 @@ import { store } from './store.js';
 import { Resolver } from './resolver.js';
 import { esc } from './renderers.js';
 
-const DEFAULT_LIMIT = 8;
-const NEXT_BATCH_LIMIT = 6;
-const SKELETON_CARD_COUNT = 6;
+const DEFAULT_LIMIT = 5;
+const NEXT_BATCH_LIMIT = 5;
 const LIST_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /** Safe API base: prefer store.apiBase when activeHost is set, else same-origin (e.g. app and API on same host:port). */
@@ -124,23 +123,24 @@ export const Discover = {
 
     _renderSkeleton() {
         if (!this._sectionsEl) return;
-        const sectionHtml = `
-            <section class="discover-section">
-                <h2>For you</h2>
-                <div class="discover-shelf" aria-busy="true">
-                    ${Array(SKELETON_CARD_COUNT).fill(0).map(() => `
-                        <div class="discover-skeleton">
-                            <div class="discover-skeleton-cover"></div>
-                            <div class="discover-skeleton-text">
-                                <div class="discover-skeleton-line"></div>
-                                <div class="discover-skeleton-line"></div>
-                            </div>
+        this._sectionsEl.innerHTML = `
+            <div class="discover-tinder-wrap" aria-busy="true">
+                <div class="discover-tinder-card-wrap">
+                    <div class="discover-skeleton discover-skeleton-tinder">
+                        <div class="discover-skeleton-cover"></div>
+                        <div class="discover-skeleton-text">
+                            <div class="discover-skeleton-line"></div>
+                            <div class="discover-skeleton-line"></div>
                         </div>
-                    `).join('')}
+                    </div>
                 </div>
-            </section>
+                <div class="discover-tinder-actions">
+                    <div class="discover-tinder-btn discover-tinder-skip" aria-hidden="true"></div>
+                    <div class="discover-tinder-btn discover-tinder-play" aria-hidden="true"></div>
+                    <div class="discover-tinder-btn discover-tinder-add" aria-hidden="true"></div>
+                </div>
+            </div>
         `;
-        this._sectionsEl.innerHTML = sectionHtml;
     },
 
     _sectionsFromResponse(data) {
@@ -345,13 +345,15 @@ export const Discover = {
 
         this._bindTinderSwipe(cardWrap, row, advance, addBtn);
 
+        // Fallback: when enrichment didn't provide a cover, fetch on show (e.g. first load or next batch).
         const r = this._stack[this._stackIndex];
         if (r && (!(r.cover_url || r.thumbnail) || String(r.id || '').startsWith('raw-'))) {
-            this._fetchDiscoverCover(r);
+            const isFirstCard = this._stackIndex === 0;
+            this._fetchDiscoverCover(r, isFirstCard);
         }
     },
 
-    async _fetchDiscoverCover(r) {
+    async _fetchDiscoverCover(r, retryOnceIfFailed = false) {
         const apiBase = getApiBase();
         const artist = (r.artist || r.channel || '').trim();
         const title = (r.title || '').trim();
@@ -362,27 +364,35 @@ export const Discover = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ artist, title }),
             });
-            if (res.status !== 200) return;
             const data = await res.json().catch(() => ({}));
-            const thumbnail = data.thumbnail && ensureHttpsImageUrl(data.thumbnail);
-            if (!thumbnail) return;
-            const row = this._sectionsEl?.querySelector('.discover-result-row');
-            if (!row) return;
-            const currentTitle = (row.getAttribute('data-title') || '').trim();
-            const currentArtist = (row.getAttribute('data-artist') || '').trim();
-            if (currentTitle !== title || currentArtist !== artist) return;
-            const coverEl = row.querySelector('.discover-card-cover');
-            if (coverEl) {
-                coverEl.style.backgroundImage = `url("${escapeCssUrl(thumbnail)}")`;
-                coverEl.classList.remove('discover-card-cover-placeholder');
+            const thumbnail = res.status === 200 && data.thumbnail && ensureHttpsImageUrl(data.thumbnail);
+            if (thumbnail) {
+                const row = this._sectionsEl?.querySelector('.discover-result-row');
+                if (!row) return;
+                const currentTitle = (row.getAttribute('data-title') || '').trim();
+                const currentArtist = (row.getAttribute('data-artist') || '').trim();
+                if (currentTitle !== title || currentArtist !== artist) return;
+                const coverEl = row.querySelector('.discover-card-cover');
+                if (coverEl) {
+                    coverEl.style.backgroundImage = `url("${escapeCssUrl(thumbnail)}")`;
+                    coverEl.classList.remove('discover-card-cover-placeholder');
+                }
+                row.setAttribute('data-thumbnail', thumbnail.replace(/"/g, '%22'));
+                const idx = this._stack.findIndex((x) => (x.title || '').trim() === title && (x.artist || x.channel || '').trim() === artist);
+                if (idx >= 0) {
+                    this._stack[idx].thumbnail = thumbnail;
+                    this._stack[idx].cover_url = thumbnail;
+                }
+                return;
             }
-            row.setAttribute('data-thumbnail', thumbnail.replace(/"/g, '%22'));
-            const idx = this._stack.findIndex((x) => (x.title || '').trim() === title && (x.artist || x.channel || '').trim() === artist);
-            if (idx >= 0) {
-                this._stack[idx].thumbnail = thumbnail;
-                this._stack[idx].cover_url = thumbnail;
+            if (retryOnceIfFailed) {
+                setTimeout(() => this._fetchDiscoverCover(r, false), 2000);
             }
-        } catch (_) {}
+        } catch (_) {
+            if (retryOnceIfFailed) {
+                setTimeout(() => this._fetchDiscoverCover(r, false), 2000);
+            }
+        }
     },
 
     _bindTinderSwipe(cardWrap, row, onSkip, onAdd) {

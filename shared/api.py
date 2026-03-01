@@ -1441,6 +1441,47 @@ def _get_resolve_executor():
         _resolve_executor = ThreadPoolExecutor(max_workers=3)
     return _resolve_executor
 
+
+def _warm_downloader():
+    """Run in a worker thread: call get_downloader() so it is ready for enrichment/cover.
+    Do not call get_downloader() from the request thread."""
+    try:
+        get_downloader(open_browser=False)
+    except Exception:
+        pass
+
+
+def _enrich_recommendations_with_covers(out_results: list):
+    """Run in a worker thread: get_downloader + per-item cover fetch. Mutates out_results in place.
+    Do not call get_downloader() from the request thread; only this helper (in executor) should."""
+    try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        dl = get_downloader(open_browser=False)
+        max_cover_workers = 5
+        cover_timeout_sec = 12
+        with ThreadPoolExecutor(max_workers=max_cover_workers) as pool:
+            def fetch_cover(item):
+                artist = (item.get("artist") or "").strip()
+                title = (item.get("title") or "").strip()
+                if not title:
+                    return
+                try:
+                    thumb = dl.downloader.get_cover_for_query(artist, title)
+                    if thumb:
+                        item["thumbnail"] = thumb
+                        item["cover_url"] = thumb
+                except Exception:
+                    pass
+            futures = [pool.submit(fetch_cover, item) for item in out_results]
+            for future in as_completed(futures, timeout=cover_timeout_sec):
+                try:
+                    future.result(timeout=1)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
 def _resolve_worker(job_id: str, artist: str, title: str):
     """Run in thread: get_downloader + search. Use first search result; no playability check. Updates job in _resolve_jobs."""
     result = None
@@ -1559,6 +1600,18 @@ def discover_recommendations():
             results.append(d)
 
         out_results = results[:limit]
+        # Warm downloader first so enrichment (and first card) get covers; then enrich in worker thread.
+        try:
+            executor = _get_resolve_executor()
+            warm_future = executor.submit(_warm_downloader)
+            warm_future.result(timeout=10)
+        except Exception:
+            pass
+        try:
+            future = executor.submit(_enrich_recommendations_with_covers, out_results)
+            future.result(timeout=15)
+        except Exception:
+            pass
         return jsonify({"results": out_results})
     except Exception as e:
         print(f"API: Discover recommendations error: {e}")
