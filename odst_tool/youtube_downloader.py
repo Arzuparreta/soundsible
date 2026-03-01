@@ -473,10 +473,13 @@ class YouTubeDownloader:
             video_id = entry.get('id')
             if not video_id:
                 return None
+            title = (entry.get('title') or '').strip()
+            if not title:
+                return None
             webpage_url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
             return {
                 'id': video_id,
-                'title': entry.get('title') or 'Unknown',
+                'title': title,
                 'duration': entry.get('duration') or 0,
                 'thumbnail': entry.get('thumbnail') or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else ''),
                 'webpage_url': webpage_url,

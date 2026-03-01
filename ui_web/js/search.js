@@ -8,7 +8,7 @@ import * as renderers from './renderers.js';
 import { Resolver } from './resolver.js';
 import { Haptics } from './haptics.js';
 
-const ODST_DEBOUNCE_MS = 0;
+const ODST_DEBOUNCE_MS = 150;
 
 function getApiBase() {
     if (store && store.apiBase && store.state && store.state.activeHost) return store.apiBase;
