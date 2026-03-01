@@ -127,6 +127,96 @@ const QUEUE_AUTO_SCROLL_THRESHOLD_PX = 60;
 const QUEUE_AUTO_SCROLL_STEP_PX = 4;
 const QUEUE_AUTO_SCROLL_INTERVAL_MS = 16;
 
+function initWipeLibraryModal() {
+    const modal = document.getElementById('wipe-library-modal');
+    const backdrop = document.getElementById('wipe-library-modal-backdrop');
+    const input = document.getElementById('wipe-library-confirm-input');
+    const cancelBtn = document.getElementById('wipe-library-cancel');
+    const submitBtn = document.getElementById('wipe-library-submit');
+    const errorEl = document.getElementById('wipe-library-error');
+    const openBtn = document.getElementById('settings-wipe-library-btn');
+    if (!modal || !input || !submitBtn || !openBtn) return;
+
+    function showModal() {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        input.value = '';
+        submitBtn.disabled = true;
+        if (errorEl) { errorEl.classList.add('hidden'); errorEl.textContent = ''; }
+        input.focus();
+    }
+    function hideModal() {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        input.value = '';
+        submitBtn.disabled = true;
+        if (errorEl) { errorEl.classList.add('hidden'); errorEl.textContent = ''; }
+    }
+    function checkConfirm() {
+        const v = input.value.trim();
+        submitBtn.disabled = v !== 'CONFIRM' && v !== 'confirm';
+        if (errorEl) errorEl.classList.add('hidden');
+    }
+
+    openBtn.addEventListener('click', showModal);
+    input.addEventListener('input', checkConfirm);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideModal(); });
+    cancelBtn?.addEventListener('click', hideModal);
+    backdrop?.addEventListener('click', hideModal);
+
+    submitBtn.addEventListener('click', async () => {
+        if (submitBtn.disabled) return;
+        const confirmVal = input.value.trim();
+        if (confirmVal !== 'CONFIRM' && confirmVal !== 'confirm') return;
+        submitBtn.disabled = true;
+        if (errorEl) { errorEl.classList.add('hidden'); errorEl.textContent = ''; }
+        try {
+            const res = await fetch(`${store.apiBase}/api/library/wipe`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ confirm: confirmVal })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                if (errorEl) {
+                    errorEl.textContent = data.error || 'Wipe failed';
+                    errorEl.classList.remove('hidden');
+                }
+                submitBtn.disabled = false;
+                UI.showToast(data.error || 'Wipe failed');
+                return;
+            }
+            hideModal();
+            store.update({
+                library: [],
+                queue: [],
+                playlists: {},
+                favorites: [],
+                libraryYoutubeIds: [],
+                youtubeToTrackId: {},
+                currentTrack: null,
+                isPlaying: false
+            });
+            store.save('library', []);
+            store.save('playlists', {});
+            store.save('favorites', []);
+            if (typeof audioEngine !== 'undefined' && audioEngine.pause) audioEngine.pause();
+            await store.syncLibrary();
+            UI.showToast('Library wiped');
+            renderLibraryContent();
+            if (UI.currentView === 'playlists') renderPlaylistList(store.state);
+            renderQueue(store.state);
+        } catch (err) {
+            if (errorEl) {
+                errorEl.textContent = err.message || 'Request failed';
+                errorEl.classList.remove('hidden');
+            }
+            submitBtn.disabled = false;
+            UI.showToast(err.message || 'Request failed');
+        }
+    });
+}
+
 function initQueueDrag() {
     if (!dom || !dom.floatingQueue) return;
     const container = dom.floatingQueue;
@@ -640,6 +730,7 @@ async function init() {
         initScrollTracking();
 
         wireSettings(MOBILE_SETTINGS_IDS, { store, showToast: (msg) => UI.showToast(msg), onLibraryOrderChange: () => renderLibraryContent(), subscribeIndicators: false });
+        initWipeLibraryModal();
 
         // 2. Perform Connection Race
         const endpoints = [...store.state.priorityList, window.location.hostname];
@@ -1174,7 +1265,7 @@ function renderContentForView(viewId) {
             case 'favourites': input.placeholder = 'Search favorites...'; break;
             case 'playlists': input.placeholder = 'Search playlists...'; break;
             case 'playlist-detail': input.placeholder = 'Search in playlist...'; break;
-            case 'discover': input.placeholder = 'Search library and ODST...'; break;
+            case 'discover': input.placeholder = 'Search anything...'; break;
             case 'artist-detail': input.placeholder = 'Search songs & albums...'; break;
         }
     }

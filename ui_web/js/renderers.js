@@ -29,12 +29,12 @@ function escapeCssUrl(url) {
 
 /** Play overlay for desktop: glass circle with play icon, shown on hover. No pointer-events so wrapper receives click. */
 function desktopPlayOverlayHtml() {
-    return `<div class="desktop-play-overlay absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"><span class="desktop-play-overlay-circle w-10 h-10 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm border border-white/10"><i class="fas fa-play text-white text-sm ml-0.5"></i></span></div>`;
+    return `<div class="desktop-play-overlay absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none"><span class="desktop-play-overlay-circle w-10 h-10 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm border border-white/10"><i class="fas fa-play text-white text-sm ml-0.5"></i></span></div>`;
 }
 
 /** Smaller overlay for queue/list row covers (w-12 h-12). Exported for search.js desktop rows. */
 export function desktopPlayOverlaySmallHtml() {
-    return `<div class="desktop-play-overlay absolute inset-0 flex items-center justify-center rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"><span class="desktop-play-overlay-circle w-8 h-8 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm border border-white/10"><i class="fas fa-play text-white text-[10px] ml-0.5"></i></span></div>`;
+    return `<div class="desktop-play-overlay absolute inset-0 flex items-center justify-center rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none"><span class="desktop-play-overlay-circle w-8 h-8 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm border border-white/10"><i class="fas fa-play text-white text-[10px] ml-0.5"></i></span></div>`;
 }
 
 /**

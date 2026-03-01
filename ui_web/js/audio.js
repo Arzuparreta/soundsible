@@ -22,6 +22,10 @@ class AudioEngine {
         this._preloadAudio = null;
         /** Track ID we last preloaded, to avoid re-preloading every timeupdate. */
         this._preloadedTrackId = null;
+        /** Guard: only trigger "preview ended" once per track. */
+        this._previewEndedTriggered = false;
+        /** After starting a new track, ignore timeupdate with high currentTime (stale from previous track). */
+        this._suppressStaleTimeUpdates = false;
         this.init();
     }
 
@@ -88,12 +92,8 @@ class AudioEngine {
     }
 
     init() {
-        if (store.state.muted) {
-            this.audio.volume = 0;
-        } else {
-            const v = store.state.volume;
-            this.audio.volume = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
-        }
+        const v = store.state.volume;
+        this.audio.volume = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
         this.audio.addEventListener('ended', () => this.next());
         this.audio.addEventListener('timeupdate', () => {
             this.currentPosition = this.audio.currentTime;
@@ -191,20 +191,28 @@ class AudioEngine {
         // Preview: stream through our server (same-origin) so playback works. Direct YT URLs are CORS-blocked.
         // Always use HTTP; app and API are never HTTPS.
         if (track.source === 'preview') {
-            const ytId = track.id && !String(track.id).startsWith('raw-') && String(track.id).length === 11 ? track.id : null;
-            if (!ytId) {
-                if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
-                return;
-            }
+            this._previewEndedTriggered = false;
             const host = (typeof store !== 'undefined' && store.state && store.state.activeHost) ? store.state.activeHost : (typeof window !== 'undefined' && window.location ? window.location.hostname : 'localhost');
             const apiBase = `http://${host}:5005`;
-            const streamUrl = `${apiBase}/api/preview/stream/${encodeURIComponent(ytId)}`;
+            let streamUrl;
+            if (track._libraryTrackId) {
+                streamUrl = `${apiBase}/api/static/stream/${encodeURIComponent(track._libraryTrackId)}`;
+            } else {
+                const ytId = track.id && !String(track.id).startsWith('raw-') && String(track.id).length === 11 ? track.id : null;
+                if (!ytId) {
+                    if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
+                    return;
+                }
+                streamUrl = `${apiBase}/api/preview/stream/${encodeURIComponent(ytId)}`;
+            }
             try {
                 this.audio.src = streamUrl;
                 this.audio.load();
                 await this.audio.play();
                 store.update({ currentTrack: track, isPlaying: true });
                 store.pushPlaybackState(track.id, 0, true);
+                this._suppressStaleTimeUpdates = true;
+                this._dispatchTimeUpdate(0, 0, track?.duration ?? 0);
                 if ('mediaSession' in navigator) {
                     const coverUrl = track?.id ? Resolver.getCoverUrl(track) : null;
                     const sizes = ['96x96', '128x128', '192x192', '256x256', '384x384', '512x512'];
@@ -243,6 +251,8 @@ class AudioEngine {
             await this.audio.play();
             store.update({ currentTrack: track, isPlaying: true });
             store.pushPlaybackState(track.id, 0, true);
+            this._suppressStaleTimeUpdates = true;
+            this._dispatchTimeUpdate(0, 0, track?.duration ?? 0);
 
             if ('mediaSession' in navigator) {
                 const coverUrl = track?.id ? Resolver.getCoverUrl(track) : null;
@@ -377,27 +387,42 @@ class AudioEngine {
         this.audio.volume = Math.min(1, Math.max(0, v));
     }
 
+    /** Single entry point for progress/currentTime/duration to UI: used by onTimeUpdate and when starting a new track (reset to 0). */
+    _dispatchTimeUpdate(progress, currentTime, duration) {
+        if (typeof window !== 'undefined' && window.dispatchEvent) {
+            window.dispatchEvent(new CustomEvent('audio:timeupdate', { detail: { progress, currentTime, duration } }));
+        }
+    }
+
     _lastPushTime = 0;
 
     onTimeUpdate() {
-        const duration = this.audio.duration || 0;
+        const rawDuration = this.audio.duration;
+        const trackDuration = store.state.currentTrack?.duration;
+        const duration = (Number.isFinite(rawDuration) && rawDuration > 0) ? rawDuration : (Number(trackDuration) || 0);
         const currentTime = this.audio.currentTime || 0;
-        const progress = (currentTime / duration) * 100 || 0;
+        const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
         if (store.state.resumeSyncActive) {
             this.currentPosition = currentTime;
-            if (isVisible()) {
-                window.dispatchEvent(new CustomEvent('audio:timeupdate', { detail: { progress, currentTime, duration } }));
-            }
+            if (isVisible()) this._dispatchTimeUpdate(progress, currentTime, duration);
             return;
         }
+
+        const currentTrack = store.state.currentTrack;
+        if (currentTrack?.source === 'preview' && duration > 0 && !this._previewEndedTriggered && currentTime >= duration - 1.2) {
+            this._previewEndedTriggered = true;
+            this.next();
+        }
+
         const visible = isVisible();
         const pushDebounceSec = visible ? PUSH_DEBOUNCE_VISIBLE_SEC : PUSH_DEBOUNCE_HIDDEN_SEC;
 
-        if (!this.audio.paused && store.state.currentTrack) {
+        if (!this.audio.paused && currentTrack) {
             const now = Date.now() / 1000;
             if (now - this._lastPushTime >= pushDebounceSec) {
                 this._lastPushTime = now;
-                store.pushPlaybackState(store.state.currentTrack.id, currentTime, true);
+                store.pushPlaybackState(currentTrack.id, currentTime, true);
             }
         }
 
@@ -411,11 +436,11 @@ class AudioEngine {
             }
         }
 
-        if (visible) {
-            window.dispatchEvent(new CustomEvent('audio:timeupdate', {
-                detail: { progress, currentTime, duration }
-            }));
+        if (this._suppressStaleTimeUpdates) {
+            if (currentTime > 0.5) return;
+            this._suppressStaleTimeUpdates = false;
         }
+        if (visible) this._dispatchTimeUpdate(progress, currentTime, duration);
     }
 }
 

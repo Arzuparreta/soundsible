@@ -632,6 +632,26 @@ def get_library():
         return jsonify(json.loads(lib.metadata.to_json()))
     return jsonify({"error": "Library not loaded"}), 404
 
+
+@app.route('/api/library/youtube-ids', methods=['GET'])
+def get_library_youtube_ids():
+    """Lightweight list of YouTube IDs for tracks that were downloaded from YouTube (excludes uploads). Used by preview flow to prefer library stream without reading full library."""
+    lib, _, _ = get_core()
+    lib.refresh_if_stale()
+    if not lib.metadata:
+        lib.sync_library()
+    if not lib.metadata:
+        return jsonify({"youtube_ids": [], "youtube_to_track_id": {}})
+    youtube_ids = []
+    youtube_to_track_id = {}
+    for t in lib.metadata.tracks:
+        yt_id = getattr(t, 'youtube_id', None)
+        if yt_id and isinstance(yt_id, str) and len(yt_id) == 11:
+            youtube_ids.append(yt_id)
+            youtube_to_track_id[yt_id] = t.id
+    return jsonify({"youtube_ids": youtube_ids, "youtube_to_track_id": youtube_to_track_id})
+
+
 @app.route('/api/library/sync', methods=['POST'])
 def sync_library():
     lib, _, _ = get_core()
@@ -669,6 +689,32 @@ def delete_track_from_library(track_id):
         return jsonify({"status": "success"})
     else:
         return jsonify({"error": "Deletion failed"}), 500
+
+
+@app.route('/api/library/wipe', methods=['POST'])
+def wipe_library():
+    """Wipe library to empty state. Requires trusted network and body confirm: 'CONFIRM' or 'confirm'."""
+    if not is_trusted_network(request.remote_addr):
+        return jsonify({"error": "Deletions restricted to Home Network / Tailscale"}), 403
+
+    data = request.get_json(silent=True) or {}
+    confirm = data.get("confirm")
+    if confirm not in ("CONFIRM", "confirm"):
+        return jsonify({"error": "Body must include confirm: 'CONFIRM' or 'confirm'"}), 400
+
+    try:
+        lib, _, _ = get_core()
+        success = lib.nuke_library()
+        if success:
+            socketio.emit('library_updated')
+            return jsonify({"status": "success"})
+        return jsonify({"error": "Wipe failed"}), 500
+    except Exception as e:
+        print(f"API: Library wipe error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Wipe failed"}), 500
+
 
 @app.route('/api/library/search', methods=['GET'])
 def search_library():

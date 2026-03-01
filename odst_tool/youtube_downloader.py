@@ -7,7 +7,7 @@ import re
 import uuid
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Iterator
-from urllib.parse import quote
+from urllib.parse import quote, urlparse, parse_qs
 import yt_dlp
 import requests
 from .config import (
@@ -41,6 +41,22 @@ def _is_valid_youtube_video_id(video_id: Optional[str]) -> bool:
     if len(s) != 11:
         return False
     return all(c.isalnum() or c in "-_" for c in s)
+
+
+def _extract_video_id_from_url(url: str) -> Optional[str]:
+    """Extract YouTube video ID from youtube.com or youtu.be URL."""
+    if not url or not isinstance(url, str):
+        return None
+    url = url.strip()
+    parsed = urlparse(url)
+    if "youtu.be" in parsed.netloc:
+        vid = (parsed.path or "").strip("/").split("?")[0].split("/")[0]
+        return vid if _is_valid_youtube_video_id(vid) else None
+    if "youtube.com" in parsed.netloc:
+        qs = parse_qs(parsed.query)
+        vid = (qs.get("v") or [None])[0]
+        return str(vid) if vid and _is_valid_youtube_video_id(str(vid)) else None
+    return None
 
 # Same as a normal CLI download. No extractor_args (see docs/yt-dlp-format-errors-log.md).
 YDL_FORMAT_AUDIO = "bestaudio/bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best/worstaudio"
@@ -119,6 +135,7 @@ class YouTubeDownloader:
             shutil.move(str(temp_file), str(final_path))
             
             # 5. Create Track Object
+            yt_id = video_info.get('id') if _is_valid_youtube_video_id(video_info.get('id')) else None
             track = Track(
                 id=file_hash,
                 title=clean_metadata['title'],
@@ -140,7 +157,8 @@ class YouTubeDownloader:
                 musicbrainz_id=clean_metadata.get("musicbrainz_id"),
                 isrc=clean_metadata.get("isrc"),
                 cover_source=clean_metadata.get("cover_source"),
-                metadata_modified_by_user=False
+                metadata_modified_by_user=False,
+                youtube_id=yt_id
             )
             return track
             
@@ -228,6 +246,7 @@ class YouTubeDownloader:
             final_path = self.tracks_dir / f"{file_hash}.{extension}"
             shutil.move(str(temp_file), str(final_path))
 
+            video_id = _extract_video_id_from_url(url)
             track = Track(
                 id=file_hash,
                 title=clean_meta['title'],
@@ -249,7 +268,8 @@ class YouTubeDownloader:
                 musicbrainz_id=None,
                 isrc=None,
                 cover_source="youtube",
-                metadata_modified_by_user=False
+                metadata_modified_by_user=False,
+                youtube_id=video_id
             )
             return track
         except Exception as e:

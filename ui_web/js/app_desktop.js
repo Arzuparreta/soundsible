@@ -778,6 +778,93 @@ function registerServiceWorker() {
     );
 }
 
+function initWipeLibraryModalDesktop() {
+    const modal = document.getElementById('wipe-library-modal');
+    const backdrop = document.getElementById('wipe-library-modal-backdrop');
+    const input = document.getElementById('wipe-library-confirm-input');
+    const cancelBtn = document.getElementById('wipe-library-cancel');
+    const submitBtn = document.getElementById('wipe-library-submit');
+    const errorEl = document.getElementById('wipe-library-error');
+    const openBtn = document.getElementById('desktop-settings-wipe-library-btn');
+    if (!modal || !input || !submitBtn || !openBtn) return;
+
+    function showModal() {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        input.value = '';
+        submitBtn.disabled = true;
+        if (errorEl) { errorEl.classList.add('hidden'); errorEl.textContent = ''; }
+        input.focus();
+    }
+    function hideModal() {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        input.value = '';
+        submitBtn.disabled = true;
+        if (errorEl) { errorEl.classList.add('hidden'); errorEl.textContent = ''; }
+    }
+    function checkConfirm() {
+        const v = input.value.trim();
+        submitBtn.disabled = v !== 'CONFIRM' && v !== 'confirm';
+        if (errorEl) errorEl.classList.add('hidden');
+    }
+
+    openBtn.addEventListener('click', showModal);
+    input.addEventListener('input', checkConfirm);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideModal(); });
+    cancelBtn?.addEventListener('click', hideModal);
+    backdrop?.addEventListener('click', hideModal);
+
+    submitBtn.addEventListener('click', async () => {
+        if (submitBtn.disabled) return;
+        const confirmVal = input.value.trim();
+        if (confirmVal !== 'CONFIRM' && confirmVal !== 'confirm') return;
+        submitBtn.disabled = true;
+        if (errorEl) { errorEl.classList.add('hidden'); errorEl.textContent = ''; }
+        try {
+            const res = await fetch(`${store.apiBase}/api/library/wipe`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ confirm: confirmVal })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                if (errorEl) {
+                    errorEl.textContent = data.error || 'Wipe failed';
+                    errorEl.classList.remove('hidden');
+                }
+                submitBtn.disabled = false;
+                DesktopUI.showToast(data.error || 'Wipe failed');
+                return;
+            }
+            hideModal();
+            store.update({
+                library: [],
+                queue: [],
+                playlists: {},
+                favorites: [],
+                libraryYoutubeIds: [],
+                youtubeToTrackId: {},
+                currentTrack: null,
+                isPlaying: false
+            });
+            store.save('library', []);
+            store.save('playlists', {});
+            store.save('favorites', []);
+            if (audioEngine && audioEngine.pause) audioEngine.pause();
+            await store.syncLibrary();
+            DesktopUI.showToast('Library wiped');
+        } catch (err) {
+            if (errorEl) {
+                errorEl.textContent = err.message || 'Request failed';
+                errorEl.classList.remove('hidden');
+            }
+            submitBtn.disabled = false;
+            DesktopUI.showToast(err.message || 'Request failed');
+        }
+    });
+}
+
 async function init() {
     try {
         registerServiceWorker();
@@ -823,6 +910,7 @@ async function init() {
             lastfmStatus: 'desktop-settings-lastfm-status',
             ytdlpAutoUpdate: 'desktop-settings-ytdlp-auto-update',
         }, { store, showToast: (m) => DesktopUI.showToast(m), onLibraryOrderChange: () => renderHomeSongs() });
+        initWipeLibraryModalDesktop();
 
         const themeSelect = document.getElementById('desktop-settings-theme-select');
         if (themeSelect) {
@@ -1127,7 +1215,7 @@ async function init() {
                     case 'favourites': input.placeholder = 'Search favorites...'; break;
                     case 'playlists': input.placeholder = 'Search playlists...'; break;
                     case 'playlist-detail': input.placeholder = 'Search in playlist...'; break;
-                    case 'discover': input.placeholder = 'Search library and ODST...'; break;
+                    case 'discover': input.placeholder = 'Search anything...'; break;
                     case 'artists': input.placeholder = 'Search artists...'; break;
                     case 'artist-detail': input.placeholder = 'Search songs & albums...'; break;
                     case 'podcast': input.placeholder = 'Search podcasts...'; break;

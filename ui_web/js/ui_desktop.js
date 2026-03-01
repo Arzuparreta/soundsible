@@ -16,6 +16,7 @@ export const DesktopUI = {
     currentView: 'home',
     currentActionTrack: null,
     selectedTrackId: null,
+    _lastProgressTrackId: null,
 
     setSelectedTrackId(id) {
         this.selectedTrackId = id || null;
@@ -82,13 +83,16 @@ export const DesktopUI = {
         const timeDuration = el('desktop-np-time-duration');
         const timebarRow = el('desktop-np-timebar-row');
         const seek = el('desktop-np-seek');
-        const ct = audioEngine.audio?.currentTime ?? 0;
+        const trackId = track?.id ?? null;
+        const trackJustChanged = trackId != null && trackId !== this._lastProgressTrackId;
+        if (trackJustChanged) this._lastProgressTrackId = trackId;
+        const ct = trackJustChanged ? 0 : (audioEngine.audio?.currentTime ?? 0);
         const nowPlayingBar = el('desktop-now-playing');
         if (nowPlayingBar) nowPlayingBar.classList.toggle('has-track', !!track);
         if (timeCurrent) timeCurrent.textContent = track ? renderers.formatTime(ct) : '0:00';
         if (timeDuration) timeDuration.textContent = track ? renderers.formatTime(track.duration ?? 0) : '0:00';
         if (seek && track?.duration) {
-            const pct = track.duration > 0 ? (100 * ct / track.duration) : 0;
+            const pct = trackJustChanged ? 0 : (track.duration > 0 ? (100 * ct / track.duration) : 0);
             seek.value = Math.min(100, Math.max(0, pct));
         }
 
@@ -99,10 +103,12 @@ export const DesktopUI = {
         if (shuffleBtn) {
             shuffleBtn.classList.toggle('text-[var(--accent)]', state.shuffleEnabled);
             shuffleBtn.classList.toggle('text-[var(--text-dim)]', !state.shuffleEnabled);
+            shuffleBtn.classList.toggle('desktop-np-mode-on', state.shuffleEnabled);
         }
         if (repeatBtn) {
             repeatBtn.classList.toggle('text-[var(--accent)]', state.repeatMode !== 'off');
             repeatBtn.classList.toggle('text-[var(--text-dim)]', state.repeatMode === 'off');
+            repeatBtn.classList.toggle('desktop-np-mode-on', state.repeatMode !== 'off');
         }
         if (repeatOneInd) repeatOneInd.classList.toggle('hidden', state.repeatMode !== 'once');
         if (volumeInput) {
@@ -112,9 +118,9 @@ export const DesktopUI = {
         const volumeIcon = el('desktop-volume-icon');
         const volumeMuteBtn = el('desktop-volume-mute-btn');
         if (volumeIcon) {
-            volumeIcon.className = state.muted ? 'fas fa-volume-xmark text-xs' : 'fas fa-volume-high text-xs';
+            volumeIcon.className = state.volume === 0 ? 'fas fa-volume-xmark text-xs' : 'fas fa-volume-high text-xs';
         }
-        if (volumeMuteBtn) volumeMuteBtn.setAttribute('aria-label', state.muted ? 'Unmute' : 'Mute');
+        if (volumeMuteBtn) volumeMuteBtn.setAttribute('aria-label', state.volume === 0 ? 'Unmute' : 'Mute');
     },
 
     showToast(msg) {
@@ -500,22 +506,41 @@ export const DesktopUI = {
         if (repeatBtn) repeatBtn.addEventListener('click', () => store.toggleRepeat());
         if (volumeMuteBtn) {
             volumeMuteBtn.addEventListener('click', () => {
-                store.toggleMute();
-                audioEngine.setVolume(store.state.muted ? 0 : store.state.volume);
+                if (store.state.volume > 0) {
+                    const volumeBeforeMute = store.state.volume;
+                    store.update({ volume: 0, volumeBeforeMute });
+                    audioEngine.setVolume(0);
+                } else {
+                    const restore = store.state.volumeBeforeMute ?? 1;
+                    store.update({ volume: restore });
+                    audioEngine.setVolume(restore);
+                }
             });
         }
         if (volumeInput) {
             volumeInput.addEventListener('input', () => {
                 const v = Number(volumeInput.value) / 100;
-                audioEngine.setVolume(v);
                 const patch = { volume: v };
-                if (store.state.muted && v > 0) patch.muted = false;
+                if (v === 0 && store.state.volume > 0) patch.volumeBeforeMute = store.state.volume;
                 store.update(patch);
+                audioEngine.setVolume(v);
             });
         }
 
         this.bindFullCoverOverlay();
-        window.addEventListener('audio:timeupdate', () => this.updatePlayer(store.state));
+        // Progress bar and time labels must come from event detail only (never audio.currentTime here),
+        // so the bar resets to 0 when a new track starts instead of showing the previous track's position.
+        window.addEventListener('audio:timeupdate', (e) => {
+            const d = e.detail;
+            if (d && typeof d.progress === 'number' && store.state.currentTrack) {
+                const seek = el('desktop-np-seek');
+                const timeCurrent = el('desktop-np-time-current');
+                const timeDuration = el('desktop-np-time-duration');
+                if (seek) seek.value = Math.min(100, Math.max(0, d.progress));
+                if (timeCurrent) timeCurrent.textContent = renderers.formatTime(d.currentTime ?? 0);
+                if (timeDuration) timeDuration.textContent = renderers.formatTime(d.duration ?? 0);
+            }
+        });
     },
 
     showFullCoverView(coverUrl) {

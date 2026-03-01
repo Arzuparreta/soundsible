@@ -142,9 +142,9 @@ class LocalStorageProvider(S3StorageProvider):
                 try:
                     rel_path = full_path.relative_to(bucket_root)
                     files.append({
-                        'Key': str(rel_path),
-                        'Size': full_path.stat().st_size,
-                        'LastModified': full_path.stat().st_mtime
+                        'key': str(rel_path),
+                        'size': full_path.stat().st_size,
+                        'modified': full_path.stat().st_mtime
                     })
                 except ValueError:
                     continue

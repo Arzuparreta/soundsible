@@ -42,6 +42,15 @@ let isMobile = true;
 let isDesktop = false;
 /** Search tab ODST source: 'music' = YouTube Music, 'youtube' = normal YouTube. */
 let odstSourceMode = 'music';
+/** When true, results are discover-only (ODST only, no library mix, no "ODST" label per row). */
+let isDiscoverPage = false;
+
+const SEARCH_EMPTY_DEFAULT = 'Search library and ODST...';
+const SEARCH_EMPTY_DISCOVER = 'Search anything...';
+
+function getEmptyMessage() {
+    return isDiscoverPage ? SEARCH_EMPTY_DISCOVER : SEARCH_EMPTY_DEFAULT;
+}
 
 function updateDiscoverPanels(showSearchResults) {
     if (contentPanelEl) contentPanelEl.classList.toggle('hidden', !!showSearchResults);
@@ -120,21 +129,40 @@ function buildLibraryRowHtml(track) {
     </div>`;
 }
 
-function buildOdstRowHtml(r) {
+function isYoutubeId(id) {
+    return id && typeof id === 'string' && id.length === 11 && !String(id).startsWith('raw-');
+}
+
+function buildOdstRowHtml(r, opts = {}) {
+    const omitSourceLabel = opts.omitSourceLabel === true;
     const thumbUrl = (r.thumbnail || '').replace(/"/g, '%22').replace(/'/g, '%27');
     const placeholderUrl = (store.placeholderCoverUrl || '').replace(/"/g, '%22').replace(/'/g, '%27');
     const thumbStyle = thumbUrl ? `background-image:url('${thumbUrl}');` : (placeholderUrl ? `background-image:url('${placeholderUrl}');` : '');
     const duration = renderers.formatTime(r.duration);
+    const ids = store.state.libraryYoutubeIds || [];
+    const inLibrary = isYoutubeId(r.id) && ids.includes(r.id);
+    const titleLine = inLibrary
+        ? `<div class="flex items-center gap-2 min-w-0 flex-1"><span class="text-sm font-bold truncate text-[var(--text-main)]">${esc(r.title)}</span><span class="flex-shrink-0 inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-[var(--text-dim)]" title="In library"><i class="fas fa-box text-[10px]"></i></span></div>`
+        : `<div class="text-sm font-bold truncate text-[var(--text-main)]">${esc(r.title)}</div>`;
+    const dlIcon = inLibrary ? 'fa-sync-alt' : 'fa-cloud-download-alt';
+    const dlAria = inLibrary ? 'Re-download' : 'Add to download queue';
+    const labelBlock = omitSourceLabel ? '' : `<div class="text-[9px] font-black uppercase tracking-widest text-[var(--text-dim)] mb-0.5">ODST</div>`;
+    const thumbHtml = isDesktop
+        ? `<div class="song-row-cover-wrapper relative w-12 h-12 flex-shrink-0 group rounded-xl overflow-hidden">
+            <div class="dl-result-thumb absolute inset-0 rounded-xl bg-cover bg-center border border-[var(--glass-border)]" style="${thumbStyle} background-color: var(--input-bg);"></div>
+            ${renderers.desktopPlayOverlaySmallHtml()}
+          </div>`
+        : `<div class="w-12 h-12 rounded-lg flex-shrink-0 dl-result-thumb bg-cover bg-center" style="${thumbStyle} background-color: var(--input-bg);"></div>`;
     return `
     <div class="search-result-item mb-2">
-        <div class="text-[9px] font-black uppercase tracking-widest text-[var(--text-dim)] mb-0.5">ODST</div>
+        ${labelBlock}
         <div class="flex items-center gap-3 p-3 rounded-xl border border-[var(--input-border)] transition-colors group cursor-pointer hover:bg-[var(--surface-overlay)]" style="background-color: var(--input-bg);" data-video-id="${esc(r.id)}" data-source="odst">
-            <div class="w-12 h-12 rounded-lg flex-shrink-0 dl-result-thumb bg-cover bg-center" style="${thumbStyle} background-color: var(--input-bg);"></div>
+            ${thumbHtml}
             <div class="flex-1 min-w-0">
-                <div class="text-sm font-bold truncate text-[var(--text-main)]">${esc(r.title)}</div>
+                ${titleLine}
                 <div class="text-xs text-[var(--text-dim)] truncate">${esc(r.channel)} ${duration ? ' · ' + duration : ''}</div>
             </div>
-            <button type="button" class="dl-add-one w-10 h-10 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 opacity-100 transition-all" data-video-id="${esc(r.id)}" aria-label="Add to download queue"><i class="fas fa-cloud-download-alt text-sm"></i></button>
+            <button type="button" class="dl-add-one w-10 h-10 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 opacity-100 transition-all" data-video-id="${esc(r.id)}" aria-label="${esc(dlAria)}"><i class="fas ${dlIcon} text-sm"></i></button>
         </div>
     </div>`;
 }
@@ -143,15 +171,20 @@ function render(merged) {
     if (!resultsEl) return;
     const list = Array.isArray(merged) ? merged : [];
     const libraryTracks = list.filter((m) => m.source === 'library').map((m) => m.track);
-    if (typeof window.viewContext !== 'undefined') window.viewContext.searchTracks = libraryTracks;
-    window._currentSearchTracks = libraryTracks;
+    if (isDiscoverPage) {
+        if (typeof window.viewContext !== 'undefined') window.viewContext.searchTracks = [];
+        window._currentSearchTracks = [];
+    } else {
+        if (typeof window.viewContext !== 'undefined') window.viewContext.searchTracks = libraryTracks;
+        window._currentSearchTracks = libraryTracks;
+    }
     if (list.length === 0) {
         resultsEl.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">No results</div>';
         return;
     }
     const html = list.map((item) => {
         if (item.source === 'library') return buildLibraryRowHtml(item.track);
-        return buildOdstRowHtml(item);
+        return buildOdstRowHtml(item, { omitSourceLabel: isDiscoverPage });
     }).join('');
     resultsEl.innerHTML = html;
     bindListeners(list);
@@ -210,7 +243,7 @@ function runLibraryOnly(raw) {
     if (loading) loading.remove();
     const loadingOdstEl = document.createElement('div');
     loadingOdstEl.className = 'search-odst-loading text-center py-4 text-[var(--text-dim)] text-sm';
-    loadingOdstEl.textContent = 'Loading ODST results…';
+    loadingOdstEl.textContent = 'Loading...';
     resultsEl.appendChild(loadingOdstEl);
 }
 
@@ -246,22 +279,29 @@ function runOdstFetch(raw) {
             const results = data.results || [];
             lastOdstResults = results;
             const odstItems = results.map((r) => ({ source: 'odst', ...r }));
-            const librarySorted = [...lastLibraryItems].sort((a, b) => {
-                if (b.score !== a.score) return b.score - a.score;
-                return (a.sortTitle || '').localeCompare(b.sortTitle || '');
-            });
-            const merged = [...odstItems, ...librarySorted];
-            render(merged);
+            if (isDiscoverPage) {
+                render(odstItems);
+            } else {
+                const librarySorted = [...lastLibraryItems].sort((a, b) => {
+                    if (b.score !== a.score) return b.score - a.score;
+                    return (a.sortTitle || '').localeCompare(b.sortTitle || '');
+                });
+                render([...odstItems, ...librarySorted]);
+            }
             const loading = resultsEl?.querySelector('.search-odst-loading');
             if (loading) loading.remove();
         })
         .catch((err) => {
             if (err.name === 'AbortError') return;
-            const sorted = [...lastLibraryItems].sort((a, b) => {
-                if (b.score !== a.score) return b.score - a.score;
-                return (a.sortTitle || '').localeCompare(b.sortTitle || '');
-            });
-            render(sorted);
+            if (isDiscoverPage) {
+                render([]);
+            } else {
+                const sorted = [...lastLibraryItems].sort((a, b) => {
+                    if (b.score !== a.score) return b.score - a.score;
+                    return (a.sortTitle || '').localeCompare(b.sortTitle || '');
+                });
+                render(sorted);
+            }
             const loading = resultsEl?.querySelector('.search-odst-loading');
             if (loading) loading.remove();
             const errMsg = err.message || 'ODST search unavailable';
@@ -286,7 +326,7 @@ function onInput() {
     if (!resultsEl) return;
     if (!raw) {
         updateDiscoverPanels(false);
-        resultsEl.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">Search library and ODST...</div>';
+        resultsEl.innerHTML = `<div class="text-center py-8 text-[var(--text-dim)]">${getEmptyMessage()}</div>`;
         lastLibraryItems = [];
         lastOdstResults = [];
         if (debounceTimer) clearTimeout(debounceTimer);
@@ -301,16 +341,22 @@ function onInput() {
             Downloader.enqueueDirectUrls(parsed.accepted.map((x) => x.normalized));
             if (inputEl) inputEl.value = '';
             if (typeof window.showToast === 'function') window.showToast('Link added to download queue');
-            resultsEl.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">Search library and ODST...</div>';
+            resultsEl.innerHTML = `<div class="text-center py-8 text-[var(--text-dim)]">${getEmptyMessage()}</div>`;
             lastLibraryItems = [];
             if (debounceTimer) clearTimeout(debounceTimer);
             debounceTimer = null;
             return;
         }
     }
-    runLibraryOnly(raw);
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(onDebounceFire, ODST_DEBOUNCE_MS);
+    if (isDiscoverPage) {
+        resultsEl.innerHTML = '<div class="search-odst-loading text-center py-4 text-[var(--text-dim)] text-sm">Loading...</div>';
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(onDebounceFire, ODST_DEBOUNCE_MS);
+    } else {
+        runLibraryOnly(raw);
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(onDebounceFire, ODST_DEBOUNCE_MS);
+    }
 }
 
 function onPaste() {
@@ -326,7 +372,7 @@ function onPaste() {
                 if (typeof window.showToast === 'function') window.showToast('Link added to download queue');
                 if (debounceTimer) clearTimeout(debounceTimer);
                 debounceTimer = null;
-                if (resultsEl) resultsEl.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">Search library and ODST...</div>';
+                if (resultsEl) resultsEl.innerHTML = `<div class="text-center py-8 text-[var(--text-dim)]">${getEmptyMessage()}</div>`;
             }
         }
     }, 0);
@@ -342,7 +388,7 @@ function clear() {
         odstAbortController = null;
     }
     updateDiscoverPanels(false);
-    if (resultsEl) resultsEl.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">Search library and ODST...</div>';
+    if (resultsEl) resultsEl.innerHTML = `<div class="text-center py-8 text-[var(--text-dim)]">${getEmptyMessage()}</div>`;
     lastLibraryItems = [];
     lastOdstResults = [];
     if (typeof window.viewContext !== 'undefined') window.viewContext.searchTracks = null;
@@ -381,6 +427,7 @@ function init(opts = {}) {
     isDesktop = !isMobile;
     const inputId = isMobile ? 'global-search-input' : 'desktop-global-search-input';
     const resultsId = opts.resultsContainerId || (isMobile ? 'discover-search-results' : 'desktop-discover-search-results');
+    isDiscoverPage = (resultsId === 'discover-search-results' || resultsId === 'desktop-discover-search-results');
     inputEl = document.getElementById(inputId);
     resultsEl = document.getElementById(resultsId);
     if (!inputEl || !resultsEl) return;
@@ -388,8 +435,9 @@ function init(opts = {}) {
     contentPanelEl = document.getElementById(isMobile ? 'discover-content-panel' : 'desktop-discover-content-panel');
     searchResultsPanelEl = document.getElementById(resultsId);
 
+    if (isDiscoverPage && store.fetchLibraryYoutubeIds) store.fetchLibraryYoutubeIds();
     clear();
-    resultsEl.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">Search library and ODST...</div>';
+    resultsEl.innerHTML = `<div class="text-center py-8 text-[var(--text-dim)]">${getEmptyMessage()}</div>`;
     const hasInput = (inputEl.value || '').trim().length > 0;
     updateDiscoverPanels(!!hasInput);
 

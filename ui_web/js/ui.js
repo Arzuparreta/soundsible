@@ -119,6 +119,8 @@ export class UI {
         this.isDraggingQueue = false;
         this._keyboardHeight = 0;
         this._platform = this.detectPlatform();
+        /** Track id used to reset progress bar when track changes (avoids stale timebar position). */
+        this._lastProgressTrackId = null;
 
         this.initGlobalListeners();
         this.initOmniIsland();
@@ -194,6 +196,25 @@ export class UI {
     }
 
     static updatePlayer(state) {
+        // Reset progress bar and time labels when track changes (avoids timebar stuck at previous position)
+        const trackId = state.currentTrack?.id ?? null;
+        if (trackId != null && trackId !== this._lastProgressTrackId) {
+            this._lastProgressTrackId = trackId;
+            const omniBar = this.dom.omniProgress;
+            const npBar = this.dom.npSeekProgress;
+            if (omniBar) omniBar.style.width = '0%';
+            if (npBar) npBar.style.width = '0%';
+            const dur = state.currentTrack?.duration ?? 0;
+            const omniCurrent = this.dom.omniTimeCurrent;
+            const omniDuration = this.dom.omniTimeDuration;
+            const npCurrent = this.dom.npTimeCurrent;
+            const npDuration = this.dom.npTimeDuration;
+            if (omniCurrent) { omniCurrent.textContent = '0:00'; omniCurrent.style.left = '8%'; }
+            if (omniDuration) omniDuration.textContent = UI.formatTime(dur);
+            if (npCurrent) { npCurrent.textContent = '0:00'; npCurrent.style.left = '0%'; }
+            if (npDuration) npDuration.textContent = UI.formatTime(dur);
+        }
+
         // Omni-Island State Sync
         this.syncIsland(state);
 

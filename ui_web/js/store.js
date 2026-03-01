@@ -15,6 +15,8 @@ class Store {
             activeHost: window.location.hostname || 'localhost',
             isOnline: true,
             library: this.load('library', []),
+            libraryYoutubeIds: [],
+            youtubeToTrackId: {},
             favorites: this.load('favorites', []),
             playlists: this.load('playlists', {}),
             queue: [],
@@ -35,8 +37,22 @@ class Store {
             songsViewMode: (() => { const v = this.load('songs_view_mode', 'list'); const valid = ['list', 'grid', 'gridCompact', 'gridLarge']; return valid.includes(v) ? v : (v === 'gridXLarge' ? 'gridLarge' : 'list'); })(),
             artistViewMode: (() => { const v = this.load('artist_view_mode', 'gridCompact'); const valid = ['gridCompact', 'grid', 'gridLarge']; return valid.includes(v) ? v : (v === 'gridXLarge' ? 'gridLarge' : 'gridCompact'); })(),
             libraryTab: (() => { const v = this.load('library_tab', 'songs'); return v === 'artists' ? 'artists' : 'songs'; })(),
-            volume: (() => { const v = Number(this.load('volume', 1)); return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1; })(),
-            muted: this.load('muted', false)
+            volume: (() => {
+                const savedVolume = Number(this.load('volume', 1));
+                const v = Number.isFinite(savedVolume) ? Math.min(1, Math.max(0, savedVolume)) : 1;
+                const savedMuted = this.load('muted', false);
+                if (savedMuted) return 0;
+                return v;
+            })(),
+            volumeBeforeMute: (() => {
+                const savedMuted = this.load('muted', false);
+                if (savedMuted) {
+                    const savedVolume = Number(this.load('volume', 1));
+                    return Number.isFinite(savedVolume) ? Math.min(1, Math.max(0, savedVolume)) : 1;
+                }
+                const v = this.load('volumeBeforeMute', 1);
+                return Number.isFinite(Number(v)) ? Math.min(1, Math.max(0, Number(v))) : 1;
+            })()
         };
         this.subscribers = [];
         this.applyTheme(this.state.theme);
@@ -112,7 +128,7 @@ class Store {
             if (v === 'artists' || v === 'songs') this.save('library_tab', v);
         }
         if (patch.volume !== undefined) this.save('volume', patch.volume);
-        if (patch.muted !== undefined) this.save('muted', patch.muted);
+        if (patch.volumeBeforeMute !== undefined) this.save('volumeBeforeMute', patch.volumeBeforeMute);
         if (patch.playlists !== undefined) this.save('playlists', patch.playlists);
         console.log("State Update:", Object.keys(patch));
         this.subscribers.forEach(cb => cb(this.state));
@@ -190,12 +206,26 @@ class Store {
             this.update({ library: data.tracks, playlists, isOnline: true });
             this.save('library', data.tracks);
             this.save('playlists', playlists);
+            await this.fetchLibraryYoutubeIds();
             return true;
         } catch (err) {
             console.error("Library sync error:", err);
             this.update({ isOnline: false });
             connectionManager.startReconnectionLoop();
             return false;
+        }
+    }
+
+    async fetchLibraryYoutubeIds() {
+        try {
+            const res = await fetch(`${this.apiBase}/api/library/youtube-ids?t=${Date.now()}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            const ids = Array.isArray(data.youtube_ids) ? data.youtube_ids : [];
+            const map = data.youtube_to_track_id && typeof data.youtube_to_track_id === 'object' ? data.youtube_to_track_id : {};
+            this.update({ libraryYoutubeIds: ids, youtubeToTrackId: map });
+        } catch (err) {
+            console.error("Library youtube-ids fetch error:", err);
         }
     }
 
@@ -261,10 +291,6 @@ class Store {
             console.error("Repeat toggle error:", err);
             return false;
         }
-    }
-
-    toggleMute() {
-        this.update({ muted: !this.state.muted });
     }
 
     async toggleFavourite(trackId) {

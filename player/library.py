@@ -527,25 +527,21 @@ class LibraryManager:
                 self._log("Deleting all files from cloud storage...")
                 files = self.provider.list_files()
                 for file_info in files:
-                    self._log(f"  Deleting: {file_info['key']}")
-                    self.provider.delete_file(file_info['key'])
+                    remote_key = file_info.get('key') or file_info.get('Key')
+                    if not remote_key:
+                        continue
+                    self._log(f"  Deleting: {remote_key}")
+                    self.provider.delete_file(remote_key)
             
             # 2. Clear Local Cache
             if self.cache:
                 self._log("Clearing local media cache...")
                 self.cache.clear_cache()
             
-            # 3. Clear Local SQLite Database
-            self._log("Clearing local database...")
-            self.db.clear_all()
-            
-            # 4. Reset Memory Metadata
+            # 3. Reset Memory Metadata and persist empty state (disk, cloud, DB)
             self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-            
-            # 5. Remove local metadata file (library.json)
-            cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
-            if cache_path.exists():
-                os.remove(cache_path)
+            self._log("Clearing local database and saving empty manifest...")
+            self._save_metadata()
             
             self._log("✓ Library nuked successfully.")
             return True

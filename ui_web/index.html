@@ -513,29 +513,28 @@
         .discover-card-meta { flex: 1; min-width: 0; }
         .discover-card-title { font-size: 0.8125rem; font-weight: 600; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .discover-card-artist { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .discover-skeleton { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 1rem; background: var(--surface-overlay); border: 1px solid var(--glass-border); min-width: 0; }
-        .discover-skeleton-cover { width: 48px; height: 48px; flex-shrink: 0; border-radius: 0.75rem; background: var(--input-bg); }
-        .discover-skeleton-text { flex: 1; min-width: 0; }
-        .discover-skeleton-line { height: 12px; border-radius: 4px; background: var(--text-dim); opacity: 0.3; margin-bottom: 6px; }
-        .discover-skeleton-line:last-child { width: 60%; margin-bottom: 0; }
-        .discover-tinder-card-wrap .discover-skeleton-tinder { flex-direction: column; flex: 1; min-height: 0; padding: 1rem; text-align: center; }
-        .discover-tinder-card-wrap .discover-skeleton-tinder .discover-skeleton-cover { width: 100%; flex: 1; min-height: 0; aspect-ratio: 1; border-radius: 1rem; }
-        .discover-tinder-card-wrap .discover-skeleton-tinder .discover-skeleton-text { width: 100%; margin-top: 0.75rem; flex-shrink: 0; }
-        @keyframes discover-shimmer { 0% { opacity: 0.3; } 50% { opacity: 0.5; } 100% { opacity: 0.3; } }
-        .discover-skeleton-cover, .discover-skeleton-line { animation: discover-shimmer 1.5s ease-in-out infinite; }
-        @media (prefers-reduced-motion: reduce) { .discover-skeleton-cover, .discover-skeleton-line { animation: none; } }
+        /* Skeleton convention: same DOM as loaded content + is-skeleton on container + CSS placeholder/shimmer. Reuse skeleton-shimmer for any view. */
+        @keyframes skeleton-shimmer { 0% { opacity: 0.3; } 50% { opacity: 0.5; } 100% { opacity: 0.3; } }
+        .discover-tinder-card-wrap.is-skeleton .discover-card-cover { background: var(--input-bg) !important; background-image: none !important; animation: skeleton-shimmer 1.5s ease-in-out infinite; }
+        .discover-tinder-card-wrap.is-skeleton .discover-card-title,
+        .discover-tinder-card-wrap.is-skeleton .discover-card-artist { color: transparent; background: var(--text-dim); opacity: 0.35; border-radius: 4px; min-height: 0.8125em; animation: skeleton-shimmer 1.5s ease-in-out infinite; }
+        .discover-tinder-card-wrap.is-skeleton .discover-card-artist { min-height: 0.625em; }
+        @media (prefers-reduced-motion: reduce) { .discover-tinder-card-wrap.is-skeleton .discover-card-cover, .discover-tinder-card-wrap.is-skeleton .discover-card-title, .discover-tinder-card-wrap.is-skeleton .discover-card-artist { animation: none; } }
         /* Tinder-style single card stack — mobile: card fills screen */
         #view-discover #discover-sections { display: flex; flex-direction: column; min-height: 0; }
-        .discover-tinder-wrap { display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; justify-content: center; padding: 0.5rem 0; }
-        .discover-tinder-card-wrap { position: relative; width: 100%; max-width: min(400px, 95vw); flex: 1; min-height: 0; display: flex; flex-direction: column; }
-        .discover-tinder-card-wrap .discover-card { flex: 1; min-height: 0; flex-direction: column; padding: 1rem; text-align: center; display: flex; }
-        .discover-tinder-card-wrap .discover-card-cover { width: 100%; flex: 1; min-height: 0; aspect-ratio: 1; border-radius: 1rem; }
-        .discover-tinder-card-wrap .discover-card-meta { width: 100%; margin-top: 0.75rem; flex-shrink: 0; }
+        .discover-tinder-outer { display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex: 1; min-height: 0; width: 100%; padding: 0.5rem 0; }
+        .discover-tinder-side-btn { width: 48px; height: 48px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid var(--glass-border); background: var(--surface-overlay); color: var(--text-main); font-size: 1rem; transition: transform 0.2s, background 0.2s, opacity 0.2s; }
+        .discover-tinder-side-btn:not(:disabled):active { transform: scale(0.95); }
+        .discover-tinder-side-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .discover-tinder-wrap { display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; justify-content: center; min-width: 0; }
+        .discover-tinder-card-wrap { position: relative; width: 100%; max-width: min(400px, 95vw); display: flex; flex-direction: column; border-radius: 24px; overflow: hidden; background: var(--surface-overlay); box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+        .discover-tinder-card-wrap .discover-card { flex-direction: column; padding: 1rem; text-align: center; display: flex; background: transparent; }
+        .discover-tinder-card-wrap .discover-card-cover { width: 100%; height: auto; aspect-ratio: 1; border-radius: 1rem; background-size: cover; background-position: center; }
+        .discover-tinder-card-wrap .discover-card-meta { width: 100%; margin-top: 0.75rem; }
         .discover-tinder-card-wrap .discover-card-play { border-radius: 1rem; }
-        .discover-tinder-actions { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin-top: 1rem; flex-shrink: 0; }
+        .discover-tinder-actions { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin-top: 1rem; padding-bottom: 0.25rem; }
         .discover-tinder-btn { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: none; font-size: 1.25rem; transition: transform 0.2s, background 0.2s; }
         .discover-tinder-btn:active { transform: scale(0.95); }
-        .discover-tinder-skip { background: var(--surface-overlay); color: var(--text-dim); border: 2px solid var(--glass-border); }
         .discover-tinder-play { background: var(--accent); color: var(--text-on-accent); }
         .discover-tinder-add { background: var(--surface-overlay); color: var(--accent); border: 2px solid var(--glass-border); }
         .discover-tinder-empty { text-align: center; padding: 2rem 1rem; color: var(--text-dim); font-size: 0.875rem; }
@@ -1172,6 +1171,8 @@
                     <!-- Library -->
                     <div class="glass-view rounded-[var(--radius-omni)] p-6 border border-[var(--glass-border)] transition-all duration-200">
                         <h2 class="text-lg font-bold tracking-tight mb-2" style="letter-spacing: -0.02em;">Library</h2>
+                        <p class="text-sm text-[var(--text-dim)] mb-4">Reset the library to an empty state. All tracks, playlists, and cloud data will be permanently deleted. This cannot be undone.</p>
+                        <button type="button" id="settings-wipe-library-btn" class="px-4 py-2.5 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-red-500/15 text-red-400 border border-red-500/40 hover:bg-red-500/25 transition-colors">Wipe library</button>
                     </div>
                 </div>
             </div>
@@ -1316,6 +1317,22 @@
             </div>
             <div id="add-to-playlist-picker-list" class="max-h-64 overflow-y-auto p-2 space-y-1 custom-scrollbar"></div>
             <button type="button" id="add-to-playlist-picker-close" class="w-full p-4 text-sm font-bold text-[var(--text-dim)] active:bg-[var(--surface-overlay)] transition-colors border-t border-[var(--glass-border)]">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Wipe library confirmation modal -->
+    <div id="wipe-library-modal" class="fixed inset-0 z-[265] hidden flex items-center justify-center p-4 touch-none" style="background-color: var(--overlay-bg);">
+        <div id="wipe-library-modal-backdrop" class="absolute inset-0" style="backdrop-filter: blur(4px);"></div>
+        <div class="glass-view rounded-[var(--radius-omni)] w-full max-w-md p-6 border border-[var(--glass-border)] shadow-2xl">
+            <h3 class="text-lg font-bold tracking-tight mb-2 text-[var(--text-main)]">Wipe library</h3>
+            <p class="text-sm text-[var(--text-dim)] mb-4">This will permanently delete all tracks, playlists, and library data from this device and cloud storage. This action cannot be undone.</p>
+            <p class="text-xs text-[var(--text-dim)] mb-2">Type <strong class="text-[var(--text-main)]">CONFIRM</strong> or <strong class="text-[var(--text-main)]">confirm</strong> to proceed:</p>
+            <input type="text" id="wipe-library-confirm-input" class="input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-2.5 text-sm mb-4" placeholder="Type CONFIRM or confirm" autocomplete="off">
+            <p id="wipe-library-error" class="text-xs text-red-400 mb-2 hidden"></p>
+            <div class="flex gap-3 justify-end">
+                <button type="button" id="wipe-library-cancel" class="px-4 py-2.5 rounded-[var(--radius-omni-xs)] text-sm font-bold text-[var(--text-dim)] hover:text-[var(--text-main)] transition-colors">Cancel</button>
+                <button type="button" id="wipe-library-submit" class="px-4 py-2.5 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>Wipe library</button>
+            </div>
         </div>
     </div>
 

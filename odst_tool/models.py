@@ -38,6 +38,7 @@ class Track:
     isrc: Optional[str] = None
     cover_source: Optional[str] = None
     metadata_modified_by_user: bool = False
+    youtube_id: Optional[str] = None
 
     @staticmethod
     def generate_id() -> str:

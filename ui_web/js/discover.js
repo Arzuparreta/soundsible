@@ -105,22 +105,20 @@ export const Discover = {
 
     _renderSkeleton() {
         if (!this._sectionsEl) return;
+        const cardHtml = this._renderShelfCard(null, { skeleton: true });
         this._sectionsEl.innerHTML = `
-            <div class="discover-tinder-wrap" aria-busy="true">
-                <div class="discover-tinder-card-wrap">
-                    <div class="discover-skeleton discover-skeleton-tinder">
-                        <div class="discover-skeleton-cover"></div>
-                        <div class="discover-skeleton-text">
-                            <div class="discover-skeleton-line"></div>
-                            <div class="discover-skeleton-line"></div>
+            <div class="discover-tinder-outer">
+                <button type="button" class="discover-tinder-side-btn discover-tinder-prev" disabled aria-hidden="true"><i class="fas fa-chevron-left"></i></button>
+                <div class="discover-tinder-wrap" aria-busy="true">
+                    <div class="discover-tinder-card-wrap is-skeleton" aria-busy="true">
+                        ${cardHtml}
+                        <div class="discover-tinder-actions">
+                            <button type="button" class="discover-tinder-btn discover-tinder-play" disabled aria-hidden="true"><i class="fas fa-play"></i></button>
+                            <button type="button" class="discover-tinder-btn discover-tinder-add" disabled aria-hidden="true"><i class="fas fa-cloud-download-alt"></i></button>
                         </div>
                     </div>
                 </div>
-                <div class="discover-tinder-actions">
-                    <div class="discover-tinder-btn discover-tinder-skip" aria-hidden="true"></div>
-                    <div class="discover-tinder-btn discover-tinder-play" aria-hidden="true"></div>
-                    <div class="discover-tinder-btn discover-tinder-add" aria-hidden="true"></div>
-                </div>
+                <button type="button" class="discover-tinder-side-btn discover-tinder-next" disabled aria-hidden="true"><i class="fas fa-chevron-right"></i></button>
             </div>
         `;
     },
@@ -133,40 +131,46 @@ export const Discover = {
         return [{ id: 'for-you', name: 'For you', results }];
     },
 
-    _renderShelfCard(r) {
-        const rawCover = r.cover_url || r.thumbnail || '';
+    _renderShelfCard(r, opts = {}) {
+        const skeleton = opts.skeleton === true;
+        const item = skeleton ? {} : (r || {});
+        const rawCover = item.cover_url || item.thumbnail || '';
         const cover_url = ensureHttpsImageUrl(rawCover);
         const thumb = cover_url ? cover_url.replace(/"/g, '%22') : '';
         const placeholder = getDiscoverPlaceholderUrl().replace(/"/g, '%22');
         // Single quotes in url() so style="..." attribute is not broken by inner "
-        const coverStyle = cover_url
-            ? `background-image: url('${escapeCssUrl(cover_url)}')`
-            : `background-image: url('${escapeCssUrl(placeholder)}'); background-color: var(--input-bg);`;
-        const richMetaStr = escape(JSON.stringify({
+        const coverStyle = skeleton
+            ? ''
+            : cover_url
+                ? `background-image: url('${escapeCssUrl(cover_url)}')`
+                : `background-image: url('${escapeCssUrl(placeholder)}'); background-color: var(--input-bg);`;
+        const richMetaStr = skeleton ? escape('{}') : escape(JSON.stringify({
             title: r.title,
             artist: r.artist,
             album: r.album,
             album_artist: r.album_artist,
             duration_sec: r.duration_sec,
             cover_url: r.cover_url,
-            thumbnail: r.thumbnail, // Include thumbnail in rich metadata
+            thumbnail: r.thumbnail,
             isrc: r.isrc,
             year: r.year,
             track_number: r.track_number,
             video_id: r.id
         }));
 
+        const titleText = skeleton ? '\u00A0' : esc(item.title || r?.title || '');
+        const artistText = skeleton ? '\u00A0' : esc(item.artist || item.channel || r?.artist || r?.channel || '');
+
         return `
-            <div class="discover-card discover-result-row relative" data-video-id="${esc(r.id)}" data-title="${esc(r.title)}" data-artist="${esc(r.artist || r.channel || '')}" data-duration="${r.duration || 0}" data-webpage-url="${esc(r.webpage_url || '')}" data-thumbnail="${esc(thumb)}" data-rich-metadata="${richMetaStr}">
+            <div class="discover-card discover-result-row relative" data-video-id="${esc(item.id || '')}" data-title="${esc(item.title || '')}" data-artist="${esc(item.artist || item.channel || '')}" data-duration="${item.duration || r?.duration || 0}" data-webpage-url="${esc(item.webpage_url || '')}" data-thumbnail="${esc(thumb)}" data-rich-metadata="${richMetaStr}">
                 <button type="button" class="discover-card-play absolute inset-0 z-[1] flex items-center justify-center rounded-xl bg-black/0 hover:bg-black/30 active:bg-black/40 transition-colors group focus:outline-none focus:ring-2 focus:ring-[var(--accent)]" aria-label="Play preview">
                     <span class="opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity w-12 h-12 flex items-center justify-center rounded-full bg-[var(--accent)]/90 text-[var(--text-on-accent)]"><i class="fas fa-play text-lg ml-0.5"></i></span>
                 </button>
-                <div class="discover-card-cover ${!cover_url ? 'discover-card-cover-placeholder' : ''}" style="${coverStyle}" role="img" aria-label="${cover_url ? '' : 'No cover'}"></div>
+                <div class="discover-card-cover ${!cover_url && !skeleton ? 'discover-card-cover-placeholder' : ''}" style="${coverStyle}" role="img" aria-label="${cover_url ? '' : 'No cover'}"></div>
                 <div class="discover-card-meta">
-                    <div class="discover-card-title">${esc(r.title)}</div>
-                    <div class="discover-card-artist">${esc(r.artist || r.channel || '')}</div>
+                    <div class="discover-card-title">${titleText}</div>
+                    <div class="discover-card-artist">${artistText}</div>
                 </div>
-                <button type="button" class="discover-add-btn relative z-[2] w-10 h-10 flex items-center justify-center rounded-full bg-[var(--accent)]/20 hover:bg-[var(--accent)] text-[var(--accent)] hover:text-[var(--text-on-accent)] transition-colors flex-shrink-0" aria-label="Add to download queue"><i class="fas fa-cloud-download-alt text-sm"></i></button>
             </div>
         `;
     },
@@ -255,21 +259,25 @@ export const Discover = {
         }
         const cardHtml = this._renderShelfCard(r);
         this._sectionsEl.innerHTML = `
-            <div class="discover-tinder-wrap">
-                <div class="discover-tinder-card-wrap">
-                    ${cardHtml}
+            <div class="discover-tinder-outer">
+                <button type="button" class="discover-tinder-side-btn discover-tinder-prev" aria-label="Previous" ${this._bufferIndex === 0 ? ' disabled' : ''}><i class="fas fa-chevron-left"></i></button>
+                <div class="discover-tinder-wrap">
+                    <div class="discover-tinder-card-wrap">
+                        ${cardHtml}
+                        <div class="discover-tinder-actions">
+                            <button type="button" class="discover-tinder-btn discover-tinder-play" aria-label="Play"><i class="fas fa-play"></i></button>
+                            <button type="button" class="discover-tinder-btn discover-tinder-add" aria-label="Add to queue"><i class="fas fa-cloud-download-alt"></i></button>
+                        </div>
+                    </div>
                 </div>
-                <div class="discover-tinder-actions">
-                    <button type="button" class="discover-tinder-btn discover-tinder-skip" aria-label="Skip"><i class="fas fa-times"></i></button>
-                    <button type="button" class="discover-tinder-btn discover-tinder-play" aria-label="Play"><i class="fas fa-play"></i></button>
-                    <button type="button" class="discover-tinder-btn discover-tinder-add" aria-label="Add to queue"><i class="fas fa-cloud-download-alt"></i></button>
-                </div>
+                <button type="button" class="discover-tinder-side-btn discover-tinder-next" aria-label="Next"><i class="fas fa-chevron-right"></i></button>
             </div>`;
         this._bindTinderActions();
     },
 
     _bindTinderActions() {
         if (!this._sectionsEl) return;
+        const outer = this._sectionsEl.querySelector('.discover-tinder-outer');
         const wrap = this._sectionsEl.querySelector('.discover-tinder-wrap');
         const cardWrap = this._sectionsEl.querySelector('.discover-tinder-card-wrap');
         const row = this._sectionsEl.querySelector('.discover-result-row');
@@ -282,8 +290,18 @@ export const Discover = {
             this._renderTinderStack();
         };
 
-        const skipBtn = wrap.querySelector('.discover-tinder-skip');
-        if (skipBtn) skipBtn.addEventListener('click', () => advance());
+        const goPrevious = () => {
+            if (this._bufferIndex > 0) {
+                this._bufferIndex--;
+                this._renderTinderStack();
+            }
+        };
+
+        const prevBtn = outer?.querySelector('.discover-tinder-prev');
+        if (prevBtn && !prevBtn.disabled) prevBtn.addEventListener('click', goPrevious);
+
+        const nextBtn = outer?.querySelector('.discover-tinder-next');
+        if (nextBtn) nextBtn.addEventListener('click', advance);
 
         const addBtn = wrap.querySelector('.discover-tinder-add');
         if (addBtn) addBtn.addEventListener('click', async () => {
@@ -325,19 +343,11 @@ export const Discover = {
             }
             if (typeof window.playPreview === 'function') window.playPreview(resolved);
         });
-        row.querySelector('.discover-add-btn')?.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const item = this._itemFromRow(row);
-            if (!item) return;
-            const resolved = await this._resolveItemCached(item, row);
-            if (resolved && resolved.webpage_url) this._addToQueue(resolved);
-            advance();
-        });
 
-        this._bindTinderSwipe(cardWrap, row, advance, addBtn);
+        this._bindTinderSwipe(cardWrap, row, advance, goPrevious);
     },
 
-    _bindTinderSwipe(cardWrap, row, onSkip, onAdd) {
+    _bindTinderSwipe(cardWrap, row, onNext, onPrevious) {
         if (!cardWrap || !row) return;
         let startX = 0;
         let startY = 0;
@@ -351,8 +361,8 @@ export const Discover = {
             const dy = e.changedTouches[0].clientY - startY;
             const threshold = 60;
             if (Math.abs(dx) > threshold && Math.abs(dx) > Math.abs(dy)) {
-                if (dx < 0) onSkip();
-                else if (onAdd) onAdd.click();
+                if (dx < 0) onPrevious?.();
+                else onNext();
             }
         }, { passive: true });
     },
