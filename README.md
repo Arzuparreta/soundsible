@@ -240,7 +240,7 @@ Internal and troubleshooting docs:
 
 ## Third‑party components
 
-Soundsible relies on the following; they are not bundled. Install FFmpeg yourself (see [Requirements](#quick-start) and [docs/INSTALL.md](docs/INSTALL.md)).
+Soundsible relies on the following; They are not bundled but indeed installed automatically for users.
 
 - **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** – Unlicense (public domain). YouTube/YT Music download and search.
 - **[FFmpeg](https://ffmpeg.org/)** – LGPL/GPL. Audio conversion and extraction; install via your OS.
