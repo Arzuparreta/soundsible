@@ -48,7 +48,7 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 - **Smart library management**: Edit metadata, change covers, and manage your collection directly from the UI.
 - **Universal sync**: Your playlists, favorites, metadata, and settings stay in sync across devices.
 
-<p align="center">
+<p align="left">
   <img src="docs/images/desktop-library.png" alt="Soundsible desktop library view" width="640" />
 </p>
 
@@ -58,7 +58,7 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 - **Configurable sources**: Choose between YouTube Music / YouTube as the search & download source.
 - **Lossless‑first**: Downloader defaults to **lossless** where possible. It's configurable in settings.
 
-<p align="center">
+<p align="left">
   <img src="docs/images/mobile-discover.png" alt="Soundsible mobile discover screen" width="240" />
   <img src="docs/images/mobile-library.png" alt="Soundsible mobile library screen" width="240" />
   <img src="docs/images/mobile-nowplaying.png" alt="Soundsible mobile now playing screen" width="240" />
