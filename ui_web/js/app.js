@@ -1294,7 +1294,7 @@ function renderContentForView(viewId) {
             break;
         case 'discover':
             import('./downloader.js').then((dm) => { dm.Downloader.init(); });
-            import('./discover.js').then((m) => { if (m.Discover) m.Discover.init({ mobile: true }); });
+            import('./discover.js').then((m) => { if (m.Discover) m.Discover.ensureInited({ mobile: true }); });
             import('./search.js').then((searchMod) => {
                 window.unifiedSearch = searchMod.unifiedSearch;
                 searchMod.unifiedSearch.init({ mobile: true, resultsContainerId: 'discover-search-results' });

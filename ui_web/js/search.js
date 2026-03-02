@@ -104,7 +104,7 @@ function updateDiscoverPanels(showSearchResults) {
         }, 500);
         return;
     }
-    if (isDiscoverPage && !isMobile) {
+    if (isDiscoverPage && !isMobile && typeof DesktopUI !== 'undefined' && DesktopUI.currentView === 'discover') {
         const viewDiscover = document.getElementById('desktop-view-discover');
         const viewDiscoverSearch = document.getElementById('desktop-view-discover-search');
         if (viewDiscover && viewDiscoverSearch) {

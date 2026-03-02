@@ -49,7 +49,7 @@ export const DesktopUI = {
         if (viewEl) viewEl.classList.add('active');
         if (btnEl) btnEl.classList.add('active');
         if (viewId === 'discover') {
-            import('./discover.js').then((m) => m.Discover && m.Discover.init({ mobile: false }));
+            import('./discover.js').then((m) => m.Discover && m.Discover.ensureInited({ mobile: false }));
         }
     },
 

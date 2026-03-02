@@ -44,6 +44,8 @@ export const Discover = {
     _buffer: [],
     _bufferIndex: 0,
     _refillInFlight: false,
+    _sessionExcludeIds: null,
+    _inited: false,
 
     async init(options = {}) {
         this._mobile = options.mobile !== false;
@@ -56,6 +58,7 @@ export const Discover = {
         this._contentPanel = document.getElementById(prefix + 'discover-content-panel');
         this._pageEl = document.getElementById(this._mobile ? 'view-discover' : 'desktop-view-discover');
         this._scrollEl = this._contentPanel;
+        if (!this._sessionExcludeIds) this._sessionExcludeIds = new Set();
         this._bindLastfmConfig();
         await this._updateConfigVisibility();
         this._syncVisibility();
@@ -69,6 +72,15 @@ export const Discover = {
         }
         this._bindPullToRefresh();
         if (this._hasLibrary()) this._fetchRecommendations();
+        this._inited = true;
+    },
+
+    async ensureInited(options = {}) {
+        if (this._inited) {
+            if (this._sectionsEl && this._buffer && this._buffer.length > 0) this._renderTinderStack();
+            return;
+        }
+        await this.init(options);
     },
 
     _bindPullToRefresh() {
@@ -239,13 +251,18 @@ export const Discover = {
             return;
         }
         if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
+        if (!this._sessionExcludeIds) this._sessionExcludeIds = new Set();
         if (this._pendingRefill) {
             this._pendingRefill = false;
             this._refillInFlight = false;
-            if (results.length > 0) this._buffer.push(results[0]);
+            if (results.length > 0) {
+                this._buffer.push(results[0]);
+                if (results[0].id) this._sessionExcludeIds.add(results[0].id);
+            }
         } else {
             this._buffer = results.slice();
             this._bufferIndex = 0;
+            results.forEach((item) => { if (item && item.id) this._sessionExcludeIds.add(item.id); });
         }
         this._renderTinderStack();
     },
@@ -458,7 +475,7 @@ export const Discover = {
             this._buffer = this._buffer.slice(this._bufferIndex);
             this._bufferIndex = 0;
         }
-        const exclude_ids = this._buffer.map((i) => i.id).filter(Boolean);
+        const exclude_ids = this._sessionExcludeIds ? Array.from(this._sessionExcludeIds) : [];
         this._pendingRefill = true;
         this._refillInFlight = true;
         const apiBase = getApiBase();
@@ -701,6 +718,7 @@ export const Discover = {
 
     refresh() {
         if (!this._hasLibrary()) return;
+        if (this._sessionExcludeIds) this._sessionExcludeIds.clear();
         this._buffer = [];
         this._bufferIndex = 0;
         this._pendingRefill = false;

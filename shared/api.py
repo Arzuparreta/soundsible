@@ -1606,7 +1606,7 @@ def discover_recommendations():
         from recommendations.service import RecommendationsService
         from recommendations.providers import LastFmRecommendationProvider
         from recommendations.providers.base import Seed
-        from recommendations.util import raw_stable_id, raw_to_dict
+        from recommendations.util import raw_stable_id, raw_to_dict, normalize_artist_title
         from dotenv import dotenv_values
 
         seed_objs = [Seed(artist=s["artist"], title=s["title"]) for s in seeds]
@@ -1623,12 +1623,20 @@ def discover_recommendations():
         if reason and not raw_list:
             return jsonify({"results": [], "reason": reason}), 200
 
-        # 3. Convert to dicts with stable id; filter by client-sent exclude_ids only
+        # 3. Build library keys so we never recommend tracks the user already has
+        library_keys = {
+            normalize_artist_title(t.get("artist") or "", t.get("title") or "")
+            for t in library_tracks
+            if t
+        }
+        # 4. Convert to dicts with stable id; filter by exclude_ids and library
         exclude_set = {str(x) for x in exclude_ids if x}
         results = []
         for r in raw_list:
             artist = r.get("artist") or getattr(r, "artist", "") or ""
             title = r.get("title") or getattr(r, "title", "") or ""
+            if normalize_artist_title(artist, title) in library_keys:
+                continue
             sid = raw_stable_id(artist, title)
             if sid in exclude_set:
                 continue
