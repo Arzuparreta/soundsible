@@ -20,7 +20,7 @@ Thanks for your interest in contributing – every bug report, idea, and pull re
 
 3. **Run the app in development**
 
-   The fastest way is to use the launcher:
+   The easiest way is to use the launcher:
 
    ```bash
    ./venv/bin/python start_launcher.py
