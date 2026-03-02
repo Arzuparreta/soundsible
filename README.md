@@ -1,12 +1,10 @@
 # <img src="branding/logo-app.png" alt="Soundsible" width="52" height="52" align="center"> **Soundsible**
 
-**Self-hosted, full‑featured music environment with a premium, across device experience.**
+<img src="docs/images/mobile-nowplaying.png" alt="Soundsible mobile now playing screen" width="320" align="right" />
 
-**Soundsible** replicates how a high‑end streaming platform works, but for your **own music**. It lets you **listen** to a self‑hosted library from anywhere in the world, **search** YT Music / YT, **download & save / upload** content to your library with all the metadata that a high-end streaming platform offers, **manage** your library and metadata from any device, **sync** your playback and queue across sessions and devices, **discover** music providing an optional last.fm free API key for recommendations, etc...
+**Self-hosted, full‑featured music environment with a premium, mobile‑first experience.**
 
-<p align="center">
-  <img src="docs/images/mobile-nowplaying.png" alt="Soundsible mobile now playing screen" width="320" />
-</p>
+Soundsible replicates how a high‑end streaming platform works, but for your **own music**. It lets you **download**, **manage**, and **listen** to a self‑hosted library from anywhere, with optional access over [Tailscale](https://github.com/tailscale/tailscale).
 
 ---
 
@@ -43,7 +41,7 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 ### Listening & library
 
 - **Unified search**: Search your **library** and the **internet** from the same search bar.
-- **High‑quality playback**: Engine ensures **maximum audio quality**.
+- **High‑quality playback**: Engine focused on **maximum audio quality**.
 - **Smart library management**: Edit metadata, change covers, and manage your collection directly from the Station UI.
 - **Universal sync**: Your playlists, favorites, metadata, and settings stay in sync across devices.
 
@@ -53,10 +51,10 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 
 ### Discovery & downloading
 
-- **Built‑in downloader (ODST)**: Download music from YouTube or YouTube Music from inside the app. This basically uses [yt-dlp](https://github.com/yt-dlp/yt-dlp), properly fixes the metadata that it doesn't provide, and uploads everything to your music library and SQLite database seamessly.
+- **Built‑in downloader (ODST)**: Download music from YouTube or YouTube Music from inside the app.
 - **Configurable sources**: Choose between YouTube Music / YouTube as the search & download source.
-- **Lossless‑first**: Downloader defaults to **lossless** quality audio but it's configurable in settings.
-- **Opotional** recommendeds songs section, feeded with an optional, free, last.fm API key. Unless users manually provide this KEY is completely disabled by default.
+- **Rich metadata**: Automatically fetches tags and artwork, with fallbacks for non‑music tracks.
+- **Lossless‑first**: Downloader defaults to **lossless** where possible, with manual quality selection.
 
 <p align="center">
   <img src="docs/images/mobile-discover.png" alt="Soundsible mobile discover screen" width="260" />
@@ -67,6 +65,7 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 
 - **Flexible storage**: Store files on local disk, NAS, or supported object storage.
 - **Cloud backends**: Setup wizard includes options for Cloudflare R2, Backblaze B2/R2, and S2.
+- **High‑grade cover fetching**: Prioritises high‑quality artwork with sensible fallbacks.
 
 ---
 
