@@ -30,6 +30,7 @@ Soundsible replicates how a high‑end streaming platform works, but for your **
 - [Platforms & clients](#platforms--clients)
 - [Technical details & architecture](#technical-details--architecture)
 - [Documentation](#documentation)
+- [Third‑party components](#third-party-components)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -84,6 +85,7 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 
 - Python **3.10+**
 - `git`
+- **FFmpeg** (installed via your OS package manager; required for downloading and audio conversion). Examples: `sudo apt install ffmpeg` (Debian/Ubuntu), `sudo pacman -S ffmpeg` (Arch), `brew install ffmpeg` (macOS). See [docs/INSTALL.md](docs/INSTALL.md) for more.
 - On Linux: `python3-venv`, `python3-pip` (package names may vary slightly by distro)
 
 ```bash
@@ -203,7 +205,7 @@ For low‑end or resource‑constrained devices (e.g. Raspberry Pi, thin clients
 ```
 
 On first run, this script creates a virtual environment and installs dependencies.  
-You may need additional system packages (GTK, mpv, LibAdwaita) depending on your distro.
+*Requires GTK/PyGObject, mpv, and LibAdwaita (see `gui.sh` or your distro docs for package names).*
 
 The GTK client focuses on core playback and may lag behind the Station web UI in features and UX.
 
@@ -233,6 +235,16 @@ Internal and troubleshooting docs:
 
 - [docs/yt-dlp-format-errors-log.md](docs/yt-dlp-format-errors-log.md)
 - [docs/discover-design-refs.md](docs/discover-design-refs.md)
+
+---
+
+## Third‑party components
+
+Soundsible relies on the following; they are not bundled. Install FFmpeg yourself (see [Requirements](#quick-start) and [docs/INSTALL.md](docs/INSTALL.md)).
+
+- **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** – Unlicense (public domain). YouTube/YT Music download and search.
+- **[FFmpeg](https://ffmpeg.org/)** – LGPL/GPL. Audio conversion and extraction; install via your OS.
+- **[ffmpeg-python](https://github.com/kkroening/ffmpeg-python)** – Apache 2.0. Python bindings for FFmpeg (installed via `pip`).
 
 ---
 

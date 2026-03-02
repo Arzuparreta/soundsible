@@ -2,6 +2,20 @@
 
 This document covers scenarios beyond the basic local quick start in `README.md`.
 
+### System dependencies (core)
+
+Required for the Station and ODST downloader:
+
+- **Python 3.10+** and **git** (see `README.md` for venv steps).
+- **FFmpeg** – not bundled; install via your OS package manager. Examples:
+  - Debian/Ubuntu: `sudo apt install ffmpeg`
+  - Arch: `sudo pacman -S ffmpeg`
+  - Fedora: `sudo dnf install ffmpeg`
+  - macOS: `brew install ffmpeg`
+  - Windows: [FFmpeg Windows builds](https://ffmpeg.org/download.html#build-windows) or `winget install ffmpeg`.
+
+Optional (feature-specific): a modern browser for the Station UI; [Tailscale](https://tailscale.com/) for remote access; NAS or object storage (R2/B2/S2) if you use those backends.
+
 ### 1. Running on a server (headless)
 
 1. SSH into your server and follow the same steps as local installation:
