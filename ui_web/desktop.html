@@ -391,7 +391,8 @@
         @media (prefers-reduced-motion: reduce) { .discover-tinder-card-wrap.is-skeleton .discover-card-cover, .discover-tinder-card-wrap.is-skeleton .discover-card-title, .discover-tinder-card-wrap.is-skeleton .discover-card-artist { animation: none; } }
         /* Discover tinder — desktop */
         #desktop-view-discover #desktop-discover-sections { display: flex; flex-direction: column; min-height: 0; align-items: center; justify-content: center; }
-        .discover-tinder-outer { position: relative; display: flex; align-items: center; justify-content: center; gap: 1rem; flex: 1; min-height: 0; width: 100%; }
+        .discover-tinder-outer { position: relative; display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex: 1; min-height: 0; width: 100%; }
+        #desktop-view-discover .discover-tinder-wrap { flex: 0 0 auto; }
         .discover-tinder-refresh-overlay { position: absolute; top: -2.5rem; left: 50%; transform: translateX(-50%); z-index: 2; padding: 0.5rem 1rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; background: var(--surface-overlay); color: var(--text-main); border: 1px solid var(--glass-border); box-shadow: 0 2px 8px rgba(0,0,0,0.2); pointer-events: auto; transition: background 0.2s, color 0.2s; }
         .discover-tinder-refresh-overlay:hover { background: var(--accent); color: var(--text-on-accent); }
         .discover-tinder-refresh-overlay:active { background: var(--accent); color: var(--text-on-accent); }

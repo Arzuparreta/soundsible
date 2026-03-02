@@ -1560,9 +1560,13 @@ def _resolve_recommendations_items(out_results: list):
                 title = (item.get("title") or "").strip()
                 if not title:
                     return
+                original_id = item.get("id")
                 res = _resolve_artist_title_to_youtube(artist, title)
                 if res:
                     item.update(res)
+                    if original_id:
+                        item["id"] = original_id
+                        item["video_id"] = res.get("id")
             futures = [pool.submit(resolve_one, item) for item in out_results]
             for future in as_completed(futures, timeout=resolve_timeout_sec):
                 try:
@@ -1614,7 +1618,7 @@ def discover_recommendations():
         _ODST_ENV_PATH = Path(__file__).resolve().parent.parent / "odst_tool" / ".env"
         _env_vars = dotenv_values(_ODST_ENV_PATH) if _ODST_ENV_PATH.exists() else {}
         lastfm_key = os.getenv("LASTFM_API_KEY") or _env_vars.get("LASTFM_API_KEY")
-        lastfm_provider = LastFmRecommendationProvider(lastfm_key, None)
+        lastfm_provider = LastFmRecommendationProvider(lastfm_key)
         svc = RecommendationsService(lastfm_provider, None)  # downloader=None: resolve=False, do not init ODST here
         request_limit = min(100, limit + 20)
         raw_list, reason = svc.get_recommendations(

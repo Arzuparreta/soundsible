@@ -1,7 +1,7 @@
 """Last.fm recommendation provider using track.getSimilar API."""
 
 import urllib.parse
-from typing import List, Optional, Any
+from typing import List, Optional
 
 import requests
 
@@ -13,9 +13,8 @@ LASTFM_API_BASE = "https://ws.audioscrobbler.com/2.0/"
 class LastFmRecommendationProvider(RecommendationProvider):
     """Uses Last.fm track.getSimilar. Requires LASTFM_API_KEY."""
 
-    def __init__(self, api_key: Optional[str] = None, cache: Optional[Any] = None):
+    def __init__(self, api_key: Optional[str] = None):
         self._api_key = (api_key or "").strip()
-        self._cache = cache
 
     @property
     def is_available(self) -> bool:

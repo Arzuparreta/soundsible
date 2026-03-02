@@ -104,16 +104,18 @@ function updateDiscoverPanels(showSearchResults) {
         }, 500);
         return;
     }
-    if (isDiscoverPage && !isMobile && typeof DesktopUI !== 'undefined' && DesktopUI.currentView === 'discover') {
+    if (isDiscoverPage && !isMobile && typeof window.UI !== 'undefined' && window.UI.currentView === 'discover') {
         const viewDiscover = document.getElementById('desktop-view-discover');
         const viewDiscoverSearch = document.getElementById('desktop-view-discover-search');
         if (viewDiscover && viewDiscoverSearch) {
             if (showSearchResults) {
                 viewDiscover.classList.remove('active');
                 viewDiscoverSearch.classList.add('active');
+                if (resultsEl) resultsEl.classList.remove('hidden');
             } else {
                 viewDiscoverSearch.classList.remove('active');
                 viewDiscover.classList.add('active');
+                if (resultsEl) resultsEl.classList.add('hidden');
             }
         }
         return;

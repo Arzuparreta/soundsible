@@ -1,13 +1,14 @@
 /**
  * Discover: recommendations UI (mobile + desktop).
- * Buffer of 3 resolved items; API returns already-resolved items. Skip / Play / Add. Refill when <=2 remaining.
+ * Buffer of 5 resolved items; API returns already-resolved items. Skip / Play / Add. Refill when <=3 remaining, same batch size as initial.
  */
 import { store } from './store.js';
+import { audioEngine } from './audio.js';
 import { Resolver } from './resolver.js';
 import { esc } from './renderers.js';
 
-const INITIAL_BUFFER_LIMIT = 3;
-const REFILL_LIMIT = 1;
+const INITIAL_BUFFER_LIMIT = 5;
+const REFILL_WHEN_REMAINING_AT_MOST = 3;
 
 /** Safe API base: prefer store.apiBase when activeHost is set, else same-origin (e.g. app and API on same host:port). */
 function getApiBase() {
@@ -72,6 +73,7 @@ export const Discover = {
         }
         this._bindPullToRefresh();
         if (this._hasLibrary()) this._fetchRecommendations();
+        store.subscribe((state) => this._syncTinderPlayButton(state));
         this._inited = true;
     },
 
@@ -173,14 +175,15 @@ export const Discover = {
             isrc: r.isrc,
             year: r.year,
             track_number: r.track_number,
-            video_id: r.id
+            video_id: r.video_id ?? r.id
         }));
 
+        const playbackId = (item.video_id ?? item.id) || '';
         const titleText = skeleton ? '\u00A0' : esc(item.title || r?.title || '');
         const artistText = skeleton ? '\u00A0' : esc(item.artist || item.channel || r?.artist || r?.channel || '');
 
         return `
-            <div class="discover-card discover-result-row relative" data-video-id="${esc(item.id || '')}" data-title="${esc(item.title || '')}" data-artist="${esc(item.artist || item.channel || '')}" data-duration="${item.duration || r?.duration || 0}" data-webpage-url="${esc(item.webpage_url || '')}" data-thumbnail="${esc(thumb)}" data-rich-metadata="${richMetaStr}">
+            <div class="discover-card discover-result-row relative" data-video-id="${esc(playbackId)}" data-title="${esc(item.title || '')}" data-artist="${esc(item.artist || item.channel || '')}" data-duration="${item.duration || r?.duration || 0}" data-webpage-url="${esc(item.webpage_url || '')}" data-thumbnail="${esc(thumb)}" data-rich-metadata="${richMetaStr}">
                 <button type="button" class="discover-card-play absolute inset-0 z-[1] flex items-center justify-center rounded-xl bg-black/0 hover:bg-black/30 active:bg-black/40 transition-colors group focus:outline-none focus:ring-2 focus:ring-[var(--accent)]" aria-label="Play preview">
                     <span class="opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity w-12 h-12 flex items-center justify-center rounded-full bg-[var(--accent)]/90 text-[var(--text-on-accent)]"><i class="fas fa-play text-lg ml-0.5"></i></span>
                 </button>
@@ -255,10 +258,8 @@ export const Discover = {
         if (this._pendingRefill) {
             this._pendingRefill = false;
             this._refillInFlight = false;
-            if (results.length > 0) {
-                this._buffer.push(results[0]);
-                if (results[0].id) this._sessionExcludeIds.add(results[0].id);
-            }
+            this._buffer.push(...results);
+            results.forEach((item) => { if (item && item.id) this._sessionExcludeIds.add(item.id); });
         } else {
             this._buffer = results.slice();
             this._bufferIndex = 0;
@@ -286,7 +287,8 @@ export const Discover = {
         }
         const cardHtml = this._renderShelfCard(r);
         const ids = store.state.libraryYoutubeIds || [];
-        const inLibrary = isYoutubeId(r.id) && ids.includes(r.id);
+        const playbackId = r.video_id ?? r.id;
+        const inLibrary = isYoutubeId(playbackId) && ids.includes(playbackId);
         const dlIcon = inLibrary ? 'fa-sync-alt' : 'fa-cloud-download-alt';
         const dlAria = inLibrary ? 'Re-download' : 'Add to queue';
         const tooltipAttrs = inLibrary ? ' data-hover-tooltip="Download again" data-hover-tooltip-delay="1000"' : '';
@@ -309,6 +311,18 @@ export const Discover = {
         this._bindTinderActions();
     },
 
+    _syncTinderPlayButton(state) {
+        if (!this._sectionsEl) return;
+        const btn = this._sectionsEl.querySelector('.discover-tinder-play');
+        const row = this._sectionsEl.querySelector('.discover-result-row');
+        if (!btn || !row) return;
+        const cardId = row.getAttribute('data-video-id') || '';
+        const isThisPlaying = state.currentTrack?.id === cardId && state.isPlaying;
+        const icon = btn.querySelector('i');
+        if (icon) icon.className = isThisPlaying ? 'fas fa-pause' : 'fas fa-play';
+        btn.setAttribute('aria-label', isThisPlaying ? 'Pause' : 'Play');
+    },
+
     _bindTinderActions() {
         if (!this._sectionsEl) return;
         const outer = this._sectionsEl.querySelector('.discover-tinder-outer');
@@ -320,7 +334,7 @@ export const Discover = {
         const advance = () => {
             this._bufferIndex++;
             const remaining = this._buffer.length - this._bufferIndex;
-            if (remaining <= 2 && !this._refillInFlight) this._refill();
+            if (remaining <= REFILL_WHEN_REMAINING_AT_MOST && !this._refillInFlight) this._refill();
             this._renderTinderStack();
         };
 
@@ -347,20 +361,33 @@ export const Discover = {
         });
 
         const playBtn = wrap.querySelector('.discover-tinder-play');
-        if (playBtn) playBtn.addEventListener('click', async () => {
-            const item = this._itemFromRow(row);
-            if (!item) return;
-            const resolved = await this._resolveItemCached(item, row);
-            if (!resolved) {
-                if (typeof window.showToast === 'function') window.showToast('Could not find track');
-                return;
-            }
-            if (!resolved.id || String(resolved.id).startsWith('raw-')) {
-                if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
-                return;
-            }
-            if (typeof window.playPreview === 'function') window.playPreview(resolved);
-        });
+        if (playBtn) {
+            playBtn.addEventListener('click', async () => {
+                const item = this._itemFromRow(row);
+                if (!item) return;
+                const resolved = await this._resolveItemCached(item, row);
+                if (!resolved) {
+                    if (typeof window.showToast === 'function') window.showToast('Could not find track');
+                    return;
+                }
+                const playbackId = resolved.video_id ?? resolved.id;
+                if (!playbackId || String(playbackId).startsWith('raw-')) {
+                    if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
+                    return;
+                }
+                const { currentTrack, isPlaying } = store.state;
+                if (currentTrack?.id === playbackId) {
+                    if (isPlaying) {
+                        audioEngine.pause();
+                    } else {
+                        audioEngine.play();
+                    }
+                    return;
+                }
+                if (typeof window.playPreview === 'function') window.playPreview(resolved);
+            });
+            this._syncTinderPlayButton(store.state);
+        }
 
         row.querySelector('.discover-card-play')?.addEventListener('click', async (e) => {
             e.stopPropagation();
@@ -371,7 +398,8 @@ export const Discover = {
                 if (typeof window.showToast === 'function') window.showToast('Could not find track');
                 return;
             }
-            if (!resolved.id || String(resolved.id).startsWith('raw-')) {
+            const overlayPlaybackId = resolved.video_id ?? resolved.id;
+            if (!overlayPlaybackId || String(overlayPlaybackId).startsWith('raw-')) {
                 if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
                 return;
             }
@@ -402,7 +430,8 @@ export const Discover = {
     },
 
     async _resolveItemRaw(item, row) {
-        if (item.webpage_url && item.id && !String(item.id).startsWith('raw-')) return item;
+        const rid = item.video_id ?? item.id;
+        if (item.webpage_url && rid && !String(rid).startsWith('raw-')) return item;
         row.classList.add('discover-card-resolving');
         row.style.opacity = '0.7';
         const apiBase = getApiBase();
@@ -449,13 +478,14 @@ export const Discover = {
     },
 
     async _resolveItemCached(item, row) {
-        if (item.webpage_url && item.id && !String(item.id).startsWith('raw-')) return item;
+        const rid = item.video_id ?? item.id;
+        if (item.webpage_url && rid && !String(rid).startsWith('raw-')) return item;
         return this._resolveItemRaw(item, row);
     },
 
     _applyResolvedToRow(row, data) {
         if (!row || !data) return;
-        row.setAttribute('data-video-id', data.id);
+        row.setAttribute('data-video-id', data.video_id ?? data.id);
         row.setAttribute('data-webpage-url', data.webpage_url || '');
         row.setAttribute('data-duration', data.duration || 0);
         const rawCover = data.cover_url || data.thumbnail;
@@ -470,7 +500,7 @@ export const Discover = {
     _refill() {
         if (this._refillInFlight || !this._hasLibrary()) return;
         const remaining = this._buffer.length - this._bufferIndex;
-        if (remaining > 2) return;
+        if (remaining > REFILL_WHEN_REMAINING_AT_MOST) return;
         if (this._bufferIndex > 0) {
             this._buffer = this._buffer.slice(this._bufferIndex);
             this._bufferIndex = 0;
@@ -482,7 +512,7 @@ export const Discover = {
         fetch(`${apiBase}/api/discover/recommendations`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ limit: REFILL_LIMIT, exclude_ids }),
+            body: JSON.stringify({ limit: INITIAL_BUFFER_LIMIT, exclude_ids }),
         })
             .then((res) => res.json().catch(() => ({})))
             .then((data) => {
@@ -535,13 +565,14 @@ export const Discover = {
         const apiBase = getApiBase();
 
         const resolveItem = async (item, row) => {
-            if (item.webpage_url && item.id && !String(item.id).startsWith('raw-')) return item;
+            const rid = item.video_id ?? item.id;
+            if (item.webpage_url && rid && !String(rid).startsWith('raw-')) return item;
 
             row.classList.add('discover-card-resolving');
             row.style.opacity = '0.7';
             const applyResult = (data) => {
                 if (!data) return;
-                row.setAttribute('data-video-id', data.id);
+                row.setAttribute('data-video-id', data.video_id ?? data.id);
                 row.setAttribute('data-webpage-url', data.webpage_url || '');
                 row.setAttribute('data-duration', data.duration || 0);
                 const rawCover = data.cover_url || data.thumbnail;
@@ -599,7 +630,8 @@ export const Discover = {
         this._resolveItem = resolveItem;
         this._resolveRow = (row) => {
             const item = this._itemFromRow(row);
-            if (item && item.webpage_url && item.id) return Promise.resolve(item);
+            const rid = item?.video_id ?? item?.id;
+            if (item && item.webpage_url && rid) return Promise.resolve(item);
             return resolveItem(item, row);
         };
 
@@ -629,7 +661,8 @@ export const Discover = {
                     if (typeof window.showToast === 'function') window.showToast('Could not find track');
                     return;
                 }
-                if (!item.id || String(item.id).startsWith('raw-')) {
+                const shelfPlaybackId = item.video_id ?? item.id;
+                if (!shelfPlaybackId || String(shelfPlaybackId).startsWith('raw-')) {
                     if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
                     return;
                 }

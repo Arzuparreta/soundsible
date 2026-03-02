@@ -14,22 +14,23 @@ function isYoutubeId(id) {
 }
 
 export function playPreview(item) {
-    if (!item || !item.id) return;
+    const effectiveId = item?.video_id ?? item?.id;
+    if (!item || !effectiveId) return;
     const durationSec = item.duration_sec ?? item.duration ?? 0;
     const duration = Math.max(0, Number(durationSec) || 0);
     const syntheticTrack = {
-        id: item.id,
+        id: effectiveId,
         title: item.title || 'Unknown',
         artist: item.artist || item.channel || '',
         duration,
         thumbnail: item.thumbnail || '',
         source: 'preview',
     };
-    if (isYoutubeId(item.id)) {
+    if (isYoutubeId(effectiveId)) {
         const ids = store.state.libraryYoutubeIds || [];
         const map = store.state.youtubeToTrackId || {};
-        if (ids.includes(item.id) && map[item.id]) {
-            syntheticTrack._libraryTrackId = map[item.id];
+        if (ids.includes(effectiveId) && map[effectiveId]) {
+            syntheticTrack._libraryTrackId = map[effectiveId];
         }
     }
     store.update({ currentTrack: syntheticTrack });
