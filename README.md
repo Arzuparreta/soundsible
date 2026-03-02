@@ -39,9 +39,9 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 
 ### Listening & library
 
-- **Unified search**: Search your **library** and the **internet** from the same search bar.
+- **Unified search**: Search your **library** and the **internet** from the same UI.
 - **High‑quality playback**: Engine focused on **maximum audio quality**.
-- **Smart library management**: Edit metadata, change covers, and manage your collection directly from the Station UI.
+- **Smart library management**: Edit metadata, change covers, and manage your collection directly from the UI.
 - **Universal sync**: Your playlists, favorites, metadata, and settings stay in sync across devices.
 
 <p align="center">
@@ -50,10 +50,9 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 
 ### Discovery & downloading
 
-- **Built‑in downloader (ODST)**: Download music from YouTube or YouTube Music from inside the app.
+- **Built‑in downloader (ODST)**: Download music from YouTube or YouTube Music from inside the app. This essentially does [yt-dlp](https://github.com/yt-dlp/yt-dlp), fills the not provided metadata, normalises everything, and uploads it to your library & db. This pipe is also used for the search engine & preview playback without download.
 - **Configurable sources**: Choose between YouTube Music / YouTube as the search & download source.
-- **Rich metadata**: Automatically fetches tags and artwork, with fallbacks for non‑music tracks.
-- **Lossless‑first**: Downloader defaults to **lossless** where possible, with manual quality selection.
+- **Lossless‑first**: Downloader defaults to **lossless** where possible. It's configurable in settings.
 
 <p align="center">
   <img src="docs/images/mobile-discover.png" alt="Soundsible mobile discover screen" width="240" />
@@ -65,7 +64,6 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 
 - **Flexible storage**: Store files on local disk, NAS, or supported object storage.
 - **Cloud backends**: Setup wizard includes options for Cloudflare R2, Backblaze B2/R2, and S2.
-- **High‑grade cover fetching**: Prioritises high‑quality artwork with sensible fallbacks.
 
 ---
 
