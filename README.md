@@ -2,7 +2,7 @@
 
 **Self-hosted, full‑featured music environment with a premium, across device experience.**
 
-Soundsible replicates how a high‑end streaming platform works, but for your **own music**. It lets you **download**, **manage**, and **listen** to a self‑hosted library from anywhere, with access over [Tailscale]  (https://github.com/tailscale/tailscale) (optional but recommended for the main use of this software, which is accesing your library from anywhere in the world, not just from your local network).
+Soundsible replicates how a high‑end streaming platform works, but for your **own music**. It lets you **download**, **manage**, and **listen** to a self‑hosted library from anywhere, with access over [Tailscale](https://github.com/tailscale/tailscale) (optional but recommended for the main use of this software, which is accesing your library from anywhere in the world, not just from your local network).
 
 <p align="center">
   <img src="docs/images/mobile-nowplaying.png" alt="Soundsible mobile now playing screen" width="320" />
