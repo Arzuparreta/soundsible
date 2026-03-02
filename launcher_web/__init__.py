@@ -1,1 +1,1 @@
-# Launcher webapp: entry point for Launch Ecosystem and Setup.
+"""Launcher webapp: entry point for Launch Ecosystem and Setup."""
