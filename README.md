@@ -43,7 +43,7 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 ### Listening & library
 
 - **Unified search**: Search your **library** and the **internet** from the same search bar.
-- **High‑quality playback**: Engine focused on **maximum audio quality**.
+- **High‑quality playback**: Engine ensures **maximum audio quality**.
 - **Smart library management**: Edit metadata, change covers, and manage your collection directly from the Station UI.
 - **Universal sync**: Your playlists, favorites, metadata, and settings stay in sync across devices.
 
@@ -53,10 +53,10 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 
 ### Discovery & downloading
 
-- **Built‑in downloader (ODST)**: Download music from YouTube or YouTube Music from inside the app.
+- **Built‑in downloader (ODST)**: Download music from YouTube or YouTube Music from inside the app. This basically uses [yt-dlp](https://github.com/yt-dlp/yt-dlp), properly fixes the metadata that it doesn't provide, and uploads everything to your music library and SQLite database seamessly.
 - **Configurable sources**: Choose between YouTube Music / YouTube as the search & download source.
-- **Rich metadata**: Automatically fetches tags and artwork, with fallbacks for non‑music tracks.
-- **Lossless‑first**: Downloader defaults to **lossless** where possible, with manual quality selection.
+- **Lossless‑first**: Downloader defaults to **lossless** quality audio but it's configurable in settings.
+- **Opotional** recommendeds songs section, feeded with an optional, free, last.fm API key. Unless users manually provide this KEY is completely disabled by default.
 
 <p align="center">
   <img src="docs/images/mobile-discover.png" alt="Soundsible mobile discover screen" width="260" />
@@ -67,7 +67,6 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 
 - **Flexible storage**: Store files on local disk, NAS, or supported object storage.
 - **Cloud backends**: Setup wizard includes options for Cloudflare R2, Backblaze B2/R2, and S2.
-- **High‑grade cover fetching**: Prioritises high‑quality artwork with sensible fallbacks.
 
 ---
 
