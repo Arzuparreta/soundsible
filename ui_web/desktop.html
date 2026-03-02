@@ -454,6 +454,7 @@
         #desktop-context-menu .desktop-context-item i { width: 1rem; flex-shrink: 0; }
         #desktop-context-menu .desktop-context-item.delete-item { color: rgb(248 113 113); }
         #desktop-context-menu .desktop-context-item.delete-item:hover { background: rgba(239 68 68 / 0.1); }
+        #desktop-context-menu .desktop-context-item.hidden { display: none; }
     </style>
     <script>
         (function() {
@@ -831,12 +832,16 @@
     <div id="toast-container" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[400] flex flex-col items-center gap-2 pointer-events-none max-w-xs"></div>
 
     <div id="desktop-context-menu" class="hidden" role="menu" aria-label="Track actions">
-        <button type="button" id="desktop-context-queue" class="desktop-context-item" role="menuitem"><i class="fas fa-list-ul text-[var(--secondary)]"></i><span id="desktop-context-queue-text">Add to Queue</span></button>
-        <button type="button" id="desktop-context-edit-metadata" class="desktop-context-item" role="menuitem"><i class="fas fa-pen-to-square text-purple-400"></i><span>Edit Metadata</span></button>
+        <!-- Track actions -->
         <button type="button" id="desktop-context-fav" class="desktop-context-item" role="menuitem"><i class="fas fa-heart text-[var(--accent)]"></i><span id="desktop-context-fav-text">Add to Favourites</span></button>
+        <button type="button" id="desktop-context-queue" class="desktop-context-item" role="menuitem"><i class="fas fa-list-ul text-[var(--secondary)]"></i><span id="desktop-context-queue-text">Add to Queue</span></button>
         <button type="button" id="desktop-context-add-to-playlist" class="desktop-context-item" role="menuitem"><i class="fas fa-layer-group text-[var(--secondary)]"></i><span>Add to playlist</span></button>
+        <button type="button" id="desktop-context-edit-metadata" class="desktop-context-item" role="menuitem"><i class="fas fa-pen-to-square text-purple-400"></i><span>Edit Metadata</span></button>
         <button type="button" id="desktop-context-remove-from-playlist" class="desktop-context-item delete-item hidden" role="menuitem"><i class="fas fa-eject"></i><span>Remove from playlist</span></button>
         <button type="button" id="desktop-context-delete" class="desktop-context-item delete-item" role="menuitem"><i class="fas fa-trash-can"></i><span>Delete Track</span></button>
+        <!-- Playlist actions (playlist grid right-click) -->
+        <button type="button" id="desktop-context-play-playlist" class="desktop-context-item hidden" role="menuitem"><i class="fas fa-play text-[var(--secondary)]"></i><span>Reproduce playlist</span></button>
+        <button type="button" id="desktop-context-delete-playlist" class="desktop-context-item delete-item hidden" role="menuitem"><i class="fas fa-trash-can"></i><span>Delete playlist</span></button>
     </div>
 
     <div id="add-to-playlist-picker" class="fixed inset-0 z-[270] hidden flex items-center justify-center p-4" style="background-color: var(--overlay-bg);">
@@ -861,10 +866,10 @@
                 </div>
             </div>
             <div class="space-y-1">
-                <button type="button" id="desktop-action-queue" class="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--surface-overlay)] text-left font-bold text-sm text-[var(--text-main)]"><i class="fas fa-list-ul text-[var(--secondary)] w-4"></i><span id="desktop-action-queue-text">Add to Queue</span></button>
-                <button type="button" id="desktop-action-edit-metadata" class="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--surface-overlay)] text-left font-bold text-sm text-[var(--text-main)]"><i class="fas fa-pen-to-square text-purple-400 w-4"></i><span>Edit Metadata</span></button>
                 <button type="button" id="desktop-action-fav" class="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--surface-overlay)] text-left font-bold text-sm text-[var(--text-main)]"><i class="fas fa-heart text-[var(--accent)] w-4"></i><span id="desktop-action-fav-text">Favourite</span></button>
+                <button type="button" id="desktop-action-queue" class="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--surface-overlay)] text-left font-bold text-sm text-[var(--text-main)]"><i class="fas fa-list-ul text-[var(--secondary)] w-4"></i><span id="desktop-action-queue-text">Add to Queue</span></button>
                 <button type="button" id="desktop-action-add-to-playlist" class="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--surface-overlay)] text-left font-bold text-sm text-[var(--text-main)]"><i class="fas fa-layer-group text-[var(--secondary)] w-4"></i><span>Add to playlist</span></button>
+                <button type="button" id="desktop-action-edit-metadata" class="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--surface-overlay)] text-left font-bold text-sm text-[var(--text-main)]"><i class="fas fa-pen-to-square text-purple-400 w-4"></i><span>Edit Metadata</span></button>
                 <button type="button" id="desktop-action-remove-from-playlist" class="hidden w-full flex items-center gap-4 p-3 rounded-xl hover:bg-red-500/10 text-red-400 text-left font-bold text-sm"><i class="fas fa-eject w-4"></i><span>Remove from playlist</span></button>
                 <button type="button" id="desktop-action-delete" class="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-red-500/10 text-red-400 text-left font-bold text-sm"><i class="fas fa-trash-can w-4"></i><span>Delete Track</span></button>
             </div>

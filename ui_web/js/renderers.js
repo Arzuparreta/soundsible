@@ -218,7 +218,7 @@ export function buildSongRowsHtml(tracks, options = {}) {
                     </div>
                     <div class="flex items-center space-x-3 ml-4">
                         <div class="no-row-action text-[9px] font-bold font-mono text-[var(--text-dim)] opacity-50 tracking-tighter">${formatTime(t.duration)}</div>
-                        <button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}')" class="w-10 h-10 flex items-center justify-center text-[var(--text-dim)] active:text-[var(--text-main)] transition-colors rounded-full active:bg-[var(--surface-overlay)] focus:outline-none">
+                        <button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}', this)" class="w-10 h-10 flex items-center justify-center text-[var(--text-dim)] active:text-[var(--text-main)] transition-colors rounded-full active:bg-[var(--surface-overlay)] focus:outline-none">
                             <i class="fas fa-ellipsis-v text-xs"></i>
                         </button>
                     </div>
@@ -262,7 +262,7 @@ export function buildSongGridHtml(tracks, options = {}, gridSize = 'grid') {
                 </div>
                 ${playOverlay}
                 <div class="fav-indicator absolute top-1 right-1 w-3 h-3 bg-[var(--accent)] rounded-full border-2 border-[var(--bg-card)] z-10 ${isFav ? '' : 'hidden'}"></div>
-                <button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}')" class="absolute bottom-1 right-1 w-8 h-8 flex items-center justify-center rounded-full bg-black/50 text-white/90 opacity-0 group-hover:opacity-100 transition-opacity focus:outline-none z-10">
+                <button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}', this)" class="absolute bottom-1 right-1 w-8 h-8 flex items-center justify-center rounded-full bg-black/50 text-white/90 opacity-0 group-hover:opacity-100 transition-opacity focus:outline-none z-10">
                     <i class="fas fa-ellipsis-v text-[10px]"></i>
                 </button>
             </div>

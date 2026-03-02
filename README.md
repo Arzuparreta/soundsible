@@ -1,103 +1,244 @@
 # <img src="branding/logo-app.png" alt="Soundsible" width="52" height="52" align="center"> **Soundsible**
 
-**The Self-Hosted, full featured Music Environment.**
+**Self-hosted, full‑featured music environment with a premium, mobile‑first experience.**
 
-**Sounsible** is a piece of software that aims to **replicate how a high-end streaming music platform works**, and use that infrastructure to **download**, **manage** and **listen** to your **self-hosted** music, accesible from any device, anywhere in the world (with the aid of [Tailscale](https://github.com/tailscale/tailscale)).
-I'm fully concerned about getting the closest experience possible to a third provided music platform, and I'm working everyday on features and quality of life.
-This repository contains the full Soundsible ecosystem, with the Station as its core component.
+Soundsible replicates how a high‑end streaming platform works, but for your **own music**. It lets you **download**, **manage**, and **listen** to a self‑hosted library from anywhere, with optional access over [Tailscale](https://github.com/tailscale/tailscale).
 
-## **Two ways:**
-- **Full environment experience**: [**Tailscale**](https://github.com/tailscale/tailscale) **(Recommended)**
-   (Tailscale let's you access your running API from anywhere in the world, so you can listen to your streamed music anywhere) or;
-- Only local playback: No extra configuration needed.
-   (Just download and enjoy your local music)
+<p align="center">
+  <img src="docs/images/mobile-nowplaying.png" alt="Soundsible mobile now playing screen" width="320" />
+</p>
 
 ---
 
-## The Station (Windows, Linux, Android, iOS)
-The **Station** is the primary, recommended interface for all users. It's a modern JavaScript UI that just works, and embeds the high quality audio processing from your running backend, with a full featured listening, library management, and **most importantly**, **music discovery and downloading** (Recommendations API is configurable in settings and completely optional).
-**You can**:
-- Search within your **library** and the **internet** and **download any music**; all from the same search bar.
-- Choose **search & download source**: Youtube Music / Youtube.
-- Resume playback and queue on other devices. (Just open a second device and you will see the dialog).
-- Easily **manage your library from the frontend**: Edit metadata, upload your own covers; all within the Station app.
-- Easily setup your ecosystem with the embeded **guided setup**. (Read the dialogs!)
-  
-### Key backend features:
-- **Max quality**: Playback **engine** ensures **maximum quality**. Downloader tool defaults to **losless quality** and offer **manual quality selection**.
-- **ODST Downloader**: Embeded downloader that downloads music from youtube or yt-music. It automatically fetches all the metadata including covers, and uploads it to your previously configured NAS (or desktop local) storage or third provided cloud (setup for Cloudflare R2, Backblaze R2 and S2 users on **Setup Wizard**).
-- **Universal Sync**: Your library, playlists, metadata, configurations... all synchronised along your devices. 
-- **High grade cover fetching** with fallback to yt thumbnail for non-music tracks.
+## Contents
+
+- [What is Soundsible?](#what-is-soundsible)
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Installation (detailed)](#installation-detailed)
+- [Getting started](#getting-started)
+- [Platforms & clients](#platforms--clients)
+- [Technical details & architecture](#technical-details--architecture)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
-  
-## 📦 Installation:
 
-**Requirements:** Python 3.10+ and `git`. On Linux you may need system packages (e.g. `python3-venv`, `python3-pip`).
+## What is Soundsible?
 
-**Quick (if you’re comfortable with venv):**
+Soundsible is a **self‑hosted music environment** that aims to get you as close as possible to a modern streaming experience, while keeping you in full control of your files and infrastructure.
+
+There are two typical ways to run it:
+
+- **Full environment (recommended)**: run Soundsible on a machine reachable via [Tailscale](https://github.com/tailscale/tailscale) so you can access it from anywhere in the world.
+- **Local‑only playback**: run it on a single machine and enjoy your local music with no extra networking configuration.
+
+This repository contains the full Soundsible ecosystem, with the **Station** as its primary interface.
+
+---
+
+## Features
+
+### Listening & library
+
+- **Unified search**: Search your **library** and the **internet** from the same search bar.
+- **High‑quality playback**: Engine focused on **maximum audio quality**.
+- **Smart library management**: Edit metadata, change covers, and manage your collection directly from the Station UI.
+- **Universal sync**: Your playlists, favorites, metadata, and settings stay in sync across devices.
+
+<p align="center">
+  <img src="docs/images/desktop-library.png" alt="Soundsible desktop library view" width="640" />
+</p>
+
+### Discovery & downloading
+
+- **Built‑in downloader (ODST)**: Download music from YouTube or YouTube Music from inside the app.
+- **Configurable sources**: Choose between YouTube Music / YouTube as the search & download source.
+- **Rich metadata**: Automatically fetches tags and artwork, with fallbacks for non‑music tracks.
+- **Lossless‑first**: Downloader defaults to **lossless** where possible, with manual quality selection.
+
+<p align="center">
+  <img src="docs/images/mobile-discover.png" alt="Soundsible mobile discover screen" width="260" />
+  <img src="docs/images/mobile-library.png" alt="Soundsible mobile library screen" width="260" />
+</p>
+
+### Storage & sync
+
+- **Flexible storage**: Store files on local disk, NAS, or supported object storage.
+- **Cloud backends**: Setup wizard includes options for Cloudflare R2, Backblaze B2/R2, and S2.
+- **High‑grade cover fetching**: Prioritises high‑quality artwork with sensible fallbacks.
+
+---
+
+## Quick start
+
+**Requirements**
+
+- Python **3.10+**
+- `git`
+- On Linux: `python3-venv`, `python3-pip` (package names may vary slightly by distro)
 
 ```bash
 git clone https://github.com/Arzuparreta/soundsible.git
 cd soundsible
 python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt
+
+# Launch the ecosystem (backend + Station)
+./venv/bin/python start_launcher.py
 ```
 
-**Step-by-step:**
+Then open your browser at `http://localhost:5099` and click **Launch Ecosystem**.  
+Keep that terminal open while you use Soundsible.
 
-1. Clone the repo and go into it:
+On Windows, replace `./venv/bin/python` with `venv\Scripts\python.exe` and `./venv/bin/pip` with `venv\Scripts\pip.exe`.
+
+---
+
+## Installation (detailed)
+
+1. **Clone the repo**
+
    ```bash
    git clone https://github.com/Arzuparreta/soundsible.git
    cd soundsible
    ```
-2. Create a virtual environment (so dependencies don’t touch system Python):
+
+2. **Create a virtual environment**
+
    ```bash
    python3 -m venv venv
    ```
-   *If `python3` isn’t found, install Python 3 from [python.org](https://www.python.org/downloads/) or your package manager (e.g. `sudo apt install python3 python3-venv` on Debian/Ubuntu).*
-3. Install dependencies:
+
+   If `python3` is not available, install Python 3 from [python.org](https://www.python.org/downloads/) or via your package manager, for example:
+
+   ```bash
+   sudo apt install python3 python3-venv
+   ```
+
+3. **Install dependencies**
+
    ```bash
    ./venv/bin/pip install -r requirements.txt
    ```
-   *On Windows use `venv\Scripts\pip.exe` instead of `./venv/bin/pip`.*
 
-## Getting Started!
-After [installation](#-installation):
+   On Windows:
 
-**Easiest:** Run the launcher from the project folder — your browser will open automatically. Click **Launch Ecosystem** to start the Station Engine and open the Station, or **Setup** when available.
-```bash
-python start_launcher.py
-```
-- Keep the terminal open after clicking Launch so the Station Engine keeps running.
-The launcher runs at **http://localhost:5099** (you can bookmark it). **Keep the terminal open** after you click Launch — the Station Engine runs in that terminal; closing it will stop the Station Engine. To stop the Station Engine, use the **Stop** button on the same launcher page. Reopen the launcher anytime to start or stop.
+   ```powershell
+   venv\Scripts\pip.exe install -r requirements.txt
+   ```
 
-**Terminal / SSH:** Use the slim CLI for full control:
-```bash
-python run.py
-```
-Choose **Start Station Engine & Open Station**; then **keep that terminal open** — the Station Engine runs there. Open **http://localhost:5005/player/** (or your server’s LAN IP) to use the Station. If you used [**Tailscale**](https://github.com/tailscale/tailscale), open **http://[your-tailscale-ip]:5005/player/**.
-This links redirects automatically to mobile or desktop versions.
-
-### Add as a webapp on desktop and mobile for the full inmersive experience:
-- iOS/Safari: Share > "Add to Home Screen"
-- Android/Chrome: "More" > "Install"
+For advanced deployment topics (headless server, Tailscale, reverse proxy, storage backends), see [docs/INSTALL.md](docs/INSTALL.md).
 
 ---
 
-## Legacy option: Desktop (GTK) (Linux):
+## Getting started
 
-A lightweight native client for **low-end or resource-constrained devices** (e.g. Raspberry Pi, thin clients, older Linux boxes). Uses less RAM than the web stack; core playback only. May lag behind the Station in UI/UX.
+After [installation](#installation-detailed), there are two main ways to run Soundsible.
+
+### 1. Launcher (recommended)
+
+From the project root:
+
+```bash
+python start_launcher.py
+```
+
+- The launcher runs at **http://localhost:5099**.
+- Click **Launch Ecosystem** to start the Station Engine and open the Station.
+- **Keep the launcher terminal open** — closing it will stop the Station Engine.
+- Use the **Stop** button on the launcher page to stop the Station Engine cleanly.
+
+### 2. CLI / SSH
+
+From the project root:
+
+```bash
+python run.py
+```
+
+- Choose **Start Station Engine & Open Station**.
+- Keep this terminal open while the Station Engine is running.
+- Open **http://localhost:5005/player/** (or your server’s LAN IP) in your browser.
+- If you use [Tailscale](https://github.com/tailscale/tailscale), open **http://[your-tailscale-ip]:5005/player/** for remote access.
+
+The player automatically adapts to desktop or mobile layouts.
+
+### Install as a web app
+
+For the full immersive experience:
+
+- **iOS / Safari**: Share → **Add to Home Screen**
+- **Android / Chrome**: Menu → **Install app**
+
+---
+
+## Platforms & clients
+
+### Station (primary interface)
+
+The **Station** is the main interface for Soundsible on **Windows, Linux, Android, and iOS**. It is a modern web UI backed by the Station Engine, and is what you get when you open the `/player/` URL or use the launcher.
+
+It provides:
+
+- Full playback experience (queue, now playing, progress, volume, shuffle/repeat).
+- Library browsing and editing.
+- Discovery and downloading via the embedded ODST downloader.
+- Guided setup to help you configure storage and services.
+
+### Legacy desktop client (GTK, Linux)
+
+For low‑end or resource‑constrained devices (e.g. Raspberry Pi, thin clients, older Linux boxes), there is a lightweight GTK desktop client:
 
 ```bash
 ./gui.sh
 ```
-*First run will create the venv and install dependencies; on some distros you may need system packages (GTK, mpv, LibAdwaita) — the script will prompt.*
 
+On first run, this script creates a virtual environment and installs dependencies.  
+You may need additional system packages (GTK, mpv, LibAdwaita) depending on your distro.
 
-## Architecture
+The GTK client focuses on core playback and may lag behind the Station web UI in features and UX.
 
-- **Backend**: Python/Flask (Metadata, Indexing, Audio Stream)
-- **Database**: SQLite (library metadata in `library.db`, FTS5 full-text search; cache index for playback)
-- **Frontend**: Vanilla JS / Tailwind CSS (Zero-dependency, high-performance)
-- **Storage**: Local Filesystem + Optional Cloud Sync (Backblaze B2 / Cloudflare R2 / S2)
+---
+
+## Technical details & architecture
+
+- **Backend**: Python / Flask (metadata, indexing, audio streaming).
+- **Database**: SQLite (library metadata in `library.db`, FTS5 full‑text search, cache index for playback).
+- **Frontend**: Vanilla JS + Tailwind CSS (zero‑dependency, high‑performance).
+- **Storage**: Local filesystem plus optional cloud backends (Backblaze B2 / Cloudflare R2 / S2).
+
+For a deeper architecture overview (components, data flow, and storage layout), see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+---
+
+## Documentation
+
+Additional documentation lives under `docs/`:
+
+- [docs/INSTALL.md](docs/INSTALL.md) – advanced installation and deployment.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) – technical architecture and data flow.
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) – configuration, environment variables, and storage backends.
+
+Internal and troubleshooting docs:
+
+- [docs/yt-dlp-format-errors-log.md](docs/yt-dlp-format-errors-log.md)
+- [docs/discover-design-refs.md](docs/discover-design-refs.md)
+
+---
+
+## Contributing
+
+Contributions, bug reports, and feature requests are very welcome.
+
+- Check [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+- Open an issue if you hit a bug or have a proposal.
+- Submit a pull request for fixes or new features — even small improvements help.
+
+---
+
+## License
+
+Soundsible is released under the **MIT License**.  
+See [LICENSE](LICENSE) for the full text.

@@ -138,7 +138,7 @@ export const DesktopUI = {
         setTimeout(() => div.remove(), 2500);
     },
 
-    showActionMenu(trackId) {
+    showActionMenu(trackId, sourceEl) {
         const track = store.state.library.find((t) => t.id === trackId);
         if (!track) return;
         this.currentActionTrack = track;
@@ -156,7 +156,7 @@ export const DesktopUI = {
         if (favText) favText.textContent = store.state.favorites.includes(trackId) ? 'Remove from Favourites' : 'Add to Favourites';
         if (queueText) queueText.textContent = store.state.queue.some((t) => t.id === trackId) ? 'Remove from Queue' : 'Add to Queue';
 
-        const inPlaylistDetail = this.currentView === 'playlist-detail';
+        const inPlaylistDetail = sourceEl ? !!sourceEl.closest('#desktop-playlist-detail-tracks') : this.currentView === 'playlist-detail';
         const actDelete = el('desktop-action-delete');
         const actAddToPlaylist = el('desktop-action-add-to-playlist');
         const actRemoveFromPlaylist = el('desktop-action-remove-from-playlist');
@@ -173,7 +173,7 @@ export const DesktopUI = {
         this.currentActionTrack = null;
     },
 
-    showContextMenu(trackId, clientX, clientY) {
+    showContextMenu(trackId, clientX, clientY, row) {
         const track = store.state.library.find((t) => t.id === trackId);
         if (!track) return;
         this.currentActionTrack = track;
@@ -184,10 +184,14 @@ export const DesktopUI = {
         if (queueText) queueText.textContent = store.state.queue.some((t) => t.id === trackId) ? 'Remove from Queue' : 'Add to Queue';
         if (favText) favText.textContent = store.state.favorites.includes(trackId) ? 'Remove from Favourites' : 'Add to Favourites';
 
-        const inPlaylistDetail = this.currentView === 'playlist-detail';
+        const inPlaylistDetail = row ? !!row.closest('#desktop-playlist-detail-tracks') : this.currentView === 'playlist-detail';
+        const ctxPlayPlaylist = el('desktop-context-play-playlist');
+        const ctxDeletePlaylist = el('desktop-context-delete-playlist');
         const ctxDelete = el('desktop-context-delete');
         const ctxAddToPlaylist = el('desktop-context-add-to-playlist');
         const ctxRemoveFromPlaylist = el('desktop-context-remove-from-playlist');
+        if (ctxPlayPlaylist) ctxPlayPlaylist.classList.add('hidden');
+        if (ctxDeletePlaylist) ctxDeletePlaylist.classList.add('hidden');
         if (ctxDelete) ctxDelete.classList.toggle('hidden', inPlaylistDetail);
         if (ctxAddToPlaylist) ctxAddToPlaylist.classList.toggle('hidden', inPlaylistDetail);
         if (ctxRemoveFromPlaylist) ctxRemoveFromPlaylist.classList.toggle('hidden', !inPlaylistDetail);
@@ -210,13 +214,59 @@ export const DesktopUI = {
         });
     },
 
+    showPlaylistContextMenu(playlistName, clientX, clientY, cardEl) {
+        const menu = el('desktop-context-menu');
+        if (!menu || !playlistName) return;
+
+        const ctxFav = el('desktop-context-fav');
+        const ctxQueue = el('desktop-context-queue');
+        const ctxAddToPlaylist = el('desktop-context-add-to-playlist');
+        const ctxEdit = el('desktop-context-edit-metadata');
+        const ctxRemoveFromPlaylist = el('desktop-context-remove-from-playlist');
+        const ctxDeleteTrack = el('desktop-context-delete');
+        const ctxPlayPlaylist = el('desktop-context-play-playlist');
+        const ctxDeletePlaylist = el('desktop-context-delete-playlist');
+
+        // Hide all track-specific actions
+        if (ctxFav) ctxFav.classList.add('hidden');
+        if (ctxQueue) ctxQueue.classList.add('hidden');
+        if (ctxAddToPlaylist) ctxAddToPlaylist.classList.add('hidden');
+        if (ctxEdit) ctxEdit.classList.add('hidden');
+        if (ctxRemoveFromPlaylist) ctxRemoveFromPlaylist.classList.add('hidden');
+        if (ctxDeleteTrack) ctxDeleteTrack.classList.add('hidden');
+
+        // Show playlist-specific actions
+        if (ctxPlayPlaylist) ctxPlayPlaylist.classList.remove('hidden');
+        if (ctxDeletePlaylist) ctxDeletePlaylist.classList.remove('hidden');
+
+        menu.style.left = `${clientX + 4}px`;
+        menu.style.top = `${clientY + 4}px`;
+        menu.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            const rect = menu.getBoundingClientRect();
+            const pad = 8;
+            let left = parseFloat(menu.style.left) || clientX + 4;
+            let top = parseFloat(menu.style.top) || clientY + 4;
+            if (left + rect.width > window.innerWidth - pad) left = window.innerWidth - rect.width - pad;
+            if (top + rect.height > window.innerHeight - pad) top = window.innerHeight - rect.height - pad;
+            if (left < pad) left = pad;
+            if (top < pad) top = pad;
+            menu.style.left = `${left}px`;
+            menu.style.top = `${top}px`;
+        });
+    },
+
     hideContextMenu() {
         const menu = el('desktop-context-menu');
         if (menu) menu.classList.add('hidden');
-        if (this._contextMenuOpen) this.currentActionTrack = null;
+        if (this._contextMenuOpen) {
+            this.currentActionTrack = null;
+            this.currentContextPlaylistName = null;
+        }
         this._contextMenuOpen = false;
     },
 
+    currentContextPlaylistName: null,
     _contextMenuOpen: false,
 
     bindContextMenu() {
@@ -226,12 +276,26 @@ export const DesktopUI = {
 
         document.addEventListener('contextmenu', (e) => {
             if (e.target.closest('input, textarea, select')) return;
+
+            // Playlist cards (in playlists grid)
+            const playlistCard = e.target.closest('.playlist-card');
+            if (playlistCard && this.currentView === 'playlists') {
+                e.preventDefault();
+                const name = playlistCard.getAttribute('data-playlist-name');
+                if (!name) return;
+                this._contextMenuOpen = true;
+                this.currentContextPlaylistName = name;
+                this.showPlaylistContextMenu(name, e.clientX, e.clientY, playlistCard);
+                return;
+            }
+
+            // Track rows / cards / queue items
             e.preventDefault();
             const row = e.target.closest('.song-row, .song-card, .queue-item');
             const trackId = row?.getAttribute?.('data-id');
             if (trackId) {
                 this._contextMenuOpen = true;
-                this.showContextMenu(trackId, e.clientX, e.clientY);
+                this.showContextMenu(trackId, e.clientX, e.clientY, row);
             }
         });
 
@@ -283,6 +347,27 @@ export const DesktopUI = {
                 const track = this.currentActionTrack;
                 this.hideContextMenu();
                 if (track && typeof window.showAddToPlaylistPicker === 'function') window.showAddToPlaylistPicker(track.id);
+            });
+        }
+        const playPlaylistBtn = el('desktop-context-play-playlist');
+        if (playPlaylistBtn) {
+            playPlaylistBtn.addEventListener('click', () => {
+                const name = this.currentContextPlaylistName;
+                this.hideContextMenu();
+                if (name && typeof window.playPlaylistFromContext === 'function') {
+                    window.playPlaylistFromContext(name);
+                }
+            });
+        }
+        const deletePlaylistBtn = el('desktop-context-delete-playlist');
+        if (deletePlaylistBtn) {
+            deletePlaylistBtn.addEventListener('click', () => {
+                const name = this.currentContextPlaylistName;
+                this.hideContextMenu();
+                if (name && typeof window.deletePlaylistConfirm === 'function') {
+                    window._currentPlaylistName = name;
+                    window.deletePlaylistConfirm();
+                }
             });
         }
         const removeFromPlaylistBtn = el('desktop-context-remove-from-playlist');
