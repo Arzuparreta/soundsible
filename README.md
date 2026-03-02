@@ -3,7 +3,11 @@
 **Self-hosted, full‑featured music environment with a premium, across-device experience.**
 
 Soundsible replicates how a high‑end streaming platform works, but for your **own music**.
-**Search** your music in YouTube Music / Youtube, **download** and **automatically upload it** to your library with professional metadata, **manage** and **listen** it from any device (streamed from your main machine), automatically sync queue and playback across devices and sessions, and discover music feeded by last.fm **recommendations** (completely optional & disabled until user manually provides API key).
+- **Search** your music in YouTube Music / Youtube.
+- **Download** and **automatically upload it** to your library with professional metadata.
+- **Manage** and **listen** it from any device (streamed from your main machine).
+- Queue & playback sync across devices & sessions.
+- Discover/Explore music system feeded by last.fm **recommendations** (completely optional & disabled until user manually provides API key).
 
 ---
 
