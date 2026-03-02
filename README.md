@@ -1,7 +1,5 @@
 # <img src="branding/logo-app.png" alt="Soundsible" width="52" height="52" align="center"> **Soundsible**
 
-<img src="docs/images/mobile-nowplaying.png" alt="Soundsible mobile now playing screen" width="320" align="right" />
-
 **Self-hosted, full‑featured music environment with a premium, mobile‑first experience.**
 
 Soundsible replicates how a high‑end streaming platform works, but for your **own music**. It lets you **download**, **manage**, and **listen** to a self‑hosted library from anywhere, with optional access over [Tailscale](https://github.com/tailscale/tailscale).
@@ -57,8 +55,9 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 - **Lossless‑first**: Downloader defaults to **lossless** where possible, with manual quality selection.
 
 <p align="center">
-  <img src="docs/images/mobile-discover.png" alt="Soundsible mobile discover screen" width="260" />
-  <img src="docs/images/mobile-library.png" alt="Soundsible mobile library screen" width="260" />
+  <img src="docs/images/mobile-discover.png" alt="Soundsible mobile discover screen" width="240" />
+  <img src="docs/images/mobile-library.png" alt="Soundsible mobile library screen" width="240" />
+  <img src="docs/images/mobile-nowplaying.png" alt="Soundsible mobile now playing screen" width="240" />
 </p>
 
 ### Storage & sync
