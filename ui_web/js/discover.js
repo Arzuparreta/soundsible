@@ -45,7 +45,7 @@ export const Discover = {
     _bufferIndex: 0,
     _refillInFlight: false,
 
-    init(options = {}) {
+    async init(options = {}) {
         this._mobile = options.mobile !== false;
         const prefix = this._mobile ? '' : 'desktop-';
         this._emptyLibraryEl = document.getElementById(prefix + 'discover-empty-library');
@@ -57,7 +57,7 @@ export const Discover = {
         this._pageEl = document.getElementById(this._mobile ? 'view-discover' : 'desktop-view-discover');
         this._scrollEl = this._contentPanel;
         this._bindLastfmConfig();
-        this._updateConfigVisibility();
+        await this._updateConfigVisibility();
         this._syncVisibility();
         this._bindRefresh();
         const inputId = this._mobile ? 'global-search-input' : 'desktop-global-search-input';
