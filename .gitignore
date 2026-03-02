@@ -31,8 +31,11 @@ Thumbs.db
 .pytest_cache/
 .mypy_cache/
 .coverage
+coverage.xml
 htmlcov/
 .tox/
+.dmypy.json
+.ipynb_checkpoints/
 
 # Build artifacts
 dist/
@@ -51,10 +54,15 @@ config.json
 
 # Cache and temporary files
 *.log
+logs/
 .cache/
 tmp/
 temp/
 .ruff_cache/
+*.bak
+*.backup
+*.orig
+*.rej
 
 # Music files (don't commit test libraries)
 *.mp3
@@ -66,3 +74,4 @@ temp/
 # Project-specific
 .gemini/
 gha-creds-*.json
+odst_tool/test_output/
