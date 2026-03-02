@@ -11,6 +11,15 @@ Soundsible replicates how a high‑end streaming platform works, but for your **
 
 ---
 
+## Legal disclaimer
+
+> [!WARNING]
+> **Soundsible does not encourage or support piracy or Terms‑of‑Service violations.**  
+> It is a neutral tool for managing and streaming your own, legally obtained media; **you are solely responsible** for how you use it and for complying with all applicable laws and platform terms.  
+> See [docs/LEGAL.md](docs/LEGAL.md) for full legal and acceptable‑use details.
+
+---
+
 ## Contents
 
 - [What is Soundsible?](#what-is-soundsible)
@@ -54,7 +63,7 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 
 ### Discovery & downloading
 
-- **Built‑in downloader (ODST)**: Download music from YouTube or YouTube Music from inside the app. This essentially does [yt-dlp](https://github.com/yt-dlp/yt-dlp), fills the not provided metadata, normalises everything, and uploads it to your library & db. This pipe is also used for the search engine & preview playback without download.
+- **Built‑in downloader (ODST)**: Download music from YouTube or YouTube Music from inside the app. This essentially does [yt-dlp](https://github.com/yt-dlp/yt-dlp), fills the not provided metadata, normalises everything, and uploads it to your library & db (for content you have the rights to access). This pipe is also used for the search engine & preview playback without download.
 - **Configurable sources**: Choose between YouTube Music / YouTube as the search & download source.
 - **Lossless‑first**: Downloader defaults to **lossless** where possible. It's configurable in settings.
 
@@ -218,6 +227,7 @@ Additional documentation lives under `docs/`:
 - [docs/INSTALL.md](docs/INSTALL.md) – advanced installation and deployment.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) – technical architecture and data flow.
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md) – configuration, environment variables, and storage backends.
+- [docs/LEGAL.md](docs/LEGAL.md) – legal disclaimer and acceptable‑use notes.
 
 Internal and troubleshooting docs:
 

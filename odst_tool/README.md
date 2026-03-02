@@ -2,6 +2,11 @@
 
 A powerful tool to download music from YouTube Music, YouTube, or Spotify links. Fully compatible with `Soundsible`.
 
+> [!WARNING]
+> **ODST and Soundsible do not encourage or support piracy or Terms‑of‑Service violations.**  
+> Use this tool only with content you have the legal right to access and in compliance with all applicable laws and platform terms.  
+> See the main project’s [docs/LEGAL.md](../docs/LEGAL.md) for full legal and acceptable‑use details.
+
 **The downloader is now embedded in the main Soundsible webapp.** Use the web player at `http://localhost:5005/player/` (ensure the API is running on port 5005) for the built-in downloader.
 
 ## Features
