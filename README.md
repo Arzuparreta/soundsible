@@ -1,6 +1,6 @@
 # <img src="branding/logo-app.png" alt="Soundsible" width="52" height="52" align="center"> **Soundsible**
 
-**Self-hosted, full‑featured music environment with a premium, mobile‑first experience.**
+**Self-hosted, full‑featured music environment with a premium, across device experience.**
 
 Soundsible replicates how a high‑end streaming platform works, but for your **own music**. It lets you **download**, **manage**, and **listen** to a self‑hosted library from anywhere, with optional access over [Tailscale](https://github.com/tailscale/tailscale).
 
