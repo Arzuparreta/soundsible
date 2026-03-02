@@ -1576,13 +1576,10 @@ def _resolve_recommendations_items(out_results: list):
 @app.route('/api/discover/recommendations', methods=['POST'])
 def discover_recommendations():
     """Return Last.fm recommendations with each item fully resolved to YouTube (id, thumbnail, webpage_url, etc.).
-    Body: seed_track_ids (list, optional), limit (optional, default 20), exclude_ids (list, optional).
-    Resolve runs in a worker with max 2 parallel; items may be raw if resolve fails or times out."""
+    Body: limit (optional, default 20), exclude_ids (list, optional).
+    Seeds are auto-selected from the library (shuffled). Resolve runs in a worker with max 2 parallel; items may be raw if resolve fails or times out."""
     try:
         data = request.json or {}
-        seed_ids = data.get("seed_track_ids")
-        if seed_ids is not None and not isinstance(seed_ids, list):
-            seed_ids = []
         exclude_ids = data.get("exclude_ids")
         if not isinstance(exclude_ids, list):
             exclude_ids = []
@@ -1592,23 +1589,16 @@ def discover_recommendations():
         if not lib.metadata:
             lib.sync_library()
         library_tracks = [t.to_dict() for t in (lib.metadata.tracks or [])]
-        track_by_id = {t["id"]: t for t in library_tracks}
 
-        # 1. Build seeds: explicit list or from library (shuffle so refresh gets different seeds)
+        # 1. Build seeds from library (shuffle so refresh gets different seeds)
+        shuffled = list(library_tracks)
+        random.shuffle(shuffled)
         seeds = []
-        if seed_ids:
-            for tid in seed_ids[:10]:
-                t = track_by_id.get(str(tid))
-                if t and t.get("artist") is not None and t.get("title") is not None:
-                    seeds.append({"artist": t["artist"], "title": t["title"]})
-        else:
-            shuffled = list(library_tracks)
-            random.shuffle(shuffled)
-            for t in shuffled:
-                if len(seeds) >= DISCOVER_SEED_CAP:
-                    break
-                if t.get("artist") is not None and t.get("title") is not None:
-                    seeds.append({"artist": t["artist"], "title": t["title"]})
+        for t in shuffled:
+            if len(seeds) >= DISCOVER_SEED_CAP:
+                break
+            if t.get("artist") is not None and t.get("title") is not None:
+                seeds.append({"artist": t["artist"], "title": t["title"]})
         if not seeds:
             return jsonify({"results": [], "reason": "no_seeds"}), 200
 

@@ -254,7 +254,7 @@
 
         /* Global Search Bar */
         #global-search-container {
-            position: absolute;
+            position: fixed;
             top: 0;
             left: 0;
             right: 0;
@@ -340,6 +340,8 @@
         .view-outgoing { z-index: 10 !important; filter: brightness(0.5) scale(0.96); }
         .view-from-right { transform: translateX(100%); transition: none; }
         .view-from-left { transform: translateX(-100%); transition: none; }
+        .view-from-top { transform: translateY(-100%); transition: none; }
+        .view-to-top { transform: translateY(-100%); }
 
         #now-playing-view {
             transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, visibility 0.4s, backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
@@ -752,11 +754,26 @@
         /* List scroll safety (same pattern as library artists): keep, but do not disable song-row transforms so swipe animations still work */
         #view-artist-detail.list-scroll-active .artist-album-header { transform: none !important; }
         #view-playlists.list-scroll-active .playlist-card { transform: none !important; }
-        /* Discover: no padding/chrome — tinder only (search bar is global). */
-        #view-discover { display: flex; flex-direction: column; padding: 0; }
-        .is-ios #view-discover { padding: 0; }
+        /* Discover: same scroll/touch as library — .view is the scroll container (no overrides). */
         #view-discover.list-scroll-active .discover-card { background: var(--surface-overlay) !important; }
         #view-discover.list-scroll-active .discover-card-play { background: transparent !important; }
+        #view-discover-search.list-scroll-active .discover-card { background: var(--surface-overlay) !important; }
+        #view-discover-search.list-scroll-active .discover-card-play { background: transparent !important; }
+        /* Discover (recommendations): always fixed, full screen; content panel scrolls. */
+        #view-discover.view-discover-fixed {
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: auto;
+            height: 100dvh;
+            max-height: 100dvh;
+        }
+        .is-ios #view-discover.view-discover-fixed { padding: 0; }
+        #view-discover.view-discover-fixed #discover-main { min-height: 0; }
 
         /* Artist detail: expandable album tracks */
         .artist-album-expanded .artist-album-tracks { display: block !important; }
@@ -938,7 +955,7 @@
                 </div>
             </div>
             <div id="view-playlist-detail" class="view hidden">
-                <button type="button" id="playlist-detail-back" class="flex items-center text-[var(--secondary)] font-bold mb-4 hover:underline focus:outline-none" onclick="typeof UI!=='undefined'&&UI.navigateBack&&UI.navigateBack()">
+                <button type="button" id="playlist-detail-back" class="flex items-center text-[var(--secondary)] font-bold mb-4 hover:underline focus:outline-none" onclick="typeof UI!=='undefined'&&UI.goToPreviousView&&UI.goToPreviousView()">
                     <i class="fas fa-chevron-left mr-2"></i>Back
                 </button>
                 <div id="playlist-detail-hero" class="flex flex-col sm:flex-row items-center sm:items-end gap-6 mb-6">
@@ -960,10 +977,8 @@
             <div id="view-favourites" class="view hidden">
                 <div id="fav-tracks" class="space-y-2"></div>
             </div>
-            <div id="view-discover" class="view hidden">
-                <div class="flex flex-col flex-1 min-h-0">
-                    <div id="discover-search-results" class="hidden flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2 min-h-[120px]"></div>
-                    <div id="discover-content-panel" class="flex flex-col flex-1 min-h-0">
+            <div id="view-discover" class="view view-discover-fixed hidden">
+                <div id="discover-content-panel" class="flex flex-col flex-1 min-h-0 overflow-y-auto" style="-webkit-overflow-scrolling: touch;">
                         <p id="discover-empty-library" class="hidden text-sm text-[var(--text-dim)] py-4 px-1">Search and download a song in the bar above to get recommendations!</p>
                         <div id="discover-config-wrap" class="mb-4 p-4 rounded-2xl border border-[var(--glass-border)] flex-shrink-0" style="background: var(--surface-overlay);">
                             <p class="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-dim)] mb-2">Recommendations configuration</p>
@@ -982,12 +997,14 @@
                             </div>
                             <p id="discover-lastfm-status" class="mt-2 text-xs text-[var(--text-dim)] hidden"></p>
                         </div>
-                        <div id="discover-main" class="flex flex-col flex-1 min-h-0 hidden">
-                            <div id="discover-no-results" class="hidden text-center py-6 text-sm text-[var(--text-dim)]">No recommendations right now. Try again later.</div>
-                            <div id="discover-sections" class="flex-1 min-h-0"></div>
-                        </div>
+                    <div id="discover-main" class="flex flex-col flex-1 min-h-0 hidden">
+                        <div id="discover-no-results" class="hidden text-center py-6 text-sm text-[var(--text-dim)]">No recommendations right now. Try again later.</div>
+                        <div id="discover-sections" class="flex-1 min-h-0"></div>
                     </div>
                 </div>
+            </div>
+            <div id="view-discover-search" class="view hidden">
+                <div id="discover-search-results" class="space-y-2"></div>
             </div>
             <!-- YouTube preview modal (ODST result click; used from Search) -->
             <div id="dl-preview-modal" class="fixed inset-0 z-[110] hidden flex-col backdrop-blur-sm" style="background-color: var(--overlay-bg);">

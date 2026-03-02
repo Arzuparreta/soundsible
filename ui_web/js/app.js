@@ -1386,6 +1386,7 @@ function initArtistScrollSuppress() {
     initListScrollSuppress(document.getElementById('view-home'), 'list-scroll-active');
     initListScrollSuppress(document.getElementById('view-favourites'), 'list-scroll-active');
     initListScrollSuppress(document.getElementById('view-discover'), 'list-scroll-active');
+    initListScrollSuppress(document.getElementById('view-discover-search'), 'list-scroll-active');
     initListScrollSuppress(document.getElementById('view-playlists'), 'list-scroll-active');
     initListScrollSuppress(document.getElementById('view-playlist-detail'), 'list-scroll-active');
     initListScrollSuppress(document.getElementById('view-artist-detail'), 'list-scroll-active');
@@ -1394,10 +1395,7 @@ function initArtistScrollSuppress() {
 function initArtistDetailBack() {
     const backBtn = document.getElementById('artist-detail-back');
     if (!backBtn) return;
-    backBtn.addEventListener('click', () => {
-        store.update({ libraryTab: 'artists' });
-        UI.showView('home', false);
-    });
+    backBtn.addEventListener('click', () => UI.goToPreviousView());
 }
 
 function getCurrentTrackList() {

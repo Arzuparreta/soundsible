@@ -55,7 +55,7 @@ export const Discover = {
         this._sectionsEl = document.getElementById(prefix + 'discover-sections');
         this._contentPanel = document.getElementById(prefix + 'discover-content-panel');
         this._pageEl = document.getElementById(this._mobile ? 'view-discover' : 'desktop-view-discover');
-        this._scrollEl = this._mobile ? this._pageEl : this._contentPanel;
+        this._scrollEl = this._contentPanel;
         this._bindLastfmConfig();
         this._updateConfigVisibility();
         this._syncVisibility();
@@ -63,7 +63,7 @@ export const Discover = {
         const inputId = this._mobile ? 'global-search-input' : 'desktop-global-search-input';
         const input = document.getElementById(inputId);
         const searchResultsPanel = document.getElementById(prefix + 'discover-search-results');
-        if (this._contentPanel && searchResultsPanel && (!input || !(input.value || '').trim())) {
+        if (!this._mobile && this._contentPanel && searchResultsPanel && (!input || !(input.value || '').trim())) {
             this._contentPanel.classList.remove('hidden');
             searchResultsPanel.classList.add('hidden');
         }
@@ -73,12 +73,12 @@ export const Discover = {
 
     _bindPullToRefresh() {
         const pageEl = this._pageEl;
-        const scrollEl = this._scrollEl;
-        if (!pageEl || !scrollEl) return;
+        if (!pageEl || !this._scrollEl) return;
         let startY = 0;
         let pulled = false;
         pageEl.addEventListener('touchstart', (e) => {
-            if (scrollEl.scrollTop <= 0) startY = e.touches[0].clientY;
+            const scrollEl = this._scrollEl;
+            if (scrollEl && scrollEl.scrollTop <= 0) startY = e.touches[0].clientY;
             else startY = -1;
             pulled = false;
         }, { passive: true });
@@ -88,7 +88,8 @@ export const Discover = {
             if (y - startY > 60) pulled = true;
         }, { passive: true });
         pageEl.addEventListener('touchend', () => {
-            if (pulled && scrollEl.scrollTop <= 0) this.refresh();
+            const scrollEl = this._scrollEl;
+            if (pulled && scrollEl && scrollEl.scrollTop <= 0) this.refresh();
             startY = -1;
         }, { passive: true });
     },

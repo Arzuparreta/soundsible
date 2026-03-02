@@ -547,7 +547,7 @@ export class UI {
     }
 
     static hideDiscover() {
-        if (this.currentView === 'discover') this.navigateBack();
+        if (this.currentView === 'discover') this.goToPreviousView();
     }
 
     static toggleQueue() {
@@ -605,6 +605,12 @@ export class UI {
         return leftViews.includes(resolved) ? 'view-from-left' : 'view-from-right';
     }
 
+    /** True when discover search results panel is visible (mobile). Used so back gesture closes search first. */
+    static isDiscoverSearchActive() {
+        const vds = document.getElementById('view-discover-search');
+        return !!(vds && !vds.classList.contains('hidden'));
+    }
+
     static showView(viewId, saveToHistory = true) {
         // Auto-hide Now Playing if active (even if selecting the same view)
         if (this.dom.nowPlayingView?.classList.contains('active')) {
@@ -618,8 +624,23 @@ export class UI {
         UI._viewTransitionEnd = Date.now() + 520;
         this.updateLabel(viewId);
 
-        const oldView = document.getElementById(`view-${this.currentView}`);
-        const targetView = document.getElementById(`view-${viewId}`);
+        let oldView = document.getElementById(`view-${this.currentView}`);
+        if (this.currentView === 'discover') {
+            const vds = document.getElementById('view-discover-search');
+            oldView = (vds && !vds.classList.contains('hidden')) ? vds : (document.getElementById('view-discover') || oldView);
+        }
+        let targetView = document.getElementById(`view-${viewId}`);
+        if (viewId === 'discover') {
+            const searchInput = document.getElementById('global-search-input');
+            const hasQuery = searchInput && (searchInput.value || '').trim().length > 0;
+            const viewDiscoverSearch = document.getElementById('view-discover-search');
+            const viewDiscover = document.getElementById('view-discover');
+            targetView = hasQuery && viewDiscoverSearch ? viewDiscoverSearch : viewDiscover;
+            if (viewDiscoverSearch && viewDiscover) {
+                viewDiscoverSearch.classList.toggle('hidden', targetView !== viewDiscoverSearch);
+                viewDiscover.classList.toggle('hidden', targetView !== viewDiscover);
+            }
+        }
         if (!targetView) return;
 
         if (saveToHistory) {
@@ -688,13 +709,28 @@ export class UI {
         // syncArtistGridIndicators deferred to 500ms cleanup so we don't touch sliding view DOM in same turn
     }
 
+    /** Single entry point for "go back": sub-views (e.g. discover-search) close first; then stack pop. */
+    static goToPreviousView() {
+        if (this.currentView === 'home') return;
+        if (this.currentView === 'discover' && this.isDiscoverSearchActive()) {
+            if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) {
+                window.unifiedSearch.clear();
+            }
+            return;
+        }
+        this.navigateBack();
+    }
+
     static navigateBack() {
         if (this.viewStack.length === 0) {
             this.showView('home', false);
             return;
         }
-        
+
         const previousView = this.viewStack.pop();
+        if (this.currentView === 'artist-detail' && previousView === 'home') {
+            store.update({ libraryTab: 'artists' });
+        }
         this.showView(previousView, false);
     }
 
@@ -1048,12 +1084,7 @@ export class UI {
                     }
                     if (diffX > threshold && this.currentView !== 'home') {
                         this.vibrate(20);
-                        if (this.currentView === 'artist-detail') {
-                            store.update({ libraryTab: 'artists' });
-                            this.showView('home', false);
-                        } else if (this.currentView === 'playlist-detail') this.showView('playlists', false);
-                        else if (this.currentView === 'discover') this.navigateBack();
-                        else this.showView('home', false);
+                        this.goToPreviousView();
                     }
                 }
                 gesture.isEdgeSwipe = false;
@@ -1309,16 +1340,10 @@ export class UI {
                     this.resetOmniIsland();
                     return;
                 }
-                // Swipe down: same as edge swipe from left — go back (artist-detail → home with Artists tab, playlist-detail → playlists, else home)
+                // Swipe down: same as edge swipe from left — go to previous view (stack or close sub-view)
                 if (deltaY > deadzone) {
-                    if (this.currentView === 'artist-detail') {
-                        store.update({ libraryTab: 'artists' });
-                        this.showView('home', false);
-                    } else {
-                        const targetView = this.currentView === 'playlist-detail' ? 'playlists' : 'home';
-                        if (this.currentView !== targetView) this.vibrate(20);
-                        this.showView(targetView, false);
-                    }
+                    if (this.currentView !== 'home') this.vibrate(20);
+                    this.goToPreviousView();
                     this.resetOmniIsland();
                     return;
                 }
