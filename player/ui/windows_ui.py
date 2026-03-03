@@ -77,11 +77,17 @@ class WindowsControlCenter:
         ttk.Button(bottom, text="Exit", command=self.quit_app).pack(side=tk.RIGHT)
 
     def open_player(self):
-        webbrowser.open("http://localhost:5005/player/")
+        from shared.https_proxy import is_proxy_preferred, HTTPS_PROXY_PORT
+        scheme = "https" if is_proxy_preferred() else "http"
+        port = HTTPS_PROXY_PORT if is_proxy_preferred() else 5005
+        webbrowser.open(f"{scheme}://localhost:{port}/player/")
 
     def open_downloader(self):
-        """Open the embedded downloader in the main webapp (ensure API is running on 5005)."""
-        webbrowser.open("http://localhost:5005/player/")
+        """Open the embedded downloader in the main webapp."""
+        from shared.https_proxy import is_proxy_preferred, HTTPS_PROXY_PORT
+        scheme = "https" if is_proxy_preferred() else "http"
+        port = HTTPS_PROXY_PORT if is_proxy_preferred() else 5005
+        webbrowser.open(f"{scheme}://localhost:{port}/player/")
 
     def show_sync_qr(self):
         """Show sync QR code using the same logic as the Linux app."""
@@ -114,15 +120,19 @@ class WindowsControlCenter:
             local_ip = s.getsockname()[0]
             s.close()
         except: local_ip = "localhost"
-        
-        lan_url = f"http://{local_ip}:5005/player/"
-        ts_url = f"http://{tailscale_ip}:5005/player/" if tailscale_ip else None
+
+        from shared.https_proxy import is_proxy_preferred, HTTPS_PROXY_PORT
+        use_https = is_proxy_preferred()
+        scheme = "https" if use_https else "http"
+        port = HTTPS_PROXY_PORT if use_https else 5005
+        lan_url = f"{scheme}://{local_ip}:{port}/player/"
+        ts_url = f"{scheme}://{tailscale_ip}:{port}/player/" if tailscale_ip else None
 
         # 1. Generate Token
         config_data = config.to_dict()
         from shared.api import get_active_endpoints
         config_data['endpoints'] = get_active_endpoints()
-        config_data['port'] = 5005
+        config_data['port'] = port
         
         json_bytes = json.dumps(config_data).encode('utf-8')
         compressed = zlib.compress(json_bytes)

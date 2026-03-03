@@ -191,10 +191,14 @@
       <h2 data-i18n="index.launch.title">Launch Ecosystem</h2>
       <p data-i18n="index.launch.intro">Starts the Station Engine. The Station will be available on:</p>
       <ul>
-        <li><code>http://{your-tailscale-ip}:5005/player</code> <span class="note" data-i18n="index.launch.bullet1Note">— Access it from all around the world. You need <a href="https://tailscale.com/download" target="_blank" rel="noopener">Tailscale</a> installed; find your IP on the <a href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener">Machines dashboard</a>.</span></li>
-        <li><code>http://localhost:5005/player</code> <span class="note" data-i18n="index.launch.bullet2Note">— Only from the main machine.</span></li>
-        <li><code>http://<a href="#" class="local-ip-link" id="local-ip-link">{your-local-ip}</a>:5005/player</code> <span class="note" data-i18n="index.launch.bullet3Note">— Only from your home network.</span></li>
+        <li><code><span id="url-scheme">{{ proxy_scheme }}</span>://{your-tailscale-ip}:<span id="url-port">{{ proxy_port }}</span>/player</code> <span class="note" data-i18n="index.launch.bullet1Note">— Access it from all around the world. You need <a href="https://tailscale.com/download" target="_blank" rel="noopener">Tailscale</a> installed; find your IP on the <a href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener">Machines dashboard</a>.</span></li>
+        <li><code><span id="url-scheme-local">{{ proxy_scheme }}</span>://localhost:<span id="url-port-local">{{ proxy_port }}</span>/player</code> <span class="note" data-i18n="index.launch.bullet2Note">— Only from the main machine.</span></li>
+        <li><code><span id="url-scheme-lan">{{ proxy_scheme }}</span>://<a href="#" class="local-ip-link" id="local-ip-link">{your-local-ip}</a>:<span id="url-port-lan">{{ proxy_port }}</span>/player</code> <span class="note" data-i18n="index.launch.bullet3Note">— Only from your home network.</span></li>
       </ul>
+      <label class="card-actions" style="display: flex; align-items: center; gap: 8px; margin-top: 12px; cursor: pointer;">
+        <input type="checkbox" id="proxy-checkbox" {{ 'checked' if proxy_enabled else '' }} />
+        <span data-i18n="index.launch.httpsProxy">Use HTTPS (recommended for mobile / Add to Home Screen)</span>
+      </label>
       <div class="card-actions">
         <button type="button" class="btn btn-launch" id="btn-launch" data-i18n="index.launch.btnLaunch">Launch</button>
         <button type="button" class="btn btn-stop" id="btn-stop" data-i18n="index.launch.btnStop">Stop</button>
@@ -250,7 +254,12 @@
 
     function launchEcosystem() {
       btnLaunch.disabled = true;
-      fetch('/api/launch-ecosystem', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      const httpsProxy = document.getElementById('proxy-checkbox')?.checked ?? false;
+      fetch('/api/launch-ecosystem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ https_proxy: httpsProxy })
+      })
         .then(r => r.json())
         .then(data => {
           btnLaunch.disabled = false;
@@ -322,6 +331,36 @@
       link.addEventListener('mousemove', placeTooltip);
       link.addEventListener('mouseleave', hideTooltip);
       link.addEventListener('click', function (e) { e.preventDefault(); });
+    })();
+
+    (function () {
+      const checkbox = document.getElementById('proxy-checkbox');
+      const schemeEls = document.querySelectorAll('[id^="url-scheme"]');
+      const portEls = document.querySelectorAll('[id^="url-port"]');
+
+      function updateUrls() {
+        fetch('/api/proxy-preference')
+          .then(r => r.json())
+          .then(data => {
+            const scheme = data.https_proxy ? 'https' : 'http';
+            const port = data.port || 5005;
+            schemeEls.forEach(el => { el.textContent = scheme; });
+            portEls.forEach(el => { el.textContent = port; });
+          })
+          .catch(() => {});
+      }
+
+      checkbox?.addEventListener('change', function () {
+        fetch('/api/proxy-preference', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ https_proxy: checkbox.checked })
+        })
+          .then(() => updateUrls())
+          .catch(() => {});
+      });
+
+      updateUrls();
     })();
   </script>
 </body>

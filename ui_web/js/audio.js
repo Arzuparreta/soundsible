@@ -193,7 +193,7 @@ class AudioEngine {
         if (track.source === 'preview') {
             this._previewEndedTriggered = false;
             const host = (typeof store !== 'undefined' && store.state && store.state.activeHost) ? store.state.activeHost : (typeof window !== 'undefined' && window.location ? window.location.hostname : 'localhost');
-            const apiBase = `http://${host}:5005`;
+            const apiBase = (typeof store !== 'undefined' && store.apiBase) ? store.apiBase : `${(typeof window !== 'undefined' && window.location?.protocol) || 'http:'}//${host}:${(typeof store !== 'undefined' && store.state?.config?.port) || 5005}`;
             let streamUrl;
             if (track._libraryTrackId) {
                 streamUrl = `${apiBase}/api/static/stream/${encodeURIComponent(track._libraryTrackId)}`;

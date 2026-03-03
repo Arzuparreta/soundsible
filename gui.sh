@@ -89,6 +89,9 @@ install_dependencies() {
                 adwaita)
                     packages="libadwaita"
                     ;;
+                proxy)
+                    packages="caddy"
+                    ;;
             esac
             install_cmd="sudo dnf install -y $packages"
             ;;
@@ -103,6 +106,9 @@ install_dependencies() {
                 adwaita)
                     packages="libadwaita"
                     ;;
+                proxy)
+                    packages="caddy"
+                    ;;
             esac
             install_cmd="sudo pacman -S --noconfirm $packages"
             ;;
@@ -116,6 +122,9 @@ install_dependencies() {
                     ;;
                 adwaita)
                     packages="gir1.2-adw-1"
+                    ;;
+                proxy)
+                    packages="caddy"
                     ;;
             esac
             install_cmd="sudo apt install -y $packages"
