@@ -42,4 +42,5 @@ if __name__ == "__main__":
 
     threading.Thread(target=open_browser, daemon=True).start()
     print(f"Launcher: {url}")
+    print("(If you see DEPRECATED_ENDPOINT from Chrome in the logs, ignore it — it's a browser internal, not the app.)")
     start_server(port=port)

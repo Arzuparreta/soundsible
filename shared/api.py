@@ -11,7 +11,7 @@ import uuid
 import logging
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify, send_file, send_from_directory, Response, stream_with_context
+from flask import Flask, request, jsonify, send_file, send_from_directory, Response, stream_with_context, redirect
 from flask_socketio import SocketIO, emit, join_room
 from flask_cors import CORS
 
@@ -403,13 +403,23 @@ BRANDING_PATH = os.path.join(REPO_ROOT, 'branding')
 def serve_web_player():
     return send_from_directory(WEB_UI_PATH, 'index.html')
 
+
+@app.route('/player/index.html')
+def serve_web_player_index_redirect():
+    # Ensure any explicit /player/index.html (including iOS web clips)
+    # lands on the canonical /player/ URL.
+    return redirect('/player/', code=302)
+
+
 @app.route('/player/desktop/')
 def serve_web_player_desktop():
     return send_from_directory(WEB_UI_PATH, 'desktop.html')
 
+
 @app.route('/player/branding/<path:path>')
 def serve_branding(path):
     return send_from_directory(BRANDING_PATH, path)
+
 
 @app.route('/player/<path:path>')
 def serve_web_player_assets(path):
@@ -1981,7 +1991,7 @@ def update_config():
 
 # --- Server Management ---
 
-def start_api(port=5005, debug=False):
+def start_api(port=5005, debug=False, https_proxy_active=False):
     global api_observer
     print(f"--- Soundsible API Boot Sequence ---")
     print(f"Target Port: {port}")
@@ -2058,14 +2068,16 @@ def start_api(port=5005, debug=False):
         print(f"API: Could not list routes: {e}")
 
     # Access Summary
+    from shared.https_proxy import HTTPS_PROXY_PORT
+    proxy_port = HTTPS_PROXY_PORT if https_proxy_active else port
+    scheme = "https" if https_proxy_active else "http"
     print("\n" + "="*40)
     print("       SOUNDSIBLE ONLINE")
     print("="*40)
-    print(f"Local:  http://localhost:{port}/player/")
-    
+    print(f"Local:  {scheme}://localhost:{proxy_port}/player/")
     endpoints = get_active_endpoints()
     for ip in endpoints:
-        print(f"Remote: http://{ip}:{port}/player/")
+        print(f"Remote: {scheme}://{ip}:{proxy_port}/player/")
     print("="*40 + "\n")
 
     try:
