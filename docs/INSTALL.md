@@ -53,27 +53,9 @@ Soundsible works well together with [Tailscale](https://github.com/tailscale/tai
 
 4. Optionally, install the web app on mobile (see `README.md` for PWA instructions).
 
-### 3. HTTPS proxy (optional)
+### 3. Reverse proxy (optional)
 
-Enabling HTTPS fixes iOS "Add to Home Screen" issues on some networks (e.g. Wi‑Fi that forces TLS). Soundsible can run an optional Caddy reverse proxy that terminates TLS on port 8443 and forwards to Flask on 5005.
-
-1. **Install Caddy** (system package):
-   - Debian/Ubuntu: `sudo apt install caddy`
-   - Arch: `sudo pacman -S caddy`
-   - Fedora: `sudo dnf install caddy`
-   - macOS: `brew install caddy`
-
-2. **Enable the proxy**:
-   - In the web launcher: check "Use HTTPS (recommended for mobile / Add to Home Screen)" before launching.
-   - Or set `SOUNDSIBLE_HTTPS_PROXY=1` when starting the daemon (e.g. `SOUNDSIBLE_HTTPS_PROXY=1 ./venv/bin/python run.py --daemon`).
-
-3. **Access the Station** at `https://{ip}:8443/player/` instead of `http://{ip}:5005/player/`.
-
-4. **First-time self-signed cert**: Your browser will show a security warning. Trust the certificate once (e.g. "Advanced" → "Proceed") so Add to Home Screen works reliably.
-
-### 4. Reverse proxy (manual)
-
-If you want to serve Soundsible behind your own reverse proxy (e.g. Nginx, Traefik):
+If you want to serve Soundsible behind a reverse proxy (e.g. Nginx, Caddy, Traefik):
 
 1. Run the Station Engine on its default port (`5005`).
 2. Configure your proxy to forward a public path (for example `https://music.example.com`) to `http://127.0.0.1:5005`.
@@ -81,7 +63,7 @@ If you want to serve Soundsible behind your own reverse proxy (e.g. Nginx, Traef
 
 Consult your proxy’s documentation for exact configuration snippets.
 
-### 5. Storage considerations
+### 4. Storage considerations
 
 By default, Soundsible uses local disk on the host. For larger libraries or shared setups:
 

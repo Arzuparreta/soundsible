@@ -394,16 +394,7 @@ class SoundsibleLauncher:
         if "--daemon" in sys.argv:
             console.print("[bold green]Soundsible Daemon is running.[/bold green]")
             from shared.api import start_api
-            from shared.https_proxy import start_caddy_proxy, HTTPS_PROXY_PORT
-
-            https_proxy_active = False
-            proxy_val = os.environ.get("SOUNDSIBLE_HTTPS_PROXY", "").strip().lower()
-            if proxy_val in ("1", "true", "yes"):
-                proc = start_caddy_proxy(port=HTTPS_PROXY_PORT)
-                if proc is not None:
-                    https_proxy_active = True
-
-            start_api(https_proxy_active=https_proxy_active)
+            start_api()  # This blocks, but api_observer is set as module-level variable
             return
 
         while True:

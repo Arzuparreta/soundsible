@@ -18,33 +18,8 @@ from shared.daemon_launcher import (
     is_port_in_use,
     STATION_PORT,
 )
-from shared.https_proxy import HTTPS_PROXY_PORT
 
 DEFAULT_PORT = 5099
-
-
-def _launcher_prefs_path():
-    from shared.constants import DEFAULT_CONFIG_DIR
-    return Path(DEFAULT_CONFIG_DIR).expanduser() / "launcher_prefs.json"
-
-
-def _load_proxy_preference() -> bool:
-    path = _launcher_prefs_path()
-    if not path.exists():
-        return False
-    try:
-        with open(path) as f:
-            data = json.load(f)
-        return bool(data.get("https_proxy", False))
-    except Exception:
-        return False
-
-
-def _save_proxy_preference(enabled: bool) -> None:
-    path = _launcher_prefs_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        json.dump({"https_proxy": enabled}, f)
 
 
 def get_local_ipv4() -> str:
@@ -62,13 +37,7 @@ app = Flask(__name__, template_folder="templates", static_folder="static")
 
 @app.route("/")
 def index():
-    proxy_enabled = _load_proxy_preference()
-    return render_template(
-        "index.html",
-        proxy_enabled=proxy_enabled,
-        proxy_port=HTTPS_PROXY_PORT if proxy_enabled else STATION_PORT,
-        proxy_scheme="https" if proxy_enabled else "http",
-    )
+    return render_template("index.html")
 
 
 @app.route("/api/local-ip")
@@ -84,30 +53,9 @@ def stop_ecosystem():
     return jsonify({"ok": False, "error": message}), 500
 
 
-@app.route("/api/proxy-preference", methods=["GET"])
-def get_proxy_preference():
-    return jsonify({
-        "https_proxy": _load_proxy_preference(),
-        "port": HTTPS_PROXY_PORT if _load_proxy_preference() else STATION_PORT,
-        "scheme": "https" if _load_proxy_preference() else "http",
-    })
-
-
-@app.route("/api/proxy-preference", methods=["POST"])
-def post_proxy_preference():
-    data = request.get_json(silent=True) or {}
-    enabled = bool(data.get("https_proxy", False))
-    _save_proxy_preference(enabled)
-    return jsonify({"ok": True, "https_proxy": enabled})
-
-
 @app.route("/api/launch-ecosystem", methods=["POST"])
 def launch_ecosystem():
-    data = request.get_json(silent=True) or {}
-    env_extra = {"SOUNDSIBLE_LAUNCHED_FROM": "web"}
-    if data.get("https_proxy") or _load_proxy_preference():
-        env_extra["SOUNDSIBLE_HTTPS_PROXY"] = "1"
-    ok, message = start_daemon_process(ROOT_DIR, env_extra=env_extra, detach=False)
+    ok, message = start_daemon_process(ROOT_DIR, env_extra={"SOUNDSIBLE_LAUNCHED_FROM": "web"}, detach=False)
     if ok:
         return jsonify({"ok": True, "message": message}), 200
     # Already running is not an error; report as success with that message

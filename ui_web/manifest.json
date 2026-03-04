@@ -1,8 +1,7 @@
 {
   "name": "Soundsible Player",
   "short_name": "Soundsible",
-  "start_url": "./",
-  "scope": "./",
+  "start_url": "index.html",
   "display": "standalone",
   "background_color": "#0d0d0f",
   "theme_color": "#0d0d0f",

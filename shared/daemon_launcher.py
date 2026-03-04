@@ -93,16 +93,9 @@ def start_daemon_process(root_dir: Path = None, env_extra: dict = None, detach: 
 def stop_daemon_process(port: int = STATION_PORT) -> Tuple[bool, str]:
     """
     Stop the process listening on the Station Engine port.
-    Also stops Caddy HTTPS proxy if running on 8443.
     Returns (success, message). Message is user-facing.
     """
     if not is_port_in_use(port):
-        # Still try to stop Caddy in case it was running without Flask
-        try:
-            from shared.https_proxy import stop_caddy_proxy, HTTPS_PROXY_PORT
-            stop_caddy_proxy(HTTPS_PROXY_PORT)
-        except Exception:
-            pass
         return True, MSG_STATION_NOT_RUNNING
     try:
         if os.name == "nt":
@@ -132,11 +125,6 @@ def stop_daemon_process(port: int = STATION_PORT) -> Tuple[bool, str]:
             stdout=subprocess.DEVNULL,
             timeout=5,
         )
-        try:
-            from shared.https_proxy import stop_caddy_proxy, HTTPS_PROXY_PORT
-            stop_caddy_proxy(HTTPS_PROXY_PORT)
-        except Exception:
-            pass
         return True, MSG_STATION_STOPPED
     except Exception as e:
         return False, str(e)

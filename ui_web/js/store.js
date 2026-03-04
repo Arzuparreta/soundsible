@@ -6,17 +6,11 @@ import { connectionManager } from './connection.js';
 class Store {
     constructor() {
         this.state = {
-            config: (() => {
-                const saved = this.load('config', { host: 'localhost', port: 5005, syncToken: null });
-                const portFromUrl = (typeof window !== 'undefined' && window.location?.port)
-                    ? parseInt(window.location.port, 10) : null;
-                return {
-                    ...saved,
-                    host: saved.host || (typeof window !== 'undefined' && window.location?.hostname) || 'localhost',
-                    port: (Number.isInteger(portFromUrl) && portFromUrl > 0) ? portFromUrl : (saved.port || 5005),
-                    syncToken: saved.syncToken
-                };
-            })(),
+            config: this.load('config', {
+                host: window.location.hostname || 'localhost',
+                port: 5005,
+                syncToken: null
+            }),
             priorityList: this.load('priority_list', []),
             activeHost: window.location.hostname || 'localhost',
             isOnline: true,
@@ -148,9 +142,7 @@ class Store {
     }
 
     get apiBase() {
-        const protocol = (typeof window !== 'undefined' && window.location?.protocol) || 'http:';
-        const port = this.state.config?.port || 5005;
-        return `${protocol}//${this.state.activeHost}:${port}`;
+        return `http://${this.state.activeHost}:5005`;
     }
 
     /** Stable device id for playback sync (persisted in localStorage). */

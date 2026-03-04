@@ -60,11 +60,8 @@ export class ConnectionManager {
             this.socket.disconnect();
         }
 
-        const protocol = (typeof window !== 'undefined' && window.location?.protocol) || 'http:';
-        const port = store.state.config?.port || 5005;
-        const url = `${protocol}//${host}:${port}`;
-        console.log("🔌 Initializing SocketIO at:", url);
-        this.socket = io(url);
+        console.log("🔌 Initializing SocketIO at:", host);
+        this.socket = io(`http://${host}:5005`);
 
         this.socket.on('connect', () => {
             console.log("✅ Socket Connected");
@@ -151,9 +148,7 @@ export class ConnectionManager {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
         
-        const protocol = (typeof window !== 'undefined' && window.location?.protocol) || 'http:';
-        const port = store.state?.config?.port || 5005;
-        const url = `${protocol}//${host}:${port}/api/health`;
+        const url = `http://${host}:5005/api/health`; // Check health endpoint
         
         try {
             const res = await fetch(url, { 

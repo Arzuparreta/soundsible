@@ -1572,14 +1572,10 @@ class MainWindow(Adw.ApplicationWindow):
             local_ip = s.getsockname()[0]
             s.close()
         except: pass
-
-        from shared.https_proxy import is_proxy_preferred, HTTPS_PROXY_PORT
-        use_https = is_proxy_preferred()
-        scheme = "https" if use_https else "http"
-        port = HTTPS_PROXY_PORT if use_https else 5005
-        lan_url = f"{scheme}://{local_ip}:{port}/player/"
-        ts_url = f"{scheme}://{tailscale_ip}:{port}/player/" if tailscale_ip else None
-
+            
+        lan_url = f"http://{local_ip}:5005/player/"
+        ts_url = f"http://{tailscale_ip}:5005/player/" if tailscale_ip else None
+        
         config = self._load_config()
         if not config:
             print("DEBUG: [QR] ❌ No config found")
@@ -1588,11 +1584,11 @@ class MainWindow(Adw.ApplicationWindow):
         try:
             print("DEBUG: [QR] Generating token...")
             config_data = config.to_dict()
-
+            
             # Smart Resolver: Pack all available network endpoints
             from shared.api import get_active_endpoints
             config_data['endpoints'] = get_active_endpoints()
-            config_data['port'] = port
+            config_data['port'] = 5005
             
             json_bytes = json.dumps(config_data).encode('utf-8')
             compressed = zlib.compress(json_bytes)
