@@ -13,24 +13,22 @@ import { DesktopUI } from './ui_desktop.js';
 import { checkResumeFromOtherDevice } from './playback_resume.js';
 import { playPreview } from './preview_playback.js';
 import { initHoverTooltip } from './tooltip.js';
+import * as playback_context from './playback_context.js';
 
 console.log('Soundsible Desktop initializing...');
 
+function getDesktopViewState() {
+    return {
+        homeTracks: window._currentHomeTracks,
+        favTracks: window._currentFavTracks,
+        artistTracks: window._currentArtistTracks,
+        playlistTracks: window._currentPlaylistTracks,
+        searchTracks: window._currentSearchTracks
+    };
+}
+
 function playTrack(trackId) {
-    const state = store.state;
-    let context = state.library;
-    if (DesktopUI.currentView === 'home') {
-        context = window._currentHomeTracks ?? renderers.sortLibraryTracks(state.library, state.libraryOrder || 'date_added', state.favorites);
-    } else if (DesktopUI.currentView === 'favourites') context = window._currentFavTracks ?? context;
-    else if (DesktopUI.currentView === 'artist-detail') context = window._currentArtistTracks ?? context;
-    else if (DesktopUI.currentView === 'playlist-detail') context = window._currentPlaylistTracks ?? context;
-    else if (DesktopUI.currentView === 'discover') context = window._currentSearchTracks ?? context;
-    const track = context?.find((t) => t.id === trackId);
-    if (track) {
-        audioEngine.setContext(context);
-        store.update({ currentTrack: track });
-        audioEngine.playTrack(track);
-    }
+    playback_context.playTrackFromContext(trackId, DesktopUI.currentView, getDesktopViewState());
 }
 
 function showArtistDetail(artistName) {

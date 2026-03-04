@@ -18,8 +18,9 @@ from flask_cors import CORS
 logger = logging.getLogger(__name__)
 
 from shared.models import PlayerConfig, Track, LibraryMetadata, StorageProvider
-from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, DEFAULT_CACHE_DIR, STATION_PORT
+from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, DEFAULT_CACHE_DIR, STATION_PORT, DEFAULT_OUTPUT_DIR_FALLBACK
 from shared.path_resolver import resolve_local_track_path
+from shared.app_config import set_output_dir as set_app_output_dir
 from shared.playback_state import get_state as get_playback_state, put_state as put_playback_state, get_scope_from_request
 from player.library import LibraryManager
 from player.engine import PlaybackEngine
@@ -161,15 +162,21 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
         if log_callback:
             log_callback(msg)
 
-    # 1. Determine the target output directory (outside lock)
+    # Load env once (used for quality/cookie_browser below)
     from dotenv import dotenv_values
-    env_path = Path('odst_tool/.env')
-    env_vars = dotenv_values(env_path) if env_path.exists() else {}
-    target_dir = output_dir or env_vars.get("OUTPUT_DIR") or os.getenv("OUTPUT_DIR")
-    if not target_dir:
-        from odst_tool.config import DEFAULT_OUTPUT_DIR
-        target_dir = str(DEFAULT_OUTPUT_DIR)
-    target_path = Path(target_dir).expanduser().absolute()
+    _env_path = Path(_REPO_ROOT) / "odst_tool" / ".env"
+    env_vars = dotenv_values(_env_path) if _env_path.exists() else {}
+
+    # 1. Determine the target output directory (prefer app_config set at startup)
+    from shared.app_config import get_output_dir
+    _app_out = get_output_dir()
+    if output_dir:
+        target_path = Path(output_dir).expanduser().absolute()
+    elif _app_out is not None:
+        target_path = _app_out
+    else:
+        target_dir = env_vars.get("OUTPUT_DIR") or os.getenv("OUTPUT_DIR") or DEFAULT_OUTPUT_DIR_FALLBACK
+        target_path = Path(target_dir).expanduser().absolute()
 
     with _downloader_lock:
         should_init = False
@@ -446,12 +453,38 @@ def home():
 
 # --- Server Management ---
 
+def _resolve_output_dir():
+    """Resolve OUTPUT_DIR once at startup (only place that may read odst_tool/.env)."""
+    target = os.getenv("OUTPUT_DIR")
+    if not target:
+        try:
+            from dotenv import dotenv_values
+            _env_path = Path(_REPO_ROOT) / "odst_tool" / ".env"
+            _env = dotenv_values(_env_path) if _env_path.exists() else {}
+            target = _env.get("OUTPUT_DIR")
+        except Exception:
+            pass
+    if not target:
+        try:
+            from odst_tool.config import DEFAULT_OUTPUT_DIR
+            target = str(DEFAULT_OUTPUT_DIR)
+        except Exception:
+            target = DEFAULT_OUTPUT_DIR_FALLBACK
+    return Path(target).expanduser().resolve() if target else None
+
+
 def start_api(port=STATION_PORT, debug=False):
     global api_observer
     logger.info("--- Soundsible API Boot Sequence ---")
     logger.info("Target Port: %s", port)
     logger.info("CWD: %s", os.getcwd())
     logger.info("For full startup (sync + watcher) use: python run.py --daemon")
+
+    # Set app config so path_resolver and security do not depend on odst_tool layout
+    _out = _resolve_output_dir()
+    if _out:
+        set_app_output_dir(_out)
+        logger.info("API: Output dir set to %s", _out)
 
     _defer_ytdlp_thread = False
     _run_ytdlp_update = None

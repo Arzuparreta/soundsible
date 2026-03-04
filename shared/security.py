@@ -8,7 +8,16 @@ import tempfile
 
 logger = logging.getLogger(__name__)
 
-from shared.constants import DEFAULT_CONFIG_DIR, DEFAULT_CACHE_DIR
+from shared.constants import DEFAULT_CONFIG_DIR, DEFAULT_CACHE_DIR, DEFAULT_OUTPUT_DIR_FALLBACK
+
+
+def _get_output_dir_root():
+    """Output dir for allowed_roots; use app_config if set, else fallback (no odst_tool import)."""
+    from shared.app_config import get_output_dir
+    out = get_output_dir()
+    if out is not None:
+        return os.path.normpath(os.path.abspath(str(out)))
+    return os.path.normpath(os.path.abspath(os.path.expanduser(DEFAULT_OUTPUT_DIR_FALLBACK)))
 
 
 def is_trusted_network(remote_addr) -> bool:
@@ -41,12 +50,11 @@ def is_safe_path(file_path, is_trusted: bool = False) -> bool:
         # Lexical normalization for public-facing security check
         target = os.path.normpath(os.path.abspath(os.path.expanduser(file_path)))
 
-        # Approved Roots for public access
-        from odst_tool.config import DEFAULT_OUTPUT_DIR
+        # Approved Roots for public access (no odst_tool dependency)
         allowed_roots = [
             os.path.normpath(os.path.abspath(os.path.expanduser(DEFAULT_CONFIG_DIR))),
             os.path.normpath(os.path.abspath(os.path.expanduser(DEFAULT_CACHE_DIR))),
-            os.path.normpath(os.path.abspath(os.path.expanduser(str(DEFAULT_OUTPUT_DIR)))),
+            _get_output_dir_root(),
             os.path.normpath(os.path.abspath(tempfile.gettempdir())),
             os.path.normpath(os.path.abspath(os.path.expanduser("~")))
         ]

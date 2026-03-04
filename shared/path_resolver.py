@@ -16,20 +16,19 @@ def resolve_local_track_path(track: Any) -> Optional[str]:
     Does not use track.local_path or any stored path.
     Returns the first path that exists, or None.
     """
+    from shared.app_config import get_output_dir
+    from shared.constants import DEFAULT_OUTPUT_DIR_FALLBACK
+
     track_id = getattr(track, "id", None)
     file_hash = getattr(track, "file_hash", None)
     track_format = (getattr(track, "format", None) or "mp3").strip(".")
 
-    try:
-        from dotenv import dotenv_values
-        env_path = Path("odst_tool/.env")
-        env_vars = dotenv_values(env_path) if env_path.exists() else {}
-        output_dir = env_vars.get("OUTPUT_DIR") or os.getenv("OUTPUT_DIR")
-        if not output_dir:
-            return None
-        tracks_dir = Path(output_dir).expanduser().absolute() / "tracks"
-    except Exception:
+    output_dir = get_output_dir()
+    if output_dir is None:
+        output_dir = os.getenv("OUTPUT_DIR") or DEFAULT_OUTPUT_DIR_FALLBACK
+    if not output_dir:
         return None
+    tracks_dir = Path(output_dir).expanduser().resolve() / "tracks"
 
     candidates = []
     if track_id:
@@ -41,6 +40,6 @@ def resolve_local_track_path(track: Any) -> Optional[str]:
         try:
             if candidate and os.path.exists(candidate):
                 return candidate
-        except Exception:
+        except OSError:
             continue
     return None

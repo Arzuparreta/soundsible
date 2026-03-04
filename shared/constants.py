@@ -41,6 +41,8 @@ AWS_S3_ENDPOINT_TEMPLATE = "https://s3.{region}.amazonaws.com"
 # Configuration paths
 DEFAULT_CONFIG_DIR = "~/.config/soundsible"
 DEFAULT_CACHE_DIR = "~/.cache/soundsible"
+# Fallback when OUTPUT_DIR is not set (shared code avoids depending on odst_tool)
+DEFAULT_OUTPUT_DIR_FALLBACK = "~/Music/Soundsible"
 DEFAULT_DATA_DIR = "~/.local/share/soundsible"
 DEFAULT_LIBRARY_PATH = DEFAULT_CONFIG_DIR + "/" + LIBRARY_METADATA_FILENAME
 

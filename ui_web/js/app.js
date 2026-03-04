@@ -17,8 +17,19 @@ import { checkResumeFromOtherDevice } from './playback_resume.js';
 import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 import { playPreview } from './preview_playback.js';
 import { initHoverTooltip } from './tooltip.js';
+import * as playback_context from './playback_context.js';
 
 const LIBRARY_SYNC_INTERVAL_MS = 300000;
+
+function viewStateFromContext() {
+    return {
+        homeTracks: viewContext.homeTracks,
+        favTracks: viewContext.favTracks,
+        artistTracks: viewContext.artistTracks,
+        playlistTracks: window._currentPlaylistTracks,
+        searchTracks: viewContext.searchTracks
+    };
+}
 
 console.log("🚀 Soundsible Web Player Initializing...");
 
@@ -1399,34 +1410,15 @@ function initArtistDetailBack() {
     backBtn.addEventListener('click', () => UI.goToPreviousView());
 }
 
-function getCurrentTrackList() {
-    const order = store.state.libraryOrder || 'date_added';
-    const sorted = () => sortLibraryTracks(store.state.library, order, store.state.favorites);
-    if (UI.currentView === 'home') return viewContext.homeTracks != null ? viewContext.homeTracks : sorted();
-    if (UI.currentView === 'favourites') return viewContext.favTracks || store.state.library;
-    if (UI.currentView === 'playlists' || UI.currentView === 'playlist-detail') return window._currentPlaylistTracks || store.state.library;
-    if (UI.currentView === 'artist-detail') return viewContext.artistTracks || store.state.library;
-    if (UI.currentView === 'discover' && viewContext.searchTracks) return viewContext.searchTracks;
-    return store.state.library;
-}
-
 /** Same context as playTrack; used by long-press to resolve track for NP. */
 window.getTrackFromCurrentContext = (trackId) => {
-    const context = getCurrentTrackList();
-    return context && context.find(t => t.id === trackId) || null;
+    return playback_context.getTrackFromContext(trackId, UI.currentView, viewStateFromContext());
 };
 
 window.playTrack = (trackId) => {
     console.log("Playing track ID:", trackId);
     Haptics.tick();
-
-    const context = getCurrentTrackList();
-    const track = context && context.find(t => t.id === trackId);
-    if (track) {
-        audioEngine.setContext(context);
-        store.update({ currentTrack: track });
-        audioEngine.playTrack(track);
-    }
+    playback_context.playTrackFromContext(trackId, UI.currentView, viewStateFromContext());
 };
 
 window.playPreview = playPreview;
