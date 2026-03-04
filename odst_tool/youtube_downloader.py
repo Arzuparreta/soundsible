@@ -153,7 +153,7 @@ class YouTubeDownloader:
                 genre=None,
                 track_number=clean_metadata.get('track_number'),
                 is_local=True,
-                local_path=str(final_path.absolute()),
+                local_path=None,
                 musicbrainz_id=clean_metadata.get("musicbrainz_id"),
                 isrc=clean_metadata.get("isrc"),
                 cover_source=clean_metadata.get("cover_source"),
@@ -264,7 +264,7 @@ class YouTubeDownloader:
                 genre=None,
                 track_number=clean_meta.get('track_number') or 1,
                 is_local=True,
-                local_path=str(final_path.absolute()),
+                local_path=None,
                 musicbrainz_id=None,
                 isrc=None,
                 cover_source="youtube",
@@ -535,6 +535,70 @@ class YouTubeDownloader:
                     print(f"YouTube search error (fallback): {e2}")
             else:
                 print(f"YouTube search error: {e}")
+        return out
+
+    def get_related_videos(self, seed_video_id: str, max_results: int = 25) -> List[Dict[str, Any]]:
+        """
+        Fetch related/mix videos for a seed from YouTube Music (playlist RD{id}).
+        Returns same shape as search_youtube: id, title, duration, thumbnail, webpage_url, channel, artist.
+        """
+        if not _is_valid_youtube_video_id(seed_video_id):
+            return []
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+            'noplaylist': False,
+            'extractor_args': {
+                'youtube': {'player_client': ['android', 'ios', 'web']}
+            }
+        }
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            ydl_opts['cookiefile'] = self.cookie_file
+        elif self.cookie_browser:
+            ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
+
+        # Watch URL with list=RD: direct playlist?list=RD returns "This playlist type is unviewable".
+        mix_url = f"https://www.youtube.com/watch?v={seed_video_id}&list=RD{seed_video_id}&start_radio=1"
+
+        def to_item(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            if not entry:
+                return None
+            video_id = entry.get('id')
+            if not video_id:
+                return None
+            title = (entry.get('title') or '').strip() or 'Unknown'
+            webpage_url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
+            channel = entry.get('channel') or entry.get('uploader') or ''
+            return {
+                'id': video_id,
+                'title': title,
+                'duration': entry.get('duration') or 0,
+                'thumbnail': entry.get('thumbnail') or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else ''),
+                'webpage_url': webpage_url,
+                'channel': channel,
+                'artist': channel,
+            }
+
+        out: List[Dict[str, Any]] = []
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                result = ydl.extract_info(mix_url, download=False)
+            if not result or 'entries' not in result:
+                print(f"[Discover] get_related_videos: no entries in result for seed {seed_video_id} (result keys: {list(result.keys()) if result else 'None'})")
+                return []
+            raw_entries = result['entries']
+            if raw_entries is None:
+                print(f"[Discover] get_related_videos: entries is None for seed {seed_video_id}")
+                return []
+            entries_list = list(raw_entries) if not isinstance(raw_entries, list) else raw_entries
+            for entry in entries_list[:max_results]:
+                item = to_item(entry)
+                if item is not None:
+                    out.append(item)
+        except Exception as e:
+            print(f"[Discover] get_related_videos failed for seed {seed_video_id}: {e}")
+            return []
         return out
 
     def get_stream_url(self, video_id: str) -> Optional[str]:

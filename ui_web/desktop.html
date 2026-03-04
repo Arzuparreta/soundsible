@@ -692,24 +692,7 @@
                 <div id="desktop-view-discover" class="desktop-view">
                     <div class="flex flex-col h-full w-full overflow-hidden">
                         <div id="desktop-discover-content-panel" class="flex flex-col flex-1 min-h-0 w-full overflow-y-auto custom-scrollbar">
-                            <p id="desktop-discover-empty-library" class="hidden text-sm text-[var(--text-dim)] py-4 px-1">Search and download a song in the bar above to get recommendations!</p>
-                            <div id="desktop-discover-config-wrap" class="p-4 rounded-2xl border border-[var(--glass-border)] mb-4 flex-shrink-0 hidden" style="background: var(--surface-overlay);">
-                                    <p class="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-dim)] mb-2">Recommendations configuration</p>
-                                    <p class="text-xs text-[var(--text-dim)] mb-2">Last.fm improves recommendations. <a id="desktop-discover-lastfm-link" href="https://www.last.fm/api/account/create" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] font-bold underline hover:no-underline">https://www.last.fm/api/account/create</a></p>
-                                    <details class="mb-3 text-[11px] text-[var(--text-dim)]">
-                                        <summary class="cursor-pointer font-semibold text-[var(--text-main)]">How to get your API key</summary>
-                                        <ol class="mt-2 space-y-1.5 list-decimal list-inside">
-                                            <li><strong>Register first.</strong> You need a Last.fm account. Sign up at <a href="https://www.last.fm/join" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] underline">last.fm/join</a> (free) if you don’t have one.</li>
-                                            <li>Open the link above and create an application. Use: <strong>Contact email</strong> — your email; <strong>Application name</strong> — e.g. Soundsible; <strong>Application description</strong> — e.g. Music recommendations; <strong>Callback URL</strong> — leave blank or <code class="text-[10px] bg-[var(--input-bg)] px-1 rounded">https://localhost</code> (not used); <strong>Application homepage</strong> — leave blank or your site URL.</li>
-                                            <li>After submitting, copy the <strong>API Key</strong> and paste it below.</li>
-                                        </ol>
-                                    </details>
-                                    <div class="flex gap-2">
-                                        <input type="password" id="desktop-discover-lastfm-input" class="input-theme flex-1 rounded-[var(--radius-omni-xs)] px-3 py-2 text-sm" placeholder="Last.fm API key" autocomplete="off">
-                                        <button type="button" id="desktop-discover-lastfm-save" class="px-4 py-2 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]/40 hover:opacity-90 transition-opacity">Save</button>
-                                    </div>
-                                    <p id="desktop-discover-lastfm-status" class="mt-2 text-xs text-[var(--text-dim)] hidden"></p>
-                            </div>
+                            <p id="desktop-discover-empty-library" class="hidden text-sm text-[var(--text-dim)] py-4 px-1">Add music from YouTube to your library to get recommendations.</p>
                             <div id="desktop-discover-main" class="flex flex-col flex-1 min-h-0 hidden">
                                 <div id="desktop-discover-no-results" class="hidden text-center py-6 text-sm text-[var(--text-dim)]">No recommendations right now. Try again later.</div>
                                 <div id="desktop-discover-sections" class="flex-1 min-h-0"></div>
@@ -755,24 +738,15 @@
                             <option value="alphabetical">Alphabetical</option>
                             <option value="favorites_first">Favorites first</option>
                         </select>
+                        <h2 class="text-lg font-bold pt-4">Storage</h2>
+                        <p class="text-sm text-[var(--text-dim)] mb-2">Folder where downloaded tracks and library are stored. Used for downloads and after Wipe library.</p>
+                        <div class="flex gap-2 flex-wrap items-center mb-2">
+                            <input type="text" id="dl-conf-path" class="input-theme flex-1 min-w-0 rounded-[var(--radius-omni-xs)] px-4 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors" placeholder="/path/to/music" aria-label="Storage path">
+                            <button type="button" id="dl-save-conf-btn" class="px-4 py-2 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)] text-[var(--text-on-accent)] hover:opacity-90 transition-opacity shrink-0">Save</button>
+                        </div>
                         <h2 class="text-lg font-bold pt-4">Wipe library</h2>
                         <p class="text-sm text-[var(--text-dim)] mb-2">Reset the library to an empty state. All tracks, playlists, and cloud data will be permanently deleted. This cannot be undone.</p>
                         <button type="button" id="desktop-settings-wipe-library-btn" class="px-4 py-2 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-red-500/15 text-red-400 border border-red-500/40 hover:bg-red-500/25 transition-colors">Wipe library</button>
-                        <h2 class="text-lg font-bold pt-4">Recommendations</h2>
-                        <p class="text-xs text-[var(--text-dim)] mb-2">Last.fm API key improves Discover. <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] font-bold underline hover:no-underline">https://www.last.fm/api/account/create</a></p>
-                        <details class="mb-3 text-[11px] text-[var(--text-dim)]">
-                            <summary class="cursor-pointer font-semibold text-[var(--text-main)]">How to get your API key</summary>
-                            <ol class="mt-2 space-y-1.5 list-decimal list-inside">
-                                <li><strong>Register first.</strong> You need a Last.fm account. Sign up at <a href="https://www.last.fm/join" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] underline">last.fm/join</a> (free) if you don’t have one.</li>
-                                <li>Open the link above and create an application. Use: <strong>Contact email</strong> — your email; <strong>Application name</strong> — e.g. Soundsible; <strong>Application description</strong> — e.g. Music recommendations; <strong>Callback URL</strong> — leave blank or <code class="text-[10px] bg-[var(--input-bg)] px-1 rounded">https://localhost</code> (not used); <strong>Application homepage</strong> — leave blank or your site URL.</li>
-                                <li>After submitting, copy the <strong>API Key</strong> and paste it below.</li>
-                            </ol>
-                        </details>
-                        <div class="flex gap-2">
-                            <input type="password" id="desktop-settings-lastfm-api-key" class="input-theme flex-1 rounded-[var(--radius-omni-xs)] px-4 py-2 text-sm" placeholder="Last.fm API key" autocomplete="off">
-                            <button type="button" id="desktop-settings-lastfm-save" class="px-4 py-2 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]/40 hover:opacity-90 transition-opacity">Save</button>
-                        </div>
-                        <p id="desktop-settings-lastfm-status" class="mt-2 text-xs text-[var(--text-dim)] hidden"></p>
                         <h2 class="text-lg font-bold pt-4">YouTube engine</h2>
                         <label class="flex items-center gap-3 cursor-pointer group">
                             <input type="checkbox" id="desktop-settings-ytdlp-auto-update" class="rounded border-[var(--input-border)] text-[var(--accent)] focus:ring-[var(--accent)]">

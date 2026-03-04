@@ -125,6 +125,9 @@ class DatabaseManager:
                 if 'metadata_modified_by_user' not in columns:
                     conn.execute("ALTER TABLE tracks ADD COLUMN metadata_modified_by_user BOOLEAN DEFAULT 0")
 
+                # 3b. Clear stored local_path (path is resolved at read from OUTPUT_DIR)
+                conn.execute("UPDATE tracks SET local_path = NULL WHERE local_path IS NOT NULL")
+
                 # 4. YouTube Resolution Cache
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS youtube_resolution_cache (
@@ -188,7 +191,7 @@ class DatabaseManager:
                             genre=excluded.genre,
                             track_number=excluded.track_number,
                             is_local=CASE WHEN excluded.is_local THEN 1 ELSE tracks.is_local END,
-                            local_path=COALESCE(excluded.local_path, tracks.local_path),
+                            local_path=excluded.local_path,
                             musicbrainz_id=COALESCE(excluded.musicbrainz_id, tracks.musicbrainz_id),
                             isrc=COALESCE(excluded.isrc, tracks.isrc),
                             album_artist=excluded.album_artist,
@@ -199,8 +202,8 @@ class DatabaseManager:
                         track.duration, track.file_hash, track.original_filename, 
                         track.compressed, track.file_size, track.bitrate, track.format, 
                         track.cover_art_key, track.year, track.genre, track.track_number, 
-                        track.is_local, track.local_path, track.musicbrainz_id, 
-                        track.isrc, track.album_artist,
+                        track.is_local, None,
+                        track.musicbrainz_id, track.isrc, track.album_artist,
                         track.cover_source, track.metadata_modified_by_user
                     ))
                 conn.execute("COMMIT")
@@ -290,10 +293,11 @@ class DatabaseManager:
             return [self._row_to_track(row) for row in cursor.fetchall()]
 
     def _row_to_track(self, row: sqlite3.Row) -> Track:
-        # Map row to Track object
+        # Map row to Track object; ignore stored local_path (resolve at read from OUTPUT_DIR).
         data = dict(row)
-        # Remove last_updated which isn't in Track model
-        if 'last_updated' in data: del data['last_updated']
+        if "last_updated" in data:
+            del data["last_updated"]
+        data["local_path"] = None
         return Track.from_dict(data)
 
     def get_stats(self) -> Dict[str, int]:

@@ -26,7 +26,7 @@ A powerful tool to download music from YouTube Music and YouTube links. Fully co
    ```
    *(Or manually: `python -m venv venv && ./venv/bin/pip install -r requirements.txt`)*
 
-2. **Optional**: Create a `.env` file (e.g. from `odst_tool/.env.example`) to set `LASTFM_API_KEY` for Discover recommendations in the webapp.
+2. **Optional**: Create a `.env` file (e.g. from `odst_tool/.env.example`) to override `OUTPUT_DIR` or other options.
 
 ## Usage
 

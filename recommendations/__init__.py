@@ -1,6 +1,5 @@
-"""Discover recommendations engine: Last.fm + ODST bridge."""
+"""Discover recommendations: YouTube mix (related) pipeline."""
 
-from .service import RecommendationsService
-from .models import Seed, RawRecommendation
+from .service import get_recommendations
 
-__all__ = ["RecommendationsService", "Seed", "RawRecommendation"]
+__all__ = ["get_recommendations"]

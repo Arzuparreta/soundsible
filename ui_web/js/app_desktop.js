@@ -907,9 +907,6 @@ async function init() {
             statusPulse: null,
             serverStatus: 'desktop-server-status',
             hostDisplay: 'desktop-active-host-display',
-            lastfmInput: 'desktop-settings-lastfm-api-key',
-            lastfmSave: 'desktop-settings-lastfm-save',
-            lastfmStatus: 'desktop-settings-lastfm-status',
             ytdlpAutoUpdate: 'desktop-settings-ytdlp-auto-update',
         }, { store, showToast: (m) => DesktopUI.showToast(m), onLibraryOrderChange: () => renderHomeSongs() });
         initWipeLibraryModalDesktop();
@@ -1238,6 +1235,9 @@ async function init() {
                     window.unifiedSearch = m.unifiedSearch;
                     m.unifiedSearch.init({ mobile: false, resultsContainerId: 'desktop-discover-search-results' });
                 });
+            }
+            if (viewId === 'settings' && typeof Downloader !== 'undefined' && typeof Downloader.loadConfig === 'function') {
+                Downloader.loadConfig();
             }
         };
 

@@ -116,9 +116,10 @@ class LibraryMetadata:
         Returns:
             JSON string representation
         """
+        # Omit local_path when persisting; path is resolved at read from OUTPUT_DIR.
         data = {
             "version": self.version,
-            "tracks": [track.to_dict() for track in self.tracks],
+            "tracks": [{k: v for k, v in track.to_dict().items() if k != "local_path"} for track in self.tracks],
             "playlists": self.playlists,
             "settings": self.settings,
             "last_updated": self.last_updated
@@ -129,8 +130,9 @@ class LibraryMetadata:
     def from_dict(cls, data: Dict[str, Any]) -> 'LibraryMetadata':
         """
         Deserialize library metadata from dictionary.
+        Ignore stored local_path; path is resolved at read from OUTPUT_DIR.
         """
-        tracks = [Track.from_dict(t) for t in data["tracks"]]
+        tracks = [Track.from_dict({**t, "local_path": None}) for t in data["tracks"]]
         
         # Handle migration from library_version (str) to version (int)
         raw_version = data.get("version")

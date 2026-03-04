@@ -26,7 +26,7 @@ Short design research for the Discover recommendations UI. Implement to match pr
 
 ## Summary for implementation
 
-- **Seeds:** Backend auto-selects seeds from the user's library (shuffled, up to DISCOVER_SEED_CAP). No UI for picking seeds.
+- **Seeds:** Backend picks one library track with a valid YouTube ID; recommendations come from YouTube Music mix (related) for that seed. No UI for picking seeds.
 - **Discover UI:** Single-card (tinder-style) stack: one recommendation at a time with Prev/Next, Add, Play, and Refresh. Refresh fetches a new set; refill appends when near end of buffer.
 - **Results:** Card = div cover, title, artist; actions Add-to-queue, Play preview. Same metadata pattern as ODST search.
-- **Empty states:** "Search and download a song in the bar above to get recommendations!" when library is empty; "No recommendations right now. Try again later." when API returns empty; "Add Last.fm API key below to get recommendations" when provider unavailable.
+- **Empty states:** "Add music from YouTube to your library to get recommendations." when library has no tracks with YouTube ID or API returns no_seeds; "No recommendations right now. Try again later." when API returns empty results.

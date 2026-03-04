@@ -834,28 +834,27 @@ export class Downloader {
         try {
             const resp = await fetch(`${apiBase}/api/downloader/config`);
             const data = await resp.json();
-            this.confPath.value = data.output_dir || '';
-            
-            this.confR2Acc.value = data.r2_account_id || '';
-            this.confR2Bucket.value = data.r2_bucket || '';
-            this.confR2Key.value = data.r2_access_key || '';
-            this.confR2Secret.value = data.r2_secret_key || '';
+            if (this.confPath) this.confPath.value = data.output_dir || '';
+            if (this.confR2Acc) this.confR2Acc.value = data.r2_account_id || '';
+            if (this.confR2Bucket) this.confR2Bucket.value = data.r2_bucket || '';
+            if (this.confR2Key) this.confR2Key.value = data.r2_access_key || '';
+            if (this.confR2Secret) this.confR2Secret.value = data.r2_secret_key || '';
         } catch (err) {
             console.error("Config load failed:", err);
         }
     }
 
     static async saveConfig() {
-        const data = {
-            output_dir: this.confPath.value,
-            r2_account_id: this.confR2Acc.value,
-            r2_bucket: this.confR2Bucket.value,
-            r2_access_key: this.confR2Key.value,
-            r2_secret_key: this.confR2Secret.value
-        };
+        const data = {};
+        if (this.confPath) data.output_dir = this.confPath.value.trim();
+        if (this.confR2Acc) data.r2_account_id = this.confR2Acc.value;
+        if (this.confR2Bucket) data.r2_bucket = this.confR2Bucket.value;
+        if (this.confR2Key) data.r2_access_key = this.confR2Key.value;
+        if (this.confR2Secret) data.r2_secret_key = this.confR2Secret.value;
 
         try {
-            const resp = await fetch(`${store.apiBase}/api/downloader/config`, {
+            const apiBase = (typeof store !== 'undefined' && store.apiBase) ? store.apiBase : getApiBase();
+            const resp = await fetch(`${apiBase}/api/downloader/config`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)

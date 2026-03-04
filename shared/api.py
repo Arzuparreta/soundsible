@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 from shared.models import PlayerConfig, Track, LibraryMetadata, StorageProvider
 from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, DEFAULT_CACHE_DIR
+from shared.path_resolver import resolve_local_track_path
 from shared.playback_state import get_state as get_playback_state, put_state as put_playback_state, get_scope_from_request
 from player.library import LibraryManager
 from player.engine import PlaybackEngine
@@ -190,46 +191,6 @@ def is_safe_path(file_path, is_trusted=False):
         print(f"SECURITY: Error validating path {file_path}: {e}")
         
     return False
-
-def resolve_local_track_path(track):
-    """
-    Resolve a local audio path for a track.
-    Priority:
-    1) track.local_path (if present)
-    2) OUTPUT_DIR/tracks/{track.id}.{track.format}
-    3) OUTPUT_DIR/tracks/{track.file_hash}.{track.format}
-    """
-    candidates = []
-
-    local_path = getattr(track, 'local_path', None)
-    if local_path:
-        candidates.append(local_path)
-
-    track_id = getattr(track, 'id', None)
-    file_hash = getattr(track, 'file_hash', None)
-    track_format = (getattr(track, 'format', None) or 'mp3').strip('.')
-
-    try:
-        from dotenv import dotenv_values
-        env_path = Path('odst_tool/.env')
-        env_vars = dotenv_values(env_path) if env_path.exists() else {}
-        output_dir = env_vars.get("OUTPUT_DIR") or os.getenv("OUTPUT_DIR")
-        if output_dir:
-            tracks_dir = Path(output_dir).expanduser().absolute() / "tracks"
-            if track_id:
-                candidates.append(str(tracks_dir / f"{track_id}.{track_format}"))
-            if file_hash and file_hash != track_id:
-                candidates.append(str(tracks_dir / f"{file_hash}.{track_format}"))
-    except Exception:
-        pass
-
-    for candidate in candidates:
-        try:
-            if candidate and os.path.exists(candidate):
-                return candidate
-        except Exception:
-            continue
-    return None
 
 class LibraryFileWatcher(FileSystemEventHandler):
     """Watches library.json for changes and triggers SocketIO updates."""
@@ -560,7 +521,9 @@ def process_queue_background():
                     if not lib.metadata:
                         lib.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
                     
-                    shared_track = Track.from_dict(track.to_dict())
+                    track_dict = track.to_dict()
+                    track_dict.pop("local_path", None)
+                    shared_track = Track.from_dict(track_dict)
                     if not lib.metadata.get_track_by_id(shared_track.id):
                         lib.metadata.add_track(shared_track)
                     # Pre-cache cover so first request serves it (avoids placeholder until second load)
@@ -693,7 +656,9 @@ def delete_track_from_library(track_id):
 
 @app.route('/api/library/wipe', methods=['POST'])
 def wipe_library():
-    """Wipe library to empty state. Requires trusted network and body confirm: 'CONFIRM' or 'confirm'."""
+    """Wipe library to empty state at current path. Requires trusted network and body confirm: 'CONFIRM' or 'confirm'.
+    Clears core library (cloud + cache + DB) and the ODST library at the current downloader output_dir.
+    Does NOT change OUTPUT_DIR or any path config."""
     if not is_trusted_network(request.remote_addr):
         return jsonify({"error": "Deletions restricted to Home Network / Tailscale"}), 403
 
@@ -705,10 +670,21 @@ def wipe_library():
     try:
         lib, _, _ = get_core()
         success = lib.nuke_library()
-        if success:
-            socketio.emit('library_updated')
-            return jsonify({"status": "success"})
-        return jsonify({"error": "Wipe failed"}), 500
+        if not success:
+            return jsonify({"error": "Wipe failed"}), 500
+
+        # Also wipe ODST library at current path (reuse same path; do not change OUTPUT_DIR)
+        try:
+            dl = get_downloader(open_browser=False)
+            from odst_tool.models import LibraryMetadata as ODSTLibraryMetadata
+            dl.library = ODSTLibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+            dl.save_library()
+            print(f"API: ODST library wiped at {dl.output_dir}")
+        except Exception as e:
+            print(f"API: ODST library wipe (non-fatal): {e}")
+
+        socketio.emit('library_updated')
+        return jsonify({"status": "success"})
     except Exception as e:
         print(f"API: Library wipe error: {e}")
         import traceback
@@ -1115,26 +1091,14 @@ def stream_local_track(track_id):
     if not track:
         print(f"DEBUG: [Stream] ❌ Track {track_id} not found in metadata")
         return jsonify({"error": "Track not found"}), 404
-        
-    # Path Resolution Logic
-    raw_path = getattr(track, 'local_path', None)
-    if not raw_path and lib.cache:
-        raw_path = lib.cache.get_cached_path(track_id)
-        
-    if not raw_path:
+
+    # Resolve path from current OUTPUT_DIR only (no stored path; same pattern as preview stream).
+    path = resolve_local_track_path(track)
+    if not path:
         print(f"DEBUG: [Stream] ❌ No path known for {track_id}")
         return jsonify({"error": "No path registered"}), 404
 
-    # Convert relative to absolute if needed
-    path = os.path.expanduser(raw_path)
-    if not os.path.isabs(path):
-        # Try relative to home first, then relative to project
-        alt_path = os.path.join(os.path.expanduser("~"), path)
-        if os.path.exists(alt_path):
-            path = alt_path
-        else:
-            path = os.path.abspath(os.path.join(os.getcwd(), raw_path))
-
+    path = os.path.normpath(os.path.abspath(os.path.expanduser(path)))
     if not os.path.exists(path):
         print(f"DEBUG: [Stream] ❌ File NOT found at: {path}")
         return jsonify({"error": f"File not found: {path}"}), 404
@@ -1397,10 +1361,12 @@ def play_track():
     
     track = lib.metadata.get_track_by_id(track_id)
     if track and engine:
-        # Hybrid resolution (local -> cache -> cloud)
+        # Hybrid resolution (OUTPUT_DIR resolver -> cache -> cloud)
         url = lib.get_track_url(track)
         engine.play(url, track)
-        return jsonify({"status": "playing", "track": track.title, "source": "local" if url == track.local_path else "remote"})
+        resolved = resolve_local_track_path(track)
+        source = "local" if (resolved and url == resolved) else "remote"
+        return jsonify({"status": "playing", "track": track.title, "source": source})
     return jsonify({"error": "Track not found or engine not ready"}), 404
 
 @app.route('/api/playback/toggle', methods=['POST'])
@@ -1466,18 +1432,9 @@ def youtube_search():
         print(f"API: YouTube search error: {e}")
         return jsonify({"results": [], "error": str(e)}), 500
 
-LIBRARY_SEED_CAP = 50
+# --- Discover: YouTube mix (related) only; run get_downloader in executor to avoid blocking ---
 
-# --- Discover: keep this path fast and non-blocking ---
-# Do NOT call get_downloader() here: we only need Last.fm raw results (resolve=False). Downloader init holds a
-# global lock and does yt-dlp setup; calling it here would block the request thread and freeze the whole server.
-# Use DISCOVER_SEED_CAP so we do at most ~12 Last.fm requests (5 concurrent) and return in a few seconds.
-DISCOVER_SEED_CAP = 12
-
-# Async resolve: avoid blocking the request thread with yt-dlp (15–40s). Jobs run in a thread pool.
-_resolve_jobs: dict = {}
-_resolve_jobs_lock = threading.Lock()
-_resolve_job_ttl_sec = 300
+# Executor for discover (warm downloader + get_recommendations). Do not block request thread.
 _resolve_executor = None
 
 def _get_resolve_executor():
@@ -1497,156 +1454,53 @@ def _warm_downloader():
         pass
 
 
-def _resolve_artist_title_to_youtube(artist: str, title: str):
-    """Resolve (artist, title) to one YouTube result (id, thumbnail, webpage_url, etc.).
-    Call from a worker thread only (uses get_downloader). Returns dict or None."""
+def _discover_recommendations_worker(seed_id: str, limit: int, library_youtube_ids: set):
+    """Run in executor: get_downloader + get_recommendations. Returns list of video dicts."""
     try:
         dl = get_downloader(open_browser=False)
-        query = f"{artist or ''} {title or ''}".strip()
-        if not query:
-            return None
-        results = dl.downloader.search_youtube(query, max_results=5, use_ytmusic=True)
-        if not results:
-            results = dl.downloader.search_youtube(query, max_results=5, use_ytmusic=False)
-        if not results:
-            return None
-        entry = None
-        for candidate in results:
-            video_id = candidate.get("id")
-            if video_id and _validate_youtube_video_id(str(video_id)):
-                entry = candidate
-                break
-        if not entry:
-            return None
-        video_id = entry.get("id")
-        yt_thumb = entry.get("thumbnail") or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else "")
-        return {
-            "id": video_id,
-            "title": entry.get("title") or title,
-            "duration": entry.get("duration") or 0,
-            "thumbnail": yt_thumb,
-            "cover_url": yt_thumb,
-            "webpage_url": entry.get("webpage_url") or (f"https://www.youtube.com/watch?v={video_id}" if video_id else ""),
-            "channel": entry.get("channel") or "",
-            "artist": (artist or "").strip() or entry.get("channel") or ""
-        }
+        from recommendations import get_recommendations
+        out = get_recommendations(
+            seed_video_ids=[seed_id],
+            limit=limit,
+            library_youtube_ids=library_youtube_ids,
+            downloader=dl.downloader,
+        )
+        return out
     except Exception as e:
-        print(f"API: Discover resolve artist/title error: {e}")
-        return None
-
-
-def _resolve_worker(job_id: str, artist: str, title: str):
-    """Run in thread: resolve (artist, title) to YouTube and store in job. Updates _resolve_jobs."""
-    result = _resolve_artist_title_to_youtube(artist, title)
-    error = None if result else "Resolution failed"
-    with _resolve_jobs_lock:
-        if job_id in _resolve_jobs:
-            _resolve_jobs[job_id]["status"] = "completed" if result else "failed"
-            _resolve_jobs[job_id]["result"] = result
-            _resolve_jobs[job_id]["error"] = error
-            _resolve_jobs[job_id]["finished_at"] = time.time()
-
-
-def _resolve_recommendations_items(out_results: list):
-    """Run in a worker thread: full resolve for each item. Mutates out_results in place.
-    Max 2 concurrent resolves, total timeout 25s. Do not call get_downloader() from request thread."""
-    try:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        resolve_timeout_sec = 25
-        max_workers = 2
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            def resolve_one(item):
-                artist = (item.get("artist") or "").strip()
-                title = (item.get("title") or "").strip()
-                if not title:
-                    return
-                original_id = item.get("id")
-                res = _resolve_artist_title_to_youtube(artist, title)
-                if res:
-                    item.update(res)
-                    if original_id:
-                        item["id"] = original_id
-                        item["video_id"] = res.get("id")
-            futures = [pool.submit(resolve_one, item) for item in out_results]
-            for future in as_completed(futures, timeout=resolve_timeout_sec):
-                try:
-                    future.result(timeout=1)
-                except Exception:
-                    pass
-    except Exception:
-        pass
+        print(f"[Discover] worker failed for seed {seed_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
 
 
 @app.route('/api/discover/recommendations', methods=['POST'])
 def discover_recommendations():
-    """Return Last.fm recommendations with each item fully resolved to YouTube (id, thumbnail, webpage_url, etc.).
-    Body: limit (optional, default 20), exclude_ids (list, optional).
-    Seeds are auto-selected from the library (shuffled). Resolve runs in a worker with max 2 parallel; items may be raw if resolve fails or times out."""
+    """Return YouTube mix (related) recommendations for one seed from library. Body: limit (optional, default 20)."""
     try:
         data = request.json or {}
-        exclude_ids = data.get("exclude_ids")
-        if not isinstance(exclude_ids, list):
-            exclude_ids = []
         limit = min(30, max(1, data.get("limit", 20)))
 
         lib, _, _ = get_core()
         if not lib.metadata:
             lib.sync_library()
-        library_tracks = [t.to_dict() for t in (lib.metadata.tracks or [])]
+        library_tracks = lib.metadata.tracks or []
 
-        # 1. Build seeds from library (shuffle so refresh gets different seeds)
-        shuffled = list(library_tracks)
-        random.shuffle(shuffled)
-        seeds = []
-        for t in shuffled:
-            if len(seeds) >= DISCOVER_SEED_CAP:
-                break
-            if t.get("artist") is not None and t.get("title") is not None:
-                seeds.append({"artist": t["artist"], "title": t["title"]})
-        if not seeds:
+        # 1. Seeds = library tracks with valid youtube_id
+        seed_ids = []
+        library_youtube_ids = set()
+        for t in library_tracks:
+            yt_id = getattr(t, "youtube_id", None) or (t.to_dict() if hasattr(t, "to_dict") else {}).get("youtube_id")
+            if yt_id and isinstance(yt_id, str) and _validate_youtube_video_id(yt_id):
+                library_youtube_ids.add(yt_id)
+                seed_ids.append(yt_id)
+        if not seed_ids:
             return jsonify({"results": [], "reason": "no_seeds"}), 200
 
-        # 2. Raw from Last.fm only (no get_downloader; resolve happens on click via /api/discover/resolve)
-        from recommendations.service import RecommendationsService
-        from recommendations.models import Seed
-        from recommendations.util import raw_stable_id, raw_to_dict, normalize_artist_title
-        from dotenv import dotenv_values
-
-        seed_objs = [Seed(artist=s["artist"], title=s["title"]) for s in seeds]
-        random.shuffle(seed_objs)
-        _ODST_ENV_PATH = Path(__file__).resolve().parent.parent / "odst_tool" / ".env"
-        _env_vars = dotenv_values(_ODST_ENV_PATH) if _ODST_ENV_PATH.exists() else {}
-        lastfm_key = os.getenv("LASTFM_API_KEY") or _env_vars.get("LASTFM_API_KEY")
-        svc = RecommendationsService(lastfm_api_key=lastfm_key, downloader=None)  # resolve=False, do not init ODST here
+        # 2. Pick one seed at random
+        seed_id = random.choice(seed_ids)
         request_limit = min(100, limit + 20)
-        raw_list, reason = svc.get_recommendations(
-            seed_objs, limit=request_limit, library_tracks=library_tracks, resolve=False
-        )
-        if reason and not raw_list:
-            return jsonify({"results": [], "reason": reason}), 200
 
-        # 3. Build library keys so we never recommend tracks the user already has
-        library_keys = {
-            normalize_artist_title(t.get("artist") or "", t.get("title") or "")
-            for t in library_tracks
-            if t
-        }
-        # 4. Convert to dicts with stable id; filter by exclude_ids and library
-        exclude_set = {str(x) for x in exclude_ids if x}
-        results = []
-        for r in raw_list:
-            artist = r.get("artist") or getattr(r, "artist", "") or ""
-            title = r.get("title") or getattr(r, "title", "") or ""
-            if normalize_artist_title(artist, title) in library_keys:
-                continue
-            sid = raw_stable_id(artist, title)
-            if sid in exclude_set:
-                continue
-            d = raw_to_dict(r, sid)
-            results.append(d)
-
-        out_results = results[:limit]
-        # Warm downloader then full resolve per item (max 2 parallel, 25s total). Run in executor.
+        # 3. Run in executor (do not block request thread)
         try:
             executor = _get_resolve_executor()
             warm_future = executor.submit(_warm_downloader)
@@ -1654,11 +1508,18 @@ def discover_recommendations():
         except Exception:
             pass
         try:
-            future = executor.submit(_resolve_recommendations_items, out_results)
-            future.result(timeout=30)
-        except Exception:
-            pass
-        return jsonify({"results": out_results})
+            future = executor.submit(_discover_recommendations_worker, seed_id, request_limit, library_youtube_ids)
+            out_results = future.result(timeout=45)
+        except Exception as e:
+            print(f"[Discover] executor failed: {e}")
+            out_results = []
+        results = (out_results or [])[:limit]
+        if not results and seed_ids:
+            print(f"[Discover] no results for seed {seed_id} (library has {len(seed_ids)} tracks with youtube_id). Check station console for yt-dlp/YouTube Music errors.")
+        payload = {"results": results}
+        if not results and seed_ids:
+            payload["reason"] = "no_results"
+        return jsonify(payload)
     except Exception as e:
         print(f"API: Discover recommendations error: {e}")
         import traceback
@@ -1666,74 +1527,6 @@ def discover_recommendations():
         return jsonify({"results": [], "reason": "error", "error": str(e)}), 500
 
 
-@app.route('/api/discover/cover', methods=['POST'])
-def discover_cover():
-    """Fetch only cover (thumbnail) for a recommendation via yt-dlp. No audio download.
-    Body: { artist, title }. Returns { thumbnail: "url" } or 404 if not found."""
-    try:
-        data = request.json or {}
-        artist = (data.get("artist") or "").strip()
-        title = (data.get("title") or "").strip()
-        if not title:
-            return jsonify({"error": "Missing title"}), 400
-        dl = get_downloader(open_browser=False)
-        thumbnail = dl.downloader.get_cover_for_query(artist, title)
-        if not thumbnail:
-            return jsonify({"error": "No cover found"}), 404
-        return jsonify({"thumbnail": thumbnail})
-    except Exception as e:
-        print(f"API: Discover cover error: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-def _resolve_job_key(artist: str, title: str) -> str:
-    return f"{ (artist or '').strip().lower() }|{ (title or '').strip().lower() }"
-
-@app.route('/api/discover/resolve', methods=['GET', 'POST'])
-def discover_resolve():
-    """Start async resolve (POST) or health check (GET). Returns 202 + job_id; client polls status."""
-    if request.method == 'GET':
-        return jsonify({"ok": True, "message": "discover resolve route is registered"}), 200
-    try:
-        data = request.json or {}
-        artist = data.get("artist") or ""
-        title = data.get("title") or ""
-        if not title:
-            return jsonify({"error": "Missing title"}), 400
-        job_id = uuid.uuid4().hex[:12]
-        with _resolve_jobs_lock:
-            _resolve_jobs[job_id] = {"key": _resolve_job_key(artist, title), "status": "pending", "result": None, "error": None, "finished_at": None}
-        _get_resolve_executor().submit(_resolve_worker, job_id, artist, title)
-        return jsonify({"job_id": job_id, "status": "pending"}), 202
-    except Exception as e:
-        print(f"API: Discover resolve error: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/discover/resolve/status/<job_id>', methods=['GET'])
-def discover_resolve_status(job_id):
-    """Poll for async resolve result. Returns status (pending|completed|failed) and result or error."""
-    if not job_id:
-        return jsonify({"error": "Missing job_id"}), 400
-    now = time.time()
-    with _resolve_jobs_lock:
-        # Prune expired jobs to avoid unbounded growth
-        for jid in list(_resolve_jobs):
-            j = _resolve_jobs[jid]
-            if j.get("finished_at") and (now - j["finished_at"]) > _resolve_job_ttl_sec:
-                del _resolve_jobs[jid]
-        job = _resolve_jobs.get(job_id)
-        if not job:
-            return jsonify({"status": "failed", "error": "Unknown job"}), 404
-        if job.get("finished_at") and (now - job["finished_at"]) > _resolve_job_ttl_sec:
-            del _resolve_jobs[job_id]
-            return jsonify({"status": "failed", "error": "Expired"}), 404
-        status = job.get("status", "pending")
-        out = {"job_id": job_id, "status": status}
-        if status == "completed" and job.get("result"):
-            out["result"] = job["result"]
-        if status == "failed":
-            out["error"] = job.get("error", "Resolution failed")
-        return jsonify(out), 200
 @app.route('/api/downloader/queue', methods=['POST'])
 def add_to_downloader_queue():
     try:
@@ -1876,20 +1669,20 @@ def get_downloader_config():
         return f"{s[:4]}...{s[-4:]}****"
 
     auto_update = (env_vars.get("YTDLP_AUTO_UPDATE", os.getenv("YTDLP_AUTO_UPDATE", "false")) or "false").strip().lower() in ("true", "1")
+    output_dir_fallback = env_vars.get("OUTPUT_DIR", os.getenv("OUTPUT_DIR", str(Path.home() / "Music" / "Soundsible")))
     config = {
-        "output_dir": env_vars.get("OUTPUT_DIR", os.getenv("OUTPUT_DIR", str(Path.home() / "Music" / "Soundsible"))),
+        "output_dir": str(downloader_service.output_dir) if downloader_service else output_dir_fallback,
         "quality": env_vars.get("DEFAULT_QUALITY", os.getenv("DEFAULT_QUALITY", "high")),
         "r2_account_id": env_vars.get("R2_ACCOUNT_ID", os.getenv("R2_ACCOUNT_ID", "")),
         "r2_access_key": mask(env_vars.get("R2_ACCESS_KEY_ID", os.getenv("R2_ACCESS_KEY_ID", ""))),
         "r2_secret_key": mask(env_vars.get("R2_SECRET_ACCESS_KEY", os.getenv("R2_SECRET_ACCESS_KEY", ""))),
         "r2_bucket": env_vars.get("R2_BUCKET_NAME", os.getenv("R2_BUCKET_NAME", "")),
-        "lastfm_api_key": mask(env_vars.get("LASTFM_API_KEY", os.getenv("LASTFM_API_KEY", ""))),
         "auto_update_ytdlp": auto_update,
     }
     
     # If not on a trusted network, strip ALL sensitive info (even masked ones)
     if not is_trusted:
-        sensitive_keys = ["r2_account_id", "r2_access_key", "r2_secret_key", "r2_bucket", "lastfm_api_key"]
+        sensitive_keys = ["r2_account_id", "r2_access_key", "r2_secret_key", "r2_bucket"]
         for key in sensitive_keys: config[key] = "HIDDEN (Connect to Tailscale/LAN to view)"
 
     return jsonify(config)
@@ -1917,7 +1710,6 @@ def update_downloader_config():
         "r2_access_key": "R2_ACCESS_KEY_ID",
         "r2_secret_key": "R2_SECRET_ACCESS_KEY",
         "r2_bucket": "R2_BUCKET_NAME",
-        "lastfm_api_key": "LASTFM_API_KEY",
         "auto_update_ytdlp": "YTDLP_AUTO_UPDATE",
     }
 

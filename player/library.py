@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from shared.models import LibraryMetadata, Track, PlayerConfig, StorageProvider
 from shared.constants import LIBRARY_METADATA_FILENAME, DEFAULT_CONFIG_DIR
+from shared.path_resolver import resolve_local_track_path
 from setup_tool.provider_factory import StorageProviderFactory
 from setup_tool.audio import AudioProcessor
 from setup_tool.uploader import UploadEngine
@@ -218,14 +219,15 @@ class LibraryManager:
         """
         Get a playable URL for a track.
         Resolution Order:
-        1. Local path (if verified exists)
+        1. Current OUTPUT_DIR (resolve at read via path_resolver)
         2. Cache path (if exists)
         3. Cloud URL (signed/presigned)
         """
-        # 1. Local path
-        if track.local_path and os.path.exists(track.local_path):
-            return track.local_path
-            
+        # 1. Resolve from current OUTPUT_DIR (no stored path)
+        resolved = resolve_local_track_path(track)
+        if resolved:
+            return resolved
+
         # 2. Cache
         if self.cache:
             cached_path = self.cache.get_cached_path(track.id)

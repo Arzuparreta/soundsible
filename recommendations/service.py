@@ -1,65 +1,33 @@
-"""Orchestrates Last.fm recommendations and optional ODST bridge for YouTube resolution."""
+"""Recommendations: YouTube mix (related) only. Extensible for future sources."""
 
-from typing import Any, Dict, List, Optional
-
-from .models import RawRecommendation, Seed
-from . import lastfm
-from .bridge import resolve_to_youtube
+from typing import Any, Dict, List, Optional, Set
 
 
-class RecommendationsService:
-    """Builds recommendations from Last.fm and optionally resolves to YouTube via ODST."""
-
-    def __init__(self, lastfm_api_key: Optional[str] = None, downloader: Any = None):
-        self._lastfm_api_key = (lastfm_api_key or "").strip()
-        self._downloader = downloader
-
-    def get_recommendations(
-        self,
-        seeds: List[Seed],
-        limit: int = 20,
-        library_tracks: Optional[List[Dict[str, Any]]] = None,
-        resolve: bool = True,
-    ) -> tuple[List[Dict[str, Any]], Optional[str]]:
-        """
-        Returns (list of items for frontend, optional reason if empty).
-        Each item: id, title, duration, thumbnail, webpage_url, channel, artist.
-        """
-        if not seeds:
-            return [], "no_seeds"
-        raw: List[RawRecommendation] = []
-        if lastfm.is_lastfm_available(self._lastfm_api_key):
-            try:
-                raw = lastfm.get_recommendations(seeds, limit, self._lastfm_api_key)
-            except Exception:
-                pass
-        if not raw:
-            if not lastfm.is_lastfm_available(self._lastfm_api_key):
-                return [], "providers_unavailable"
-            return [], "no_recommendations"
-
-        # If not resolving, just return the raw recommendations formatted as dicts
-        if not resolve:
-            raw_dicts = []
-            for r in raw:
-                r_dict = {
-                    "artist": r.artist,
-                    "title": r.title,
-                    "album": r.album,
-                    "album_artist": r.album_artist,
-                    "duration_sec": r.duration_sec,
-                    "isrc": r.isrc,
-                    "year": r.year,
-                    "track_number": r.track_number,
-                    "id": "",  # To be resolved later; cover from /api/discover/cover (YouTube)
-                }
-                raw_dicts.append(r_dict)
-            return raw_dicts, None
-        # Resolve to YouTube via ODST bridge
-        try:
-            resolved = resolve_to_youtube(raw, self._downloader, library_tracks=library_tracks)
-        except Exception:
-            return [], "bridge_failed"
-        if not resolved:
-            return [], "no_matches"
-        return resolved, None
+def get_recommendations(
+    seed_video_ids: List[str],
+    limit: int,
+    library_youtube_ids: Optional[Set[str]] = None,
+    downloader: Any = None,
+) -> List[Dict[str, Any]]:
+    """
+    Return recommended videos for the given seed(s). Today: one YouTube Music mix request per seed.
+    Filters out any result already in library_youtube_ids.
+    Same item shape as ODST search: id, title, duration, thumbnail, webpage_url, channel, artist.
+    """
+    if not downloader or not seed_video_ids:
+        return []
+    library = library_youtube_ids or set()
+    seed = seed_video_ids[0]
+    try:
+        raw = downloader.get_related_videos(seed, max_results=limit + len(library))
+    except Exception:
+        return []
+    out: List[Dict[str, Any]] = []
+    for item in raw:
+        vid = item.get("id")
+        if not vid or vid in library:
+            continue
+        if len(out) >= limit:
+            break
+        out.append(dict(item))
+    return out

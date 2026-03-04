@@ -69,10 +69,10 @@ class LibraryMetadata:
     last_updated: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     
     def to_json(self, indent: int = 2) -> str:
-        """Serialize library metadata to JSON string."""
+        """Serialize library metadata to JSON string. Omit local_path; path is resolved at read from OUTPUT_DIR."""
         data = {
             "version": self.version,
-            "tracks": [track.to_dict() for track in self.tracks],
+            "tracks": [{k: v for k, v in track.to_dict().items() if k != "local_path"} for track in self.tracks],
             "playlists": self.playlists,
             "settings": self.settings,
             "last_updated": self.last_updated
@@ -81,9 +81,9 @@ class LibraryMetadata:
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'LibraryMetadata':
-        """Create LibraryMetadata from dictionary."""
+        """Create LibraryMetadata from dictionary. Ignore stored local_path."""
         tracks_data = data.get("tracks", [])
-        tracks = [Track.from_dict(t) for t in tracks_data]
+        tracks = [Track.from_dict({**t, "local_path": None}) for t in tracks_data]
         
         # Handle migration from library_version (str) to version (int)
         raw_version = data.get("version")

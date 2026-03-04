@@ -4,7 +4,6 @@
  */
 import { store } from './store.js';
 import { audioEngine } from './audio.js';
-import { Resolver } from './resolver.js';
 import { esc } from './renderers.js';
 
 const INITIAL_BUFFER_LIMIT = 5;
@@ -25,7 +24,7 @@ function isYoutubeId(id) {
     return id && typeof id === 'string' && id.length === 11 && !String(id).startsWith('raw-');
 }
 
-/** Prefer HTTPS for image URLs so they load on HTTPS pages (e.g. Last.fm often returns http). */
+/** Prefer HTTPS for image URLs so they load on HTTPS pages. */
 function ensureHttpsImageUrl(url) {
     if (!url || typeof url !== 'string') return url || '';
     const t = url.trim();
@@ -45,23 +44,18 @@ export const Discover = {
     _buffer: [],
     _bufferIndex: 0,
     _refillInFlight: false,
-    _sessionExcludeIds: null,
     _inited: false,
 
     async init(options = {}) {
         this._mobile = options.mobile !== false;
         const prefix = this._mobile ? '' : 'desktop-';
         this._emptyLibraryEl = document.getElementById(prefix + 'discover-empty-library');
-        this._configWrap = document.getElementById(prefix + 'discover-config-wrap');
         this._mainEl = document.getElementById(prefix + 'discover-main');
         this._noResultsEl = document.getElementById(prefix + 'discover-no-results');
         this._sectionsEl = document.getElementById(prefix + 'discover-sections');
         this._contentPanel = document.getElementById(prefix + 'discover-content-panel');
         this._pageEl = document.getElementById(this._mobile ? 'view-discover' : 'desktop-view-discover');
         this._scrollEl = this._contentPanel;
-        if (!this._sessionExcludeIds) this._sessionExcludeIds = new Set();
-        this._bindLastfmConfig();
-        await this._updateConfigVisibility();
         this._syncVisibility();
         this._bindRefresh();
         const inputId = this._mobile ? 'global-search-input' : 'desktop-global-search-input';
@@ -219,23 +213,14 @@ export const Discover = {
             if (this._pendingRefill) { this._pendingRefill = false; this._refillInFlight = false; }
             this._buffer = [];
             this._bufferIndex = 0;
+            this._noSeeds = true;
             if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
             this._renderTinderStack();
             return;
         }
-        if (reason === 'providers_unavailable') {
-            if (this._sectionsEl) {
-                const lastfmUrl = 'https://www.last.fm/api/account/create';
-                this._sectionsEl.innerHTML = `
-                    <div class="text-center py-6 text-sm text-[var(--text-dim)]">
-                        <p class="mb-3">Add a Last.fm API key below to get recommendations.</p>
-                        <a href="${esc(lastfmUrl)}" target="_blank" rel="noopener noreferrer" class="text-[var(--accent)] font-bold underline hover:no-underline">https://www.last.fm/api/account/create</a>
-                    </div>
-                `;
-            }
-            return;
-        }
-        if (reason && reason !== 'no_seeds' && reason !== 'providers_unavailable') {
+        this._noSeeds = false;
+        this._noResultsFromFetch = reason === 'no_results';
+        if (reason && reason !== 'no_seeds') {
             if (this._pendingRefill) { this._pendingRefill = false; this._refillInFlight = false; }
             this._buffer = [];
             this._bufferIndex = 0;
@@ -243,6 +228,7 @@ export const Discover = {
             this._renderTinderStack();
             return;
         }
+        this._noResultsFromFetch = false;
         const sections = this._sectionsFromResponse(data);
         const results = sections.flatMap(s => s.results || []);
         if (sections.every(s => !(s.results && s.results.length)) || !results.length) {
@@ -254,16 +240,14 @@ export const Discover = {
             return;
         }
         if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
-        if (!this._sessionExcludeIds) this._sessionExcludeIds = new Set();
+        this._noResultsFromFetch = false;
         if (this._pendingRefill) {
             this._pendingRefill = false;
             this._refillInFlight = false;
             this._buffer.push(...results);
-            results.forEach((item) => { if (item && item.id) this._sessionExcludeIds.add(item.id); });
         } else {
             this._buffer = results.slice();
             this._bufferIndex = 0;
-            results.forEach((item) => { if (item && item.id) this._sessionExcludeIds.add(item.id); });
         }
         this._renderTinderStack();
     },
@@ -272,9 +256,13 @@ export const Discover = {
         if (!this._sectionsEl) return;
         const r = this._buffer[this._bufferIndex];
         if (!r) {
-            const msg = this._buffer.length === 0
-                ? 'No recommendations right now. Try again later.'
-                : 'No more cards. Pull to refresh or tap Refresh.';
+            const msg = this._noSeeds
+                ? 'Add music from YouTube to your library to get recommendations.'
+                : this._noResultsFromFetch
+                    ? 'Could not load recommendations. YouTube Music mix may require login—check downloader cookies in Settings, then try Refresh.'
+                    : this._buffer.length === 0
+                        ? 'No recommendations right now. Try again later.'
+                        : 'No more cards. Pull to refresh or tap Refresh.';
             const refreshId = (this._mobile ? '' : 'desktop-') + 'discover-refresh-btn';
             this._sectionsEl.innerHTML = `
                 <div class="discover-tinder-outer">
@@ -352,58 +340,37 @@ export const Discover = {
         if (nextBtn) nextBtn.addEventListener('click', advance);
 
         const addBtn = wrap.querySelector('.discover-tinder-add');
-        if (addBtn) addBtn.addEventListener('click', async () => {
+        if (addBtn) addBtn.addEventListener('click', () => {
             const item = this._itemFromRow(row);
-            if (!item) return;
-            const resolved = await this._resolveItemCached(item, row);
-            if (resolved && resolved.webpage_url) this._addToQueue(resolved);
+            if (item && item.webpage_url) this._addToQueue(item);
             advance();
         });
 
         const playBtn = wrap.querySelector('.discover-tinder-play');
         if (playBtn) {
-            playBtn.addEventListener('click', async () => {
+            playBtn.addEventListener('click', () => {
                 const item = this._itemFromRow(row);
-                if (!item) return;
-                const resolved = await this._resolveItemCached(item, row);
-                if (!resolved) {
-                    if (typeof window.showToast === 'function') window.showToast('Could not find track');
-                    return;
-                }
-                const playbackId = resolved.video_id ?? resolved.id;
-                if (!playbackId || String(playbackId).startsWith('raw-')) {
-                    if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
-                    return;
-                }
+                if (!item || !item.webpage_url) return;
+                const playbackId = item.video_id ?? item.id;
+                if (!playbackId || String(playbackId).startsWith('raw-')) return;
                 const { currentTrack, isPlaying } = store.state;
                 if (currentTrack?.id === playbackId) {
-                    if (isPlaying) {
-                        audioEngine.pause();
-                    } else {
-                        audioEngine.play();
-                    }
+                    if (isPlaying) audioEngine.pause();
+                    else audioEngine.play();
                     return;
                 }
-                if (typeof window.playPreview === 'function') window.playPreview(resolved);
+                if (typeof window.playPreview === 'function') window.playPreview(item);
             });
             this._syncTinderPlayButton(store.state);
         }
 
-        row.querySelector('.discover-card-play')?.addEventListener('click', async (e) => {
+        row.querySelector('.discover-card-play')?.addEventListener('click', (e) => {
             e.stopPropagation();
             const item = this._itemFromRow(row);
-            if (!item) return;
-            const resolved = await this._resolveItemCached(item, row);
-            if (!resolved) {
-                if (typeof window.showToast === 'function') window.showToast('Could not find track');
-                return;
-            }
-            const overlayPlaybackId = resolved.video_id ?? resolved.id;
-            if (!overlayPlaybackId || String(overlayPlaybackId).startsWith('raw-')) {
-                if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
-                return;
-            }
-            if (typeof window.playPreview === 'function') window.playPreview(resolved);
+            if (!item || !item.webpage_url) return;
+            const playbackId = item.video_id ?? item.id;
+            if (!playbackId || String(playbackId).startsWith('raw-')) return;
+            if (typeof window.playPreview === 'function') window.playPreview(item);
         });
 
         this._bindTinderSwipe(cardWrap, row, advance, goPrevious);
@@ -429,74 +396,6 @@ export const Discover = {
         }, { passive: true });
     },
 
-    async _resolveItemRaw(item, row) {
-        const rid = item.video_id ?? item.id;
-        if (item.webpage_url && rid && !String(rid).startsWith('raw-')) return item;
-        row.classList.add('discover-card-resolving');
-        row.style.opacity = '0.7';
-        const apiBase = getApiBase();
-        try {
-            const res = await fetch(`${apiBase}/api/discover/resolve`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ artist: item.artist, title: item.title }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (res.status === 200 && data.result) {
-                this._applyResolvedToRow(row, data.result);
-                row.classList.remove('discover-card-resolving');
-                row.style.opacity = '1';
-                return { ...item, ...data.result };
-            }
-            if (res.status === 202 && data.job_id) {
-                const jobId = data.job_id;
-                const pollMs = 600;
-                const maxAttempts = 80;
-                for (let i = 0; i < maxAttempts; i++) {
-                    await new Promise((r) => setTimeout(r, pollMs));
-                    const st = await fetch(`${apiBase}/api/discover/resolve/status/${jobId}`);
-                    const stData = await st.json().catch(() => ({}));
-                    if (stData.status === 'completed' && stData.result) {
-                        this._applyResolvedToRow(row, stData.result);
-                        row.classList.remove('discover-card-resolving');
-                        row.style.opacity = '1';
-                        return { ...item, ...stData.result };
-                    }
-                    if (stData.status === 'failed') throw new Error(stData.error || 'Resolution failed');
-                }
-                throw new Error('Resolution timed out');
-            }
-            if (res.status === 404) throw new Error(data.error || 'Resolution failed');
-            throw new Error(data.error || 'Resolution failed');
-        } catch (err) {
-            console.error('Failed to resolve recommendation:', err);
-            return null;
-        } finally {
-            row.classList.remove('discover-card-resolving');
-            row.style.opacity = '1';
-        }
-    },
-
-    async _resolveItemCached(item, row) {
-        const rid = item.video_id ?? item.id;
-        if (item.webpage_url && rid && !String(rid).startsWith('raw-')) return item;
-        return this._resolveItemRaw(item, row);
-    },
-
-    _applyResolvedToRow(row, data) {
-        if (!row || !data) return;
-        row.setAttribute('data-video-id', data.video_id ?? data.id);
-        row.setAttribute('data-webpage-url', data.webpage_url || '');
-        row.setAttribute('data-duration', data.duration || 0);
-        const rawCover = data.cover_url || data.thumbnail;
-        const coverUrl = ensureHttpsImageUrl(rawCover);
-        if (coverUrl) {
-            const coverEl = row.querySelector('.discover-card-cover');
-            if (coverEl) coverEl.style.backgroundImage = `url("${escapeCssUrl(coverUrl)}")`;
-            row.setAttribute('data-thumbnail', coverUrl.replace(/"/g, '%22'));
-        }
-    },
-
     _refill() {
         if (this._refillInFlight || !this._hasLibrary()) return;
         const remaining = this._buffer.length - this._bufferIndex;
@@ -505,14 +404,13 @@ export const Discover = {
             this._buffer = this._buffer.slice(this._bufferIndex);
             this._bufferIndex = 0;
         }
-        const exclude_ids = this._sessionExcludeIds ? Array.from(this._sessionExcludeIds) : [];
         this._pendingRefill = true;
         this._refillInFlight = true;
         const apiBase = getApiBase();
         fetch(`${apiBase}/api/discover/recommendations`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ limit: INITIAL_BUFFER_LIMIT, exclude_ids }),
+            body: JSON.stringify({ limit: INITIAL_BUFFER_LIMIT }),
         })
             .then((res) => res.json().catch(() => ({})))
             .then((data) => {
@@ -549,6 +447,7 @@ export const Discover = {
 
         return {
             id,
+            video_id: id,
             title: row.getAttribute('data-title') || '',
             artist: row.getAttribute('data-artist') || '',
             duration: parseInt(row.getAttribute('data-duration') || '0', 10),
@@ -562,166 +461,30 @@ export const Discover = {
 
     _bindResultButtons() {
         if (!this._sectionsEl) return;
-        const apiBase = getApiBase();
-
-        const resolveItem = async (item, row) => {
-            const rid = item.video_id ?? item.id;
-            if (item.webpage_url && rid && !String(rid).startsWith('raw-')) return item;
-
-            row.classList.add('discover-card-resolving');
-            row.style.opacity = '0.7';
-            const applyResult = (data) => {
-                if (!data) return;
-                row.setAttribute('data-video-id', data.video_id ?? data.id);
-                row.setAttribute('data-webpage-url', data.webpage_url || '');
-                row.setAttribute('data-duration', data.duration || 0);
-                const rawCover = data.cover_url || data.thumbnail;
-                const coverUrl = ensureHttpsImageUrl(rawCover);
-                if (coverUrl) {
-                    const coverEl = row.querySelector('.discover-card-cover');
-                    if (coverEl) coverEl.style.backgroundImage = `url("${escapeCssUrl(coverUrl)}")`;
-                    row.setAttribute('data-thumbnail', coverUrl.replace(/"/g, '%22'));
-                }
-            };
-            try {
-                const res = await fetch(`${apiBase}/api/discover/resolve`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ artist: item.artist, title: item.title }),
-                });
-                const data = await res.json().catch(() => ({}));
-                if (res.status === 200 && data.result) {
-                    applyResult(data.result);
-                    row.classList.remove('discover-card-resolving');
-                    row.style.opacity = '1';
-                    return { ...item, ...data.result };
-                }
-                if (res.status === 202 && data.job_id) {
-                    const jobId = data.job_id;
-                    const pollMs = 600;
-                    const maxAttempts = 80;
-                    for (let i = 0; i < maxAttempts; i++) {
-                        await new Promise((r) => setTimeout(r, pollMs));
-                        const st = await fetch(`${apiBase}/api/discover/resolve/status/${jobId}`);
-                        const stData = await st.json().catch(() => ({}));
-                        if (stData.status === 'completed' && stData.result) {
-                            applyResult(stData.result);
-                            row.classList.remove('discover-card-resolving');
-                            row.style.opacity = '1';
-                            return { ...item, ...stData.result };
-                        }
-                        if (stData.status === 'failed') {
-                            throw new Error(stData.error || 'Resolution failed');
-                        }
-                    }
-                    throw new Error('Resolution timed out');
-                }
-                if (res.status === 404) throw new Error(data.error || 'Resolution failed');
-                throw new Error(data.error || 'Resolution failed');
-            } catch (err) {
-                console.error('Failed to resolve recommendation:', err);
-                return null;
-            } finally {
-                row.classList.remove('discover-card-resolving');
-                row.style.opacity = '1';
-            }
-        };
-
-        this._resolveItem = resolveItem;
-        this._resolveRow = (row) => {
-            const item = this._itemFromRow(row);
-            const rid = item?.video_id ?? item?.id;
-            if (item && item.webpage_url && rid) return Promise.resolve(item);
-            return resolveItem(item, row);
-        };
-
         this._sectionsEl.querySelectorAll('.discover-add-btn').forEach((btn) => {
             const row = btn.closest('.discover-result-row');
             if (!row) return;
-            btn.addEventListener('click', async (e) => {
+            btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                let item = this._itemFromRow(row);
-                if (!item) return;
-
-                item = await resolveItem(item, row);
+                const item = this._itemFromRow(row);
                 if (item && item.webpage_url) this._addToQueue(item);
             });
         });
-
         this._sectionsEl.querySelectorAll('.discover-card-play').forEach((playBtn) => {
             const row = playBtn.closest('.discover-result-row');
             if (!row) return;
-            playBtn.addEventListener('click', async (e) => {
+            playBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                let item = this._itemFromRow(row);
-                if (!item) return;
-
-                item = await resolveItem(item, row);
-                if (!item) {
-                    if (typeof window.showToast === 'function') window.showToast('Could not find track');
-                    return;
-                }
+                const item = this._itemFromRow(row);
+                if (!item || !item.webpage_url) return;
                 const shelfPlaybackId = item.video_id ?? item.id;
-                if (!shelfPlaybackId || String(shelfPlaybackId).startsWith('raw-')) {
-                    if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
-                    return;
-                }
+                if (!shelfPlaybackId || String(shelfPlaybackId).startsWith('raw-')) return;
                 if (typeof window.playPreview === 'function') window.playPreview(item);
             });
         });
     },
 
-    async _updateConfigVisibility() {
-        if (!this._configWrap) return;
-        const apiBase = getApiBase();
-        try {
-            const res = await fetch(`${apiBase}/api/downloader/config`);
-            const data = await res.json().catch(() => ({}));
-            const key = data.lastfm_api_key || '';
-            const isActivated = key && !String(key).startsWith('HIDDEN');
-            this._configWrap.classList.toggle('hidden', !!isActivated);
-        } catch {
-            this._configWrap.classList.remove('hidden');
-        }
-    },
-
-    _bindLastfmConfig() {
-        const prefix = this._mobile ? '' : 'desktop-';
-        const input = document.getElementById(prefix + 'discover-lastfm-input');
-        const saveBtn = document.getElementById(prefix + 'discover-lastfm-save');
-        const statusEl = document.getElementById(prefix + 'discover-lastfm-status');
-        if (!saveBtn || !input) return;
-        const apiBase = getApiBase();
-        saveBtn.addEventListener('click', async () => {
-            const key = (input.value || '').trim();
-            if (!key) {
-                if (statusEl) { statusEl.textContent = 'Enter an API key.'; statusEl.classList.remove('hidden'); }
-                return;
-            }
-            saveBtn.disabled = true;
-            if (statusEl) { statusEl.textContent = 'Saving…'; statusEl.classList.remove('hidden'); }
-            try {
-                const res = await fetch(`${apiBase}/api/downloader/config`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lastfm_api_key: key }),
-                });
-                if (res.ok) {
-                    if (statusEl) { statusEl.textContent = 'Saved.'; statusEl.classList.remove('hidden'); }
-                    input.value = '';
-                    this._updateConfigVisibility();
-                } else {
-                    const d = await res.json().catch(() => ({}));
-                    if (statusEl) { statusEl.textContent = d.error || 'Save failed.'; statusEl.classList.remove('hidden'); }
-                }
-            } catch (err) {
-                if (statusEl) { statusEl.textContent = 'Network error.'; statusEl.classList.remove('hidden'); }
-            }
-            saveBtn.disabled = false;
-        });
-    },
-
-    async _fetchRecommendations(limit = INITIAL_BUFFER_LIMIT, excludeIds = []) {
+    async _fetchRecommendations(limit = INITIAL_BUFFER_LIMIT) {
         if (!this._hasLibrary()) return;
         if (this._loading) return;
         this._loading = true;
@@ -733,7 +496,7 @@ export const Discover = {
             const res = await fetch(`${apiBase}/api/discover/recommendations`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ limit, exclude_ids: excludeIds }),
+                body: JSON.stringify({ limit }),
             });
             const data = await res.json().catch(() => ({}));
             const reason = data.reason || null;
@@ -751,12 +514,11 @@ export const Discover = {
 
     refresh() {
         if (!this._hasLibrary()) return;
-        if (this._sessionExcludeIds) this._sessionExcludeIds.clear();
         this._buffer = [];
         this._bufferIndex = 0;
         this._pendingRefill = false;
         this._refillInFlight = false;
-        this._fetchRecommendations(INITIAL_BUFFER_LIMIT, []);
+        this._fetchRecommendations(INITIAL_BUFFER_LIMIT);
     },
 
     _addToQueue(item) {

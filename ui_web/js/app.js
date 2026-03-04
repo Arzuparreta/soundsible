@@ -52,9 +52,6 @@ const MOBILE_SETTINGS_IDS = {
     statusPulse: 'status-led-pulse',
     serverStatus: 'server-status',
     hostDisplay: 'active-host-display',
-    lastfmInput: 'settings-lastfm-api-key',
-    lastfmSave: 'settings-lastfm-save',
-    lastfmStatus: 'settings-lastfm-status',
     ytdlpAutoUpdate: 'settings-ytdlp-auto-update',
 };
 
@@ -1301,6 +1298,10 @@ function renderContentForView(viewId) {
             });
             break;
         case 'settings':
+            import('./downloader.js').then((dm) => {
+                if (!dm.Downloader.initialized) dm.Downloader.init();
+                if (typeof dm.Downloader.loadConfig === 'function') dm.Downloader.loadConfig();
+            });
             break;
         default:
             break;
