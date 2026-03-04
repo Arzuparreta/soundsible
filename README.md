@@ -58,7 +58,7 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 - **Smart library management**: Edit metadata, change covers, and manage your collection directly from the UI.
 - **Universal sync**: Your playlists, favorites, metadata, and settings stay in sync across devices.
 
-<p align="left">
+<p align="center">
   <img src="docs/images/desktop-library.png" alt="Soundsible desktop library view" width="640" />
 </p>
 
