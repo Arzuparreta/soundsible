@@ -132,7 +132,7 @@ class LibraryMetadata:
         Deserialize library metadata from dictionary.
         Ignore stored local_path; path is resolved at read from OUTPUT_DIR.
         """
-        tracks = [Track.from_dict({**t, "local_path": None}) for t in data["tracks"]]
+        tracks = [Track.from_dict({**t, "local_path": None}) for t in data.get("tracks", [])]
         
         # Handle migration from library_version (str) to version (int)
         raw_version = data.get("version")
@@ -156,14 +156,12 @@ class LibraryMetadata:
     def from_json(cls, json_str: str) -> 'LibraryMetadata':
         """
         Deserialize library metadata from JSON string.
-        
-        Args:
-            json_str: JSON string to parse
-            
-        Returns:
-            LibraryMetadata instance
+        Returns empty library on decode error or empty/corrupt content.
         """
-        data = json.loads(json_str)
+        try:
+            data = json.loads(json_str)
+        except json.JSONDecodeError:
+            return cls(version=1, tracks=[], playlists={}, settings={})
         return cls.from_dict(data)
     
     def get_track_by_id(self, track_id: str) -> Optional[Track]:
@@ -172,7 +170,14 @@ class LibraryMetadata:
             if track.id == track_id:
                 return track
         return None
-    
+
+    def get_track_by_hash(self, file_hash: str) -> Optional[Track]:
+        """Find track by file hash."""
+        for track in self.tracks:
+            if track.file_hash == file_hash:
+                return track
+        return None
+
     def add_track(self, track: Track) -> None:
         """Add a track to the library."""
         self.tracks.append(track)

@@ -8,8 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Tuple
 
-# Port the Station Engine listens on
-STATION_PORT = 5005
+from shared.constants import STATION_PORT
 
 # Canonical user-facing messages (one place for consistency and i18n)
 MSG_STATION_STARTING = "Station Engine is starting."

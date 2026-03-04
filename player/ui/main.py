@@ -2,7 +2,7 @@ import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Gio, GObject, GLib, Gdk
-from shared.constants import DEFAULT_CONFIG_DIR, DEFAULT_LIBRARY_PATH, DEFAULT_CACHE_DIR, LIBRARY_METADATA_FILENAME
+from shared.constants import DEFAULT_CONFIG_DIR, DEFAULT_LIBRARY_PATH, DEFAULT_CACHE_DIR, LIBRARY_METADATA_FILENAME, STATION_PORT
 from shared.models import PlayerConfig, LibraryMetadata
 from player.cover_manager import CoverFetchManager
 from player.library import LibraryManager
@@ -1573,8 +1573,8 @@ class MainWindow(Adw.ApplicationWindow):
             s.close()
         except: pass
             
-        lan_url = f"http://{local_ip}:5005/player/"
-        ts_url = f"http://{tailscale_ip}:5005/player/" if tailscale_ip else None
+        lan_url = f"http://{local_ip}:{STATION_PORT}/player/"
+        ts_url = f"http://{tailscale_ip}:{STATION_PORT}/player/" if tailscale_ip else None
         
         config = self._load_config()
         if not config:
@@ -1588,7 +1588,7 @@ class MainWindow(Adw.ApplicationWindow):
             # Smart Resolver: Pack all available network endpoints
             from shared.api import get_active_endpoints
             config_data['endpoints'] = get_active_endpoints()
-            config_data['port'] = 5005
+            config_data['port'] = STATION_PORT
             
             json_bytes = json.dumps(config_data).encode('utf-8')
             compressed = zlib.compress(json_bytes)

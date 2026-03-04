@@ -45,8 +45,9 @@ import signal
 from datetime import datetime
 from pathlib import Path
 
-STATION_PORT = 5005
-PLAYER_URL = "http://localhost:5005/player/"
+from shared.constants import STATION_PORT
+
+PLAYER_URL = f"http://localhost:{STATION_PORT}/player/"
 
 # --- VENV BOOTSTRAP ---
 ROOT_DIR = Path(__file__).parent.absolute()
@@ -297,13 +298,13 @@ class SoundsibleLauncher:
         console.print(Panel.fit(
             "[bold green]Station Engine started.[/bold green]\n\n"
             "[bold]" + MSG_KEEP_TERMINAL_OPEN + "[/bold]\n\n"
-            "[dim]Open the Station at http://localhost:5005/player/ when ready.[/dim]",
+            f"[dim]Open the Station at {PLAYER_URL} when ready.[/dim]",
             border_style="green"
         ))
         time.sleep(0.5)
 
     def stop_station(self):
-        """Kill the process listening on the Station Engine port (5005)."""
+        """Kill the process listening on the Station Engine port."""
         ok, msg = stop_daemon_process(STATION_PORT)
         if ok:
             console.print(f"[green]{msg}[/green]")

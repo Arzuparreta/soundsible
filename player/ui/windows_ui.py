@@ -12,6 +12,7 @@ import sys
 import socket
 import time
 from pathlib import Path
+from shared.constants import STATION_PORT
 from PIL import Image, ImageTk
 import pystray
 from pystray import MenuItem as item
@@ -77,11 +78,11 @@ class WindowsControlCenter:
         ttk.Button(bottom, text="Exit", command=self.quit_app).pack(side=tk.RIGHT)
 
     def open_player(self):
-        webbrowser.open("http://localhost:5005/player/")
+        webbrowser.open(f"http://localhost:{STATION_PORT}/player/")
 
     def open_downloader(self):
-        """Open the embedded downloader in the main webapp (ensure API is running on 5005)."""
-        webbrowser.open("http://localhost:5005/player/")
+        """Open the embedded downloader in the main webapp (ensure API is running on STATION_PORT)."""
+        webbrowser.open(f"http://localhost:{STATION_PORT}/player/")
 
     def show_sync_qr(self):
         """Show sync QR code using the same logic as the Linux app."""
@@ -115,14 +116,14 @@ class WindowsControlCenter:
             s.close()
         except: local_ip = "localhost"
         
-        lan_url = f"http://{local_ip}:5005/player/"
-        ts_url = f"http://{tailscale_ip}:5005/player/" if tailscale_ip else None
+        lan_url = f"http://{local_ip}:{STATION_PORT}/player/"
+        ts_url = f"http://{tailscale_ip}:{STATION_PORT}/player/" if tailscale_ip else None
 
         # 1. Generate Token
         config_data = config.to_dict()
         from shared.api import get_active_endpoints
         config_data['endpoints'] = get_active_endpoints()
-        config_data['port'] = 5005
+        config_data['port'] = STATION_PORT
         
         json_bytes = json.dumps(config_data).encode('utf-8')
         compressed = zlib.compress(json_bytes)
@@ -312,12 +313,12 @@ class SettingsWindow(tk.Toplevel):
 
     def check_status(self):
         while self.update_loop_active:
-            # Check API (Port 5005)
+            # Check API (Station port)
             api_online = False
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.settimeout(0.5)
-                    api_online = s.connect_ex(('127.0.0.1', 5005)) == 0
+                    api_online = s.connect_ex(('127.0.0.1', STATION_PORT)) == 0
             except: pass
             
             # Update UI safely

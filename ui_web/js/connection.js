@@ -3,6 +3,7 @@
  * Handles multi-path probing and hot-swap connectivity.
  */
 import { store } from './store.js';
+import { getApiBase } from './config.js';
 import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 
 const RECONNECT_INTERVAL_VISIBLE_MS = 5000;
@@ -61,7 +62,7 @@ export class ConnectionManager {
         }
 
         console.log("🔌 Initializing SocketIO at:", host);
-        this.socket = io(`http://${host}:5005`);
+        this.socket = io(getApiBase(host));
 
         this.socket.on('connect', () => {
             console.log("✅ Socket Connected");
@@ -148,7 +149,7 @@ export class ConnectionManager {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
         
-        const url = `http://${host}:5005/api/health`; // Check health endpoint
+        const url = `${getApiBase(host)}/api/health`; // Check health endpoint
         
         try {
             const res = await fetch(url, { 

@@ -2,6 +2,7 @@
  * Web Audio Engine - Resilience & Hot-Swap Support
  */
 import { store } from './store.js';
+import { getApiBase } from './config.js';
 import { Resolver } from './resolver.js';
 import { connectionManager } from './connection.js';
 import { Haptics } from './haptics.js';
@@ -193,7 +194,7 @@ class AudioEngine {
         if (track.source === 'preview') {
             this._previewEndedTriggered = false;
             const host = (typeof store !== 'undefined' && store.state && store.state.activeHost) ? store.state.activeHost : (typeof window !== 'undefined' && window.location ? window.location.hostname : 'localhost');
-            const apiBase = `http://${host}:5005`;
+            const apiBase = getApiBase(host);
             let streamUrl;
             if (track._libraryTrackId) {
                 streamUrl = `${apiBase}/api/static/stream/${encodeURIComponent(track._libraryTrackId)}`;

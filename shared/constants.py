@@ -45,6 +45,7 @@ DEFAULT_DATA_DIR = "~/.local/share/soundsible"
 DEFAULT_LIBRARY_PATH = DEFAULT_CONFIG_DIR + "/" + LIBRARY_METADATA_FILENAME
 
 # Network Settings
+STATION_PORT = 5005  # Station Engine API port (single source of truth for backend + launcher)
 DEFAULT_NETWORK_TIMEOUT = 30  # seconds
 DEFAULT_DOWNLOAD_CHUNK_SIZE = 8192  # bytes
 

@@ -9,8 +9,8 @@ except ImportError:
     print("CRITICAL ERROR: Desktop GUI libraries (tkinter) are missing.")
     print("This is common on some Linux setups.")
     print("--> Use the embedded downloader in the main webapp instead:")
-    print("    http://localhost:5005/player/")
-    print("    (Ensure the Soundsible API is running on port 5005.)")
+    print(f"    http://localhost:{STATION_PORT}/player/")
+    print(f"    (Ensure the Soundsible API is running on port {STATION_PORT}.)")
     print("!"*60 + "\n")
     sys.exit(1)
 import threading
@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Any
 
+from shared.constants import STATION_PORT
 from .config import DEFAULT_OUTPUT_DIR, DEFAULT_WORKERS, DEFAULT_COOKIE_BROWSER
 from .odst_downloader import ODSTDownloader
 from .cloud_sync import CloudSync
@@ -179,6 +180,9 @@ class DownloaderGUI:
                     track = self.app.downloader.process_track(fake_meta)
                 
                 if track:
+                    existing = self.app.library.get_track_by_hash(track.file_hash)
+                    if existing:
+                        self.app.library.remove_track(existing.id)
                     self.app.library.add_track(track)
                     self.log(f"Downloaded: {track.artist} - {track.title}")
                     # Remove from UI list

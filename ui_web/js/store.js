@@ -2,13 +2,14 @@
  * State Management Store
  */
 import { connectionManager } from './connection.js';
+import { STATION_PORT, getApiBase } from './config.js';
 
 class Store {
     constructor() {
         this.state = {
             config: this.load('config', {
                 host: window.location.hostname || 'localhost',
-                port: 5005,
+                port: STATION_PORT,
                 syncToken: null
             }),
             priorityList: this.load('priority_list', []),
@@ -142,7 +143,7 @@ class Store {
     }
 
     get apiBase() {
-        return `http://${this.state.activeHost}:5005`;
+        return getApiBase(this.state.activeHost);
     }
 
     /** Stable device id for playback sync (persisted in localStorage). */
