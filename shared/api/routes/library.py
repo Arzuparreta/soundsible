@@ -19,6 +19,7 @@ library_bp = Blueprint("library", __name__, url_prefix="")
 
 
 def _get_api():
+    """Lazy import from shared.api to avoid circular imports; returns a dict of core helpers and singletons."""
     from shared.api import (
         get_core,
         get_track_by_id,

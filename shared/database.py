@@ -5,10 +5,13 @@ Handles local metadata storage, rapid searching, and manifest synchronization.
 
 import sqlite3
 import json
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from shared.models import Track, LibraryMetadata
 from shared.constants import DEFAULT_CONFIG_DIR
+
+logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     def __init__(self, db_path: Optional[str] = None):
@@ -370,4 +373,4 @@ class DatabaseManager:
                 conn.execute("COMMIT")
             except Exception as e:
                 conn.execute("ROLLBACK")
-                print(f"Error caching YouTube resolution: {e}")
+                logger.warning("Error caching YouTube resolution: %s", e)

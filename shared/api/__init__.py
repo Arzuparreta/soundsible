@@ -70,7 +70,8 @@ def get_active_endpoints():
                     ip = addr.address
                     if ip not in endpoints and not ip.startswith('127.'):
                         endpoints.append(ip)
-    except:
+    except Exception as e:
+        logger.debug("get_active_endpoints: primary discovery failed, using fallback: %s", e)
         # Fallback to a simple socket test if psutil fails or isn't installed
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -78,8 +79,9 @@ def get_active_endpoints():
             ip = s.getsockname()[0]
             if ip not in endpoints: endpoints.append(ip)
             s.close()
-        except: pass
-        
+        except Exception:
+            pass
+
     return endpoints
 
 app = Flask(__name__)

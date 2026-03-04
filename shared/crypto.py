@@ -45,7 +45,7 @@ class CredentialManager:
             try:
                 with open('/etc/machine-id', 'r') as f:
                     machine_id = f.read().strip()
-            except:
+            except OSError:
                 machine_id = os.getenv('HOSTNAME', 'default-machine')
             username = os.getenv('USER', 'default-user')
         
