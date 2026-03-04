@@ -10,8 +10,8 @@ except (ImportError, OSError):
     MPV_AVAILABLE = False
 
 import os
-from typing import Optional, Callable, Dict, Any, List
-from shared.models import Track
+from typing import Optional, Callable, Dict, Any, List, Union
+from shared.models import Track, QueueItem
 from player.queue_manager import QueueManager
 
 class PlaybackEngine:
@@ -48,7 +48,7 @@ class PlaybackEngine:
         self._track_end_callbacks: List[Callable[[], None]] = []
         self._on_time_update: Optional[Callable[[float], None]] = None
         self._on_state_change: Optional[Callable[[str], None]] = None
-        self._on_track_load: Optional[Callable[[Track], None]] = None  # For UI to load next track
+        self._on_track_load: Optional[Callable[[Union[Track, QueueItem]], None]] = None  # For UI to load next track (QueueItem from queue)
         
         # State
         self.current_track: Optional[Track] = None
@@ -157,12 +157,12 @@ class PlaybackEngine:
         
         # Then, check queue for auto-play
         if self.queue_manager and not self.queue_manager.is_empty():
-            next_track = self.queue_manager.get_next()
-            if next_track and self._on_track_load:
+            next_item = self.queue_manager.get_next()
+            if next_item and self._on_track_load:
                 try:
-                    self._on_track_load(next_track)
+                    self._on_track_load(next_item)
                 except Exception as e:
-                    print(f"ERROR auto-playing queued track: {e}")
+                    print(f"ERROR auto-playing queued item: {e}")
             
     def _handle_pause_change(self, name, value):
         """Handle pause state changes from MPV."""
@@ -190,6 +190,6 @@ class PlaybackEngine:
     def set_state_change_callback(self, callback: Callable[[str], None]):
         self._on_state_change = callback
     
-    def set_track_load_callback(self, callback: Callable[[Track], None]):
-        """Set callback for when a new track should be loaded (e.g., from queue)."""
+    def set_track_load_callback(self, callback: Callable[[Union[Track, QueueItem]], None]):
+        """Set callback for when a new track should be loaded (e.g., from queue). Receives QueueItem from queue."""
         self._on_track_load = callback

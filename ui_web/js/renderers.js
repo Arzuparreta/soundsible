@@ -369,7 +369,7 @@ export function renderQueue(state, queueContainerEls, options = {}) {
             </div>
             <div class="flex items-center flex-shrink-0 ml-auto ${btnGap}">
                 ${playBtnHtml}
-                <button type="button" class="queue-remove-btn ${btnSize} flex items-center justify-center bg-[var(--surface-overlay)] text-[var(--text-dim)] rounded-full hover:bg-red-500/10 hover:text-red-400 active:scale-90 transition-all" data-queue-index="${idx}" aria-label="Remove from queue">
+                <button type="button" class="queue-remove-btn ${btnSize} flex items-center justify-center bg-[var(--surface-overlay)] text-[var(--text-dim)] rounded-full hover:bg-red-500/10 hover:text-red-400 active:scale-90 transition-all" data-queue-index="${idx}" data-queue-id="${t.id}" aria-label="Remove from queue">
                     <i class="fas fa-times text-xs"></i>
                 </button>
                 ${handleHtml}

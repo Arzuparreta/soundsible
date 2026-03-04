@@ -230,6 +230,7 @@ function buildOdstRowHtml(r, opts = {}) {
                 ${titleLine}
                 <div class="text-xs text-[var(--text-dim)] truncate">${esc(r.channel)} ${duration ? ' · ' + duration : ''}</div>
             </div>
+            <button type="button" class="dl-playback-queue w-10 h-10 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 opacity-100 transition-all" aria-label="Add to playback queue" title="Add to playback queue"><i class="fas fa-list-ul text-sm"></i></button>
             <button type="button" class="dl-add-one w-10 h-10 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 opacity-100 transition-all" data-video-id="${esc(r.id)}" aria-label="${esc(dlAria)}"${tooltipAttrs}><i class="fas ${dlIcon} text-sm"></i></button>
         </div>
     </div>`;
@@ -276,11 +277,18 @@ function bindListeners(merged) {
         if (!videoId) return;
         const item = odstItems.find((o) => o.id === videoId) || null;
         row.addEventListener('click', (e) => {
-            if (e.target.closest('.dl-add-one')) return;
+            if (e.target.closest('.dl-add-one') || e.target.closest('.dl-playback-queue')) return;
             if (item && typeof window.playPreview === 'function') {
                 window.playPreview(item);
             }
         });
+        const playbackQueueBtn = row.querySelector('.dl-playback-queue');
+        if (playbackQueueBtn && item && store.addPreviewToQueue) {
+            playbackQueueBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                store.addPreviewToQueue(item);
+            });
+        }
         const addBtn = row.querySelector('.dl-add-one');
         if (addBtn && item && typeof window.Downloader !== 'undefined' && window.Downloader.addToDownloadQueue) {
             addBtn.addEventListener('click', (e) => {

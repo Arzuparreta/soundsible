@@ -199,7 +199,8 @@ def get_track_cover(track_id):
 def get_playback_queue():
     api = _get_api()
     _, _, queue = api["get_core"]()
-    return jsonify({"tracks": [t.to_dict() for t in queue.get_all()], "repeat_mode": queue.get_repeat_mode()})
+    items = [item.to_dict() for item in queue.get_all()]
+    return jsonify({"items": items, "tracks": items, "repeat_mode": queue.get_repeat_mode()})
 
 
 @playback_bp.route("/api/playback/shuffle", methods=["POST"])
@@ -223,15 +224,36 @@ def set_playback_repeat():
 @playback_bp.route("/api/playback/queue", methods=["POST"])
 def add_to_playback_queue():
     api = _get_api()
-    _, _, queue = api["get_core"]()
-    data = request.json
-    track_id = data.get("track_id")
-    lib, _, _ = api["get_core"]()
-    track = api["get_track_by_id"](lib, track_id)
-    if track:
-        queue.add(track)
+    lib, _, queue = api["get_core"]()
+    data = request.json or {}
+    if "track_id" in data:
+        track = api["get_track_by_id"](lib, data["track_id"])
+        if track:
+            queue.add_library_track(track)
+            return jsonify({"status": "success", "size": queue.size()})
+        return jsonify({"error": "Track not found"}), 404
+    if "preview" in data:
+        preview = data["preview"]
+        video_id = preview.get("video_id") or preview.get("id")
+        if not video_id or not validate_youtube_video_id(str(video_id)):
+            return jsonify({"error": "Invalid or missing video_id"}), 400
+        title = preview.get("title") or "Unknown"
+        artist = preview.get("artist") or ""
+        duration = int(preview.get("duration") or preview.get("duration_sec") or 0)
+        thumbnail = preview.get("thumbnail") or None
+        library_track_id = preview.get("library_track_id") or None
+        album = preview.get("album") or None
+        queue.add_preview(
+            video_id=str(video_id),
+            title=title,
+            artist=artist,
+            duration=max(0, duration),
+            thumbnail=thumbnail,
+            library_track_id=library_track_id,
+            album=album,
+        )
         return jsonify({"status": "success", "size": queue.size()})
-    return jsonify({"error": "Track not found"}), 404
+    return jsonify({"error": "Missing track_id or preview"}), 400
 
 
 @playback_bp.route("/api/playback/queue/<int:index>", methods=["DELETE"])
@@ -247,13 +269,10 @@ def remove_from_playback_queue(index):
 def remove_track_id_from_playback_queue(track_id):
     api = _get_api()
     _, _, queue = api["get_core"]()
-    tracks = queue.get_all()
-    indices_to_remove = [i for i, t in enumerate(tracks) if t.id == track_id]
-    if not indices_to_remove:
-        return jsonify({"error": "Track not in queue"}), 404
-    for index in reversed(indices_to_remove):
-        queue.remove(index)
-    return jsonify({"status": "success", "removed_count": len(indices_to_remove)})
+    removed_count = queue.remove_by_id(track_id)
+    if removed_count:
+        return jsonify({"status": "success", "removed_count": removed_count})
+    return jsonify({"error": "Track not in queue"}), 404
 
 
 @playback_bp.route("/api/playback/queue/move", methods=["POST"])
@@ -280,9 +299,9 @@ def clear_playback_queue():
 def get_next_from_queue():
     api = _get_api()
     _, _, queue = api["get_core"]()
-    track = queue.get_next()
-    if track:
-        return jsonify(track.to_dict())
+    item = queue.get_next()
+    if item:
+        return jsonify(item.to_dict())
     return jsonify(None)
 
 

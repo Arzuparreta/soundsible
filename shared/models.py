@@ -6,7 +6,7 @@ for representing music tracks, library organization, and synchronization.
 """
 
 from dataclasses import dataclass, asdict, field
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Literal
 from enum import Enum
 import json
 import uuid
@@ -90,6 +90,76 @@ class Track:
         field_names = {f.name for f in dataclasses.fields(cls)}
         filtered_data = {k: v for k, v in data.items() if k in field_names}
         return cls(**filtered_data)
+
+
+@dataclass
+class QueueItem:
+    """
+    A single playable item in the playback queue (library track or preview).
+    id is the canonical identifier: library UUID or video_id for preview.
+    """
+    source: Literal["library", "preview"]
+    id: str
+    title: str
+    artist: str
+    duration: int
+    thumbnail: Optional[str] = None
+    library_track_id: Optional[str] = None
+    album: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Stable JSON for API and web (source, id, title, artist, duration, thumbnail)."""
+        out: Dict[str, Any] = {
+            "source": self.source,
+            "id": self.id,
+            "title": self.title,
+            "artist": self.artist,
+            "duration": self.duration,
+        }
+        if self.thumbnail is not None:
+            out["thumbnail"] = self.thumbnail
+        if self.library_track_id is not None:
+            out["library_track_id"] = self.library_track_id
+        if self.album is not None:
+            out["album"] = self.album
+        return out
+
+    @classmethod
+    def from_library_track(cls, track: 'Track') -> 'QueueItem':
+        """Build a library QueueItem from a Track."""
+        return cls(
+            source="library",
+            id=track.id,
+            title=track.title,
+            artist=track.artist,
+            duration=track.duration,
+            thumbnail=None,
+            library_track_id=None,
+            album=track.album,
+        )
+
+    @classmethod
+    def from_preview(
+        cls,
+        video_id: str,
+        title: str,
+        artist: str,
+        duration: int,
+        thumbnail: Optional[str] = None,
+        library_track_id: Optional[str] = None,
+        album: Optional[str] = None,
+    ) -> 'QueueItem':
+        """Build a preview QueueItem."""
+        return cls(
+            source="preview",
+            id=video_id,
+            title=title,
+            artist=artist,
+            duration=duration,
+            thumbnail=thumbnail,
+            library_track_id=library_track_id,
+            album=album,
+        )
 
 
 @dataclass

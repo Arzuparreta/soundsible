@@ -3,7 +3,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Gio, GObject, GLib, Gdk
 from shared.constants import DEFAULT_CONFIG_DIR, DEFAULT_LIBRARY_PATH, DEFAULT_CACHE_DIR, LIBRARY_METADATA_FILENAME, STATION_PORT
-from shared.models import PlayerConfig, LibraryMetadata
+from shared.models import PlayerConfig, LibraryMetadata, QueueItem
 from player.cover_manager import CoverFetchManager
 from player.library import LibraryManager
 from player.ui.library import LibraryView
@@ -331,7 +331,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.engine = PlaybackEngine(queue_manager=self.queue_manager)
         self.engine.set_state_change_callback(self.on_player_state_change)
         self.engine.add_track_end_callback(self.on_track_ended)
-        self.engine.set_track_load_callback(self.play_track)  # For auto-play from queue
+        self.engine.set_track_load_callback(self._on_queue_next_item)  # For auto-play from queue
         
         
         # MPRIS Integration (optional - requires mpris_server package)
@@ -838,6 +838,16 @@ class MainWindow(Adw.ApplicationWindow):
         
         self._seeking = False
         return False  # Remove callback from idle queue to prevent memory leak
+
+    def _on_queue_next_item(self, item: QueueItem):
+        """Called when the queue advances (auto-play). Resolve library items to Track and play; skip preview on desktop."""
+        if item.source == "preview":
+            # Desktop does not play preview from queue yet; skip to next or leave idle
+            return
+        if item.source == "library" and self.lib_manager and self.lib_manager.metadata:
+            track = self.lib_manager.metadata.get_track_by_id(item.id)
+            if track:
+                self.play_track(track)
 
     def play_track(self, track):
         """Called when a track is double-clicked in the library."""

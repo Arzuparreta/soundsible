@@ -248,8 +248,14 @@ class Store {
             const res = await fetch(`${this.apiBase}/api/playback/queue?t=${Date.now()}`);
             if (res.ok) {
                 const data = await res.json();
-                this.update({ 
-                    queue: data.tracks,
+                const raw = data.items ?? data.tracks ?? [];
+                const queue = raw.map((item) => {
+                    const out = { ...item };
+                    if (out.library_track_id != null) out._libraryTrackId = out.library_track_id;
+                    return out;
+                });
+                this.update({
+                    queue,
                     repeatMode: data.repeat_mode
                 });
             }
@@ -575,6 +581,41 @@ class Store {
             return false;
         } catch (err) {
             console.error("Add to queue error:", err);
+            return false;
+        }
+    }
+
+    /**
+     * Add a preview (Discover/Search) item to the playback queue.
+     * @param {{ video_id?: string, id?: string, title?: string, artist?: string, duration?: number, duration_sec?: number, thumbnail?: string, library_track_id?: string, _libraryTrackId?: string }} item
+     */
+    async addPreviewToQueue(item) {
+        if (!item) return false;
+        const videoId = item.video_id ?? item.id;
+        if (!videoId) return false;
+        try {
+            const preview = {
+                video_id: videoId,
+                title: item.title ?? 'Unknown',
+                artist: item.artist ?? item.channel ?? '',
+                duration: Number(item.duration ?? item.duration_sec ?? 0) || 0,
+                thumbnail: item.thumbnail ?? null
+            };
+            if (item.library_track_id ?? item._libraryTrackId) {
+                preview.library_track_id = item.library_track_id ?? item._libraryTrackId;
+            }
+            const res = await fetch(`${this.apiBase}/api/playback/queue`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ preview })
+            });
+            if (res.ok) {
+                await this.syncQueue();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("Add preview to queue error:", err);
             return false;
         }
     }

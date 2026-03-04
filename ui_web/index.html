@@ -533,14 +533,13 @@
         .discover-tinder-wrap { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; justify-content: center; min-width: 0; }
         .discover-tinder-card-wrap { position: relative; width: 100%; max-width: min(400px, 95vw); display: flex; flex-direction: column; border-radius: 24px; overflow: hidden; background: var(--surface-overlay); box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
         .discover-tinder-card-wrap .discover-card { flex-direction: column; padding: 1rem; text-align: center; display: flex; background: transparent; }
+        .discover-tinder-card-wrap .discover-card-cover-wrap { width: 100%; }
         .discover-tinder-card-wrap .discover-card-cover { width: 100%; height: auto; aspect-ratio: 1; border-radius: 1rem; background-size: cover; background-position: center; }
         .discover-tinder-card-wrap .discover-card-meta { width: 100%; margin-top: 0.75rem; }
         .discover-tinder-card-wrap .discover-card-play { border-radius: 1rem; }
-        .discover-tinder-actions { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin-top: 1rem; padding-bottom: 0.25rem; }
+        .discover-tinder-actions { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin-top: 1rem; padding-bottom: 1rem; }
         .discover-tinder-btn { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: none; font-size: 1.25rem; transition: transform 0.2s, background 0.2s; }
         .discover-tinder-btn:active { transform: scale(0.95); }
-        .discover-tinder-play { background: var(--accent); color: var(--text-on-accent); }
-        .discover-tinder-add { background: var(--surface-overlay); color: var(--accent); border: 2px solid var(--glass-border); }
         .discover-tinder-empty { text-align: center; padding: 2rem 1rem; color: var(--text-dim); font-size: 0.875rem; }
 
         /* Omnibar root: pinned to layout viewport (100dvh) so the bar does not move when the keyboard opens (different layer from keyboard). */
@@ -759,21 +758,16 @@
         #view-discover.list-scroll-active .discover-card-play { background: transparent !important; }
         #view-discover-search.list-scroll-active .discover-card { background: var(--surface-overlay) !important; }
         #view-discover-search.list-scroll-active .discover-card-play { background: transparent !important; }
-        /* Discover (recommendations): always fixed, full screen; content panel scrolls. */
-        #view-discover.view-discover-fixed {
-            padding: 0;
-            overflow: hidden;
+        /* Discover: same view structure as library/favourites (uses .view padding); inner panel scrolls. */
+        #view-discover {
             display: flex;
             flex-direction: column;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: auto;
-            height: 100dvh;
-            max-height: 100dvh;
+            min-height: 0;
         }
-        .is-ios #view-discover.view-discover-fixed { padding: 0; }
-        #view-discover.view-discover-fixed #discover-main { min-height: 0; }
+        #view-discover #discover-content-panel {
+            flex: 1;
+            min-height: 0;
+        }
 
         /* Artist detail: expandable album tracks */
         .artist-album-expanded .artist-album-tracks { display: block !important; }
@@ -977,7 +971,7 @@
             <div id="view-favourites" class="view hidden">
                 <div id="fav-tracks" class="space-y-2"></div>
             </div>
-            <div id="view-discover" class="view view-discover-fixed hidden">
+            <div id="view-discover" class="view hidden">
                 <div id="discover-content-panel" class="flex flex-col flex-1 min-h-0 overflow-y-auto" style="-webkit-overflow-scrolling: touch;">
                         <p id="discover-empty-library" class="hidden text-sm text-[var(--text-dim)] py-4 px-1">Add music from YouTube to your library to get recommendations.</p>
                     <div id="discover-main" class="flex flex-col flex-1 min-h-0 hidden">

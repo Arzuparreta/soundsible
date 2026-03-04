@@ -35,7 +35,11 @@ export function getCurrentTrackList(currentView, viewState) {
  */
 export function getTrackFromContext(trackId, currentView, viewState) {
     const context = getCurrentTrackList(currentView, viewState);
-    return (context && context.find((t) => t.id === trackId)) || null;
+    let track = context && context.find((t) => t.id === trackId);
+    if (!track && store.state.queue) {
+        track = store.state.queue.find((t) => t.id === trackId) || null;
+    }
+    return track || null;
 }
 
 /**
@@ -45,9 +49,14 @@ export function getTrackFromContext(trackId, currentView, viewState) {
  */
 export function playTrackFromContext(trackId, currentView, viewState) {
     const context = getCurrentTrackList(currentView, viewState);
-    const track = context && context.find((t) => t.id === trackId);
+    let track = context && context.find((t) => t.id === trackId);
+    let list = context;
+    if (!track && store.state.queue) {
+        track = store.state.queue.find((t) => t.id === trackId) || null;
+        if (track) list = store.state.queue;
+    }
     if (track) {
-        audioEngine.setContext(context);
+        audioEngine.setContext(list);
         store.update({ currentTrack: track });
         audioEngine.playTrack(track);
     }

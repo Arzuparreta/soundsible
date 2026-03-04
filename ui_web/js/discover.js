@@ -128,6 +128,7 @@ export const Discover = {
                         ${cardHtml}
                         <div class="discover-tinder-actions">
                             <button type="button" class="discover-tinder-btn discover-tinder-add" disabled aria-hidden="true"><i class="fas fa-cloud-download-alt"></i></button>
+                            <button type="button" class="discover-tinder-btn discover-tinder-playback-queue" disabled aria-hidden="true" aria-label="Add to playback queue"><i class="fas fa-list-ul"></i></button>
                             <button type="button" class="discover-tinder-btn discover-tinder-play" disabled aria-hidden="true"><i class="fas fa-play"></i></button>
                         </div>
                     </div>
@@ -178,10 +179,12 @@ export const Discover = {
 
         return `
             <div class="discover-card discover-result-row relative" data-video-id="${esc(playbackId)}" data-title="${esc(item.title || '')}" data-artist="${esc(item.artist || item.channel || '')}" data-duration="${item.duration || r?.duration || 0}" data-webpage-url="${esc(item.webpage_url || '')}" data-thumbnail="${esc(thumb)}" data-rich-metadata="${richMetaStr}">
-                <button type="button" class="discover-card-play absolute inset-0 z-[1] flex items-center justify-center rounded-xl bg-black/0 hover:bg-black/30 active:bg-black/40 transition-colors group focus:outline-none focus:ring-2 focus:ring-[var(--accent)]" aria-label="Play preview">
-                    <span class="opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity w-12 h-12 flex items-center justify-center rounded-full bg-[var(--accent)]/90 text-[var(--text-on-accent)]"><i class="fas fa-play text-lg ml-0.5"></i></span>
-                </button>
-                <div class="discover-card-cover ${!cover_url && !skeleton ? 'discover-card-cover-placeholder' : ''}" style="${coverStyle}" role="img" aria-label="${cover_url ? '' : 'No cover'}"></div>
+                <div class="discover-card-cover-wrap relative flex-shrink-0">
+                    <button type="button" class="discover-card-play absolute inset-0 z-[1] flex items-center justify-center rounded-xl bg-black/0 hover:bg-black/30 active:bg-black/40 transition-colors group focus:outline-none focus:ring-2 focus:ring-[var(--accent)]" aria-label="Play preview">
+                        <span class="opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity w-12 h-12 flex items-center justify-center rounded-full bg-[var(--accent)]/90 text-[var(--text-on-accent)]"><i class="fas fa-play text-lg ml-0.5"></i></span>
+                    </button>
+                    <div class="discover-card-cover ${!cover_url && !skeleton ? 'discover-card-cover-placeholder' : ''}" style="${coverStyle}" role="img" aria-label="${cover_url ? '' : 'No cover'}"></div>
+                </div>
                 <div class="discover-card-meta">
                     <div class="discover-card-title">${titleText}</div>
                     <div class="discover-card-artist">${artistText}</div>
@@ -290,6 +293,7 @@ export const Discover = {
                         ${cardHtml}
                         <div class="discover-tinder-actions">
                             <button type="button" class="discover-tinder-btn discover-tinder-add" aria-label="${esc(dlAria)}"${tooltipAttrs}><i class="fas ${dlIcon}"></i></button>
+                            <button type="button" class="discover-tinder-btn discover-tinder-playback-queue" aria-label="Add to playback queue"><i class="fas fa-list-ul"></i></button>
                             <button type="button" class="discover-tinder-btn discover-tinder-play" aria-label="Play"><i class="fas fa-play"></i></button>
                         </div>
                     </div>
@@ -343,7 +347,14 @@ export const Discover = {
         if (addBtn) addBtn.addEventListener('click', () => {
             const item = this._itemFromRow(row);
             if (item && item.webpage_url) this._addToQueue(item);
-            advance();
+        });
+
+        const playbackQueueBtn = wrap.querySelector('.discover-tinder-playback-queue');
+        if (playbackQueueBtn) playbackQueueBtn.addEventListener('click', () => {
+            const item = this._itemFromRow(row);
+            if (item && (item.video_id || item.id)) {
+                if (store.addPreviewToQueue) store.addPreviewToQueue(item);
+            }
         });
 
         const playBtn = wrap.querySelector('.discover-tinder-play');

@@ -366,8 +366,13 @@ function initDesktopQueueDrag() {
         if (removeBtn) {
             e.preventDefault();
             e.stopPropagation();
-            const index = parseInt(removeBtn.getAttribute('data-queue-index'), 10);
-            if (!Number.isNaN(index)) store.removeFromQueue(index);
+            const id = removeBtn.getAttribute('data-queue-id');
+            if (id) {
+                store.removeFromQueueById(id);
+            } else {
+                const index = parseInt(removeBtn.getAttribute('data-queue-index'), 10);
+                if (!Number.isNaN(index)) store.removeFromQueue(index);
+            }
             return;
         }
         const moveBtn = e.target.closest('.queue-move-btn');

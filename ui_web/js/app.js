@@ -602,6 +602,21 @@ function initQueueDrag() {
     document.addEventListener('pointercancel', function cancelHoldOnPointerCancel() {
         if (!dragStarted && holdTimer) clearHoldTimer();
     });
+
+    container.addEventListener('click', (e) => {
+        const removeBtn = e.target.closest('.queue-remove-btn');
+        if (!removeBtn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const id = removeBtn.getAttribute('data-queue-id');
+        if (id) {
+            store.removeFromQueueById(id);
+        } else {
+            const index = parseInt(removeBtn.getAttribute('data-queue-index'), 10);
+            if (!Number.isNaN(index)) store.removeFromQueue(index);
+        }
+        Haptics.tick();
+    });
 }
 
 /**
