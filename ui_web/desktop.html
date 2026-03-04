@@ -331,7 +331,7 @@
         }
         .song-card { transition: opacity 0.2s, transform 0.2s, border-color 0.2s; }
         .song-card-body { transition: opacity 0.2s; }
-        /* Desktop Spotify-style: play overlay on cover (hover), selection highlight */
+        /* Desktop: play overlay on cover (hover), selection highlight */
         .desktop-play-overlay { z-index: 2; transition: none; }
         /* While this track is playing, hide the hover play overlay so the playing icon shows instead */
         #desktop-app .is-currently-playing .desktop-play-overlay { opacity: 0 !important; pointer-events: none; }
@@ -820,7 +820,7 @@
         </div>
     </div>
 
-    <!-- Full-resolution cover overlay (Spotify-style) -->
+    <!-- Full-resolution cover overlay (hover-to-play) -->
     <div id="full-cover-overlay" class="fixed inset-0 z-[130] hidden flex items-center justify-center p-4 transition-opacity duration-300 ease-out" style="background-color: var(--overlay-bg);">
         <div id="full-cover-overlay-backdrop" class="absolute inset-0" aria-hidden="true"></div>
         <div id="full-cover-overlay-content" class="relative flex flex-col items-center max-w-[min(90vw,400px)] w-full" onclick="event.stopPropagation()">

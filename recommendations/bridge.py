@@ -3,7 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from .providers.base import RawRecommendation
+from .models import RawRecommendation
 
 
 def _normalize(s: str) -> str:

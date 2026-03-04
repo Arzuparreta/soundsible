@@ -1,6 +1,6 @@
 # Music Downloader (ODST Tool)
 
-A powerful tool to download music from YouTube Music, YouTube, or Spotify links. Fully compatible with `Soundsible`.
+A powerful tool to download music from YouTube Music and YouTube links. Fully compatible with `Soundsible`.
 
 > [!WARNING]
 > **ODST and Soundsible do not encourage or support piracy or Terms‑of‑Service violations.**  
@@ -12,9 +12,9 @@ A powerful tool to download music from YouTube Music, YouTube, or Spotify links.
 ## Features
 - **Flexible Selection**: Download everything, specific playlists, or liked songs
 - **Smart Search**: Uses YouTube "Topic" channels for highest quality audio
-- **Multi-Platform Links**: Paste links from Spotify, YouTube, or YouTube Music (can mix sources!)
+- **YouTube / YouTube Music**: Paste links or search by song name
 - **Storage**: Stores files as `tracks/{hash}.mp3` with `library.json` metadata (Soundsible compatible)
-- **Metadata**: Embeds ID3 tags and Album Art from Spotify
+- **Metadata**: Embeds ID3 tags and album art from resolved sources
 - **Parallel Downloads**: Fast multi-threaded processing
 
 ## Setup
@@ -26,13 +26,7 @@ A powerful tool to download music from YouTube Music, YouTube, or Spotify links.
    ```
    *(Or manually: `python -m venv venv && ./venv/bin/pip install -r requirements.txt`)*
 
-2. **Configure Credentials**
-   Create a `.env` file with your Spotify App credentials:
-   ```bash
-   cp .env.example .env
-   nano .env
-   ```
-   *Get credentials at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)*
+2. **Optional**: Create a `.env` file (e.g. from `odst_tool/.env.example`) to set `LASTFM_API_KEY` for Discover recommendations in the webapp.
 
 ## Usage
 
@@ -46,5 +40,3 @@ Use the **main Soundsible webapp**: start the API (e.g. from `run.py` → Launch
 ./downloader_gui.sh
 ```
 Requires tkinter. If tkinter is missing, use the embedded downloader in the webapp instead.
-
-> **Note:** Spotify API credentials are **only needed** if you want to auto-download your entire Spotify library/playlists. For simply pasting links, no credentials are required.

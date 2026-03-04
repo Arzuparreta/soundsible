@@ -102,7 +102,7 @@ def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
     metadata_evidence = item.get("metadata_evidence") if isinstance(item.get("metadata_evidence"), dict) else None
     output_dir = item.get("output_dir")
     if item.get("spotify_data") or (song_str and "spotify.com" in song_str):
-        return None, "Spotify links are not supported"
+        return None, "This link type is not supported"
 
     if source_type in {"youtube_url", "ytmusic_search", "youtube_search"}:
         normalized = normalize_youtube_url(song_str)
@@ -1608,8 +1608,7 @@ def discover_recommendations():
 
         # 2. Raw from Last.fm only (no get_downloader; resolve happens on click via /api/discover/resolve)
         from recommendations.service import RecommendationsService
-        from recommendations.providers import LastFmRecommendationProvider
-        from recommendations.providers.base import Seed
+        from recommendations.models import Seed
         from recommendations.util import raw_stable_id, raw_to_dict, normalize_artist_title
         from dotenv import dotenv_values
 
@@ -1618,8 +1617,7 @@ def discover_recommendations():
         _ODST_ENV_PATH = Path(__file__).resolve().parent.parent / "odst_tool" / ".env"
         _env_vars = dotenv_values(_ODST_ENV_PATH) if _ODST_ENV_PATH.exists() else {}
         lastfm_key = os.getenv("LASTFM_API_KEY") or _env_vars.get("LASTFM_API_KEY")
-        lastfm_provider = LastFmRecommendationProvider(lastfm_key)
-        svc = RecommendationsService(lastfm_provider, None)  # downloader=None: resolve=False, do not init ODST here
+        svc = RecommendationsService(lastfm_api_key=lastfm_key, downloader=None)  # resolve=False, do not init ODST here
         request_limit = min(100, limit + 20)
         raw_list, reason = svc.get_recommendations(
             seed_objs, limit=request_limit, library_tracks=library_tracks, resolve=False

@@ -1,4 +1,4 @@
-"""ODST downloader: YouTube search + download + library + cloud. No Spotify."""
+"""ODST downloader: YouTube search + download + library + cloud."""
 
 from pathlib import Path
 from typing import Optional
@@ -10,7 +10,7 @@ from .cloud_sync import CloudSync
 
 
 class ODSTDownloader:
-    """YouTube search, download, library, and cloud sync. Used by the webapp; no Spotify."""
+    """YouTube search, download, library, and cloud sync. Used by the webapp."""
 
     def __init__(
         self,

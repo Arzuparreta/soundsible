@@ -86,7 +86,7 @@ class YouTubeDownloader:
             except ImportError:
                 pass
 
-    def process_track(self, metadata: Dict[str, Any], source: str = "spotify") -> Optional[Track]:
+    def process_track(self, metadata: Dict[str, Any], source: str = "manual") -> Optional[Track]:
         """
         Full workflow for a single track: Search -> Download -> Process -> Return Track.
         """

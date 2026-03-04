@@ -83,7 +83,7 @@ class SmartDownloader:
              track = self.downloader.process_video(query)
              
         elif "spotify.com" in query:
-            self.log("Spotify links are not supported. Use a YouTube URL or search by song name.", "error")
+            self.log("This link type is not supported. Use a YouTube URL or search by song name.", "error")
             return None
 
         else:

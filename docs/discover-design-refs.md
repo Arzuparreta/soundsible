@@ -4,20 +4,15 @@ Short design research for the Discover recommendations UI. Implement to match pr
 
 ## Reference UIs
 
-1. **Spotify Made for You / Mixes**  
-   - *Access:* Search → Made for You (mobile); left menu Made For You (desktop).  
-   - *Reuse:* Clear section labels, compact rows for recommended list, primary CTA to refresh. Card layout (cover + title + short subtitle).  
-   - [Spotify Mixes support](https://support.spotify.com/us/article/spotify-mixes/) (structure); [Made for You mixes](https://www.androidcentral.com/spotifys-new-personalized-mixes-will-give-you-more-your-favorite-artists) (overview).
-
-2. **BBC Orbit – intentional discovery**  
+1. **BBC Orbit – intentional discovery**  
    - *Concept:* User-controlled exploration; horizontal = similar tracks, vertical = different content; map-like exploration.  
    - *Reuse:* Card-based discovery; refresh to get new recommendations.  
    - [Designing for intentional discovery](https://www.bbc.co.uk/rd/articles/2025-03-orbit-music-discovery-design).
 
-3. **Music discovery apps – mood/activity filtering**  
+2. **Music discovery apps – mood/activity filtering**  
    - *Pattern:* Multiple entry points (search, mood, single track). Result lists as rows: cover + title + artist + action (add/play).  
    - *Reuse:* Result list = same row pattern as Search (div cover, title, artist, Add button). One primary action per row.  
-   - [Spotify UI/UX Case Study – discovery](https://philostories.com/spotify); [Building a music discovery app](https://bitsandmusic.com/post/building-music-discovery-app-4/).
+   - [Building a music discovery app](https://bitsandmusic.com/post/building-music-discovery-app-4/).
 
 ## Constraints (premium-glass + project rules)
 

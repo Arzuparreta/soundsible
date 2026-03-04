@@ -45,7 +45,7 @@ Clients (desktop & mobile browsers / PWA)
 
 The ODST tool is available both as a separate component and tightly integrated into Station.
 
-- Accepts links or search queries (YouTube / YouTube Music, and optionally Spotify‑based workflows).
+- Accepts links or search queries (YouTube / YouTube Music).
 - Resolves high‑quality audio sources.
 - Downloads to a tracks directory using hashed filenames.
 - Populates metadata so downloaded tracks immediately appear in the library.

@@ -16,7 +16,7 @@ It is intended for **personal use with media you have the legal right to access*
 By using Soundsible, **you agree that you alone are responsible** for:
 
 - Ensuring that your use of the software complies with all applicable **local, national, and international laws**.
-- Respecting the **Terms of Service** of any platforms or services you access (for example, YouTube, YouTube Music, Spotify, Cloudflare R2, Backblaze, etc.).
+- Respecting the **Terms of Service** of any platforms or services you access (for example, YouTube, YouTube Music, Cloudflare R2, Backblaze, etc.).
 - Only downloading, storing, or streaming content when you have the **necessary rights or permissions** to do so.
 
 If you are unsure whether a particular use is lawful in your jurisdiction, you should seek **independent legal advice**.  

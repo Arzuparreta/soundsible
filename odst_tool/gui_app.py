@@ -34,7 +34,7 @@ class DownloaderGUI:
         self.app = self._init_backend()
         self.cloud = CloudSync(self.app.output_dir)
         self.queue = []
-        self.input_mode = "manual"  # manual vs spotify
+        self.input_mode = "manual"  # manual input
         
         self._setup_ui()
         
@@ -55,7 +55,7 @@ class DownloaderGUI:
         input_frame = ttk.LabelFrame(self.root, text="Add Music", padding="10")
         input_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        # Tabs for Source (Manual vs Spotify)
+        # Tabs for input and settings
         self.notebook = ttk.Notebook(input_frame)
         self.notebook.pack(fill=tk.X, expand=True)
         

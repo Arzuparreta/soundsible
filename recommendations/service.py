@@ -1,16 +1,17 @@
-"""Orchestrates recommendation providers and ODST bridge."""
+"""Orchestrates Last.fm recommendations and optional ODST bridge for YouTube resolution."""
 
 from typing import Any, Dict, List, Optional
 
-from .providers.base import Seed, RawRecommendation
+from .models import RawRecommendation, Seed
+from . import lastfm
 from .bridge import resolve_to_youtube
 
 
 class RecommendationsService:
-    """Builds recommendations from Last.fm and resolves to YouTube via ODST."""
+    """Builds recommendations from Last.fm and optionally resolves to YouTube via ODST."""
 
-    def __init__(self, lastfm_provider: Any, downloader: Any):
-        self._lastfm = lastfm_provider
+    def __init__(self, lastfm_api_key: Optional[str] = None, downloader: Any = None):
+        self._lastfm_api_key = (lastfm_api_key or "").strip()
         self._downloader = downloader
 
     def get_recommendations(
@@ -27,16 +28,16 @@ class RecommendationsService:
         if not seeds:
             return [], "no_seeds"
         raw: List[RawRecommendation] = []
-        if getattr(self._lastfm, "is_available", False):
+        if lastfm.is_lastfm_available(self._lastfm_api_key):
             try:
-                raw = self._lastfm.get_recommendations(seeds, limit=limit)
+                raw = lastfm.get_recommendations(seeds, limit, self._lastfm_api_key)
             except Exception:
                 pass
         if not raw:
-            if not getattr(self._lastfm, "is_available", False):
+            if not lastfm.is_lastfm_available(self._lastfm_api_key):
                 return [], "providers_unavailable"
             return [], "no_recommendations"
-        
+
         # If not resolving, just return the raw recommendations formatted as dicts
         if not resolve:
             raw_dicts = []

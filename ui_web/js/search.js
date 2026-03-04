@@ -38,7 +38,7 @@ let searchResultsPanelEl = null;
 let lastLibraryItems = [];
 let lastOdstResults = [];
 let isMobile = true;
-/** When false (desktop), library rows use Spotify-style click (delegation); no single-click play on row. */
+/** When false (desktop), library rows use hover-to-play style (delegation); no single-click play on row. */
 let isDesktop = false;
 /** Search tab ODST source: 'music' = YouTube Music, 'youtube' = normal YouTube. */
 let odstSourceMode = 'music';
