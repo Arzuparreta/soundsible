@@ -7,7 +7,7 @@ import { connectionManager } from './connection.js';
 import { audioEngine } from './audio.js';
 import { Downloader } from './downloader.js';
 import * as renderers from './renderers.js';
-import { scoreLibrary, scoreArtist, mergeAndSortByScore } from './search.js';
+import { scoreLibrary, scoreArtist, mergeAndSortByScore, unifiedSearch } from './search.js';
 import { wireSettings, wireActionMenu } from './wires.js';
 import { DesktopUI } from './ui_desktop.js';
 import { DISCOVERY_TABS } from './discovery_tabs.js';
@@ -1222,12 +1222,14 @@ async function init() {
 
         const origShowView = DesktopUI.showView.bind(DesktopUI);
         DesktopUI.showView = (viewId) => {
-            origShowView(viewId);
-            
             const input = document.getElementById('desktop-global-search-input');
             const container = document.getElementById('desktop-global-search-container');
             const clearBtn = document.getElementById('desktop-global-search-clear');
-            
+            if (viewId === 'discover' && input) {
+                input.value = '';
+                if (clearBtn) clearBtn.classList.add('hidden');
+            }
+            origShowView(viewId);
             if (input) {
                 input.value = '';
                 if (clearBtn) clearBtn.classList.add('hidden');
@@ -1280,6 +1282,14 @@ async function init() {
             }
         };
 
+        const origNavigateBack = DesktopUI.navigateBack.bind(DesktopUI);
+        DesktopUI.navigateBack = () => {
+            if (DesktopUI.currentView === 'discover' && document.getElementById('desktop-view-discover-search')?.classList.contains('active')) {
+                unifiedSearch.updateDiscoverPanels(false);
+                return;
+            }
+            origNavigateBack();
+        };
         document.getElementById('desktop-artist-back')?.addEventListener('click', () => DesktopUI.navigateBack());
         document.getElementById('desktop-playlist-detail-back')?.addEventListener('click', () => DesktopUI.navigateBack());
 

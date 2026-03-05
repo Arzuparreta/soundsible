@@ -39,9 +39,14 @@ export const DesktopUI = {
         this.currentView = viewId;
         document.querySelectorAll('.desktop-view').forEach((v) => v.classList.remove('active'));
         document.querySelectorAll('.desktop-nav-btn').forEach((b) => b.classList.remove('active'));
-        const viewEl = el(`desktop-view-${viewId}`);
-        const btnEl = document.querySelector(`.desktop-nav-btn[data-view="${viewId}"]`);
+        let viewEl = el(`desktop-view-${viewId}`);
+        if (viewId === 'discover') {
+            const input = el('desktop-global-search-input');
+            const hasQuery = input && (input.value || '').trim().length > 0;
+            viewEl = hasQuery ? el('desktop-view-discover-search') : el('desktop-view-discover');
+        }
         if (viewEl) viewEl.classList.add('active');
+        const btnEl = document.querySelector(`.desktop-nav-btn[data-view="${viewId}"]`);
         if (btnEl) btnEl.classList.add('active');
         if (viewId === 'discover') {
             import('./discover.js').then((m) => m.Discover && m.Discover.ensureInited({ mobile: false }));

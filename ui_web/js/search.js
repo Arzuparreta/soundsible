@@ -104,8 +104,15 @@ function updateDiscoverPanels(showSearchResults) {
         }, 500);
         return;
     }
-    if (contentPanelEl) contentPanelEl.classList.toggle('hidden', !!showSearchResults);
-    if (searchResultsPanelEl) searchResultsPanelEl.classList.toggle('hidden', !showSearchResults);
+    if (isDiscoverPage && !isMobile && contentPanelEl?.id === 'desktop-view-discover' && searchResultsPanelEl?.id === 'desktop-view-discover-search') {
+        contentPanelEl.classList.toggle('active', !showSearchResults);
+        searchResultsPanelEl.classList.toggle('active', !!showSearchResults);
+        const innerResults = searchResultsPanelEl.querySelector('#desktop-discover-search-results');
+        if (innerResults) innerResults.classList.toggle('hidden', !showSearchResults);
+    } else {
+        if (contentPanelEl) contentPanelEl.classList.toggle('hidden', !!showSearchResults);
+        if (searchResultsPanelEl) searchResultsPanelEl.classList.toggle('hidden', !showSearchResults);
+    }
 }
 
 function scoreLibrary(track, query) {
@@ -493,8 +500,8 @@ function init(opts = {}) {
     if (!inputEl || !resultsEl) return;
 
     if (isDiscoverPage && !isMobile) {
-        contentPanelEl = document.getElementById('desktop-discover-content-panel');
-        searchResultsPanelEl = document.getElementById('desktop-discover-search-panel');
+        contentPanelEl = document.getElementById('desktop-view-discover');
+        searchResultsPanelEl = document.getElementById('desktop-view-discover-search');
     } else {
         contentPanelEl = document.getElementById(isMobile ? 'discover-content-panel' : 'desktop-discover-content-panel');
         searchResultsPanelEl = document.getElementById(resultsId);
@@ -528,5 +535,6 @@ function init(opts = {}) {
 
 export const unifiedSearch = {
     init,
-    clear
+    clear,
+    updateDiscoverPanels
 };
