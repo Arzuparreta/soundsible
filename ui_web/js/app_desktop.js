@@ -1269,6 +1269,7 @@ async function init() {
             if (viewId === 'discover') {
                 syncDiscoveryPanels();
                 renderDiscoveryTabBar();
+                import('./discover.js').then((m) => m.Discover && m.Discover.ensureInited({ mobile: false }));
                 import('./search.js').then((m) => {
                     window.unifiedSearch = m.unifiedSearch;
                     m.unifiedSearch.init({ mobile: false, resultsContainerId: 'desktop-discover-search-results' });

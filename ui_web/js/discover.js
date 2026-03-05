@@ -65,7 +65,6 @@ export const Discover = {
             this._contentPanel.classList.remove('hidden');
             searchResultsPanel.classList.add('hidden');
         }
-        this._bindPullToRefresh();
         if (this._hasLibrary()) {
             if (this._mainEl) this._mainEl.classList.remove('hidden');
             this._renderTinderStack();
@@ -80,27 +79,6 @@ export const Discover = {
             return;
         }
         await this.init(options);
-    },
-
-    _bindPullToRefresh() {
-        const pageEl = this._pageEl;
-        if (!pageEl || !this._scrollEl) return;
-        let startY = 0;
-        let pulled = false;
-        pageEl.addEventListener('touchstart', (e) => {
-            const scrollEl = this._scrollEl;
-            if (scrollEl && scrollEl.scrollTop <= 0) startY = e.touches[0].clientY;
-            else startY = -1;
-            pulled = false;
-        }, { passive: true });
-        pageEl.addEventListener('touchmove', (e) => {
-            if (startY < 0) return;
-            const y = e.touches[0].clientY;
-            if (y - startY > 60) pulled = true;
-        }, { passive: true });
-        pageEl.addEventListener('touchend', () => {
-            startY = -1;
-        }, { passive: true });
     },
 
     _hasLibrary() {
