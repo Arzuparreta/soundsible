@@ -177,16 +177,15 @@
 
         .desktop-view { display: none; }
         .desktop-view.active { display: block; }
-        #desktop-view-playlists:not(.active) { display: none !important; }
+        /* Ensure inactive desktop views are fully hidden, even when Tailwind utility classes like .flex set display */
+        .desktop-view:not(.active) { display: none !important; }
         /* Discover: same main padding and search bar as other views; view fills remaining space. */
-        #desktop-main:has(#desktop-view-discover.active),
-        #desktop-main:has(#desktop-view-discover-search.active) {
+        #desktop-main:has(#desktop-view-discover.active) {
             display: flex;
             flex-direction: column;
             overflow: hidden;
         }
-        #desktop-view-discover.active,
-        #desktop-view-discover-search.active {
+        #desktop-view-discover.active {
             flex: 1;
             min-height: 0;
             min-width: 0;
@@ -195,7 +194,7 @@
             flex-direction: column;
         }
         #desktop-view-discover.active > .library-panel,
-        #desktop-view-discover-search.active > div { flex: 1; min-height: 0; }
+        #desktop-view-discover.active > #desktop-discover-search-panel { flex: 1; min-height: 0; }
         #desktop-view-discover #desktop-discovery-tab-bar { flex: 0 0 auto; }
         #desktop-now-playing .desktop-queue-status-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         #desktop-sidebar .desktop-queue-status-btn.queue-panel-open { background: var(--surface-overlay); color: var(--text-main); }
@@ -703,9 +702,9 @@
                             </div>
                         </div>
                     </div>
-                </div>
-                <div id="desktop-view-discover-search" class="desktop-view">
-                    <div id="desktop-discover-search-results" class="overflow-y-auto custom-scrollbar space-y-2 h-full min-h-0"></div>
+                    <div id="desktop-discover-search-panel" class="flex flex-col flex-1 min-h-0 w-full overflow-y-auto custom-scrollbar hidden">
+                        <div id="desktop-discover-search-results" class="space-y-2 h-full min-h-0"></div>
+                    </div>
                 </div>
                 <div id="desktop-view-settings" class="desktop-view">
                     <div class="glass-view rounded-2xl p-6 border border-[var(--glass-border)] max-w-xl space-y-6">

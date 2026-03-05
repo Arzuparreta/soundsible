@@ -104,22 +104,6 @@ function updateDiscoverPanels(showSearchResults) {
         }, 500);
         return;
     }
-    if (isDiscoverPage && !isMobile && typeof window.UI !== 'undefined' && window.UI.currentView === 'discover') {
-        const viewDiscover = document.getElementById('desktop-view-discover');
-        const viewDiscoverSearch = document.getElementById('desktop-view-discover-search');
-        if (viewDiscover && viewDiscoverSearch) {
-            if (showSearchResults) {
-                viewDiscover.classList.remove('active');
-                viewDiscoverSearch.classList.add('active');
-                if (resultsEl) resultsEl.classList.remove('hidden');
-            } else {
-                viewDiscoverSearch.classList.remove('active');
-                viewDiscover.classList.add('active');
-                if (resultsEl) resultsEl.classList.add('hidden');
-            }
-        }
-        return;
-    }
     if (contentPanelEl) contentPanelEl.classList.toggle('hidden', !!showSearchResults);
     if (searchResultsPanelEl) searchResultsPanelEl.classList.toggle('hidden', !showSearchResults);
 }
@@ -508,8 +492,13 @@ function init(opts = {}) {
     resultsEl = document.getElementById(resultsId);
     if (!inputEl || !resultsEl) return;
 
-    contentPanelEl = document.getElementById(isMobile ? 'discover-content-panel' : 'desktop-discover-content-panel');
-    searchResultsPanelEl = document.getElementById(resultsId);
+    if (isDiscoverPage && !isMobile) {
+        contentPanelEl = document.getElementById('desktop-discover-content-panel');
+        searchResultsPanelEl = document.getElementById('desktop-discover-search-panel');
+    } else {
+        contentPanelEl = document.getElementById(isMobile ? 'discover-content-panel' : 'desktop-discover-content-panel');
+        searchResultsPanelEl = document.getElementById(resultsId);
+    }
 
     if (isDiscoverPage && store.fetchLibraryYoutubeIds) store.fetchLibraryYoutubeIds();
     clear();
