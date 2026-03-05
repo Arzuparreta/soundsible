@@ -38,6 +38,7 @@ class Store {
             songsViewMode: (() => { const v = this.load('songs_view_mode', 'list'); const valid = ['list', 'grid', 'gridCompact', 'gridLarge']; return valid.includes(v) ? v : (v === 'gridXLarge' ? 'gridLarge' : 'list'); })(),
             artistViewMode: (() => { const v = this.load('artist_view_mode', 'gridCompact'); const valid = ['gridCompact', 'grid', 'gridLarge']; return valid.includes(v) ? v : (v === 'gridXLarge' ? 'gridLarge' : 'gridCompact'); })(),
             libraryTab: (() => { const v = this.load('library_tab', 'songs'); return v === 'artists' ? 'artists' : 'songs'; })(),
+            discoveryTab: (() => { const v = this.load('discovery_tab', 'soundsnap'); return v === 'soundsnap' ? 'soundsnap' : 'soundsnap'; })(),
             volume: (() => {
                 const savedVolume = Number(this.load('volume', 1));
                 const v = Number.isFinite(savedVolume) ? Math.min(1, Math.max(0, savedVolume)) : 1;
@@ -127,6 +128,10 @@ class Store {
         if (patch.libraryTab !== undefined) {
             const v = patch.libraryTab;
             if (v === 'artists' || v === 'songs') this.save('library_tab', v);
+        }
+        if (patch.discoveryTab !== undefined) {
+            const v = patch.discoveryTab;
+            if (v === 'soundsnap') this.save('discovery_tab', v);
         }
         if (patch.volume !== undefined) this.save('volume', patch.volume);
         if (patch.volumeBeforeMute !== undefined) this.save('volumeBeforeMute', patch.volumeBeforeMute);

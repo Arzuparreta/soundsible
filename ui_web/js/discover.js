@@ -1,13 +1,13 @@
 /**
  * Discover: recommendations UI (mobile + desktop).
- * Buffer of 5 resolved items; API returns already-resolved items. Skip / Play / Add. Refill when <=3 remaining, same batch size as initial.
+ * Single fill process keeps buffer full to BUFFER_CAP. No refill; navigation does not trigger loading.
  */
 import { store } from './store.js';
 import { audioEngine } from './audio.js';
 import { esc } from './renderers.js';
 
-const INITIAL_BUFFER_LIMIT = 5;
-const REFILL_WHEN_REMAINING_AT_MOST = 3;
+const BUFFER_CAP = 30;
+const FILL_INTERVAL_MS = 10000;
 
 /** Safe API base: prefer store.apiBase when activeHost is set, else same-origin (e.g. app and API on same host:port). */
 function getApiBase() {
@@ -43,7 +43,8 @@ export const Discover = {
     _loading: false,
     _buffer: [],
     _bufferIndex: 0,
-    _refillInFlight: false,
+    _fillInFlight: false,
+    _fillIntervalStarted: false,
     _inited: false,
 
     async init(options = {}) {
@@ -57,7 +58,6 @@ export const Discover = {
         this._pageEl = document.getElementById(this._mobile ? 'view-discover' : 'desktop-view-discover');
         this._scrollEl = this._contentPanel;
         this._syncVisibility();
-        this._bindRefresh();
         const inputId = this._mobile ? 'global-search-input' : 'desktop-global-search-input';
         const input = document.getElementById(inputId);
         const searchResultsPanel = document.getElementById(prefix + 'discover-search-results');
@@ -66,7 +66,10 @@ export const Discover = {
             searchResultsPanel.classList.add('hidden');
         }
         this._bindPullToRefresh();
-        if (this._hasLibrary()) this._fetchRecommendations();
+        if (this._hasLibrary()) {
+            if (this._mainEl) this._mainEl.classList.remove('hidden');
+            this._renderTinderStack();
+        }
         store.subscribe((state) => this._syncTinderPlayButton(state));
         this._inited = true;
     },
@@ -96,8 +99,6 @@ export const Discover = {
             if (y - startY > 60) pulled = true;
         }, { passive: true });
         pageEl.addEventListener('touchend', () => {
-            const scrollEl = this._scrollEl;
-            if (pulled && scrollEl && scrollEl.scrollTop <= 0) this.refresh();
             startY = -1;
         }, { passive: true });
     },
@@ -118,12 +119,10 @@ export const Discover = {
     _renderSkeleton() {
         if (!this._sectionsEl) return;
         const cardHtml = this._renderShelfCard(null, { skeleton: true });
-        const refreshId = (this._mobile ? '' : 'desktop-') + 'discover-refresh-btn';
         this._sectionsEl.innerHTML = `
             <div class="discover-tinder-outer">
                 <button type="button" class="discover-tinder-side-btn discover-tinder-prev" disabled aria-hidden="true"><i class="fas fa-chevron-left"></i></button>
                 <div class="discover-tinder-wrap" aria-busy="true">
-                    <button type="button" id="${refreshId}" class="discover-tinder-refresh-overlay" aria-label="Refresh">Refresh</button>
                     <div class="discover-tinder-card-wrap is-skeleton" aria-busy="true">
                         ${cardHtml}
                         <div class="discover-tinder-actions">
@@ -213,7 +212,6 @@ export const Discover = {
         if (!this._hasLibrary()) return;
         if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
         if (reason === 'no_seeds') {
-            if (this._pendingRefill) { this._pendingRefill = false; this._refillInFlight = false; }
             this._buffer = [];
             this._bufferIndex = 0;
             this._noSeeds = true;
@@ -224,7 +222,6 @@ export const Discover = {
         this._noSeeds = false;
         this._noResultsFromFetch = reason === 'no_results';
         if (reason && reason !== 'no_seeds') {
-            if (this._pendingRefill) { this._pendingRefill = false; this._refillInFlight = false; }
             this._buffer = [];
             this._bufferIndex = 0;
             if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
@@ -235,23 +232,16 @@ export const Discover = {
         const sections = this._sectionsFromResponse(data);
         const results = sections.flatMap(s => s.results || []);
         if (sections.every(s => !(s.results && s.results.length)) || !results.length) {
-            const wasRefill = this._pendingRefill;
-            if (this._pendingRefill) { this._pendingRefill = false; this._refillInFlight = false; }
-            if (!wasRefill) { this._buffer = []; this._bufferIndex = 0; }
+            this._buffer = [];
+            this._bufferIndex = 0;
             if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
             this._renderTinderStack();
             return;
         }
         if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
         this._noResultsFromFetch = false;
-        if (this._pendingRefill) {
-            this._pendingRefill = false;
-            this._refillInFlight = false;
-            this._buffer.push(...results);
-        } else {
-            this._buffer = results.slice();
-            this._bufferIndex = 0;
-        }
+        this._buffer = results.slice(0, BUFFER_CAP);
+        this._bufferIndex = 0;
         this._renderTinderStack();
     },
 
@@ -262,15 +252,15 @@ export const Discover = {
             const msg = this._noSeeds
                 ? 'Add music from YouTube to your library to get recommendations.'
                 : this._noResultsFromFetch
-                    ? 'Could not load recommendations. YouTube Music mix may require login—check downloader cookies in Settings, then try Refresh.'
+                    ? 'Could not load recommendations. YouTube Music mix may require login—check downloader cookies in Settings.'
                     : this._buffer.length === 0
-                        ? 'No recommendations right now. Try again later.'
-                        : 'No more cards. Pull to refresh or tap Refresh.';
-            const refreshId = (this._mobile ? '' : 'desktop-') + 'discover-refresh-btn';
+                        ? (this._fillInFlight ? 'Loading more…' : 'No recommendations right now. Try again later.')
+                        : this._fillInFlight
+                            ? 'Loading more…'
+                            : 'No more cards.';
             this._sectionsEl.innerHTML = `
                 <div class="discover-tinder-outer">
                     <div class="discover-tinder-wrap">
-                        <button type="button" id="${refreshId}" class="discover-tinder-refresh-overlay" aria-label="Refresh">Refresh</button>
                         <div class="discover-tinder-empty">${esc(msg)}</div>
                     </div>
                 </div>`;
@@ -283,12 +273,10 @@ export const Discover = {
         const dlIcon = inLibrary ? 'fa-sync-alt' : 'fa-cloud-download-alt';
         const dlAria = inLibrary ? 'Re-download' : 'Add to queue';
         const tooltipAttrs = inLibrary ? ' data-hover-tooltip="Download again" data-hover-tooltip-delay="1000"' : '';
-        const refreshId = (this._mobile ? '' : 'desktop-') + 'discover-refresh-btn';
         this._sectionsEl.innerHTML = `
             <div class="discover-tinder-outer">
                 <button type="button" class="discover-tinder-side-btn discover-tinder-prev" aria-label="Previous" ${this._bufferIndex === 0 ? ' disabled' : ''}><i class="fas fa-chevron-left"></i></button>
                 <div class="discover-tinder-wrap">
-                    <button type="button" id="${refreshId}" class="discover-tinder-refresh-overlay" aria-label="Refresh">Refresh</button>
                     <div class="discover-tinder-card-wrap">
                         ${cardHtml}
                         <div class="discover-tinder-actions">
@@ -325,8 +313,6 @@ export const Discover = {
 
         const advance = () => {
             this._bufferIndex++;
-            const remaining = this._buffer.length - this._bufferIndex;
-            if (remaining <= REFILL_WHEN_REMAINING_AT_MOST && !this._refillInFlight) this._refill();
             this._renderTinderStack();
         };
 
@@ -407,40 +393,6 @@ export const Discover = {
         }, { passive: true });
     },
 
-    _refill() {
-        if (this._refillInFlight || !this._hasLibrary()) return;
-        const remaining = this._buffer.length - this._bufferIndex;
-        if (remaining > REFILL_WHEN_REMAINING_AT_MOST) return;
-        if (this._bufferIndex > 0) {
-            this._buffer = this._buffer.slice(this._bufferIndex);
-            this._bufferIndex = 0;
-        }
-        this._pendingRefill = true;
-        this._refillInFlight = true;
-        const apiBase = getApiBase();
-        fetch(`${apiBase}/api/discover/recommendations`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ limit: INITIAL_BUFFER_LIMIT }),
-        })
-            .then((res) => res.json().catch(() => ({})))
-            .then((data) => {
-                this._renderResults(data, data.reason || null);
-            })
-            .catch(() => {
-                this._pendingRefill = false;
-                this._refillInFlight = false;
-            });
-    },
-
-    _bindRefresh() {
-        if (!this._sectionsEl) return;
-        const refreshId = (this._mobile ? '' : 'desktop-') + 'discover-refresh-btn';
-        this._sectionsEl.addEventListener('click', (e) => {
-            if (e.target.closest('#' + refreshId)) this.refresh();
-        });
-    },
-
     _itemFromRow(row) {
         if (!row) return null;
         const id = row.getAttribute('data-video-id');
@@ -495,7 +447,7 @@ export const Discover = {
         });
     },
 
-    async _fetchRecommendations(limit = INITIAL_BUFFER_LIMIT) {
+    async _fetchRecommendations(limit = BUFFER_CAP) {
         if (!this._hasLibrary()) return;
         if (this._loading) return;
         this._loading = true;
@@ -523,13 +475,42 @@ export const Discover = {
         }
     },
 
-    refresh() {
+    fillBuffer() {
         if (!this._hasLibrary()) return;
-        this._buffer = [];
-        this._bufferIndex = 0;
-        this._pendingRefill = false;
-        this._refillInFlight = false;
-        this._fetchRecommendations(INITIAL_BUFFER_LIMIT);
+        if (!this._fillIntervalStarted) {
+            this._fillIntervalStarted = true;
+            setInterval(() => this.fillBuffer(), FILL_INTERVAL_MS);
+        }
+        if (this._fillInFlight) return;
+        if (this._bufferIndex > 0) {
+            this._buffer = this._buffer.slice(this._bufferIndex);
+            this._bufferIndex = 0;
+        }
+        if (this._buffer.length >= BUFFER_CAP) return;
+        this._fillInFlight = true;
+        const apiBase = getApiBase();
+        const limit = BUFFER_CAP - this._buffer.length;
+        fetch(`${apiBase}/api/discover/recommendations`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ limit }),
+        })
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+                this._fillInFlight = false;
+                if (!data || typeof data !== 'object') return;
+                const sections = this._sectionsFromResponse(data);
+                const results = sections.flatMap(s => s.results || []);
+                if (results.length) {
+                    this._buffer.push(...results);
+                    this._buffer = this._buffer.slice(0, BUFFER_CAP);
+                }
+                if (this._sectionsEl) this._renderTinderStack();
+                if (this._buffer.length < BUFFER_CAP && results.length) this.fillBuffer();
+            })
+            .catch(() => {
+                this._fillInFlight = false;
+            });
     },
 
     _addToQueue(item) {

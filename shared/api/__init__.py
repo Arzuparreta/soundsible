@@ -381,14 +381,13 @@ def _warm_downloader():
         pass
 
 
-def _discover_recommendations_worker(seed_id: str, limit: int, library_youtube_ids: set):
+def _discover_recommendations_worker(seed_id: str, limit: int):
     try:
         dl = get_downloader(open_browser=False)
         from recommendations import get_recommendations
         return get_recommendations(
             seed_video_ids=[seed_id],
             limit=limit,
-            library_youtube_ids=library_youtube_ids,
             downloader=dl.downloader,
         )
     except Exception as e:

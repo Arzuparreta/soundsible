@@ -13,6 +13,7 @@ import * as renderers from './renderers.js';
 import { scoreLibrary, scoreArtist, mergeAndSortByScore } from './search.js';
 import { wireSettings } from './wires.js';
 import { LIBRARY_TABS } from './library_tabs.js';
+import { DISCOVERY_TABS } from './discovery_tabs.js';
 import { checkResumeFromOtherDevice } from './playback_resume.js';
 import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 import { playPreview } from './preview_playback.js';
@@ -739,7 +740,10 @@ async function init() {
         playlistDetailCoverIcon: document.getElementById('playlist-detail-cover-icon'),
         playlistDetailMeta: document.getElementById('playlist-detail-meta'),
         playlistDetailTracks: document.getElementById('playlist-detail-tracks'),
-        initialLoader: document.getElementById('initial-loader')
+        initialLoader: document.getElementById('initial-loader'),
+        discoveryTabBar: document.getElementById('discovery-tab-bar'),
+        discoveryTabButtons: document.getElementById('discovery-tab-buttons'),
+        discoveryPanelSoundSnap: document.getElementById('discovery-panel-soundsnap')
     };
     try {
         // 1. Initialize UI First (Navigation, Player Bar)
@@ -765,11 +769,15 @@ async function init() {
         
         // 3. Load Library Data (Non-blocking)
         console.log("DATA: Starting background library sync...");
-        store.syncLibrary().then(() => checkResumeFromOtherDevice());
+        store.syncLibrary().then(() => {
+            checkResumeFromOtherDevice();
+            import('./discover.js').then((m) => m.Discover && m.Discover.fillBuffer());
+        });
 
         // 3. Subscribe to state changes for re-rendering (Optimized)
         let lastLibraryJson = null; // Force first render in subscription
         let lastLibraryTab = store.state.libraryTab || 'songs';
+        let lastDiscoveryTab = store.state.discoveryTab || 'soundsnap';
         let lastPlaylistsJson = JSON.stringify(store.state.playlists || {});
         let lastFavsJson = JSON.stringify(store.state.favorites);
         let lastQueueJson = JSON.stringify(store.state.queue);
@@ -779,6 +787,7 @@ async function init() {
         store.subscribe((state) => {
             const currentLibJson = JSON.stringify(state.library);
             const currentLibraryTab = state.libraryTab || 'songs';
+            const currentDiscoveryTab = state.discoveryTab || 'soundsnap';
             const currentPlaylistsJson = JSON.stringify(state.playlists || {});
             const currentFavsJson = JSON.stringify(state.favorites);
             const currentQueueJson = JSON.stringify(state.queue);
@@ -794,7 +803,12 @@ async function init() {
                 renderLibraryTabBar();
                 renderLibraryContent();
             }
-            
+            if (currentDiscoveryTab !== lastDiscoveryTab && UI.currentView === 'discover') {
+                lastDiscoveryTab = currentDiscoveryTab;
+                syncDiscoveryPanels();
+                renderDiscoveryTabBar();
+            }
+
             // 1. If the entire Library changed (e.g. metadata sync), re-render only the current view (Option B: no pre-render of hidden views)
             if (currentLibJson !== lastLibraryJson) {
                 console.log("Library synced, re-render current view.");
@@ -922,6 +936,36 @@ function syncLibraryPanels() {
     const tab = store.state.libraryTab || 'songs';
     if (dom?.librarySongs) dom.librarySongs.classList.toggle('hidden', tab !== 'songs');
     if (dom?.libraryArtists) dom.libraryArtists.classList.toggle('hidden', tab !== 'artists');
+}
+
+function syncDiscoveryPanels() {
+    const tab = store.state.discoveryTab || 'soundsnap';
+    if (dom?.discoveryPanelSoundSnap) dom.discoveryPanelSoundSnap.classList.toggle('hidden', tab !== 'soundsnap');
+}
+
+function renderDiscoveryTabBar() {
+    const bar = dom?.discoveryTabBar;
+    const buttonsEl = dom?.discoveryTabButtons;
+    if (!bar || !buttonsEl) return;
+    const tab = store.state.discoveryTab || 'soundsnap';
+    bar.setAttribute('data-active-tab', tab);
+    buttonsEl.innerHTML = DISCOVERY_TABS.map((t) => {
+        const active = t.id === tab;
+        return `<button type="button" class="discovery-tab-btn px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors ${active ? 'bg-[var(--accent)] text-[var(--text-on-accent)]' : 'bg-[var(--accent)]/15 text-[var(--accent)]'}" data-discovery-tab="${t.id}" aria-pressed="${active}">${t.label}</button>`;
+    }).join('');
+    buttonsEl.querySelectorAll('.discovery-tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-discovery-tab');
+            if (id && id === 'soundsnap') {
+                store.update({ discoveryTab: id });
+                syncDiscoveryPanels();
+                renderDiscoveryTabBar();
+                if (id === 'soundsnap') {
+                    import('./discover.js').then((m) => { if (m.Discover) m.Discover.ensureInited({ mobile: true }); });
+                }
+            }
+        });
+    });
 }
 
 function renderLibraryTabBar() {
@@ -1316,6 +1360,8 @@ function renderContentForView(viewId) {
             if (viewContext.currentPlaylistName) renderPlaylistDetail(viewContext.currentPlaylistName);
             break;
         case 'discover':
+            syncDiscoveryPanels();
+            renderDiscoveryTabBar();
             import('./downloader.js').then((dm) => { dm.Downloader.init(); });
             import('./discover.js').then((m) => { if (m.Discover) m.Discover.ensureInited({ mobile: true }); });
             import('./search.js').then((searchMod) => {

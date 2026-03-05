@@ -194,8 +194,9 @@
             display: flex;
             flex-direction: column;
         }
-        #desktop-view-discover.active > div,
+        #desktop-view-discover.active > .library-panel,
         #desktop-view-discover-search.active > div { flex: 1; min-height: 0; }
+        #desktop-view-discover #desktop-discovery-tab-bar { flex: 0 0 auto; }
         #desktop-now-playing .desktop-queue-status-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         #desktop-sidebar .desktop-queue-status-btn.queue-panel-open { background: var(--surface-overlay); color: var(--text-main); }
         #desktop-queue-count.queue-has-items { color: var(--accent); opacity: 1; }
@@ -403,6 +404,13 @@
         .discover-tinder-btn { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: none; font-size: 1.25rem; transition: transform 0.2s, background 0.2s; }
         .discover-tinder-btn:active { transform: scale(0.95); }
         .discover-tinder-empty { text-align: center; padding: 2rem 1rem; color: var(--text-dim); font-size: 0.875rem; }
+        .discovery-tab-bar .discovery-tab-btn {
+            padding: 0.375rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 10px;
+            font-weight: 700;
+            transition: background 0.2s, color 0.2s;
+        }
         @keyframes song-marquee {
             0%, 15% { transform: translateX(0); }
             85%, 100% { transform: translateX(var(--marquee-offset, -100%)); }
@@ -680,8 +688,13 @@
                         <p class="text-sm text-[var(--text-dim)] mt-4">Listen to your podcasts.</p>
                     </div>
                 </div>
-                <div id="desktop-view-discover" class="desktop-view">
-                    <div class="flex flex-col h-full w-full overflow-hidden">
+                <div id="desktop-view-discover" class="desktop-view flex flex-col min-h-0">
+                    <div id="desktop-discovery-tab-bar" class="discovery-tab-bar flex justify-start items-center gap-1.5 px-4 py-2 flex-shrink-0" data-active-tab="soundsnap">
+                        <div id="desktop-discovery-tab-buttons" class="flex gap-1.5">
+                            <!-- Tabs injected by app_desktop.js from DISCOVERY_TABS -->
+                        </div>
+                    </div>
+                    <div id="desktop-discovery-panel-soundsnap" class="library-panel flex flex-col flex-1 min-h-0 w-full overflow-hidden">
                         <div id="desktop-discover-content-panel" class="flex flex-col flex-1 min-h-0 w-full overflow-y-auto custom-scrollbar">
                             <p id="desktop-discover-empty-library" class="hidden text-sm text-[var(--text-dim)] py-4 px-1">Add music from YouTube to your library to get recommendations.</p>
                             <div id="desktop-discover-main" class="flex flex-col flex-1 min-h-0 hidden">

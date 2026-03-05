@@ -10,6 +10,7 @@ import * as renderers from './renderers.js';
 import { scoreLibrary, scoreArtist, mergeAndSortByScore } from './search.js';
 import { wireSettings, wireActionMenu } from './wires.js';
 import { DesktopUI } from './ui_desktop.js';
+import { DISCOVERY_TABS } from './discovery_tabs.js';
 import { checkResumeFromOtherDevice } from './playback_resume.js';
 import { playPreview } from './preview_playback.js';
 import { initHoverTooltip } from './tooltip.js';
@@ -950,7 +951,10 @@ async function init() {
 
         const endpoints = [...store.state.priorityList, window.location.hostname];
         await connectionManager.findActiveHost([...new Set(endpoints)].filter(Boolean));
-        store.syncLibrary().then(() => checkResumeFromOtherDevice());
+        store.syncLibrary().then(() => {
+            checkResumeFromOtherDevice();
+            import('./discover.js').then((m) => m.Discover && m.Discover.fillBuffer());
+        });
 
         const songsViewModeToContainerClass = {
             list: 'songs-container-list space-y-2 transition-all duration-300',
@@ -1067,6 +1071,35 @@ async function init() {
             const tracksEl = document.getElementById('desktop-artist-tracks');
             const albumsEl = document.getElementById('desktop-artist-albums');
             renderers.renderArtistDetail(window._currentArtistName, store.state.library, { titleEl, coverEl }, tracksEl, albumsEl, { desktopClickBehavior: true, searchQuery });
+        }
+
+        function syncDiscoveryPanels() {
+            const tab = store.state.discoveryTab || 'soundsnap';
+            const panel = document.getElementById('desktop-discovery-panel-soundsnap');
+            if (panel) panel.classList.toggle('hidden', tab !== 'soundsnap');
+        }
+
+        function renderDiscoveryTabBar() {
+            const bar = document.getElementById('desktop-discovery-tab-bar');
+            const buttonsEl = document.getElementById('desktop-discovery-tab-buttons');
+            if (!bar || !buttonsEl) return;
+            const tab = store.state.discoveryTab || 'soundsnap';
+            bar.setAttribute('data-active-tab', tab);
+            buttonsEl.innerHTML = DISCOVERY_TABS.map((t) => {
+                const active = t.id === tab;
+                return `<button type="button" class="discovery-tab-btn px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors ${active ? 'bg-[var(--accent)] text-[var(--text-on-accent)]' : 'bg-[var(--accent)]/15 text-[var(--accent)]'}" data-discovery-tab="${t.id}" aria-pressed="${active}">${t.label}</button>`;
+            }).join('');
+            buttonsEl.querySelectorAll('.discovery-tab-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const id = btn.getAttribute('data-discovery-tab');
+                    if (id && id === 'soundsnap') {
+                        store.update({ discoveryTab: id });
+                        syncDiscoveryPanels();
+                        renderDiscoveryTabBar();
+                        import('./discover.js').then((m) => m.Discover && m.Discover.ensureInited({ mobile: false }));
+                    }
+                });
+            });
         }
 
         let prevTrackId = null;
@@ -1234,6 +1267,8 @@ async function init() {
             if (viewId === 'artists') renderDesktopArtists();
             if (viewId === 'artist-detail' && window._currentArtistName) renderDesktopArtistDetail();
             if (viewId === 'discover') {
+                syncDiscoveryPanels();
+                renderDiscoveryTabBar();
                 import('./search.js').then((m) => {
                     window.unifiedSearch = m.unifiedSearch;
                     m.unifiedSearch.init({ mobile: false, resultsContainerId: 'desktop-discover-search-results' });

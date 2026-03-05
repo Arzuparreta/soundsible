@@ -764,7 +764,14 @@
             flex-direction: column;
             min-height: 0;
         }
-        #view-discover #discover-content-panel {
+        .discovery-tab-bar .discovery-tab-btn {
+            padding: 0.375rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 10px;
+            font-weight: 700;
+            transition: background 0.2s, color 0.2s;
+        }
+        #view-discover #discovery-panel-soundsnap #discover-content-panel {
             flex: 1;
             min-height: 0;
         }
@@ -971,12 +978,19 @@
             <div id="view-favourites" class="view hidden">
                 <div id="fav-tracks" class="space-y-2"></div>
             </div>
-            <div id="view-discover" class="view hidden">
-                <div id="discover-content-panel" class="flex flex-col flex-1 min-h-0 overflow-y-auto" style="-webkit-overflow-scrolling: touch;">
+            <div id="view-discover" class="view hidden flex flex-col min-h-0">
+                <div id="discovery-tab-bar" class="discovery-tab-bar flex justify-start items-center gap-1.5 px-4 py-2 flex-shrink-0" data-active-tab="soundsnap">
+                    <div id="discovery-tab-buttons" class="flex gap-1.5">
+                        <!-- Tabs injected by app.js from DISCOVERY_TABS -->
+                    </div>
+                </div>
+                <div id="discovery-panel-soundsnap" class="library-panel flex flex-col flex-1 min-h-0">
+                    <div id="discover-content-panel" class="flex flex-col flex-1 min-h-0 overflow-y-auto" style="-webkit-overflow-scrolling: touch;">
                         <p id="discover-empty-library" class="hidden text-sm text-[var(--text-dim)] py-4 px-1">Add music from YouTube to your library to get recommendations.</p>
-                    <div id="discover-main" class="flex flex-col flex-1 min-h-0 hidden">
-                        <div id="discover-no-results" class="hidden text-center py-6 text-sm text-[var(--text-dim)]">No recommendations right now. Try again later.</div>
-                        <div id="discover-sections" class="flex-1 min-h-0"></div>
+                        <div id="discover-main" class="flex flex-col flex-1 min-h-0 hidden">
+                            <div id="discover-no-results" class="hidden text-center py-6 text-sm text-[var(--text-dim)]">No recommendations right now. Try again later.</div>
+                            <div id="discover-sections" class="flex-1 min-h-0"></div>
+                        </div>
                     </div>
                 </div>
             </div>

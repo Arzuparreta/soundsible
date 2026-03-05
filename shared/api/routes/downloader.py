@@ -73,11 +73,9 @@ def discover_recommendations():
             lib.sync_library()
         library_tracks = lib.metadata.tracks or []
         seed_ids = []
-        library_youtube_ids = set()
         for t in library_tracks:
             yt_id = getattr(t, "youtube_id", None) or (t.to_dict() if hasattr(t, "to_dict") else {}).get("youtube_id")
             if yt_id and isinstance(yt_id, str) and validate_youtube_video_id(yt_id):
-                library_youtube_ids.add(yt_id)
                 seed_ids.append(yt_id)
         if not seed_ids:
             return jsonify({"results": [], "reason": "no_seeds"}), 200
@@ -93,7 +91,7 @@ def discover_recommendations():
         try:
             executor = _get_resolve_executor()
             from shared.api import _discover_recommendations_worker
-            future = executor.submit(_discover_recommendations_worker, seed_id, request_limit, library_youtube_ids)
+            future = executor.submit(_discover_recommendations_worker, seed_id, request_limit)
             out_results = future.result(timeout=45)
         except Exception as e:
             logger.warning("[Discover] executor failed: %s", e)
