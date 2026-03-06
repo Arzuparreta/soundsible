@@ -48,6 +48,8 @@ export const DesktopUI = {
         if (viewEl) viewEl.classList.add('active');
         const btnEl = document.querySelector(`.desktop-nav-btn[data-view="${viewId}"]`);
         if (btnEl) btnEl.classList.add('active');
+        const main = el('desktop-main');
+        if (main) main.classList.toggle('desktop-main--discover', viewId === 'discover');
         if (viewId === 'discover') {
             import('./discover.js').then((m) => m.Discover && m.Discover.ensureInited({ mobile: false }));
         }

@@ -179,9 +179,8 @@
         .desktop-view.active { display: block; }
         /* Ensure inactive desktop views are fully hidden, even when Tailwind utility classes like .flex set display */
         .desktop-view:not(.active) { display: none !important; }
-        /* Discover: same main padding and search bar as other views; view fills remaining space. */
-        #desktop-main:has(#desktop-view-discover.active),
-        #desktop-main:has(#desktop-view-discover-search.active) {
+        /* Discover: same main padding and search bar as other views; view fills remaining space. Class toggled in showView() so scroll is restored when leaving discover. */
+        #desktop-main.desktop-main--discover {
             display: flex;
             flex-direction: column;
             overflow: hidden;
