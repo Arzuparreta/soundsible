@@ -148,7 +148,12 @@ def get_core():
             logger.info("API: No metadata in memory, checking cache...")
             cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
             library_manager._load_from_cache(cache_path)
-            
+            # If cache looks like it's from a different path (e.g. old install), don't use it
+            if library_manager.metadata and library_manager._is_cache_likely_stale():
+                logger.info("API: Cached library does not match current music path; starting fresh.")
+                library_manager.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+                library_manager._save_metadata()
+
         logger.info("API: Initializing Queue, Playback Engine and Favourites...")
         queue_manager = QueueManager()
         favourites_manager = FavouritesManager()
@@ -486,6 +491,14 @@ def start_api(port=STATION_PORT, debug=False):
     if _out:
         set_app_output_dir(_out)
         logger.info("API: Output dir set to %s", _out)
+        # So desktop player finds path when it reads ~/.config/soundsible/output_dir
+        try:
+            from shared.constants import DEFAULT_CONFIG_DIR
+            cfg = Path(DEFAULT_CONFIG_DIR).expanduser()
+            cfg.mkdir(parents=True, exist_ok=True)
+            (cfg / "output_dir").write_text(str(_out))
+        except Exception:
+            pass
 
     _defer_ytdlp_thread = False
     _run_ytdlp_update = None

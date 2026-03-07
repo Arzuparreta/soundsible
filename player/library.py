@@ -10,7 +10,42 @@ from typing import Dict, List, Optional
 from shared.models import LibraryMetadata, Track, PlayerConfig, StorageProvider
 from shared.constants import LIBRARY_METADATA_FILENAME, DEFAULT_CONFIG_DIR
 from shared.path_resolver import resolve_local_track_path
+from shared.app_config import get_output_dir
 from setup_tool.provider_factory import StorageProviderFactory
+
+def _output_dir_for_library() -> Optional[Path]:
+    """Return OUTPUT_DIR so player and API both see the path. Checks config dir first (same place we save from webapp)."""
+    out = get_output_dir()
+    if out:
+        return out
+    try:
+        out = os.environ.get("OUTPUT_DIR")
+        if out:
+            return Path(out).expanduser().resolve()
+    except Exception:
+        pass
+    # Canonical path set from webapp Settings: same file for all processes regardless of cwd
+    try:
+        config_dir = Path(DEFAULT_CONFIG_DIR).expanduser()
+        out_file = config_dir / "output_dir"
+        if out_file.exists():
+            raw = out_file.read_text().strip()
+            if raw:
+                return Path(raw).expanduser().resolve()
+    except Exception:
+        pass
+    try:
+        from dotenv import dotenv_values
+        _repo = Path(__file__).resolve().parent.parent
+        _env = _repo / "odst_tool" / ".env"
+        if _env.exists():
+            vals = dotenv_values(_env)
+            out = (vals or {}).get("OUTPUT_DIR")
+            if out:
+                return Path(out).expanduser().resolve()
+    except Exception:
+        pass
+    return None
 from setup_tool.audio import AudioProcessor
 from setup_tool.uploader import UploadEngine
 from shared.database import DatabaseManager
@@ -142,11 +177,34 @@ class LibraryManager:
             if not is_silent: print(msg)
 
         cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
-        
+
+        # Always prefer the path set in Settings (output_dir): if it has library.json, use it first.
+        # This makes the webapp/player "music path" the single source of truth when that path has a library.
+        out_dir = _output_dir_for_library()
+        if out_dir:
+            path_at_music = Path(out_dir).expanduser().resolve() / LIBRARY_METADATA_FILENAME
+            if path_at_music.exists():
+                try:
+                    json_str = path_at_music.read_text()
+                    lib = LibraryMetadata.from_json(json_str)
+                    if lib.tracks:
+                        _log_local(f"Loaded library from music path ({path_at_music.parent}): {len(lib.tracks)} tracks.")
+                        self.metadata = lib
+                        self._save_metadata()
+                        return True
+                except Exception as e:
+                    _log_local(f"Could not load library from music path: {e}")
+
         if not self.provider:
             _log_local("No storage provider configured. Using local cache only.")
-            return self._load_from_cache(cache_path)
-            
+            ok = self._load_from_cache(cache_path)
+            if ok and self.metadata and self._is_cache_likely_stale():
+                _log_local("Cached library does not match current music path; starting fresh.")
+                self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+                self._save_metadata()
+                return True
+            return ok
+
         try:
             _log_local("Syncing library (Universal 3-way merge)...")
             
@@ -173,7 +231,24 @@ class LibraryManager:
                 # Save immediately to initialize the remote/local files
                 self._save_metadata()
                 return True
-                
+
+            # Don't use config-dir cache when the configured source has no library (e.g. new system,
+            # same path as previous install but no library.json there). Otherwise we show stale
+            # tracks from another machine that can't be played.
+            if not remote_lib and local_lib and self.config and self.config.provider == StorageProvider.LOCAL:
+                _log_local("Configured music path has no library.json; ignoring stale cache and starting fresh.")
+                self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+                self._save_metadata()
+                return True
+
+            # If we would use cache but cached tracks don't exist at current OUTPUT_DIR, start fresh
+            # (e.g. new clone, same user, cache from 2 weeks ago, music path set to different drive)
+            if not remote_lib and local_lib and self._is_cache_likely_stale(local_lib):
+                _log_local("Cached library does not match current music path; starting fresh.")
+                self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+                self._save_metadata()
+                return True
+
             if not remote_lib:
                 self.metadata = local_lib
             elif not local_lib:
@@ -284,6 +359,39 @@ class LibraryManager:
                 self._log("Library manifest changed on disk. Reloading...")
                 self._load_from_cache(cache_path)
                 return True
+        return False
+
+    def _is_cache_likely_stale(self, metadata: Optional[LibraryMetadata] = None) -> bool:
+        """
+        Return True if the cached library appears to be from a different machine/path:
+        current OUTPUT_DIR is set but (almost) none of the cached tracks exist there.
+        """
+        if metadata is None:
+            metadata = self.metadata
+        if not metadata or not metadata.tracks:
+            return False
+        out = get_output_dir()
+        if not out:
+            try:
+                out = os.environ.get("OUTPUT_DIR")
+            except Exception:
+                pass
+        if not out:
+            return False
+        sample_size = min(25, len(metadata.tracks))
+        step = max(1, len(metadata.tracks) // sample_size) if metadata.tracks else 1
+        found = 0
+        for i in range(0, len(metadata.tracks), step):
+            if found >= 2:
+                break
+            if i >= sample_size * step:
+                break
+            t = metadata.tracks[i]
+            if resolve_local_track_path(t):
+                found += 1
+        # If we have 5+ tracks and none (or 1) exist at current path, cache is stale
+        if len(metadata.tracks) >= 5 and found <= 1:
+            return True
         return False
 
     def _load_from_cache(self, cache_path: Path) -> bool:

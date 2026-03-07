@@ -266,6 +266,18 @@ def update_downloader_config():
                 val = "true" if (val is True or (isinstance(val, str) and val.strip().lower() in ("true", "1"))) else "false"
             set_key(str(env_path), env_key, str(val))
             os.environ[env_key] = str(val)
+            # Keep in-memory app config in sync so GET config and get_downloader() see the new path immediately
+            if key == "output_dir":
+                from shared.app_config import set_output_dir as set_app_output_dir
+                set_app_output_dir(val)
+                # So desktop player finds path regardless of cwd: write to config dir (same place player reads)
+                try:
+                    from shared.constants import DEFAULT_CONFIG_DIR
+                    cfg = Path(DEFAULT_CONFIG_DIR).expanduser()
+                    cfg.mkdir(parents=True, exist_ok=True)
+                    (cfg / "output_dir").write_text(str(val).strip())
+                except Exception:
+                    pass
     import shared.api as api_mod
     api_mod.downloader_service = None
     return jsonify({"status": "updated"})

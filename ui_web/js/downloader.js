@@ -862,9 +862,13 @@ export class Downloader {
             if (resp.ok) {
                 this.addLog("Settings updated on Station Engine.");
                 this.loadConfig(); // Refresh to see masks
+            } else {
+                const err = await resp.json().catch(() => ({ error: resp.statusText }));
+                this.addLog("Save failed: " + (err.error || resp.status));
             }
         } catch (err) {
             console.error("Config save failed:", err);
+            this.addLog("Save failed: " + (err.message || "network error"));
         }
     }
 

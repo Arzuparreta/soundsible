@@ -254,7 +254,14 @@ class CloudflareR2Provider(S3StorageProvider):
             )
             return True
         except ClientError as e:
-            print(f"JSON upload failed: {e}")
+            error_code = e.response.get('Error', {}).get('Code')
+            if error_code == 'NoSuchBucket':
+                print(
+                    f"Cannot upload: bucket '{self.bucket_name}' does not exist. "
+                    "Create it in your R2/S3 dashboard or run Setup (option 2)."
+                )
+            else:
+                print(f"JSON upload failed: {e}")
             return False
     
     def download_json(self, remote_key: str) -> Optional[str]:
@@ -267,7 +274,15 @@ class CloudflareR2Provider(S3StorageProvider):
             # 404 Not Found error codes
             if error_code in ['NoSuchKey', '404']:
                 return None
-            
+            # Bucket doesn't exist yet (e.g. not created in R2/S3 console)
+            if error_code == 'NoSuchBucket':
+                print(
+                    f"The bucket '{self.bucket_name}' does not exist. "
+                    "Create it in your cloud provider (R2/S3 dashboard) or run Setup (option 2) to create it. "
+                    "Using local library for now."
+                )
+                return None
+
             # For other errors (permissions, network, etc), raise them!
             # We do NOT want to mistakenly wipe the library because of a network glitch.
             print(f"JSON download failed with error {error_code}: {e}")

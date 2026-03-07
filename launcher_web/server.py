@@ -184,6 +184,11 @@ def post_setup_config():
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
             f.write(config.to_json())
+        if provider == StorageProvider.LOCAL and endpoint:
+            try:
+                (path.parent / "output_dir").write_text(endpoint.strip())
+            except Exception:
+                pass
         return jsonify({"ok": True, "message": "Configuration saved."}), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
