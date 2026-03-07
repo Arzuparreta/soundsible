@@ -124,7 +124,14 @@ class LibraryManager:
                 }
                 
             self.provider = StorageProviderFactory.create(self.config.provider)
-            self.provider.authenticate(creds)
+            try:
+                self.provider.authenticate(creds)
+            except (PermissionError, FileNotFoundError, ValueError) as e:
+                self._log(
+                    f"Storage path unavailable: {e}. "
+                    "Edit ~/.config/soundsible/config.json (endpoint / base_path) or use Settings → Storage to set a writable folder."
+                )
+                raise
             
             # Ensure we know the bucket name
             self.provider.bucket_name = self.config.bucket

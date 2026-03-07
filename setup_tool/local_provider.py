@@ -28,9 +28,23 @@ class LocalStorageProvider(S3StorageProvider):
         path = credentials.get('base_path') or credentials.get('endpoint')
         if not path:
             return False
-            
+
         self.base_path = Path(path).expanduser().absolute()
-        self.base_path.mkdir(parents=True, exist_ok=True)
+        try:
+            self.base_path.mkdir(parents=True, exist_ok=True)
+        except PermissionError as e:
+            raise PermissionError(
+                f"Cannot access library path '{self.base_path}': permission denied. "
+                "Use a folder you own (e.g. ~/Music or ~/.local/share/soundsible) or fix permissions. "
+                "Change the path in Settings → Storage."
+            ) from e
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"Library path '{self.base_path}' could not be created (parent missing or not writable). "
+                "Choose a path that exists and you can write to in Settings → Storage."
+            ) from e
+        if not self.base_path.is_dir():
+            raise ValueError(f"Library path '{self.base_path}' is not a directory.")
         return True
 
     def create_bucket(self, bucket_name: str, public: bool = False, 
