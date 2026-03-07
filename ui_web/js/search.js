@@ -105,6 +105,7 @@ function updateDiscoverPanels(showSearchResults) {
         return;
     }
     if (isDiscoverPage && !isMobile && contentPanelEl?.id === 'desktop-view-discover' && searchResultsPanelEl?.id === 'desktop-view-discover-search') {
+        if (window.UI && window.UI.currentView !== 'discover') return;
         contentPanelEl.classList.toggle('active', !showSearchResults);
         searchResultsPanelEl.classList.toggle('active', !!showSearchResults);
         const innerResults = searchResultsPanelEl.querySelector('#desktop-discover-search-results');
