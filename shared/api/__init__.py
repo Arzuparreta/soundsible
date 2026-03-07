@@ -5,6 +5,7 @@ Acts as the bridge between the Python core and various frontends (Tauri, Web, PW
 
 import os
 import sys
+import errno
 import threading
 import json
 import uuid
@@ -91,6 +92,40 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
 # Suppress engineio/socketio INFO logs (e.g. "Invalid session" when browser reconnects with stale sid)
 logging.getLogger("engineio").setLevel(logging.WARNING)
 logging.getLogger("socketio").setLevel(logging.WARNING)
+
+
+def _wrap_iterable_suppress_client_disconnect(iterable, log):
+    """Wrap response iterable; on client disconnect (EIO/BrokenPipe/ConnectionReset) log at debug and stop."""
+    it = iter(iterable)
+    while True:
+        try:
+            chunk = next(it)
+        except StopIteration:
+            break
+        except (BrokenPipeError, ConnectionResetError):
+            log.debug("Client disconnected while sending response (broken pipe or connection reset)")
+            break
+        except OSError as e:
+            if e.errno == errno.EIO:
+                log.debug("Client disconnected while sending response (I/O error)")
+                break
+            raise
+        yield chunk
+
+
+class _SuppressClientDisconnectMiddleware:
+    """WSGI middleware: catch EIO/BrokenPipe/ConnectionReset when streaming response and log at debug."""
+
+    def __init__(self, app, log=None):
+        self.app = app
+        self.log = log or logger
+
+    def __call__(self, environ, start_response):
+        result = self.app(environ, start_response)
+        return _wrap_iterable_suppress_client_disconnect(result, self.log)
+
+
+app.wsgi_app = _SuppressClientDisconnectMiddleware(app.wsgi_app)
 
 
 @socketio.on('playback_register')
