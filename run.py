@@ -29,10 +29,10 @@ if _venv.exists():
                 print("Requirement installation failed:", _r.stderr or _r.stdout)
                 sys.exit(1)
             _marker.write_text(_current_hash)
-        # If critical deps are broken (e.g. user removed yt-dlp), reinstall on every start
-        try:
-            import yt_dlp  # noqa: F401
-        except ImportError:
+        # If critical deps are broken (e.g. user removed yt-dlp), reinstall on every start.
+        # Use subprocess so we don't import yt_dlp/urllib3/ssl here; gevent must monkey-patch before those.
+        _r = subprocess.run([str(_py), "-c", "import yt_dlp"], capture_output=True, text=True)
+        if _r.returncode != 0:
             print("Dependencies missing or broken (e.g. yt-dlp). Reinstalling...")
             _marker.unlink(missing_ok=True)
             _r = subprocess.run([str(_py), "-m", "pip", "install", "-r", str(_req_file)], capture_output=True, text=True)
