@@ -29,6 +29,17 @@ if _venv.exists():
                 print("Requirement installation failed:", _r.stderr or _r.stdout)
                 sys.exit(1)
             _marker.write_text(_current_hash)
+        # If critical deps are broken (e.g. user removed yt-dlp), reinstall on every start
+        try:
+            import yt_dlp  # noqa: F401
+        except ImportError:
+            print("Dependencies missing or broken (e.g. yt-dlp). Reinstalling...")
+            _marker.unlink(missing_ok=True)
+            _r = subprocess.run([str(_py), "-m", "pip", "install", "-r", str(_req_file)], capture_output=True, text=True)
+            if _r.returncode != 0:
+                print("Reinstall failed:", _r.stderr or _r.stdout)
+                sys.exit(1)
+            _marker.write_text(_current_hash)
 # Gevent must patch before any other imports that use socket/threading (so the API can handle multiple requests concurrently).
 from gevent import monkey
 monkey.patch_all()
@@ -423,6 +434,18 @@ class SoundsibleLauncher:
                     console.print(error_panel)
                     sys.exit(1)
                     
+                marker.write_text(current_hash)
+            # If critical deps are broken (e.g. user removed yt-dlp), reinstall on every start
+            try:
+                import yt_dlp  # noqa: F401
+            except ImportError:
+                console.print("[cyan]Dependencies missing or broken. Reinstalling...[/cyan]")
+                marker.unlink(missing_ok=True)
+                result = subprocess.run([str(self.python_exe), "-m", "pip", "install", "-r", str(req_file)],
+                                       capture_output=True, text=True)
+                if result.returncode != 0:
+                    console.print("[red]Reinstall failed:[/red]", result.stderr or result.stdout)
+                    sys.exit(1)
                 marker.write_text(current_hash)
 
 if __name__ == "__main__":

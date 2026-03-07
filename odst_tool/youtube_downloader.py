@@ -25,6 +25,7 @@ from .config import (
 import difflib
 from .audio_utils import AudioProcessor
 from .models import Track
+from shared.venv_utils import get_subprocess_python
 
 def _yt_thumbnail_url(video_id: Optional[str]) -> Optional[str]:
     """YouTube thumbnail URL (mqdefault). Returns None if video_id is falsy."""
@@ -401,7 +402,7 @@ class YouTubeDownloader:
 
         codec = profile['format'] if profile['format'] != 'best' else 'flac'
         args = [
-            sys.executable, "-m", "yt_dlp",
+            get_subprocess_python(), "-m", "yt_dlp",
             "-f", YDL_FORMAT_AUDIO,
             "-x",
             "--audio-format", codec,
@@ -607,7 +608,7 @@ class YouTubeDownloader:
             return None
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
         args = [
-            sys.executable, "-m", "yt_dlp",
+            get_subprocess_python(), "-m", "yt_dlp",
             "-g",
             "-f", YDL_FORMAT_AUDIO,
             "--no-warnings",

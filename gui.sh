@@ -55,6 +55,17 @@ setup_env() {
         fi
         echo "[DONE] Setup complete."
     fi
+
+    # 4. If critical deps are broken (e.g. user removed yt-dlp), reinstall on every start
+    if ! "$VENV_DIR/bin/python" -c "import yt_dlp" 2>/dev/null; then
+        echo "· Dependencies missing or broken. Reinstalling..."
+        rm -f "$MARKER_FILE"
+        "$VENV_DIR/bin/pip" install -r "$REQUIREMENTS" || { echo "❌ Reinstall failed."; exit 1; }
+        if [ -f "$REQUIREMENTS" ]; then
+            md5sum "$REQUIREMENTS" | cut -d ' ' -f 1 > "$MARKER_FILE"
+        fi
+        echo "[DONE] Reinstall complete."
+    fi
 }
 
 setup_env
