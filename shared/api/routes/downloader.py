@@ -64,25 +64,26 @@ def youtube_suggest():
         return jsonify({"suggestions": []})
     
     url = "http://suggestqueries.google.com/complete/search"
-    # Note: Try music client first if it's a music-focused app
+    # Note: Using 'firefox' client ensures we get a pure JSON array instead of JSONP
     params = {
-        "client": "youtube",
-        "ds": "yt", # Note: 'Yt' for general, 'ytm' sometimes used for music
+        "client": "firefox",
+        "ds": "yt", # Note: 'yt' for general YouTube search suggestions
         "q": q,
         "oe": "utf-8"
     }
-    # Note: If we want to be smart, we could try multiple clients,
-    # Note: But 'youtube' with 'ds=yt' is most reliable for general queries.
     try:
-        # Note: This API returns a JSON-p style array ["query", ["suggestion1", "suggestion2", ...], ...]
+        # Note: This API returns a simple array: ["query", ["suggestion1", "suggestion2", ...], ...]
         resp = requests.get(url, params=params, timeout=2)
         if resp.ok:
-            data = resp.json()
-            if isinstance(data, list) and len(data) > 1:
-                return jsonify({"suggestions": data[1]})
+            try:
+                data = resp.json()
+                if isinstance(data, list) and len(data) > 1:
+                    return jsonify({"suggestions": data[1]})
+            except Exception as json_err:
+                logger.warning("API: Suggest JSON parse error: %s (Response: %s)", json_err, resp.text[:100])
         return jsonify({"suggestions": []})
     except Exception as e:
-        logger.warning("API: Suggest error: %s", e)
+        logger.warning("API: Suggest network/other error: %s", e)
         return jsonify({"suggestions": []})
 
 
