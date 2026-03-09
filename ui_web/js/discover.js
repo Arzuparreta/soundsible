@@ -125,7 +125,7 @@ export const Discover = {
         const cover_url = ensureHttpsImageUrl(rawCover);
         const thumb = cover_url ? cover_url.replace(/"/g, '%22') : '';
         const placeholder = getDiscoverPlaceholderUrl().replace(/"/g, '%22');
-        // Single quotes in url() so style="..." attribute is not broken by inner "
+        // Note: Single quotes in URL() so style="..." attribute is not broken by inner "
         const coverStyle = skeleton
             ? ''
             : cover_url
@@ -487,7 +487,7 @@ export const Discover = {
     },
 
     _addToQueue(item) {
-        // Discover items read the global search source mode (Music vs YouTube).
+        // Note: Discover items read the global search source mode (music vs youtube).
         const opts = { source: searchService.sourceMode };
         const dl = typeof window.Downloader !== 'undefined' ? window.Downloader : null;
         if (dl && dl.addToDownloadQueue) {

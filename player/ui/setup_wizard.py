@@ -24,33 +24,33 @@ class SetupWizard(Adw.Window):
         self.set_default_size(700, 550)
         self.set_modal(True)
         
-        # Storage for wizard state
+        # Note: Storage for wizard state
         self.selected_provider = None
         self.credentials = {}
         self.bucket_name = None
         self.config = None
         self.provider_instance = None
         
-        # Create main layout
+        # Note: Create main layout
         self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.set_content(self.main_box)
         
-        # Header with progress
+        # Note: Header with progress
         self.create_header()
         
-        # Content area (pages will switch here)
+        # Note: Content area (pages will switch here)
         self.content_stack = Gtk.Stack()
         self.content_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
         self.content_stack.set_vexpand(True)
         self.main_box.append(self.content_stack)
         
-        # Navigation buttons
+        # Note: Navigation buttons
         self.create_navigation()
         
-        # Create pages
+        # Note: Create pages
         self.create_pages()
         
-        # Start with welcome page
+        # Note: Start with welcome page
         self.current_page_index = 0
         self.update_navigation()
     
@@ -181,7 +181,7 @@ class SetupWizard(Adw.Window):
         
         self.provider_group = None
         
-        # Cloudflare R2
+        # Note: Cloudflare R2
         r2_card = self.create_provider_card(
             "Cloudflare R2",
             "Best for streaming - zero bandwidth costs",
@@ -190,7 +190,7 @@ class SetupWizard(Adw.Window):
         )
         cards_box.append(r2_card)
         
-        # Backblaze B2
+        # Note: Backblaze B2
         b2_card = self.create_provider_card(
             "Backblaze B2",
             "Simplest setup - no credit card needed",
@@ -199,7 +199,7 @@ class SetupWizard(Adw.Window):
         )
         cards_box.append(b2_card)
 
-        # Local Storage / NAS
+        # Note: Local storage / NAS
         local_card = self.create_provider_card(
             "Local Storage / NAS",
             "Use your own hard drive or a mounted network folder",
@@ -208,7 +208,7 @@ class SetupWizard(Adw.Window):
         )
         cards_box.append(local_card)
         
-        # Generic S3
+        # Note: Generic S3
         s3_card = self.create_provider_card(
             "Generic S3",
             "For advanced users with existing S3 storage",
@@ -492,7 +492,7 @@ class SetupWizard(Adw.Window):
         
         self.content_stack.set_visible_child_name(f"page_{self.current_page_index}")
         
-        # Update credentials page based on selected provider
+        # Note: Update credentials page based on selected provider
         if self.current_page_index == 2:
             if self.selected_provider == StorageProvider.CLOUDFLARE_R2:
                 self.creds_stack.set_visible_child_name("r2")
@@ -524,12 +524,12 @@ class SetupWizard(Adw.Window):
     
     def validate_current_page(self):
         """Validate current page before advancing."""
-        if self.current_page_index == 1:  # Provider page
+        if self.current_page_index == 1:  # Note: Provider page
             if not self.selected_provider:
                 print("Please select a provider")
                 return False
         
-        elif self.current_page_index == 2:  # Credentials page
+        elif self.current_page_index == 2:  # Note: Credentials page
             if self.selected_provider == StorageProvider.CLOUDFLARE_R2:
                 account_id = self.r2_account_id.get_text()
                 access_key = self.r2_access_key.get_text()
@@ -567,17 +567,17 @@ class SetupWizard(Adw.Window):
                     'base_path': path
                 }
         
-        elif self.current_page_index == 3:  # Bucket page
-            # Get selected or new bucket
+        elif self.current_page_index == 3:  # Note: Bucket page
+            # Note: Get selected or new bucket
             selected_idx = self.bucket_dropdown.get_selected()
             new_bucket = self.new_bucket_entry.get_text().strip()
             
             if selected_idx != Gtk.INVALID_LIST_POSITION:
-                # Use selected bucket
+                # Note: Use selected bucket
                 model = self.bucket_dropdown.get_model()
                 self.bucket_name = model.get_string(selected_idx)
             elif new_bucket:
-                # Create new bucket
+                # Note: Create new bucket
                 self.bucket_name = new_bucket
             else:
                 print("Please select or create a bucket")
@@ -587,11 +587,11 @@ class SetupWizard(Adw.Window):
     
     def on_finish(self):
         """Handle wizard completion."""
-        # Determine endpoint based on provider
+        # Note: Determine endpoint based on provider
         if self.selected_provider == StorageProvider.CLOUDFLARE_R2:
             endpoint = f"https://{self.credentials['account_id']}.r2.cloudflarestorage.com"
         elif self.selected_provider == StorageProvider.BACKBLAZE_B2:
-            endpoint = "s3.us-west-004.backbl2.com"  # Default, may need region selection
+            endpoint = "s3.us-west-004.backbl2.com"  # Note: Default, may need region selection
         elif self.selected_provider == StorageProvider.LOCAL:
             endpoint = self.credentials.get('base_path', '')
         else:

@@ -58,11 +58,11 @@ def search_itunes(query: str, limit: int = 5) -> List[Dict[str, Any]]:
         results = []
         if 'results' in data:
             for item in data['results']:
-                # Get highest res artwork available (usually 100x100 is returned, but we can hack url)
+                # Note: Get highest res artwork available (usually 100x100 is returned, but we can hack URL)
                 artwork_url = item.get('artworkUrl100', '')
-                # Hack to get 600x600 or higher
-                # iTunes URLs are like .../100x100bb.jpg
-                # We can replace 100x100bb with 600x600bb
+                # Note: Hack to get 600x600 or higher
+                # Note: Itunes urls are like .../100x100bb.jpg
+                # Note: We can replace 100x100bb with 600x600bb
                 if artwork_url:
                     artwork_url = artwork_url.replace('100x100bb', '600x600bb')
                 
@@ -83,7 +83,7 @@ def search_itunes(query: str, limit: int = 5) -> List[Dict[str, Any]]:
         print(f"Error searching iTunes: {e}")
         return []
 
-# YouTube thumbnail hosts often block default User-Agent; use browser-like header
+# Note: Youtube thumbnail hosts often block default user-agent; use browser-like header
 _YT_IMAGE_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0"
 )

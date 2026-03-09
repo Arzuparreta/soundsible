@@ -16,7 +16,7 @@ class AudioEngine {
         this.audio = new Audio();
         this.audio.crossOrigin = 'anonymous';
         this.currentPosition = 0;
-        this.currentContext = []; // Sequential fallback
+        this.currentContext = []; // Note: Sequential fallback
         /** Track ID we already repeated once in repeat(1) mode; cleared when song changes. */
         this._repeatOnceUsedTrackId = null;
         /** Auxiliary audio element for pre-loading next track URL (cache only; never play()). */
@@ -48,7 +48,7 @@ class AudioEngine {
 
         if (mode === 'once' && currentTrack) {
             if (this._repeatOnceUsedTrackId !== currentTrack.id) return currentTrack;
-            // consumed; fall through to queue/context
+            // Note: Consumed; fall through to queue/context
         }
 
         const fromQueue = store.peekNextFromQueue();
@@ -68,7 +68,7 @@ class AudioEngine {
 
     _preloadTrack(track) {
         if (!track?.id) return;
-        if (track.source === 'preview') return; // avoid hitting preview stream until user actually plays next
+        if (track.source === 'preview') return; // Note: Avoid hitting preview stream until user actually plays next
         const url = Resolver.getTrackUrl(track);
         const el = this._getPreloadAudio();
         el.src = url;
@@ -135,12 +135,12 @@ class AudioEngine {
             }
         }, 20000);
 
-        // Stop when another device resumes (server sends playback_stop_requested)
+        // Note: Stop when another device resumes (server sends playback_stop_requested)
         if (typeof window !== 'undefined') {
             window.addEventListener('playback_stop_requested', () => this.pause());
         }
 
-        // Persist playback state on close so same-device resume works after reload
+        // Note: Persist playback state on close so same-device resume works after reload
         const pushStateOnUnload = () => {
             if (store.state.currentTrack) {
                 const time = Number.isFinite(this.audio.currentTime) ? this.audio.currentTime : 0;
@@ -175,13 +175,13 @@ class AudioEngine {
      * Single path for all in-app preview (Discover, Search, queue, context).
      */
     async playTrack(track) {
-        // Any song change (different track) resets repeat
+        // Note: Any song change (different track) resets repeat
         if (store.state.currentTrack && track.id !== store.state.currentTrack.id) {
             store.update({ repeatMode: 'off' });
             this._repeatOnceUsedTrackId = null;
         }
 
-        // Prevent redundant loads if tapping the same track rapidly
+        // Note: Prevent redundant loads if tapping the same track rapidly
         if (this.audio.src.includes(track.id) && !this.audio.paused) {
             console.log("Track already playing, ignoring redundant request.");
             return;
@@ -189,8 +189,8 @@ class AudioEngine {
 
         this._invalidatePreload();
 
-        // Preview: stream through our server (same-origin) so playback works. Direct YT URLs are CORS-blocked.
-        // Always use HTTP; app and API are never HTTPS.
+        // Note: Preview stream through our server (same-origin) so playback works. direct YT urls are CORS-blocked.
+        // Note: Always use HTTP; app and API are never HTTPS.
         if (track.source === 'preview') {
             this._previewEndedTriggered = false;
             const host = (typeof store !== 'undefined' && store.state && store.state.activeHost) ? store.state.activeHost : (typeof window !== 'undefined' && window.location ? window.location.hostname : 'localhost');
@@ -237,7 +237,7 @@ class AudioEngine {
                 }
             } catch (err) {
                 store.update({ isPlaying: false });
-                // Don't toast here: the audio 'error' listener already shows "Preview unavailable" when load fails
+                // Note: Don't toast here the audio 'error' listener already shows "preview unavailable" when load fails
                 console.error("Preview playback failed:", err);
             }
             return;
@@ -277,8 +277,8 @@ class AudioEngine {
                 this.setMediaSessionHandlers();
             }
         } catch (err) {
-            // SECURITY & UX: AbortError is normal when switching tracks quickly (e.g. double tap)
-            // We catch it silently. Other errors (404, network) still show alerts.
+            // Note: Security & UX aborterror is normal when switching tracks quickly (e.g. double tap)
+            // Note: We catch it silently. other errors (404, network) still show alerts.
             if (err.name === 'AbortError') {
                 console.log("Playback aborted (interrupted by new request).");
             } else {
@@ -303,14 +303,14 @@ class AudioEngine {
         const currentTrack = store.state.currentTrack;
         const mode = store.state.repeatMode;
 
-        // Repeat (infinite): same song forever until user turns off or changes song
+        // Note: Repeat (infinite) same song forever until user turns off or changes song
         if (mode === 'one' && currentTrack) {
             console.log("Repeat active, restarting track.");
             this.playTrack(currentTrack);
             return;
         }
 
-        // Repeat(1): play current song one more time, then continue
+        // Note: Repeat(1) play current song one more time, then continue
         if (mode === 'once' && currentTrack) {
             if (this._repeatOnceUsedTrackId !== currentTrack.id) {
                 this._repeatOnceUsedTrackId = currentTrack.id;
@@ -318,10 +318,10 @@ class AudioEngine {
                 this.playTrack(currentTrack);
                 return;
             }
-            this._repeatOnceUsedTrackId = null; // consumed; continue to next
+            this._repeatOnceUsedTrackId = null; // Note: Consumed; continue to next
         }
 
-        // 1. Try Queue First
+        // Note: 1. Try queue first
         console.log("Playing next track from queue...");
         const nextTrack = await store.popNextFromQueue();
         if (nextTrack) {
@@ -329,7 +329,7 @@ class AudioEngine {
             return;
         }
 
-        // 2. Try Context Fallback (sequential or shuffled)
+        // Note: 2. Try context fallback (sequential or shuffled)
         if (this.currentContext && this.currentContext.length > 0 && store.state.currentTrack) {
             const currentIndex = this.currentContext.findIndex(t => t.id === store.state.currentTrack.id);
             const shuffleOn = store.state.shuffleEnabled;

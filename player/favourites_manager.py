@@ -19,11 +19,11 @@ class FavouritesManager:
     
     def __init__(self):
         self._favourites: Set[str] = set()
-        self._lock = threading.RLock()  # Use reentrant lock to prevent deadlocks with callbacks
+        self._lock = threading.RLock()  # Note: Use reentrant lock to prevent deadlocks with callbacks
         self._on_change_callbacks: List[Callable[[], None]] = []
         self._favourites_file = Path(DEFAULT_CONFIG_DIR).expanduser() / "favourites.json"
         
-        # Load existing favourites
+        # Note: Load existing favourites
         self._load_from_file()
     
     def add(self, track_id: str) -> None:
@@ -107,7 +107,7 @@ class FavouritesManager:
     def _save_to_file(self) -> None:
         """Save favourites to JSON file."""
         try:
-            # Ensure config directory exists
+            # Note: Ensure config directory exists
             self._favourites_file.parent.mkdir(parents=True, exist_ok=True)
             
             data = {
@@ -132,7 +132,7 @@ class FavouritesManager:
             with open(self._favourites_file, 'r') as f:
                 data = json.load(f)
             
-            # Validate data structure
+            # Note: Validate data structure
             if not isinstance(data, dict) or 'favourites' not in data:
                 print("Invalid favourites file format, starting fresh")
                 return

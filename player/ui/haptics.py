@@ -8,7 +8,7 @@ system bell support for accessibility.
 from gi.repository import Gdk
 
 class Haptics:
-    # Tactile Vocabulary (Parity with WebUI)
+    # Note: Tactile vocabulary (parity with webui)
     PATTERNS = {
         'TICK': [5],
         'LOCK': [15],
@@ -17,7 +17,7 @@ class Haptics:
         'ERROR': [50, 50, 50]
     }
 
-    ENABLED = True # TODO: Bind to player config
+    ENABLED = True # Note: TODO: bind to player config
 
     @staticmethod
     def trigger(pattern_name):
@@ -29,12 +29,12 @@ class Haptics:
         if not Haptics.ENABLED:
             return
 
-        # Future: Gamepad vibration or specific hardware driver
-        # For now, we log for debug parity
-        # print(f"[Haptics] Trigger: {pattern_name}")
+        # Note: Future gamepad vibration or specific hardware driver
+        # Note: For now, we log for debug parity
+        # Note: Print(f"[haptics] trigger {pattern_name}")
         pass
 
-    # Semantic Aliases
+    # Note: Semantic aliases
     @staticmethod
     def tick():
         Haptics.trigger('TICK')
@@ -53,7 +53,7 @@ class Haptics:
 
     @staticmethod
     def error():
-        # For errors, we can use the system bell as an accessible fallback
+        # Note: For errors, we can use the system bell as an accessible fallback
         display = Gdk.Display.get_default()
         if display:
             display.beep()

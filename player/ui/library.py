@@ -57,29 +57,29 @@ class EditTrackDialog(Gtk.Window):
         box.set_margin_end(20)
         self.set_child(box)
         
-        # Grid for fields
+        # Note: Grid for fields
         grid = Gtk.Grid()
         grid.set_row_spacing(10)
         grid.set_column_spacing(10)
         box.append(grid)
         
-        # Title
+        # Note: Title details
         grid.attach(Gtk.Label(label="Title:", xalign=1), 0, 0, 1, 1)
         self.title_entry = Gtk.Entry(text=track.title)
         self.title_entry.set_hexpand(True)
         grid.attach(self.title_entry, 1, 0, 1, 1)
         
-        # Artist
+        # Note: Artist details
         grid.attach(Gtk.Label(label="Artist:", xalign=1), 0, 1, 1, 1)
         self.artist_entry = Gtk.Entry(text=track.artist)
         grid.attach(self.artist_entry, 1, 1, 1, 1)
         
-        # Album
+        # Note: Album details
         grid.attach(Gtk.Label(label="Album:", xalign=1), 0, 2, 1, 1)
         self.album_entry = Gtk.Entry(text=track.album)
         grid.attach(self.album_entry, 1, 2, 1, 1)
         
-        # Cover Art Section
+        # Note: Cover art section
         box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
         
         cover_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
@@ -105,11 +105,11 @@ class EditTrackDialog(Gtk.Window):
         select_btn.connect('clicked', self.on_select_file)
         btn_box.append(select_btn)
         
-        # Status
+        # Note: Status details
         self.status = Gtk.Label(label="")
         box.append(self.status)
         
-        # Action Buttons
+        # Note: Action buttons
         actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         actions.set_halign(Gtk.Align.END)
         actions.set_margin_top(10)
@@ -174,13 +174,13 @@ class EditTrackDialog(Gtk.Window):
         self.album_entry.set_sensitive(False)
         self.status.set_label("Updating track... This involves re-uploading to cloud.")
         
-        # Internal logic: If the album name is being changed, we should probably 
-        # clear or re-evaluate the internal album_artist to avoid grouping issues.
-        # Otherwise, we keep the one we had.
+        # Note: Internal logic if the album name is being changed, we should probably
+        # Note: Clear or re-evaluate the internal album_artist to avoid grouping issues.
+        # Note: Otherwise, we keep the one we had.
         new_album = self.album_entry.get_text()
         album_artist = self.track.album_artist
         if new_album != self.track.album:
-            album_artist = None  # Reset when album changes
+            album_artist = None  # Note: Reset when album changes
             
         new_meta = {
             'title': self.title_entry.get_text(),
@@ -194,7 +194,7 @@ class EditTrackDialog(Gtk.Window):
     def _save_thread(self, meta):
         success = self.library_manager.update_track(self.track, meta, self.cover_path)
         if success:
-            # Sync library to get latest version
+            # Note: Sync library to get latest version
             self.library_manager.sync_library()
         GLib.idle_add(self.on_save_complete, success)
         
@@ -203,12 +203,12 @@ class EditTrackDialog(Gtk.Window):
             self.status.set_label("✓ Metadata updated successfully!")
             self.status.add_css_class("success")
             
-            # Trigger a global library refresh if we can find the main window
+            # Note: Trigger a global library refresh if we can find the main window
             root = self.get_transient_for()
             if root and hasattr(root, 'refresh_library'):
                 root.refresh_library(self.library_manager.metadata)
             
-            # Close dialog after 1 second so user sees success message
+            # Note: Close dialog after 1 second so user sees success message
             GLib.timeout_add(1000, lambda: self.close() or False)
         else:
             self.status.set_label("❌ Update failed. Check logs.")
@@ -217,7 +217,7 @@ class EditTrackDialog(Gtk.Window):
             self.title_entry.set_sensitive(True)
             self.artist_entry.set_sensitive(True)
             self.album_entry.set_sensitive(True)
-            # Re-enable fetch buttons if they exist
+            # Note: Re-enable fetch buttons if they exist
             if hasattr(self, 'auto_btn'): self.auto_btn.set_sensitive(True)
             if hasattr(self, 'select_btn'): self.select_btn.set_sensitive(True)
 
@@ -232,34 +232,34 @@ class LibraryView(Gtk.Box):
         self.album_filter = album_filter
         self.album_artist_filter = album_artist_filter
 
-        # Setup List Model
+        # Note: Setup list model
         self.store = Gio.ListStore(item_type=TrackObject)
         self._populate_library()
         
-        # 3. Setup Filter Model
+        # Note: 3. Setup filter model
         self.filter = Gtk.CustomFilter()
         self.filter.set_filter_func(self._filter_func)
         self.filter_model = Gtk.FilterListModel(model=self.store, filter=self.filter)
-        self.search_query = ""  # Store current search query
+        self.search_query = ""  # Note: Store current search query
 
-        # 4. Setup Selection Model
-        # Single selection for now
+        # Note: 4. Setup selection model
+        # Note: Single selection for now
         self.selection_model = Gtk.SingleSelection(model=self.filter_model)
         self.selection_model.connect('selection-changed', self.on_selection_changed)
 
-        # 5. Create Column View
+        # Note: 5. Create column view
         self.column_view = Gtk.ColumnView(model=self.selection_model)
-        self.column_view.add_css_class("rich-list") # Adwaita style class
+        self.column_view.add_css_class("rich-list") # Note: Adwaita style class
 
         self._active_popover = None
 
-        # Capture clicks at window level when popover is open to block controls
-        # but MAINTAIN single-click selection logic.
+        # Note: Capture clicks at window level when popover is open to block controls
+        # Note: But maintain single-click selection logic.
         self.dismiss_gesture = Gtk.GestureClick()
         self.dismiss_gesture.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         self.dismiss_gesture.connect("pressed", self._on_dismiss_click)
         
-        # Columns - Add cover art first, then golden dot for favourites
+        # Note: Columns - add cover art first, then golden dot for favourites
         self._add_cover_column()
         if self.favourites_manager:
             self._add_favourite_dot_column()
@@ -271,33 +271,33 @@ class LibraryView(Gtk.Box):
         self._add_text_column("Album", "album")
         self._add_text_column("Length", "duration", fixed_width=80) 
 
-        # Scroll Window
+        # Note: Scroll window
         scroller = Gtk.ScrolledWindow()
         scroller.set_child(self.column_view)
         scroller.set_vexpand(True)
         self.append(scroller)
 
-        # Signal for playback when row activated (double click)
+        # Note: Signal for playback when row activated (double click)
         self.column_view.connect("activate", self.on_row_activated)
         
-        # Right Click Menu
+        # Note: Right click menu
         self.ctx_gesture = Gtk.GestureClick()
         self.ctx_gesture.set_button(3)
         self.ctx_gesture.connect("pressed", self.on_right_click)
         self.column_view.add_controller(self.ctx_gesture)
         
-        # Middle Click for Favourites
+        # Note: Middle click for favourites
         if self.favourites_manager:
             middle_click = Gtk.GestureClick()
-            middle_click.set_button(2)  # Middle mouse button
+            middle_click.set_button(2)  # Note: Middle mouse button
             middle_click.connect("pressed", self.on_middle_click)
             self.column_view.add_controller(middle_click)
 
-        # Register callback for refreshing
-        # This is a bit hacky, attaching to manager, but works for this scope
+        # Note: Register callback for refreshing
+        # Note: This is A bit hacky, attaching to manager, but works for this scope
         self.library_manager.refresh_callback = self.refresh
         
-        # Register favourites callback to refresh UI when favourites change
+        # Note: Register favourites callback to refresh UI when favourites change
         if self.favourites_manager:
             self.favourites_manager.add_change_callback(self._on_favourites_changed)
 
@@ -306,7 +306,7 @@ class LibraryView(Gtk.Box):
         if not self._active_popover:
             return
 
-        # Coordinates are relative to the root window
+        # Note: Coordinates are relative to the root window
         root = self.get_root()
         if not root: return
         
@@ -320,21 +320,21 @@ class LibraryView(Gtk.Box):
             if curr == self._active_popover:
                 is_inside_popover = True
                 break
-            # Robust check for track object on the widget or its parents
+            # Note: Robust check for track object on the widget or its parents
             track_obj = getattr(curr, '_track_obj', None)
             if track_obj and isinstance(track_obj, TrackObject):
                 clicked_track_obj = track_obj
             curr = curr.get_parent()
             
         if not is_inside_popover:
-            # We clicked outside the menu. 
-            # ALWAYS claim the event to "lock controls" (block other app/system interactions)
+            # Note: We clicked outside the menu.
+            # Note: Always claim the event to "lock controls" (block other app/system interactions)
             gesture.set_state(Gtk.EventSequenceState.CLAIMED)
             
-            # Close the menu
+            # Note: Close the menu
             self._active_popover.popdown()
             
-            # MAINTAIN SINGLE CLICK SELECTION: If it was a song, manually select it
+            # Note: Maintain single CLICK selection if it was a song, manually select it
             if clicked_track_obj:
                 n = self.filter_model.get_n_items()
                 for i in range(n):
@@ -345,13 +345,13 @@ class LibraryView(Gtk.Box):
     def refresh(self):
         """Reload the library from the manager (re-sync optional)."""
         print("Refreshing library view...")
-        # Force manager to reload metadata from local cache/DB
+        # Note: Force manager to reload metadata from local cache/DB
         cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
         self.library_manager._load_from_cache(cache_path)
         
-        # Clear store
+        # Note: Clear store
         self.store.remove_all()
-        # Repopulate
+        # Note: Repopulate details
         self._populate_library()
 
     def set_tracks(self, tracks):
@@ -362,11 +362,11 @@ class LibraryView(Gtk.Box):
     def on_right_click(self, gesture, n_press, x, y):
         gesture.set_state(Gtk.EventSequenceState.CLAIMED)
         
-        # If there's an active popover, close it first
+        # Note: If there's an active popover, close it first
         if self._active_popover:
             self._active_popover.popdown()
 
-        # Update selection to the item under cursor (using local coordinates)
+        # Note: Update selection to the item under cursor (using local coordinates)
         target = gesture.get_widget().pick(x, y, Gtk.PickFlags.DEFAULT)
         curr = target
         while curr:
@@ -389,7 +389,7 @@ class LibraryView(Gtk.Box):
         p = Gtk.Popover()
         p.set_parent(self.column_view)
         p.set_has_arrow(False)
-        p.set_autohide(False) # Disable autohide so it doesn't consume the first click
+        p.set_autohide(False) # Note: Disable autohide so it doesn't consume the first click
         p.add_css_class("context-menu")
 
         rect = Gdk.Rectangle()
@@ -398,7 +398,7 @@ class LibraryView(Gtk.Box):
 
         self._active_popover = p
         
-        # Attach dismissal gesture to root window to block controls
+        # Note: Attach dismissal gesture to root window to block controls
         root = self.get_root()
         if root:
             root.add_controller(self.dismiss_gesture)
@@ -408,18 +408,18 @@ class LibraryView(Gtk.Box):
             if self._active_popover == popover:
                 self._active_popover = None
             popover.unparent()
-            # Remove dismissal gesture from window
+            # Note: Remove dismissal gesture from window
             if hasattr(self, '_gesture_root') and self._gesture_root:
                 self._gesture_root.remove_controller(self.dismiss_gesture)
                 self._gesture_root = None
             
         p.connect("closed", on_closed)
         
-        # Also dismiss if the main window loses focus (crucial for i3 workspace switching)
+        # Note: Also dismiss if the main window loses focus (crucial for i3 workspace switching)
         if root:
-            # notify::is-active triggers when window gains/loses focus
+            # Note: Notify is-active triggers when window gains/loses focus
             handler_id = root.connect("notify::is-active", lambda w, pspec: p.popdown() if not w.get_active() else None)
-            # Cleanup handler on popover close
+            # Note: Cleanup handler on popover close
             p.connect("closed", lambda _: root.disconnect(handler_id))
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -450,14 +450,14 @@ class LibraryView(Gtk.Box):
     def _on_search_changed(self, entry):
         """Handle search query changes."""
         self.search_query = entry.get_text().lower().strip()
-        # Trigger filter update
+        # Note: Trigger filter update
         self.filter.changed(Gtk.FilterChange.DIFFERENT)
     
     def _filter_func(self, track_obj):
         """Filter function to match tracks against search query, favourites, and album filter."""
         track = track_obj.track
         
-        # Filter by album if requested
+        # Note: Filter by album if requested
         if self.album_filter:
             if track.album != self.album_filter:
                 return False
@@ -465,16 +465,16 @@ class LibraryView(Gtk.Box):
                 if (track.album_artist or track.artist) != self.album_artist_filter:
                     return False
             
-        # Filter by favourites if in favourites-only mode
+        # Note: Filter by favourites if in favourites-only mode
         if self.show_favourites_only:
             if not self.favourites_manager or not self.favourites_manager.is_favourite(track.id):
                 return False
         
-        # Then filter by search query
+        # Note: Then filter by search query
         if not self.search_query:
-            return True  # Show all when no search
+            return True  # Note: Show all when no search
         
-        # Search in title, artist, and album (case-insensitive)
+        # Note: Search in title, artist, and album (case-insensitive)
         return (self.search_query in track.title.lower() or
                 self.search_query in track.artist.lower() or
                 self.search_query in track.album.lower())
@@ -482,7 +482,7 @@ class LibraryView(Gtk.Box):
     def _confirm_delete(self, popover, track):
         popover.popdown()
         
-        # Create confirmation dialog
+        # Note: Create confirmation dialog
         dialog = Gtk.MessageDialog(
             transient_for=self.get_root(),
             modal=True,
@@ -501,7 +501,7 @@ class LibraryView(Gtk.Box):
             self._perform_delete(track)
             
     def _perform_delete(self, track):
-        # Show some loading state?
+        # Note: Show some loading state?
         print(f"Starting deletion for: {track.title}")
         
         def delete_thread():
@@ -513,12 +513,12 @@ class LibraryView(Gtk.Box):
         
     def _on_delete_complete(self, success, track):
         if success:
-            # Remove from store
-            # Since we don't have direct index map, we iterate (slow but fine for now)
-            # Or assume library sync will handle it? 
-            # library sync might be too heavy. Let's manually remove from UI list.
+            # Note: Remove from store
+            # Note: Since we don't have direct index map, we iterate (slow but fine for now)
+            # Note: Or assume library sync will handle it?
+            # Note: Library sync might be too heavy. let's manually remove from UI list.
             
-            # Find item in store
+            # Note: Find item in store
             found_idx = -1
             for i in range(self.store.get_n_items()):
                 item = self.store.get_item(i)
@@ -530,13 +530,13 @@ class LibraryView(Gtk.Box):
                 self.store.remove(found_idx)
                 print(f"Removed '{track.title}' from UI list.")
             
-            # Refresh related UI components (like album grid)
+            # Note: Refresh related UI components (like album grid)
             root = self.get_root()
             if root and hasattr(root, 'album_grid'):
                 GLib.idle_add(root.album_grid.refresh)
             
         else:
-            # Show error
+            # Note: Show error
             error_dialog = Gtk.MessageDialog(
                 transient_for=self.get_root(),
                 modal=True,
@@ -558,7 +558,7 @@ class LibraryView(Gtk.Box):
         popover.popdown()
         if self.queue_manager:
             self.queue_manager.add(track)
-            # Could show a toast notification here in the future
+            # Note: Could show A toast notification here in the future
     
     def _clear_queue(self, popover):
         """Clear all tracks from the queue."""
@@ -591,15 +591,15 @@ class LibraryView(Gtk.Box):
             label = list_item.get_child()
             track_obj = list_item.get_item()
             
-            # Store track_obj on label for right-click hit testing
+            # Note: Store track_obj on label for right-click hit testing
             label._track_obj = track_obj
             
-            # Initial set
+            # Note: Initial set
             update_dot(label, track_obj.props.is_fav)
             
-            # Bind to property change
+            # Note: Bind to property change
             handler_id = track_obj.connect('notify::is-fav', lambda obj, pspec: update_dot(label, obj.props.is_fav))
-            # Store handler_id on the label widget as a Python attribute (set_data is unsupported in Python 3.14+)
+            # Note: Store handler_id on the label widget as a python attribute (set_data is unsupported in python 3.14+)
             label._handler_id = handler_id
 
         def on_unbind(factory, list_item):
@@ -632,7 +632,7 @@ class LibraryView(Gtk.Box):
             image = list_item.get_child()
             track_obj = list_item.get_item()
             
-            # Store track_obj on image for right-click hit testing
+            # Note: Store track_obj on image for right-click hit testing
             image._track_obj = track_obj
             
             if track_obj.is_local:
@@ -667,10 +667,10 @@ class LibraryView(Gtk.Box):
             image = list_item.get_child()
             track_obj = list_item.get_item()
             
-            # Store track_obj on image for right-click hit testing
+            # Note: Store track_obj on image for right-click hit testing
             image._track_obj = track_obj
             
-            # Try to load cover art
+            # Note: Try to load cover art
             self._load_cover_thumbnail(image, track_obj.track)
         
         factory.connect("setup", on_setup)
@@ -685,26 +685,26 @@ class LibraryView(Gtk.Box):
         import os
         from gi.repository import GdkPixbuf
         
-        # Tag image to avoid recycling issues
+        # Note: Tag image to avoid recycling issues
         image.track_id = track.id
-        image.set_from_icon_name("emblem-music-symbolic") # Default
+        image.set_from_icon_name("emblem-music-symbolic") # Note: Default
         
-        # 1. Access Manager
+        # Note: 1. Access manager
         manager = CoverFetchManager.get_instance()
         
-        # 2. Prepare embedded info if available (path to audio file)
+        # Note: 2. Prepare embedded info if available (path to audio file)
         embedded_path = None
         if self.library_manager.cache:
-            # We trust cache path lookup is fast (sqlite indexed)
+            # Note: We trust cache path lookup is fast (sqlite indexed)
              embedded_path = self.library_manager.cache.get_cached_path(track.id)
 
-        # 3. Callback
+        # Note: 3. Callback
         def on_fetched(pixbuf):
             try:
                 self._safe_set_image(image, track.id, pixbuf)
             except: pass
             
-        # 4. Request (Handles smart cache check + queued processing)
+        # Note: 4. Request (handles smart cache check + queued processing)
         manager.request_cover(track, embedded_cache_info=embedded_path, callback=on_fetched)
 
     def _safe_set_image(self, image, track_id, pixbuf):
@@ -715,7 +715,7 @@ class LibraryView(Gtk.Box):
     def _add_text_column(self, title, property_name, expand=False, fixed_width=None):
         factory = Gtk.SignalListItemFactory()
         
-        # Create Label
+        # Note: Create label
         def on_setup(factory, list_item):
             label = Gtk.Label(xalign=0)
             label.set_ellipsize(Pango.EllipsizeMode.END)
@@ -723,15 +723,15 @@ class LibraryView(Gtk.Box):
             label.set_halign(Gtk.Align.FILL)
             list_item.set_child(label)
             
-        # Bind Data
+        # Note: Bind data
         def on_bind(factory, list_item):
             label = list_item.get_child()
-            track_obj = list_item.get_item() # This is our TrackObject
+            track_obj = list_item.get_item() # Note: This is our trackobject
             
-            # Store track_obj on label for right-click hit testing
+            # Note: Store track_obj on label for right-click hit testing
             label._track_obj = track_obj
             
-            # Helper to format duration if that's the property
+            # Note: Helper to format duration if that's the property
             if property_name == "duration":
                 val = self._format_duration(track_obj.track.duration)
             else:
@@ -752,14 +752,14 @@ class LibraryView(Gtk.Box):
 
     def _populate_library(self):
         """Initiate asynchronous library loading to avoid blocking UI."""
-        # Show loading state
+        # Note: Show loading state
         self.loading_label = Gtk.Label(label="Loading library...")
         self.loading_label.add_css_class("title-2")
         self.loading_label.set_margin_top(50)
         self.loading_label.set_margin_bottom(50)
         self.append(self.loading_label)
         
-        # Load in background using GLib thread pool
+        # Note: Load in background using glib thread pool
         import threading
         thread = threading.Thread(target=self._load_library_thread, daemon=True)
         thread.start()
@@ -771,10 +771,10 @@ class LibraryView(Gtk.Box):
                 tracks = self.library_manager.metadata.tracks
                 print(f"Found {len(tracks)} tracks in library.")
                 
-                # Update UI on main thread
+                # Note: Update UI on main thread
                 GLib.idle_add(self._populate_ui, tracks)
                 
-                # Also refresh album grid if we are the main library view
+                # Note: Also refresh album grid if we are the main library view
                 if not self.show_favourites_only:
                     def _refresh_grid():
                         root = self.get_root()
@@ -788,11 +788,11 @@ class LibraryView(Gtk.Box):
 
     def _populate_ui(self, tracks):
         """Populate UI with tracks (called on main thread)."""
-        # Remove loading indicator
+        # Note: Remove loading indicator
         if hasattr(self, 'loading_label') and self.loading_label.get_parent():
             self.remove(self.loading_label)
         
-        # Batch UI updates for better performance
+        # Note: Batch UI updates for better performance
         self.store.freeze_notify()
         try:
             for track in tracks:
@@ -803,11 +803,11 @@ class LibraryView(Gtk.Box):
         finally:
             self.store.thaw_notify()
         
-        return False  # Remove from idle queue
+        return False  # Note: Remove from idle queue
 
     def _show_error(self, message):
         """Show error message in UI (called on main thread)."""
-        # Remove loading indicator if present
+        # Note: Remove loading indicator if present
         if hasattr(self, 'loading_label') and self.loading_label.get_parent():
             self.remove(self.loading_label)
         
@@ -817,7 +817,7 @@ class LibraryView(Gtk.Box):
         self.append(error_label)
         
         print(f"Library Error: {message}")
-        return False  # Remove from idle queue
+        return False  # Note: Remove from idle queue
 
     def _format_duration(self, seconds):
         if not seconds: return "--:--"
@@ -825,7 +825,7 @@ class LibraryView(Gtk.Box):
         return f"{m}:{s:02d}"
 
     def on_selection_changed(self, model, position, n_items):
-        pass # Placeholder
+        pass # Note: Placeholder
 
     def on_row_activated(self, view, position):
         selected_obj = self.selection_model.get_selected_item()
@@ -852,17 +852,17 @@ class LibraryView(Gtk.Box):
         """Handle favourites changes by refreshing the filter and visible icons."""
         if not self.favourites_manager: return
         
-        # Update is_fav property on all track objects
-        # This will trigger UI updates for bound columns via notify::is-fav
+        # Note: Update is_fav property on all track objects
+        # Note: This will trigger UI updates for bound columns via notify is-fav
         n = self.store.get_n_items()
         favs = set(self.favourites_manager.get_all())
         
         for i in range(n):
             item = self.store.get_item(i)
-            # Efficient update: only write if changed to minimize signals
+            # Note: Efficient update only write if changed to minimize signals
             new_state = (item.track.id in favs)
             if item.props.is_fav != new_state:
                 item.props.is_fav = new_state
 
-        # Refresh the filter to update "Favourites" tab list
+        # Note: Refresh the filter to update "favourites" tab list
         self.filter.changed(Gtk.FilterChange.DIFFERENT)

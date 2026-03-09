@@ -90,7 +90,7 @@ function updateQueueScrollCuePosition() {
     const maxY = Math.max(0, cueHeight - thumbHeight);
     const scrollRange = floatingQueue.scrollHeight - floatingQueue.clientHeight;
     const ratio = scrollRange > 0 ? (floatingQueue.scrollTop / scrollRange) : 0;
-    // Keep motion subtle: informative cue, not a full-range scrollbar.
+    // Note: Keep motion subtle informative cue, not a full-range scrollbar.
     const travelFactor = 0.28;
     const centeredOffset = (maxY * (1 - travelFactor)) / 2;
     thumb.style.top = `${Math.round(centeredOffset + (maxY * ratio * travelFactor))}px`;
@@ -424,7 +424,7 @@ function initQueueDrag() {
     }
 
     function flyToSlotAndCommit(toIndex) {
-        // No travel/bounce: clean “drop” fade, then commit.
+        // Note: No travel/bounce clean “drop” fade, then commit.
         if (!clone) {
             commitReorder(toIndex);
             return;
@@ -432,7 +432,7 @@ function initQueueDrag() {
 
         clearDropTarget();
 
-        // Let the original stay dim until commit swaps the list.
+        // Note: Let the original stay dim until commit swaps the list.
         clone.style.transition = `opacity ${QUEUE_DROP_FADE_MS}ms ease-out, transform ${QUEUE_DROP_FADE_MS}ms cubic-bezier(0.19, 1, 0.22, 1)`;
         clone.style.opacity = '0';
         clone.style.transform = 'scale(0.985)';
@@ -555,7 +555,7 @@ function initQueueDrag() {
             item.classList.add('queue-drag-source');
             requestAnimationFrame(() => {
                 if (originalItem && originalItem.parentNode) {
-                    // Keep a faint ghost to avoid “hard disappear” feeling.
+                    // Note: Keep a faint ghost to avoid “hard disappear” feeling.
                     originalItem.style.opacity = '0.18';
                 }
             });
@@ -627,14 +627,14 @@ function syncUIState(state) {
     const activeId = state.currentTrack ? state.currentTrack.id : null;
     const favIds = state.favorites || [];
 
-    // 1. Update all visible song rows across the entire app
+    // Note: 1. Update all visible song rows across the entire app
     const rows = document.querySelectorAll('.song-row');
     rows.forEach(row => {
         const id = row.getAttribute('data-id');
         const isActive = id === activeId;
         const isFav = favIds.includes(id);
 
-        // Surgical update: Active highlight classes (Theme Aware)
+        // Note: Surgical update active highlight classes (theme aware)
         if (isActive) {
             row.classList.remove('bg-[var(--bg-card)]', 'border-transparent');
             row.classList.add('bg-[var(--bg-selection)]', 'border-[var(--glass-border)]');
@@ -643,7 +643,7 @@ function syncUIState(state) {
             row.classList.add('bg-[var(--bg-card)]', 'border-transparent');
         }
 
-        // Surgical update: Active indicator (Volume icon)
+        // Note: Surgical update active indicator (volume icon)
         const indicator = row.querySelector('.active-indicator-container');
         if (indicator) {
             indicator.classList.toggle('opacity-100', isActive);
@@ -652,11 +652,11 @@ function syncUIState(state) {
             indicator.classList.toggle('is-playing', isActive);
         }
 
-        // Surgical update: Favourite indicator (Orange dot)
+        // Note: Surgical update favourite indicator (orange dot)
         const favIndicator = row.querySelector('.fav-indicator');
         if (favIndicator) favIndicator.classList.toggle('hidden', !isFav);
 
-        // Surgical update: Title color
+        // Note: Surgical update title color
         const title = row.querySelector('.song-title');
         if (title) {
             title.classList.toggle('text-[var(--text-on-selection)]', isActive);
@@ -704,7 +704,7 @@ window.showArtistDetail = (artistName) => {
     UI.showView('artist-detail');
 };
 
-// INITIALIZATION ERROR HANDLER
+// ## Section: Initialization ERROR handler
 window.addEventListener('error', (e) => {
     console.error("GLOBAL ERROR:", e.error);
     const loader = (dom && dom.initialLoader) || document.getElementById('initial-loader');
@@ -746,12 +746,12 @@ async function init() {
         discoveryPanelSoundSnap: document.getElementById('discovery-panel-soundsnap')
     };
     try {
-        // 1. Initialize UI First (Navigation, Player Bar)
+        // Note: 1. Initialize UI first (navigation, player bar)
         console.log("UI: Initializing...");
         UI.init();
         initHoverTooltip();
         initGlobalSearch();
-        // Initial view is home but we never call showView(); ensure search bar is visible.
+        // Note: Initial view is home but we never call showview(); ensure search bar is visible.
         if (typeof window.renderContentForView === 'function') window.renderContentForView('home');
         initArtistScrollSuppress();
         initArtistDetailBack();
@@ -761,21 +761,21 @@ async function init() {
         wireSettings(MOBILE_SETTINGS_IDS, { store, showToast: (msg) => UI.showToast(msg), onLibraryOrderChange: () => renderLibraryContent(), subscribeIndicators: false });
         initWipeLibraryModal();
 
-        // 2. Perform Connection Race
+        // Note: 2. Perform connection race
         const endpoints = [...store.state.priorityList, window.location.hostname];
         const uniqueEndpoints = [...new Set(endpoints)].filter(e => e);
         console.log("NET: Probing endpoints:", uniqueEndpoints);
         await connectionManager.findActiveHost(uniqueEndpoints);
         
-        // 3. Load Library Data (Non-blocking)
+        // Note: 3. Load library data (non-blocking)
         console.log("DATA: Starting background library sync...");
         store.syncLibrary().then(() => {
             checkResumeFromOtherDevice();
             import('./discover.js').then((m) => m.Discover && m.Discover.fillBuffer());
         });
 
-        // 3. Subscribe to state changes for re-rendering (Optimized)
-        let lastLibraryJson = null; // Force first render in subscription
+        // Note: 3. Subscribe to state changes for re-rendering (optimized)
+        let lastLibraryJson = null; // Note: Force first render in subscription
         let lastLibraryTab = store.state.libraryTab || 'songs';
         let lastDiscoveryTab = store.state.discoveryTab || 'soundsnap';
         let lastPlaylistsJson = JSON.stringify(store.state.playlists || {});
@@ -794,9 +794,9 @@ async function init() {
             const currentTrackId = state.currentTrack ? state.currentTrack.id : null;
             const currentIsPlaying = state.isPlaying;
 
-            // --- SMART RE-RENDERING LOGIC ---
+            // ## Section: SMART RE-rendering LOGIC
 
-            // 0. If only libraryTab changed (e.g. user tapped tab or returned from artist-detail), update tab bar and content
+            // Note: 0 Details
             if (currentLibraryTab !== lastLibraryTab && UI.currentView === 'home') {
                 lastLibraryTab = currentLibraryTab;
                 syncLibraryPanels();
@@ -809,7 +809,7 @@ async function init() {
                 renderDiscoveryTabBar();
             }
 
-            // 1. If the entire Library changed (e.g. metadata sync), re-render only the current view (Option B: no pre-render of hidden views)
+            // Note: 1 Details
             if (currentLibJson !== lastLibraryJson) {
                 console.log("Library synced, re-render current view.");
                 lastLibraryJson = currentLibJson;
@@ -834,7 +834,7 @@ async function init() {
                 if (currentView === 'playlists') renderPlaylistList(state);
                 if (currentView === 'playlist-detail' && viewContext.currentPlaylistName) renderPlaylistDetail(viewContext.currentPlaylistName);
             } else {
-                // 2. If ONLY favorites changed, we update the indicators surgically
+                // Note: 2. If ONLY favorites changed, we update the indicators surgically
                 if (currentFavsJson !== lastFavsJson) {
                     syncUIState(state);
                     if (UI.currentView === 'favourites') renderFavourites(state);
@@ -845,24 +845,24 @@ async function init() {
                 }
                 lastFavsJson = currentFavsJson;
 
-                // 3. If the active track or playing state changed, we update highlights surgically
+                // Note: 3. If the active track or playing state changed, we update highlights surgically
                 if (currentTrackId !== lastTrackId || currentIsPlaying !== lastIsPlaying) {
                     syncUIState(state);
                     syncArtistGridIndicators(state);
                 }
 
-                // 4. If ONLY the queue changed
+                // Note: 4. If ONLY the queue changed
                 if (currentQueueJson !== lastQueueJson) {
-                    // If the user is dragging, do NOT re-render the queue or we'll break the interaction
+                    // Note: If the user is dragging, do NOT re-render the queue or we'll break the interaction
                     if (!UI.isDraggingQueue) {
                         renderQueue(state);
                     }
                 }
             }
             
-            // --- End Smart Rendering ---
+            // ## Section: End smart rendering
 
-            // Dedicated search bars already own rendering for home/favourites.
+            // Note: Dedicated search bars already own rendering for home/favourites.
             
             lastLibraryTab = currentLibraryTab;
             lastFavsJson = currentFavsJson;
@@ -872,7 +872,7 @@ async function init() {
             lastIsPlaying = currentIsPlaying;
         });
 
-        // 4. Initial Render — only default view (home) and queue (Option B: other views render when user navigates)
+        // Note: 4. Initial render — only default view (home) and queue (option B other views render when user navigates)
         if (store.state.library.length > 0 && dom) {
             console.log("DATA: Performing initial render (home + queue)...");
             syncLibraryPanels();
@@ -884,7 +884,7 @@ async function init() {
     } catch (err) {
         console.error("CRITICAL: App initialization failed:", err);
     } finally {
-        // 6. Dismiss Loader
+        // Note: 6. Dismiss loader
         const loader = dom && dom.initialLoader;
         if (loader) {
             loader.classList.add('opacity-0', 'pointer-events-none');
@@ -1207,7 +1207,7 @@ function initGlobalSearch() {
 }
 
 function initScrollTracking() {
-    // Mobile views scroll individually
+    // Note: Mobile views scroll individually
     const views = document.querySelectorAll('.view');
     views.forEach(view => {
         view.addEventListener('scroll', () => {
@@ -1312,7 +1312,7 @@ function renderContentForView(viewId) {
     const input = dom?.globalSearchInput;
     const container = dom?.globalSearchContainer;
 
-    // Reset search state for new view
+    // Note: Reset search state for new view
     if (input) input.value = '';
     if (dom?.globalSearchClear) dom.globalSearchClear.classList.add('hidden');
     if (container) container.classList.remove('scrolled');
@@ -1413,12 +1413,12 @@ function applyFavFirstEntranceIfNeeded() {
     viewContext.pendingFavFirstEntranceId = null;
     row.style.transition = 'none';
     row.style.transform = 'translateX(-100vw)';
-    row.offsetHeight; // reflow
+    row.offsetHeight; // Note: Reflow
     row.style.transition = 'transform 0.6s cubic-bezier(0.19, 1, 0.22, 1)';
     row.style.transform = 'translateX(0)';
     const onEntranceEnd = () => {
         row.removeEventListener('transitionend', onEntranceEnd);
-        row.style.transition = ''; // restore default from CSS
+        row.style.transition = ''; // Note: Restore default from CSS
     };
     row.addEventListener('transitionend', onEntranceEnd, { once: true });
 }
@@ -1485,7 +1485,7 @@ window.playTrack = (trackId) => {
 window.playPreview = playPreview;
 window.showToast = (msg) => { if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(msg); };
 
-// RELIABLE INIT: Run immediately if DOM is already ready
+// Note: Reliable INIT run immediately if DOM is already ready
 if (document.readyState === 'loading') {
     window.addEventListener('DOMContentLoaded', init);
 } else {

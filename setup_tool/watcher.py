@@ -15,7 +15,7 @@ class MusicFolderHandler(FileSystemEventHandler):
     def __init__(self, scanner: LibraryScanner):
         self.scanner = scanner
         self.debounce_timer = None
-        self.debounce_delay = 5.0 # Seconds to wait after last event before scanning
+        self.debounce_delay = 5.0 # Note: Seconds to wait after last event before scanning
 
     def on_modified(self, event):
         if not event.is_directory and self._is_audio(event.src_path):

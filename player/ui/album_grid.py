@@ -3,7 +3,7 @@ import os
 from shared.constants import DEFAULT_CACHE_DIR
 from player.cover_manager import CoverFetchManager
 
-# Fixed column count for equal-width grid cells (webapp-style)
+# Note: Fixed column count for equal-width grid cells (webapp-style)
 ALBUM_GRID_COLUMNS = 4
 ALBUM_TILE_SIZE = 160
 ALBUM_GRID_GAP = 24
@@ -39,7 +39,7 @@ class AlbumCard(Gtk.Box):
         self.set_hexpand(False)
         self.set_vexpand(False)
 
-        # Cover: single Gtk.Picture = the only visible "tile" (rounded, shadow, border via .album-tile)
+        # Note: Cover single GTK.picture = the only visible "tile" (rounded, shadow, border via .album-tile)
         self.img = Gtk.Picture()
         self.img.set_content_fit(Gtk.ContentFit.COVER)
         self.img.set_can_shrink(False)
@@ -53,7 +53,7 @@ class AlbumCard(Gtk.Box):
             self.img.set_paintable(icon_paintable)
         self.append(self.img)
 
-        # Text below (mt-4 px-2 style): wrapper for margin only
+        # Note: Text below (mt-4 px-2 style) wrapper for margin only
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         text_box.add_css_class("album-card-text")
         self.title = Gtk.Label(label=album_obj.album, xalign=0)

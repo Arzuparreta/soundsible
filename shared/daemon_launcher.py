@@ -10,7 +10,7 @@ from typing import Tuple
 
 from shared.constants import STATION_PORT
 
-# Canonical user-facing messages (one place for consistency and i18n)
+# Note: Canonical user-facing messages (one place for consistency and i18n)
 MSG_STATION_STARTING = "Station Engine is starting."
 MSG_STATION_STOPPED = "Station Engine stopped."
 MSG_STATION_NOT_RUNNING = "Station Engine was not running."

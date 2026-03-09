@@ -54,7 +54,7 @@ class AudioProcessor:
         sha256 = hashlib.sha256()
         
         with open(file_path, 'rb') as f:
-            # Read in chunks for memory efficiency
+            # Note: Read in chunks for memory efficiency
             for chunk in iter(lambda: f.read(8192), b''):
                 sha256.update(chunk)
         
@@ -86,12 +86,12 @@ class AudioProcessor:
             if audio is None:
                 raise ValueError(f"Failed to open audio file: {file_path}")
             
-            # Extract basic info
+            # Note: Extract basic info
             duration = int(audio.info.length) if hasattr(audio.info, 'length') else 0
             bitrate = int(audio.info.bitrate / 1000) if hasattr(audio.info, 'bitrate') else 0
             format_ext = Path(file_path).suffix.lower().lstrip('.')
             
-            # Extract tags based on format
+            # Note: Extract tags based on format
             metadata = {
                 'title': 'Unknown Title',
                 'artist': 'Unknown Artist',
@@ -106,7 +106,7 @@ class AudioProcessor:
                 'cover_art': False
             }
             
-            # MP3 files
+            # Note: MP3 files
             if isinstance(audio, MP3):
                 tags = audio.tags
                 if tags:
@@ -114,35 +114,35 @@ class AudioProcessor:
                     metadata['artist'] = str(tags.get('TPE1', 'Unknown Artist'))
                     metadata['album'] = str(tags.get('TALB', 'Unknown Album'))
                     
-                    # Album Artist
+                    # Note: Album artist
                     if 'TPE2' in tags:
                         metadata['album_artist'] = str(tags['TPE2'])
                     
-                    # Year
+                    # Note: Year details
                     if 'TDRC' in tags:
                         metadata['year'] = int(str(tags['TDRC']).split('-')[0])
                     
-                    # Genre
+                    # Note: Genre details
                     if 'TCON' in tags:
                         metadata['genre'] = str(tags['TCON'])
                     
-                    # Track number
+                    # Note: Track number
                     if 'TRCK' in tags:
                         track_str = str(tags['TRCK'])
                         metadata['track_number'] = int(track_str.split('/')[0])
                     
-                    # Cover art
+                    # Note: Cover art
                     if any(frame.startswith('APIC:') for frame in tags.keys()):
                         metadata['cover_art'] = True
             
-            # FLAC files
+            # Note: FLAC files
             elif isinstance(audio, FLAC):
                 if audio.tags:
                     metadata['title'] = audio.tags.get('title', ['Unknown Title'])[0]
                     metadata['artist'] = audio.tags.get('artist', ['Unknown Artist'])[0]
                     metadata['album'] = audio.tags.get('album', ['Unknown Album'])[0]
                     
-                    # Album Artist
+                    # Note: Album artist
                     if 'albumartist' in audio.tags:
                         metadata['album_artist'] = audio.tags['albumartist'][0]
                     elif 'album artist' in audio.tags:
@@ -158,11 +158,11 @@ class AudioProcessor:
                         track_str = audio.tags['tracknumber'][0]
                         metadata['track_number'] = int(track_str.split('/')[0])
                 
-                # Check for cover art
+                # Note: Check for cover art
                 if audio.pictures:
                     metadata['cover_art'] = True
             
-            # OGG Vorbis files
+            # Note: OGG vorbis files
             elif isinstance(audio, OggVorbis):
                 if audio.tags:
                     metadata['title'] = audio.tags.get('title', ['Unknown Title'])[0]
@@ -181,7 +181,7 @@ class AudioProcessor:
                     if 'tracknumber' in audio.tags:
                         metadata['track_number'] = int(audio.tags['tracknumber'][0])
             
-            # M4A (MP4/AAC) files
+            # Note: M4A (MP4/AAC) files
             elif isinstance(audio, MP4):
                 if audio.tags:
                     metadata['title'] = audio.tags.get('\xa9nam', ['Unknown Title'])[0]
@@ -200,11 +200,11 @@ class AudioProcessor:
                     if 'trkn' in audio.tags:
                         metadata['track_number'] = audio.tags['trkn'][0][0]
                     
-                    # Check for cover art
+                    # Note: Check for cover art
                     if 'covr' in audio.tags:
                         metadata['cover_art'] = True
             
-            # Fallback to filename if title is still unknown
+            # Note: Fallback to filename if title is still unknown
             if metadata['title'] == 'Unknown Title':
                 metadata['title'] = Path(file_path).stem
             
@@ -212,7 +212,7 @@ class AudioProcessor:
             
         except Exception as e:
             print(f"Warning: Failed to extract metadata from {file_path}: {e}")
-            # Return minimal metadata
+            # Note: Return minimal metadata
             return {
                 'title': Path(file_path).stem,
                 'artist': 'Unknown Artist',
@@ -241,14 +241,14 @@ class AudioProcessor:
             True if conversion successful
         """
         try:
-            # Use ffmpeg to convert
+            # Note: Use ffmpeg to convert
             stream = ffmpeg.input(input_path)
             stream = ffmpeg.output(
                 stream,
                 output_path,
                 audio_bitrate=f'{bitrate}k',
                 acodec='libmp3lame',
-                map_metadata=0  # Preserve metadata
+                map_metadata=0  # Note: Preserve metadata
             )
             ffmpeg.run(stream, overwrite_output=True, quiet=True)
             return True
@@ -300,11 +300,11 @@ class AudioProcessor:
         """
         ext = Path(file_path).suffix.lower()
         
-        # We now support streaming lossless formats directly
+        # Note: We now support streaming lossless formats directly
         if ext in ['.mp3', '.ogg', '.opus', '.aac', '.flac', '.wav', '.alac', '.m4a']:
             return False, f"Format supported for direct streaming ({ext})"
         
-        # Default: don't compress unknown formats, let the user decide
+        # Note: Default don't compress unknown formats, let the user decide
         return False, "Format not recognized for auto-compression"
 
     @staticmethod
@@ -343,15 +343,15 @@ class AudioProcessor:
             if 'artist' in tags: audio['artist'] = tags['artist']
             if 'album' in tags: audio['album'] = tags['album']
             
-            # Handle Album Artist (Key varies by format)
+            # Note: Handle album artist (key varies by format)
             album_artist = tags.get('album_artist')
             if album_artist:
                 if ext == '.mp3':
                     audio['albumartist'] = album_artist
                 elif ext == '.m4a' or ext == '.mp4':
-                    audio['\xa9ART'] = album_artist # Album Artist in M4A
+                    audio['\xa9ART'] = album_artist # Note: Album artist in M4A
                 else:
-                    # FLAC/OGG standard
+                    # Note: FLAC/OGG standard
                     audio['albumartist'] = album_artist
             
             audio.save()
@@ -382,21 +382,21 @@ class AudioProcessor:
                 except ID3NoHeaderError:
                     audio = ID3()
                 
-                # Remove existing covers
+                # Note: Remove existing covers
                 audio.delall('APIC')
                 
                 with open(cover_path, 'rb') as img:
                     data = img.read()
                     
-                # Simple header check for mime
+                # Note: Simple header check for mime
                 mime = 'image/jpeg'
                 if data.startswith(b'\x89PNG'):
                     mime = 'image/png'
                     
                 audio.add(APIC(
-                    encoding=3, # 3 is UTF-8
+                    encoding=3, # Note: 3 Is UTF-8
                     mime=mime, 
-                    type=3, # 3 is cover(front)
+                    type=3, # Note: 3 Is cover(front)
                     desc=u'Cover',
                     data=data
                 ))
@@ -452,7 +452,7 @@ class AudioProcessor:
             if ext == '.mp3':
                 try:
                     audio = ID3(file_path)
-                    # Look for APIC frames (album pictures)
+                    # Note: Look for APIC frames (album pictures)
                     for key in audio.keys():
                         if key.startswith('APIC:'):
                             return audio[key].data

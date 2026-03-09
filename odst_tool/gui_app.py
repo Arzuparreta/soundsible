@@ -31,11 +31,11 @@ class DownloaderGUI:
         self.root.title("Music Downloader")
         self.root.geometry("600x500")
         
-        # Initialize Backend
+        # Note: Initialize backend
         self.app = self._init_backend()
         self.cloud = CloudSync(self.app.output_dir)
         self.queue = []
-        self.input_mode = "manual"  # manual input
+        self.input_mode = "manual"  # Note: Manual input
         
         self._setup_ui()
         
@@ -47,20 +47,20 @@ class DownloaderGUI:
         )
 
     def _setup_ui(self):
-        # Header
+        # Note: Header details
         header = ttk.Frame(self.root, padding="10")
         header.pack(fill=tk.X)
         ttk.Label(header, text="Music Downloader", font=("Helvetica", 16, "bold")).pack(side=tk.LEFT)
         
-        # Input Area
+        # Note: Input area
         input_frame = ttk.LabelFrame(self.root, text="Add Music", padding="10")
         input_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        # Tabs for input and settings
+        # Note: Tabs for input and settings
         self.notebook = ttk.Notebook(input_frame)
         self.notebook.pack(fill=tk.X, expand=True)
         
-        # Manual Tab
+        # Note: Manual tab
         manual_frame = ttk.Frame(self.notebook, padding="5")
         self.notebook.add(manual_frame, text="Manual Input")
         
@@ -71,11 +71,11 @@ class DownloaderGUI:
         
         ttk.Button(manual_frame, text="Add to Queue", command=self.add_to_queue).pack(anchor="e")
 
-        # Settings Tab
+        # Note: Settings tab
         settings_frame = ttk.Frame(self.notebook, padding="5")
         self.notebook.add(settings_frame, text="Settings")
         
-        # Danger Zone
+        # Note: Danger zone
         danger_frame = ttk.LabelFrame(settings_frame, text="Danger Zone", padding="10")
         danger_frame.pack(fill=tk.X, pady=10)
         
@@ -83,7 +83,7 @@ class DownloaderGUI:
         btn_delete_all = tk.Button(danger_frame, text="ERASE EVERYTHING", bg="#ffcccc", fg="red", command=self.confirm_and_erase_all)
         btn_delete_all.pack(fill=tk.X)
         
-        # Queue Area
+        # Note: Queue area
         queue_frame = ttk.LabelFrame(self.root, text="Download Queue", padding="10")
         queue_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
@@ -97,7 +97,7 @@ class DownloaderGUI:
         control_frame = ttk.Frame(self.root, padding="10")
         control_frame.pack(fill=tk.X)
         
-        # Direct to Cloud Option
+        # Note: Direct to cloud option
         self.direct_to_cloud_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(control_frame, text="Direct to Cloud (Upload & Delete Local)", variable=self.direct_to_cloud_var).pack(side=tk.LEFT)
         
@@ -106,7 +106,7 @@ class DownloaderGUI:
         
         ttk.Button(control_frame, text="Clear Queue", command=self.clear_queue).pack(side=tk.RIGHT, padx=5)
 
-        # Log Area
+        # Note: Log area
         log_frame = ttk.LabelFrame(self.root, text="Logs", padding="5")
         log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         self.log_area = scrolledtext.ScrolledText(log_frame, height=8, state='disabled')
@@ -144,7 +144,7 @@ class DownloaderGUI:
         self.btn_download.config(state="disabled")
         self.log("--- Starting Download ---")
         
-        # Run in thread to not freeze UI
+        # Note: Run in thread to not freeze UI
         threading.Thread(target=self._download_thread, daemon=True).start()
 
     def _download_thread(self):
@@ -154,13 +154,13 @@ class DownloaderGUI:
                 
                 track = None
                 
-                # Check if it's a URL
+                # Note: Check if it's a URL
                 if song_str.strip().startswith("http"):
                     self.log("Detected URL mode...")
                     track = self.app.downloader.process_video(song_str.strip())
                 else:
-                    # Manual artist - title input
-                    # Mock metadata creation
+                    # Note: Manual artist - title input
+                    # Note: Mock metadata creation
                     parts = song_str.split("-")
                     artist = parts[0].strip()
                     title = parts[1].strip() if len(parts) > 1 else song_str.strip()
@@ -169,7 +169,7 @@ class DownloaderGUI:
                         'title': title,
                         'artist': artist,
                         'album': 'Manual Download',
-                        'duration_ms': 0, # Signal to skip duration check?
+                        'duration_ms': 0, # Note: Signal to skip duration check?
                         'duration_sec': 0,
                         'release_date': None,
                         'track_number': None,
@@ -185,7 +185,7 @@ class DownloaderGUI:
                         self.app.library.remove_track(existing.id)
                     self.app.library.add_track(track)
                     self.log(f"Downloaded: {track.artist} - {track.title}")
-                    # Remove from UI list
+                    # Note: Remove from UI list
                     self._remove_from_listbox(song_str)
                 else:
                     self.log(f"Failed: {song_str}")
@@ -196,11 +196,11 @@ class DownloaderGUI:
         self.app.save_library()
         self.log("--- Download Complete ---")
         
-        # Auto Sync (Direct to Cloud)
+        # Note: Auto sync (direct to cloud)
         if self.direct_to_cloud_var.get():
             self.log("☁️ Starting Direct-to-Cloud Sync (Upload & Delete Local)...")
             
-            # Run sync in thread or same thread? Same thread is fine here since we are already in bg thread.
+            # Note: Run sync in thread or same thread? same thread is fine here since we are already in bg thread.
             try:
                 stats = self.cloud.sync_library(
                     self.app.library, 
@@ -218,9 +218,9 @@ class DownloaderGUI:
         self.root.after(0, lambda: self.btn_download.config(state="normal"))
 
     def _remove_from_listbox(self, item_text):
-        # Find index
+        # Note: Find index
         try:
-            # Tkinter listbox get() returns tuple of all items
+            # Note: Tkinter listbox get() returns tuple of all items
             idx = self.queue_list.get(0, tk.END).index(item_text)
             self.queue_list.delete(idx)
         except ValueError:
@@ -239,25 +239,25 @@ class DownloaderGUI:
         threading.Thread(target=self._erase_all_thread, daemon=True).start()
 
     def _erase_all_thread(self):
-        # 1. Cloud Delete
+        # Note: 1. Cloud delete
         self.log("Connecting to Cloudflare R2...")
         if self.cloud.is_configured():
             self.cloud.delete_all_remote_files(progress_callback=self.log)
         else:
             self.log("Skipping Cloud (Not Configured).")
             
-        # 2. Local Delete
+        # Note: 2. Local delete
         self.log("Deleting local files...")
         tracks_dir = self.app.output_dir / "tracks"
         if tracks_dir.exists():
             try:
                 shutil.rmtree(tracks_dir)
-                tracks_dir.mkdir(exist_ok=True) # Recreate empty
+                tracks_dir.mkdir(exist_ok=True) # Note: Recreate empty
                 self.log("Local tracks folder cleared.")
             except Exception as e:
                 self.log(f"Error clearing local tracks: {e}")
         
-        # 3. Library JSON Delete
+        # Note: 3. Library JSON delete
         lib_path = self.app.library_path
         if lib_path.exists():
             try:
@@ -266,7 +266,7 @@ class DownloaderGUI:
             except Exception as e:
                 self.log(f"Error deleting library.json: {e}")
                 
-        # 4. Reset Memory
+        # Note: 4. Reset memory
         self.app.library = self.app._load_library()
         self.log("Memory state reset.")
         self.log("--- ERASURE COMPLETE ---")
@@ -274,7 +274,7 @@ class DownloaderGUI:
 
 def main():
     root = tk.Tk()
-    # Apply theme/style
+    # Note: Apply theme/style
     style = ttk.Style()
     style.theme_use('clam')
     

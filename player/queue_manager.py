@@ -17,7 +17,7 @@ class QueueManager:
     def __init__(self):
         self._queue: List[QueueItem] = []
         self._history: List[QueueItem] = []
-        self._repeat_mode = "off"  # off, all, one, once (web: one=infinite song, once=one extra play)
+        self._repeat_mode = "off"  # Note: Off, all, one, once (web: one=infinite song, once=one extra play)
         self._lock = threading.Lock()
         self._on_change_callbacks: List[Callable[[], None]] = []
     

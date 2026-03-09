@@ -28,9 +28,9 @@ def is_trusted_network(remote_addr) -> bool:
     try:
         import ipaddress
         ip = ipaddress.ip_address(remote_addr)
-        # Trust if it's Private (LAN/WiFi) or Loopback (Localhost)
-        # 100.x.x.x (Tailscale) is explicitly caught by is_private in many versions,
-        # but we check it specifically for reliability.
+        # Note: Trust if it's private (LAN/wifi) or loopback (localhost)
+        # Note: 100.X.x.x (tailscale) is explicitly caught by is_private in many versions,
+        # Note: But we check it specifically for reliability.
         is_tailscale = str(remote_addr).startswith('100.')
         return ip.is_private or ip.is_loopback or is_tailscale
     except (ValueError, TypeError) as e:
@@ -47,10 +47,10 @@ def is_safe_path(file_path, is_trusted: bool = False) -> bool:
         return True
 
     try:
-        # Lexical normalization for public-facing security check
+        # Note: Lexical normalization for public-facing security check
         target = os.path.normpath(os.path.abspath(os.path.expanduser(file_path)))
 
-        # Approved Roots for public access (no odst_tool dependency)
+        # Note: Approved roots for public access (no odst_tool dependency)
         allowed_roots = [
             os.path.normpath(os.path.abspath(os.path.expanduser(DEFAULT_CONFIG_DIR))),
             os.path.normpath(os.path.abspath(os.path.expanduser(DEFAULT_CACHE_DIR))),
@@ -61,7 +61,7 @@ def is_safe_path(file_path, is_trusted: bool = False) -> bool:
 
         for root in allowed_roots:
             try:
-                # Use commonpath to verify target is within root
+                # Note: Use commonpath to verify target is within root
                 if os.path.commonpath([target, root]) == root:
                     return True
             except (ValueError, OSError) as e:

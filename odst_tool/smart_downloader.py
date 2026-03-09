@@ -6,21 +6,21 @@ import os
 import tempfile
 from pathlib import Path
 
-# Add project root to path if needed (for GUI usage it might be already there)
-# But for safety, we assume imports work relative to project root.
+# Note: Add project root to path if needed (for GUI usage it might be already there)
+# Note: But for safety, we assume imports work relative to project root.
 
 class SmartDownloader:
     def __init__(self, output_dir=None):
-        # We ALWAYS use a temporary directory for staging to prevent 
-        # accidental deletion of the user's actual music library.
+        # Note: We always use a temporary directory for staging to prevent
+        # Note: Accidental deletion of the user's actual music library.
         self.staging_dir = Path(tempfile.mkdtemp(prefix="soundsible_staging_"))
         
-        # Reference to the final library root if provided
+        # Note: Reference to the final library root if provided
         self.library_root = Path(output_dir) if output_dir else None
             
         self.staging_dir.mkdir(parents=True, exist_ok=True)
         self.downloader = None
-        self._log_callback = print  # Default to print
+        self._log_callback = print  # Note: Default to print
         
     def set_log_callback(self, callback):
         """Set a callback for log messages (msg, level)."""
@@ -69,7 +69,7 @@ class SmartDownloader:
     def process_query(self, query, quality=None):
         self._lazy_load()
         
-        # Override quality if provided
+        # Note: Override quality if provided
         if quality:
             self.downloader.quality = quality
             
@@ -77,7 +77,7 @@ class SmartDownloader:
         
         track = None
         
-        # 1. Check if it's a URL
+        # Note: 1. Check if it's a URL
         if "youtube.com" in query or "youtu.be" in query:
              self.log("Detected YouTube URL...", "info")
              track = self.downloader.process_video(query)
@@ -87,7 +87,7 @@ class SmartDownloader:
             return None
 
         else:
-             # Manual search: pass query as title; process_track searches YT and downloads.
+             # Note: Manual search pass query as title; process_track searches YT and downloads.
              self.log(f"Searching for: {query}", "info")
              meta = {
                  'artist': 'Unknown',
@@ -134,18 +134,18 @@ class SmartDownloader:
              self.log(f"No tracks directory found at {tracks_dir}", "warning")
              return None
              
-        # List files for debugging
+        # Note: List files for debugging
         staged_files = list(tracks_dir.glob("*"))
         self.log(f"Found {len(staged_files)} files in staging area.", "info")
         for f in staged_files:
             self.log(f"  - {f.name}", "info")
              
-        # Create a proxy progress object or capture logs?
-        # UploadEngine uses rich.progress usually. 
-        # We can pass None for progress if we don't handle it, or we handle logging differently.
+        # Note: Create a proxy progress object or capture logs?
+        # Note: Uploadengine uses rich.progress usually.
+        # Note: We can pass none for progress if we don't handle it, or we handle logging differently.
         
         try:
-            # We don't compress here since it's already been handled by YouTubeDownloader's quality setting
+            # Note: We don't compress here since it's already been handled by youtubedownloader's quality setting
             updated_lib = uploader.run(str(tracks_dir), compress=False, parallel=1, auto_fetch=False)
             
             if updated_lib:

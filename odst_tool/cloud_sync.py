@@ -27,17 +27,17 @@ class CloudSync:
             'bucket': os.getenv('R2_BUCKET_NAME')
         }
         
-        # If missing, try to find neighbor project .env
+        # Note: If missing, try to find neighbor project .env
         if not all(config.values()):
             possible_path = Path('../soundsible/.env')
             if possible_path.exists():
                 from dotenv import dotenv_values
                 env_vals = dotenv_values(possible_path)
                 
-                # soundsible naming might be slightly different or same.
-                # Usually: REPOSITORY_R2_ACCOUNT_ID etc.
-                # Based on user context, we might guess or just look for standard R2 keys.
-                # For now let's check standard keys.
+                # Note: Soundsible naming might be slightly different or same.
+                # Note: Usually REPOSITORY_R2_ACCOUNT_ID etc.
+                # Note: Based on user context, we might guess or just look for standard R2 keys.
+                # Note: For now let's check standard keys.
                 if not config['account_id']: config['account_id'] = env_vals.get('R2_ACCOUNT_ID')
                 if not config['access_key']: config['access_key'] = env_vals.get('R2_ACCESS_KEY_ID')
                 if not config['secret_key']: config['secret_key'] = env_vals.get('R2_SECRET_ACCESS_KEY')
@@ -70,7 +70,7 @@ class CloudSync:
         bucket = self.config['bucket']
         
         try:
-            # List all objects
+            # Note: List all objects
             paginator = self.s3_client.get_paginator('list_objects_v2')
             
             for page in paginator.paginate(Bucket=bucket):
@@ -121,7 +121,7 @@ class CloudSync:
         bucket = self.config['bucket']
         stats = {'uploaded': 0, 'errors': 0, 'merged': 0, 'deleted': 0}
 
-        # 1. Fetch Remote Library
+        # Note: 1. Fetch remote library
         remote_lib = None
         try:
             obj = self.s3_client.get_object(Bucket=bucket, Key='library.json')
@@ -129,40 +129,40 @@ class CloudSync:
             remote_lib = LibraryMetadata.from_json(remote_data)
         except ClientError as e:
             if e.response['Error']['Code'] == "NoSuchKey":
-                # No remote library, start fresh with local
+                # Note: No remote library, start fresh with local
                 pass
             else:
                 return {"error": f"Failed to fetch remote library: {e}"}
 
-        # 2. Merge Logic
-        # We want to keep all remote tracks and add any local tracks that are new.
-        # Track identity is roughly ID.
+        # Note: 2. Merge logic
+        # Note: We want to keep all remote tracks and add any local tracks that are new.
+        # Note: Track identity is roughly ID.
         
         final_tracks = {}
         
-        # Start with remote tracks
+        # Note: Start with remote tracks
         if remote_lib:
             for t in remote_lib.tracks:
                 final_tracks[t.id] = t
                 
-        # Add/Overwrite with Local tracks (Local is authoritative for files we just downloaded)
-        # Actually safer to just add if missing to avoid overwriting metadata edits on cloud?
-        # User said "UPLOADS this music", implying adding new stuff.
+        # Note: Add/overwrite with local tracks (local is authoritative for files we just downloaded)
+        # Note: Actually safer to just add if missing to avoid overwriting metadata edits on cloud?
+        # Note: User said "uploads this music", implying adding new stuff.
         for t in local_library.tracks:
             if t.id not in final_tracks:
                 final_tracks[t.id] = t
                 stats['merged'] += 1
             else:
-                # Optional: Update metadata if strictly newer?
-                # For now, skip if ID exists.
+                # Note: Optional update metadata if strictly newer?
+                # Note: For now, skip if ID exists.
                 pass
 
         merged_list = list(final_tracks.values())
         
-        # 3. Upload Missing Files
-        # We need to check what files corresponding to 'merged_list' are actually present on R2?
-        # CRITICAL FIX: Only add to the final library IF the file actually exists on remote (or was just uploaded).
-        # This prevents "Ghost Tracks" (metadata without audio) which cause 404s in players.
+        # Note: 3. Upload missing files
+        # Note: We need to check what files corresponding to 'merged_list' are actually present on R2?
+        # Note: Critical FIX only add to the final library IF the file actually exists on remote (or was just uploaded).
+        # Note: This prevents "ghost tracks" (metadata without audio) which cause 404s in players.
         
         tracks_dir = self.output_dir / "tracks"
         validated_tracks = []
@@ -175,12 +175,12 @@ class CloudSync:
             
             exists_on_remote = False
             
-            # Check if exists on remote (HeadObject)
+            # Note: Check if exists on remote (headobject)
             try:
                 self.s3_client.head_object(Bucket=bucket, Key=remote_path)
                 exists_on_remote = True
             except ClientError:
-                # Doesn't exist on remote. Check if we have it locally to upload.
+                # Note: Doesn't exist on remote. check if we have it locally to upload.
                 if local_path.exists():
                      if progress_callback: progress_callback(f"Uploading: {track.artist} - {track.title}")
                      success = self.upload_file(local_path, remote_path)
@@ -190,14 +190,14 @@ class CloudSync:
                      else:
                         stats['errors'] += 1
                 else:
-                    # We don't have it locally, and it's not on remote.
-                    # This track is broken (ghost). Skip it.
+                    # Note: We don't have it locally, and it's not on remote.
+                    # Note: This track is broken (ghost). skip it.
                     pass
             
             if exists_on_remote:
                 validated_tracks.append(track)
                 
-                # Delete local file if configured and confirmed on remote
+                # Note: Delete local file if configured and confirmed on remote
                 if delete_local and local_path.exists():
                     try:
                         os.remove(local_path)
@@ -206,11 +206,11 @@ class CloudSync:
                     except Exception as e:
                         print(f"Failed to delete {local_path}: {e}")
         
-        # 4. Push Updated Library (Only validated tracks)
+        # Note: 4. Push updated library (only validated tracks)
         new_lib = LibraryMetadata(
             version=1,
             tracks=validated_tracks,
-            playlists=remote_lib.playlists if remote_lib else {}, # Keep remote playlists
+            playlists=remote_lib.playlists if remote_lib else {}, # Note: Keep remote playlists
             settings=remote_lib.settings if remote_lib else {}
         )
         

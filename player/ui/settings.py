@@ -28,7 +28,7 @@ class SettingsDialog(Adw.PreferencesWindow):
         self.set_modal(True)
         self.set_default_size(600, 500)
         
-        # Create pages
+        # Note: Create pages
         self._create_storage_page()
         self._create_playback_page()
         self._create_appearance_page()
@@ -40,22 +40,22 @@ class SettingsDialog(Adw.PreferencesWindow):
         page.set_title("Storage")
         page.set_icon_name("drive-harddisk-symbolic")
         
-        # Cloud Storage Group
+        # Note: Cloud storage group
         cloud_group = Adw.PreferencesGroup()
         cloud_group.set_title("Cloud Storage")
         cloud_group.set_description("Your music files stored in the cloud")
         
-        # Provider info
+        # Note: Provider info
         provider_name = "Unknown"
         bucket_name = "Unknown"
         if hasattr(self.library_manager, 'provider'):
             provider = self.library_manager.provider
-            # Try different attribute names for bucket
+            # Note: Try different attribute names for bucket
             if hasattr(provider, 'bucket_name'):
                 bucket_name = provider.bucket_name
             elif hasattr(provider, 'bucket'):
                 bucket_name = provider.bucket
-            # Detect provider type
+            # Note: Detect provider type
             provider_type = type(provider).__name__
             if "Cloudflare" in provider_type:
                 provider_name = "Cloudflare R2"
@@ -72,9 +72,9 @@ class SettingsDialog(Adw.PreferencesWindow):
         bucket_row.set_subtitle(bucket_name)
         cloud_group.add(bucket_row)
         
-        # Local Path Change (only if provider is LOCAL)
+        # Note: Local path change (only if provider is LOCAL)
         if provider_name == "Unknown" and hasattr(self.library_manager, 'config'):
-             # Double check provider type from config
+             # Note: Double check provider type from config
              from shared.models import StorageProvider
              if self.library_manager.config.provider == StorageProvider.LOCAL:
                  provider_name = "Local Storage / NAS"
@@ -90,7 +90,7 @@ class SettingsDialog(Adw.PreferencesWindow):
                  path_row.add_suffix(change_btn)
                  cloud_group.add(path_row)
         
-        # Storage usage - calculate on demand
+        # Note: Storage usage - calculate on demand
         self.storage_row = Adw.ActionRow()
         self.storage_row.set_title("Cloud Storage Used")
         self.storage_row.set_subtitle("Click to calculate")
@@ -104,12 +104,12 @@ class SettingsDialog(Adw.PreferencesWindow):
         
         page.add(cloud_group)
         
-        # Local Cache Group
+        # Note: Local cache group
         cache_group = Adw.PreferencesGroup()
         cache_group.set_title("Local Cache")
         cache_group.set_description("Downloaded files stored on your computer")
         
-        # Cache location
+        # Note: Cache location
         cache_path = "Not configured"
         if hasattr(self.library_manager, 'cache') and self.library_manager.cache:
             cache_path = str(self.library_manager.cache.cache_dir)
@@ -119,14 +119,14 @@ class SettingsDialog(Adw.PreferencesWindow):
         location_row.set_subtitle(cache_path)
         cache_group.add(location_row)
         
-        # Cache size
+        # Note: Cache size
         cache_size = self._get_cache_size()
         size_row = Adw.ActionRow()
         size_row.set_title("Cache Size")
         size_row.set_subtitle(cache_size)
         cache_group.add(size_row)
         
-        # Clear cache button
+        # Note: Clear cache button
         clear_row = Adw.ActionRow()
         clear_row.set_title("Clear Cache")
         clear_btn = Gtk.Button(label="Clear")
@@ -137,7 +137,7 @@ class SettingsDialog(Adw.PreferencesWindow):
         
         page.add(cache_group)
         
-        # Danger Zone
+        # Note: Danger zone
         danger_group = Adw.PreferencesGroup()
         danger_group.set_title("Danger Zone")
         danger_group.set_description("Irreversible actions")
@@ -148,7 +148,7 @@ class SettingsDialog(Adw.PreferencesWindow):
         
         nuke_btn = Gtk.Button(label="Nuke Library")
         nuke_btn.set_valign(Gtk.Align.CENTER)
-        nuke_btn.add_css_class("destructive-action") # This is often red in themes
+        nuke_btn.add_css_class("destructive-action") # Note: This is often red in themes
         nuke_btn.connect("clicked", self._on_nuke_library)
         nuke_row.add_suffix(nuke_btn)
         danger_group.add(nuke_row)
@@ -173,17 +173,17 @@ class SettingsDialog(Adw.PreferencesWindow):
         page.set_title("Playback")
         page.set_icon_name("media-playback-start-symbolic")
         
-        # Audio Output Group
+        # Note: Audio output group
         audio_group = Adw.PreferencesGroup()
         audio_group.set_title("Audio Output")
         
-        # Output device selector
+        # Note: Output device selector
         device_row = Adw.ActionRow()
         device_row.set_title("Output Device")
         device_row.set_subtitle("Default system output")
         
         # Note: MPV handles device selection automatically
-        # Advanced users can configure via mpv.conf
+        # Note: Advanced users can configure via MPV.conf
         info_label = Gtk.Label(label="Managed by system")
         info_label.add_css_class("dim-label")
         device_row.add_suffix(info_label)
@@ -191,7 +191,7 @@ class SettingsDialog(Adw.PreferencesWindow):
         audio_group.add(device_row)
         page.add(audio_group)
         
-        # Download Group
+        # Note: Download group
         download_group = Adw.PreferencesGroup()
         download_group.set_title("Downloads")
         
@@ -202,7 +202,7 @@ class SettingsDialog(Adw.PreferencesWindow):
         model = Gtk.StringList.new(["Standard (128k)", "High Quality (320k)", "Ultra (Best Source)"])
         quality_row.set_model(model)
         
-        # Map quality strings to indices
+        # Note: Map quality strings to indices
         quality_map = {"standard": 0, "high": 1, "ultra": 2}
         current_quality = getattr(self.library_manager.config, 'quality_preference', 'high')
         quality_row.set_selected(quality_map.get(current_quality, 1))
@@ -220,11 +220,11 @@ class SettingsDialog(Adw.PreferencesWindow):
         page.set_title("Appearance")
         page.set_icon_name("preferences-desktop-theme-symbolic")
         
-        # Theme Group
+        # Note: Theme group
         theme_group = Adw.PreferencesGroup()
         theme_group.set_title("Theme")
         
-        # Color scheme
+        # Note: Color scheme
         scheme_row = Adw.ActionRow()
         scheme_row.set_title("Color Scheme")
         
@@ -234,7 +234,7 @@ class SettingsDialog(Adw.PreferencesWindow):
         scheme_combo.append("dark", "Dark")
         scheme_combo.append("odst", "ODST")
         
-        # Set to current theme (passed from main window)
+        # Note: Set to current theme (passed from main window)
         scheme_combo.set_active_id(self.current_theme)
         
         scheme_combo.connect("changed", self._on_color_scheme_changed)
@@ -243,11 +243,11 @@ class SettingsDialog(Adw.PreferencesWindow):
         theme_group.add(scheme_row)
         page.add(theme_group)
         
-        # Typography Group
+        # Note: Typography group
         typo_group = Adw.PreferencesGroup()
         typo_group.set_title("Typography")
         
-        # Font size
+        # Note: Font size
         font_row = Adw.ActionRow()
         font_row.set_title("Font Size")
         font_row.set_subtitle("Requires app restart")
@@ -290,7 +290,7 @@ class SettingsDialog(Adw.PreferencesWindow):
         if not hasattr(self.library_manager, 'cache') or not self.library_manager.cache:
             return
         
-        # Confirmation dialog
+        # Note: Confirmation dialog
         dialog = Adw.MessageDialog(transient_for=self)
         dialog.set_heading("Clear Cache?")
         dialog.set_body("This will delete all cached music files. They will be re-downloaded when needed.")
@@ -311,7 +311,7 @@ class SettingsDialog(Adw.PreferencesWindow):
     
     def _on_nuke_library(self, button):
         """Handle nuke library button click."""
-        # Confirmation dialog
+        # Note: Confirmation dialog
         dialog = Adw.MessageDialog(transient_for=self)
         dialog.set_heading("Permanently Delete All Content?")
         dialog.set_body("This will delete ALL music files from your cloud bucket AND your local cache. This action is IRREVERSIBLE.")
@@ -325,11 +325,11 @@ class SettingsDialog(Adw.PreferencesWindow):
         """Handle nuke confirmation."""
         if response == "nuke":
             try:
-                # Show some feedback if possible, or just do it
+                # Note: Show some feedback if possible, or just do it
                 success = self.library_manager.nuke_library()
                 if success:
-                    # Maybe close dialog and show toast? 
-                    # For now just print and hope user sees the change in UI later
+                    # Note: Maybe close dialog and show toast?
+                    # Note: For now just print and hope user sees the change in UI later
                     print("Library nuked successfully")
                 else:
                     print("Failed to nuke library")
@@ -353,7 +353,7 @@ class SettingsDialog(Adw.PreferencesWindow):
             try:
                 if self.library_manager.disconnect_storage(wipe_local=False):
                     print("Disconnected successfully. Please restart the application.")
-                    # In a real app we might want to trigger a restart or return to onboarding
+                    # Note: In a real app we might want to trigger a restart or return to onboarding
                 else:
                     print("Failed to disconnect.")
             except Exception as e:
@@ -364,7 +364,7 @@ class SettingsDialog(Adw.PreferencesWindow):
         import threading
         from gi.repository import GLib
         
-        # Disable button and show loading
+        # Note: Disable button and show loading
         button.set_sensitive(False)
         self.storage_row.set_subtitle("Calculating...")
         
@@ -379,7 +379,7 @@ class SettingsDialog(Adw.PreferencesWindow):
                     else:
                         size_str = f"{size_mb / 1024:.2f} GB"
                     
-                    # Update UI on main thread
+                    # Note: Update UI on main thread
                     GLib.idle_add(self._update_storage_display, size_str, button)
                 else:
                     GLib.idle_add(self._update_storage_display, "Provider not available", button)
@@ -407,27 +407,27 @@ class SettingsDialog(Adw.PreferencesWindow):
                     print(f"Switching local storage to: {new_path}")
                     
                     if self.library_manager.config:
-                        # 1. Update Config
+                        # Note: 1. Update config
                         self.library_manager.config.endpoint = new_path
-                        # Ensure bucket is '.' for flat structure in new folder
+                        # Note: Ensure bucket is '.' for flat structure in new folder
                         self.library_manager.config.bucket = "."
                         
-                        # 2. Save Config
+                        # Note: 2. Save config
                         from shared.constants import DEFAULT_CONFIG_DIR
                         config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
                         with open(config_path, 'w') as f:
                             f.write(self.library_manager.config.to_json())
                             
-                        # 3. Re-init Network/Provider
+                        # Note: 3. Re-init network/provider
                         self.library_manager._init_network()
                         
-                        # 4. Trigger Sync and Refresh
+                        # Note: 4. Trigger sync and refresh
                         self.library_manager.sync_library()
                         if hasattr(self.library_manager, 'refresh_callback') and self.library_manager.refresh_callback:
                             self.library_manager.refresh_callback()
                             
-                        # 5. Reload Settings page to show new path
-                        # Simplified: just close and let user re-open or update label
+                        # Note: 5. Reload settings page to show new path
+                        # Note: Simplified just close and let user re-open or update label
                         self.close()
                         
             except Exception as e:
@@ -451,7 +451,7 @@ class SettingsDialog(Adw.PreferencesWindow):
         
         if self.library_manager.config:
             self.library_manager.config.quality_preference = quality
-            # Save config to disk
+            # Note: Save config to disk
             from shared.constants import DEFAULT_CONFIG_DIR
             config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
             with open(config_path, 'w') as f:

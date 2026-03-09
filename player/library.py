@@ -24,7 +24,7 @@ def _output_dir_for_library() -> Optional[Path]:
             return Path(out).expanduser().resolve()
     except Exception:
         pass
-    # Canonical path set from webapp Settings: same file for all processes regardless of cwd
+    # Note: Canonical path set from webapp settings same file for all processes regardless of cwd
     try:
         config_dir = Path(DEFAULT_CONFIG_DIR).expanduser()
         out_file = config_dir / "output_dir"
@@ -63,7 +63,7 @@ class LibraryManager:
         self.db = DatabaseManager()
         self._manifest_mtime = 0
         
-        # Initialize Cache
+        # Note: Initialize cache
         try:
              from .cache import CacheManager
              self.cache = CacheManager()
@@ -88,7 +88,7 @@ class LibraryManager:
                     
                 self.config = PlayerConfig.from_dict(data)
                 
-                # Migration: If it was plain text on disk, save it back encrypted
+                # Note: Migration if it was plain text on disk, save it back encrypted
                 if not data.get('is_encrypted', False):
                     self._log("Migrating config to encrypted format...")
                     with open(config_path, 'w') as f:
@@ -99,7 +99,7 @@ class LibraryManager:
     def _init_network(self):
         """Initialize storage provider."""
         if self.config:
-            # Reconstruct credentials from config
+            # Note: Reconstruct credentials from config
             creds = {
                 'access_key_id': self.config.access_key_id,
                 'secret_access_key': self.config.secret_access_key,
@@ -109,7 +109,7 @@ class LibraryManager:
                 'application_key': self.config.secret_access_key
             }
             
-            # Provider-specific credential adjustments
+            # Note: Provider-specific credential adjustments
             if self.config.provider == StorageProvider.CLOUDFLARE_R2 and self.config.endpoint:
                 try:
                     creds['account_id'] = self.config.endpoint.split('//')[1].split('.')[0]
@@ -117,7 +117,7 @@ class LibraryManager:
             elif self.config.provider == StorageProvider.LOCAL:
                 creds = {'base_path': self.config.endpoint}
             elif self.config.provider == StorageProvider.BACKBLAZE_B2:
-                # B2 uses application_key_id/application_key
+                # Note: B2 uses application_key_id/application_key
                 creds = {
                     'application_key_id': self.config.access_key_id,
                     'application_key': self.config.secret_access_key,
@@ -133,10 +133,10 @@ class LibraryManager:
                 )
                 raise
             
-            # Ensure we know the bucket name
+            # Note: Ensure we know the bucket name
             self.provider.bucket_name = self.config.bucket
             if hasattr(self.provider, 'bucket') and self.provider.bucket is None:
-                # For B2 specific setup if needed
+                # Note: For B2 specific setup if needed
                  try:
                     self.provider.bucket = self.provider.api.get_bucket_by_name(self.config.bucket)
                  except: pass
@@ -154,16 +154,16 @@ class LibraryManager:
         try:
             json_str = self.metadata.to_json()
             
-            # 1. Local Cache file
+            # Note: 1. Local cache file
             cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             cache_path.write_text(json_str)
             
-            # 2. Remote Cloud Storage
+            # Note: 2. Remote cloud storage
             if self.provider:
                 self.provider.save_library(self.metadata)
                 
-            # 3. Local SQLite DB
+            # Note: 3. Local sqlite DB
             self.db.sync_from_metadata(self.metadata)
             
             return True
@@ -178,15 +178,15 @@ class LibraryManager:
         2. Merge with any local deep-scanned tracks
         3. Save unified manifest to cloud and local cache
         """
-        # Allow override or use class default
+        # Note: Allow override or use class default
         is_silent = silent if silent is not None else self.silent
         def _log_local(msg):
             if not is_silent: print(msg)
 
         cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
 
-        # Always prefer the path set in Settings (output_dir): if it has library.json, use it first.
-        # This makes the webapp/player "music path" the single source of truth when that path has a library.
+        # Note: Always prefer the path set in settings (output_dir) if it has library.JSON, use it first.
+        # Note: This makes the webapp/player "music path" the single source of truth when that path has a library.
         out_dir = _output_dir_for_library()
         if out_dir:
             path_at_music = Path(out_dir).expanduser().resolve() / LIBRARY_METADATA_FILENAME
@@ -215,13 +215,13 @@ class LibraryManager:
         try:
             _log_local("Syncing library (Universal 3-way merge)...")
             
-            # 1. Get Remote
+            # Note: 1. Get remote
             remote_json = self.provider.download_json(LIBRARY_METADATA_FILENAME)
             remote_lib = None
             if remote_json:
                 remote_lib = LibraryMetadata.from_json(remote_json)
             
-            # 2. Get Local (from cache/previous sync)
+            # Note: 2. Get local (from cache/previous sync)
             local_lib = None
             if cache_path.exists():
                 local_content = cache_path.read_text().strip()
@@ -231,25 +231,25 @@ class LibraryManager:
                     except Exception as e:
                         _log_local(f"Warning: Cached library corrupted: {e}")
             
-            # 3. Merge Logic
+            # Note: 3. Merge logic
             if not remote_lib and not local_lib:
                 _log_local("Initializing fresh library metadata...")
                 self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-                # Save immediately to initialize the remote/local files
+                # Note: Save immediately to initialize the remote/local files
                 self._save_metadata()
                 return True
 
-            # Don't use config-dir cache when the configured source has no library (e.g. new system,
-            # same path as previous install but no library.json there). Otherwise we show stale
-            # tracks from another machine that can't be played.
+            # Note: Don't use config-dir cache when the configured source has no library (e.g. new system,
+            # Note: Same path as previous install but no library.JSON there). otherwise we show stale
+            # Note: Tracks from another machine that can't be played.
             if not remote_lib and local_lib and self.config and self.config.provider == StorageProvider.LOCAL:
                 _log_local("Configured music path has no library.json; ignoring stale cache and starting fresh.")
                 self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
                 self._save_metadata()
                 return True
 
-            # If we would use cache but cached tracks don't exist at current OUTPUT_DIR, start fresh
-            # (e.g. new clone, same user, cache from 2 weeks ago, music path set to different drive)
+            # Note: If we would use cache but cached tracks don't exist at current output_dir, start fresh
+            # Note: (E.g. new clone, same user, cache from 2 weeks ago, music path set to different drive)
             if not remote_lib and local_lib and self._is_cache_likely_stale(local_lib):
                 _log_local("Cached library does not match current music path; starting fresh.")
                 self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
@@ -261,22 +261,22 @@ class LibraryManager:
             elif not local_lib:
                 self.metadata = remote_lib
             else:
-                # Merge: Combine tracks by ID, keeping newest metadata
-                # We prioritize remote version but preserve local_path for this machine
+                # Note: Merge combine tracks by ID, keeping newest metadata
+                # Note: We prioritize remote version but preserve local_path for this machine
                 
-                # START WITH REMOTE - This is the source of truth for library content
+                # Note: START WITH remote - this is the source of truth for library content
                 track_map = {t.id: t for t in remote_lib.tracks}
                 
-                # Now layer on local metadata (specifically paths)
+                # Note: Now layer on local metadata (specifically paths)
                 for lt in local_lib.tracks:
                     if lt.id in track_map:
-                        # If we have a local path for a known track, use it (if valid)
+                        # Note: If we have a local path for a known track, use it (if valid)
                         if lt.local_path and os.path.exists(lt.local_path):
                             track_map[lt.id].local_path = lt.local_path
                             track_map[lt.id].is_local = True
                     else:
-                        # This track is ONLY in local.
-                        # It's likely a new local scan that hasn't been uploaded yet.
+                        # Note: This track is ONLY in local.
+                        # Note: It's likely A new local scan that hasn't been uploaded yet.
                         if lt.local_path and os.path.exists(lt.local_path):
                             track_map[lt.id] = lt
                 
@@ -284,7 +284,7 @@ class LibraryManager:
                 remote_lib.version = max(remote_lib.version, local_lib.version) + 1
                 self.metadata = remote_lib
 
-            # 4. Save Back using unified method
+            # Note: 4. Save back using unified method
             success = self._save_metadata()
             if success:
                 _log_local(f"✓ Sync complete: {len(self.metadata.tracks)} tracks unified.")
@@ -305,18 +305,18 @@ class LibraryManager:
         2. Cache path (if exists)
         3. Cloud URL (signed/presigned)
         """
-        # 1. Resolve from current OUTPUT_DIR (no stored path)
+        # Note: 1. Resolve from current output_dir (no stored path)
         resolved = resolve_local_track_path(track)
         if resolved:
             return resolved
 
-        # 2. Cache
+        # Note: 2. Cache
         if self.cache:
             cached_path = self.cache.get_cached_path(track.id)
             if cached_path and os.path.exists(cached_path):
                 return cached_path
                 
-        # 3. Cloud Provider
+        # Note: 3. Cloud provider
         if self.provider:
             remote_key = f"tracks/{track.id}.{track.format}"
             return self.provider.get_file_url(remote_key)
@@ -330,14 +330,14 @@ class LibraryManager:
         from player.cover_manager import CoverFetchManager
         manager = CoverFetchManager.get_instance()
         
-        # 1. Check if already cached for THIS track
+        # Note: 1. Check if already cached for THIS track
         path = manager.get_cached_path(track.id)
         if path and os.path.exists(path):
             return path
             
-        # 2. Fallback: Check if ANY track in the same album has a cached cover
-        # (This handles cases where the user requests a track without embedded art 
-        # but another track in the same album has it cached)
+        # Note: 2. Fallback check if ANY track in the same album has a cached cover
+        # Note: (This handles cases where the user requests a track without embedded art
+        # Note: But another track in the same album has it cached)
         try:
             album_tracks = self.db.get_tracks_by_album(track.album, track.artist)
             for t in album_tracks:
@@ -347,8 +347,8 @@ class LibraryManager:
                     return path
         except: pass
 
-        # 3. Trigger async fetch if not found at all
-        # Pass the local track path if available for embedded extraction
+        # Note: 3. Trigger async fetch if not found at all
+        # Note: Pass the local track path if available for embedded extraction
         embedded_path = self.get_track_url(track)
         if embedded_path and not embedded_path.startswith('http'):
             manager.request_cover(track, embedded_cache_info=embedded_path)
@@ -396,7 +396,7 @@ class LibraryManager:
             t = metadata.tracks[i]
             if resolve_local_track_path(t):
                 found += 1
-        # If we have 5+ tracks and none (or 1) exist at current path, cache is stale
+        # Note: If we have 5+ tracks and none (or 1) exist at current path, cache is stale
         if len(metadata.tracks) >= 5 and found <= 1:
             return True
         return False
@@ -447,20 +447,20 @@ class LibraryManager:
         try:
             self._log(f"Updating track: {track.title}")
             
-            # 1. Get local file
+            # Note: 1. Get local file
             local_path = None
             
-            # Try cache first
+            # Note: Try cache first
             if self.cache:
                 cached = self.cache.get_cached_path(track.id)
                 if cached:
-                    # Copy to temp to avoid messing up cache directly
+                    # Note: Copy to temp to avoid messing up cache directly
                     fd, temp_path = tempfile.mkstemp(suffix=f".{track.format}")
                     os.close(fd)
                     shutil.copy2(cached, temp_path)
                     local_path = temp_path
             
-            # If not in cache, download it
+            # Note: If not in cache, download it
             if not local_path and self.provider:
                 remote_key = f"tracks/{track.id}.{track.format}"
                 fd, temp_path = tempfile.mkstemp(suffix=f".{track.format}")
@@ -475,15 +475,15 @@ class LibraryManager:
             if not local_path:
                 return False
                 
-            # 2. Modify File
+            # Note: 2. Modify file
             changes_made = False
             
-            # Update Tags
+            # Note: Update tags
             if new_metadata:
                 if AudioProcessor.update_tags(local_path, new_metadata):
                     changes_made = True
             
-            # Embed Art
+            # Note: Embed art
             if cover_path:
                 self._log(f"Embedding artwork from {cover_path}...")
                 if AudioProcessor.embed_artwork(local_path, cover_path):
@@ -492,40 +492,40 @@ class LibraryManager:
             if not changes_made:
                 self._log("No changes applied.")
                 os.remove(local_path)
-                return True # Success but nothing to do
+                return True # Note: Success but nothing to do
                 
-            # 3. Process as "New" Upload
-            # We use UploadEngine logic to re-hash and upload
+            # Note: 3. Process as "new" upload
+            # Note: We use uploadengine logic to re-hash and upload
             self._log("Re-processing file...")
             uploader = UploadEngine(self.config)
             
-            # Hack: We use _process_single_file but we need to pass a valid source_root
-            # We treat the temp dir as root
+            # Note: Hack we use _process_single_file but we need to pass a valid source_root
+            # Note: We treat the temp dir as root
             source_root = Path(local_path).parent
             
             new_track, uploaded = uploader._process_single_file(
                 Path(local_path),
                 source_root,
-                compress=False, # Don't re-compress if possible, just upload
+                compress=False, # Note: Don't re-compress if possible, just upload
                 bitrate=track.bitrate or 320,
-                existing_tracks={}, # Clear to force new object construction
-                cover_image_path=None, # Already embedded
+                existing_tracks={}, # Note: Clear to force new object construction
+                cover_image_path=None, # Note: Already embedded
                 auto_fetch=False,
                 force_reprocess=True
             )
             
             if new_track:
-                # Add the manually set album_artist if it was passed in new_metadata
+                # Note: Add the manually set album_artist if it was passed in new_metadata
                 if 'album_artist' in new_metadata:
                     new_track.album_artist = new_metadata['album_artist']
                 elif not new_track.album_artist:
-                    # Fallback to existing if not re-extracted
+                    # Note: Fallback to existing if not re-extracted
                     new_track.album_artist = track.album_artist
                 
-                # 4. Update Library
+                # Note: 4. Update library
                 self._log("Updating library registry...")
                 
-                # Clear cache for this track so new version with cover will be downloaded
+                # Note: Clear cache for this track so new version with cover will be downloaded
                 if self.cache:
                     old_cache_key = f"tracks/{track.id}.{track.format}"
                     cache_file = self.cache.cache_dir / old_cache_key.replace('/', '_')
@@ -533,28 +533,28 @@ class LibraryManager:
                         self._log(f"Clearing cache for updated track...")
                         os.remove(cache_file)
                 
-                # Remove old track
+                # Note: Remove old track
                 self.metadata.tracks = [t for t in self.metadata.tracks if t.id != track.id]
                 
-                # Add new track
+                # Note: Add new track
                 self.metadata.tracks.append(new_track)
                 self.metadata.version += 1
                 
-                # Save changes everywhere
+                # Note: Save changes everywhere
                 self._save_metadata()
                 
-                # 5. Cleanup Old Remote File (if hash changed)
+                # Note: 5. Cleanup old remote file (if hash changed)
                 if new_track.id != track.id:
                     self._log("Removing old file from storage...")
                     old_key = f"tracks/{track.id}.{track.format}"
                     self.provider.delete_file(old_key)
 
-                # Update Cache Identically
+                # Note: Update cache identically
                 if self.cache:
                     self._log("Updating cache with new version...")
-                    # We move the local_path to cache, so we don't need to delete it later
-                    # cache.add_to_cache(id, path, move=True/False)
-                    # We used a temp path, let's copy it to cache to be safe
+                    # Note: We move the local_path to cache, so we don't need to delete it later
+                    # Note: Cache.add_to_cache(ID, path, move=true/false)
+                    # Note: We used A temp path, let's copy it to cache to be safe
                     self.cache.add_to_cache(new_track.id, local_path, move=False)
 
                 os.remove(local_path)
@@ -582,11 +582,11 @@ class LibraryManager:
         self._log(f"Deleting track: {track.title} ({track.id})...")
         
         try:
-            # 1. Remove from Cache
+            # Note: 1. Remove from cache
             if self.cache:
                 self.cache.remove_track(track.id)
                 
-            # 2. Remove from Cloud Storage
+            # Note: 2. Remove from cloud storage
             if self.provider:
                 remote_key = f"tracks/{track.id}.{track.format}"
                 if self.provider.file_exists(remote_key):
@@ -594,15 +594,15 @@ class LibraryManager:
                     if not self.provider.delete_file(remote_key):
                         self._log("Failed to delete remote file. Proceeding anyway.")
                 
-                # Check for cover art if stored separately? 
-                # Currently cover art seems embedded or fetched from URL, but if we stored it in S3 we should delete it too.
-                # The Track model has cover_art_key.
+                # Note: Check for cover art if stored separately?
+                # Note: Currently cover art seems embedded or fetched from URL, but if we stored it in S3 we should delete it too.
+                # Note: The track model has cover_art_key.
                 if track.cover_art_key:
                     self._log(f"Deleting cover art: {track.cover_art_key}")
                     self.provider.delete_file(track.cover_art_key)
 
-            # 3. Update Library Metadata
-            # Remove from track list
+            # Note: 3. Update library metadata
+            # Note: Remove from track list
             original_count = len(self.metadata.tracks)
             self.metadata.tracks = [t for t in self.metadata.tracks if t.id != track.id]
             
@@ -610,12 +610,12 @@ class LibraryManager:
                 self._log("Removed track from metadata.")
                 self.metadata.version += 1
                 
-                # Remove from playlists
+                # Note: Remove from playlists
                 for name, playlist in self.metadata.playlists.items():
                     if track.id in playlist:
                         self.metadata.playlists[name] = [pid for pid in playlist if pid != track.id]
 
-                # Save changes everywhere
+                # Note: Save changes everywhere
                 if self._save_metadata():
                     self._log("Track deleted successfully.")
                     return True
@@ -639,7 +639,7 @@ class LibraryManager:
         """
         self._log("!!! NUKE INITIATED !!!")
         try:
-            # 1. Clear Cloud Storage
+            # Note: 1. Clear cloud storage
             if self.provider:
                 self._log("Deleting all files from cloud storage...")
                 files = self.provider.list_files()
@@ -650,12 +650,12 @@ class LibraryManager:
                     self._log(f"  Deleting: {remote_key}")
                     self.provider.delete_file(remote_key)
             
-            # 2. Clear Local Cache
+            # Note: 2. Clear local cache
             if self.cache:
                 self._log("Clearing local media cache...")
                 self.cache.clear_cache()
             
-            # 3. Reset Memory Metadata and persist empty state (disk, cloud, DB)
+            # Note: 3. Reset memory metadata and persist empty state (disk, cloud, DB)
             self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
             self._log("Clearing local database and saving empty manifest...")
             self._save_metadata()
@@ -677,24 +677,24 @@ class LibraryManager:
         try:
             config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
             
-            # 1. Clear local metadata if requested
+            # Note: 1. Clear local metadata if requested
             if wipe_local:
                 self._log("Wiping local database and cache as requested...")
                 self.db.clear_all()
                 if self.cache:
                     self.cache.clear_cache()
                 
-                # Remove local library.json
+                # Note: Remove local library.JSON
                 metadata_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
                 if metadata_path.exists():
                     os.remove(metadata_path)
 
-            # 2. Remove configuration file
+            # Note: 2. Remove configuration file
             if config_path.exists():
                 os.remove(config_path)
                 self._log("Configuration file removed. You are now disconnected.")
             
-            # 3. Reset internal state
+            # Note: 3. Reset internal state
             self.config = None
             self.provider = None
             self.metadata = None

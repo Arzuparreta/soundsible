@@ -87,13 +87,13 @@ class LocalStorageProvider(S3StorageProvider):
         try:
             dest_path = self._get_path(remote_key)
             
-            # Skip if same file
+            # Note: Skip if same file
             if Path(local_path).resolve() == dest_path.resolve():
                 return True
 
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Simple copy
+            # Note: Simple copy
             shutil.copy2(local_path, dest_path)
             
             if progress_callback:
@@ -112,7 +112,7 @@ class LocalStorageProvider(S3StorageProvider):
             if not src_path.exists():
                 return False
             
-            # Skip if same
+            # Note: Skip if same
             if src_path.resolve() == Path(local_path).resolve():
                 return True
                 

@@ -11,12 +11,12 @@ from typing import List, Dict, Optional, Tuple, Any
 from concurrent.futures import ThreadPoolExecutor
 
 from shared.models import PlayerConfig, Track, LibraryMetadata
-# from setup_tool.cloud import CloudStorage  <-- REMOVED
+# Note: From setup_tool.cloud import cloudstorage <-- removed
 from setup_tool.provider_factory import StorageProviderFactory
 from setup_tool.audio import AudioProcessor
 from shared.constants import DEFAULT_MP3_BITRATE
 
-# Optional progress reporting
+# Note: Optional progress reporting
 try:
     from rich.progress import Progress
 except ImportError:
@@ -29,32 +29,32 @@ class UploadEngine:
     def __init__(self, config: PlayerConfig):
         self.config = config
         
-        # Initialize storage provider
+        # Note: Initialize storage provider
         self.storage = StorageProviderFactory.create(self.config.provider)
         
-        # Authenticate using config credentials
+        # Note: Authenticate using config credentials
         creds = {
             'access_key_id': self.config.access_key_id,
             'secret_access_key': self.config.secret_access_key,
             'region': self.config.region,
             'endpoint': self.config.endpoint,
-            # B2 compatibility mappings if needed
+            # Note: B2 compatibility mappings if needed
             'application_key_id': self.config.access_key_id, 
             'application_key': self.config.secret_access_key
         }
 
-        # R2 specific: Need to extract account_id from endpoint
+        # Note: R2 specific need to extract account_id from endpoint
         if self.config.provider.name == 'CLOUDFLARE_R2' and self.config.endpoint:
             try:
-                # Endpoint format: https://<account_id>.r2.cloudflarestorage.com
+                # Note: Endpoint format https //<account_id>.r2.cloudflarestorage.com
                 creds['account_id'] = self.config.endpoint.split('//')[1].split('.')[0]
             except IndexError:
-                pass # Should probably log this warning
+                pass # Note: Should probably log this warning
         
         if not self.storage.authenticate(creds):
             raise ValueError("Failed to authenticate storage provider with cached config")
             
-        # Ensure bucket exists/is selectable
+        # Note: Ensure bucket exists/is selectable
         self.storage.bucket_name = self.config.bucket
 
 
@@ -94,7 +94,7 @@ class UploadEngine:
         if not source_dir.exists():
             raise FileNotFoundError(f"Directory not found: {source_path}")
 
-        # 1. Scan files
+        # Note: 1. Scan files
         if progress:
             scan_task = progress.add_task("[cyan]Scanning files...", total=None)
         
@@ -106,7 +106,7 @@ class UploadEngine:
         if not audio_files:
             return None
 
-        # 2. Fetch remote library to check for duplicates
+        # Note: 2. Fetch remote library to check for duplicates
         if progress:
             sync_task = progress.add_task("[cyan]Syncing library...", total=None)
             
@@ -116,8 +116,8 @@ class UploadEngine:
         if progress:
             progress.update(sync_task, completed=100, visible=False)
 
-        # 3. Process and Upload
-        # Create a map of existing tracks to merge updates into
+        # Note: 3. Process and upload
+        # Note: Create a map of existing tracks to merge updates into
         track_map = {t.id: t for t in existing_library.tracks}
         
         if progress:
@@ -141,7 +141,7 @@ class UploadEngine:
                 try:
                     result_track, uploaded = future.result()
                     if result_track:
-                        # Add or update the track in the map
+                        # Note: Add or update the track in the map
                         track_map[result_track.id] = result_track
                     
                     if progress:
@@ -149,7 +149,7 @@ class UploadEngine:
                 except Exception as e:
                     print(f"Error processing file: {e}")
 
-        # 4. Update Library Manifest
+        # Note: 4. Update library manifest
         new_version = existing_library.version + 1
         updated_tracks = list(track_map.values())
         updated_library = LibraryMetadata(
@@ -159,7 +159,7 @@ class UploadEngine:
             settings=existing_library.settings
         )
         
-        # Save library to cloud
+        # Note: Save library to cloud
         self.storage.save_library(updated_library)
 
         return updated_library
@@ -174,40 +174,40 @@ class UploadEngine:
         Process a single audio file: hash, compress, embed art, upload.
         """
         try:
-            # Calculate hash first to check for duplicates
+            # Note: Calculate hash first to check for duplicates
             file_hash = AudioProcessor.calculate_hash(str(file_path))
             
-            # Check for duplicates, BUT allow overwrite if:
-            # 1. We are manually setting a cover (Allows fixing missing covers by re-uploading same file)
-            # 2. force_reprocess is True (Explicitly requested update)
+            # Note: Check for duplicates, BUT allow overwrite if details
+            # Note: 1. We are manually setting a cover (allows fixing missing covers by re-uploading same file)
+            # Note: 2. Force_reprocess is true (explicitly requested update)
             if file_hash in existing_tracks and not cover_image_path and not force_reprocess:
                 return existing_tracks[file_hash], False
 
-            # Extract metadata
+            # Note: Extract metadata
             metadata = AudioProcessor.extract_metadata(str(file_path))
             
-            # Auto-Fetch / Cover Logic
+            # Note: Auto-fetch / cover logic
             fetched_cover_path = None
             if auto_fetch and not cover_image_path and not metadata.get('cover_art', False):
                 try:
                     from setup_tool.metadata import search_itunes, download_image
                     import tempfile
                     
-                    # Construct query with progressive fallbacks
+                    # Note: Construct query with progressive fallbacks
                     queries = []
                     
-                    # 1. Artist + Title (Best)
+                    # Note: 1. Artist + title (best)
                     if metadata['artist'] != 'Unknown Artist' and metadata['title'] != 'Unknown Title':
                          queries.append(f"{metadata['artist']} {metadata['title']}")
                     
-                    # 2. Filename cleaned (smarter)
+                    # Note: 2. Filename cleaned (smarter)
                     stem = file_path.stem
-                    # Remove "Original Soundtrack", "OST", etc
+                    # Note: Remove "original soundtrack", "OST", etc
                     stem = re.sub(r'(?i)original soundtrack|ost', '', stem)
-                    # Remove track numbers "01 ", "04-"
+                    # Note: Remove track numbers "01 ", "04-"
                     stem = re.sub(r'^\d+\s*[-_.]?\s*', '', stem)
                     
-                    # Strategy 3: Hyphen Split
+                    # Note: Strategy 3 hyphen split
                     if ' - ' in file_path.stem:
                         parts = file_path.stem.split(' - ')
                         if len(parts) >= 2:
@@ -218,16 +218,16 @@ class UploadEngine:
                             possible_artist = parts[0].replace('_', ' ').strip()
                             queries.append(f"{possible_artist} {possible_title}")
 
-                    # Replace separators (Strategy 2 cont)
+                    # Note: Replace separators (strategy 2 cont)
                     stem = stem.replace('_', ' ').replace('-', ' ')
                     stem = " ".join(stem.split())
                     queries.append(stem)
                     
-                    # 4. Simple Filename (last resort)
+                    # Note: 4. Simple filename (last resort)
                     if stem != file_path.stem:
                         queries.append(file_path.stem.replace('_', ' '))
 
-                    # Try queries until one works
+                    # Note: Try queries until one works
                     results = None
                     for q in queries:
                         if len(q) < 3: continue 
@@ -245,17 +245,17 @@ class UploadEngine:
                 except Exception as e:
                     print(f"Auto-fetch failed for {file_path.name}: {e}")
 
-            # Determine active cover source
+            # Note: Determine active cover source
             active_cover_path = cover_image_path or fetched_cover_path
             
-            # Logic: If we need to embed art we might need a temp copy
+            # Note: Logic if we need to embed art we might need a temp copy
             working_file_path = file_path
             is_temp_copy = False
             
             compression_needed, _ = AudioProcessor.should_compress(str(file_path))
             will_compress = compress and compression_needed
             
-            # Case 1: Embedding into original format (no compression)
+            # Note: Case 1 embedding into original format (no compression)
             if active_cover_path and not will_compress:
                 import shutil
                 import tempfile
@@ -267,7 +267,7 @@ class UploadEngine:
                 
                 AudioProcessor.embed_artwork(str(working_file_path), active_cover_path)
             
-            # Compression decision
+            # Note: Compression decision
             should_compress, reason = AudioProcessor.should_compress(str(working_file_path))
             final_file_path = working_file_path
             is_compressed_copy = False
@@ -284,51 +284,51 @@ class UploadEngine:
                     metadata['format'] = 'mp3'
                     metadata['bitrate'] = bitrate
                     
-                    # Embed art into the NEW mp3 if we have it
+                    # Note: Embed art into the NEW mp3 if we have it
                     if active_cover_path:
                          AudioProcessor.embed_artwork(str(final_file_path), active_cover_path)
             
-            # Use temp copy if no compression happened
+            # Note: Use temp copy if no compression happened
             if is_temp_copy and not is_compressed_copy:
                  final_file_path = working_file_path
 
-            # Upload
+            # Note: Upload details
             track_id = file_hash
             remote_key = f"tracks/{track_id}.{metadata['format']}"
             
             uploaded = self.storage.upload_file(str(final_file_path), remote_key)
             
-            # For local providers, we want the absolute path to the file in the "bucket"
+            # Note: For local providers, we want the absolute path to the file in the "bucket"
             final_local_path = None
             if self.config.provider.value == 'local':
                 if hasattr(self.storage, '_get_path'):
                     final_local_path = str(self.storage._get_path(remote_key).absolute())
             
-            # Update metadata with remote URL? No, URL is generated.
-            # But we might want size
+            # Note: Update metadata with remote URL? no, URL is generated.
+            # Note: But we might want size
             metadata['size'] = os.path.getsize(final_file_path)
 
-             # Cleanup temp files
+             # Note: Cleanup temp files
             if is_compressed_copy:
                 os.remove(final_file_path)
             
             if is_temp_copy:
                  os.remove(working_file_path)
 
-            # Cleanup fetched cover
+            # Note: Cleanup fetched cover
             if fetched_cover_path and os.path.exists(fetched_cover_path):
                 os.remove(fetched_cover_path)
             
             if not uploaded:
                 return None, False
 
-            # Create Track object
-            # Validate metadata fields are not None
+            # Note: Create track object
+            # Note: Validate metadata fields are not none
             title = metadata.get('title', 'Unknown') or 'Unknown'
             artist = metadata.get('artist', 'Unknown') or 'Unknown' 
             album = metadata.get('album', 'Unknown') or 'Unknown'
             
-            # Calculate original filename relative to source_root safely
+            # Note: Calculate original filename relative to source_root safely
             try:
                 orig_name = str(file_path.relative_to(source_root))
             except ValueError:

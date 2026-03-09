@@ -47,9 +47,9 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
     for i, track in enumerate(library.tracks):
         if limit > 0 and optimized_count >= limit:
             log(f"Limit of {limit} reached.")
-            updated_tracks.append(track) # Append the rest? No, we should break and append the rest unmodified
-            # Actually if we rebuild list, we must process all
-            # So if limit reached, we just skip optimization logic but append track
+            updated_tracks.append(track) # Note: Append the rest? no, we should break and append the rest unmodified
+            # Note: Actually if we rebuild list, we must process all
+            # Note: So if limit reached, we just skip optimization logic but append track
             updated_tracks.append(track)
             continue
 
@@ -62,12 +62,12 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
             
         duration, bitrate, size = AudioProcessor.get_audio_details(str(original_file))
         
-        # Threshold: if bitrate > 140kbps
+        # Note: Threshold if bitrate > 140kbps
         if bitrate > 140:
             log(f"[{i+1}/{total_tracks}] Optimizing: {track.artist} - {track.title} ({bitrate}kbps -> 128kbps)...")
             
             if dry_run:
-                # Estimate savings (approx 60% for 320->128)
+                # Note: Estimate savings (approx 60% for 320->128)
                 est_saving = size * 0.6
                 log(f"   -> (Dry Run) Would save approx {est_saving / 1024 / 1024:.2f} MB")
                 saved_space += est_saving
@@ -139,7 +139,7 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
         log(f"Estimated Space Savings: {saved_space / 1024 / 1024:.2f} MB")
         return
 
-    # Save logic
+    # Note: Save logic
     if optimized_count > 0:
         library.tracks = updated_tracks
         shutil.copy(json_path, str(json_path) + ".bak")

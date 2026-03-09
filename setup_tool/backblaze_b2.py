@@ -39,7 +39,7 @@ class BackblazeB2Provider(S3StorageProvider):
                 credentials['application_key']
             )
             
-            # Set bucket if provided
+            # Note: Set bucket if provided
             if 'bucket' in credentials:
                 self.bucket_name = credentials['bucket']
                 self.bucket = self.api.get_bucket_by_name(self.bucket_name)
@@ -54,7 +54,7 @@ class BackblazeB2Provider(S3StorageProvider):
                      region: Optional[str] = None) -> Dict[str, Any]:
         """Create B2 bucket."""
         try:
-            # B2 bucket types: allPrivate, allPublic
+            # Note: B2 bucket types allprivate, allpublic
             bucket_type = 'allPublic' if public else 'allPrivate'
             
             self.bucket = self.api.create_bucket(
@@ -66,7 +66,7 @@ class BackblazeB2Provider(S3StorageProvider):
             )
             self.bucket_name = bucket_name
             
-            # Get download URL
+            # Note: Get download URL
             auth_info = self.api.account_info
             download_url = auth_info.get_download_url()
             
@@ -114,7 +114,7 @@ class BackblazeB2Provider(S3StorageProvider):
             
             file_size = os.path.getsize(local_path)
             
-            # Progress listener
+            # Note: Progress listener
             class ProgressListener:
                 def __init__(self, callback, total_bytes, file_name):
                     self.callback = callback
@@ -132,7 +132,7 @@ class BackblazeB2Provider(S3StorageProvider):
             
             listener = ProgressListener(progress_callback, file_size, os.path.basename(local_path)) if progress_callback else None
             
-            # Upload with automatic large file handling
+            # Note: Upload with automatic large file handling
             self.bucket.upload_local_file(
                 local_file=local_path,
                 file_name=remote_key,
@@ -153,11 +153,11 @@ class BackblazeB2Provider(S3StorageProvider):
             if not self.bucket:
                 raise ValueError("No bucket selected.")
             
-            # Get file info first
+            # Note: Get file info first
             file_version = self.bucket.get_file_info_by_name(remote_key)
             file_size = file_version.size
             
-            # Progress listener
+            # Note: Progress listener
             class ProgressListener:
                 def __init__(self, callback, total_bytes, file_name):
                     self.callback = callback
@@ -237,7 +237,7 @@ class BackblazeB2Provider(S3StorageProvider):
             if not self.bucket:
                 return ""
             
-            # B2 presigned URLs
+            # Note: B2 presigned urls
             auth_token = self.api.get_download_authorization(
                 self.bucket_name,
                 remote_key,

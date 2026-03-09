@@ -21,7 +21,7 @@ class Store {
             favorites: this.load('favorites', []),
             playlists: this.load('playlists', {}),
             queue: [],
-            repeatMode: 'off', // off = no repeat, one = infinite repeat of current song, once = repeat current song one time then continue
+            repeatMode: 'off', // Note: Off = no repeat, one = infinite repeat of current song, once = repeat current song one time then continue
             shuffleEnabled: false,
             currentTrack: null,
             isPlaying: false,
@@ -111,7 +111,7 @@ class Store {
     update(patch) {
         let changed = false;
         for (const key in patch) {
-            // Shallow equality check for primitive values (status, isPlaying, etc)
+            // Note: Shallow equality check for primitive values (status, isplaying, etc)
             if (this.state[key] !== patch[key]) {
                 changed = true;
                 break;
@@ -204,7 +204,7 @@ class Store {
             
             const data = await res.json();
 
-            // Also sync favourites and queue
+            // Note: Also sync favourites and queue
             await this.syncFavourites();
             await this.syncQueue();
 
@@ -285,7 +285,7 @@ class Store {
     }
 
     async toggleRepeat() {
-        const modes = ['off', 'one', 'once']; // off → repeat (∞) → repeat(1) → off
+        const modes = ['off', 'one', 'once']; // Note: Off → repeat (∞) → repeat(1) → off
         const nextMode = modes[(modes.indexOf(this.state.repeatMode) + 1) % modes.length];
         
         try {
@@ -714,16 +714,16 @@ class Store {
 
     importToken(token) {
         try {
-            // Decode token (Base64 -> Zlib Decompress -> JSON)
-            // Note: In browser we use atob and pako or similar, but for now 
-            // we assume the token is simple or handle basic JSON if plain text.
+            // Note: Decode token (Base64 -> zlib decompress -> JSON)
+            // Note: In browser we use atob and pako or similar, but for now
+            // Note: We assume the token is simple or handle basic JSON if plain text.
             
-            // For MVP, we will try to decode if it looks like Base64, else treat as JSON
+            // Note: For MVP, we will try to decode if it looks like Base64, else treat as JSON
             let data;
             try {
                 const bin = atob(token);
-                // Simple check: if it looks like binary, we might need a library. 
-                // But if it was plain json-base64 we can read it.
+                // Note: Simple check if it looks like binary, we might need a library.
+                // Note: But if it was plain JSON-base64 we can read it.
                 data = JSON.parse(bin);
             } catch {
                 data = JSON.parse(token);

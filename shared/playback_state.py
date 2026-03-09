@@ -13,10 +13,10 @@ from shared.constants import DEFAULT_CONFIG_DIR
 DEFAULT_SCOPE = "default"
 ACTIVE_DEVICE_TTL_SEC = 90
 ACTIVE_DEVICE_CONSIDERED_RECENT_SEC = 60
-STATE_TTL_SEC = 24 * 3600  # 24h optional; state older can be ignored on GET
+STATE_TTL_SEC = 24 * 3600  # Note: 24H optional; state older can be ignored on GET
 
 _lock = threading.Lock()
-_active_devices: dict[str, dict[str, dict[str, Any]]] = {}  # scope -> device_id -> state
+_active_devices: dict[str, dict[str, dict[str, Any]]] = {}  # Note: Scope -> device_id -> state
 
 
 def _config_dir() -> Path:
@@ -60,7 +60,7 @@ def get_state(scope: str, exclude_device_id: Optional[str] = None) -> Optional[d
         _cleanup_scope(scope)
         now = time.time()
 
-        # Prefer active other device if exclude_device_id given
+        # Note: Prefer active other device if exclude_device_id given
         if exclude_device_id:
             scope_devices = _active_devices.get(scope, {})
             best = None
@@ -82,7 +82,7 @@ def get_state(scope: str, exclude_device_id: Optional[str] = None) -> Optional[d
             if best:
                 return best
 
-        # Fall back to persisted file (same device or other; client decides dialog vs auto-restore)
+        # Note: Fall back to persisted file (same device or other; client decides dialog vs auto-restore)
         path = _state_path(scope)
         if not path.exists():
             return None

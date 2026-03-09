@@ -39,11 +39,11 @@ class StorageProviderFactory:
             return LocalStorageProvider()
         
         elif provider_type == StorageProvider.AWS_S3:
-            # Could implement AWS S3 provider here
+            # Note: Could implement AWS S3 provider here
             raise NotImplementedError("AWS S3 provider not yet implemented")
         
         elif provider_type == StorageProvider.GENERIC_S3:
-            # Could implement generic S3 provider here
+            # Note: Could implement generic S3 provider here
             raise NotImplementedError("Generic S3 provider not yet implemented")
         
         else:

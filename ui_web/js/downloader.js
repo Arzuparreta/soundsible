@@ -109,10 +109,10 @@ export class Downloader {
         this.updateFabAndPopover();
         this.refreshStatus();
         
-        // Apply initial toggle state
+        // Note: Apply initial toggle state
         searchService.applyToggleUI(sel.searchSourceMusicBtn, sel.searchSourceYoutubeBtn);
         
-        // Typeahead support
+        // ## Section: Typeahead support
         if (this.searchInput) {
             searchService.attach(this.searchInput, (val) => {
                 if (val) this.runSearch(val);
@@ -175,7 +175,7 @@ export class Downloader {
     }
 
     static setSearchSource(value) {
-        // SourceMode standardized to 'ytmusic' / 'youtube'
+        // Note: Sourcemode standardized to 'ytmusic' / 'youtube'
         searchService.sourceMode = value;
         Haptics.tick();
 
@@ -228,7 +228,7 @@ export class Downloader {
             const results = await searchService.query(q, { debounce: 0 });
             this.searchBtn?.classList.remove('opacity-70');
             
-            if (results === null) return; // Aborted
+            if (results === null) return; // Note: Aborted
             
             if (results.length === 0) {
                 this.searchResults.innerHTML = '<div class="text-center py-8 text-gray-500">No results</div>';
@@ -320,18 +320,18 @@ export class Downloader {
         const modal = document.getElementById('dl-cover-choice-modal');
         if (!modal || !track) return;
         
-        // Store current track for handlers
+        // Note: Store current track for handlers
         this.currentCoverChoiceTrack = track;
         
-        // Update modal content
+        // Note: Update modal content
         document.getElementById('dl-cover-choice-title').textContent = track.title || 'Unknown Title';
         document.getElementById('dl-cover-choice-artist').textContent = track.artist || 'Unknown Artist';
         
-        // Show modal
+        // ## Section: Show modal
         modal.classList.remove('hidden');
         modal.classList.add('flex');
         
-        // Bind handlers if not already bound
+        // Note: Bind handlers if not already bound
         if (!this.coverChoiceBound) {
             document.getElementById('dl-cover-choice-close').onclick = () => this.hideCoverChoiceModal();
             document.getElementById('dl-cover-choice-yt').onclick = () => this.handleCoverChoice('youtube');
@@ -359,7 +359,7 @@ export class Downloader {
         
         try {
             if (choice === 'youtube') {
-                // Use YouTube cover
+                // ## Section: Use youtube cover
                 const coverUrl = track.fallback_cover_url || track.album_art_url;
                 if (coverUrl) {
                     const res = await fetch(`${searchService.getApiBase()}/api/library/tracks/${track.id}/metadata`, {
@@ -373,21 +373,21 @@ export class Downloader {
                     }
                 }
             } else if (choice === 'library') {
-                // Show library cover picker - for now, just show a message
-                // TODO: Implement library cover picker UI
+                // Note: Show library cover picker - for now, just show a message
+                // Note: TODO implement library cover picker UI
                 alert('Library cover picker coming soon. For now, use Edit Metadata → Upload Cover.');
             } else if (choice === 'upload') {
-                // Open metadata editor with upload focus
+                // Note: Open metadata editor with upload focus
                 if (window.UI && window.UI.showMetadataEditor) {
                     window.UI.showMetadataEditor(track.id);
-                    // Focus upload button after a delay
+                    // Note: Focus upload button after a delay
                     setTimeout(() => {
                         const uploadBtn = document.getElementById('edit-upload-btn');
                         if (uploadBtn) uploadBtn.click();
                     }, 300);
                 }
             } else if (choice === 'none') {
-                // Clear cover
+                // ## Section: Clear cover
                 const res = await fetch(`${searchService.getApiBase()}/api/library/tracks/${track.id}/cover/none`, {
                     method: 'POST'
                 });
@@ -407,7 +407,7 @@ export class Downloader {
         const canonicalUrl = searchService.normalizeYouTubeUrl(result.webpage_url || `https://www.youtube.com/watch?v=${result.id}`);
         if (!canonicalUrl) return;
 
-        // Distinguish between YT Music and normal YT results for backend provider routing
+        // Note: Distinguish between YT music and normal YT results for backend provider routing
         const sourceMode = options.source || searchService.sourceMode;
         const sourceType = (sourceMode === 'ytmusic') ? SourceType.YTMUSIC_SEARCH : SourceType.YOUTUBE_SEARCH;
 
@@ -424,7 +424,7 @@ export class Downloader {
                 title: result.title || '',
                 artist: result.artist ?? result.channel ?? '',
                 duration_sec: result.duration || 0,
-                // Source hint for backend provider (search_youtube behavior)
+                // Note: Source hint for backend provider (search_youtube behavior)
                 source_mode: (options.source === ODST_SOURCE_YOUTUBE || options.source === ODST_SOURCE_MUSIC) 
                     ? options.source 
                     : searchService.sourceMode
@@ -503,7 +503,7 @@ export class Downloader {
         const ring = this.dlQueueProgressRing;
         const badge = this.dlQueueBadge;
         if (ring) {
-            // Simple on/off indicator: show full circle while backend has active downloads.
+            // Note: Simple on/off indicator show full circle while backend has active downloads.
             const isActive = isProcessing && total > 0;
             const radius = (ring.r && ring.r.baseVal && ring.r.baseVal.value) || 22;
             const circumference = 2 * Math.PI * radius;
@@ -787,7 +787,7 @@ export class Downloader {
             });
             if (resp.ok) {
                 this.addLog("Settings updated on Station Engine.");
-                this.loadConfig(); // Refresh to see masks
+                this.loadConfig(); // Note: Refresh to see masks
             } else {
                 const err = await resp.json().catch(() => ({ error: resp.statusText }));
                 this.addLog("Save failed: " + (err.error || resp.status));

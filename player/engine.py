@@ -21,8 +21,8 @@ class PlaybackEngine:
         self.player = None
         if MPV_AVAILABLE:
             try:
-                # Initialize MPV with options optimized for streaming
-                # vo='null' because we are audio-only
+                # Note: Initialize MPV with options optimized for streaming
+                # Note: Vo='null' because we are audio-only
                 self.player = mpv.MPV(
                     input_default_bindings=True, 
                     input_vo_keyboard=True, 
@@ -41,28 +41,28 @@ class PlaybackEngine:
         if not self.player:
             print("PlaybackEngine: Local playback is DISABLED (mpv not found). Streaming still works.")
         
-        # Queue Manager
+        # Note: Queue manager
         self.queue_manager = queue_manager
         
-        # Callbacks
+        # Note: Callbacks details
         self._track_end_callbacks: List[Callable[[], None]] = []
         self._on_time_update: Optional[Callable[[float], None]] = None
         self._on_state_change: Optional[Callable[[str], None]] = None
-        self._on_track_load: Optional[Callable[[Union[Track, QueueItem]], None]] = None  # For UI to load next track (QueueItem from queue)
+        self._on_track_load: Optional[Callable[[Union[Track, QueueItem]], None]] = None  # Note: For UI to load next track (queueitem from queue)
         
-        # State
+        # Note: State details
         self.current_track: Optional[Track] = None
         self.is_playing = False
         
-        # Throttling for time updates (reduce CPU usage)
+        # Note: Throttling for time updates (reduce CPU usage)
         self._last_time_update = 0.0
         
-        # Bind events
+        # Note: Bind events
         if self.player:
             self.player.observe_property('time-pos', self._handle_time_update)
             self.player.observe_property('eof-reached', self._handle_eof)
             self.player.observe_property('idle-active', self._handle_idle)
-            # Set initial volume
+            # Note: Set initial volume
             self.player.volume = 100
 
     def play(self, url: str, track: Track):
@@ -79,7 +79,7 @@ class PlaybackEngine:
         except Exception as e:
             print(f"ERROR: mpv failed to play {url}: {e}")
         
-        # Notify UI of state change
+        # Note: Notify UI of state change
         if self._on_state_change:
             self._on_state_change('playing')
             
@@ -89,7 +89,7 @@ class PlaybackEngine:
         self.player.pause = not self.player.pause
         self.is_playing = not self.player.pause
         
-        # Explicitly notify UI immediately
+        # Note: Explicitly notify UI immediately
         if self._on_state_change:
             state = 'paused' if self.player.pause else 'playing'
             self._on_state_change(state)
@@ -124,11 +124,11 @@ class PlaybackEngine:
         """Get track duration in seconds."""
         return self.player.duration if self.player else 0
 
-    # Event handlers
+    # Note: Event handlers
     def _handle_time_update(self, name, value):
         """Handle time position updates from MPV with throttling."""
         if value is not None and self._on_time_update:
-            # Throttle to ~4 updates per second (250ms between updates)
+            # Note: Throttle to ~4 updates per second (250ms between updates)
             import time
             current_time = time.time()
             if current_time - self._last_time_update >= 0.25:
@@ -148,14 +148,14 @@ class PlaybackEngine:
     def _trigger_track_end(self):
         """Execute all registered track end callbacks safely."""
         
-        # First, execute custom callbacks
+        # Note: First, execute custom callbacks
         for callback in self._track_end_callbacks:
             try:
                 callback()
             except Exception as e:
                 print(f"ERROR executing track_end callback {callback}: {e}")
         
-        # Then, check queue for auto-play
+        # Note: Then, check queue for auto-play
         if self.queue_manager and not self.queue_manager.is_empty():
             next_item = self.queue_manager.get_next()
             if next_item and self._on_track_load:
@@ -166,19 +166,19 @@ class PlaybackEngine:
             
     def _handle_pause_change(self, name, value):
         """Handle pause state changes from MPV."""
-        # Ignore None values (MPV initialization)
+        # Note: Ignore none values (MPV initialization)
         if value is None:
             return
             
         self.is_playing = not value
         
-        # Only send state change callbacks if we have a track
-        # This prevents UI updates for spurious MPV state changes
+        # Note: Only send state change callbacks if we have a track
+        # Note: This prevents UI updates for spurious MPV state changes
         if self._on_state_change:
             state = 'paused' if value else 'playing'
             self._on_state_change(state)
 
-    # Callback setters
+    # Note: Callback setters
     def add_track_end_callback(self, callback: Callable[[], None]):
         """Register a callback for when a track ends."""
         if callback not in self._track_end_callbacks:

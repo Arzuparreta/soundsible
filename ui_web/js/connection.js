@@ -11,7 +11,7 @@ const RECONNECT_INTERVAL_HIDDEN_MS = 20000;
 
 export class ConnectionManager {
     constructor() {
-        this.timeout = 2500; // 2.5 seconds timeout per probe
+        this.timeout = 2500; // Note: 2.5 Seconds timeout per probe
     }
 
     /**
@@ -26,11 +26,11 @@ export class ConnectionManager {
         const probes = endpoints.map(host => this.probe(host));
 
         try {
-            // Robust Promise.any fallback
+            // Note: Robust promise.any fallback
             const fastestHost = await (Promise.any ? Promise.any(probes) : this._anyFallback(probes));
             console.log("✅ Fastest Path Locked:", fastestHost);
             
-            // Update store
+            // ## Section: Update store
             store.update({ activeHost: fastestHost, isOnline: true });
             this.initSocket(fastestHost);
             return fastestHost;
@@ -79,7 +79,7 @@ export class ConnectionManager {
             this.startReconnectionLoop();
         });
 
-        // Forward downloader events to the window
+        // Note: Forward downloader events to the window
         this.socket.on('downloader_log', (data) => {
             window.dispatchEvent(new CustomEvent('downloader_log', { detail: data }));
         });
@@ -149,7 +149,7 @@ export class ConnectionManager {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
         
-        const url = `${getApiBase(host)}/api/health`; // Check health endpoint
+        const url = `${getApiBase(host)}/api/health`; // Note: Check health endpoint
         
         try {
             const res = await fetch(url, { 

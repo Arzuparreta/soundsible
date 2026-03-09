@@ -44,7 +44,7 @@ class AudioProcessor:
         try:
             audio = FLAC(file_path)
             
-            # Basic tags
+            # Note: Basic tags
             if metadata.get('title'):
                 audio['title'] = metadata['title']
             if metadata.get('artist'):
@@ -64,7 +64,7 @@ class AudioProcessor:
             if metadata.get('isrc'):
                 audio['isrc'] = metadata['isrc']
 
-            # Cover Art
+            # Note: Cover art
             if cover_data:
                 try:
                     image = Picture()
@@ -89,46 +89,46 @@ class AudioProcessor:
             audio = MP3(file_path)
             audio.add_tags()
 
-        # Title
+        # Note: Title details
         if metadata.get('title'):
             audio.tags.add(TIT2(encoding=3, text=metadata['title']))
         
-        # Artist
+        # Note: Artist details
         if metadata.get('artist'):
             audio.tags.add(TPE1(encoding=3, text=metadata['artist']))
             
-        # Album
+        # Note: Album details
         if metadata.get('album'):
             audio.tags.add(TALB(encoding=3, text=metadata['album']))
             
-        # Album Artist
+        # Note: Album artist
         if metadata.get('album_artist'):
             from mutagen.id3 import TPE2
             audio.tags.add(TPE2(encoding=3, text=metadata['album_artist']))
             
-        # Year
+        # Note: Year details
         year = metadata.get('year') or (metadata['release_date'][:4] if metadata.get('release_date') else None)
         if year:
             audio.tags.add(TDRC(encoding=3, text=str(year)))
             
-        # Track Number
+        # Note: Track number
         if metadata.get('track_number'):
             from mutagen.id3 import TRCK
             audio.tags.add(TRCK(encoding=3, text=str(metadata['track_number'])))
             
-        # ISRC
+        # Note: ISRC details
         if metadata.get('isrc'):
             from mutagen.id3 import TXXX
             audio.tags.add(TXXX(encoding=3, desc='ISRC', text=metadata['isrc']))
 
-        # Cover Art
+        # Note: Cover art
         if cover_data:
             try:
                 audio.tags.add(
                     APIC(
-                        encoding=3, # 3 is UTF-8
-                        mime='image/jpeg', # assume jpeg usually
-                        type=3, # 3 is for the cover image
+                        encoding=3, # Note: 3 Is UTF-8
+                        mime='image/jpeg', # Note: Assume jpeg usually
+                        type=3, # Note: 3 Is for the cover image
                         desc=u'Cover',
                         data=cover_data
                     )
@@ -152,12 +152,12 @@ class AudioProcessor:
             audio = mutagen.File(file_path)
             if audio is not None:
                 duration = int(audio.info.length)
-                # Bitrate might not be available for all formats (e.g. lossless)
+                # Note: Bitrate might not be available for all formats (e.g. lossless)
                 if hasattr(audio.info, 'bitrate') and audio.info.bitrate:
                     bitrate = int(audio.info.bitrate / 1000)
                 else:
-                    # For lossless, we can calculate 'nominal' bitrate or leave as 0
-                    # For now, let's try to estimate if possible or just use 0 (which means 'variable/highest')
+                    # Note: For lossless, we can calculate 'nominal' bitrate or leave as 0
+                    # Note: For now, let's try to estimate if possible or just use 0 (which means 'variable/highest')
                     bitrate = 0
         except Exception as e:
             print(f"Error reading audio details: {e}")

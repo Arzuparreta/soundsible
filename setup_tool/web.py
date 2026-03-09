@@ -15,7 +15,7 @@ app.config['SECRET_KEY'] = os.urandom(24)
 socketio = SocketIO(app, cors_allowed_origins="*")
 console = Console()
 
-# Global config cache
+# Note: Global config cache
 current_config = None
 
 def load_config():
@@ -53,7 +53,7 @@ def handle_upload(data):
          emit('upload_error', {'msg': 'Configuration not loaded'})
          return
 
-    # Run upload in background thread
+    # Note: Run upload in background thread
     threading.Thread(target=run_upload_process, args=(source_path,)).start()
     emit('upload_started', {'path': source_path})
 
@@ -62,14 +62,14 @@ def run_upload_process(path):
     try:
         uploader = UploadEngine(current_config)
         
-        # Custom progress class to bridge Rich Progress -> SocketIO
-        # We can't easily pass the rich progress object, so we'll 
-        # modify UploadEngine or wrap it. 
-        # For MVP, let's create a proxy progress reporter.
+        # Note: Custom progress class to bridge rich progress -> socketio
+        # Note: We can't easily pass the rich progress object, so we'll
+        # Note: Modify uploadengine or wrap it.
+        # Note: For MVP, let's create a proxy progress reporter.
         
-        # We need to adapt UploadEngine to report progress via callback or similar.
-        # Since UploadEngine currently expects a rich.progress.Progress object, 
-        # let's mock it or adapt it.
+        # Note: We need to adapt uploadengine to report progress via callback or similar.
+        # Note: Since uploadengine currently expects a rich.progress.progress object,
+        # Note: Let's mock it or adapt it.
         
         class SocketProgress:
             def __init__(self, socket):
@@ -106,7 +106,7 @@ def run_upload_process(path):
                         'completed': self.tasks[task_id]['completed']
                     })
 
-        # Note: UploadEngine type hint assumes rich.progress.Progress, but python makes it duck-typeable.
+        # Note: Uploadengine type hint assumes rich.progress.progress, but python makes it duck-typeable.
         proxy_progress = SocketProgress(socketio)
         
         library = uploader.run(path, progress=proxy_progress)
@@ -131,7 +131,7 @@ def handle_wipe(data):
         emit('wipe_error', {'msg': 'Confirmation name does not match bucket name'})
         return
 
-    # Run wipe in background
+    # Note: Run wipe in background
     threading.Thread(target=run_wipe_process, args=(current_config,)).start()
     emit('wipe_started', {'bucket': current_config.bucket})
 
@@ -141,7 +141,7 @@ def run_wipe_process(config):
         from setup_tool.provider_factory import StorageProviderFactory
         
         provider = StorageProviderFactory.create(config.provider)
-        # Auth
+        # Note: Auth details
         creds = config.to_dict()
         if config.provider.name == 'CLOUDFLARE_R2' and config.endpoint:
              try:
@@ -161,7 +161,7 @@ def run_wipe_process(config):
         
         for i, file in enumerate(files):
             provider.delete_file(file['key'])
-            # Emit progress every 5 files or so to avoid spamming
+            # Note: Emit progress every 5 files or so to avoid spamming
             if i % 5 == 0 or i == total - 1:
                 socketio.emit('wipe_progress', {
                     'msg': f"Deleted {i+1}/{total} files...",

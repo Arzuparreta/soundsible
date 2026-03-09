@@ -47,18 +47,18 @@ class CloudflareR2Provider(S3StorageProvider):
                 endpoint_url=self.endpoint_url,
                 aws_access_key_id=credentials['access_key_id'],
                 aws_secret_access_key=credentials['secret_access_key'],
-                region_name='auto'  # R2 uses 'auto' region
+                region_name='auto'  # Note: R2 uses 'auto' region
             )
             
-            # Test connection by listing buckets
-            # Test connection
+            # Note: Test connection by listing buckets
+            # Note: Test connection
             try:
                 self.s3_client.list_buckets()
             except AttributeError:
-                # Fallback if client wasn't created properly
+                # Note: Fallback if client wasn't created properly
                 raise
             except Exception:
-                # If list_buckets fails (permissions?), we try to continue if we have a bucket name
+                # Note: If list_buckets fails (permissions?), we try to continue if we have a bucket name
                 if self.bucket_name:
                     print("Warning: Could not list buckets. Verifying specific bucket access...")
                     self.s3_client.head_bucket(Bucket=self.bucket_name)
@@ -83,13 +83,13 @@ class CloudflareR2Provider(S3StorageProvider):
                      region: Optional[str] = None) -> Dict[str, Any]:
         """Create R2 bucket."""
         try:
-            # R2 doesn't use regions, always 'auto'
+            # Note: R2 doesn't use regions, always 'auto'
             self.s3_client.create_bucket(Bucket=bucket_name)
             self.bucket_name = bucket_name
             
-            # Note: R2 public bucket access must be configured in Cloudflare dashboard
-            # The PutBucketPolicy operation is not supported by R2
-            # Users can make buckets public via: R2 Dashboard > Bucket > Settings > Public Access
+            # Note: R2 public bucket access must be configured in cloudflare dashboard
+            # Note: The putbucketpolicy operation is not supported by R2
+            # Note: Users can make buckets public via R2 dashboard > bucket > settings > public access
             if public:
                 print("\n[WARNING] Note: R2 buckets must be made public via Cloudflare dashboard")
                 print("   Go to: R2 > Your Bucket > Settings > Enable Public Access")
@@ -125,7 +125,7 @@ class CloudflareR2Provider(S3StorageProvider):
             if metadata:
                 extra_args['Metadata'] = metadata
             
-            # Upload with progress callback
+            # Note: Upload with progress callback
             if progress_callback:
                 def progress(bytes_uploaded):
                     progress_callback(UploadProgress(
@@ -157,7 +157,7 @@ class CloudflareR2Provider(S3StorageProvider):
         """Download file from R2."""
         try:
             if progress_callback:
-                # Get file size first
+                # Note: Get file size first
                 response = self.s3_client.head_object(Bucket=self.bucket_name, Key=remote_key)
                 file_size = response['ContentLength']
                 
@@ -271,10 +271,10 @@ class CloudflareR2Provider(S3StorageProvider):
             return response['Body'].read().decode('utf-8')
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code')
-            # 404 Not Found error codes
+            # Note: 404 Not found error codes
             if error_code in ['NoSuchKey', '404']:
                 return None
-            # Bucket doesn't exist yet (e.g. not created in R2/S3 console)
+            # Note: Bucket doesn't exist yet (e.g. not created in R2/S3 console)
             if error_code == 'NoSuchBucket':
                 print(
                     f"The bucket '{self.bucket_name}' does not exist. "
@@ -283,7 +283,7 @@ class CloudflareR2Provider(S3StorageProvider):
                 )
                 return None
 
-            # For other errors (permissions, network, etc), raise them!
-            # We do NOT want to mistakenly wipe the library because of a network glitch.
+            # Note: For other errors (permissions, network, etc), raise them!
+            # Note: We do NOT want to mistakenly wipe the library because of a network glitch.
             print(f"JSON download failed with error {error_code}: {e}")
             raise

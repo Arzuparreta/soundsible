@@ -23,15 +23,15 @@ class CoverFetchManager:
         return cls._instance
 
     def __init__(self):
-        self.callbacks = {} # map track_id -> list of callbacks(path)
+        self.callbacks = {} # Note: Map track_id -> list of callbacks(path)
         self.lock = threading.Lock()
         
         self.covers_dir = os.path.join(os.path.expanduser(DEFAULT_CACHE_DIR), "covers")
         os.makedirs(self.covers_dir, exist_ok=True)
         
-        # Bounded Thread Pool
+        # Note: Bounded thread pool
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="CoverWorker")
-        self.submitted_tracks = set() # Track IDs currently in pool
+        self.submitted_tracks = set() # Note: Track ids currently in pool
 
     def get_cached_path(self, track_id):
         path = os.path.join(self.covers_dir, f"{track_id}.jpg")
@@ -44,10 +44,10 @@ class CoverFetchManager:
         Request a cover for a track.
         Callback receives: (pixbuf)
         """
-        # 1. Check Smart Cache (Fastest) - Check existence, if yes, decode in BACKGROUND
+        # Note: 1. Check smart cache (fastest) - check existence, if yes, decode in background
         path = self.get_cached_path(track.id)
         if path:
-             # Even if cached, decode in background to save UI thread
+             # Note: Even if cached, decode in background to save UI thread
              if callback:
                  with self.lock:
                     if track.id not in self.callbacks:
@@ -57,14 +57,14 @@ class CoverFetchManager:
                  self.executor.submit(self._load_and_notify, track.id, path, size)
              return
 
-        # 2. Register callback
+        # Note: 2. Register callback
         if callback:
             with self.lock:
                 if track.id not in self.callbacks:
                     self.callbacks[track.id] = []
                 self.callbacks[track.id].append(callback)
 
-        # 3. Submit to pool if not already running
+        # Note: 3. Submit to pool if not already running
         with self.lock:
             if track.id not in self.submitted_tracks:
                 self.submitted_tracks.add(track.id)
@@ -74,14 +74,14 @@ class CoverFetchManager:
         try:
             dest_path = os.path.join(self.covers_dir, f"{track.id}.jpg")
             
-            # Double check if appeared while waiting
+            # Note: Double check if appeared while waiting
             if os.path.exists(dest_path):
                 self._load_and_notify(track.id, dest_path, size)
                 return
 
             found = False
 
-            # A. Try Embedded Art (Medium)
+            # Note: A. try embedded art (medium)
             if embedded_path and os.path.exists(embedded_path):
                 try:
                     cover_data = AudioProcessor.extract_cover_art(embedded_path)
@@ -92,16 +92,16 @@ class CoverFetchManager:
                 except Exception:
                     pass
             
-            # B. Network Fetch (Slow)
+            # Note: B. network fetch (slow)
             if not found:
-                 # Rate limit slightly to avoid spamming iTunes if pool is churning fast
+                 # Note: Rate limit slightly to avoid spamming itunes if pool is churning fast
                  time.sleep(0.2) 
                  found = self._fetch_online(track, dest_path)
 
             if found:
                 self._load_and_notify(track.id, dest_path, size)
             elif os.path.exists(dest_path):
-                 # Fallback if found earlier but logic skipped
+                 # Note: Fallback if found earlier but logic skipped
                  self._load_and_notify(track.id, dest_path, size)
 
         except Exception as e:
@@ -112,7 +112,7 @@ class CoverFetchManager:
 
     def _load_and_notify(self, track_id, path, size=64):
         try:
-            # Decode in worker thread at requested scale
+            # Note: Decode in worker thread at requested scale
             pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, size, size, True)
             self._notify_success(track_id, pixbuf)
         except Exception as e:
@@ -127,7 +127,7 @@ class CoverFetchManager:
 
     def _fetch_online(self, track, dest_path):
         try:
-            # Search strategies
+            # Note: Search strategies
             queries = [f"{track.artist} {track.title}"]
             clean_query = f"{track.artist} {track.title}"
             clean_query = re.sub(r'(?i)original soundtrack|ost', '', clean_query)

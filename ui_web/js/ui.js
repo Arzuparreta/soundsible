@@ -8,7 +8,7 @@ import { audioEngine } from './audio.js';
 import { Haptics } from './haptics.js';
 import { wireActionMenu } from './wires.js';
 
-// Global availability for inline onclick handlers
+// Note: Global availability for inline onclick handlers
 window.audioEngine = audioEngine;
 
 export class UI {
@@ -104,16 +104,16 @@ export class UI {
             miniPrevBtn: d('mini-prev-btn')
         };
         this.content = this.dom.content;
-        // Platform Detection: Notch Safety
+        // ## Section: Platform detection notch safety
         const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || 
-                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPad Pro
+                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // Note: Ipad pro
         if (isIOS) document.body.classList.add('is-ios');
 
-        // Navigation State
+        // ## Section: Navigation state
         this.viewStack = [];
         this.currentView = 'home';
         this._npGesturesBound = false;
-        this._npViewOpen = false; // true when Now Playing view is visible (omni label fades out)
+        this._npViewOpen = false; // Note: True when now playing view is visible (omni label fades out)
         this.isIslandActive = false;
         this.isBlooming = false;
         this.isDraggingQueue = false;
@@ -129,8 +129,8 @@ export class UI {
         store.subscribe((state) => this.updatePlayer(state));
         this.updatePlayer(store.state);
 
-        // INTERRUPTION RECOVERY: If app backgrounds or loses focus during a gesture, reset the island.
-        // This prevents the island from being stuck in "nav mode" if an iOS system gesture interrupts.
+        // Note: Interruption recovery if app backgrounds or loses focus during a gesture, reset the island.
+        // Note: This prevents the island from being stuck in "nav mode" if an ios system gesture interrupts.
         const resetEvents = ['visibilitychange', 'blur', 'contextmenu'];
         resetEvents.forEach(evt => {
             window.addEventListener(evt, () => {
@@ -138,10 +138,10 @@ export class UI {
             });
         });
 
-        // Gestures Engine
+        // ## Section: Gestures engine
         this.initGestures();
 
-        // Action menu: wire buttons once (shared wires.js)
+        // Note: Action menu wire buttons once (shared wires.js)
         wireActionMenu({
             overlay: 'action-menu-overlay',
             queueBtn: 'action-queue',
@@ -196,7 +196,7 @@ export class UI {
     }
 
     static updatePlayer(state) {
-        // Reset progress bar and time labels when track changes (avoids timebar stuck at previous position)
+        // Note: Reset progress bar and time labels when track changes (avoids timebar stuck at previous position)
         const trackId = state.currentTrack?.id ?? null;
         if (trackId != null && trackId !== this._lastProgressTrackId) {
             this._lastProgressTrackId = trackId;
@@ -215,7 +215,7 @@ export class UI {
             if (npDuration) npDuration.textContent = UI.formatTime(dur);
         }
 
-        // Omni-Island State Sync
+        // ## Section: Omni-island state sync
         this.syncIsland(state);
 
         if (state.currentTrack) {
@@ -228,7 +228,7 @@ export class UI {
             this.updateTransportControls(state.isPlaying);
         }
 
-        // Floating Queue
+        // ## Section: Floating queue
         const fab = this.dom.queueFab;
         const badge = this.dom.queueBadge;
         const qCount = state.queue ? state.queue.length : 0;
@@ -260,7 +260,7 @@ export class UI {
             this.collapseToSeed();
         }
 
-        // Real-time UI Sync: expanded = play/pause; collapsed = logo (hold hint)
+        // Note: Real-time UI sync expanded = play/pause; collapsed = logo (hold hint)
         const anchorIcon = this.dom.omniAnchorIcon;
         const logoWrap = this.dom.omniAnchorLogoWrap;
         if (!anchorIcon || !logoWrap) return;
@@ -285,24 +285,24 @@ export class UI {
         const text2 = this.dom.omniText2;
         if (!container || !scroller || !text1 || !text2) return;
 
-        // Escape function for safety since we're using innerHTML
+        // Note: Escape function for safety since we're using innerhtml
         const esc = (str) => (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 
         const titleHtml = `<span class="text-[var(--nav-icon)]">${esc(track.title)}</span>`;
         const restHtml = ` • ${esc(track.artist)} • ${esc(track.album)} • `;
         const contentHtml = titleHtml + restHtml;
         
-        // Simple comparison to avoid DOM thrashing
+        // Note: Simple comparison to avoid DOM thrashing
         if (text1.innerHTML === contentHtml) return;
 
         text1.innerHTML = contentHtml;
         text2.innerHTML = contentHtml;
         this.updateOmniMetadataVisibility();
 
-        // Marquee Logic
+        // ## Section: Marquee logic
         const textWidth = text1.offsetWidth;
 
-        if (textWidth > 150) { // If it's more than a small stub
+        if (textWidth > 150) { // Note: If it's more than a small stub
             scroller.style.animation = `omni-marquee ${textWidth * 0.05}s linear infinite`;
         } else {
             scroller.style.animation = 'none';
@@ -558,7 +558,7 @@ export class UI {
             popover.classList.remove('hidden');
             setTimeout(() => {
                 popover.classList.remove('pointer-events-none');
-                popover.style.pointerEvents = 'auto'; // Ensure interaction
+                popover.style.pointerEvents = 'auto'; // Note: Ensure interaction
                 popover.classList.replace('scale-95', 'scale-100');
                 popover.classList.replace('opacity-0', 'opacity-100');
             }, 10);
@@ -575,7 +575,7 @@ export class UI {
         popover.classList.replace('scale-100', 'scale-95');
         popover.classList.replace('opacity-100', 'opacity-0');
         popover.classList.add('pointer-events-none');
-        popover.style.pointerEvents = 'none'; // Block interaction
+        popover.style.pointerEvents = 'none'; // Note: Block interaction
         setTimeout(() => popover.classList.add('hidden'), 300);
     }
 
@@ -612,7 +612,7 @@ export class UI {
     }
 
     static showView(viewId, saveToHistory = true) {
-        // Auto-hide Now Playing if active (even if selecting the same view)
+        // Note: Auto-hide now playing if active (even if selecting the same view)
         if (this.dom.nowPlayingView?.classList.contains('active')) {
             this.hideNowPlaying();
         }
@@ -649,18 +649,18 @@ export class UI {
             else this.viewStack.push(this.currentView);
         }
 
-        // --- PERFORM STACKING TRANSITION ---
+        // ## Section: Perform stacking transition
         
-        // 1. Prepare Outgoing (stays in background with dim/scale)
+        // Note: 1. Prepare outgoing (stays in background with dim/scale)
         if (oldView) oldView.classList.add('view-outgoing');
 
-        // 2. Prepare Incoming — slide direction from omnibar DOM order: views left of blank → slide from left, right of blank → slide from right (reorder ribbon = behavior follows)
+        // Note: 2 Details
         const slideClass = UI.getSlideClassForView(viewId);
         targetView.classList.remove('hidden', 'view-warm-hidden-left', 'view-warm-hidden-right');
         targetView.classList.add('view-incoming');
         targetView.classList.add(slideClass);
         
-        // Returning to artists from artist-detail: clear sticky :active from back button and suppress card feedback briefly
+        // Note: Returning to artists from artist-detail clear sticky active from back button and suppress card feedback briefly
         const fromArtistDetail = viewId === 'home' && this.currentView === 'artist-detail';
         if (fromArtistDetail) {
             document.activeElement?.blur?.();
@@ -668,7 +668,7 @@ export class UI {
             setTimeout(() => targetView.classList.remove('artist-just-returned'), 320);
         }
         
-        // 3. Trigger Animation — double rAF so browser can apply classes without forcing synchronous reflow
+        // Note: 3. Trigger animation — double raf so browser can apply classes without forcing synchronous reflow
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 targetView.classList.remove('view-from-right', 'view-from-left');
@@ -676,7 +676,7 @@ export class UI {
             });
         });
 
-        // 4. Cleanup after transition — clear old view content, hide old view, then render new view content (Option B: no heavy DOM during slide)
+        // Note: 4 Details
         setTimeout(() => {
             const oldViewId = oldView && oldView.id ? oldView.id.replace(/^view-/, '') : null;
             if (oldViewId && typeof window.clearContentForView === 'function') {
@@ -704,9 +704,9 @@ export class UI {
         const queueContainer = this.dom.queueContainer;
         if (queueContainer) queueContainer.classList.remove('hidden');
 
-        // ODST Music/YouTube toggle is now embedded in the search bar; visibility controlled by show-discover-odst on container (app.js)
+        // Note: ODST music/youtube toggle is now embedded in the search bar; visibility controlled by show-discover-odst on container (app
 
-        // syncArtistGridIndicators deferred to 500ms cleanup so we don't touch sliding view DOM in same turn
+        // Note: Syncartistgridindicators deferred to 500ms cleanup so we don't touch sliding view DOM in same turn
     }
 
     /** Single entry point for "go back": sub-views (e.g. discover-search) close first; then stack pop. */
@@ -735,10 +735,10 @@ export class UI {
     }
 
     static initGlobalListeners() {
-        // Global: Prevent context menu everywhere for a native app feel
+        // Note: Global prevent context menu everywhere for a native app feel
         window.addEventListener('contextmenu', (e) => e.preventDefault());
 
-        // Global Clicks
+        // ## Section: Global clicks
         window.addEventListener('click', (e) => {
             if (this.currentView === 'discover') {
                 const dlq = this.dom.dlQueueContainer;
@@ -749,12 +749,12 @@ export class UI {
             }
         });
 
-        // Transport Handlers
+        // ## Section: Transport handlers
         const bindTransport = (id, fn) => {
             const el = document.getElementById(id);
             if (el) el.onclick = (e) => { 
                 e.stopPropagation(); 
-                Haptics.tick(); // 15ms tactile feedback
+                Haptics.tick(); // Note: 15Ms tactile feedback
                 fn(); 
             };
         };
@@ -768,7 +768,7 @@ export class UI {
         bindTransport('omni-shuffle-btn', () => store.toggleShuffle());
         bindTransport('omni-repeat-btn', () => store.toggleRepeat());
 
-        // Seek helpers
+        // ## Section: Seek helpers
         const calculateSeekPercent = (e, container) => {
             const rect = container.getBoundingClientRect();
             const clientX = e.clientX ?? e.changedTouches?.[0]?.clientX ?? e.touches?.[0]?.clientX;
@@ -885,7 +885,7 @@ export class UI {
             });
         }
 
-        // Block page scroll while dragging omnibar or NP timeline
+        // Note: Block page scroll while dragging omnibar or NP timeline
         document.addEventListener('touchmove', (e) => {
             if ((omniDragRef.current || npDragRef.current) && e.cancelable) {
                 e.preventDefault();
@@ -915,7 +915,7 @@ export class UI {
     }
 
     static initGestures() {
-        // Block multi-touch zoom
+        // Note: Block multi-touch zoom
         document.addEventListener('touchstart', (e) => {
             if (e.touches.length > 1 && e.cancelable) e.preventDefault();
         }, { passive: false });
@@ -1148,7 +1148,7 @@ export class UI {
             cleanupGestureEnd();
         }, { passive: true });
 
-        // Prevent click events after long press (song row or queue item cover)
+        // Note: Prevent click events after long press (song row or queue item cover)
         document.addEventListener('click', (e) => {
             if (gesture.longPressTriggered) {
                 const row = e.target.closest('.song-row');
@@ -1163,7 +1163,7 @@ export class UI {
             }
         }, { capture: true });
 
-        // No-action zones: do not trigger row default action (e.g. play) on tap/long-press release
+        // Note: No-action zones do not trigger row default action (e.g. play) on tap/long-press release
         document.addEventListener('click', (e) => {
             const row = e.target.closest('.song-row');
             const noAction = e.target.closest('.no-row-action');
@@ -1175,7 +1175,7 @@ export class UI {
             }
         }, { capture: true });
 
-        // Action Menu Swipe-to-Dismiss logic
+        // ## Section: Action menu swipe-to-dismiss logic
         this.initBottomSheetGestures();
         this.bindFullCoverOverlay();
     }
@@ -1231,7 +1231,7 @@ export class UI {
         
         if (!this.island || !this.anchor) return;
 
-        // Sync progress track (and time labels) to collapsed state on load so labels are not visible before first touch
+        // Note: Sync progress track (and time labels) to collapsed state on load so labels are not visible before first touch
         const omniProgressTrack = this.dom.omniProgressTrack;
         if (omniProgressTrack) {
             omniProgressTrack.style.transition = 'opacity 0.28s ease';
@@ -1277,7 +1277,7 @@ export class UI {
             }, 33);
 
             this._omniHoldTimer = setTimeout(() => {
-                // Only bloom if we haven't swiped up significantly
+                // Note: Only bloom if we haven't swiped up significantly
                 if (this._startedInside && Math.abs(this._currentY - this._startY) < 30) {
                     Haptics.heavy();
                     this.isBlooming = true;
@@ -1322,7 +1322,7 @@ export class UI {
             const hitboxRect = touchArea.getBoundingClientRect();
             const deltaY = touch.clientY - this._startY;
             
-            // Dynamic Horizontal Check: Must be within the current width of the island
+            // Note: Dynamic horizontal check must be within the current width of the island
             const isHorizontalValid = touch.clientX >= rect.left - 20 && touch.clientX <= rect.right + 20;
             const isInside = touch.clientX >= hitboxRect.left && touch.clientX <= hitboxRect.right && 
                              touch.clientY >= hitboxRect.top && touch.clientY <= hitboxRect.bottom;
@@ -1330,7 +1330,7 @@ export class UI {
             if (this._omniHoldTimer) clearTimeout(this._omniHoldTimer);
             if (this._labelAnimTimer) clearTimeout(this._labelAnimTimer);
 
-            // 0. SWIPE GESTURES: up = Now Playing (current track only); down = back to library
+            // Note: 0. SWIPE gestures up = now playing (current track only); down = back to library
             const deadzone = 15;
             if (this._isHolding && !this.isBlooming && this._startedInside && isHorizontalValid) {
                 const isNPActive = this.dom.nowPlayingView?.classList.contains('active');
@@ -1340,7 +1340,7 @@ export class UI {
                     this.resetOmniIsland();
                     return;
                 }
-                // Swipe down: same as edge swipe from left — go to previous view (stack or close sub-view)
+                // Note: Swipe down same as edge swipe from left — go to previous view (stack or close sub-view)
                 if (deltaY > deadzone) {
                     if (this.currentView !== 'home') this.vibrate(20);
                     this.goToPreviousView();
@@ -1349,7 +1349,7 @@ export class UI {
                 }
             }
 
-            // 1. COORDINATE-BASED TRANSPORT — only when expanded; when collapsed, tap does nothing (keep grid icon)
+            // Note: 1. Coordinate-BASED transport — only when expanded; when collapsed, tap does nothing (keep grid icon)
             if (this._isHolding && !this.isBlooming && isInside && this.isIslandActive) {
                 const relX = (touch.clientX - rect.left) / rect.width;
                 let zone = 'anchor';
@@ -1368,7 +1368,7 @@ export class UI {
                 else if (store.state.currentTrack) audioEngine.toggle();
             }
 
-            // 2. NAV COMMIT — only navigate when finger is released over a nav item; release over center/blank must not navigate
+            // Note: 2 Details
             const viewToShow = this._activeNavView || this._lastActiveNavView;
             let releaseOverNavItem = false;
             if (this.isBlooming && ribbon) {
@@ -1410,7 +1410,7 @@ export class UI {
             requestAnimationFrame(() => this.resetOmniIsland());
         };
 
-        // Bind events to the Hitbox Layer
+        // Note: Bind events to the hitbox layer
         touchArea.addEventListener('touchstart', (e) => {
             e.preventDefault();
             startBloom(e);
@@ -1431,7 +1431,7 @@ export class UI {
                     const touchX = touch.clientX;
                     const touchY = touch.clientY;
                     let hitChild = false;
-                    // 1) Hit-test over ribbon children so behaviour is identical for every item when finger is on the bar
+                    // Note: 1) Hit-test over ribbon children so behaviour is identical for every item when finger is on the bar
                     for (const child of ribbon.children) {
                         const r = child.getBoundingClientRect();
                         const padding = 8;
@@ -1442,7 +1442,7 @@ export class UI {
                             break;
                         }
                     }
-                    // 2) Finger in valid vertical band but not over a child (e.g. space below the omnibar): project X onto ribbon width so grabbing continues to work
+                    // Note: 2) Finger in valid vertical band but not over a child (e
                     if (!hitChild) {
                         const ribbonRect = ribbon.getBoundingClientRect();
                         const ribbonWidth = ribbonRect.width;
@@ -1465,7 +1465,7 @@ export class UI {
                         this._activeNavView = view;
                         this._lastActiveNavView = view;
 
-                        // Reset siblings and set active state
+                        // Note: Reset siblings and set active state
                         items.forEach(i => {
                             i.classList.remove('active');
                             i.style.transform = 'scale(1)';
@@ -1476,25 +1476,25 @@ export class UI {
                         item.style.transform = 'scale(1.3)';
                         item.querySelector('i').style.color = 'var(--accent)';
 
-                        // Update Label
+                        // ## Section: Update label
                         label.textContent = this.VIEW_LABELS[view] || '';
                         label.classList.add('hovered');
                         
-                        // Centering logic: translateX(itemCenter - islandCenter)
+                        // Note: Centering logic translatex(itemcenter - islandcenter)
                         const itemRect = item.getBoundingClientRect();
                         const offset = (itemRect.left + itemRect.width / 2) - (rect.left + rect.width / 2);
                         label.style.setProperty('--tx', `${offset}px`);
                         label.style.removeProperty('transform');
                     }
                 } else if (this._activeNavView !== null) {
-                    // RESET: Finger is over a blank area
+                    // Note: RESET finger is over a blank area
                     this._activeNavView = null;
                     
-                    // Maintain 'hovered' (grey) state during active bloom
+                    // Note: Maintain 'hovered' (grey) state during active bloom
                     label.classList.add('hovered');
                     label.classList.remove('docked');
                     
-                    // Update text without clearing the transform logic
+                    // Note: Update text without clearing the transform logic
                     label.textContent = this.VIEW_LABELS[this.currentView] || '';
                     label.style.setProperty('--tx', '0px');
 
@@ -1505,7 +1505,7 @@ export class UI {
                     });
                 }
             } else {
-                // SWIPE FEEDBACK: Subtle movement when swiping
+                // Note: SWIPE feedback subtle movement when swiping
                 if (!this._startedInside) return;
 
                 const deltaY = this._currentY - this._startY;
@@ -1528,7 +1528,7 @@ export class UI {
 
         document.addEventListener('touchend', endHold);
         
-        // Critical: Handle system gestures (swiping home) that cancel the touch event
+        // Note: Critical handle system gestures (swiping home) that cancel the touch event
         touchArea.addEventListener('touchcancel', () => this.resetOmniIsland());
     }
 
@@ -1555,7 +1555,7 @@ export class UI {
             this._labelAnimTimer = null;
         }
 
-        // Restore Playback UI
+        // ## Section: Restore playback UI
         if (this.isIslandActive) {
             this.island.style.width = '250px';
             this.island.classList.remove('omni-seed');
@@ -1564,7 +1564,7 @@ export class UI {
             this.island.classList.add('omni-seed');
         }
 
-        this.island.style.transform = ''; // Clear swipe displacement
+        this.island.style.transform = ''; // Note: Clear swipe displacement
 
         const omniProgressTrack = this.dom.omniProgressTrack;
         const transportFadeDuration = '0.22s';
@@ -1607,7 +1607,7 @@ export class UI {
             i.querySelector('i').style.color = '';
         });
 
-        // Seed state: show logo and urge pulse; playback state leaves play/pause as-is
+        // Note: Seed state show logo and urge pulse; playback state leaves play/pause as-is
         const anchorIcon = this.dom.omniAnchorIcon;
         const logoWrap = this.dom.omniAnchorLogoWrap;
         if (!this.isIslandActive) {
@@ -1618,7 +1618,7 @@ export class UI {
             }
         }
 
-        // Always reset label to the current view's docked state
+        // Note: Always reset label to the current view's docked state
         if (label) {
             this.updateLabel(this.currentView);
         }
@@ -1632,7 +1632,7 @@ export class UI {
     }
 
     static showActionMenu(trackId) {
-        // CRITICAL: Blur any active element to prevent auto-focus/highlight on mobile
+        // Note: Critical blur any active element to prevent auto-focus/highlight on mobile
         if (document.activeElement) document.activeElement.blur();
 
         const track = store.state.library.find(t => t.id === trackId);
@@ -1677,7 +1677,7 @@ export class UI {
                 menu.querySelector('#action-menu-overlay').classList.replace('opacity-0', 'opacity-100');
             }
             if (sheet) {
-                sheet.style.transform = ''; // Clear manual drag
+                sheet.style.transform = ''; // Note: Clear manual drag
                 sheet.classList.remove('translate-y-full');
             }
         }, 10);
@@ -1689,7 +1689,7 @@ export class UI {
         const menu = this.dom.actionMenu;
         const sheet = this.dom.actionMenuSheet;
         if (sheet) {
-            sheet.style.transform = ''; // Clear manual drag
+            sheet.style.transform = ''; // Note: Clear manual drag
             sheet.classList.add('translate-y-full');
         }
         if (menu) {
@@ -1725,10 +1725,10 @@ export class UI {
             if (!isDragging) return;
             isDragging = false;
             const deltaY = e.changedTouches[0].clientY - startY;
-            const threshold = window.innerHeight * 0.08; // Same as NP swipe-to-close
+            const threshold = window.innerHeight * 0.08; // Note: Same as NP swipe-to-close
             sheet.style.transition = 'transform 0.6s cubic-bezier(0.19, 1, 0.22, 1)';
             if (deltaY > threshold) {
-                Haptics.lock(); // 15ms pulse for dismissal
+                Haptics.lock(); // Note: 15Ms pulse for dismissal
                 this.hideActionMenu();
             } else {
                 sheet.style.transform = 'translateY(0)';
@@ -1904,7 +1904,7 @@ export class UI {
         const c = this.dom.toastContainer;
         if (!c) return;
         const t = document.createElement('div');
-        // Omni-Island Styled Toast
+        // ## Section: Omni-island styled toast
         t.className = 'glass-view px-6 py-3 rounded-full shadow-2xl text-[10px] font-black uppercase tracking-[0.2em] font-mono text-[var(--text-main)] transition-all duration-500 ease-[cubic-bezier(0.19,1,0.22,1)] transform translate-y-10 opacity-0 border border-[var(--glass-border)]';
         t.style.backdropFilter = 'blur(32px)';
         t.style.webkitBackdropFilter = 'blur(32px)';

@@ -45,7 +45,7 @@ def youtube_search():
         return jsonify({"results": []})
     limit = min(20, max(1, request.args.get("limit", 10, type=int)))
     source = (request.args.get("source") or "ytmusic").strip().lower()
-    # Canonical: ytmusic, youtube. Support 'music' as legacy alias for ytmusic.
+    # Note: Canonical ytmusic, youtube. support 'music' as legacy alias for ytmusic.
     use_ytmusic = (source in ("ytmusic", "music"))
     try:
         dl = _get_api()["get_downloader"](open_browser=False)
@@ -64,17 +64,17 @@ def youtube_suggest():
         return jsonify({"suggestions": []})
     
     url = "http://suggestqueries.google.com/complete/search"
-    # Try music client first if it's a music-focused app
+    # Note: Try music client first if it's a music-focused app
     params = {
         "client": "youtube",
-        "ds": "yt", # 'yt' for general, 'ytm' sometimes used for music
+        "ds": "yt", # Note: 'Yt' for general, 'ytm' sometimes used for music
         "q": q,
         "oe": "utf-8"
     }
-    # If we want to be smart, we could try multiple clients, 
-    # but 'youtube' with 'ds=yt' is most reliable for general queries.
+    # Note: If we want to be smart, we could try multiple clients,
+    # Note: But 'youtube' with 'ds=yt' is most reliable for general queries.
     try:
-        # This API returns a JSON-p style array: ["query", ["suggestion1", "suggestion2", ...], ...]
+        # Note: This API returns a JSON-p style array ["query", ["suggestion1", "suggestion2", ...], ...]
         resp = requests.get(url, params=params, timeout=2)
         if resp.ok:
             data = resp.json()
@@ -295,11 +295,11 @@ def update_downloader_config():
                 val = "true" if (val is True or (isinstance(val, str) and val.strip().lower() in ("true", "1"))) else "false"
             set_key(str(env_path), env_key, str(val))
             os.environ[env_key] = str(val)
-            # Keep in-memory app config in sync so GET config and get_downloader() see the new path immediately
+            # Note: Keep in-memory app config in sync so GET config and get_downloader() see the new path immediately
             if key == "output_dir":
                 from shared.app_config import set_output_dir as set_app_output_dir
                 set_app_output_dir(val)
-                # So desktop player finds path regardless of cwd: write to config dir (same place player reads)
+                # Note: So desktop player finds path regardless of cwd write to config dir (same place player reads)
                 try:
                     from shared.constants import DEFAULT_CONFIG_DIR
                     cfg = Path(DEFAULT_CONFIG_DIR).expanduser()

@@ -9,57 +9,57 @@ import sys
 import os
 from pathlib import Path
 
-# Try to import odst_tool, looking in parent/adjacent dirs if needed
+# Note: Try to import odst_tool, looking in parent/adjacent dirs if needed
 try:
     from odst_tool.smart_downloader import SmartDownloader
 except ImportError:
-    # Fallback: Check for adjacent 'ods-tool' or 'odst-tool' folders
+    # Note: Fallback check for adjacent 'ods-tool' or 'odst-tool' folders
     current_dir = Path(__file__).resolve().parent
-    root_dir = current_dir.parent.parent # soundsible/player/ui -> soundsible
+    root_dir = current_dir.parent.parent # Note: Soundsible/player/UI -> soundsible
     
     potential_names = ['odst_tool', 'ods-tool', 'ods_tool']
     found = False
     
-    # Check inside root first (normal case)
+    # Note: Check inside root first (normal case)
     for name in potential_names:
         p = root_dir / name
         if p.exists() and p.is_dir():
              if str(root_dir) not in sys.path:
                  sys.path.append(str(root_dir))
-             # Map package name if needed (e.g. ods-tool -> odst_tool)
-             # But we can't easily rename package in python without symlinks or tricks.
-             # Simplest: Add the PARENT of ods-tool to path? No, that exposes everything.
-             # If user cloned 'ods-tool', the package name is 'ods-tool'.
-             # But code expects 'odst_tool'. 
-             # We might need to alias it or just fail gracefully.
+             # Note: Map package name if needed (e.g. ods-tool -> odst_tool)
+             # Note: But we can't easily rename package in python without symlinks or tricks.
+             # Note: Simplest add the parent of ods-tool to path? no, that exposes everything.
+             # Note: If user cloned 'ods-tool', the package name is 'ods-tool'.
+             # Note: But code expects 'odst_tool'.
+             # Note: We might need to alias it or just fail gracefully.
              pass
 
-    # Check ADJACENT to root (user case: cloned side-by-side)
-    # ../soundsible -> ../ods-tool
+    # Note: Check adjacent to root (user case cloned side-by-side)
+    # Note: ../Soundsible -> ../ods-tool
     parent_of_root = root_dir.parent
     for name in potential_names:
         p = parent_of_root / name
         if p.exists() and p.is_dir():
-            # Add PARENT of the tool to sys.path so 'import ods-tool' works
-            # But we need 'import odst_tool'. 
-            # If folder is named 'ods-tool', we can't import it as 'odst_tool'.
-            # We will try to mock it or just import what is there.
+            # Note: Add parent of the tool to sys.path so 'import ods-tool' works
+            # Note: But we need 'import odst_tool'.
+            # Note: If folder is named 'ods-tool', we can't import it as 'odst_tool'.
+            # Note: We will try to mock it or just import what is there.
             
             sys.path.append(str(parent_of_root))
             
-            # If the folder is 'ods-tool', we need to alias it?
-            # Hack: blindly try importing it.
+            # Note: If the folder is 'ods-tool', we need to alias it?
+            # Note: Hack blindly try importing it.
             try:
                 if name == 'odst_tool':
                     from odst_tool.smart_downloader import SmartDownloader
                     found = True
                     break
                 elif name == 'ods-tool':
-                    # Can't simple import with dash.
-                    # We can use importlib or just rely on the user having valid name.
-                    # But wait, user said "ods-tool".
-                    # Let's try to add the folder ITSELF to sys.path?
-                    # No, then we import 'smart_downloader' directly.
+                    # Note: Can't simple import with dash.
+                    # Note: We can use importlib or just rely on the user having valid name.
+                    # Note: But wait, user said "ods-tool".
+                    # Note: Let's try to add the folder itself to sys.path?
+                    # Note: No, then we import 'smart_downloader' directly.
                     sys.path.append(str(p))
                     try:
                         from smart_downloader import SmartDownloader
@@ -71,8 +71,8 @@ except ImportError:
                 continue
     
     if not found:
-        # One last desperate try: maybe it IS in path but named differently?
-        # Just fail gracefully for the class definition helper
+        # Note: One last desperate try maybe it IS in path but named differently?
+        # Note: Just fail gracefully for the class definition helper
         print("Warning: odst_tool module not found. Download features disabled.")
         SmartDownloader = None
 
@@ -88,15 +88,15 @@ class DownloadDialog(Adw.Window):
         self.set_default_size(500, 400)
         self.set_modal(True)
         
-        # Main layout
+        # Note: Main layout
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.set_content(main_box)
         
-        # Header
+        # Note: Header details
         header = Adw.HeaderBar()
         main_box.append(header)
         
-        # Content
+        # Note: Content details
         content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=24)
         content_box.set_margin_top(24)
         content_box.set_margin_bottom(24)
@@ -104,29 +104,29 @@ class DownloadDialog(Adw.Window):
         content_box.set_margin_end(24)
         main_box.append(content_box)
         
-        # Title
+        # Note: Title details
         title_label = Gtk.Label(label="Smart Downloader")
         title_label.add_css_class("title-2")
         content_box.append(title_label)
         
-        # Description
+        # Note: Description details
         desc_label = Gtk.Label(label="Enter a song name or YouTube URL.")
         desc_label.add_css_class("dim-label")
         content_box.append(desc_label)
         
-        # Input Group (Multi-line)
+        # Note: Input group (multi-line)
         input_group = Adw.PreferencesGroup()
         input_group.set_title("Paste Links (one per line)")
         content_box.append(input_group)
         
-        # Scrolled Text View for Input
+        # Note: Scrolled text view for input
         input_scrolled = Gtk.ScrolledWindow()
         input_scrolled.set_min_content_height(100)
-        input_scrolled.set_max_content_height(100) # Increased size
+        input_scrolled.set_max_content_height(100) # Note: Increased size
         input_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         
         self.input_view = Gtk.TextView()
-        self.input_view.set_wrap_mode(Gtk.WrapMode.NONE) # No wrap for URLs
+        self.input_view.set_wrap_mode(Gtk.WrapMode.NONE) # Note: No wrap for urls
         self.input_view.set_top_margin(8)
         self.input_view.set_bottom_margin(8)
         self.input_view.set_left_margin(8)
@@ -134,26 +134,26 @@ class DownloadDialog(Adw.Window):
         self.input_buffer = self.input_view.get_buffer()
         input_scrolled.set_child(self.input_view)
         
-        # Wrap input in a row or box? AdwPreferencesGroup expects Rows usually?
-        # Actually we can just put the scrolled window in the box directly.
-        # But to look nice, let's put it in a card-like frame if possible, or just box.
+        # Note: Wrap input in a row or box? adwpreferencesgroup expects rows usually?
+        # Note: Actually we can just put the scrolled window in the box directly.
+        # Note: But to look nice, let's put it in a card-like frame if possible, or just box.
         
-        # Create a clamped wrapper for nicer width?
+        # Note: Create a clamped wrapper for nicer width?
         input_frame = Gtk.Frame()
         input_frame.set_child(input_scrolled)
-        input_group.add(input_frame) # Takes widget? No, adds to list_box usually.
-        # Adw.PreferencesGroup.add() adds a child widget to the box. Yes.
+        input_group.add(input_frame) # Note: Takes widget? no, adds to list_box usually.
+        # Note: ADW.preferencesgroup.add() adds A child widget to the box. yes.
         
-        # Quality Selector
+        # Note: Quality selector
         self.quality_row = Adw.ComboRow()
         self.quality_row.set_title("Download Quality")
         self.quality_row.set_subtitle("Affects file size and audio fidelity")
         
-        # Add options (Standard, High, Ultra)
+        # Note: Add options (standard, high, ultra)
         model = Gtk.StringList.new(["Standard (128k)", "High Quality (320k)", "Ultra (Best Source)"])
         self.quality_row.set_model(model)
         
-        # Set initial quality from config
+        # Note: Set initial quality from config
         self.quality_map = {0: "standard", 1: "high", 2: "ultra"}
         self.quality_map_inv = {"standard": 0, "high": 1, "ultra": 2}
         
@@ -165,7 +165,7 @@ class DownloadDialog(Adw.Window):
         
         input_group.add(self.quality_row)
         
-        # Action Button
+        # Note: Action button
         self.download_btn = Gtk.Button(label="Start Download")
         self.download_btn.add_css_class("suggested-action")
         self.download_btn.add_css_class("pill")
@@ -174,26 +174,26 @@ class DownloadDialog(Adw.Window):
         self.download_btn.connect("clicked", self.on_download_clicked)
         content_box.append(self.download_btn)
         
-        # Progress Area
+        # Note: Progress area
         self.progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self.progress_box.set_visible(False)
         
         self.progress_bar = Gtk.ProgressBar()
         self.status_label = Gtk.Label(label="Initializing...")
         
-        # Log view (simple text view)
+        # Note: Log view (simple text view)
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_min_content_height(100)
         scrolled.set_max_content_height(150)
         scrolled.set_vexpand(True)
-        # Force scrollbars to be automatic
+        # Note: Force scrollbars to be automatic
         scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC) 
 
         self.log_view = Gtk.TextView()
         self.log_view.set_editable(False)
         self.log_view.set_wrap_mode(Gtk.WrapMode.WORD)
         scrolled.set_child(self.log_view)
-        # Store buffer for easier appending
+        # Note: Store buffer for easier appending
         self.log_buffer = self.log_view.get_buffer()
         
         self.progress_box.append(self.progress_bar)
@@ -203,35 +203,35 @@ class DownloadDialog(Adw.Window):
         content_box.append(self.progress_box)
         
     def on_download_clicked(self, btn):
-        # Get text from buffer
+        # Note: Get text from buffer
         start, end = self.input_buffer.get_bounds()
         text = self.input_buffer.get_text(start, end, True)
         
         if not text.strip():
             return
             
-        # Parse lines
+        # Note: Parse lines
         lines = [line.strip() for line in text.split('\n') if line.strip()]
         if not lines:
             return
 
-        # Disable input
+        # Note: Disable input
         self.input_view.set_editable(False)
         self.download_btn.set_sensitive(False)
         
-        # Show progress
+        # Note: Show progress
         self.progress_box.set_visible(True)
         self.progress_bar.pulse()
         self.status_label.set_label("Starting download engine...")
         
-        # Clear log
+        # Note: Clear log
         self.log_buffer.set_text("")
         
-        # Get selected quality
+        # Note: Get selected quality
         selected_idx = self.quality_row.get_selected()
         selected_quality = self.quality_map.get(selected_idx, "high")
         
-        # Start thread
+        # Note: Start thread
         self.download_thread = threading.Thread(
             target=self._run_process, 
             args=(lines, selected_quality), 
@@ -251,11 +251,11 @@ class DownloadDialog(Adw.Window):
                 
             self.log_buffer.insert(end_iter, f"{prefix}{msg}\n")
             
-            # Auto scroll
+            # Note: Auto scroll
             mark = self.log_buffer.create_mark(None, end_iter, False)
             self.log_view.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
             
-            # Update status label with last message
+            # Note: Update status label with last message
             self.status_label.set_label(msg)
             return False
             
@@ -267,7 +267,7 @@ class DownloadDialog(Adw.Window):
         
         success_count = 0
         total = len(queries)
-        downloaded_tracks = [] # Keep track of actual track objects
+        downloaded_tracks = [] # Note: Keep track of actual track objects
         
         try:
             GLib.idle_add(self.progress_bar.pulse)
@@ -292,7 +292,7 @@ class DownloadDialog(Adw.Window):
                 except Exception as e:
                     self._log_ui(f"Error processing item: {e}", "error")
             
-            # Upload Phase
+            # Note: Upload phase
             if any_success:
                 self._log_ui("Starting batch upload...", "info")
                 GLib.idle_add(self.progress_bar.pulse)
@@ -300,7 +300,7 @@ class DownloadDialog(Adw.Window):
                 updated_library = downloader.upload_to_cloud()
                 
                 if updated_library:
-                     # CRITICAL FIX: Integrate tracks and covers BEFORE cleaning staging
+                     # Note: Critical FIX integrate tracks and covers before cleaning staging
                      if self.library_manager:
                          self._log_ui("Proactively caching tracks and covers...", "info")
                          
@@ -310,11 +310,11 @@ class DownloadDialog(Adw.Window):
                          os.makedirs(covers_dir, exist_ok=True)
 
                          for t in downloaded_tracks:
-                             # 1. Seed Audio Cache
+                             # Note: 1. Seed audio cache
                              if self.library_manager.cache and hasattr(t, 'local_path') and t.local_path:
                                  self.library_manager.cache.add_to_cache(t.id, t.local_path, move=False)
                              
-                             # 2. Extract and Cache Cover Art
+                             # Note: 2. Extract and cache cover art
                              try:
                                  if hasattr(t, 'local_path') and t.local_path:
                                      cover_data = AudioProcessor.extract_cover_art(t.local_path)
@@ -327,7 +327,7 @@ class DownloadDialog(Adw.Window):
                      GLib.idle_add(lambda: self.progress_bar.set_fraction(1.0))
                      self._log_ui("All operations completed successfully!", "success")
                      
-                     # Trigger Library Refresh with injected metadata
+                     # Note: Trigger library refresh with injected metadata
                      parent = self.get_transient_for()
                      if parent and hasattr(parent, 'refresh_library'):
                          GLib.idle_add(parent.refresh_library, updated_library)
@@ -350,6 +350,6 @@ class DownloadDialog(Adw.Window):
     def _on_finished(self):
         self.input_view.set_editable(True)
         self.download_btn.set_sensitive(True)
-        # Clear input so user can enter new links
+        # Note: Clear input so user can enter new links
         self.input_buffer.set_text("") 
         self.status_label.set_label("Ready for next batch")

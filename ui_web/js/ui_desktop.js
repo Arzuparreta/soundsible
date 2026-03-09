@@ -229,7 +229,7 @@ export const DesktopUI = {
         const ctxPlayPlaylist = el('desktop-context-play-playlist');
         const ctxDeletePlaylist = el('desktop-context-delete-playlist');
 
-        // Hide all track-specific actions
+        // Note: Hide all track-specific actions
         if (ctxFav) ctxFav.classList.add('hidden');
         if (ctxQueue) ctxQueue.classList.add('hidden');
         if (ctxAddToPlaylist) ctxAddToPlaylist.classList.add('hidden');
@@ -237,7 +237,7 @@ export const DesktopUI = {
         if (ctxRemoveFromPlaylist) ctxRemoveFromPlaylist.classList.add('hidden');
         if (ctxDeleteTrack) ctxDeleteTrack.classList.add('hidden');
 
-        // Show playlist-specific actions
+        // Note: Show playlist-specific actions
         if (ctxPlayPlaylist) ctxPlayPlaylist.classList.remove('hidden');
         if (ctxDeletePlaylist) ctxDeletePlaylist.classList.remove('hidden');
 
@@ -279,7 +279,7 @@ export const DesktopUI = {
         document.addEventListener('contextmenu', (e) => {
             if (e.target.closest('input, textarea, select')) return;
 
-            // Playlist cards (in playlists grid)
+            // Note: Playlist cards (in playlists grid)
             const playlistCard = e.target.closest('.playlist-card');
             if (playlistCard && this.currentView === 'playlists') {
                 e.preventDefault();
@@ -291,7 +291,7 @@ export const DesktopUI = {
                 return;
             }
 
-            // Track rows / cards / queue items
+            // Note: Track rows / cards / queue items
             e.preventDefault();
             const row = e.target.closest('.song-row, .song-card, .queue-item');
             const trackId = row?.getAttribute?.('data-id');
@@ -614,8 +614,8 @@ export const DesktopUI = {
         }
 
         this.bindFullCoverOverlay();
-        // Progress bar and time labels must come from event detail only (never audio.currentTime here),
-        // so the bar resets to 0 when a new track starts instead of showing the previous track's position.
+        // Note: Progress bar and time labels must come from event detail only (never audio.currenttime here),
+        // Note: So the bar resets to 0 when a new track starts instead of showing the previous track's position.
         window.addEventListener('audio:timeupdate', (e) => {
             const d = e.detail;
             if (d && typeof d.progress === 'number' && store.state.currentTrack) {

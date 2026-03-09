@@ -71,7 +71,7 @@ class CacheManager:
                 if row:
                     file_path = row[0]
                     if os.path.exists(file_path):
-                        # Update access stats
+                        # Note: Update access stats
                         self.conn.execute("""
                             UPDATE cache_entries 
                             SET last_accessed = ?, access_count = access_count + 1 
@@ -80,11 +80,11 @@ class CacheManager:
                         self.conn.commit()
                         return file_path
                     else:
-                        # Orphaned entry cleanup
+                        # Note: Orphaned entry cleanup
                         self.conn.execute("DELETE FROM cache_entries WHERE track_id = ?", (track_id,))
                         self.conn.commit()
              except sqlite3.OperationalError:
-                 pass # Be resilient to locks
+                 pass # Note: Be resilient to locks
         return None
 
     def add_to_cache(self, track_id: str, source_path: str, move: bool = False) -> str:
@@ -93,7 +93,7 @@ class CacheManager:
         """
         file_size = os.path.getsize(source_path)
         
-        # Ensure space
+        # Note: Ensure space
         self._ensure_space(file_size)
         
         target_name = f"{track_id}{Path(source_path).suffix}"
@@ -104,7 +104,7 @@ class CacheManager:
         else:
             shutil.copy2(source_path, target_path)
             
-        # Update DB
+        # Note: Update DB
         with self.lock:
              try:
                 self.conn.execute("""
@@ -129,7 +129,7 @@ class CacheManager:
                 if current_size <= target_bytes:
                     return
 
-                # Get candidates (oldest first)
+                # Note: Get candidates (oldest first)
                 cursor = self.conn.execute(
                     "SELECT track_id, file_path, file_size FROM cache_entries ORDER BY last_accessed ASC"
                 )
@@ -151,7 +151,7 @@ class CacheManager:
                     if current_size <= target_bytes:
                         break
                 self.conn.commit()
-                # print(f"Cache: Pruned {pruned_count} files to reach target size.")
+                # Note: Print(f"cache pruned {pruned_count} files to reach target size.")
             except Exception as e:
                 pass
 

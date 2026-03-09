@@ -32,8 +32,8 @@ def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
     if item.get("spotify_data") or (song_str and "spotify.com" in song_str):
         return None, "This link type is not supported"
 
-    # Normalize source_type to standardized enums
-    # Handle legacy aliases (like 'music' or 'ytmusic') to canonical enums
+    # Note: Normalize source_type to standardized enums
+    # Note: Handle legacy aliases (like 'music' or 'ytmusic') to canonical enums
     if source_type in ("music", "ytmusic", "ytmusic_search"):
         if source_type != SourceType.YTMUSIC_SEARCH:
             logger.info("API: Normalizing legacy source '%s' to '%s'", source_type, SourceType.YTMUSIC_SEARCH)

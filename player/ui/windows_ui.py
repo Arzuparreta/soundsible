@@ -25,11 +25,11 @@ class WindowsControlCenter:
         self.root.geometry("500x450")
         self.root.resizable(False, False)
         
-        # Tray setup
+        # Note: Tray setup
         self.tray_icon = None
         self.root.protocol('WM_DELETE_WINDOW', self.minimize_to_tray)
         
-        # Styles
+        # Note: Styles details
         style = ttk.Style()
         style.configure("Status.TLabel", font=("Segoe UI", 10))
         style.configure("Header.TLabel", font=("Segoe UI", 14, "bold"))
@@ -39,15 +39,15 @@ class WindowsControlCenter:
         self.update_loop_active = True
         
     def setup_ui(self):
-        # Main Container
+        # Note: Main container
         main = ttk.Frame(self.root, padding="20")
         main.pack(fill=tk.BOTH, expand=True)
         
-        # Header
+        # Note: Header details
         header = ttk.Label(main, text="Soundsible", style="Header.TLabel")
         header.pack(pady=(0, 20))
         
-        # Status Card
+        # Note: Status card
         status_frame = ttk.LabelFrame(main, text=" Server Status ", padding="15")
         status_frame.pack(fill=tk.X, pady=10)
         
@@ -57,7 +57,7 @@ class WindowsControlCenter:
         self.ip_label = ttk.Label(status_frame, text="Local IP: Detecting...", style="Status.TLabel")
         self.ip_label.pack(anchor=tk.W, pady=(5, 0))
         
-        # Quick Actions
+        # Note: Quick actions
         actions_frame = ttk.Frame(main, padding="10")
         actions_frame.pack(fill=tk.X, pady=20)
         
@@ -70,7 +70,7 @@ class WindowsControlCenter:
         btn_sync = ttk.Button(actions_frame, text="Sync to Mobile (QR)", style="Big.TButton", command=self.show_sync_qr)
         btn_sync.pack(fill=tk.X, pady=5)
         
-        # Bottom Bar
+        # Note: Bottom bar
         bottom = ttk.Frame(main)
         bottom.pack(side=tk.BOTTOM, fill=tk.X)
         
@@ -100,7 +100,7 @@ class WindowsControlCenter:
             messagebox.showerror("Error", "No Configuration Found. Run setup first.")
             return
 
-        # Detect IPs
+        # Note: Detect ips
         tailscale_ip = None
         local_ip = "localhost"
         try:
@@ -119,7 +119,7 @@ class WindowsControlCenter:
         lan_url = f"http://{local_ip}:{STATION_PORT}/player/"
         ts_url = f"http://{tailscale_ip}:{STATION_PORT}/player/" if tailscale_ip else None
 
-        # 1. Generate Token
+        # Note: 1. Generate token
         config_data = config.to_dict()
         from shared.api import get_active_endpoints
         config_data['endpoints'] = get_active_endpoints()
@@ -129,12 +129,12 @@ class WindowsControlCenter:
         compressed = zlib.compress(json_bytes)
         token = base64.urlsafe_b64encode(compressed).decode('utf-8')
         
-        # 2. Generate QR
+        # Note: 2. Generate QR
         qr = segno.make(token)
         out = io.BytesIO()
         qr.save(out, kind='png', scale=5)
         
-        # 3. Show Window
+        # Note: 3. Show window
         qr_win = tk.Toplevel(self.root)
         qr_win.title("Sync to Mobile")
         qr_win.geometry("400x600")
@@ -158,7 +158,7 @@ class WindowsControlCenter:
         img = Image.open(out)
         img_tk = ImageTk.PhotoImage(img)
         qr_label = tk.Label(qr_win, image=img_tk)
-        qr_label.image = img_tk # Keep reference
+        qr_label.image = img_tk # Note: Keep reference
         qr_label.pack(pady=20)
         
         tk.Label(qr_win, text="Paste this token in your phone's Settings:", font=("Segoe UI", 9)).pack()
@@ -178,7 +178,7 @@ class WindowsControlCenter:
             self.create_tray_icon()
 
     def create_tray_icon(self):
-        # Use placeholder icon
+        # Note: Use placeholder icon
         icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "ui_web", "assets", "icons", "icon-192.png")
         if os.path.exists(icon_path):
             image = Image.open(icon_path)
@@ -230,7 +230,7 @@ class SettingsWindow(tk.Toplevel):
         tabs = ttk.Notebook(self)
         tabs.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # --- Local Tab ---
+        # Note: Local tab
         local_tab = ttk.Frame(tabs, padding=15)
         tabs.add(local_tab, text=" Local / NAS ")
         
@@ -247,7 +247,7 @@ class SettingsWindow(tk.Toplevel):
         ttk.Button(btn_box, text="Add Folder", command=self.add_folder).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_box, text="Remove", command=self.remove_folder).pack(side=tk.LEFT, padx=2)
         
-        # --- Cloud Tab ---
+        # Note: Cloud tab
         cloud_tab = ttk.Frame(tabs, padding=15)
         tabs.add(cloud_tab, text=" Cloud Storage ")
         
@@ -278,7 +278,7 @@ class SettingsWindow(tk.Toplevel):
         
         cloud_tab.columnconfigure(1, weight=1)
         
-        # Save Button
+        # Note: Save button
         save_btn = ttk.Button(self, text="Save & Apply", command=self.save_settings)
         save_btn.pack(pady=15)
 
@@ -294,7 +294,7 @@ class SettingsWindow(tk.Toplevel):
 
     def save_settings(self):
         from shared.models import StorageProvider
-        # Update config object
+        # Note: Update config object
         self.config.provider = StorageProvider(self.provider_var.get())
         self.config.bucket = self.bucket_entry.get()
         self.config.access_key_id = self.key_entry.get()
@@ -302,7 +302,7 @@ class SettingsWindow(tk.Toplevel):
         self.config.endpoint = self.endpoint_entry.get()
         self.config.watch_folders = list(self.folder_list.get(0, tk.END))
         
-        # Save to disk
+        # Note: Save to disk
         from shared.constants import DEFAULT_CONFIG_DIR
         config_file = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
         with open(config_file, 'w') as f:
@@ -313,7 +313,7 @@ class SettingsWindow(tk.Toplevel):
 
     def check_status(self):
         while self.update_loop_active:
-            # Check API (Station port)
+            # Note: Check API (station port)
             api_online = False
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -321,10 +321,10 @@ class SettingsWindow(tk.Toplevel):
                     api_online = s.connect_ex(('127.0.0.1', STATION_PORT)) == 0
             except: pass
             
-            # Update UI safely
+            # Note: Update UI safely
             status_text = "Backend API: ONLINE" if api_online else "Backend API: OFFLINE (Starting...)"
             
-            # Get IP
+            # Note: Get IP
             try:
                 hostname = socket.gethostname()
                 ip = socket.gethostbyname(hostname)
@@ -333,13 +333,13 @@ class SettingsWindow(tk.Toplevel):
             self.root.after(0, lambda: self.api_status_label.config(text=status_text))
             self.root.after(0, lambda: self.ip_label.config(text=f"Local IP: {ip}"))
             
-            # If offline and not started, start it
+            # Note: If offline and not started, start it
             if not api_online:
                 self.launcher.launch_web_player()
                 
             time.sleep(5)
 
     def run(self):
-        # Start status monitor thread
+        # Note: Start status monitor thread
         threading.Thread(target=self.check_status, daemon=True).start()
         self.root.mainloop()

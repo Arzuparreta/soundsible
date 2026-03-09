@@ -26,47 +26,47 @@ class VolumeKnob(Gtk.DrawingArea):
     def __init__(self, initial_value=100.0):
         super().__init__()
         
-        # Value properties
+        # Note: Value properties
         self._value = max(0.0, min(100.0, initial_value))
         self._min_value = 0.0
         self._max_value = 100.0
         
-        # Visual properties
-        self._size = 56  # Increased to prevent clipping
+        # Note: Visual properties
+        self._size = 56  # Note: Increased to prevent clipping
         self._knob_radius = 18
         self._track_width = 4
         self._hovering = False
         self._dragging = False
         
-        # Angle range (in radians): -135° to +135° (270° total)
-        self._angle_min = -3 * math.pi / 4  # -135°
-        self._angle_max = 3 * math.pi / 4   # +135°
+        # Note: Angle range (in radians) -135° to +135° (270° total)
+        self._angle_min = -3 * math.pi / 4  # Note: 135°
+        self._angle_max = 3 * math.pi / 4   # Note: +135°
         
-        # Setup widget
+        # Note: Setup widget
         self.set_size_request(self._size, self._size)
         self.set_content_width(self._size)
         self.set_content_height(self._size)
         self.set_draw_func(self._on_draw)
         
-        # Mouse events
+        # Note: Mouse events
         self._setup_event_controllers()
     
     def _setup_event_controllers(self):
         """Setup mouse and scroll event controllers."""
-        # Drag gesture for rotation
+        # Note: Drag gesture for rotation
         drag = Gtk.GestureDrag()
         drag.connect('drag-begin', self._on_drag_begin)
         drag.connect('drag-update', self._on_drag_update)
         drag.connect('drag-end', self._on_drag_end)
         self.add_controller(drag)
         
-        # Scroll for fine adjustment
+        # Note: Scroll for fine adjustment
         scroll = Gtk.EventControllerScroll()
         scroll.set_flags(Gtk.EventControllerScrollFlags.VERTICAL)
         scroll.connect('scroll', self._on_scroll)
         self.add_controller(scroll)
         
-        # Hover detection
+        # Note: Hover detection
         motion = Gtk.EventControllerMotion()
         motion.connect('enter', self._on_enter)
         motion.connect('leave', self._on_leave)
@@ -77,18 +77,18 @@ class VolumeKnob(Gtk.DrawingArea):
         center_x = width / 2
         center_y = height / 2
         
-        # Dynamic sizing
+        # Note: Dynamic sizing
         min_side = min(width, height)
         
-        # Calculate scaling factor relative to default size (56) purely for stroke widths
+        # Note: Calculate scaling factor relative to default size (56) purely for stroke widths
         scale_factor = min_side / 56.0
         
-        # Adjust track width for smaller sizes
+        # Note: Adjust track width for smaller sizes
         self._track_width = max(2, 4 * scale_factor)
         
-        # Radius Calculation:
-        # Drawing extends to: radius + padding_ring(6) + stroke_width/2
-        # Max radius = (min_side / 2) - padding_ring(6) - (stroke_width/2) - safe_margin(1)
+        # Note: Radius calculation details
+        # Note: Drawing extends to radius + padding_ring(6) + stroke_width/2
+        # Note: Max radius = (min_side / 2) - padding_ring(6) - (stroke_width/2) - safe_margin(1)
         
         safe_margin = 1
         ring_padding = 6
@@ -96,14 +96,14 @@ class VolumeKnob(Gtk.DrawingArea):
         
         self._knob_radius = (min_side / 2) - ring_padding - stroke_half - safe_margin
         
-        if self._knob_radius < 4: self._knob_radius = 4 # Safety floor
+        if self._knob_radius < 4: self._knob_radius = 4 # Note: Safety floor
         value_ratio = (self._value - self._min_value) / (self._max_value - self._min_value)
         current_angle = self._angle_min + value_ratio * (self._angle_max - self._angle_min)
         
-        # Colors (adapt to dark theme)
+        # Note: Colors (adapt to dark theme)
         bg_color = (0.2, 0.2, 0.2)
         track_bg_color = (0.3, 0.3, 0.3)
-        track_fill_color = (0.4, 0.6, 1.0)  # Blue accent
+        track_fill_color = (0.4, 0.6, 1.0)  # Note: Blue accent
         knob_color = (0.35, 0.35, 0.35)
         indicator_color = (1.0, 1.0, 1.0)
         
@@ -112,12 +112,12 @@ class VolumeKnob(Gtk.DrawingArea):
         if self._dragging:
             knob_color = (0.45, 0.45, 0.45)
         
-        # Draw background circle
+        # Note: Draw background circle
         cr.set_source_rgb(*bg_color)
         cr.arc(center_x, center_y, self._knob_radius + 6, 0, 2 * math.pi)
         cr.fill()
         
-        # Draw track background arc
+        # Note: Draw track background arc
         cr.set_line_width(self._track_width)
         cr.set_source_rgb(*track_bg_color)
         cr.arc(center_x, center_y, self._knob_radius + 6, 
@@ -125,7 +125,7 @@ class VolumeKnob(Gtk.DrawingArea):
                self._angle_max - math.pi / 2)
         cr.stroke()
         
-        # Draw filled track (progress)
+        # Note: Draw filled track (progress)
         if self._value > self._min_value:
             cr.set_line_width(self._track_width)
             cr.set_source_rgb(*track_fill_color)
@@ -134,12 +134,12 @@ class VolumeKnob(Gtk.DrawingArea):
                    current_angle - math.pi / 2)
             cr.stroke()
         
-        # Draw main knob circle
+        # Note: Draw main knob circle
         cr.set_source_rgb(*knob_color)
         cr.arc(center_x, center_y, self._knob_radius, 0, 2 * math.pi)
         cr.fill()
         
-        # Draw knob indicator line
+        # Note: Draw knob indicator line
         indicator_length = self._knob_radius - 4
         indicator_x = center_x + math.cos(current_angle - math.pi / 2) * indicator_length
         indicator_y = center_y + math.sin(current_angle - math.pi / 2) * indicator_length
@@ -150,7 +150,7 @@ class VolumeKnob(Gtk.DrawingArea):
         cr.line_to(indicator_x, indicator_y)
         cr.stroke()
         
-        # Draw center dot
+        # Note: Draw center dot
         cr.set_source_rgb(*indicator_color)
         cr.arc(center_x, center_y, 2, 0, 2 * math.pi)
         cr.fill()
@@ -158,22 +158,22 @@ class VolumeKnob(Gtk.DrawingArea):
     def _on_drag_begin(self, gesture, start_x, start_y):
         """Handle drag start."""
         self._dragging = True
-        self._drag_start_value = self._value  # Store starting value
+        self._drag_start_value = self._value  # Note: Store starting value
         self.queue_draw()
     
     def _on_drag_update(self, gesture, offset_x, offset_y):
         """Handle drag update - use combined movement to adjust volume."""
-        # Combine both horizontal and vertical movement
-        # Right/Up = increase, Left/Down = decrease
-        # Sensitivity: moving ~200 pixels = full range (0-100)
-        sensitivity = 0.35  # Reduced by 30% for more precise control
+        # Note: Combine both horizontal and vertical movement
+        # Note: Right/up = increase, left/down = decrease
+        # Note: Sensitivity moving ~200 pixels = full range (0-100)
+        sensitivity = 0.35  # Note: Reduced by 30% for more precise control
         
-        # Combine offsets: right is positive, up is negative (so negate y)
-        # This makes dragging right OR up increase volume
+        # Note: Combine offsets right is positive, up is negative (so negate y)
+        # Note: This makes dragging right OR up increase volume
         combined_offset = offset_x + (-offset_y)
         delta = combined_offset * sensitivity
         
-        # Calculate new value based on drag from initial position
+        # Note: Calculate new value based on drag from initial position
         if not hasattr(self, '_drag_start_value'):
             self._drag_start_value = self._value
         
@@ -184,13 +184,13 @@ class VolumeKnob(Gtk.DrawingArea):
         """Handle drag end."""
         self._dragging = False
         if hasattr(self, '_drag_start_value'):
-            delattr(self, '_drag_start_value')  # Clean up
+            delattr(self, '_drag_start_value')  # Note: Clean up
         self.queue_draw()
     
     def _on_scroll(self, controller, dx, dy):
         """Handle scroll wheel - adjust volume."""
-        # Scroll up = increase, scroll down = decrease
-        delta = -dy * 5  # Sensitivity
+        # Note: Scroll up = increase, scroll down = decrease
+        delta = -dy * 5  # Note: Sensitivity
         new_value = self._value + delta
         self.set_value(new_value)
         return True

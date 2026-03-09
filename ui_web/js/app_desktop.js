@@ -1177,7 +1177,7 @@ async function init() {
                 else if (view === 'artists') renderDesktopArtists();
                 else if (view === 'artist-detail' && window._currentArtistName) renderDesktopArtistDetail();
                 else if (view === 'discover' && typeof window.unifiedSearch !== 'undefined') {
-                    // Discover search uses its own debounced listener
+                    // Note: Discover search uses its own debounced listener
                 }
             });
 

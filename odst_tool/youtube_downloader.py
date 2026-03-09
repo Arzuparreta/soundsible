@@ -59,7 +59,7 @@ def _extract_video_id_from_url(url: str) -> Optional[str]:
         return str(vid) if vid and _is_valid_youtube_video_id(str(vid)) else None
     return None
 
-# Same as a normal CLI download. No extractor_args (see docs/yt-dlp-format-errors-log.md).
+# Note: Same as A normal CLI download. no extractor_args (see docs/yt-dlp-format-errors-log.md).
 YDL_FORMAT_AUDIO = "bestaudio/bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best/worstaudio"
 
 
@@ -76,14 +76,14 @@ class YouTubeDownloader:
         self.cookie_file = cookie_file
         self.quality = quality
         
-        # Auto-detect cookies.txt if no cookie source provided
+        # Note: Auto-detect cookies.txt if no cookie source provided
         if not self.cookie_file and not self.cookie_browser:
             try:
                 from shared.constants import DEFAULT_CONFIG_DIR
                 potential_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "cookies.txt"
                 if potential_path.exists():
                     self.cookie_file = str(potential_path)
-                    # print(f"DEBUG: Auto-detected cookies at {self.cookie_file}")
+                    # Note: Print(f"DEBUG auto-detected cookies at {self.cookie_file}")
             except ImportError:
                 pass
 
@@ -97,19 +97,19 @@ class YouTubeDownloader:
         metadata.setdefault("album", "")
         clean_metadata = metadata
 
-        # Search for video
+        # Note: Search for video
         video_info = self._search_youtube(clean_metadata)
         
         if not video_info:
             return None
             
-        # Rate Limit Protection: Sleep random amount
+        # Note: Rate limit protection sleep random amount
         import time
         import random
         from .config import DOWNLOAD_DELAY_RANGE
         time.sleep(random.uniform(*DOWNLOAD_DELAY_RANGE))
             
-        # 3. Download audio
+        # Note: 3. Download audio
         url = video_info.get('webpage_url') or video_info.get('url')
         temp_file = self._download_audio(url)
         
@@ -117,25 +117,25 @@ class YouTubeDownloader:
             return None
             
         try:
-            # 4. Process file (Hash, Metadata, Move)
+            # Note: 4. Process file (hash, metadata, move)
             file_hash = AudioProcessor.calculate_hash(str(temp_file))
             extension = temp_file.suffix[1:]
             final_path = self.tracks_dir / f"{file_hash}.{extension}"
             
-            # Embed metadata (using clean version)
+            # Note: Embed metadata (using clean version)
             AudioProcessor.embed_metadata(
                 str(temp_file), 
                 clean_metadata, 
                 clean_metadata.get('album_art_url')
             )
             
-            # Verify audio details
+            # Note: Verify audio details
             duration, bitrate, size = AudioProcessor.get_audio_details(str(temp_file))
             
-            # Move to final location (renaming to hash)
+            # Note: Move to final location (renaming to hash)
             shutil.move(str(temp_file), str(final_path))
             
-            # 5. Create Track Object
+            # Note: 5. Create track object
             yt_id = video_info.get('id') if _is_valid_youtube_video_id(video_info.get('id')) else None
             track = Track(
                 id=file_hash,
@@ -175,28 +175,28 @@ class YouTubeDownloader:
         Detect if YouTube content is music-specific (likely to have good album art thumbnails).
         Returns True if content appears to be music-focused (YouTube Music, VEVO, Topic channels, etc.).
         """
-        # Check yt-dlp music-specific fields
+        # Note: Check yt-dlp music-specific fields
         if info.get('artist') or info.get('track') or info.get('album'):
             return True
         
-        # Check URL domain
+        # Note: Check URL domain
         if 'music.youtube.com' in url.lower():
             return True
         
-        # Check channel/uploader patterns
+        # Note: Check channel/uploader patterns
         channel = (info.get('channel') or info.get('uploader') or "").lower()
         if not channel:
             return False
         
-        # VEVO channels
+        # Note: VEVO channels
         if 'vevo' in channel:
             return True
         
-        # Topic channels (official music channels)
+        # Note: Topic channels (official music channels)
         if channel.endswith('- topic') or channel.endswith(' - topic'):
             return True
         
-        # Known music labels/collectives
+        # Note: Known music labels/collectives
         music_keywords = [
             'records', 'music', 'official', 'oficial', 'label',
             '88rising', 'trap nation', 'proximity', 'monstercat',
@@ -206,7 +206,7 @@ class YouTubeDownloader:
             if keyword in channel:
                 return True
         
-        # Check category if available
+        # Note: Check category if available
         category = (info.get('categories') or [])
         if isinstance(category, list):
             category_str = ' '.join(category).lower()
@@ -288,14 +288,14 @@ class YouTubeDownloader:
         """
         queries = []
         
-        # Strategy 1: Topic search (Artist - Title official audio)
+        # Note: Strategy 1 topic search (artist - title official audio)
         q1 = SEARCH_STRATEGY_PRIMARY.format(
             artist=metadata['artist'], 
             title=metadata['title']
         )
         queries.append(q1)
         
-        # Strategy 2: Fallback (Artist - Title)
+        # Note: Strategy 2 fallback (artist - title)
         q2 = SEARCH_STRATEGY_FALLBACK.format(
             artist=metadata['artist'], 
             title=metadata['title']
@@ -305,10 +305,10 @@ class YouTubeDownloader:
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': True, # Don't download, just get info
+            'extract_flat': True, # Note: Don't download, just get info
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'ios', 'web'], # Try mobile clients first
+                    'player_client': ['android', 'ios', 'web'], # Note: Try mobile clients first
                 }
             }
         }
@@ -321,7 +321,7 @@ class YouTubeDownloader:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             for query in queries:
                 try:
-                    # Search 5 results
+                    # Note: Search 5 results
                     results = ydl.extract_info(f"ytsearch5:{query}", download=False)
                     if not results or 'entries' not in results:
                         continue
@@ -355,7 +355,7 @@ class YouTubeDownloader:
         """
         title = video_info.get('title', '').lower()
         
-        # 1. Duration Check (Only if duration is known)
+        # Note: 1. Duration check (only if duration is known)
         target_duration = metadata.get('duration_sec', 0)
         if target_duration > 0:
             actual_duration = video_info.get('duration', 0)
@@ -363,29 +363,29 @@ class YouTubeDownloader:
             if diff > DURATION_TOLERANCE_SEC:
                 return False, 0.0
         
-        # 2. Keyword Exclusion
+        # Note: 2. Keyword exclusion
         for keyword in FORBIDDEN_KEYWORDS:
             if keyword in title and keyword not in metadata['title'].lower():
                 return False, 0.0
 
-        # 3. Robust Word Matching
-        # We check if most words from our query are present in the video title
+        # Note: 3. Robust word matching
+        # Note: We check if most words from our query are present in the video title
         query_text = f"{metadata['artist']} {metadata['title']}".lower()
         query_words = set(re.findall(r'\w+', query_text))
         video_words = set(re.findall(r'\w+', title))
         
-        # Remove small generic words from comparison
+        # Note: Remove small generic words from comparison
         stop_words = {'a', 'the', 'of', 'and', 'official', 'audio', 'video', 'music'}
         query_words = query_words - stop_words
         
         if not query_words:
-            return True, 1.0 # Should not happen
+            return True, 1.0 # Note: Should not happen
             
         intersection = query_words.intersection(video_words)
         match_ratio = len(intersection) / len(query_words)
         
-        # Use existing threshold
-        if match_ratio >= 0.5: # Half of the important words match
+        # Note: Use existing threshold
+        if match_ratio >= 0.5: # Note: Half of the important words match
             return True, match_ratio
             
         return False, 0.0
@@ -432,7 +432,7 @@ class YouTubeDownloader:
             capture_output=True,
             text=True,
         )
-        # With cookies, YouTube can return a format list that doesn't match; retry without cookies (same as terminal).
+        # Note: With cookies, youtube can return a format list that doesn't match; retry without cookies (same as terminal).
         if result.returncode != 0 and "Requested format is not available" in (result.stderr or result.stdout or ""):
             if self.cookie_file or self.cookie_browser:
                 i, no_cookies = 0, []
@@ -525,7 +525,7 @@ class YouTubeDownloader:
                     out.append(item)
         except Exception as e:
             logger.warning("YouTube search error (use_ytmusic=%s): %s", use_ytmusic, e)
-            # No silent fallback -- let the caller decide or propagate the error
+            # Note: No silent fallback -- let the caller decide or propagate the error
             raise e
         return out
 
@@ -550,7 +550,7 @@ class YouTubeDownloader:
         elif self.cookie_browser:
             ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
 
-        # Watch URL with list=RD: direct playlist?list=RD returns "This playlist type is unviewable".
+        # Note: Watch URL with list=RD direct playlist?list=RD returns "this playlist type is unviewable".
         mix_url = f"https://www.youtube.com/watch?v={seed_video_id}&list=RD{seed_video_id}&start_radio=1"
 
         def to_item(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -617,7 +617,7 @@ class YouTubeDownloader:
                 text=True,
                 timeout=30,
             )
-            # Same as download: if "Requested format is not available", retry without cookies
+            # Note: Same as download if "requested format is not available", retry without cookies
             if result.returncode != 0 and "Requested format is not available" in (result.stderr or result.stdout or ""):
                 if self.cookie_file or self.cookie_browser:
                     no_cookies = []

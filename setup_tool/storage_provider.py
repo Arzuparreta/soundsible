@@ -208,8 +208,8 @@ class S3StorageProvider(ABC):
         Raises:
             Exception: If library cannot be retrieved due to network/auth errors
         """
-        # Do NO try/except here. We want to fail if the download fails.
-        # The only allowed failure is "File Not Found" which returns None from download_json.
+        # Note: Do NO try/except here. we want to fail if the download fails.
+        # Note: The only allowed failure is "file not found" which returns none from download_json.
         
         from shared.constants import LIBRARY_METADATA_FILENAME
         from shared.models import LibraryMetadata
@@ -220,11 +220,11 @@ class S3StorageProvider(ABC):
             try:
                 return LibraryMetadata.from_json(json_str)
             except Exception as e:
-                # Corrupt JSON? We should probably stop too, to avoid overwriting a potentially valid file
-                # that we just failed to parse.
+                # Note: Corrupt JSON? we should probably stop too, to avoid overwriting a potentially valid file
+                # Note: That we just failed to parse.
                 raise ValueError(f"Corrupt library.json file: {e}")
         
-        # Only return new library if file was explicitly not found (None)
+        # Note: Only return new library if file was explicitly not found (none)
         print("Library not found (new install?), creating fresh one.")
         return LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
 
@@ -255,7 +255,7 @@ class S3StorageProvider(ABC):
         """
         try:
             total_size = 0
-            # List all objects in bucket
+            # Note: List all objects in bucket
             paginator = self.s3_client.get_paginator('list_objects_v2')
             pages = paginator.paginate(Bucket=self.bucket_name)
             

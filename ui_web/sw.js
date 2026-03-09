@@ -21,7 +21,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  // Force the waiting service worker to become the active service worker.
+  // Note: Force the waiting service worker to become the active service worker.
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -48,12 +48,12 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = event.request.url;
 
-  // PASS-THROUGH for Audio: Service Workers + Cache API have issues with Range (206) requests.
+  // Note: PASS-through for audio service workers + cache API have issues with range (206) requests.
   if (url.includes('/api/static/stream/') || url.includes('r2.cloudflarestorage.com')) {
-    return; // Let the browser handle it normally
+    return; // Note: Let the browser handle it normally
   }
 
-  // Network-First for HTML/JS to ensure updates are seen while allowing offline access
+  // Note: Network-first for HTML/JS to ensure updates are seen while allowing offline access
   if (event.request.mode === 'navigate' || event.request.destination === 'script') {
     event.respondWith(
       fetch(event.request).then(response => {
@@ -65,7 +65,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Standard cache-first for other assets
+  // Note: Standard cache-first for other assets
   event.respondWith(
     caches.match(event.request).then((response) => {
       return response || fetch(event.request);

@@ -3,7 +3,7 @@
 Soundsible Universal Launcher
 The single entry point for all Soundsible components (Player, Downloader, Setup).
 """
-# Prepend venv site-packages so "python3 run.py" finds gevent and other deps (same as using ./venv/bin/python).
+# Note: Prepend venv site-packages so "python3 run.py" finds gevent and other deps (same as using ./venv/bin/python).
 import sys
 import subprocess
 import hashlib
@@ -16,7 +16,7 @@ if _venv.exists():
     _sp = _venv / ("Lib/site-packages" if platform.system() == "Windows" else f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages")
     if _sp.exists():
         site.addsitedir(str(_sp))
-    # Install/update requirements (including gevent) before importing gevent, so first-time run works.
+    # Note: Install/update requirements (including gevent) before importing gevent, so first-time run works.
     _req_file = _run_dir / "requirements.txt"
     _marker = _venv / ".installed_requirements_hash"
     _py = _venv / ("Scripts/python.exe" if platform.system() == "Windows" else "bin/python")
@@ -29,8 +29,8 @@ if _venv.exists():
                 print("Requirement installation failed:", _r.stderr or _r.stdout)
                 sys.exit(1)
             _marker.write_text(_current_hash)
-        # If critical deps are broken (e.g. user removed yt-dlp), reinstall on every start.
-        # Use subprocess so we don't import yt_dlp/urllib3/ssl here; gevent must monkey-patch before those.
+        # Note: If critical deps are broken (e.g. user removed yt-dlp), reinstall on every start.
+        # Note: Use subprocess so we don't import yt_dlp/urllib3/ssl here; gevent must monkey-patch before those.
         _r = subprocess.run([str(_py), "-c", "import yt_dlp"], capture_output=True, text=True)
         if _r.returncode != 0:
             print("Dependencies missing or broken (e.g. yt-dlp). Reinstalling...")
@@ -40,7 +40,7 @@ if _venv.exists():
                 print("Reinstall failed:", _r.stderr or _r.stdout)
                 sys.exit(1)
             _marker.write_text(_current_hash)
-# Gevent must patch before any other imports that use socket/threading (so the API can handle multiple requests concurrently).
+# Note: Gevent must patch before any other imports that use socket/threading (so the API can handle multiple requests concurrently)
 from gevent import monkey
 monkey.patch_all()
 
@@ -60,7 +60,7 @@ from shared.constants import STATION_PORT
 
 PLAYER_URL = f"http://localhost:{STATION_PORT}/player/"
 
-# --- VENV BOOTSTRAP ---
+# Note: VENV bootstrap
 ROOT_DIR = Path(__file__).parent.absolute()
 VENV_DIR = ROOT_DIR / "venv"
 PYTHON_EXE = VENV_DIR / ("Scripts\\python.exe" if platform.system() == "Windows" else "bin/python")
@@ -91,14 +91,14 @@ def bootstrap():
         print("Creating virtual environment...")
         subprocess.check_call([sys.executable, "-m", "venv", str(VENV_DIR)])
         
-    # Instead of re-executing, we can "activate" the venv in-process for the initial setup
+    # Note: Instead of re-executing, we can "activate" the venv in-process for the initial setup
     venv_site_packages = VENV_DIR / ("Lib/site-packages" if platform.system() == "Windows" else f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages")
     
     if str(venv_site_packages) not in sys.path:
         import site
         site.addsitedir(str(venv_site_packages))
         
-    # Install basic deps if missing
+    # Note: Install basic deps if missing
     try:
         import rich
         import requests
@@ -109,9 +109,9 @@ def bootstrap():
 
 if __name__ == "__main__":
     bootstrap()
-    # Now we can safely import rich and start the launcher logic in the same process
+    # Note: Now we can safely import rich and start the launcher logic in the same process
 
-# --- ACTUAL LAUNCHER CODE ---
+# Note: Actual launcher CODE
 try:
     from rich.console import Console
     from rich.panel import Panel
@@ -133,7 +133,7 @@ class SoundsibleLauncher:
         self.python_exe = PYTHON_EXE
         self.child_processes = []
         
-        # Register cleanup handler
+        # Note: Register cleanup handler
         atexit.register(self.cleanup)
         signal.signal(signal.SIGINT, lambda s, f: sys.exit(0))
         signal.signal(signal.SIGTERM, lambda s, f: sys.exit(0))
@@ -148,7 +148,7 @@ class SoundsibleLauncher:
         
     def cleanup(self):
         """Force kill all child processes and clean up resources on exit."""
-        # Check for API observer in daemon mode
+        # Note: Check for API observer in daemon mode
         api_observer_ref = None
         try:
             from shared.api import api_observer
@@ -161,7 +161,7 @@ class SoundsibleLauncher:
         if has_work:
             console.print("\n[dim]Cleaning up background services...[/dim]")
         
-        # Clean up child processes
+        # Note: Clean up child processes
         for proc in self.child_processes:
             try:
                 if platform.system() != "Windows":
@@ -172,7 +172,7 @@ class SoundsibleLauncher:
                 try: proc.kill()
                 except: pass
         
-        # Stop API Observer if running in daemon mode
+        # Note: Stop API observer if running in daemon mode
         if api_observer_ref is not None:
             try:
                 api_observer_ref.stop()
@@ -180,7 +180,7 @@ class SoundsibleLauncher:
             except:
                 pass
         
-        # Final safety check: kill anything on Station Engine port
+        # Note: Final safety check kill anything on station engine port
         try:
             _kill_station_process(STATION_PORT)
         except Exception:
@@ -382,7 +382,7 @@ class SoundsibleLauncher:
     def run(self):
         self._install_requirements_if_needed()
         
-        # Windows-specific entry point
+        # Note: Windows-specific entry point
         if os.name == 'nt':
             try:
                 from player.ui.windows_ui import WindowsControlCenter
@@ -406,7 +406,7 @@ class SoundsibleLauncher:
         if "--daemon" in sys.argv:
             console.print("[bold green]Soundsible Daemon is running.[/bold green]")
             from shared.api import start_api
-            start_api()  # This blocks, but api_observer is set as module-level variable
+            start_api()  # Note: This blocks, but api_observer is set as module-level variable
             return
 
         while True:
@@ -435,7 +435,7 @@ class SoundsibleLauncher:
                     sys.exit(1)
                     
                 marker.write_text(current_hash)
-            # If critical deps are broken (e.g. user removed yt-dlp), reinstall on every start
+            # Note: If critical deps are broken (e.g. user removed yt-dlp), reinstall on every start
             try:
                 import yt_dlp  # noqa: F401
             except ImportError:

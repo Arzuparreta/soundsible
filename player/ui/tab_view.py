@@ -16,42 +16,42 @@ class TabView(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.add_css_class("tab-view")
         
-        # Create stack for content
+        # Note: Create stack for content
         self.stack = Gtk.Stack()
         self.stack.add_css_class("tab-view-stack")
         self.stack.set_transition_type(Gtk.StackTransitionType.NONE)
         self.stack.set_transition_duration(0)
         self.stack.set_vexpand(True)
         
-        # Tab metadata
-        self.tabs_metadata = {}  # page_name -> {label, button, visible}
+        # Note: Tab metadata
+        self.tabs_metadata = {}  # Note: Page_name -> {label, button, visible}
         
-        # Tabs bar (custom implementation for thin tabs)
+        # Note: Tabs bar (custom implementation for thin tabs)
         self.tabs_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self.tabs_bar.add_css_class("tabs-bar")
         self.tabs_bar.set_homogeneous(False)
         
-        # Content goes first, tabs below
+        # Note: Content goes first, tabs below
         self.append(self.stack)
         self.append(self.tabs_bar)
     
     def add_page(self, child: Gtk.Widget, name: str, label: str, visible: bool = True, closable: bool = False, insert_before: str = None):
         """Add a page to the stack with a tab button."""
-        # Add to stack
+        # Note: Add to stack
         self.stack.add_named(child, name)
         
-        # Create tab container (Box)
+        # Note: Create tab container (box)
         tab_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         tab_box.add_css_class("tab-container")
         
-        # Create tab button
+        # Note: Create tab button
         button = Gtk.Button(label=label)
         button.add_css_class("flat")
         button.add_css_class("tab-button")
         button.connect('clicked', lambda b: self._on_tab_clicked(name))
         tab_box.append(button)
         
-        # Add close button if closable
+        # Note: Add close button if closable
         if closable:
             close_btn = Gtk.Button(icon_name="window-close-symbolic")
             close_btn.add_css_class("flat")
@@ -60,7 +60,7 @@ class TabView(Gtk.Box):
             close_btn.connect('clicked', lambda b: self.remove_page(name))
             tab_box.append(close_btn)
         
-        # Store metadata
+        # Note: Store metadata
         self.tabs_metadata[name] = {
             'label': label,
             'container': tab_box,
@@ -70,16 +70,16 @@ class TabView(Gtk.Box):
             'closable': closable
         }
         
-        # Add to tabs bar if visible
+        # Note: Add to tabs bar if visible
         if visible:
             if insert_before and insert_before in self.tabs_metadata:
-                # Find the widget to insert before
+                # Note: Find the widget to insert before
                 sibling = self.tabs_metadata[insert_before]['container']
-                # To insert before sibling, we need to know what's BEFORE sibling
-                # In GTK4 GtkBox, we use insert_child_after.
+                # Note: To insert before sibling, we need to know what's before sibling
+                # Note: In GTK4 gtkbox, we use insert_child_after.
                 
-                # Logic to insert before:
-                # Get children of tabs_bar
+                # Note: Logic to insert before details
+                # Note: Get children of tabs_bar
                 children = []
                 curr = self.tabs_bar.get_first_child()
                 while curr:
@@ -97,7 +97,7 @@ class TabView(Gtk.Box):
             else:
                 self.tabs_bar.append(tab_box)
         
-        # If this is the first page, make it active
+        # Note: If this is the first page, make it active
         if len(self.tabs_metadata) == 1:
             button.add_css_class("active-tab")
             self.stack.set_visible_child_name(name)
@@ -109,17 +109,17 @@ class TabView(Gtk.Box):
             
         metadata = self.tabs_metadata[name]
         
-        # If active, switch to another tab first
+        # Note: If active, switch to another tab first
         if self.stack.get_visible_child_name() == name:
             self._switch_to_next_available_tab(name)
             
-        # Remove from tabs bar
+        # Note: Remove from tabs bar
         self.tabs_bar.remove(metadata['container'])
         
-        # Remove from stack
+        # Note: Remove from stack
         self.stack.remove(metadata['child'])
         
-        # Remove from metadata
+        # Note: Remove from metadata
         del self.tabs_metadata[name]
 
     def _switch_to_next_available_tab(self, current_name: str):
@@ -127,12 +127,12 @@ class TabView(Gtk.Box):
         names = list(self.tabs_metadata.keys())
         try:
             idx = names.index(current_name)
-            # Try next one
+            # Note: Try next one
             for i in range(idx + 1, len(names)):
                 if self.tabs_metadata[names[i]]['visible']:
                     self._on_tab_clicked(names[i])
                     return
-            # Try previous ones
+            # Note: Try previous ones
             for i in range(idx - 1, -1, -1):
                 if self.tabs_metadata[names[i]]['visible']:
                     self._on_tab_clicked(names[i])
@@ -140,7 +140,7 @@ class TabView(Gtk.Box):
         except ValueError:
             pass
         
-        # Fallback to first visible
+        # Note: Fallback to first visible
         self._switch_to_first_visible_tab()
 
     def set_tab_visible(self, name: str, visible: bool):
@@ -150,19 +150,19 @@ class TabView(Gtk.Box):
         
         metadata = self.tabs_metadata[name]
         if metadata['visible'] == visible:
-            return  # No change needed
+            return  # Note: No change needed
         
         metadata['visible'] = visible
         container = metadata['container']
         
         if visible:
-            # Add container to tabs bar
+            # Note: Add container to tabs bar
             self.tabs_bar.append(container)
         else:
-            # Remove container from tabs bar
+            # Note: Remove container from tabs bar
             self.tabs_bar.remove(container)
             
-            # If this tab was active, switch to first visible tab
+            # Note: If this tab was active, switch to first visible tab
             if self.stack.get_visible_child_name() == name:
                 self._switch_to_first_visible_tab()
     
@@ -183,14 +183,14 @@ class TabView(Gtk.Box):
     
     def _on_tab_clicked(self, name: str):
         """Handle tab button click."""
-        # Update active state on buttons
+        # Note: Update active state on buttons
         for tab_name, metadata in self.tabs_metadata.items():
             if tab_name == name:
                 metadata['button'].add_css_class("active-tab")
             else:
                 metadata['button'].remove_css_class("active-tab")
         
-        # Switch to page
+        # Note: Switch to page
         self.stack.set_visible_child_name(name)
     
     def _switch_to_first_visible_tab(self):

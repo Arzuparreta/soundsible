@@ -23,9 +23,9 @@ class LibraryScanner:
         self.config = config
         self._load_config_if_needed()
         
-        # We need a storage provider to Save the library.json
-        # Even if we are just scanning local files, the manifest might live in the cloud (for hybrid setup)
-        # OR it might live locally if using LocalStorageProvider.
+        # Note: We need A storage provider to save the library.JSON
+        # Note: Even if we are just scanning local files, the manifest might live in the cloud (for hybrid setup)
+        # Note: OR it might live locally if using localstorageprovider.
         self.storage = StorageProviderFactory.create(self.config.provider)
         self._authenticate_storage()
 
@@ -49,12 +49,12 @@ class LibraryScanner:
             'secret_access_key': self.config.secret_access_key,
             'region': self.config.region,
             'endpoint': self.config.endpoint,
-             # B2 compatibility mappings
+             # Note: B2 compatibility mappings
             'application_key_id': self.config.access_key_id, 
             'application_key': self.config.secret_access_key
         }
         
-        # R2 specific
+        # Note: R2 specific
         if self.config.provider.name == 'CLOUDFLARE_R2' and self.config.endpoint:
              try:
                 creds['account_id'] = self.config.endpoint.split('//')[1].split('.')[0]
@@ -72,7 +72,7 @@ class LibraryScanner:
             console.print(f"[red]Directory not found: {root_path}[/red]")
             return
 
-        # 1. Fetch existing library to avoid duplicates
+        # Note: 1. Fetch existing library to avoid duplicates
         console.print("[cyan]Fetching existing library manifest...[/cyan]")
         try:
             library = self.storage.get_library()
@@ -83,7 +83,7 @@ class LibraryScanner:
         existing_tracks = {t.file_hash: t for t in library.tracks}
         existing_paths = {t.local_path: t for t in library.tracks if t.local_path}
 
-        # 2. Find all audio files
+        # Note: 2. Find all audio files
         audio_files = []
         with console.status(f"[bold green]Scanning {root_path}...[/bold green]"):
             for root, _, filenames in os.walk(root_path):
@@ -98,7 +98,7 @@ class LibraryScanner:
 
         console.print(f"[green]Found {len(audio_files)} audio files.[/green]")
 
-        # 3. Process files
+        # Note: 3. Process files
         new_tracks = []
         updated_tracks = []
         skipped = 0
@@ -124,9 +124,9 @@ class LibraryScanner:
                     try:
                         track, is_new = future.result()
                         if track:
-                            # Check if hash already exists
+                            # Note: Check if hash already exists
                             if track.file_hash in existing_tracks:
-                                # Track exists, but maybe local path is new/changed?
+                                # Note: Track exists, but maybe local path is new/changed?
                                 existing = existing_tracks[track.file_hash]
                                 if existing.local_path != track.local_path:
                                     existing.local_path = track.local_path
@@ -141,14 +141,14 @@ class LibraryScanner:
                     
                     progress.advance(task)
 
-        # 4. Merge and Save
+        # Note: 4. Merge and save
         if not new_tracks and not updated_tracks:
             console.print("[yellow]No changes to library.[/yellow]")
             return
 
         console.print(f"[green]Adding {len(new_tracks)} new tracks, Updating {len(updated_tracks)} existing paths.[/green]")
         
-        # Merge logic
+        # Note: Merge logic
         final_tracks = list(existing_tracks.values())
         final_tracks.extend(new_tracks)
         
@@ -167,15 +167,15 @@ class LibraryScanner:
         Returns (Track, is_new_object)
         """
         try:
-            # Hash
+            # Note: Hash details
             file_hash = AudioProcessor.calculate_hash(str(file_path))
             
-            # Metadata
+            # Note: Metadata details
             meta = AudioProcessor.extract_metadata(str(file_path))
             
-            # Create Track
+            # Note: Create track
             track = Track(
-                id=file_hash, # Use hash as ID for local files
+                id=file_hash, # Note: Use hash as ID for local files
                 title=meta.get('title', 'Unknown'),
                 artist=meta.get('artist', 'Unknown'),
                 album=meta.get('album', 'Unknown'),
@@ -183,11 +183,11 @@ class LibraryScanner:
                 duration=meta.get('duration', 0),
                 file_hash=file_hash,
                 original_filename=file_path.name,
-                compressed=False, # We assume local files are "source" quality or explicitly kept
+                compressed=False, # Note: We assume local files are "source" quality or explicitly kept
                 file_size=file_path.stat().st_size,
                 bitrate=meta.get('bitrate', 0),
                 format=meta.get('format', 'mp3'),
-                cover_art_key=None, # We don't upload cover art for local-only scan yet
+                cover_art_key=None, # Note: We don't upload cover art for local-only scan yet
                 year=meta.get('year'),
                 genre=meta.get('genre'),
                 track_number=meta.get('track_number'),
@@ -198,5 +198,5 @@ class LibraryScanner:
             return track, True
             
         except Exception as e:
-            # console.print(f"Error in worker: {e}")
+            # Note: Console.print(f"error in worker {E}")
             return None, False

@@ -60,7 +60,7 @@ class Track:
     file_size: int
     bitrate: int
     format: str
-    # Fields with default values MUST come last
+    # Note: Fields with default values MUST come last
     album_artist: Optional[str] = None
     cover_art_key: Optional[str] = None
     year: Optional[int] = None
@@ -172,7 +172,7 @@ class LibraryMetadata:
     """
     version: int
     tracks: List[Track]
-    playlists: Dict[str, List[str]]  # playlist_name -> [track_ids]
+    playlists: Dict[str, List[str]]  # Note: Playlist_name -> [track_ids]
     settings: Dict[str, Any]
     last_updated: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     
@@ -186,7 +186,7 @@ class LibraryMetadata:
         Returns:
             JSON string representation
         """
-        # Omit local_path when persisting; path is resolved at read from OUTPUT_DIR.
+        # Note: Omit local_path when persisting; path is resolved at read from output_dir.
         data = {
             "version": self.version,
             "tracks": [{k: v for k, v in track.to_dict().items() if k != "local_path"} for track in self.tracks],
@@ -204,7 +204,7 @@ class LibraryMetadata:
         """
         tracks = [Track.from_dict({**t, "local_path": None}) for t in data.get("tracks", [])]
         
-        # Handle migration from library_version (str) to version (int)
+        # Note: Handle migration from library_version (str) to version (int)
         raw_version = data.get("version")
         if raw_version is None:
             raw_version = data.get("library_version", "1")
@@ -367,7 +367,7 @@ class PlayerConfig:
     cache_max_size_gb: int = 50
     cache_location: str = "~/.cache/musicplayer/"
     last_sync: Optional[str] = None
-    quality_preference: str = "high"  # standard, high, ultra
+    quality_preference: str = "high"  # Note: Standard, high, ultra
     watch_folders: List[str] = field(default_factory=list)
     is_encrypted: bool = False
     
@@ -390,7 +390,7 @@ class PlayerConfig:
         """Create PlayerConfig from dictionary, decrypting if necessary."""
         from shared.crypto import CredentialManager
         
-        # Filter out keys that are not in the dataclass
+        # Note: Filter out keys that are not in the dataclass
         import dataclasses
         field_names = {f.name for f in dataclasses.fields(cls)}
         filtered_data = {k: v for k, v in data.items() if k in field_names}
@@ -398,16 +398,16 @@ class PlayerConfig:
         filtered_data['provider'] = StorageProvider(filtered_data['provider'])
         
         if filtered_data.get('is_encrypted', False):
-            # Decrypt for in-memory use
+            # Note: Decrypt for in-memory use
             dec_id = CredentialManager.decrypt(filtered_data['access_key_id'])
             dec_key = CredentialManager.decrypt(filtered_data['secret_access_key'])
             
-            # If decryption works, update data. If not (e.g. wrong machine), 
-            # we keep encrypted strings (which will fail auth, but not crash)
+            # Note: If decryption works, update data. if not (e.g. wrong machine),
+            # Note: We keep encrypted strings (which will fail auth, but not crash)
             if dec_id is not None and dec_key is not None:
                 filtered_data['access_key_id'] = dec_id
                 filtered_data['secret_access_key'] = dec_key
-                filtered_data['is_encrypted'] = False # Marked as raw in memory
+                filtered_data['is_encrypted'] = False # Note: Marked as raw in memory
         
         return cls(**filtered_data)
     

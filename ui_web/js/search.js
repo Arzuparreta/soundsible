@@ -47,7 +47,7 @@ function updateDiscoverPanels(showSearchResults) {
         const isSearchVisible = !viewDiscoverSearch.classList.contains('hidden');
         const isRecVisible = !viewDiscover.classList.contains('hidden');
 
-        // If already in the right state (or both hidden during initialization), just set visibility with no animation.
+        // Note: If already in the right state (or both hidden during initialization), just set visibility with no animation.
         if ((wantSearch && isSearchVisible) || (!wantSearch && isRecVisible) || (!isSearchVisible && !isRecVisible)) {
             viewDiscoverSearch.classList.toggle('hidden', !wantSearch);
             viewDiscover.classList.toggle('hidden', wantSearch);
@@ -56,7 +56,7 @@ function updateDiscoverPanels(showSearchResults) {
             return;
         }
 
-        // Never run a second animation while the main view transition is active.
+        // Note: Never run A second animation while the main view transition is active.
         const transitionEnd = (window.UI && typeof window.UI._viewTransitionEnd === 'number') ? window.UI._viewTransitionEnd : 0;
         if (transitionEnd && Date.now() < transitionEnd) {
             viewDiscoverSearch.classList.toggle('hidden', !wantSearch);
@@ -231,7 +231,7 @@ function render(merged) {
         return;
     }
 
-    // Spotify-like Grouping
+    // ## Section: Spotify-like grouping
     const libItems = list.filter(m => m.source === 'library');
     const odstItems = list.filter(m => m.source === 'odst');
 
@@ -242,7 +242,7 @@ function render(merged) {
                     <i class="fas fa-music text-[10px]"></i> From Library
                  </div>`;
         html += libItems.map(item => {
-            // Build row without the inner "Library" label
+            // Note: Build row without the inner "library" label
             const track = item.track;
             const coverUrl = Resolver.getCoverUrl(track);
             const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
@@ -355,7 +355,7 @@ async function runOdstFetch(raw) {
     
     try {
         const results = await searchService.query(raw, { debounce: ODST_DEBOUNCE_MS });
-        if (results === null) return; // Aborted
+        if (results === null) return; // Note: Aborted
         
         lastOdstResults = results;
         const odstItems = results.map((r) => ({ source: 'odst', ...r }));
@@ -504,13 +504,13 @@ function init(opts = {}) {
     inputEl.addEventListener('input', onInput);
     inputEl.addEventListener('paste', onPaste);
     
-    // Typeahead support
+    // ## Section: Typeahead support
     searchService.attach(inputEl, (val) => {
         if (val) runOdstFetch(val);
     }, {
         getLibraryMatches: (query) => {
             if (isDiscoverPage) return [];
-            // Use same filtering as main search
+            // Note: Use same filtering as main search
             const tracks = renderers.filterLibraryByQuery(store.state.library, query);
             return tracks.slice(0, 5);
         }

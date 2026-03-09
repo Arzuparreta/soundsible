@@ -17,7 +17,7 @@ class QueueView(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.queue_manager = queue_manager
         
-        # Header
+        # Note: Header details
         header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         header_box.set_margin_top(6)
         header_box.set_margin_bottom(6)
@@ -37,15 +37,15 @@ class QueueView(Gtk.Box):
         
         self.append(header_box)
         
-        # Separator
+        # Note: Separator details
         self.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
         
-        # Scrolled window for queue items
+        # Note: Scrolled window for queue items
         scroller = Gtk.ScrolledWindow()
         scroller.set_vexpand(True)
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         
-        # ListBox for queue items
+        # Note: Listbox for queue items
         self.list_box = Gtk.ListBox()
         self.list_box.add_css_class("navigation-sidebar")
         self.list_box.set_selection_mode(Gtk.SelectionMode.NONE)
@@ -53,48 +53,48 @@ class QueueView(Gtk.Box):
         
         self.append(scroller)
         
-        # Empty state
+        # Note: Empty state
         self.empty_label = Gtk.Label(label="Queue is empty")
         self.empty_label.add_css_class("dim-label")
         self.empty_label.set_margin_top(50)
         self.empty_label.set_margin_bottom(50)
         
-        # Register for queue changes
+        # Note: Register for queue changes
         self.queue_manager.add_change_callback(self._on_queue_changed)
         
-        # Initial population
+        # Note: Initial population
         self._refresh_ui()
     
     def _on_queue_changed(self):
         """Callback when queue contents change."""
-        # Schedule UI update on main thread
+        # Note: Schedule UI update on main thread
         GLib.idle_add(self._refresh_ui)
     
     def _refresh_ui(self):
         """Refresh the queue display."""
-        # Clear existing items
+        # Note: Clear existing items
         while True:
             row = self.list_box.get_row_at_index(0)
             if row is None:
                 break
             self.list_box.remove(row)
         
-        # Get current queue
+        # Note: Get current queue
         tracks = self.queue_manager.get_all()
         
-        # Update count
+        # Note: Update count
         self.count_label.set_label(str(len(tracks)))
         
         if not tracks:
-            # Show empty state
+            # Note: Show empty state
             self.list_box.append(self.empty_label)
         else:
-            # Populate with tracks
+            # Note: Populate with tracks
             for idx, track in enumerate(tracks):
                 row = self._create_queue_row(track, idx)
                 self.list_box.append(row)
         
-        return False  # Remove from idle queue
+        return False  # Note: Remove from idle queue
     
     def _create_queue_row(self, track, index: int):
         """Create a row widget for a queue item."""
@@ -107,20 +107,20 @@ class QueueView(Gtk.Box):
         box.set_margin_start(12)
         box.set_margin_end(12)
         
-        # Track number
+        # Note: Track number
         num_label = Gtk.Label(label=f"{index + 1}.")
         num_label.add_css_class("dim-label")
         num_label.set_width_chars(3)
         num_label.set_xalign(1.0)
         box.append(num_label)
         
-        # Track info
+        # Note: Track info
         info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         info_box.set_hexpand(True)
         
         title_label = Gtk.Label(label=track.title)
         title_label.set_xalign(0)
-        title_label.set_ellipsize(3)  # Pango.EllipsizeMode.END
+        title_label.set_ellipsize(3)  # Note: Pango.ellipsizemode.END
         info_box.append(title_label)
         
         artist_label = Gtk.Label(label=track.artist)
@@ -132,7 +132,7 @@ class QueueView(Gtk.Box):
         
         box.append(info_box)
         
-        # Remove button
+        # Note: Remove button
         remove_btn = Gtk.Button()
         remove_btn.set_icon_name("user-trash-symbolic")
         remove_btn.add_css_class("flat")
@@ -143,7 +143,7 @@ class QueueView(Gtk.Box):
         
         row.set_child(box)
 
-        # Right-click gesture for the row
+        # Note: Right-click gesture for the row
         right_click = Gtk.GestureClick()
         right_click.set_button(3)
         right_click.connect("pressed", lambda g, n, x, y: self._on_row_right_click(g, x, y, index))

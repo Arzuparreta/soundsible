@@ -6,8 +6,8 @@ import { store } from './store.js';
 import { audioEngine } from './audio.js';
 import { Resolver } from './resolver.js';
 
-const RESUME_STATE_TTL_SEC = 24 * 3600; // 24h
-const RESUME_DIALOG_COOLDOWN_MS = 30 * 60 * 1000; // 30 min
+const RESUME_STATE_TTL_SEC = 24 * 3600; // Note: 24H
+const RESUME_DIALOG_COOLDOWN_MS = 30 * 60 * 1000; // Note: 30 Min
 const RESUME_DIALOG_SUPPRESS_KEY = 'resume_dialog_suppress_until';
 const RESUME_DIALOG_COOLDOWN_SET_AT_KEY = 'resume_dialog_cooldown_set_at';
 const RESUME_SEEKED_FALLBACK_MS = 3000;
@@ -123,8 +123,8 @@ function onResumeYes(state, opts = {}) {
     audio.src = url;
     audio.load();
 
-    // canplay → applySeek → seeked → sync-play (play to position, then pause) → complete.
-    // Mobile browsers often don't move decode on seek alone; playing does. Same flow on all devices.
+    // Note: Canplay → applyseek → seeked → sync-play (play to position, then pause) → complete.
+    // Note: Mobile browsers often don't move decode on seek alone; playing does. same flow on all devices.
     let done = false;
     let fallbackTimeoutId = null;
     let maxWaitTimeoutId = null;

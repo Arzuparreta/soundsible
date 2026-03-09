@@ -7,7 +7,7 @@
 import { store } from './store.js';
 
 export class Haptics {
-    // Tactile Vocabulary (durations in ms)
+    // Note: Tactile vocabulary (durations in ms)
     static PATTERNS = {
         TICK: [5],
         LOCK: [15],
@@ -28,7 +28,7 @@ export class Haptics {
         } catch (_) {}
     }
 
-    // Semantic Aliases
+    // ## Section: Semantic aliases
     static tick() { this.trigger(this.PATTERNS.TICK); }
     static lock() { this.trigger(this.PATTERNS.LOCK); }
     static heavy() { this.trigger(this.PATTERNS.HEAVY); }

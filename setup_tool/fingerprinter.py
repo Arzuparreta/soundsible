@@ -7,7 +7,7 @@ import acoustid
 import os
 from typing import Optional, Dict, Any
 
-# Free API key for Soundsible (should eventually be configurable)
+# Note: Free API key for soundsible (should eventually be configurable)
 ACOUSTID_API_KEY = "8XaI6Z9v"
 
 class AudioFingerprinter:
@@ -21,13 +21,13 @@ class AudioFingerprinter:
             return None
             
         try:
-            # Generate fingerprint and lookup
-            # 'recordings' gives us MBID
+            # Note: Generate fingerprint and lookup
+            # Note: 'Recordings' gives us MBID
             results = acoustid.match(ACOUSTID_API_KEY, file_path, parse=True)
             
-            # Pick the best match
+            # Note: Pick the best match
             for score, recording_id, title, artist in results:
-                if score > 0.5: # 50% confidence threshold
+                if score > 0.5: # Note: 50% Confidence threshold
                     return {
                         'musicbrainz_id': recording_id,
                         'title': title,
@@ -35,7 +35,7 @@ class AudioFingerprinter:
                         'confidence': score
                     }
         except Exception as e:
-            # print(f"Fingerprinting error: {e}")
+            # Note: Print(f"fingerprinting error {E}")
             pass
             
         return None

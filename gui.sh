@@ -1,25 +1,25 @@
 #!/bin/bash
-# Script to start the GUI Player with auto-setup
+# Note: Script to start the GUI player with auto-setup
 
-# Ensure we are in the script's directory
+# Note: Ensure we are in the script's directory
 cd "$(dirname "$0")"
 
 VENV_DIR="venv"
 REQUIREMENTS="requirements.txt"
 MARKER_FILE="$VENV_DIR/.installed_requirements_hash"
 
-# --- Function: Check for Python 3 ---
+## Section: Function Check for python 3
 if ! command -v python3 &>/dev/null; then
   echo "[ERROR] Error: Python 3 could not be found."
   echo "   Please install Python 3 (e.g., 'sudo apt install python3' on Ubuntu/Debian)"
   exit 1
 fi
 
-## Function: Setup Virtual Environment
+## Section: Function Setup virtual environment
 setup_env() {
   NEEDS_INSTALL=false
 
-  # Create venv if missing
+  # Note: Create venv if missing
   if [ ! -d "$VENV_DIR" ]; then
     echo "· First-time setup detected. Initializing..."
     echo "· Creating virtual environment in '$VENV_DIR'..."
@@ -30,7 +30,7 @@ setup_env() {
     NEEDS_INSTALL=true
   fi
 
-  # Check if requirements need updating
+  # Note: Check if requirements need updating
   if [ -f "$REQUIREMENTS" ]; then
     CURRENT_HASH=$(md5sum "$REQUIREMENTS" | cut -d ' ' -f 1)
     if [ -f "$MARKER_FILE" ]; then
@@ -46,7 +46,7 @@ setup_env() {
     echo "⚠️[WARNING] Warning: $REQUIREMENTS not found."
   fi
 
-  # Install dependencies if needed
+  # Note: Install dependencies if needed
   if [ "$NEEDS_INSTALL" = true ]; then
     echo "⬇️[DOWNLOADING] Installing/Updating dependencies from $REQUIREMENTS..."
     "$VENV_DIR/bin/pip" install --upgrade pip
@@ -55,14 +55,14 @@ setup_env() {
       exit 1
     }
 
-    # Save the hash to avoid re-installing next time
+    # Note: Save the hash to avoid re-installing next time
     if [ -f "$REQUIREMENTS" ]; then
       md5sum "$REQUIREMENTS" | cut -d ' ' -f 1 >"$MARKER_FILE"
     fi
     echo "[DONE] Setup complete."
   fi
 
-  # If critical deps are broken reinstall on every start
+  # Note: If critical deps are broken reinstall on every start
   if ! "$VENV_DIR/bin/python" -c "import yt_dlp" 2>/dev/null; then
     echo "· Dependencies missing or broken. Reinstalling..."
     rm -f "$MARKER_FILE"
@@ -79,7 +79,7 @@ setup_env() {
 
 setup_env
 
-# Function: detect linux distro
+## Section: Function Detect linux distro
 detect_distro() {
   if [ -f /etc/os-release ]; then
     . /etc/os-release
@@ -89,14 +89,14 @@ detect_distro() {
   fi
 }
 
-# Function: Install dependencies automatically
+## Section: Function Install dependencies automatically
 install_dependencies() {
   local dep_type="$1"
   local distro="$2"
   local packages=""
   local install_cmd=""
 
-  # Determine packages and install command based on distro
+  # Note: Determine packages and install command based on distro
   case "$distro" in
   fedora)
     case "$dep_type" in
@@ -141,7 +141,7 @@ install_dependencies() {
     install_cmd="sudo apt install -y $packages"
     ;;
   *)
-    return 1 # Unknown distro
+    return 1 # Note: Unknown distro
     ;;
   esac
 
@@ -149,7 +149,7 @@ install_dependencies() {
     return 1
   fi
 
-  # Prompt user for installation
+  # Note: Prompt user for installation
   echo ""
   echo "[?] Would you like to automatically install these dependencies?"
   echo "   Command: $install_cmd"
@@ -171,35 +171,35 @@ install_dependencies() {
   fi
 }
 
-# Function: run application
+## Section: Function Run application
 PYTHON="$VENV_DIR/bin/python"
 echo "[LAUNCHING] Starting Soundsible..."
 
-# Run the app and capture exit code
+# Note: Run the app and capture exit code
 "$PYTHON" -c "from player.ui import run; run()"
 EXIT_CODE=$?
 
-# Function: error diagnostics
+## Section: Function Error diagnostics
 if [ $EXIT_CODE -ne 0 ]; then
   echo ""
   echo "[WARNING] Application crashed (Exit Code: $EXIT_CODE)"
 
-  # Detect the distribution
+  # Note: Detect the distribution
   DISTRO=$(detect_distro)
   INSTALLED=false
 
-  # Check for common missing system libraries by trying to import them individually
-  # We supress stderr to keep output clean, we just want the exit code
+  # Note: Check for common missing system libraries by trying to import them individually
+  # Note: We supress stderr to keep output clean, we just want the exit code
 
   if ! "$PYTHON" -c "import gi" &>/dev/null; then
     echo "[ERROR] MISSING DEPENDENCY: GTK/PyGObject"
     echo "   Your system is missing the GTK libraries required for the GUI."
 
-    # Try automated installation
+    # Note: Try automated installation
     if install_dependencies "gtk" "$DISTRO"; then
       INSTALLED=true
     else
-      # Show manual instructions as fallback
+      # Note: Show manual instructions as fallback
       echo ""
       echo "   Manual installation instructions:"
       echo "   · Debian/Ubuntu: sudo apt install libcairo2-dev libgirepository1.0-dev pkg-config python3-dev"
@@ -211,11 +211,11 @@ if [ $EXIT_CODE -ne 0 ]; then
     echo "[ERROR] MISSING DEPENDENCY: MPV"
     echo "   Your system is missing the MPV library required for playback."
 
-    # Try automated installation
+    # Note: Try automated installation
     if install_dependencies "mpv" "$DISTRO"; then
       INSTALLED=true
     else
-      # Show manual instructions as fallback
+      # Note: Show manual instructions as fallback
       echo ""
       echo "   Manual installation instructions:"
       echo "   · Debian/Ubuntu: sudo apt install libmpv1"
@@ -227,11 +227,11 @@ if [ $EXIT_CODE -ne 0 ]; then
     echo "[ERROR] MISSING DEPENDENCY: LibAdwaita"
     echo "   Your system is missing LibAdwaita (Adw 1), required for the UI."
 
-    # Try automated installation
+    # Note: Try automated installation
     if install_dependencies "adwaita" "$DISTRO"; then
       INSTALLED=true
     else
-      # Show manual instructions as fallback
+      # Note: Show manual instructions as fallback
       echo ""
       echo "   Manual installation instructions:"
       echo "   · Debian/Ubuntu: sudo apt install gir1.2-adw-1"
@@ -242,11 +242,11 @@ if [ $EXIT_CODE -ne 0 ]; then
     echo "   Please check the error output above for details."
   fi
 
-  # If dependencies were installed, try running the GUI again
+  # Note: If dependencies were installed, try running the GUI again
   if [ "$INSTALLED" = true ]; then
     echo ""
     echo "[RETRY] Retrying GUI startup..."
-    exec "$0" # Re-run this script
+    exec "$0" # Note: Re-run this script
   fi
 
   exit $EXIT_CODE

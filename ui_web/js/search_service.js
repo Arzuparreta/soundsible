@@ -10,7 +10,7 @@ export const SourceType = {
     YOUTUBE_URL: 'youtube_url',
     YOUTUBE_SEARCH: 'youtube_search',
     YTMUSIC_SEARCH: 'ytmusic_search',
-    // Legacy support for older clients
+    // Note: Legacy support for older clients
     YTMUSIC_SEARCH_LEGACY: 'ytmusic_search',
     YOUTUBE_SEARCH_LEGACY: 'youtube_search'
 };
@@ -23,7 +23,7 @@ class SearchService {
         this.abortController = null;
         this.suggestAbortController = null;
         this.debounceTimer = null;
-        // Standardize: 'ytmusic' is the default and canonical value
+        // Note: Standardize 'ytmusic' is the default and canonical value
         const saved = localStorage.getItem(STORAGE_KEY_SOURCE_MODE);
         this._sourceMode = (saved === 'youtube') ? 'youtube' : 'ytmusic';
         this.suggestionDropdown = null;
@@ -35,7 +35,7 @@ class SearchService {
     }
 
     set sourceMode(value) {
-        // Normalize 'music' to 'ytmusic'
+        // Note: Normalize 'music' to 'ytmusic'
         const normalized = (value === 'music' || value === 'ytmusic') ? 'ytmusic' : 'youtube';
         this._sourceMode = normalized;
         localStorage.setItem(STORAGE_KEY_SOURCE_MODE, normalized);
@@ -81,14 +81,14 @@ class SearchService {
                 return;
             }
             
-            // 1. Get global suggestions (async)
+            // Note: 1. Get global suggestions (async)
             const suggestPromise = this.suggest(val);
-            // 2. Get local library matches (sync)
+            // Note: 2. Get local library matches (sync)
             const libMatches = getLibraryMatches(val) || [];
             
             const list = await suggestPromise;
             
-            // Format and Merge
+            // ## Section: Format and merge
             const formattedLib = libMatches.slice(0, 5).map(m => ({ 
                 type: 'library', 
                 value: m.title || m, 
@@ -116,13 +116,13 @@ class SearchService {
         inputEl.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') this.hideSuggestions();
             if (e.key === 'Enter' && this.suggestionDropdown) {
-                // If user hits enter and dropdown is visible, we could auto-select first one,
-                // but usually the main search handles Enter. Let's just hide.
+                // Note: If user hits enter and dropdown is visible, we could auto-select first one,
+                // Note: But usually the main search handles enter. let's just hide.
                 this.hideSuggestions();
             }
         });
 
-        // Hide on outside click
+        // Note: Hide on outside click
         document.addEventListener('click', (e) => {
             if (this.suggestionDropdown && !this.suggestionDropdown.contains(e.target) && e.target !== inputEl) {
                 this.hideSuggestions();
@@ -289,7 +289,7 @@ class SearchService {
 
         const limit = options.limit || 10;
         const source = options.source || this.sourceMode;
-        // sourceMode is already standardized to 'ytmusic' or 'youtube'
+        // Note: Sourcemode is already standardized to 'ytmusic' or 'youtube'
         const sourceParam = (source === 'youtube') ? 'youtube' : 'ytmusic';
         const url = `${this.getApiBase()}/api/downloader/youtube/search?q=${encodeURIComponent(query)}&limit=${limit}&source=${sourceParam}`;
 
@@ -302,7 +302,7 @@ class SearchService {
             const data = await resp.json();
             return (data.results || []).map(r => this.normalizeResult(r));
         } catch (err) {
-            if (err.name === 'AbortError') return null; // Distinguish abort from real error
+            if (err.name === 'AbortError') return null; // Note: Distinguish abort from real error
             throw err;
         }
     }
@@ -323,7 +323,7 @@ class SearchService {
         const youtubeBtn = document.getElementById(youtubeBtnId);
         if (!musicBtn || !youtubeBtn) return;
 
-        // Use the canonical 'ytmusic' value for the comparison
+        // Note: Use the canonical 'ytmusic' value for the comparison
         const isMusic = this.sourceMode === 'ytmusic';
         
         const setActive = (btn) => {

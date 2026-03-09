@@ -58,13 +58,13 @@ def launch_ecosystem():
     ok, message = start_daemon_process(ROOT_DIR, env_extra={"SOUNDSIBLE_LAUNCHED_FROM": "web"}, detach=False)
     if ok:
         return jsonify({"ok": True, "message": message}), 200
-    # Already running is not an error; report as success with that message
+    # Note: Already running is not an error; report as success with that message
     if "already running" in message.lower():
         return jsonify({"ok": True, "message": message}), 200
     return jsonify({"ok": False, "error": message}), 500
 
 
-# --- Setup API (config + test connection + buckets) ---
+# Note: Setup API (config + test connection + buckets)
 
 def _config_path():
     from shared.constants import DEFAULT_CONFIG_DIR

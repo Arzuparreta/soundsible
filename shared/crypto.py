@@ -37,11 +37,11 @@ class CredentialManager:
         Generate a machine-specific encryption key.
         """
         if os.name == 'nt':
-            # Windows: Use COMPUTERNAME and USERNAME
+            # Note: Windows use computername and username
             machine_id = os.getenv('COMPUTERNAME', 'default-windows-machine')
             username = os.getenv('USERNAME', 'default-windows-user')
         else:
-            # Linux/Unix
+            # Note: Linux/unix details
             try:
                 with open('/etc/machine-id', 'r') as f:
                     machine_id = f.read().strip()
@@ -82,5 +82,5 @@ class CredentialManager:
             return f.decrypt(encrypted_data.encode()).decode()
             
         except Exception as e:
-            # print(f"Decryption failed: {e}")
+            # Note: Print(f"decryption failed {E}")
             return None

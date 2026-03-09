@@ -64,7 +64,7 @@ def init(guided, provider):
 def _guided_setup():
     """Interactive guided setup wizard."""
     
-    # Step 1: Provider Selection
+    # Note: Step 1 provider selection
     console.print("[bold]Step 1: Choose Your Storage Provider[/bold]\n")
     
     table = Table(show_header=True, header_style="bold magenta")
@@ -112,7 +112,7 @@ def _guided_setup():
     
     console.print(f"\n[green][OK][/green] Selected: {provider_name}\n")
     
-    # Step 2: Provider-specific setup
+    # Note: Step 2 provider-specific setup
     if provider_code == "r2":
         credentials = _setup_cloudflare_r2()
     elif provider_code == "b2":
@@ -124,7 +124,7 @@ def _guided_setup():
         console.print("[red]Setup cancelled or failed[/red]")
         return
     
-    # Step 3: Create bucket
+    # Note: Step 3 create bucket
     console.print("\n[bold]Step 3: Create Storage Bucket[/bold]\n")
     
     bucket_name = Prompt.ask(
@@ -137,7 +137,7 @@ def _guided_setup():
         default=False
     )
     
-    # Step 4: Test connection and create bucket
+    # Note: Step 4 test connection and create bucket
     console.print("\n[bold]Step 4: Connecting to Storage[/bold]\n")
     
     with Progress(
@@ -167,7 +167,7 @@ def _guided_setup():
     console.print(f"\n[green][OK][/green] Bucket created: [cyan]{bucket_name}[/cyan]")
     console.print(f"[green][OK][/green] Endpoint: [cyan]{bucket_info.get('endpoint', 'N/A')}[/cyan]")
     
-    # Step 5: Save configuration
+    # Note: Step 5 save configuration
     config = PlayerConfig(
         provider=provider_enum,
         endpoint=bucket_info['endpoint'],
@@ -182,13 +182,13 @@ def _guided_setup():
     config_dir.mkdir(parents=True, exist_ok=True)
     config_file = config_dir / "config.json"
     
-    # Save configuration (automatically encrypted by to_json -> to_dict)
+    # Note: Save configuration (automatically encrypted by to_json -> to_dict)
     with open(config_file, 'w') as f:
         f.write(config.to_json())
     
     console.print(f"\n[green][OK][/green] Configuration saved to: {config_file}")
     
-    # Success summary
+    # Note: Success summary
     console.print("\n")
     console.print(Panel.fit(
         "[bold green][SUCCESS] Setup Complete![/bold green]\n\n"
@@ -248,7 +248,7 @@ def _setup_backblaze_b2():
     return {
         'application_key_id': application_key_id,
         'application_key': application_key,
-        'bucket': None  # Will be created later
+        'bucket': None  # Note: Will be created later
     }
 
 
@@ -283,7 +283,7 @@ def upload(music_path, compress, parallel, bitrate, auto_fetch):
     """
     from .uploader import UploadEngine
     
-    # Load config
+    # Note: Load config
     config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
     if not config_path.exists():
         console.print("[red]Error: Configuration not found. Run 'init' first.[/red]")

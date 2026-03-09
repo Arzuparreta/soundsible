@@ -26,7 +26,7 @@ class DatabaseManager:
 
     def _get_connection(self):
         conn = sqlite3.connect(self.db_path)
-        # Enable WAL mode for high concurrency
+        # Note: Enable WAL mode for high concurrency
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         return conn
@@ -37,8 +37,8 @@ class DatabaseManager:
             try:
                 conn.execute("BEGIN TRANSACTION")
                 
-                # 1. Base Tables
-                # Schema order must match the actual columns on disk to avoid confusion
+                # Note: 1. Base tables
+                # Note: Schema order must match the actual columns on disk to avoid confusion
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS tracks (
                         id TEXT PRIMARY KEY,
@@ -74,7 +74,7 @@ class DatabaseManager:
                     )
                 """)
                 
-                # 2. Search Index (FTS5)
+                # Note: 2. Search index (FTS5)
                 try:
                     conn.execute("""
                         CREATE VIRTUAL TABLE IF NOT EXISTS tracks_fts USING fts5(
@@ -87,7 +87,7 @@ class DatabaseManager:
                         )
                     """)
                     
-                    # Update Triggers
+                    # Note: Update triggers
                     conn.execute("DROP TRIGGER IF EXISTS tracks_ai")
                     conn.execute("""
                         CREATE TRIGGER tracks_ai AFTER INSERT ON tracks BEGIN
@@ -112,9 +112,9 @@ class DatabaseManager:
                         END
                     """)
                 except sqlite3.OperationalError:
-                    pass # FTS5 not available
+                    pass # Note: FTS5 not available
 
-                # 3. Schema Migrations (Ensure columns exist)
+                # Note: 3. Schema migrations (ensure columns exist)
                 cursor = conn.execute("PRAGMA table_info(tracks)")
                 columns = [row[1] for row in cursor.fetchall()]
                 if 'musicbrainz_id' not in columns:
@@ -128,10 +128,10 @@ class DatabaseManager:
                 if 'metadata_modified_by_user' not in columns:
                     conn.execute("ALTER TABLE tracks ADD COLUMN metadata_modified_by_user BOOLEAN DEFAULT 0")
 
-                # 3b. Clear stored local_path (path is resolved at read from OUTPUT_DIR)
+                # Note: 3B. clear stored local_path (path is resolved at read from output_dir)
                 conn.execute("UPDATE tracks SET local_path = NULL WHERE local_path IS NOT NULL")
 
-                # 4. YouTube Resolution Cache
+                # Note: 4. Youtube resolution cache
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS youtube_resolution_cache (
                         artist TEXT NOT NULL,
@@ -159,22 +159,22 @@ class DatabaseManager:
         with self._get_connection() as conn:
             conn.execute("BEGIN TRANSACTION")
             try:
-                # Update version
+                # Note: Update version
                 conn.execute("INSERT OR REPLACE INTO library_info (key, value) VALUES ('version', ?)", (str(metadata.version),))
                 
-                # 1. Get IDs of tracks we are about to sync
+                # Note: 1. Get ids of tracks we are about to sync
                 incoming_ids = [t.id for t in metadata.tracks]
                 
-                # 2. Prune tracks that are no longer in the manifest
+                # Note: 2. Prune tracks that are no longer in the manifest
                 if incoming_ids:
                     placeholders = ','.join(['?'] * len(incoming_ids))
                     conn.execute(f"DELETE FROM tracks WHERE id NOT IN ({placeholders})", incoming_ids)
                 else:
                     conn.execute("DELETE FROM tracks")
 
-                # 3. Batch update tracks
+                # Note: 3. Batch update tracks
                 for track in metadata.tracks:
-                    # Column order MUST match the tuple below exactly
+                    # Note: Column order MUST match the tuple below exactly
                     conn.execute("""
                         INSERT INTO tracks (
                             id, title, artist, album, duration, file_hash, 
@@ -229,7 +229,7 @@ class DatabaseManager:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             try:
-                # Try FTS5 first
+                # Note: Try FTS5 first
                 cursor = conn.execute("""
                     SELECT t.* FROM tracks t
                     JOIN tracks_fts f ON t.id = f.id
@@ -238,7 +238,7 @@ class DatabaseManager:
                 """, (f"{query}*",))
                 return [self._row_to_track(row) for row in cursor.fetchall()]
             except sqlite3.OperationalError:
-                # Fallback to LIKE
+                # Note: Fallback to LIKE
                 cursor = conn.execute("""
                     SELECT * FROM tracks 
                     WHERE title LIKE ? OR artist LIKE ? OR album LIKE ?
@@ -260,7 +260,7 @@ class DatabaseManager:
         """
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
-            # Use MAX(album_artist) or fallback to artist if NO track in the album has album_artist
+            # Note: Use MAX(album_artist) or fallback to artist if NO track in the album has album_artist
             cursor = conn.execute("""
                 SELECT 
                     album, 
@@ -296,7 +296,7 @@ class DatabaseManager:
             return [self._row_to_track(row) for row in cursor.fetchall()]
 
     def _row_to_track(self, row: sqlite3.Row) -> Track:
-        # Map row to Track object; ignore stored local_path (resolve at read from OUTPUT_DIR).
+        # Note: Map row to track object; ignore stored local_path (resolve at read from output_dir).
         data = dict(row)
         if "last_updated" in data:
             del data["last_updated"]
@@ -307,7 +307,7 @@ class DatabaseManager:
         with self._get_connection() as conn:
             total = conn.execute("SELECT COUNT(*) FROM tracks").fetchone()[0]
             local = conn.execute("SELECT COUNT(*) FROM tracks WHERE is_local = 1").fetchone()[0]
-            cloud = conn.execute("SELECT COUNT(*) FROM tracks WHERE compressed = 1").fetchone()[0] # Approximation
+            cloud = conn.execute("SELECT COUNT(*) FROM tracks WHERE compressed = 1").fetchone()[0] # Note: Approximation
             return {"tracks": total, "local": local, "cloud": cloud}
 
     def clear_all(self):
@@ -317,7 +317,7 @@ class DatabaseManager:
             try:
                 conn.execute("DELETE FROM tracks")
                 conn.execute("DELETE FROM library_info")
-                # FTS5 table cleanup
+                # Note: FTS5 table cleanup
                 try:
                     conn.execute("DELETE FROM tracks_fts")
                 except sqlite3.OperationalError:
@@ -328,7 +328,7 @@ class DatabaseManager:
                 conn.execute("ROLLBACK")
                 raise e
 
-    # --- YouTube Resolution Cache ---
+    # Note: Youtube resolution cache
 
     def get_cached_resolution(self, artist: str, title: str) -> Optional[Dict[str, Any]]:
         """Fetch a cached YouTube resolution by artist and title."""

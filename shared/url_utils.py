@@ -27,7 +27,7 @@ def normalize_youtube_url(url: str) -> str:
         video_id = (q.get("v") or [None])[0]
         if not video_id:
             return url
-        # Keep only v= and optionally si=; drop list, index, and all other params
+        # Note: Keep only V= and optionally si=; drop list, index, and all other params
         new_query = {"v": video_id}
         if "si" in q and q["si"]:
             new_query["si"] = q["si"][0]

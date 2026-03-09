@@ -54,16 +54,16 @@ def get_active_endpoints():
     """Gather all network-accessible IPv4 addresses for this machine."""
     endpoints = []
     try:
-        # Standard socket-based discovery
+        # Note: Standard socket-based discovery
         hostname = socket.gethostname()
         local_ip = socket.gethostbyname(hostname)
         if local_ip and not local_ip.startswith('127.'):
             endpoints.append(local_ip)
             
-        # More robust discovery using all interfaces
+        # Note: More robust discovery using all interfaces
         import psutil
         for interface, addrs in psutil.net_if_addrs().items():
-            # Skip common bridge/virtual interfaces that aren't useful for mobile sync
+            # Note: Skip common bridge/virtual interfaces that aren't useful for mobile sync
             if any(skip in interface.lower() for skip in ['docker', 'br-', 'veth', 'lo']):
                 continue
             for addr in addrs:
@@ -73,7 +73,7 @@ def get_active_endpoints():
                         endpoints.append(ip)
     except Exception as e:
         logger.debug("get_active_endpoints: primary discovery failed, using fallback: %s", e)
-        # Fallback to a simple socket test if psutil fails or isn't installed
+        # Note: Fallback to A simple socket test if psutil fails or isn't installed
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
@@ -89,7 +89,7 @@ app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
 
-# Suppress engineio/socketio INFO logs (e.g. "Invalid session" when browser reconnects with stale sid)
+# Note: Suppress engineio/socketio INFO logs (e.g. "invalid session" when browser reconnects with stale sid)
 logging.getLogger("engineio").setLevel(logging.WARNING)
 logging.getLogger("socketio").setLevel(logging.WARNING)
 
@@ -139,14 +139,14 @@ def on_playback_register(data):
     join_room(room, sid=request.sid)
 
 
-# Path to the new Web UI and repo branding
-# __file__ is shared/api/__init__.py; go up to project root
+# Note: Path to the new web UI and repo branding
+# Note: File__ is shared/API/__init__.py; go up to project root
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 WEB_UI_PATH = os.path.join(_REPO_ROOT, "ui_web")
 REPO_ROOT = _REPO_ROOT
 BRANDING_PATH = os.path.join(REPO_ROOT, 'branding')
 
-# Serve Web Player
+# Note: Serve web player
 @app.route('/player/')
 def serve_web_player():
     return send_from_directory(WEB_UI_PATH, 'index.html')
@@ -163,27 +163,27 @@ def serve_branding(path):
 def serve_web_player_assets(path):
     return send_from_directory(WEB_UI_PATH, path)
 
-# Global instances
+# Note: Global instances
 library_manager = None
 playback_engine = None
 queue_manager = None
 favourites_manager = None
 downloader_service = None
-_downloader_lock = threading.Lock()  # Prevent concurrent init when many discover/resolve requests hit at once
+_downloader_lock = threading.Lock()  # Note: Prevent concurrent init when many discover/resolve requests hit at once
 queue_manager_dl = DownloadQueueManager(socketio=socketio)
-api_observer = None  # Store Observer reference for cleanup in daemon mode
+api_observer = None  # Note: Store observer reference for cleanup in daemon mode
 
 def get_core():
     global library_manager, playback_engine, queue_manager, favourites_manager
     if not library_manager:
         logger.info("API: Initializing Library Manager...")
         library_manager = LibraryManager()
-        # Ensure we have metadata loaded from local cache at minimum
+        # Note: Ensure we have metadata loaded from local cache at minimum
         if not library_manager.metadata:
             logger.info("API: No metadata in memory, checking cache...")
             cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
             library_manager._load_from_cache(cache_path)
-            # If cache looks like it's from a different path (e.g. old install), don't use it
+            # Note: If cache looks like it's from a different path (e.g. old install), don't use it
             if library_manager.metadata and library_manager._is_cache_likely_stale():
                 logger.info("API: Cached library does not match current music path; starting fresh.")
                 library_manager.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
@@ -192,7 +192,7 @@ def get_core():
         logger.info("API: Initializing Queue, Playback Engine and Favourites...")
         queue_manager = QueueManager()
         favourites_manager = FavouritesManager()
-        # API server runs headless; web player uses browser for playback. Skip MPV to avoid blocking on display/audio.
+        # Note: API server runs headless; web player uses browser for playback. skip MPV to avoid blocking on display/audio.
         playback_engine = None
     return library_manager, playback_engine, queue_manager
 
@@ -204,12 +204,12 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
         if log_callback:
             log_callback(msg)
 
-    # Load env once (used for quality/cookie_browser below)
+    # Note: Load env once (used for quality/cookie_browser below)
     from dotenv import dotenv_values
     _env_path = Path(_REPO_ROOT) / "odst_tool" / ".env"
     env_vars = dotenv_values(_env_path) if _env_path.exists() else {}
 
-    # 1. Determine the target output directory (prefer app_config set at startup)
+    # Note: 1. Determine the target output directory (prefer app_config set at startup)
     from shared.app_config import get_output_dir
     _app_out = get_output_dir()
     if output_dir:
@@ -286,14 +286,14 @@ def process_queue_background():
 
                 track = None
                 if song_str:
-                    # Direct URL or simple string (typed intake contract)
+                    # Note: Direct URL or simple string (typed intake contract)
                     if source_type in {"youtube_url", "ytmusic_search", "youtube_search"} or "youtube.com" in song_str or "youtu.be" in song_str:
                         song_str = normalize_youtube_url(song_str)
                         queue_manager_dl.add_log(f"Downloading direct YouTube: {song_str}...")
                         runtime_hint = dict(metadata_evidence or {})
                         track = dl.downloader.process_video(song_str, metadata_hint=runtime_hint, source=source_type)
                     else:
-                        # Manual search
+                        # Note: Manual search
                         fake_meta = {
                             'title': song_str,
                             'artist': 'Unknown',
@@ -306,16 +306,16 @@ def process_queue_background():
                         track = dl.downloader.process_track(fake_meta, source="manual")
                 
                 if track:
-                    # Update ODST internal record (replace by hash if already present)
+                    # Note: Update ODST internal record (replace by hash if already present)
                     existing = dl.library.get_track_by_hash(track.file_hash)
                     if existing:
                         dl.library.remove_track(existing.id)
                     dl.library.add_track(track)
                     dl.save_library()
                     
-                    # Update main Soundsible library core (convert ODST Track to shared Track so sync_from_metadata does not raise)
+                    # Note: Update main soundsible library core (convert ODST track to shared track so sync_from_metadata does not raise)
                     lib, _, _ = get_core()
-                    # Ensure we have main library in memory (e.g. if None, load from config cache)
+                    # Note: Ensure we have main library in memory (e.g. if none, load from config cache)
                     cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
                     if not lib.metadata and cache_path.exists():
                         lib._load_from_cache(cache_path)
@@ -327,7 +327,7 @@ def process_queue_background():
                     shared_track = Track.from_dict(track_dict)
                     if not lib.metadata.get_track_by_id(shared_track.id):
                         lib.metadata.add_track(shared_track)
-                    # Pre-cache cover so first request serves it (avoids placeholder until second load)
+                    # Note: Pre-cache cover so first request serves it (avoids placeholder until second load)
                     local_track_path = resolve_local_track_path(shared_track)
                     covers_dir = os.path.join(os.path.expanduser(DEFAULT_CACHE_DIR), "covers")
                     os.makedirs(covers_dir, exist_ok=True)
@@ -341,9 +341,9 @@ def process_queue_background():
                                     f.write(cover_data)
                         except Exception as e:
                             logger.warning("API: Pre-cache cover failed: %s", e)
-                    # Persist to DB and library.json (config dir) so API and frontends see the new track
+                    # Note: Persist to DB and library.JSON (config dir) so API and frontends see the new track
                     lib._save_metadata()
-                    # Signal all clients to refresh (app context required when emitting from background thread)
+                    # Note: Signal all clients to refresh (app context required when emitting from background thread)
                     with app.app_context():
                         socketio.emit('library_updated')
                         queue_manager_dl.remove_item(item_id)
@@ -370,7 +370,7 @@ def process_queue_background():
         queue_manager_dl.is_processing = False
 
 
-# --- Helpers (used by blueprints) ---
+# Note: Helpers (used by blueprints)
 def get_track_by_id(lib, track_id: str) -> Optional[Track]:
     """Resolve track by ID: metadata first, then DB fallback. Single place for consistency."""
     if lib.metadata:
@@ -403,7 +403,7 @@ def _ensure_lib_metadata():
     return lib, lib.metadata if lib else None
 
 
-# --- Discover / downloader background helpers (used by downloader blueprint) ---
+# Note: Discover / downloader background helpers (used by downloader blueprint)
 _resolve_executor = None
 
 def _get_resolve_executor():
@@ -469,7 +469,7 @@ def run_sync_task():
         queue_manager_dl.add_log(f"❌ Critical Sync Error: {e}")
 
 
-# --- Blueprints ---
+# Note: Blueprints details
 from shared.api.routes.library import library_bp
 from shared.api.routes.playback import playback_bp
 from shared.api.routes.downloader import downloader_bp
@@ -492,7 +492,7 @@ def home():
         "version": "1.0.0"
     })
 
-# --- Server Management ---
+# Note: Server management
 
 def _resolve_output_dir():
     """Resolve OUTPUT_DIR once at startup (only place that may read odst_tool/.env)."""
@@ -521,12 +521,12 @@ def start_api(port=STATION_PORT, debug=False):
     logger.info("CWD: %s", os.getcwd())
     logger.info("For full startup (sync + watcher) use: python run.py --daemon")
 
-    # Set app config so path_resolver and security do not depend on odst_tool layout
+    # Note: Set app config so path_resolver and security do not depend on odst_tool layout
     _out = _resolve_output_dir()
     if _out:
         set_app_output_dir(_out)
         logger.info("API: Output dir set to %s", _out)
-        # So desktop player finds path when it reads ~/.config/soundsible/output_dir
+        # Note: So desktop player finds path when it reads ~/.config/soundsible/output_dir
         try:
             from shared.constants import DEFAULT_CONFIG_DIR
             cfg = Path(DEFAULT_CONFIG_DIR).expanduser()
@@ -542,7 +542,7 @@ def start_api(port=STATION_PORT, debug=False):
         lib, _, _ = get_core()
         logger.info("API: Core services initialized successfully.")
 
-        # Optional: auto-update yt-dlp in background if user enabled it (thread started after terminal message)
+        # Note: Optional auto-update yt-dlp in background if user enabled it (thread started after terminal message)
         try:
             from dotenv import dotenv_values
             _env_path = Path("odst_tool/.env")
@@ -581,7 +581,7 @@ def start_api(port=STATION_PORT, debug=False):
         except Exception:
             pass
 
-        # Start Library File Watcher
+        # Note: Start library file watcher
         config_dir = Path(DEFAULT_CONFIG_DIR).expanduser()
         config_dir.mkdir(parents=True, exist_ok=True)
 
@@ -596,7 +596,7 @@ def start_api(port=STATION_PORT, debug=False):
         import traceback
         traceback.print_exc()
 
-    # Diagnose: ensure discover routes are registered (helps debug 404 on resolve)
+    # Note: Diagnose ensure discover routes are registered (helps debug 404 on resolve)
     try:
         from flask import url_for
         rules = [r.rule for r in app.url_map.iter_rules() if 'discover' in r.rule]
@@ -604,7 +604,7 @@ def start_api(port=STATION_PORT, debug=False):
     except Exception as e:
         logger.debug("API: Could not list routes: %s", e)
 
-    # Access Summary
+    # Note: Access summary
     logger.info("\n" + "="*40)
     logger.info("       SOUNDSIBLE ONLINE")
     logger.info("="*40)
