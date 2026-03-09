@@ -33,10 +33,17 @@ def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
         return None, "This link type is not supported"
 
     # Normalize source_type to standardized enums
-    if source_type == "ytmusic_search":
+    # Handle legacy aliases (like 'music' or 'ytmusic') to canonical enums
+    if source_type in ("music", "ytmusic", "ytmusic_search"):
+        if source_type != SourceType.YTMUSIC_SEARCH:
+            logger.info("API: Normalizing legacy source '%s' to '%s'", source_type, SourceType.YTMUSIC_SEARCH)
+        source_type = SourceType.YTMUSIC_SEARCH
+    elif source_type in ("youtube", "youtube_search"):
+        if source_type != SourceType.YOUTUBE_SEARCH:
+            logger.info("API: Normalizing legacy source '%s' to '%s'", source_type, SourceType.YOUTUBE_SEARCH)
         source_type = SourceType.YOUTUBE_SEARCH
 
-    if source_type in {SourceType.YOUTUBE_URL, SourceType.YOUTUBE_SEARCH}:
+    if source_type in {SourceType.YOUTUBE_URL, SourceType.YOUTUBE_SEARCH, SourceType.YTMUSIC_SEARCH}:
         normalized = normalize_youtube_url(song_str)
         extracted_id = extract_youtube_video_id(normalized or song_str)
         effective_video_id = video_id or extracted_id or (metadata_evidence or {}).get("video_id")

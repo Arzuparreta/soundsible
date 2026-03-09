@@ -37,8 +37,6 @@ const DEFAULT_DL_SELECTORS = {
     saveConfBtn: 'dl-save-conf-btn',
     optimizeBtn: 'dl-optimize-btn',
     syncBtn: 'dl-sync-btn',
-    searchSourceMusicBtn: 'dl-search-source-music',
-    searchSourceYoutubeBtn: 'dl-search-source-youtube',
     dlQueueProgressRing: 'dl-queue-progress-ring',
     downloadsSection: 'desktop-downloads-section',
     downloadsPanel: 'desktop-downloads-panel',
@@ -46,7 +44,7 @@ const DEFAULT_DL_SELECTORS = {
 };
 
 /** ODST search source (UI toggle). */
-const ODST_SOURCE_MUSIC = 'music';
+const ODST_SOURCE_MUSIC = 'ytmusic';
 const ODST_SOURCE_YOUTUBE = 'youtube';
 
 export class Downloader {
@@ -173,26 +171,14 @@ export class Downloader {
         if (this.optimizeBtn) this.optimizeBtn.addEventListener('click', () => this.triggerOptimize());
         if (this.syncBtn) this.syncBtn.addEventListener('click', () => this.triggerSync());
 
-        // Search source: Music | YouTube
-        if (this.searchSourceMusicBtn) {
-            this.searchSourceMusicBtn.addEventListener('click', () => this.setSearchSource(ODST_SOURCE_MUSIC));
-        }
-        if (this.searchSourceYoutubeBtn) {
-            this.searchSourceYoutubeBtn.addEventListener('click', () => this.setSearchSource(ODST_SOURCE_YOUTUBE));
-        }
-
         window.Downloader = this;
     }
 
     static setSearchSource(value) {
-        if (value !== ODST_SOURCE_MUSIC && value !== ODST_SOURCE_YOUTUBE) return;
+        // SourceMode standardized to 'ytmusic' / 'youtube'
         searchService.sourceMode = value;
-        searchService.applyToggleUI(
-            this.searchSourceMusicBtn?.id || 'dl-search-source-music',
-            this.searchSourceYoutubeBtn?.id || 'dl-search-source-youtube'
-        );
         Haptics.tick();
-        
+
         const q = this.searchInput?.value?.trim();
         if (q) this.runSearch(q);
     }
@@ -420,11 +406,13 @@ export class Downloader {
         if (!result || !result.id) return;
         const canonicalUrl = searchService.normalizeYouTubeUrl(result.webpage_url || `https://www.youtube.com/watch?v=${result.id}`);
         if (!canonicalUrl) return;
-        
-        // Collapsed source type: both YT Music and normal YT results are just "youtube_search"
-        const sourceType = SourceType.YOUTUBE_SEARCH;
-        
+
+        // Distinguish between YT Music and normal YT results for backend provider routing
+        const sourceMode = options.source || searchService.sourceMode;
+        const sourceType = (sourceMode === 'ytmusic') ? SourceType.YTMUSIC_SEARCH : SourceType.YOUTUBE_SEARCH;
+
         this.downloadQueue.push({
+
             source_type: sourceType,
             song_str: canonicalUrl,
             video_id: result.id,

@@ -45,7 +45,8 @@ def youtube_search():
         return jsonify({"results": []})
     limit = min(20, max(1, request.args.get("limit", 10, type=int)))
     source = (request.args.get("source") or "ytmusic").strip().lower()
-    use_ytmusic = (source == "ytmusic")
+    # Canonical: ytmusic, youtube. Support 'music' as legacy alias for ytmusic.
+    use_ytmusic = (source in ("ytmusic", "music"))
     try:
         dl = _get_api()["get_downloader"](open_browser=False)
         results = dl.downloader.search_youtube(q, max_results=limit, use_ytmusic=use_ytmusic)
@@ -63,12 +64,15 @@ def youtube_suggest():
         return jsonify({"suggestions": []})
     
     url = "http://suggestqueries.google.com/complete/search"
+    # Try music client first if it's a music-focused app
     params = {
         "client": "youtube",
-        "ds": "yt",
+        "ds": "yt", # 'yt' for general, 'ytm' sometimes used for music
         "q": q,
         "oe": "utf-8"
     }
+    # If we want to be smart, we could try multiple clients, 
+    # but 'youtube' with 'ds=yt' is most reliable for general queries.
     try:
         # This API returns a JSON-p style array: ["query", ["suggestion1", "suggestion2", ...], ...]
         resp = requests.get(url, params=params, timeout=2)

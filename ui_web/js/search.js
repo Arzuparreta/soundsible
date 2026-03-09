@@ -217,6 +217,7 @@ function render(merged) {
     if (!resultsEl) return;
     const list = Array.isArray(merged) ? merged : [];
     const libraryTracks = list.filter((m) => m.source === 'library').map((m) => m.track);
+    
     if (isDiscoverPage) {
         if (typeof window.viewContext !== 'undefined') window.viewContext.searchTracks = [];
         window._currentSearchTracks = [];
@@ -224,14 +225,58 @@ function render(merged) {
         if (typeof window.viewContext !== 'undefined') window.viewContext.searchTracks = libraryTracks;
         window._currentSearchTracks = libraryTracks;
     }
+
     if (list.length === 0) {
-        resultsEl.innerHTML = '<div class="text-center py-8 text-[var(--text-dim)]">No results</div>';
+        resultsEl.innerHTML = `<div class="text-center py-10 text-[var(--text-dim)] italic animate-in fade-in slide-in-from-bottom-2 duration-300">No results found for "${esc(inputEl.value)}"</div>`;
         return;
     }
-    const html = list.map((item) => {
-        if (item.source === 'library') return buildLibraryRowHtml(item.track);
-        return buildOdstRowHtml(item, { omitSourceLabel: isDiscoverPage });
-    }).join('');
+
+    // Spotify-like Grouping
+    const libItems = list.filter(m => m.source === 'library');
+    const odstItems = list.filter(m => m.source === 'odst');
+
+    let html = '';
+    
+    if (libItems.length > 0) {
+        html += `<div class="search-section-header px-1 pb-3 pt-2 text-xs font-black uppercase tracking-widest text-[var(--accent)] flex items-center gap-2">
+                    <i class="fas fa-music text-[10px]"></i> From Library
+                 </div>`;
+        html += libItems.map(item => {
+            // Build row without the inner "Library" label
+            const track = item.track;
+            const coverUrl = Resolver.getCoverUrl(track);
+            const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+            const isActive = store.state.currentTrack && store.state.currentTrack.id === track.id;
+            const playOverlay = isDesktop ? renderers.desktopPlayOverlaySmallHtml() : '';
+            return `
+            <div class="search-result-item mb-2 animate-in fade-in slide-in-from-bottom-1 duration-200">
+                <div class="song-row relative z-10 flex items-center p-3.5 group ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] border-transparent'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer shadow-sm hover:shadow-md" data-id="${esc(track.id)}" data-source="library">
+                    <div class="song-row-cover-wrapper relative w-12 h-12 flex-shrink-0${isDesktop ? ' group' : ''}">
+                        <div class="song-row-cover absolute inset-0 rounded-xl overflow-hidden bg-cover bg-center border border-[var(--glass-border)]" style="${coverStyle}" role="img" aria-label="Cover"></div>
+                        ${playOverlay}
+                    </div>
+                    <div class="ml-4 flex-1 truncate">
+                        <div class="song-title font-bold text-sm truncate text-[var(--text-main)]">${esc(track.title)}</div>
+                        <div class="text-[11px] text-[var(--text-dim)] font-medium truncate mt-0.5 opacity-80">${esc(track.artist)}</div>
+                    </div>
+                    <div class="flex items-center ml-4">
+                        <div class="text-[10px] font-bold font-mono text-[var(--text-dim)] opacity-40">${renderers.formatTime(track.duration)}</div>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    if (odstItems.length > 0) {
+        const sourceName = searchService.sourceMode === 'youtube' ? 'YouTube' : 'YouTube Music';
+        const odstLabel = isDiscoverPage ? '' : `
+            <div class="search-section-header px-1 pb-3 pt-6 text-xs font-black uppercase tracking-widest text-[var(--secondary)] flex items-center gap-2">
+                <i class="fab fa-youtube text-[12px]"></i> Results from ${sourceName}
+            </div>`;
+        html += odstLabel;
+        html += odstItems.map(item => buildOdstRowHtml(item, { omitSourceLabel: true })).join('');
+    }
+
     resultsEl.innerHTML = html;
     bindListeners(list);
 }
@@ -413,7 +458,7 @@ function clear() {
 }
 
 function setSearchOdstSource(value) {
-    if (value !== 'music' && value !== 'youtube') return;
+    if (value !== 'music' && value !== 'youtube' && value !== 'ytmusic') return;
     searchService.sourceMode = value;
     searchService.applyToggleUI('search-odst-music', 'search-odst-youtube');
     
@@ -450,7 +495,7 @@ function init(opts = {}) {
     const youtubeBtn = document.getElementById('search-odst-youtube');
     if (musicBtn && youtubeBtn) {
         searchService.applyToggleUI('search-odst-music', 'search-odst-youtube');
-        musicBtn.addEventListener('click', () => setSearchOdstSource('music'));
+        musicBtn.addEventListener('click', () => setSearchOdstSource('ytmusic'));
         youtubeBtn.addEventListener('click', () => setSearchOdstSource('youtube'));
     }
 
@@ -462,6 +507,13 @@ function init(opts = {}) {
     // Typeahead support
     searchService.attach(inputEl, (val) => {
         if (val) runOdstFetch(val);
+    }, {
+        getLibraryMatches: (query) => {
+            if (isDiscoverPage) return [];
+            // Use same filtering as main search
+            const tracks = renderers.filterLibraryByQuery(store.state.library, query);
+            return tracks.slice(0, 5);
+        }
     });
 
     inputEl.addEventListener('keydown', (e) => {

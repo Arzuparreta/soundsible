@@ -9,8 +9,9 @@ import { Haptics } from './haptics.js';
 export const SourceType = {
     YOUTUBE_URL: 'youtube_url',
     YOUTUBE_SEARCH: 'youtube_search',
-    // Legacy support during transition
     YTMUSIC_SEARCH: 'ytmusic_search',
+    // Legacy support for older clients
+    YTMUSIC_SEARCH_LEGACY: 'ytmusic_search',
     YOUTUBE_SEARCH_LEGACY: 'youtube_search'
 };
 
@@ -22,7 +23,9 @@ class SearchService {
         this.abortController = null;
         this.suggestAbortController = null;
         this.debounceTimer = null;
-        this._sourceMode = localStorage.getItem(STORAGE_KEY_SOURCE_MODE) || 'music';
+        // Standardize: 'ytmusic' is the default and canonical value
+        const saved = localStorage.getItem(STORAGE_KEY_SOURCE_MODE);
+        this._sourceMode = (saved === 'youtube') ? 'youtube' : 'ytmusic';
         this.suggestionDropdown = null;
         this.activeInput = null;
     }
@@ -32,9 +35,10 @@ class SearchService {
     }
 
     set sourceMode(value) {
-        if (value !== 'music' && value !== 'youtube') return;
-        this._sourceMode = value;
-        localStorage.setItem(STORAGE_KEY_SOURCE_MODE, value);
+        // Normalize 'music' to 'ytmusic'
+        const normalized = (value === 'music' || value === 'ytmusic') ? 'ytmusic' : 'youtube';
+        this._sourceMode = normalized;
+        localStorage.setItem(STORAGE_KEY_SOURCE_MODE, normalized);
     }
 
     /**
@@ -61,10 +65,14 @@ class SearchService {
 
     /**
      * Attaches typeahead behavior to an input element.
+     * @param {HTMLElement} inputEl 
+     * @param {Function} onSelect 
+     * @param {Object} options { getLibraryMatches: Function }
      */
-    attach(inputEl, onSelect = null) {
+    attach(inputEl, onSelect = null, options = {}) {
         if (!inputEl) return;
         this.activeInput = inputEl;
+        const getLibraryMatches = options.getLibraryMatches || (() => []);
         
         const handleInput = async () => {
             const val = inputEl.value.trim();
@@ -72,9 +80,32 @@ class SearchService {
                 this.hideSuggestions();
                 return;
             }
-            const list = await this.suggest(val);
-            if (list && list.length > 0) {
-                this.renderSuggestions(list, onSelect);
+            
+            // 1. Get global suggestions (async)
+            const suggestPromise = this.suggest(val);
+            // 2. Get local library matches (sync)
+            const libMatches = getLibraryMatches(val) || [];
+            
+            const list = await suggestPromise;
+            
+            // Format and Merge
+            const formattedLib = libMatches.slice(0, 5).map(m => ({ 
+                type: 'library', 
+                value: m.title || m, 
+                sub: m.artist || '', 
+                id: m.id,
+                icon: 'fa-music'
+            }));
+            const formattedGlobal = (list || []).slice(0, 10).map(item => ({ 
+                type: 'global', 
+                value: item, 
+                icon: 'fa-search' 
+            }));
+
+            const combined = [...formattedLib, ...formattedGlobal];
+
+            if (combined.length > 0) {
+                this.renderSuggestions(combined, onSelect);
             } else {
                 this.hideSuggestions();
             }
@@ -103,21 +134,36 @@ class SearchService {
         if (!this.activeInput) return;
         if (!this.suggestionDropdown) {
             this.suggestionDropdown = document.createElement('div');
-            this.suggestionDropdown.className = 'search-suggestions-dropdown absolute z-[1000] bg-[var(--bg-card)] border border-[var(--glass-border)] rounded-2xl shadow-2xl overflow-hidden mt-1 min-w-[200px] max-h-[300px] overflow-y-auto animate-in fade-in zoom-in-95 duration-100';
+            this.suggestionDropdown.className = 'search-suggestions-dropdown absolute z-[1000] bg-[var(--bg-card)] border border-[var(--glass-border)] rounded-2xl shadow-2xl overflow-hidden mt-2 min-w-[280px] max-h-[400px] overflow-y-auto animate-in fade-in zoom-in-95 duration-100 backdrop-blur-xl';
             document.body.appendChild(this.suggestionDropdown);
         }
 
         const rect = this.activeInput.getBoundingClientRect();
         this.suggestionDropdown.style.top = `${window.scrollY + rect.bottom}px`;
         this.suggestionDropdown.style.left = `${window.scrollX + rect.left}px`;
-        this.suggestionDropdown.style.width = `${rect.width}px`;
+        this.suggestionDropdown.style.width = `${Math.max(rect.width, 320)}px`;
 
-        const html = list.map(item => `
-            <div class="suggestion-item p-3 hover:bg-[var(--surface-overlay)] cursor-pointer text-sm font-medium transition-colors border-b border-[var(--glass-border)] last:border-0" data-value="${this.esc(item)}">
-                <i class="fas fa-search text-[var(--text-dim)] mr-3 opacity-50"></i>
-                ${this.esc(item)}
-            </div>
-        `).join('');
+        const html = list.map(item => {
+            const isLib = item.type === 'library';
+            const icon = isLib ? 'fa-music' : 'fa-search';
+            const subLabel = item.sub ? `<span class="text-[10px] text-[var(--text-dim)] uppercase tracking-wider ml-auto font-mono opacity-60">${this.esc(item.sub)}</span>` : '';
+            const tag = isLib ? '<span class="px-1.5 py-0.5 rounded-md bg-[var(--accent)]/15 text-[var(--accent)] text-[8px] font-black uppercase tracking-widest mr-2">Library</span>' : '';
+            
+            return `
+                <div class="suggestion-item p-3.5 hover:bg-[var(--surface-overlay)] cursor-pointer flex items-center transition-all duration-200 border-b border-[var(--glass-border)]/50 last:border-0" 
+                     data-value="${this.esc(item.value)}" data-type="${item.type}" data-id="${item.id || ''}">
+                    <div class="w-8 h-8 rounded-lg bg-[var(--bg-card)] border border-[var(--glass-border)] flex items-center justify-center mr-3 shrink-0 shadow-sm">
+                        <i class="fas ${icon} text-[12px] opacity-70"></i>
+                    </div>
+                    <div class="flex-1 truncate flex items-center min-w-0">
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-sm font-semibold truncate text-[var(--text-main)]">${tag}${this.esc(item.value)}</span>
+                        </div>
+                        ${subLabel}
+                    </div>
+                </div>
+            `;
+        }).join('');
 
         this.suggestionDropdown.innerHTML = html;
         this.suggestionDropdown.classList.remove('hidden');
@@ -126,10 +172,19 @@ class SearchService {
             el.addEventListener('click', (e) => {
                 e.preventDefault();
                 const val = el.getAttribute('data-value');
-                this.activeInput.value = val;
-                this.hideSuggestions();
-                this.activeInput.dispatchEvent(new Event('input'));
-                if (onSelect) onSelect(val);
+                const type = el.getAttribute('data-type');
+                const id = el.getAttribute('data-id');
+
+                if (type === 'library' && id && typeof window.playTrack === 'function') {
+                    window.playTrack(id);
+                    this.hideSuggestions();
+                    this.activeInput.value = '';
+                } else {
+                    this.activeInput.value = val;
+                    this.hideSuggestions();
+                    this.activeInput.dispatchEvent(new Event('input'));
+                    if (onSelect) onSelect(val);
+                }
             });
         });
     }
@@ -234,6 +289,7 @@ class SearchService {
 
         const limit = options.limit || 10;
         const source = options.source || this.sourceMode;
+        // sourceMode is already standardized to 'ytmusic' or 'youtube'
         const sourceParam = (source === 'youtube') ? 'youtube' : 'ytmusic';
         const url = `${this.getApiBase()}/api/downloader/youtube/search?q=${encodeURIComponent(query)}&limit=${limit}&source=${sourceParam}`;
 
@@ -267,7 +323,8 @@ class SearchService {
         const youtubeBtn = document.getElementById(youtubeBtnId);
         if (!musicBtn || !youtubeBtn) return;
 
-        const isMusic = this.sourceMode === 'music';
+        // Use the canonical 'ytmusic' value for the comparison
+        const isMusic = this.sourceMode === 'ytmusic';
         
         const setActive = (btn) => {
             btn.classList.add('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');

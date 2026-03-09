@@ -5,7 +5,8 @@ Shared constants used across the platform.
 # Source types for downloader
 class SourceType:
     YOUTUBE_URL = "youtube_url"
-    YOUTUBE_SEARCH = "youtube_search"
+    YOUTUBE_SEARCH = "youtube_search"  # Canonical: YouTube
+    YTMUSIC_SEARCH = "ytmusic_search"    # Canonical: Music (YouTube Music)
 
 # Library metadata
 LIBRARY_VERSION = "1.0"
