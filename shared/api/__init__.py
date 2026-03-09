@@ -48,6 +48,7 @@ from shared.url_utils import normalize_youtube_url, extract_youtube_video_id, va
 from shared.security import is_trusted_network, is_safe_path
 
 from .download_queue import DownloadQueueManager, LibraryFileWatcher, parse_intake_item
+from .orchestrator import orchestrator
 
 
 def get_active_endpoints():
@@ -253,115 +254,119 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
     return downloader_service
 
 
+def _process_single_queue_item(item):
+    """Worker function for A single download queue item."""
+    global downloader_service, queue_manager_dl
+    item_id = item['id']
+    song_str = item.get('song_str')
+    output_dir = item.get('output_dir')
+    source_type = item.get('source_type') or 'manual'
+    metadata_evidence = item.get('metadata_evidence') if isinstance(item.get('metadata_evidence'), dict) else {}
+
+    queue_manager_dl.add_log(f"Preparing: {song_str or item_id}...")
+    queue_manager_dl.update_status(item_id, 'downloading')
+    with app.app_context():
+        socketio.emit('downloader_update', {'id': item_id, 'status': 'downloading'})
+
+    try:
+        dl = get_downloader(output_dir, log_callback=queue_manager_dl.add_log)
+        queue_manager_dl.add_log(f"Processing: {song_str or item_id}...")
+
+        track = None
+        if song_str:
+            if source_type in {"youtube_url", "ytmusic_search", "youtube_search"} or "youtube.com" in song_str or "youtu.be" in song_str:
+                song_str = normalize_youtube_url(song_str)
+                queue_manager_dl.add_log(f"Downloading direct YouTube: {song_str}...")
+                runtime_hint = dict(metadata_evidence or {})
+                track = dl.downloader.process_video(song_str, metadata_hint=runtime_hint, source=source_type)
+            else:
+                fake_meta = {
+                    'title': song_str,
+                    'artist': 'Unknown',
+                    'album': 'Manual',
+                    'duration_sec': 0,
+                    'id': f"manual_{uuid.uuid4().hex[:8]}",
+                }
+                if metadata_evidence:
+                    fake_meta.update({k: v for k, v in metadata_evidence.items() if v is not None})
+                track = dl.downloader.process_track(fake_meta, source="manual")
+
+        if track:
+            # Note: Update ODST internal record (replace by hash if already present)
+            existing = dl.library.get_track_by_hash(track.file_hash)
+            if existing:
+                dl.library.remove_track(existing.id)
+            dl.add_track(track)
+            dl.save_library()
+
+            # Note: Pre-cache cover so first request serves it
+            track_dict = track.to_dict()
+            track_dict.pop("local_path", None)
+            shared_track = Track.from_dict(track_dict)
+            
+            local_track_path = resolve_local_track_path(shared_track)
+            covers_dir = os.path.join(os.path.expanduser(DEFAULT_CACHE_DIR), "covers")
+            os.makedirs(covers_dir, exist_ok=True)
+            cover_path = os.path.join(covers_dir, f"{shared_track.id}.jpg")
+            if not os.path.exists(cover_path):
+                try:
+                    from setup_tool.audio import AudioProcessor
+                    cover_data = AudioProcessor.extract_cover_art(local_track_path) if local_track_path else None
+                    if cover_data:
+                        with open(cover_path, 'wb') as f:
+                            f.write(cover_data)
+                except Exception as e:
+                    logger.warning("API: Pre-cache cover failed: %s", e)
+
+            # Note: Sync to main soundsible core
+            _sync_odst_to_main_core()
+            
+            with app.app_context():
+                queue_manager_dl.remove_item(item_id)
+                socketio.emit('downloader_update', {'id': item_id, 'status': 'completed', 'track': track_dict})
+            queue_manager_dl.add_log(f"✅ Finished: {track.artist} - {track.title}")
+        else:
+            raise Exception("Downloader returned no track. Check logs for details.")
+
+    except Exception as e:
+        logger.warning("API Downloader Error: %s", e)
+        queue_manager_dl.update_status(item_id, 'failed', error=str(e))
+        with app.app_context():
+            socketio.emit('downloader_update', {'id': item_id, 'status': 'failed', 'error': str(e)})
+        queue_manager_dl.add_log(f"❌ Failed: {song_str or item_id} - {e}")
+
+
 def process_queue_background():
     global downloader_service, queue_manager_dl
     if queue_manager_dl.is_processing:
         return
         
     queue_manager_dl.is_processing = True
-    queue_manager_dl.add_log("Station Engine: Background processor started.")
+    queue_manager_dl.add_log("Station Engine: Background orchestrator active.")
     
     try:
         while True:
+            # Note: Only count jobs that start with "dl_"
+            active_ids = [jid for jid in orchestrator.active_jobs if jid.startswith("dl_")]
+            
             pending = queue_manager_dl.get_pending()
-            if not pending:
-                queue_manager_dl.add_log("Station Engine: Queue empty, idling.")
+            # Note: Filter out those already being processed
+            pending = [p for p in pending if f"dl_{p['id']}" not in active_ids]
+            
+            if not pending and not active_ids:
+                queue_manager_dl.add_log("Station Engine: All tasks complete.")
                 break
                 
-            item = pending[0]
-            item_id = item['id']
-            song_str = item.get('song_str')
-            output_dir = item.get('output_dir')
-            source_type = item.get('source_type') or 'manual'
-            metadata_evidence = item.get('metadata_evidence') if isinstance(item.get('metadata_evidence'), dict) else {}
+            # Note: Fill slots if we have capacity (max 3 concurrent)
+            capacity = 3 - len(active_ids)
+            if capacity > 0 and pending:
+                for i in range(min(capacity, len(pending))):
+                    item = pending[i]
+                    orchestrator.submit_task(f"dl_{item['id']}", _process_single_queue_item, item)
+                continue # Re-check immediately
             
-            queue_manager_dl.add_log(f"Preparing: {song_str or item_id}...")
-            queue_manager_dl.update_status(item_id, 'downloading')
-            with app.app_context():
-                socketio.emit('downloader_update', {'id': item_id, 'status': 'downloading'})
+            time.sleep(1) # Wait for slots or more items
             
-            try:
-                dl = get_downloader(output_dir, log_callback=queue_manager_dl.add_log)
-                queue_manager_dl.add_log(f"Processing: {song_str or item_id}...")
-
-                track = None
-                if song_str:
-                    # Note: Direct URL or simple string (typed intake contract)
-                    if source_type in {"youtube_url", "ytmusic_search", "youtube_search"} or "youtube.com" in song_str or "youtu.be" in song_str:
-                        song_str = normalize_youtube_url(song_str)
-                        queue_manager_dl.add_log(f"Downloading direct YouTube: {song_str}...")
-                        runtime_hint = dict(metadata_evidence or {})
-                        track = dl.downloader.process_video(song_str, metadata_hint=runtime_hint, source=source_type)
-                    else:
-                        # Note: Manual search
-                        fake_meta = {
-                            'title': song_str,
-                            'artist': 'Unknown',
-                            'album': 'Manual',
-                            'duration_sec': 0,
-                            'id': f"manual_{uuid.uuid4().hex[:8]}",
-                        }
-                        if metadata_evidence:
-                            fake_meta.update({k: v for k, v in metadata_evidence.items() if v is not None})
-                        track = dl.downloader.process_track(fake_meta, source="manual")
-                
-                if track:
-                    # Note: Update ODST internal record (replace by hash if already present)
-                    existing = dl.library.get_track_by_hash(track.file_hash)
-                    if existing:
-                        dl.library.remove_track(existing.id)
-                    dl.library.add_track(track)
-                    dl.save_library()
-                    
-                    # Note: Update main soundsible library core (convert ODST track to shared track so sync_from_metadata does not raise)
-                    lib, _, _ = get_core()
-                    # Note: Ensure we have main library in memory (e.g. if none, load from config cache)
-                    cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
-                    if not lib.metadata and cache_path.exists():
-                        lib._load_from_cache(cache_path)
-                    if not lib.metadata:
-                        lib.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-                    
-                    track_dict = track.to_dict()
-                    track_dict.pop("local_path", None)
-                    shared_track = Track.from_dict(track_dict)
-                    if not lib.metadata.get_track_by_id(shared_track.id):
-                        lib.metadata.add_track(shared_track)
-                    # Note: Pre-cache cover so first request serves it (avoids placeholder until second load)
-                    local_track_path = resolve_local_track_path(shared_track)
-                    covers_dir = os.path.join(os.path.expanduser(DEFAULT_CACHE_DIR), "covers")
-                    os.makedirs(covers_dir, exist_ok=True)
-                    cover_path = os.path.join(covers_dir, f"{shared_track.id}.jpg")
-                    if not os.path.exists(cover_path):
-                        try:
-                            from setup_tool.audio import AudioProcessor
-                            cover_data = AudioProcessor.extract_cover_art(local_track_path) if local_track_path else None
-                            if cover_data:
-                                with open(cover_path, 'wb') as f:
-                                    f.write(cover_data)
-                        except Exception as e:
-                            logger.warning("API: Pre-cache cover failed: %s", e)
-                    # Note: Persist to DB and library.JSON (config dir) so API and frontends see the new track
-                    lib._save_metadata()
-                    # Note: Signal all clients to refresh (app context required when emitting from background thread)
-                    with app.app_context():
-                        socketio.emit('library_updated')
-                        queue_manager_dl.remove_item(item_id)
-                        track_dict = track.to_dict()
-                        socketio.emit('downloader_update', {'id': item_id, 'status': 'completed', 'track': track_dict})
-                    queue_manager_dl.add_log(f"✅ Finished & Cleared: {track.artist} - {track.title}")
-                else:
-                    raise Exception("Downloader returned no track. Check logs for details.")
-                    
-            except Exception as e:
-                logger.warning("API Downloader Error: %s", e)
-                import traceback
-                traceback.print_exc()
-                queue_manager_dl.update_status(item_id, 'failed', error=str(e))
-                with app.app_context():
-                    socketio.emit('downloader_update', {'id': item_id, 'status': 'failed', 'error': str(e)})
-                queue_manager_dl.add_log(f"❌ Failed: {song_str or item_id} - {e}")
-
     except Exception as e:
         logger.error("CRITICAL: Downloader background thread crashed: %s", e)
         import traceback
@@ -437,36 +442,100 @@ def _discover_recommendations_worker(seed_id: str, limit: int):
         return []
 
 
+def _sync_odst_to_main_core():
+    """Helper to sync ODST library metadata back to the main Soundsible core."""
+    dl = get_downloader()
+    lib, _, _ = get_core()
+    
+    # Note: Ensure main library is loaded
+    cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+    if not lib.metadata and cache_path.exists():
+        lib._load_from_cache(cache_path)
+    if not lib.metadata:
+        lib.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    
+    # Note: Merge all tracks from ODST to core
+    changed = False
+    for track in dl.library.tracks:
+        if not lib.metadata.get_track_by_id(track.id):
+            track_dict = track.to_dict()
+            track_dict.pop("local_path", None)
+            shared_track = Track.from_dict(track_dict)
+            lib.metadata.add_track(shared_track)
+            changed = True
+            
+    if changed:
+        def _emit_updated():
+            with app.app_context():
+                socketio.emit('library_updated')
+        orchestrator.schedule_metadata_commit(lib._save_metadata, _emit_updated)
+
+
 def run_optimization_task(dry_run):
-    try:
-        dl = get_downloader(log_callback=queue_manager_dl.add_log)
-        mode = "DRY RUN" if dry_run else "LIVE"
-        queue_manager_dl.add_log(f"--- Starting Library Optimization ({mode}) ---")
-        def cb(msg): queue_manager_dl.add_log(f"🔧 {msg}")
-        optimize_library(dl.output_dir, dry_run=dry_run, progress_callback=cb)
-        queue_manager_dl.add_log("--- Optimization Finished ---")
-    except Exception as e:
-        queue_manager_dl.add_log(f"❌ Optimization Error: {e}")
+    def _task():
+        try:
+            dl = get_downloader(log_callback=queue_manager_dl.add_log)
+            mode = "DRY RUN" if dry_run else "LIVE"
+            queue_manager_dl.add_log(f"--- Starting Library Optimization ({mode}) ---")
+            def cb(msg): queue_manager_dl.add_log(f"🔧 {msg}")
+            
+            optimize_library(
+                dl.output_dir, 
+                dry_run=dry_run, 
+                progress_callback=cb,
+                library=dl.library,
+                save_callback=dl.save_library
+            )
+            
+            if not dry_run:
+                _sync_odst_to_main_core()
+                
+            queue_manager_dl.add_log("--- Optimization Finished ---")
+        except Exception as e:
+            queue_manager_dl.add_log(f"❌ Optimization Error: {e}")
+            
+    orchestrator.submit_task("optimization", _task)
 
 
 def run_sync_task():
-    try:
-        dl = get_downloader(log_callback=queue_manager_dl.add_log)
-        if not dl.cloud.is_configured():
-            queue_manager_dl.add_log("❌ Cloud Sync not configured. Add R2/S3 keys in Settings.")
-            return
-        queue_manager_dl.add_log("--- Starting Cloud Sync ---")
-        def cb(msg): queue_manager_dl.add_log(f"☁️ {msg}")
-        dl.library = dl._load_library()
-        result = dl.cloud.sync_library(dl.library, progress_callback=cb)
-        if 'error' in result:
-            queue_manager_dl.add_log(f"❌ Sync Error: {result['error']}")
-        else:
-            queue_manager_dl.add_log("✅ Sync Complete!")
-            queue_manager_dl.add_log(f"   Uploaded: {result.get('uploaded', 0)}, Merged: {result.get('merged', 0)}")
-            queue_manager_dl.add_log(f"   Total Remote: {result.get('total_remote', 0)}")
-    except Exception as e:
-        queue_manager_dl.add_log(f"❌ Critical Sync Error: {e}")
+    def _task():
+        try:
+            dl = get_downloader(log_callback=queue_manager_dl.add_log)
+            if not dl.cloud.is_configured():
+                queue_manager_dl.add_log("❌ Cloud Sync not configured. Add R2/S3 keys in Settings.")
+                return
+            queue_manager_dl.add_log("--- Starting Cloud Sync ---")
+            def cb(msg): queue_manager_dl.add_log(f"☁️ {msg}")
+            
+            # Note: Refresh library from disk before sync to ensure we have latest local changes
+            dl.library = dl._load_library()
+            result = dl.cloud.sync_library(dl.library, progress_callback=cb)
+            
+            if 'error' in result:
+                queue_manager_dl.add_log(f"❌ Sync Error: {result['error']}")
+            else:
+                # Note: ODST cloud sync might have merged remote tracks into dl.library (indirectly via shared obj?)
+                # Actually dl.cloud.sync_library creates A NEW lib object for pushing to cloud,
+                # but we should update dl.library with the results.
+                # Let's check sync_library return again. It returns stats.
+                
+                # We should reload dl.library if it was changed by sync (wait, sync_library in cloud_sync.py 
+                # doesn't seem to modify the passed local_library object, it creates A new one).
+                # This is A bug in the original code too.
+                
+                queue_manager_dl.add_log("✅ Sync Complete!")
+                queue_manager_dl.add_log(f"   Uploaded: {result.get('uploaded', 0)}, Merged: {result.get('merged', 0)}")
+                queue_manager_dl.add_log(f"   Total Remote: {result.get('total_remote', 0)}")
+                
+                # TODO: Update dl.library with the validated_tracks from result if we want full 2-way sync
+                # For now, let's at least sync what we have to main core
+                _sync_odst_to_main_core()
+        except Exception as e:
+            queue_manager_dl.add_log(f"❌ Critical Sync Error: {e}")
+            import traceback
+            traceback.print_exc()
+
+    orchestrator.submit_task("sync", _task)
 
 
 # Note: Blueprints details

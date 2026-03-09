@@ -9,7 +9,7 @@ from .config import DEFAULT_OUTPUT_DIR, LIBRARY_FILENAME, TRACKS_DIR, DEFAULT_BI
 from .models import LibraryMetadata, Track
 from .audio_utils import AudioProcessor
 
-def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, progress_callback=None):
+def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, progress_callback=None, library: Optional[LibraryMetadata] = None, save_callback=None):
     """
     Iterates through the library, finds tracks with bitrate > 128kbps (approx),
     and re-encodes them to 128kbps.
@@ -23,17 +23,21 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
     log(f"Loading library from {library_path}..." + (" (DRY RUN)" if dry_run else ""))
     
     json_path = library_path / LIBRARY_FILENAME
-    if not json_path.exists():
-        log("Library not found!")
-        return
+    
+    if library is None:
+        if not json_path.exists():
+            log("Library not found!")
+            return
 
-    try:
-        with open(json_path, 'r') as f:
-            data = json.load(f)
-            library = LibraryMetadata.from_dict(data)
-    except Exception as e:
-        log(f"Error loading library: {e}")
-        return
+        try:
+            with open(json_path, 'r') as f:
+                data = json.load(f)
+                library = LibraryMetadata.from_dict(data)
+        except Exception as e:
+            log(f"Error loading library: {e}")
+            return
+    else:
+        log("Using provided in-memory library metadata.")
 
     tracks_dir = library_path / TRACKS_DIR
     optimized_count = 0
@@ -142,9 +146,13 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
     # Note: Save logic
     if optimized_count > 0:
         library.tracks = updated_tracks
-        shutil.copy(json_path, str(json_path) + ".bak")
-        with open(json_path, 'w') as f:
-            f.write(library.to_json())
+        if save_callback:
+            log("Calling save callback...")
+            save_callback()
+        else:
+            shutil.copy(json_path, str(json_path) + ".bak")
+            with open(json_path, 'w') as f:
+                f.write(library.to_json())
         log(f"\nOptimization Complete! Saved {saved_space / 1024 / 1024:.2f} MB")
     else:
         log("\nNo changes needed.")

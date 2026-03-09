@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
+import threading
 from .config import DEFAULT_WORKERS, LIBRARY_FILENAME, DEFAULT_COOKIE_BROWSER, DEFAULT_QUALITY
 from .models import LibraryMetadata
 from .youtube_downloader import YouTubeDownloader
@@ -22,6 +23,7 @@ class ODSTDownloader:
         self.output_dir = Path(output_dir)
         self.workers = workers
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
 
         self.cloud = CloudSync(self.output_dir)
         self.library_path = self.output_dir / LIBRARY_FILENAME
@@ -45,5 +47,11 @@ class ODSTDownloader:
         )
 
     def save_library(self) -> None:
-        with open(self.library_path, "w") as f:
-            f.write(self.library.to_json())
+        with self._lock:
+            with open(self.library_path, "w") as f:
+                f.write(self.library.to_json())
+
+    def add_track(self, track) -> None:
+        with self._lock:
+            self.library.add_track(track)
+

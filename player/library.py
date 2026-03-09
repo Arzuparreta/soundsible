@@ -5,6 +5,7 @@ Handles loading library.json, resolving URLs, and basic playlist management.
 
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 from shared.models import LibraryMetadata, Track, PlayerConfig, StorageProvider
@@ -62,6 +63,7 @@ class LibraryManager:
         self.provider = None
         self.db = DatabaseManager()
         self._manifest_mtime = 0
+        self._lock = threading.Lock()
         
         # Note: Initialize cache
         try:
@@ -151,25 +153,26 @@ class LibraryManager:
         if not self.metadata:
             return False
             
-        try:
-            json_str = self.metadata.to_json()
-            
-            # Note: 1. Local cache file
-            cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(json_str)
-            
-            # Note: 2. Remote cloud storage
-            if self.provider:
-                self.provider.save_library(self.metadata)
+        with self._lock:
+            try:
+                json_str = self.metadata.to_json()
                 
-            # Note: 3. Local sqlite DB
-            self.db.sync_from_metadata(self.metadata)
-            
-            return True
-        except Exception as e:
-            self._log(f"Error saving metadata: {e}")
-            return False
+                # Note: 1. Local cache file
+                cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                cache_path.write_text(json_str)
+                
+                # Note: 2. Remote cloud storage
+                if self.provider:
+                    self.provider.save_library(self.metadata)
+                    
+                # Note: 3. Local sqlite DB
+                self.db.sync_from_metadata(self.metadata)
+                
+                return True
+            except Exception as e:
+                self._log(f"Error saving metadata: {e}")
+                return False
 
     def sync_library(self, silent: bool = None) -> bool:
         """
