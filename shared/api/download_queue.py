@@ -12,7 +12,7 @@ from pathlib import Path
 
 from watchdog.events import FileSystemEventHandler
 
-from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME
+from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, SourceType
 from shared.url_utils import normalize_youtube_url, extract_youtube_video_id
 
 logger = logging.getLogger(__name__)
@@ -25,38 +25,45 @@ def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
 
     source_type = (item.get("source_type") or item.get("type") or "").strip() or None
     song_str = (item.get("song_str") or "").strip()
+    video_id = (item.get("video_id") or "").strip() or None
     metadata_evidence = item.get("metadata_evidence") if isinstance(item.get("metadata_evidence"), dict) else None
     output_dir = item.get("output_dir")
+    
     if item.get("spotify_data") or (song_str and "spotify.com" in song_str):
         return None, "This link type is not supported"
 
-    if source_type in {"youtube_url", "ytmusic_search", "youtube_search"}:
+    # Normalize source_type to standardized enums
+    if source_type == "ytmusic_search":
+        source_type = SourceType.YOUTUBE_SEARCH
+
+    if source_type in {SourceType.YOUTUBE_URL, SourceType.YOUTUBE_SEARCH}:
         normalized = normalize_youtube_url(song_str)
-        video_id = extract_youtube_video_id(normalized or song_str)
-        if not normalized or ("youtube.com" not in normalized and "youtu.be" not in normalized) or not video_id:
-            return None, "Invalid or unsupported YouTube URL"
-        if source_type in ("ytmusic_search", "youtube_search"):
-            evidence_video_id = (metadata_evidence or {}).get("video_id")
-            if not evidence_video_id:
-                return None, f"{source_type} requires metadata_evidence.video_id"
+        extracted_id = extract_youtube_video_id(normalized or song_str)
+        effective_video_id = video_id or extracted_id or (metadata_evidence or {}).get("video_id")
+        
+        if not normalized or ("youtube.com" not in normalized and "youtu.be" not in normalized) or not effective_video_id:
+            return None, "Invalid or unsupported YouTube URL or missing video_id"
+            
         return {
             "source_type": source_type,
             "song_str": normalized,
             "output_dir": output_dir,
             "metadata_evidence": metadata_evidence,
-            "video_id": (metadata_evidence or {}).get("video_id") or video_id,
+            "video_id": effective_video_id,
         }, None
 
     if song_str:
         if "youtube.com" in song_str or "youtu.be" in song_str:
             normalized = normalize_youtube_url(song_str)
-            if not extract_youtube_video_id(normalized):
+            extracted_id = extract_youtube_video_id(normalized)
+            if not extracted_id:
                 return None, "Playlist-only or invalid YouTube URL (missing v=)"
             return {
-                "source_type": "youtube_url",
+                "source_type": SourceType.YOUTUBE_URL,
                 "song_str": normalized,
                 "output_dir": output_dir,
                 "metadata_evidence": metadata_evidence,
+                "video_id": extracted_id,
             }, None
         return {
             "source_type": "manual",

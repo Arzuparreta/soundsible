@@ -2,6 +2,11 @@
 Shared constants used across the platform.
 """
 
+# Source types for downloader
+class SourceType:
+    YOUTUBE_URL = "youtube_url"
+    YOUTUBE_SEARCH = "youtube_search"
+
 # Library metadata
 LIBRARY_VERSION = "1.0"
 LIBRARY_METADATA_FILENAME = "library.json"

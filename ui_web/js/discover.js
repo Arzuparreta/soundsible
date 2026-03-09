@@ -5,15 +5,10 @@
 import { store } from './store.js';
 import { audioEngine } from './audio.js';
 import { esc } from './renderers.js';
+import { searchService } from './search_service.js';
 
 const BUFFER_CAP = 30;
 const FILL_INTERVAL_MS = 10000;
-
-/** Safe API base: prefer store.apiBase when activeHost is set, else same-origin (e.g. app and API on same host:port). */
-function getApiBase() {
-    if (typeof store !== 'undefined' && store.apiBase && store.state && store.state.activeHost) return store.apiBase;
-    return window.location.origin || '';
-}
 
 function escapeCssUrl(url) {
     if (!url) return '';
@@ -432,7 +427,7 @@ export const Discover = {
         if (this._mainEl) this._mainEl.classList.remove('hidden');
         if (this._noResultsEl) this._noResultsEl.classList.add('hidden');
         this._renderSkeleton();
-        const apiBase = getApiBase();
+        const apiBase = searchService.getApiBase();
         try {
             const res = await fetch(`${apiBase}/api/discover/recommendations`, {
                 method: 'POST',
@@ -466,7 +461,7 @@ export const Discover = {
         }
         if (this._buffer.length >= BUFFER_CAP) return;
         this._fillInFlight = true;
-        const apiBase = getApiBase();
+        const apiBase = searchService.getApiBase();
         const limit = BUFFER_CAP - this._buffer.length;
         fetch(`${apiBase}/api/discover/recommendations`, {
             method: 'POST',
@@ -492,8 +487,8 @@ export const Discover = {
     },
 
     _addToQueue(item) {
-        // Discover items are always queued as music (canonical metadata), never as raw YouTube.
-        const opts = { source: 'music' };
+        // Discover items read the global search source mode (Music vs YouTube).
+        const opts = { source: searchService.sourceMode };
         const dl = typeof window.Downloader !== 'undefined' ? window.Downloader : null;
         if (dl && dl.addToDownloadQueue) {
             if (dl.init && !dl.initialized) dl.init();

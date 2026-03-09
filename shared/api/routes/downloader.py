@@ -40,21 +40,46 @@ def _get_api():
 
 @downloader_bp.route("/api/downloader/youtube/search", methods=["GET"])
 def youtube_search():
-    api = _get_api()
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify({"results": []})
     limit = min(20, max(1, request.args.get("limit", 10, type=int)))
     source = (request.args.get("source") or "ytmusic").strip().lower()
-    use_ytmusic = source == "ytmusic"
+    use_ytmusic = (source == "ytmusic")
     try:
-        dl = api["get_downloader"](open_browser=False)
+        dl = _get_api()["get_downloader"](open_browser=False)
         results = dl.downloader.search_youtube(q, max_results=limit, use_ytmusic=use_ytmusic)
-        results = [r for r in results if (r.get("title") or "").strip() and (r.get("title") or "").strip() != "Unknown"]
         return jsonify({"results": results})
     except Exception as e:
         logger.warning("API: YouTube search error: %s", e)
         return jsonify({"results": [], "error": str(e)}), 500
+
+
+@downloader_bp.route("/api/downloader/youtube/suggest", methods=["GET"])
+def youtube_suggest():
+    import requests
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify({"suggestions": []})
+    
+    url = "http://suggestqueries.google.com/complete/search"
+    params = {
+        "client": "youtube",
+        "ds": "yt",
+        "q": q,
+        "oe": "utf-8"
+    }
+    try:
+        # This API returns a JSON-p style array: ["query", ["suggestion1", "suggestion2", ...], ...]
+        resp = requests.get(url, params=params, timeout=2)
+        if resp.ok:
+            data = resp.json()
+            if isinstance(data, list) and len(data) > 1:
+                return jsonify({"suggestions": data[1]})
+        return jsonify({"suggestions": []})
+    except Exception as e:
+        logger.warning("API: Suggest error: %s", e)
+        return jsonify({"suggestions": []})
 
 
 def _get_resolve_executor():

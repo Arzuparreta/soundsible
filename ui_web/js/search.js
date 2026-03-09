@@ -5,31 +5,18 @@
  */
 import { store } from './store.js';
 import * as renderers from './renderers.js';
+import { esc } from './renderers.js';
 import { Resolver } from './resolver.js';
 import { Haptics } from './haptics.js';
+import { searchService } from './search_service.js';
 
 const ODST_DEBOUNCE_MS = 150;
-
-function getApiBase() {
-    if (store && store.apiBase && store.state && store.state.activeHost) return store.apiBase;
-    if (typeof window !== 'undefined' && window.location && window.location.origin) return window.location.origin;
-    return '';
-}
-
-function esc(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
 
 function escapeCssUrl(url) {
     if (!url) return '';
     return String(url).replace(/"/g, '%22').replace(/'/g, '%27');
 }
 
-let debounceTimer = null;
-let odstAbortController = null;
 let inputEl = null;
 let resultsEl = null;
 /** When init is called with resultsContainerId (Discover), we toggle content vs search results panels. */
@@ -40,8 +27,6 @@ let lastOdstResults = [];
 let isMobile = true;
 /** When false (desktop), library rows use hover-to-play style (delegation); no single-click play on row. */
 let isDesktop = false;
-/** Search tab ODST source: 'music' = YouTube Music, 'youtube' = normal YouTube. */
-let odstSourceMode = 'music';
 /** When true, results are discover-only (ODST only, no library mix, no "ODST" label per row). */
 let isDiscoverPage = false;
 
@@ -285,7 +270,7 @@ function bindListeners(merged) {
         if (addBtn && item && typeof window.Downloader !== 'undefined' && window.Downloader.addToDownloadQueue) {
             addBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                window.Downloader.addToDownloadQueue(item, { source: odstSourceMode });
+                window.Downloader.addToDownloadQueue(item, { source: searchService.sourceMode });
             });
         }
     });
@@ -315,115 +300,81 @@ function runLibraryOnly(raw) {
     resultsEl.appendChild(loadingOdstEl);
 }
 
-/** Only ODST fetch; merges with lastLibraryItems when done. Called when debounce fires (or immediately if ODST_DEBOUNCE_MS is 0). */
-function runOdstFetch(raw) {
+/** Only ODST fetch; merges with lastLibraryItems when done. */
+async function runOdstFetch(raw) {
     if (!resultsEl || !raw) {
         const loading = resultsEl?.querySelector('.search-odst-loading');
         if (loading) loading.remove();
         return;
     }
-    const Downloader = window.Downloader;
-    if (Downloader && typeof Downloader.parseUrlLines === 'function') {
-        const parsed = Downloader.parseUrlLines(raw);
-        if (parsed.mode === 'url') {
-            const loading = resultsEl.querySelector('.search-odst-loading');
-            if (loading) loading.remove();
-            return;
+    
+    try {
+        const results = await searchService.query(raw, { debounce: ODST_DEBOUNCE_MS });
+        if (results === null) return; // Aborted
+        
+        lastOdstResults = results;
+        const odstItems = results.map((r) => ({ source: 'odst', ...r }));
+        if (isDiscoverPage) {
+            render(odstItems);
+        } else {
+            const librarySorted = [...lastLibraryItems].sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score;
+                return (a.sortTitle || '').localeCompare(b.sortTitle || '');
+            });
+            render([...odstItems, ...librarySorted]);
         }
+        const loading = resultsEl?.querySelector('.search-odst-loading');
+        if (loading) loading.remove();
+    } catch (err) {
+        if (isDiscoverPage) {
+            render([]);
+        } else {
+            const sorted = [...lastLibraryItems].sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score;
+                return (a.sortTitle || '').localeCompare(b.sortTitle || '');
+            });
+            render(sorted);
+        }
+        const loading = resultsEl?.querySelector('.search-odst-loading');
+        if (loading) loading.remove();
+        const errMsg = err.message || 'ODST search unavailable';
+        if (resultsEl) {
+            const msg = document.createElement('div');
+            msg.className = 'text-center py-3 text-[var(--text-dim)] text-sm';
+            msg.textContent = errMsg;
+            resultsEl.appendChild(msg);
+        }
+        if (typeof window.showToast === 'function') window.showToast(errMsg);
     }
-    const sourceParam = (odstSourceMode === 'youtube') ? 'youtube' : 'ytmusic';
-    if (odstAbortController) odstAbortController.abort();
-    odstAbortController = new AbortController();
-    fetch(`${getApiBase()}/api/downloader/youtube/search?q=${encodeURIComponent(raw)}&limit=10&source=${sourceParam}`, {
-        signal: odstAbortController.signal
-    })
-        .then((resp) => {
-            if (!resp.ok) {
-                throw new Error(resp.status === 500 ? (resp.statusText || 'Server error') : `HTTP ${resp.status}`);
-            }
-            return resp.json();
-        })
-        .then((data) => {
-            const results = data.results || [];
-            lastOdstResults = results;
-            const odstItems = results.map((r) => ({ source: 'odst', ...r }));
-            if (isDiscoverPage) {
-                render(odstItems);
-            } else {
-                const librarySorted = [...lastLibraryItems].sort((a, b) => {
-                    if (b.score !== a.score) return b.score - a.score;
-                    return (a.sortTitle || '').localeCompare(b.sortTitle || '');
-                });
-                render([...odstItems, ...librarySorted]);
-            }
-            const loading = resultsEl?.querySelector('.search-odst-loading');
-            if (loading) loading.remove();
-        })
-        .catch((err) => {
-            if (err.name === 'AbortError') return;
-            if (isDiscoverPage) {
-                render([]);
-            } else {
-                const sorted = [...lastLibraryItems].sort((a, b) => {
-                    if (b.score !== a.score) return b.score - a.score;
-                    return (a.sortTitle || '').localeCompare(b.sortTitle || '');
-                });
-                render(sorted);
-            }
-            const loading = resultsEl?.querySelector('.search-odst-loading');
-            if (loading) loading.remove();
-            const errMsg = err.message || 'ODST search unavailable';
-            if (resultsEl) {
-                const msg = document.createElement('div');
-                msg.className = 'text-center py-3 text-[var(--text-dim)] text-sm';
-                msg.textContent = errMsg;
-                resultsEl.appendChild(msg);
-            }
-            if (typeof window.showToast === 'function') window.showToast(errMsg);
-        });
-}
-
-function onDebounceFire() {
-    debounceTimer = null;
-    const raw = (inputEl && inputEl.value) ? inputEl.value.trim() : '';
-    runOdstFetch(raw);
 }
 
 function onInput() {
     const raw = (inputEl && inputEl.value) ? inputEl.value.trim() : '';
     if (!resultsEl) return;
     if (!raw) {
-        updateDiscoverPanels(false);
-        resultsEl.innerHTML = `<div class="text-center py-8 text-[var(--text-dim)]">${getEmptyMessage()}</div>`;
-        lastLibraryItems = [];
-        lastOdstResults = [];
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = null;
+        clear();
         return;
     }
     updateDiscoverPanels(true);
-    const Downloader = window.Downloader;
-    if (Downloader && typeof Downloader.parseUrlLines === 'function') {
-        const parsed = Downloader.parseUrlLines(raw);
-        if (parsed.mode === 'url') {
+
+    const parsed = searchService.parseUrlLines(raw);
+    if (parsed.mode === 'url') {
+        const Downloader = window.Downloader;
+        if (Downloader && typeof Downloader.enqueueDirectUrls === 'function') {
             Downloader.enqueueDirectUrls(parsed.accepted.map((x) => x.normalized));
             if (inputEl) inputEl.value = '';
             if (typeof window.showToast === 'function') window.showToast('Link added to download queue');
-            resultsEl.innerHTML = `<div class="text-center py-8 text-[var(--text-dim)]">${getEmptyMessage()}</div>`;
-            lastLibraryItems = [];
-            if (debounceTimer) clearTimeout(debounceTimer);
-            debounceTimer = null;
+            clear();
             return;
         }
     }
+    
     if (isDiscoverPage) {
         resultsEl.innerHTML = '<div class="search-odst-loading text-center py-4 text-[var(--text-dim)] text-sm">Loading...</div>';
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(onDebounceFire, ODST_DEBOUNCE_MS);
+        runOdstFetch(raw);
     } else {
         runLibraryOnly(raw);
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(onDebounceFire, ODST_DEBOUNCE_MS);
+        runOdstFetch(raw);
     }
 }
 
@@ -431,29 +382,27 @@ function onPaste() {
     setTimeout(() => {
         const raw = (inputEl && inputEl.value) ? inputEl.value.trim() : '';
         if (!raw) return;
-        const Downloader = window.Downloader;
-        if (Downloader && typeof Downloader.parseUrlLines === 'function') {
-            const parsed = Downloader.parseUrlLines(raw);
-            if (parsed.mode === 'url') {
+        const parsed = searchService.parseUrlLines(raw);
+        if (parsed.mode === 'url') {
+            const Downloader = window.Downloader;
+            if (Downloader && typeof Downloader.enqueueDirectUrls === 'function') {
                 Downloader.enqueueDirectUrls(parsed.accepted.map((x) => x.normalized));
                 if (inputEl) inputEl.value = '';
                 if (typeof window.showToast === 'function') window.showToast('Link added to download queue');
-                if (debounceTimer) clearTimeout(debounceTimer);
-                debounceTimer = null;
-                if (resultsEl) resultsEl.innerHTML = `<div class="text-center py-8 text-[var(--text-dim)]">${getEmptyMessage()}</div>`;
+                clear();
             }
         }
     }, 0);
 }
 
 function clear() {
-    if (debounceTimer) {
-        clearTimeout(debounceTimer);
-        debounceTimer = null;
+    if (searchService.debounceTimer) {
+        clearTimeout(searchService.debounceTimer);
+        searchService.debounceTimer = null;
     }
-    if (odstAbortController) {
-        odstAbortController.abort();
-        odstAbortController = null;
+    if (searchService.abortController) {
+        searchService.abortController.abort();
+        searchService.abortController = null;
     }
     updateDiscoverPanels(false);
     if (resultsEl) resultsEl.innerHTML = `<div class="text-center py-8 text-[var(--text-dim)]">${getEmptyMessage()}</div>`;
@@ -465,26 +414,9 @@ function clear() {
 
 function setSearchOdstSource(value) {
     if (value !== 'music' && value !== 'youtube') return;
-    odstSourceMode = value;
-    const musicBtn = document.getElementById('search-odst-music');
-    const youtubeBtn = document.getElementById('search-odst-youtube');
-    if (musicBtn && youtubeBtn) {
-        if (value === 'music') {
-            musicBtn.classList.add('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
-            musicBtn.classList.remove('bg-[var(--accent)]/15', 'text-[var(--accent)]');
-            musicBtn.setAttribute('aria-pressed', 'true');
-            youtubeBtn.classList.remove('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
-            youtubeBtn.classList.add('bg-[var(--accent)]/15', 'text-[var(--accent)]');
-            youtubeBtn.setAttribute('aria-pressed', 'false');
-        } else {
-            youtubeBtn.classList.add('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
-            youtubeBtn.classList.remove('bg-[var(--accent)]/15', 'text-[var(--accent)]');
-            youtubeBtn.setAttribute('aria-pressed', 'true');
-            musicBtn.classList.remove('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
-            musicBtn.classList.add('bg-[var(--accent)]/15', 'text-[var(--accent)]');
-            musicBtn.setAttribute('aria-pressed', 'false');
-        }
-    }
+    searchService.sourceMode = value;
+    searchService.applyToggleUI('search-odst-music', 'search-odst-youtube');
+    
     Haptics.tick();
     const raw = (inputEl && inputEl.value) ? inputEl.value.trim() : '';
     if (raw) runOdstFetch(raw);
@@ -517,7 +449,7 @@ function init(opts = {}) {
     const musicBtn = document.getElementById('search-odst-music');
     const youtubeBtn = document.getElementById('search-odst-youtube');
     if (musicBtn && youtubeBtn) {
-        setSearchOdstSource(odstSourceMode);
+        searchService.applyToggleUI('search-odst-music', 'search-odst-youtube');
         musicBtn.addEventListener('click', () => setSearchOdstSource('music'));
         youtubeBtn.addEventListener('click', () => setSearchOdstSource('youtube'));
     }
@@ -526,6 +458,11 @@ function init(opts = {}) {
     inputEl.removeEventListener('paste', onPaste);
     inputEl.addEventListener('input', onInput);
     inputEl.addEventListener('paste', onPaste);
+    
+    // Typeahead support
+    searchService.attach(inputEl, (val) => {
+        if (val) runOdstFetch(val);
+    });
 
     inputEl.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {

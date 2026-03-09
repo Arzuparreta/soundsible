@@ -494,7 +494,9 @@ class YouTubeDownloader:
             video_id = entry.get('id')
             if not video_id:
                 return None
-            title = (entry.get('title') or '').strip() or 'Unknown'
+            title = (entry.get('title') or '').strip()
+            if not title or title.lower() == 'unknown':
+                return None
             webpage_url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
             return {
                 'id': video_id,
@@ -522,20 +524,9 @@ class YouTubeDownloader:
                 if item is not None:
                     out.append(item)
         except Exception as e:
-            if use_ytmusic:
-                try:
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        result = ydl.extract_info(f"ytsearch{max_results}:{query}", download=False)
-                    if result and 'entries' in result:
-                        for entry in result['entries']:
-                            item = to_item(entry)
-                            if item is not None:
-                                out.append(item)
-                    print(f"YouTube Music search failed, used YouTube fallback: {e}")
-                except Exception as e2:
-                    print(f"YouTube search error (fallback): {e2}")
-            else:
-                print(f"YouTube search error: {e}")
+            logger.warning("YouTube search error (use_ytmusic=%s): %s", use_ytmusic, e)
+            # No silent fallback -- let the caller decide or propagate the error
+            raise e
         return out
 
     def get_related_videos(self, seed_video_id: str, max_results: int = 25) -> List[Dict[str, Any]]:

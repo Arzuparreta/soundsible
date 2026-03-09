@@ -5,36 +5,9 @@
  */
 import { store } from './store.js';
 import { Haptics } from './haptics.js';
-import { formatTime } from './renderers.js';
+import { formatTime, esc } from './renderers.js';
 import { isVisible, onChange as onVisibilityChange } from './visibility.js';
-
-function esc(str) {
-    if (!str) return "";
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
-
-function normalizeYouTubeUrl(url) {
-    try {
-        const raw = (url || "").trim();
-        if (!raw) return null;
-        const parsed = new URL(raw);
-        const host = parsed.hostname.toLowerCase();
-        const isYoutubeHost = host.includes("youtube.com") || host.includes("youtu.be");
-        if (!isYoutubeHost) return null;
-        let videoId = "";
-        if (host.includes("youtu.be")) {
-            videoId = parsed.pathname.replace("/", "").trim();
-        } else {
-            videoId = parsed.searchParams.get("v") || "";
-        }
-        if (!videoId) return null;
-        return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
-    } catch {
-        return null;
-    }
-}
+import { searchService, SourceType } from './search_service.js';
 
 /** Default element IDs for mobile (index.html). Desktop passes overrides so the same class works in desktop.html. */
 const DEFAULT_DL_SELECTORS = {
@@ -72,19 +45,9 @@ const DEFAULT_DL_SELECTORS = {
     downloadsList: 'desktop-downloads-list'
 };
 
-/** Safe API base: same-origin when app is served from API (e.g. :5005/player/), else store.apiBase. */
-function getApiBase() {
-    if (typeof store !== 'undefined' && store.state?.activeHost) return store.apiBase;
-    return (typeof window !== 'undefined' && window.location?.origin) ? window.location.origin : '';
-}
-
 /** ODST search source (UI toggle). */
 const ODST_SOURCE_MUSIC = 'music';
 const ODST_SOURCE_YOUTUBE = 'youtube';
-/** Backend source_type values. */
-const SOURCE_TYPE_YTMUSIC_SEARCH = 'ytmusic_search';
-const SOURCE_TYPE_YOUTUBE_SEARCH = 'youtube_search';
-const SOURCE_TYPE_YOUTUBE_URL = 'youtube_url';
 
 export class Downloader {
     static downloadQueue = [];
@@ -95,8 +58,6 @@ export class Downloader {
     static suppressResultClicksUntil = 0;
     /** Guard: ignore outside-click close for this many ms after opening (avoids mobile ghost tap closing the popover). */
     static _downloadQueueOpenedAt = 0;
-    /** Search source: ODST_SOURCE_MUSIC = YouTube Music (default), ODST_SOURCE_YOUTUBE = normal YouTube */
-    static searchSource = ODST_SOURCE_MUSIC;
     /** Batch total at start of current processing run (for ring progress). Reset when idle. */
     static _batchTotal = 0;
 
@@ -149,6 +110,17 @@ export class Downloader {
         this.bindEvents();
         this.updateFabAndPopover();
         this.refreshStatus();
+        
+        // Apply initial toggle state
+        searchService.applyToggleUI(sel.searchSourceMusicBtn, sel.searchSourceYoutubeBtn);
+        
+        // Typeahead support
+        if (this.searchInput) {
+            searchService.attach(this.searchInput, (val) => {
+                if (val) this.runSearch(val);
+            });
+        }
+
         if (this.confPath) this.loadConfig();
         setInterval(() => {
             if (!isVisible()) return;
@@ -212,59 +184,23 @@ export class Downloader {
         window.Downloader = this;
     }
 
-    static parseUrlLines(rawInput) {
-        const raw = (rawInput || "").trim();
-        const lines = raw
-            .split('\n')
-            .map((l) => l.trim())
-            .filter((l) => l.length > 0);
-        if (lines.length === 0) return { mode: 'empty', accepted: [], rejected: [] };
-        const urlMatches = raw.match(/https?:\/\/[^\s]+/g) || [];
-        const textWithoutUrls = raw.replace(/https?:\/\/[^\s]+/g, '').trim();
-        const candidates = urlMatches.length > 0 && textWithoutUrls.length === 0 ? urlMatches : lines;
-        const accepted = [];
-        const rejected = [];
-        for (const line of candidates) {
-            const normalized = normalizeYouTubeUrl(line);
-            if (!normalized) {
-                rejected.push({ line, reason: 'Unsupported or invalid URL' });
-                continue;
-            }
-            accepted.push({ line, normalized });
-        }
-        const isUrlMode = accepted.length > 0 && rejected.length === 0;
-        return { mode: isUrlMode ? 'url' : 'search', accepted, rejected, lines };
-    }
-
     static setSearchSource(value) {
         if (value !== ODST_SOURCE_MUSIC && value !== ODST_SOURCE_YOUTUBE) return;
-        this.searchSource = value;
-        const musicBtn = this.searchSourceMusicBtn;
-        const youtubeBtn = this.searchSourceYoutubeBtn;
-        if (musicBtn && youtubeBtn) {
-            if (value === ODST_SOURCE_MUSIC) {
-                musicBtn.classList.add('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
-                musicBtn.classList.remove('bg-[var(--accent)]/15', 'text-[var(--accent)]');
-                musicBtn.setAttribute('aria-pressed', 'true');
-                youtubeBtn.classList.remove('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
-                youtubeBtn.classList.add('bg-[var(--accent)]/15', 'text-[var(--accent)]');
-                youtubeBtn.setAttribute('aria-pressed', 'false');
-            } else {
-                youtubeBtn.classList.add('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
-                youtubeBtn.classList.remove('bg-[var(--accent)]/15', 'text-[var(--accent)]');
-                youtubeBtn.setAttribute('aria-pressed', 'true');
-                musicBtn.classList.remove('bg-[var(--accent)]', 'text-[var(--text-on-accent)]');
-                musicBtn.classList.add('bg-[var(--accent)]/15', 'text-[var(--accent)]');
-                musicBtn.setAttribute('aria-pressed', 'false');
-            }
-        }
+        searchService.sourceMode = value;
+        searchService.applyToggleUI(
+            this.searchSourceMusicBtn?.id || 'dl-search-source-music',
+            this.searchSourceYoutubeBtn?.id || 'dl-search-source-youtube'
+        );
         Haptics.tick();
+        
+        const q = this.searchInput?.value?.trim();
+        if (q) this.runSearch(q);
     }
 
     static async handlePrimaryInput() {
         const raw = this.searchInput?.value?.trim() || '';
         if (!raw) return;
-        const parsed = this.parseUrlLines(raw);
+        const parsed = searchService.parseUrlLines(raw);
         if (parsed.mode === 'url') {
             this.enqueueDirectUrls(parsed.accepted.map((x) => x.normalized));
             this.searchInput.value = '';
@@ -280,7 +216,7 @@ export class Downloader {
             if (existing.has(url)) continue;
             existing.add(url);
             this.downloadQueue.push({
-                source_type: SOURCE_TYPE_YOUTUBE_URL,
+                source_type: SourceType.YOUTUBE_URL,
                 song_str: url,
                 title: url,
                 channel: '',
@@ -301,16 +237,13 @@ export class Downloader {
         if (!q || !this.searchResults) return;
         this.searchResults.innerHTML = '<div class="text-center py-8 text-gray-500">Searching...</div>';
         this.searchBtn?.classList.add('opacity-70');
-        const sourceParam = this.searchSource === ODST_SOURCE_YOUTUBE ? 'youtube' : 'ytmusic';
+        
         try {
-            const resp = await fetch(`${store.apiBase}/api/downloader/youtube/search?q=${encodeURIComponent(q)}&limit=10&source=${sourceParam}`);
-            const data = await resp.json();
+            const results = await searchService.query(q, { debounce: 0 });
             this.searchBtn?.classList.remove('opacity-70');
-            if (!resp.ok) {
-                this.searchResults.innerHTML = `<div class="text-center py-8 text-red-400">${esc(data.error || 'Search failed')}</div>`;
-                return;
-            }
-            const results = data.results || [];
+            
+            if (results === null) return; // Aborted
+            
             if (results.length === 0) {
                 this.searchResults.innerHTML = '<div class="text-center py-8 text-gray-500">No results</div>';
                 return;
@@ -321,7 +254,8 @@ export class Downloader {
             Haptics.tick();
         } catch (err) {
             this.searchBtn?.classList.remove('opacity-70');
-            this.searchResults.innerHTML = '<div class="text-center py-8 text-red-400">Could not reach Station Engine.</div>';
+            const errMsg = err.message || 'Could not reach Station Engine.';
+            this.searchResults.innerHTML = `<div class="text-center py-8 text-red-400">${esc(errMsg)}</div>`;
         }
     }
 
@@ -442,7 +376,7 @@ export class Downloader {
                 // Use YouTube cover
                 const coverUrl = track.fallback_cover_url || track.album_art_url;
                 if (coverUrl) {
-                    const res = await fetch(`${store.apiBase}/api/library/tracks/${track.id}/metadata`, {
+                    const res = await fetch(`${searchService.getApiBase()}/api/library/tracks/${track.id}/metadata`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ cover_url: coverUrl })
@@ -468,7 +402,7 @@ export class Downloader {
                 }
             } else if (choice === 'none') {
                 // Clear cover
-                const res = await fetch(`${store.apiBase}/api/library/tracks/${track.id}/cover/none`, {
+                const res = await fetch(`${searchService.getApiBase()}/api/library/tracks/${track.id}/cover/none`, {
                     method: 'POST'
                 });
                 if (res.ok) {
@@ -484,10 +418,12 @@ export class Downloader {
 
     static addToDownloadQueue(result, options = {}) {
         if (!result || !result.id) return;
-        const canonicalUrl = normalizeYouTubeUrl(result.webpage_url || `https://www.youtube.com/watch?v=${result.id}`);
+        const canonicalUrl = searchService.normalizeYouTubeUrl(result.webpage_url || `https://www.youtube.com/watch?v=${result.id}`);
         if (!canonicalUrl) return;
-        const effectiveSource = (options.source === ODST_SOURCE_YOUTUBE || options.source === ODST_SOURCE_MUSIC) ? options.source : this.searchSource;
-        const sourceType = effectiveSource === ODST_SOURCE_YOUTUBE ? SOURCE_TYPE_YOUTUBE_SEARCH : SOURCE_TYPE_YTMUSIC_SEARCH;
+        
+        // Collapsed source type: both YT Music and normal YT results are just "youtube_search"
+        const sourceType = SourceType.YOUTUBE_SEARCH;
+        
         this.downloadQueue.push({
             source_type: sourceType,
             song_str: canonicalUrl,
@@ -500,9 +436,10 @@ export class Downloader {
                 title: result.title || '',
                 artist: result.artist ?? result.channel ?? '',
                 duration_sec: result.duration || 0,
-                source: sourceType,
-                video_id: result.id,
-                channel: result.channel || result.artist || ''
+                // Source hint for backend provider (search_youtube behavior)
+                source_mode: (options.source === ODST_SOURCE_YOUTUBE || options.source === ODST_SOURCE_MUSIC) 
+                    ? options.source 
+                    : searchService.sourceMode
             }
         });
         this.renderDownloadQueueList();
@@ -627,8 +564,9 @@ export class Downloader {
             return;
         }
         const items = this.downloadQueue.map((r) => ({
-            source_type: r.source_type || SOURCE_TYPE_YOUTUBE_URL,
-            song_str: r.song_str || normalizeYouTubeUrl(r.webpage_url || `https://www.youtube.com/watch?v=${r.video_id || r.id || ''}`),
+            source_type: r.source_type || SourceType.YOUTUBE_URL,
+            song_str: r.song_str,
+            video_id: r.video_id,
             output_dir: r.output_dir,
             metadata_evidence: r.metadata_evidence || null
         })).filter((item) => !!item.song_str);
@@ -636,7 +574,7 @@ export class Downloader {
             this.addLog('No valid items to send (missing URL).');
             return;
         }
-        const apiBase = getApiBase();
+        const apiBase = searchService.getApiBase();
         try {
             const resp = await fetch(`${apiBase}/api/downloader/queue`, {
                 method: 'POST',
@@ -670,7 +608,7 @@ export class Downloader {
 
     static async startProcessing() {
         try {
-            await fetch(`${store.apiBase}/api/downloader/start`, { method: 'POST' });
+            await fetch(`${searchService.getApiBase()}/api/downloader/start`, { method: 'POST' });
             this.refreshStatus();
         } catch (err) {
             console.error("Start failed:", err);
@@ -678,7 +616,7 @@ export class Downloader {
     }
 
     static async refreshStatus() {
-        const apiBase = getApiBase();
+        const apiBase = searchService.getApiBase();
         if (!apiBase) return;
         try {
             const resp = await fetch(`${apiBase}/api/downloader/queue/status`);
@@ -728,7 +666,7 @@ export class Downloader {
 
     static async removeItem(id) {
         try {
-            await fetch(`${store.apiBase}/api/downloader/queue/${id}`, { method: 'DELETE' });
+            await fetch(`${searchService.getApiBase()}/api/downloader/queue/${id}`, { method: 'DELETE' });
             this.refreshStatus();
         } catch (err) {
             console.error("Remove failed:", err);
@@ -738,7 +676,7 @@ export class Downloader {
     static async clearQueue() {
         if (!confirm("Clear all items from the queue?")) return;
         try {
-            await fetch(`${store.apiBase}/api/downloader/queue`, { method: 'DELETE' });
+            await fetch(`${searchService.getApiBase()}/api/downloader/queue`, { method: 'DELETE' });
             this.refreshStatus();
         } catch (err) {
             console.error("Clear failed:", err);
@@ -829,7 +767,7 @@ export class Downloader {
     }
 
     static async loadConfig() {
-        const apiBase = getApiBase();
+        const apiBase = searchService.getApiBase();
         if (!apiBase) return;
         try {
             const resp = await fetch(`${apiBase}/api/downloader/config`);
@@ -853,7 +791,7 @@ export class Downloader {
         if (this.confR2Secret) data.r2_secret_key = this.confR2Secret.value;
 
         try {
-            const apiBase = (typeof store !== 'undefined' && store.apiBase) ? store.apiBase : getApiBase();
+            const apiBase = searchService.getApiBase();
             const resp = await fetch(`${apiBase}/api/downloader/config`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -875,7 +813,7 @@ export class Downloader {
     static async triggerOptimize() {
         const dryRun = confirm("Run Optimization in DRY RUN mode first? (Cancel for LIVE mode)");
         try {
-            await fetch(`${store.apiBase}/api/downloader/optimize`, {
+            await fetch(`${searchService.getApiBase()}/api/downloader/optimize`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ dry_run: dryRun })
@@ -889,7 +827,7 @@ export class Downloader {
     static async triggerSync() {
         if (!confirm("Start syncing library to Cloud Storage?")) return;
         try {
-            await fetch(`${store.apiBase}/api/downloader/sync`, { method: 'POST' });
+            await fetch(`${searchService.getApiBase()}/api/downloader/sync`, { method: 'POST' });
             this.addLog("Cloud Sync started...");
         } catch (err) {
             console.error("Sync failed:", err);
