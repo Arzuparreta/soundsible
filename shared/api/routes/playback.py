@@ -23,6 +23,13 @@ PREVIEW_STREAM_WINDOW_SEC = 60
 _preview_stream_timestamps = {}
 _preview_stream_lock = threading.Lock()
 
+# Note: Small in-memory cache for preview stream URLs to avoid repeated expensive
+# resolution calls for the same video_id. This is intentionally short-lived and
+# process-local; ODST itself also has deeper caching at the downloader layer.
+PREVIEW_STREAM_CACHE_TTL_SEC = 300  # 5 minutes
+_preview_stream_cache = {}
+_preview_stream_cache_lock = threading.Lock()
+
 
 def _preview_stream_rate_limit(ip: str) -> bool:
     now = time.time()
@@ -34,6 +41,29 @@ def _preview_stream_rate_limit(ip: str) -> bool:
         timestamps.append(now)
         _preview_stream_timestamps[ip] = timestamps
     return True
+
+
+def _get_preview_stream_url_cached(api, video_id: str) -> str:
+    """
+    Resolve a preview stream URL with a small TTL cache to avoid repeated
+    calls into the downloader for the same video_id under bursty access.
+    """
+    now = time.time()
+    with _preview_stream_cache_lock:
+        entry = _preview_stream_cache.get(video_id)
+        if entry and entry["expires_at"] > now and entry.get("url"):
+            return entry["url"]
+
+    dl = api["get_downloader"](open_browser=False)
+    url = dl.downloader.get_stream_url(video_id)
+    if not url:
+        return ""
+
+    expires_at = now + PREVIEW_STREAM_CACHE_TTL_SEC
+    with _preview_stream_cache_lock:
+        _preview_stream_cache[video_id] = {"url": url, "expires_at": expires_at}
+
+    return url
 
 
 def _get_api():
@@ -100,13 +130,19 @@ def preview_stream_proxy(video_id):
     if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
         return jsonify({"error": "Too many requests"}), 429
     try:
-        dl = api["get_downloader"](open_browser=False)
-        stream_url = dl.downloader.get_stream_url(video_id)
+        stream_url = _get_preview_stream_url_cached(api, video_id)
         if not stream_url:
             return jsonify({"error": "Preview unavailable"}), 502
         range_header = request.headers.get("Range")
         req_headers = {"Range": range_header} if range_header else {}
-        resp = requests.get(stream_url, stream=True, headers=req_headers, timeout=90)
+        # Use a conservative connect/read timeout to avoid tying up worker
+        # threads on very slow upstreams.
+        resp = requests.get(
+            stream_url,
+            stream=True,
+            headers=req_headers,
+            timeout=(5, 90),
+        )
         resp.raise_for_status()
         content_length = resp.headers.get("Content-Length")
         content_range = resp.headers.get("Content-Range")
@@ -141,8 +177,7 @@ def get_preview_stream_url(video_id):
     if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
         return jsonify({"error": "Too many requests"}), 429
     try:
-        dl = api["get_downloader"](open_browser=False)
-        url = dl.downloader.get_stream_url(video_id)
+        url = _get_preview_stream_url_cached(api, video_id)
         if not url:
             return jsonify({"error": "Stream URL unavailable"}), 404
         return jsonify({"url": url})

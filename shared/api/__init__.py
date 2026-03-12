@@ -356,8 +356,9 @@ def process_queue_background():
                 queue_manager_dl.add_log("Station Engine: All tasks complete.")
                 break
                 
-            # Note: Fill slots if we have capacity (max 3 concurrent)
-            capacity = 3 - len(active_ids)
+            # Note: Fill slots if we have capacity (max 3 concurrent downloads by default)
+            # The effective concurrency can be tuned via the JobOrchestrator max_workers if needed.
+            capacity = max(0, 3 - len(active_ids))
             if capacity > 0 and pending:
                 for i in range(min(capacity, len(pending))):
                     item = pending[i]

@@ -428,15 +428,24 @@ class LibraryManager:
         return False
         
     def get_all_tracks(self) -> List[Track]:
-        """Return all tracks, prioritized by speed (DB first)."""
+        """
+        Return all tracks, preferring the SQLite index for ordering.
+        Falls back to in-memory metadata if the DB is empty or unavailable.
+        """
         db_tracks = self.db.get_all_tracks()
         if db_tracks:
             return db_tracks
         return self.metadata.tracks if self.metadata else []
 
     def search(self, query: str) -> List[Track]:
-        """Perform a fast search using the local database."""
-        return self.db.search_tracks(query)
+        """
+        Perform a fast search using the local database (FTS5 when available).
+        Falls back to in-memory metadata only if the DB has not been populated yet.
+        """
+        try:
+            return self.db.search_tracks(query)
+        except Exception:
+            return self.metadata.tracks if (self.metadata and not query) else []
 
     def update_track(self, track: Track, new_metadata: Dict[str, str], cover_path: Optional[str] = None) -> bool:
         """

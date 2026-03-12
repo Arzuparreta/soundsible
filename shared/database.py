@@ -146,6 +146,15 @@ class DatabaseManager:
                     )
                 """)
                 
+                # Note: 5. Performance indexes for common access patterns
+                # - get_all_tracks orders by artist, album, track_number
+                # - get_albums groups by album and reports an artist
+                # - get_tracks_by_album filters by album/artist and orders by track_number
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_tracks_album_sort 
+                    ON tracks (album, album_artist, artist, track_number)
+                """)
+                
                 conn.execute("COMMIT")
             except Exception as e:
                 conn.execute("ROLLBACK")
