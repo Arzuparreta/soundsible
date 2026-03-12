@@ -870,6 +870,38 @@ function initWipeLibraryModalDesktop() {
     });
 }
 
+function initPurgeMissingButtonDesktop() {
+    const btn = document.getElementById('desktop-settings-purge-missing-btn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.classList.add('opacity-60', 'cursor-wait');
+        try {
+            const res = await fetch(`${store.apiBase}/api/library/purge-missing`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                DesktopUI.showToast(data.error || 'Purge failed');
+            } else {
+                const checked = typeof data.checked === 'number' ? data.checked : 0;
+                const removed = typeof data.removed === 'number' ? data.removed : 0;
+                const msg = removed === 0
+                    ? 'No missing tracks found'
+                    : `Removed ${removed} missing ${removed === 1 ? 'track' : 'tracks'} (checked ${checked})`;
+                DesktopUI.showToast(msg);
+                await store.syncLibrary();
+            }
+        } catch (err) {
+            DesktopUI.showToast(err?.message || 'Purge failed');
+        } finally {
+            btn.disabled = false;
+            btn.classList.remove('opacity-60', 'cursor-wait');
+        }
+    });
+}
+
 async function init() {
     try {
         registerServiceWorker();
@@ -914,6 +946,7 @@ async function init() {
             ytdlpAutoUpdate: 'desktop-settings-ytdlp-auto-update',
         }, { store, showToast: (m) => DesktopUI.showToast(m), onLibraryOrderChange: () => renderHomeSongs() });
         initWipeLibraryModalDesktop();
+        initPurgeMissingButtonDesktop();
 
         const themeSelect = document.getElementById('desktop-settings-theme-select');
         if (themeSelect) {

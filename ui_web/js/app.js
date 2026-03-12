@@ -227,6 +227,40 @@ function initWipeLibraryModal() {
     });
 }
 
+function initPurgeMissingButton() {
+    const btn = document.getElementById('settings-purge-missing-btn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.classList.add('opacity-60', 'cursor-wait');
+        try {
+            const res = await fetch(`${store.apiBase}/api/library/purge-missing`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                UI.showToast(data.error || 'Purge failed');
+            } else {
+                const checked = typeof data.checked === 'number' ? data.checked : 0;
+                const removed = typeof data.removed === 'number' ? data.removed : 0;
+                const msg = removed === 0
+                    ? 'No missing tracks found'
+                    : `Removed ${removed} missing ${removed === 1 ? 'track' : 'tracks'} (checked ${checked})`;
+                UI.showToast(msg);
+                await store.syncLibrary();
+                renderLibraryContent();
+                renderQueue(store.state);
+            }
+        } catch (err) {
+            UI.showToast(err?.message || 'Purge failed');
+        } finally {
+            btn.disabled = false;
+            btn.classList.remove('opacity-60', 'cursor-wait');
+        }
+    });
+}
+
 function initQueueDrag() {
     if (!dom || !dom.floatingQueue) return;
     const container = dom.floatingQueue;
@@ -760,6 +794,7 @@ async function init() {
 
         wireSettings(MOBILE_SETTINGS_IDS, { store, showToast: (msg) => UI.showToast(msg), onLibraryOrderChange: () => renderLibraryContent(), subscribeIndicators: false });
         initWipeLibraryModal();
+        initPurgeMissingButton();
 
         // Note: 2. Perform connection race
         const endpoints = [...store.state.priorityList, window.location.hostname];

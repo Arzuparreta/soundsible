@@ -707,3 +707,51 @@ class LibraryManager:
             self._log(f"Failed to disconnect: {e}")
             return False
 
+    def purge_missing_tracks(self) -> dict:
+        """
+        Remove tracks from metadata (and playlists/DB) whose audio file no longer exists
+        in the current OUTPUT_DIR and, if a cloud provider is configured, in remote storage.
+        Returns a summary dict: {"checked": N, "removed": M}.
+        """
+        if not self.metadata or not self.metadata.tracks:
+            return {"checked": 0, "removed": 0}
+
+        checked = 0
+        removed = 0
+
+        # Work on a copy so we can mutate the original list safely
+        tracks_snapshot = list(self.metadata.tracks)
+
+        for track in tracks_snapshot:
+            checked += 1
+
+            # 1) Check local file via unified resolver
+            local_path = resolve_local_track_path(track)
+
+            # 2) If we have a provider, see if the remote object still exists
+            remote_exists = False
+            if self.provider:
+                try:
+                    remote_key = f"tracks/{track.id}.{track.format}"
+                    remote_exists = self.provider.file_exists(remote_key)
+                except Exception:
+                    # Be conservative: if we can't check, assume it exists to avoid accidental data loss
+                    remote_exists = True
+
+            if local_path or remote_exists:
+                continue
+
+            # At this point, neither a local file nor a known remote object exists – purge metadata entry.
+            self.metadata.tracks = [t for t in self.metadata.tracks if t.id != track.id]
+            # Also remove from any playlists
+            for name, playlist in list(self.metadata.playlists.items()):
+                if track.id in playlist:
+                    self.metadata.playlists[name] = [pid for pid in playlist if pid != track.id]
+            removed += 1
+
+        if removed > 0:
+            self.metadata.version += 1
+            self._save_metadata()
+
+        return {"checked": checked, "removed": removed}
+

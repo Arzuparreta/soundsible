@@ -1174,8 +1174,17 @@
                     <!-- Library -->
                     <div class="glass-view rounded-[var(--radius-omni)] p-6 border border-[var(--glass-border)] transition-all duration-200">
                         <h2 class="text-lg font-bold tracking-tight mb-2" style="letter-spacing: -0.02em;">Library</h2>
-                        <p class="text-sm text-[var(--text-dim)] mb-4">Reset the library to an empty state. All tracks, playlists, and cloud data will be permanently deleted. This cannot be undone.</p>
-                        <button type="button" id="settings-wipe-library-btn" class="px-4 py-2.5 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-red-500/15 text-red-400 border border-red-500/40 hover:bg-red-500/25 transition-colors">Wipe library</button>
+                        <div class="space-y-4">
+                            <div>
+                                <p class="text-sm text-[var(--text-main)] mb-1">Purge missing tracks</p>
+                                <p class="text-xs text-[var(--text-dim)]">Remove entries from the library whose audio files no longer exist on disk (and, if configured, in cloud storage).</p>
+                                <button type="button" id="settings-purge-missing-btn" class="mt-2 px-4 py-2.5 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--surface-overlay)] text-[var(--text-main)] border border-[var(--glass-border)] hover:bg-[var(--bg-card)] transition-colors">Purge missing tracks</button>
+                            </div>
+                            <div class="pt-3 border-t border-[var(--glass-border)]">
+                                <p class="text-sm text-[var(--text-dim)] mb-2">Reset the library to an empty state. All tracks, playlists, and cloud data will be permanently deleted. This cannot be undone.</p>
+                                <button type="button" id="settings-wipe-library-btn" class="px-4 py-2.5 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-red-500/15 text-red-400 border border-red-500/40 hover:bg-red-500/25 transition-colors">Wipe library</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -140,6 +140,29 @@ def search_library():
     return jsonify([t.to_dict() for t in results[:50]])
 
 
+@library_bp.route("/api/library/purge-missing", methods=["POST"])
+def purge_missing_library_tracks():
+    """
+    Remove library entries for tracks whose audio files no longer exist locally
+    (and, if a cloud provider is configured, have no corresponding remote object).
+    Restricted to trusted networks (Home/Tailscale).
+    """
+    api = _get_api()
+    if not api["is_trusted_network"](request.remote_addr):
+        return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
+
+    lib, _, _ = api["get_core"]()
+    lib.refresh_if_stale()
+    if not lib.metadata:
+        lib.sync_library()
+    if not lib.metadata:
+        return jsonify({"error": "Library not loaded"}), 404
+
+    summary = lib.purge_missing_tracks()
+    api["socketio"].emit("library_updated")
+    return jsonify({"status": "success", **summary})
+
+
 @library_bp.route("/api/metadata/search", methods=["GET"])
 def search_metadata_external():
     query = request.args.get("q", "")
