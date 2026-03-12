@@ -253,13 +253,12 @@ class SoundsibleLauncher:
         table.add_row("2", "Start Station Engine only (no browser)")
         table.add_row("3", "Open Station (Station Engine must be running)")
         table.add_row("4", "Stop Station Engine")
-        table.add_row("5", "Launch Legacy App (GTK desktop player)")
-        table.add_row("6", "Quick Discover / Terminal Playback")
+        table.add_row("5", "Quick Discover / Terminal Playback")
         table.add_row("q", "Exit")
 
         console.print(Panel(table, title="Main Menu", border_style="dim"))
 
-        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "5", "6", "q"], default="1")
+        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "5", "q"], default="1")
         
         if choice == "1":
             self.launch_ecosystem()
@@ -270,8 +269,6 @@ class SoundsibleLauncher:
         elif choice == "4":
             self.stop_station()
         elif choice == "5":
-            self.launch_player()
-        elif choice == "6":
             self.search_ui()
         elif choice == "q":
             console.print("[italic]Happy listening![/italic]")
@@ -323,31 +320,6 @@ class SoundsibleLauncher:
             console.print(f"[red]{msg}[/red]")
         time.sleep(0.5)
 
-    def launch_player(self):
-        """Launch the Legacy GTK desktop player."""
-        console.print("[green]Launching Legacy Player...[/green]")
-        if self.os_name == "Linux":
-            try:
-                log_dir = self.root_dir / "logs"
-                log_dir.mkdir(exist_ok=True)
-                player_log = open(log_dir / "player.log", "a")
-                
-                proc = subprocess.Popen(
-                    [str(self.python_exe), "-c", "from player.ui import run; run()"],
-                    cwd=str(self.root_dir),
-                    stdout=player_log,
-                    stderr=player_log,
-                    start_new_session=True 
-                )
-                self.child_processes.append(proc)
-                console.print("[dim]Player is starting. Logs: logs/player.log[/dim]")
-                time.sleep(1.0)
-            except Exception as e:
-                console.print(f"[red]Failed to launch: {e}[/red]")
-        else:
-            console.print("[yellow]GTK Player is Linux-only. Use Option 3 for Windows.[/yellow]")
-            Prompt.ask("Press Enter to return")
-
     def launch_web_player(self):
         """Open the Station (web player) in the default browser (Station Engine must already be running)."""
         if not _is_port_in_use(STATION_PORT):
@@ -382,23 +354,12 @@ class SoundsibleLauncher:
     def run(self):
         self._install_requirements_if_needed()
         
-        # Note: Windows-specific entry point
-        if os.name == 'nt':
-            try:
-                from player.ui.windows_ui import WindowsControlCenter
-                app = WindowsControlCenter(self)
-                app.run()
-                return
-            except Exception as e:
-                console.print(f"[yellow]Note: Windows Control Center could not start ({e}). Falling back to CLI.[/yellow]")
-
         if not self.is_configured():
             if "--daemon" in sys.argv:
                 print(f"Daemon: {MSG_CONFIG_MISSING}")
                 print("Run without --daemon once to complete setup: python run.py")
                 return
-            console.print(Panel("[bold yellow]First Run Detected![/bold yellow]\nWelcome! Launching setup...", border_style="yellow"))
-            self.launch_player()
+            console.print(Panel("[bold yellow]First Run Detected![/bold yellow]\nWelcome! Please complete setup using the web interface.", border_style="yellow"))
         
         self.start_background_sync()
         self._start_watcher()

@@ -18,18 +18,10 @@ flask-cors>=4.0.0          # Cross-Origin Resource Sharing
 # HTTP Client
 requests>=2.31.0           # Sync HTTP requests
 
-# Player Dependencies (GTK)
-PyGObject>=3.42.0; sys_platform == 'linux'          # GTK bindings
-python-mpv>=1.0.1; sys_platform == 'linux'          # mpv media player integration
-mpris-server>=0.9.0; sys_platform == 'linux'        # MPRIS D-Bus server for media keys (optional)
-
-# Utilities
 cryptography>=41.0.0       # Encrypt stored credentials
-pillow>=10.0.0             # Image processing (covers, tray icons)
-segno>=1.6.0               # QR codes (multi-device pairing)
+pillow>=10.0.0             # Image processing (covers, branding)
 watchdog>=3.0.0            # Folder monitoring
 pyacoustid>=1.2.2          # Audio fingerprinting
-pystray>=0.19.5            # System tray for Windows/macOS
 
 # Development
 pytest>=7.4.0              # Testing framework

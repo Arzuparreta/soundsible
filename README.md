@@ -196,21 +196,6 @@ It provides:
 - Discovery and downloading via the embedded ODST downloader.
 - Guided setup to help you configure storage and services.
 
-### Legacy desktop client (GTK, Linux)
-
-For low‑end or resource‑constrained devices (e.g. Raspberry Pi, thin clients, older Linux boxes), there is a lightweight GTK desktop client:
-
-```bash
-./gui.sh
-```
-
-On first run, this script creates a virtual environment and installs dependencies.  
-*Requires GTK/PyGObject, mpv, and LibAdwaita (see `gui.sh` or your distro docs for package names).*
-
-The GTK client focuses on core playback and may lag behind the Station web UI in features and UX.
-
----
-
 ## Technical details & architecture
 
 - **Backend**: Python / Flask (metadata, indexing, audio streaming).

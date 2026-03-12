@@ -97,6 +97,16 @@ def delete_track_from_library(track_id):
     logger.info("API: Deleting track %s (%s)...", track.title, track_id)
     success = lib.delete_track(track)
     if success:
+        # Note: Also remove from the ODST downloader's library (OUTPUT_DIR/library.json).
+        # sync_library() reads that file on startup; if we don't update it here the track
+        # reappears on every restart because that file is never touched by _save_metadata().
+        try:
+            dl = api["get_downloader"](open_browser=False)
+            if dl and dl.library and dl.library.remove_track(track_id):
+                dl.save_library()
+                logger.info("API: Track %s also removed from ODST library.", track_id)
+        except Exception as e:
+            logger.warning("API: Could not remove track from ODST library (non-fatal): %s", e)
         api["socketio"].emit("library_updated")
         return jsonify({"status": "success"})
     return jsonify({"error": "Deletion failed"}), 500

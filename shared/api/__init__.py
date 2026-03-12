@@ -24,7 +24,6 @@ from shared.path_resolver import resolve_local_track_path
 from shared.app_config import set_output_dir as set_app_output_dir
 from shared.playback_state import get_state as get_playback_state, put_state as put_playback_state, get_scope_from_request
 from player.library import LibraryManager
-from player.engine import PlaybackEngine
 from player.queue_manager import QueueManager
 from player.favourites_manager import FavouritesManager
 from odst_tool.odst_downloader import ODSTDownloader
