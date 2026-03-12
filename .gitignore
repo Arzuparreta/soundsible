@@ -76,3 +76,4 @@ temp/
 gha-creds-*.json
 odst_tool/test_output/
 .aider*
+docs/discover-design-refs.md

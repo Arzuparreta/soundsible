@@ -219,7 +219,6 @@ Additional documentation lives under `docs/`:
 Internal and troubleshooting docs:
 
 - [docs/yt-dlp-format-errors-log.md](docs/yt-dlp-format-errors-log.md)
-- [docs/discover-design-refs.md](docs/discover-design-refs.md)
 
 ---
 
