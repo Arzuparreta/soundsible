@@ -62,3 +62,39 @@ Audio and artwork can live on:
 
 The setup wizard guides you through pointing Soundsible to the right storage location.
 
+## Request and playback flow
+
+The typical path from a user action to audio playback looks like this:
+
+1. A client (desktop or mobile browser / PWA) loads Station.
+2. Station calls the Station Engine API over HTTP or keeps a WebSocket connection open for real‑time updates.
+3. Station Engine queries `library.db` for metadata and search, and returns JSON responses.
+4. When playback starts, Station requests an audio stream from the Station Engine.
+5. Station Engine reads the file from the configured storage backend and streams audio bytes to the client.
+
+For tracks that were downloaded via ODST, the file path and metadata are already registered in `library.db`, so they behave like any other library tracks.
+
+## Library and metadata model (high‑level)
+
+The SQLite database keeps the library structured but intentionally simple.
+
+Conceptually, it tracks:
+
+- Tracks (file path, title, duration, track‑level metadata, references to album/artist).
+- Albums (name, artwork, year, references to artist).
+- Artists (name and related metadata).
+- Playlists (name and ordering of tracks).
+- Search indices (FTS5 tables and helper indices) to support fast queries.
+
+Audio files and artwork are not stored in the database. They live in the configured storage location, and rows in `library.db` point to them via normalized paths or URLs.
+
+## Extensibility notes
+
+At a high level, you can extend the system in the following places:
+
+- Storage backends: add new storage providers by implementing the same path and URL contract the Station Engine expects, then wiring them into the setup wizard and configuration layer.
+- Downloader behavior: adjust or extend ODST to support new sources or custom format selection, as long as it still produces a file and metadata entry the Station Engine understands.
+- Frontend: build new views in Station that call the existing APIs, or add new endpoints in the Station Engine and then surface them in the UI.
+
+For more details on configuration and deployment, see `CONFIGURATION.md` and `INSTALL.md`.
+
