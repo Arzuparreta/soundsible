@@ -590,7 +590,7 @@ def start_api(port=STATION_PORT, debug=False):
     logger.info("CWD: %s", os.getcwd())
     logger.info("For full startup (sync + watcher) use: python run.py --daemon")
 
-    # Note: Set app config so path_resolver and security do not depend on odst_tool layout
+        # Note: Set app config so path_resolver and security do not depend on odst_tool layout
     _out = _resolve_output_dir()
     if _out:
         set_app_output_dir(_out)
@@ -610,14 +610,16 @@ def start_api(port=STATION_PORT, debug=False):
     try:
         lib, _, _ = get_core()
         logger.info("API: Core services initialized successfully.")
-
+        
         # Note: Optional auto-update yt-dlp in background if user enabled it (thread started after terminal message)
         try:
             from dotenv import dotenv_values
-            _env_path = Path("odst_tool/.env")
+            # Note: Always resolve the .env path from the repo root so auto-update works regardless of CWD.
+            _env_path = Path(_REPO_ROOT) / "odst_tool" / ".env"
             _env = dotenv_values(_env_path) if _env_path.exists() else {}
             _auto = (_env.get("YTDLP_AUTO_UPDATE", os.getenv("YTDLP_AUTO_UPDATE", "false")) or "false").strip().lower() in ("true", "1")
             if _auto:
+                logger.info("API: yt-dlp auto-update requested (YTDLP_AUTO_UPDATE=true). Will run in background after startup banner.")
                 def _run_ytdlp_update():
                     import subprocess
                     pip_cmd = None
@@ -634,6 +636,8 @@ def start_api(port=STATION_PORT, debug=False):
                     if not pip_cmd:
                         pip_cmd = [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"]
                     try:
+                        logger.info("API: Updating yt-dlp (auto-update enabled)...")
+                        logger.info("API: Starting yt-dlp auto-update via pip: %s", " ".join(pip_cmd))
                         result = subprocess.run(
                             pip_cmd,
                             capture_output=True,
@@ -648,7 +652,7 @@ def start_api(port=STATION_PORT, debug=False):
                         logger.warning("API: yt-dlp auto-update error: %s", e)
                 _defer_ytdlp_thread = True
         except Exception:
-            pass
+            logger.debug("API: yt-dlp auto-update setup skipped due to error", exc_info=True)
 
         # Note: Start library file watcher
         config_dir = Path(DEFAULT_CONFIG_DIR).expanduser()

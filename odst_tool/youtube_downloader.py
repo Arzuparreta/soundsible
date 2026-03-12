@@ -432,8 +432,13 @@ class YouTubeDownloader:
             capture_output=True,
             text=True,
         )
-        # Note: With cookies, youtube can return a format list that doesn't match; retry without cookies (same as terminal).
-        if result.returncode != 0 and "Requested format is not available" in (result.stderr or result.stdout or ""):
+        # Note: With cookies, youtube can return a format list that doesn't match or a "page needs to be reloaded" error.
+        # In both cases, retry once without cookies (same as a normal terminal fallback).
+        combined_output = (result.stderr or "") + (result.stdout or "")
+        if result.returncode != 0 and (
+            "Requested format is not available" in combined_output
+            or "The page needs to be reloaded" in combined_output
+        ):
             if self.cookie_file or self.cookie_browser:
                 i, no_cookies = 0, []
                 while i < len(args):
@@ -449,8 +454,9 @@ class YouTubeDownloader:
                     capture_output=True,
                     text=True,
                 )
+                combined_output = (result.stderr or "") + (result.stdout or "")
         if result.returncode != 0:
-            raise Exception(result.stderr or result.stdout or f"yt-dlp exited {result.returncode}")
+            raise Exception(combined_output or f"yt-dlp exited {result.returncode}")
 
         ext = codec
         expected_path = self.temp_dir / f"{temp_filename}.{ext}"
@@ -617,8 +623,13 @@ class YouTubeDownloader:
                 text=True,
                 timeout=30,
             )
-            # Note: Same as download if "requested format is not available", retry without cookies
-            if result.returncode != 0 and "Requested format is not available" in (result.stderr or result.stdout or ""):
+            # Note: Same as download: if yt-dlp reports format mismatch or "page needs to be reloaded",
+            # retry once without cookies to avoid transient YouTube/STS issues.
+            combined_output = (result.stderr or "") + (result.stdout or "")
+            if result.returncode != 0 and (
+                "Requested format is not available" in combined_output
+                or "The page needs to be reloaded" in combined_output
+            ):
                 if self.cookie_file or self.cookie_browser:
                     no_cookies = []
                     i = 0
@@ -634,8 +645,9 @@ class YouTubeDownloader:
                         text=True,
                         timeout=30,
                     )
+                    combined_output = (result.stderr or "") + (result.stdout or "")
             if result.returncode != 0:
-                stderr = (result.stderr or "").strip() or "(no stderr)"
+                stderr = (combined_output or "").strip() or "(no stderr)"
                 print(f"[Preview] yt-dlp -g failed for {video_id}: returncode={result.returncode}, stderr={stderr[:500]}")
                 return None
             line = (result.stdout or "").strip().splitlines()

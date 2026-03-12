@@ -237,7 +237,8 @@ def get_downloader_config():
     api = _get_api()
     is_trusted = api["is_trusted_network"](request.remote_addr)
     from dotenv import dotenv_values
-    env_path = Path("odst_tool/.env")
+    # Note: Resolve .env from the project root so config and startup use the same file regardless of CWD.
+    env_path = Path(__file__).resolve().parents[3] / "odst_tool" / ".env"
     env_vars = {}
     if env_path.exists():
         env_vars = dotenv_values(env_path)
@@ -274,8 +275,11 @@ def update_downloader_config():
     if not api["is_trusted_network"](request.remote_addr):
         return jsonify({"error": "Admin actions restricted to Home Network / Tailscale"}), 403
     data = request.json
-    env_path = Path("odst_tool/.env")
+    # Note: Keep writer in sync with reader and API startup: always use repo-root-based .env.
+    env_path = Path(__file__).resolve().parents[3] / "odst_tool" / ".env"
     from dotenv import set_key, dotenv_values
+    # Note: Ensure parent directory exists before touching .env, regardless of CWD
+    env_path.parent.mkdir(parents=True, exist_ok=True)
     if not env_path.exists():
         env_path.touch()
     key_map = {
