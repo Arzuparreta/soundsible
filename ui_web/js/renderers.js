@@ -4,6 +4,7 @@
  */
 import { store } from './store.js';
 import { Resolver } from './resolver.js';
+import { VirtualList } from './virtual_list.js';
 
 /** Escape HTML to prevent XSS. */
 export function esc(str) {
@@ -302,11 +303,39 @@ export function enableMarqueeIfNeeded(containerEl) {
  */
 export function renderSongList(tracks, containerEl, options = {}) {
     if (!containerEl) return;
+    
     if (tracks.length === 0) {
-        containerEl.innerHTML = '<div class="text-gray-500 text-center py-10 italic">No songs found.</div>';
+        if (containerEl.__virtualList) {
+            containerEl.__virtualList.destroy();
+            containerEl.__virtualList = null;
+        }
+        containerEl.innerHTML = '<div class="text-[var(--text-dim)] text-center py-10 italic text-sm">No songs found.</div>';
         return;
     }
-    containerEl.innerHTML = buildSongRowsHtml(tracks, options);
+
+    const useVirtual = tracks.length > 30; // Virtualize lists larger than 30 items
+
+    if (useVirtual) {
+        if (containerEl.__virtualList) {
+            containerEl.__virtualList.options.renderItem = (track) => buildSongRowsHtml([track], options);
+            containerEl.__virtualList.updateData(tracks);
+        } else {
+            renderSkeletonList(containerEl, 12);
+            requestAnimationFrame(() => {
+                containerEl.__virtualList = new VirtualList(containerEl, {
+                    items: tracks,
+                    itemHeight: 76,
+                    renderItem: (track) => buildSongRowsHtml([track], options)
+                });
+            });
+        }
+    } else {
+        if (containerEl.__virtualList) {
+            containerEl.__virtualList.destroy();
+            containerEl.__virtualList = null;
+        }
+        containerEl.innerHTML = buildSongRowsHtml(tracks, options);
+    }
 }
 
 /**
@@ -689,4 +718,20 @@ export function renderPlaylistDetail(playlistName, trackIds, library, tracksCont
         addDataIndex: true,
         desktopClickBehavior: options.desktopClickBehavior
     });
+}
+
+export function renderSkeletonList(container, count = 15) {
+    if (!container) return;
+    let html = '';
+    for(let i = 0; i < count; i++) {
+        html += `
+        <div class="skeleton-row border-b border-white/5">
+            <div class="skeleton-cover"></div>
+            <div class="skeleton-text-container">
+                <div class="skeleton-text-title"></div>
+                <div class="skeleton-text-subtitle"></div>
+            </div>
+        </div>`;
+    }
+    container.innerHTML = html;
 }

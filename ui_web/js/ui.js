@@ -612,35 +612,20 @@ export class UI {
     }
 
     static showView(viewId, saveToHistory = true) {
-        // Note: Auto-hide now playing if active (even if selecting the same view)
         if (this.dom.nowPlayingView?.classList.contains('active')) {
             this.hideNowPlaying();
         }
 
         if (viewId === this.currentView) return;
 
+        // Note: Special tab logic for library return
         if (viewId === 'home' && this.currentView === 'artist-detail') store.update({ libraryTab: 'artists' });
 
-        UI._viewTransitionEnd = Date.now() + 520;
         this.updateLabel(viewId);
 
         let oldView = document.getElementById(`view-${this.currentView}`);
-        if (this.currentView === 'discover') {
-            const vds = document.getElementById('view-discover-search');
-            oldView = (vds && !vds.classList.contains('hidden')) ? vds : (document.getElementById('view-discover') || oldView);
-        }
         let targetView = document.getElementById(`view-${viewId}`);
-        if (viewId === 'discover') {
-            const searchInput = document.getElementById('global-search-input');
-            const hasQuery = searchInput && (searchInput.value || '').trim().length > 0;
-            const viewDiscoverSearch = document.getElementById('view-discover-search');
-            const viewDiscover = document.getElementById('view-discover');
-            targetView = hasQuery && viewDiscoverSearch ? viewDiscoverSearch : viewDiscover;
-            if (viewDiscoverSearch && viewDiscover) {
-                viewDiscoverSearch.classList.toggle('hidden', targetView !== viewDiscoverSearch);
-                viewDiscover.classList.toggle('hidden', targetView !== viewDiscover);
-            }
-        }
+
         if (!targetView) return;
 
         if (saveToHistory) {
@@ -649,64 +634,42 @@ export class UI {
             else this.viewStack.push(this.currentView);
         }
 
-        // ## Section: Perform stacking transition
+        // 1. Position incoming view before it becomes visible
+        const slideClass = UI.getSlideClassForView(viewId);
+        targetView.classList.remove('hidden');
+        targetView.classList.add(slideClass, 'view-incoming');
         
-        // Note: 1. Prepare outgoing (stays in background with dim/scale)
         if (oldView) oldView.classList.add('view-outgoing');
 
-        // Note: 2 Details
-        const slideClass = UI.getSlideClassForView(viewId);
-        targetView.classList.remove('hidden', 'view-warm-hidden-left', 'view-warm-hidden-right');
-        targetView.classList.add('view-incoming');
-        targetView.classList.add(slideClass);
-        
-        // Note: Returning to artists from artist-detail clear sticky active from back button and suppress card feedback briefly
-        const fromArtistDetail = viewId === 'home' && this.currentView === 'artist-detail';
-        if (fromArtistDetail) {
-            document.activeElement?.blur?.();
-            targetView.classList.add('artist-just-returned');
-            setTimeout(() => targetView.classList.remove('artist-just-returned'), 320);
-        }
-        
-        // Note: 3. Trigger animation — double raf so browser can apply classes without forcing synchronous reflow
+        // 2. Double-RAF to ensure DOM paints the initial state before transition starts
         requestAnimationFrame(() => {
+            // Render content now (after first RAF) so it's in the DOM for the slide
+            if (typeof window.renderContentForView === 'function') {
+                window.renderContentForView(viewId);
+            }
+            
             requestAnimationFrame(() => {
                 targetView.classList.remove('view-from-right', 'view-from-left');
                 if (this.dom.content) this.dom.content.scrollTop = 0;
             });
         });
 
-        // Note: 4 Details
+        // 3. Post-transition cleanup (matching new 0.4s CSS)
         setTimeout(() => {
             const oldViewId = oldView && oldView.id ? oldView.id.replace(/^view-/, '') : null;
             if (oldViewId && typeof window.clearContentForView === 'function') {
                 window.clearContentForView(oldViewId);
             }
-            if (oldView && oldView.id !== `view-${viewId}`) {
-                const warmViews = { 'view-home': 'view-warm-hidden-right' };
-                const warmClass = warmViews[oldView.id];
-                if (warmClass) {
-                    oldView.classList.add(warmClass);
-                } else {
-                    oldView.classList.add('hidden');
-                }
+            if (oldView && oldView.id !== targetView.id) {
+                oldView.classList.add('hidden');
                 oldView.classList.remove('view-outgoing');
             }
             targetView.classList.remove('view-incoming');
-            UI._viewTransitionEnd = 0;
-            if (typeof window.renderContentForView === 'function') {
-                window.renderContentForView(viewId);
-            }
-        }, 500);
+        }, 400);
 
         this.currentView = viewId;
-
         const queueContainer = this.dom.queueContainer;
         if (queueContainer) queueContainer.classList.remove('hidden');
-
-        // Note: ODST music/youtube toggle is now embedded in the search bar; visibility controlled by show-discover-odst on container (app
-
-        // Note: Syncartistgridindicators deferred to 500ms cleanup so we don't touch sliding view DOM in same turn
     }
 
     /** Single entry point for "go back": sub-views (e.g. discover-search) close first; then stack pop. */

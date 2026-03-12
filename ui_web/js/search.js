@@ -39,54 +39,15 @@ function getEmptyMessage() {
 
 function updateDiscoverPanels(showSearchResults) {
     if (isDiscoverPage && isMobile) {
-        const viewDiscover = document.getElementById('view-discover');
+        const viewDiscoverRecs = document.getElementById('discovery-panel-soundsnap');
         const viewDiscoverSearch = document.getElementById('view-discover-search');
-        if (!viewDiscover || !viewDiscoverSearch) return;
+        if (!viewDiscoverRecs || !viewDiscoverSearch) return;
 
         const wantSearch = !!showSearchResults;
-        const isSearchVisible = !viewDiscoverSearch.classList.contains('hidden');
-        const isRecVisible = !viewDiscover.classList.contains('hidden');
-
-        // Note: If already in the right state (or both hidden during initialization), just set visibility with no animation.
-        if ((wantSearch && isSearchVisible) || (!wantSearch && isRecVisible) || (!isSearchVisible && !isRecVisible)) {
-            viewDiscoverSearch.classList.toggle('hidden', !wantSearch);
-            viewDiscover.classList.toggle('hidden', wantSearch);
-            viewDiscoverSearch.classList.remove('view-incoming', 'view-outgoing', 'view-from-right', 'view-from-left', 'view-from-top', 'view-to-top');
-            viewDiscover.classList.remove('view-incoming', 'view-outgoing', 'view-from-right', 'view-from-left', 'view-from-top', 'view-to-top');
-            return;
-        }
-
-        // Note: Never run A second animation while the main view transition is active.
-        const transitionEnd = (window.UI && typeof window.UI._viewTransitionEnd === 'number') ? window.UI._viewTransitionEnd : 0;
-        if (transitionEnd && Date.now() < transitionEnd) {
-            viewDiscoverSearch.classList.toggle('hidden', !wantSearch);
-            viewDiscover.classList.toggle('hidden', wantSearch);
-            return;
-        }
-
-        const outgoing = wantSearch ? viewDiscover : viewDiscoverSearch;
-        const incoming = wantSearch ? viewDiscoverSearch : viewDiscover;
-
-        if (wantSearch) {
-            outgoing.classList.add('view-outgoing');
-            incoming.classList.remove('hidden', 'view-warm-hidden-left', 'view-warm-hidden-right');
-            incoming.classList.add('view-incoming', 'view-from-top');
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    incoming.classList.remove('view-from-top');
-                });
-            });
-        } else {
-            outgoing.classList.add('view-outgoing', 'view-to-top');
-            incoming.classList.remove('hidden', 'view-warm-hidden-left', 'view-warm-hidden-right');
-            incoming.classList.add('view-incoming');
-        }
-
-        setTimeout(() => {
-            outgoing.classList.add('hidden');
-            outgoing.classList.remove('view-outgoing', 'view-to-top');
-            incoming.classList.remove('view-incoming');
-        }, 500);
+        
+        // Instant toggle for internal panels
+        viewDiscoverSearch.classList.toggle('hidden', !wantSearch);
+        viewDiscoverRecs.classList.toggle('hidden', wantSearch);
         return;
     }
     if (isDiscoverPage && !isMobile && contentPanelEl?.id === 'desktop-view-discover' && searchResultsPanelEl?.id === 'desktop-view-discover-search') {

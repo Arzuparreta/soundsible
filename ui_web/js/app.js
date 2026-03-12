@@ -19,6 +19,9 @@ import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 import { playPreview } from './preview_playback.js';
 import { initHoverTooltip } from './tooltip.js';
 import * as playback_context from './playback_context.js';
+import { VirtualList } from './virtual_list.js';
+
+window.virtualLists = {};
 
 const LIBRARY_SYNC_INTERVAL_MS = 300000;
 
@@ -1293,6 +1296,15 @@ window.showAddToPlaylistPicker = (trackId) => {
     picker.classList.remove('hidden');
 };
 
+function clearContainerContent(el) {
+    if (!el) return;
+    if (el.__virtualList) {
+        el.__virtualList.destroy();
+        el.__virtualList = null;
+    }
+    el.innerHTML = '';
+}
+
 /**
  * Clear main content of a view when leaving (Option B: no heavy DOM during transition).
  * Called from ui.js showView 500ms cleanup for the OLD view.
@@ -1301,15 +1313,15 @@ function clearContentForView(viewId) {
     if (!dom) return;
     switch (viewId) {
         case 'home':
-            if (dom.allSongs) dom.allSongs.innerHTML = '';
-            if (dom.allArtists) dom.allArtists.innerHTML = '';
+            clearContainerContent(dom.allSongs);
+            clearContainerContent(dom.allArtists);
             break;
         case 'favourites':
-            if (dom.favTracks) dom.favTracks.innerHTML = '';
+            clearContainerContent(dom.favTracks);
             break;
         case 'artist-detail':
-            if (dom.artistTracks) dom.artistTracks.innerHTML = '';
-            if (dom.artistAlbums) dom.artistAlbums.innerHTML = '';
+            clearContainerContent(dom.artistTracks);
+            clearContainerContent(dom.artistAlbums);
             if (dom.artistDetailTitle) dom.artistDetailTitle.textContent = '';
             if (dom.artistDetailCover) {
                 if (dom.artistDetailCover.tagName === 'IMG') dom.artistDetailCover.src = '';
@@ -1317,7 +1329,7 @@ function clearContentForView(viewId) {
             }
             break;
         case 'playlists':
-            if (dom.playlistListContainer) dom.playlistListContainer.innerHTML = '';
+            clearContainerContent(dom.playlistListContainer);
             break;
         case 'playlist-detail':
             viewContext.currentPlaylistName = null;
@@ -1326,7 +1338,7 @@ function clearContentForView(viewId) {
             if (dom.playlistDetailMeta) dom.playlistDetailMeta.textContent = '0 tracks';
             if (dom.playlistDetailCover) dom.playlistDetailCover.style.backgroundImage = '';
             if (dom.playlistDetailCoverIcon) dom.playlistDetailCoverIcon.classList.add('hidden');
-            if (dom.playlistDetailTracks) dom.playlistDetailTracks.innerHTML = '';
+            clearContainerContent(dom.playlistDetailTracks);
             break;
         case 'discover':
             if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) window.unifiedSearch.clear();

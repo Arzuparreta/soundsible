@@ -236,9 +236,10 @@
             overscroll-behavior: contain;
             padding: calc(max(1.5rem, env(safe-area-inset-top)) + 76px) 1.25rem 12rem 1.25rem;
             background-color: var(--bg-deep);
-            transition: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, filter 0.5s ease;
-            will-change: transform, opacity, filter;
-            z-index: 10;
+            transition: transform 0.4s cubic-bezier(0.33, 1, 0.68, 1), opacity 0.3s ease;
+            will-change: transform, opacity;
+            transform: translate3d(0, 0, 0);
+            z-index: 1;
             -webkit-overflow-scrolling: touch;
         }
 
@@ -315,33 +316,15 @@
         }
 
         .view.hidden {
-            display: none;
-            opacity: 0;
-            pointer-events: none;
+            display: none !important;
         }
 
-        /* Home/Artists: keep laid out so slide animation never waits on content (no display:none) */
-        .view-warm-hidden-left {
-            visibility: hidden;
-            pointer-events: none;
-            transform: translateX(-100%);
-            z-index: 0;
-            transition: none;
-        }
-        .view-warm-hidden-right {
-            visibility: hidden;
-            pointer-events: none;
-            transform: translateX(100%);
-            z-index: 0;
-            transition: none;
-        }
-
-        .view-incoming { z-index: 20 !important; }
-        .view-outgoing { z-index: 10 !important; filter: brightness(0.5) scale(0.96); }
-        .view-from-right { transform: translateX(100%); transition: none; }
-        .view-from-left { transform: translateX(-100%); transition: none; }
-        .view-from-top { transform: translateY(-100%); transition: none; }
-        .view-to-top { transform: translateY(-100%); }
+        /* Hyper-simple transition system */
+        .view-incoming { z-index: 20; transform: translate3d(0, 0, 0); }
+        .view-outgoing { z-index: 10; transform: translate3d(0, 0, 0); }
+        
+        .view-from-right { transform: translate3d(100%, 0, 0) !important; transition: none !important; }
+        .view-from-left { transform: translate3d(-100%, 0, 0) !important; transition: none !important; }
 
         #now-playing-view {
             transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, visibility 0.4s, backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
@@ -824,6 +807,48 @@
         #np-seek-container.seeking #np-seek-progress {
             box-shadow: 0 0 16px var(--accent);
         }
+        /* Skeleton Screen Styles */
+        @keyframes shimmer {
+            0% { background-position: -1000px 0; }
+            100% { background-position: 1000px 0; }
+        }
+        .skeleton-row {
+            height: 64px;
+            display: flex;
+            align-items: center;
+            padding: 8px 16px;
+            opacity: 0.6;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .skeleton-cover {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.05) 75%);
+            background-size: 1000px 100%;
+            animation: shimmer 2s infinite linear;
+        }
+        .skeleton-text-container {
+            margin-left: 12px;
+            flex: 1;
+        }
+        .skeleton-text-title {
+            height: 16px;
+            width: 60%;
+            border-radius: 4px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.05) 75%);
+            background-size: 1000px 100%;
+            animation: shimmer 2s infinite linear;
+            margin-bottom: 8px;
+        }
+        .skeleton-text-subtitle {
+            height: 12px;
+            width: 40%;
+            border-radius: 4px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.05) 75%);
+            background-size: 1000px 100%;
+            animation: shimmer 2s infinite linear;
+        }
     </style>
     <script>
         (function() {
@@ -984,6 +1009,7 @@
                         <!-- Tabs injected by app.js from DISCOVERY_TABS -->
                     </div>
                 </div>
+                <!-- Recommendations Panel -->
                 <div id="discovery-panel-soundsnap" class="library-panel flex flex-col flex-1 min-h-0">
                     <div id="discover-content-panel" class="flex flex-col flex-1 min-h-0 overflow-y-auto" style="-webkit-overflow-scrolling: touch;">
                         <p id="discover-empty-library" class="hidden text-sm text-[var(--text-dim)] py-4 px-1">Add music from YouTube to your library to get recommendations.</p>
@@ -993,9 +1019,10 @@
                         </div>
                     </div>
                 </div>
-            </div>
-            <div id="view-discover-search" class="view hidden">
-                <div id="discover-search-results" class="space-y-2"></div>
+                <!-- Search Results Panel (Inside the same view) -->
+                <div id="view-discover-search" class="hidden flex-1 overflow-y-auto px-5 pb-32">
+                    <div id="discover-search-results" class="space-y-2"></div>
+                </div>
             </div>
             <!-- YouTube preview modal (ODST result click; used from Search) -->
             <div id="dl-preview-modal" class="fixed inset-0 z-[110] hidden flex-col backdrop-blur-sm" style="background-color: var(--overlay-bg);">
