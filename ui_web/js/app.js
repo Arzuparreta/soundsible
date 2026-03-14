@@ -19,9 +19,6 @@ import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 import { playPreview } from './preview_playback.js';
 import { initHoverTooltip } from './tooltip.js';
 import * as playback_context from './playback_context.js';
-import { VirtualList } from './virtual_list.js';
-
-window.virtualLists = {};
 
 const LIBRARY_SYNC_INTERVAL_MS = 300000;
 
@@ -1299,7 +1296,9 @@ window.showAddToPlaylistPicker = (trackId) => {
 function clearContainerContent(el) {
     if (!el) return;
     if (el.__virtualList) {
-        el.__virtualList.destroy();
+        try {
+            el.__virtualList.destroy();
+        } catch (_) {}
         el.__virtualList = null;
     }
     el.innerHTML = '';
