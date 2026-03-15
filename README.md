@@ -59,7 +59,7 @@ This repository contains the full Soundsible ecosystem, with the **Station** as 
 - **Universal sync**: Your playlists, favorites, metadata, and settings stay in sync across devices.
 
 <p align="center">
-  <img src="docs/images/desktop-library.png" alt="Soundsible desktop library view" width="640" />
+  <img src="docs/images/desktop-player.png" alt="Soundsible desktop library view" width="640" />
 </p>
 
 ### Discovery & downloading
