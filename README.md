@@ -183,30 +183,6 @@ For the full immersive experience:
 
 ---
 
-## Platforms & clients
-
-### Station (primary interface)
-
-The **Station** is the main interface for Soundsible on **Windows, Linux, Android, and iOS**. It is a modern web UI backed by the Station Engine, and is what you get when you open the `/player/` URL or use the launcher.
-
-It provides:
-
-- Full playback experience (queue, now playing, progress, volume, shuffle/repeat).
-- Library browsing and editing.
-- Discovery and downloading via the embedded ODST downloader.
-- Guided setup to help you configure storage and services.
-
-## Technical details & architecture
-
-- **Backend**: Python / Flask (metadata, indexing, audio streaming).
-- **Database**: SQLite (library metadata in `library.db`, FTS5 full‑text search, cache index for playback).
-- **Frontend**: Vanilla JS + Tailwind CSS (zero‑dependency, high‑performance).
-- **Storage**: Local filesystem plus optional cloud backends (Backblaze B2 / Cloudflare R2 / S2).
-
-For a deeper architecture overview (components, data flow, and storage layout), see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
----
-
 ## Documentation
 
 Additional documentation lives under `docs/`:
