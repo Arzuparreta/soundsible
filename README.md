@@ -1,3 +1,4 @@
+## Note: I've stopped vibecoding for a while so this project is not going to get new features, just mainteanace. I do not have the raw knowledge to keep developing this.
 # <img src="branding/logo-app.png" alt="Soundsible" width="52" height="52" align="center"> **Soundsible**
 
 **Self-hosted, full‑featured music environment with a premium, across-device experience.**
