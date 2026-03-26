@@ -516,16 +516,8 @@ class Store {
     }
 
     async searchMetadata(query) {
-        try {
-            const res = await fetch(`${this.apiBase}/api/metadata/search?q=${encodeURIComponent(query)}`);
-            if (res.ok) {
-                return await res.json();
-            }
-            return [];
-        } catch (err) {
-            console.error("Metadata search error:", err);
-            return [];
-        }
+        // Legacy iTunes metadata search endpoint was removed.
+        return [];
     }
 
     async updateMetadata(trackId, metadata, coverUrl = null) {

@@ -31,7 +31,6 @@ from odst_tool.cloud_sync import CloudSync
 from odst_tool.optimize_library import optimize_library
 from setup_tool.uploader import UploadEngine
 from setup_tool.provider_factory import StorageProviderFactory
-from setup_tool.metadata import search_itunes, download_image
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 

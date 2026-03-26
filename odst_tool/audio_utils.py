@@ -2,10 +2,37 @@ import hashlib
 import os
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
+import requests
 import mutagen
 from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, TCON, APIC, COMM, USLT
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC, Picture
+
+_session = requests.Session()
+_YT_IMAGE_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0"
+)
+
+
+def download_image(url: str) -> Optional[bytes]:
+    """Download image bytes. Uses browser UA for YouTube thumbnail hosts."""
+    if not url:
+        return None
+    headers = None
+    host = ""
+    try:
+        from urllib.parse import urlparse
+        host = (urlparse(url).netloc or "").lower()
+    except Exception:
+        host = ""
+    if "ytimg.com" in host or "youtube.com" in host or "img.youtube" in host:
+        headers = {"User-Agent": _YT_IMAGE_USER_AGENT}
+    try:
+        response = _session.get(url, timeout=10, headers=headers)
+        response.raise_for_status()
+        return response.content
+    except Exception:
+        return None
 
 class AudioProcessor:
     """Utilities for audio file processing."""
@@ -28,7 +55,6 @@ class AudioProcessor:
         cover_data = None
         if cover_url:
             try:
-                from setup_tool.metadata import download_image
                 cover_data = download_image(cover_url)
             except Exception:
                 pass

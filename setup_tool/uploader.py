@@ -3,7 +3,6 @@ Upload engine for managing music uploads to cloud storage.
 """
 
 import os
-import re
 import concurrent.futures
 import traceback
 from pathlib import Path
@@ -189,61 +188,8 @@ class UploadEngine:
             # Note: Auto-fetch / cover logic
             fetched_cover_path = None
             if auto_fetch and not cover_image_path and not metadata.get('cover_art', False):
-                try:
-                    from setup_tool.metadata import search_itunes, download_image
-                    import tempfile
-                    
-                    # Note: Construct query with progressive fallbacks
-                    queries = []
-                    
-                    # Note: 1. Artist + title (best)
-                    if metadata['artist'] != 'Unknown Artist' and metadata['title'] != 'Unknown Title':
-                         queries.append(f"{metadata['artist']} {metadata['title']}")
-                    
-                    # Note: 2. Filename cleaned (smarter)
-                    stem = file_path.stem
-                    # Note: Remove "original soundtrack", "OST", etc
-                    stem = re.sub(r'(?i)original soundtrack|ost', '', stem)
-                    # Note: Remove track numbers "01 ", "04-"
-                    stem = re.sub(r'^\d+\s*[-_.]?\s*', '', stem)
-                    
-                    # Note: Strategy 3 hyphen split
-                    if ' - ' in file_path.stem:
-                        parts = file_path.stem.split(' - ')
-                        if len(parts) >= 2:
-                            possible_title = parts[-1]
-                            possible_title = re.sub(r'^\d+\s*[-_.]?\s*', '', possible_title)
-                            queries.append(possible_title)
-                            
-                            possible_artist = parts[0].replace('_', ' ').strip()
-                            queries.append(f"{possible_artist} {possible_title}")
-
-                    # Note: Replace separators (strategy 2 cont)
-                    stem = stem.replace('_', ' ').replace('-', ' ')
-                    stem = " ".join(stem.split())
-                    queries.append(stem)
-                    
-                    # Note: 4. Simple filename (last resort)
-                    if stem != file_path.stem:
-                        queries.append(file_path.stem.replace('_', ' '))
-
-                    # Note: Try queries until one works
-                    results = None
-                    for q in queries:
-                        if len(q) < 3: continue 
-                        results = search_itunes(q, limit=1)
-                        if results:
-                            break
-                            
-                    if results:
-                        img_url = results[0]['artwork_url']
-                        img_data = download_image(img_url)
-                        if img_data:
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-                                tmp.write(img_data)
-                                fetched_cover_path = tmp.name
-                except Exception as e:
-                    print(f"Auto-fetch failed for {file_path.name}: {e}")
+                # Note: Legacy iTunes autofetch removed with GTK frontend cleanup.
+                fetched_cover_path = None
 
             # Note: Determine active cover source
             active_cover_path = cover_image_path or fetched_cover_path

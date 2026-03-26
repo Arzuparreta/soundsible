@@ -11,7 +11,7 @@ from urllib.parse import unquote
 from flask import Blueprint, request, jsonify
 
 from shared.path_resolver import resolve_local_track_path
-from setup_tool.metadata import search_itunes, download_image
+from odst_tool.audio_utils import download_image
 
 logger = logging.getLogger(__name__)
 
@@ -171,15 +171,6 @@ def purge_missing_library_tracks():
     summary = lib.purge_missing_tracks()
     api["socketio"].emit("library_updated")
     return jsonify({"status": "success", **summary})
-
-
-@library_bp.route("/api/metadata/search", methods=["GET"])
-def search_metadata_external():
-    query = request.args.get("q", "")
-    if not query:
-        return jsonify([])
-    results = search_itunes(query, limit=10)
-    return jsonify(results)
 
 
 @library_bp.route("/api/library/tracks/<track_id>/metadata", methods=["POST"])
