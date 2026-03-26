@@ -52,12 +52,10 @@ export const DesktopUI = {
                 editAlbum: el('edit-album'),
                 editCoverPreview: el('edit-cover-preview'),
                 editSaveBtn: el('edit-save-btn'),
-                editAutoFetchBtn: el('edit-auto-fetch-btn'),
                 editUploadBtn: el('edit-upload-btn'),
                 editFileInput: el('edit-file-input'),
                 editStatus: el('edit-status'),
-                editRawYoutubeNote: el('edit-raw-youtube-note'),
-                autoFetchResults: el('auto-fetch-results')
+                editRawYoutubeNote: el('edit-raw-youtube-note')
             }),
             showToast: (message) => this.showToast(message)
         });
@@ -424,14 +422,6 @@ export const DesktopUI = {
 
     async saveMetadata() {
         await this.metadataEditor?.save();
-    },
-
-    async autoFetch() {
-        await this.metadataEditor?.autoFetch();
-    },
-
-    applyFetchedMetadata(title, artist, album, cover) {
-        this.metadataEditor?.applyFetched(title, artist, album, cover);
     },
 
     async handleCoverUpload(e) {

@@ -873,9 +873,6 @@
                         </div>
                     </div>
                     <div class="flex space-x-3 w-full">
-                        <button id="edit-auto-fetch-btn" class="flex-1 bg-[var(--surface-overlay)] active:opacity-80 py-3 rounded-[var(--radius-omni-xs)] text-xs font-bold transition-all focus:outline-none border border-[var(--input-border)] active:scale-95 text-[var(--text-main)]">
-                            <i class="fas fa-magic mr-2 text-[var(--accent)]"></i>Auto-fetch
-                        </button>
                         <button id="edit-upload-btn" class="flex-1 bg-[var(--surface-overlay)] active:opacity-80 py-3 rounded-[var(--radius-omni-xs)] text-xs font-bold transition-all focus:outline-none border border-[var(--input-border)] active:scale-95 text-[var(--text-main)]">
                             <i class="fas fa-upload mr-2 text-[var(--secondary)]"></i>Upload
                         </button>
@@ -897,7 +894,6 @@
                         <input type="text" id="edit-album" class="input-theme w-full rounded-[var(--radius-omni-xs)] px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] transition-all font-medium text-[var(--text-main)]">
                     </div>
                 </div>
-                <div id="auto-fetch-results" class="hidden space-y-2 max-h-40 overflow-y-auto custom-scrollbar border-t border-[var(--glass-border)] pt-4"></div>
                 <div id="edit-status" class="text-[10px] font-bold text-center min-h-[1rem] uppercase tracking-widest text-[var(--accent)] opacity-60 font-mono"></div>
                 <div class="flex space-x-4 pt-4">
                     <button type="button" onclick="UI.hideMetadataEditor()" class="flex-1 py-4 text-[var(--text-dim)] font-black uppercase tracking-widest text-[10px] hover:text-[var(--text-main)] transition-colors focus:outline-none font-mono">Cancel</button>

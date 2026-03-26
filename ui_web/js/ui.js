@@ -87,12 +87,10 @@ export class UI {
             editAlbum: d('edit-album'),
             editCoverPreview: d('edit-cover-preview'),
             editSaveBtn: d('edit-save-btn'),
-            editAutoFetchBtn: d('edit-auto-fetch-btn'),
             editUploadBtn: d('edit-upload-btn'),
             editFileInput: d('edit-file-input'),
             editStatus: d('edit-status'),
             editRawYoutubeNote: d('edit-raw-youtube-note'),
-            autoFetchResults: d('auto-fetch-results'),
             toastContainer: d('toast-container'),
             miniPlayBtn: d('mini-play-btn'),
             miniRepeatBtn: d('mini-repeat-btn'),
@@ -144,12 +142,10 @@ export class UI {
                 editAlbum: this.dom.editAlbum,
                 editCoverPreview: this.dom.editCoverPreview,
                 editSaveBtn: this.dom.editSaveBtn,
-                editAutoFetchBtn: this.dom.editAutoFetchBtn,
                 editUploadBtn: this.dom.editUploadBtn,
                 editFileInput: this.dom.editFileInput,
                 editStatus: this.dom.editStatus,
-                editRawYoutubeNote: this.dom.editRawYoutubeNote,
-                autoFetchResults: this.dom.autoFetchResults
+                editRawYoutubeNote: this.dom.editRawYoutubeNote
             }),
             showToast: (message) => this.showToast(message),
             triggerHaptics: (ms) => Haptics.trigger(ms)
@@ -1744,14 +1740,6 @@ export class UI {
 
     static async saveMetadata() {
         await this.metadataEditor?.save();
-    }
-
-    static async autoFetch() {
-        await this.metadataEditor?.autoFetch();
-    }
-
-    static applyFetchedMetadata(title, artist, album, cover) {
-        this.metadataEditor?.applyFetched(title, artist, album, cover);
     }
 
     static async handleCoverUpload(e) {

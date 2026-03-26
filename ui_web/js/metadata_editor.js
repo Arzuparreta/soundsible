@@ -33,10 +33,6 @@ export function createMetadataEditor(options) {
             el.editRawYoutubeNote.textContent = '';
             el.editRawYoutubeNote.classList.add('hidden');
         }
-        if (el.autoFetchResults) {
-            el.autoFetchResults.innerHTML = '';
-            el.autoFetchResults.classList.add('hidden');
-        }
         if (el.editStatus) el.editStatus.textContent = '';
         if (el.metadataEditor) el.metadataEditor.classList.remove('hidden');
         setTimeout(() => {
@@ -48,7 +44,6 @@ export function createMetadataEditor(options) {
 
         if (!state.bound) {
             if (el.editSaveBtn) el.editSaveBtn.onclick = () => save();
-            if (el.editAutoFetchBtn) el.editAutoFetchBtn.onclick = () => autoFetch();
             if (el.editUploadBtn && el.editFileInput) {
                 el.editUploadBtn.onclick = () => {
                     triggerHaptics(10);
@@ -91,64 +86,6 @@ export function createMetadataEditor(options) {
         }
     };
 
-    const applyFetched = (title, artist, album, cover) => {
-        const el = getElements();
-        triggerHaptics(10);
-        if (el.editTitle) el.editTitle.value = title || '';
-        if (el.editArtist) el.editArtist.value = artist || '';
-        if (el.editAlbum) el.editAlbum.value = album || '';
-        if (el.editCoverPreview) el.editCoverPreview.src = cover || store.placeholderCoverUrl;
-        if (el.autoFetchResults) el.autoFetchResults.classList.add('hidden');
-        if (el.editStatus) el.editStatus.textContent = 'Metadata applied locally';
-    };
-
-    const autoFetch = async () => {
-        if (!state.editingTrack) return;
-        const el = getElements();
-        triggerHaptics(20);
-        if (el.editStatus) el.editStatus.textContent = 'Searching technical data...';
-        if (el.autoFetchResults) {
-            el.autoFetchResults.innerHTML = '';
-            el.autoFetchResults.classList.add('hidden');
-        }
-        const query = `${el.editTitle?.value ?? ''} ${el.editArtist?.value ?? ''}`;
-        const results = await store.searchMetadata(query);
-        if (!results || results.length === 0) {
-            if (el.editStatus) el.editStatus.textContent = 'No matches found';
-            return;
-        }
-        if (el.editStatus) el.editStatus.textContent = 'Matches found';
-        if (!el.autoFetchResults) return;
-        const escAttr = (v) => (v || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;');
-        const escText = (v) => (v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const placeholder = store.placeholderCoverUrl.replace(/'/g, "\\'");
-        el.autoFetchResults.classList.remove('hidden');
-        el.autoFetchResults.innerHTML = results.slice(0, 5).map((r) => `
-            <div class="flex items-center p-3 hover:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] cursor-pointer transition-colors border border-transparent active:border-[var(--accent)]/30 active:bg-[var(--accent)]/5"
-                data-meta-title="${escAttr(r.title)}"
-                data-meta-artist="${escAttr(r.artist)}"
-                data-meta-album="${escAttr(r.album)}"
-                data-meta-cover="${escAttr(r.cover)}">
-                <img src="${escAttr(r.cover)}" class="w-10 h-10 rounded-[var(--radius-omni-xs)] object-cover shadow-md" onerror="this.src='${placeholder}'">
-                <div class="ml-3 truncate">
-                    <div class="text-xs font-bold truncate text-[var(--text-main)]">${escText(r.title)}</div>
-                    <div class="text-[9px] font-bold text-[var(--text-dim)] truncate uppercase tracking-widest font-mono">${escText(r.artist)}</div>
-                </div>
-            </div>
-        `).join('');
-
-        el.autoFetchResults.querySelectorAll('[data-meta-title]').forEach((node) => {
-            node.addEventListener('click', () => {
-                applyFetched(
-                    node.getAttribute('data-meta-title') || '',
-                    node.getAttribute('data-meta-artist') || '',
-                    node.getAttribute('data-meta-album') || '',
-                    node.getAttribute('data-meta-cover') || ''
-                );
-            });
-        });
-    };
-
     const handleCoverUpload = async (event) => {
         const file = event?.target?.files?.[0];
         if (!file || !state.editingTrack) return;
@@ -170,5 +107,5 @@ export function createMetadataEditor(options) {
         if (event?.target) event.target.value = '';
     };
 
-    return { show, hide, save, autoFetch, applyFetched, handleCoverUpload };
+    return { show, hide, save, handleCoverUpload };
 }

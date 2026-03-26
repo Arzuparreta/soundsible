@@ -515,11 +515,6 @@ class Store {
         }
     }
 
-    async searchMetadata(query) {
-        // Legacy iTunes metadata search endpoint was removed.
-        return [];
-    }
-
     async updateMetadata(trackId, metadata, coverUrl = null) {
         try {
             const payload = { ...metadata };
