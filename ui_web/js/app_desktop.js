@@ -1094,8 +1094,9 @@ async function init() {
                 }
             }
 
-            if (viewId !== 'discover' && typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) {
-                window.unifiedSearch.clear();
+            if (viewId !== 'discover' && typeof window.unifiedSearch !== 'undefined') {
+                if (window.unifiedSearch.destroy) window.unifiedSearch.destroy();
+                else if (window.unifiedSearch.clear) window.unifiedSearch.clear();
             }
             if (viewId === 'home') renderHomeSongs();
             if (viewId === 'favourites') renderFavourites();

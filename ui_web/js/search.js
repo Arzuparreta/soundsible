@@ -29,6 +29,11 @@ let isMobile = true;
 let isDesktop = false;
 /** When true, results are discover-only (ODST only, no library mix, no "ODST" label per row). */
 let isDiscoverPage = false;
+let detachTypeahead = null;
+let musicBtnEl = null;
+let youtubeBtnEl = null;
+let onMusicSourceClick = null;
+let onYoutubeSourceClick = null;
 
 const SEARCH_EMPTY_DEFAULT = 'Search library and ODST...';
 const SEARCH_EMPTY_DISCOVER = 'Search anything...';
@@ -410,12 +415,41 @@ function clear() {
         searchService.abortController.abort();
         searchService.abortController = null;
     }
+    searchService.hideSuggestions();
     updateDiscoverPanels(false);
     if (resultsEl) resultsEl.innerHTML = `<div class="text-center py-8 text-[var(--text-dim)]">${getEmptyMessage()}</div>`;
     lastLibraryItems = [];
     lastOdstResults = [];
     if (typeof window.viewContext !== 'undefined') window.viewContext.searchTracks = null;
     window._currentSearchTracks = null;
+}
+
+function isDiscoverViewActive() {
+    const mobileDiscover = !!(window.UI && window.UI.currentView === 'discover');
+    const desktopDiscover = !!(window.DesktopUI && window.DesktopUI.currentView === 'discover');
+    return mobileDiscover || desktopDiscover || isDiscoverPage;
+}
+
+function destroy() {
+    if (inputEl) {
+        inputEl.removeEventListener('input', onInput);
+        inputEl.removeEventListener('paste', onPaste);
+    }
+    if (typeof detachTypeahead === 'function') {
+        detachTypeahead();
+        detachTypeahead = null;
+    }
+    if (musicBtnEl && onMusicSourceClick) musicBtnEl.removeEventListener('click', onMusicSourceClick);
+    if (youtubeBtnEl && onYoutubeSourceClick) youtubeBtnEl.removeEventListener('click', onYoutubeSourceClick);
+    musicBtnEl = null;
+    youtubeBtnEl = null;
+    onMusicSourceClick = null;
+    onYoutubeSourceClick = null;
+    clear();
+    inputEl = null;
+    resultsEl = null;
+    contentPanelEl = null;
+    searchResultsPanelEl = null;
 }
 
 function setSearchOdstSource(value) {
@@ -429,6 +463,21 @@ function setSearchOdstSource(value) {
 }
 
 function init(opts = {}) {
+    if (inputEl) {
+        inputEl.removeEventListener('input', onInput);
+        inputEl.removeEventListener('paste', onPaste);
+    }
+    if (typeof detachTypeahead === 'function') {
+        detachTypeahead();
+        detachTypeahead = null;
+    }
+    if (musicBtnEl && onMusicSourceClick) musicBtnEl.removeEventListener('click', onMusicSourceClick);
+    if (youtubeBtnEl && onYoutubeSourceClick) youtubeBtnEl.removeEventListener('click', onYoutubeSourceClick);
+    musicBtnEl = null;
+    youtubeBtnEl = null;
+    onMusicSourceClick = null;
+    onYoutubeSourceClick = null;
+
     isMobile = opts.mobile !== false;
     isDesktop = !isMobile;
     const inputId = isMobile ? 'global-search-input' : 'desktop-global-search-input';
@@ -452,12 +501,14 @@ function init(opts = {}) {
     const hasInput = (inputEl.value || '').trim().length > 0;
     updateDiscoverPanels(!!hasInput);
 
-    const musicBtn = document.getElementById('search-odst-music');
-    const youtubeBtn = document.getElementById('search-odst-youtube');
-    if (musicBtn && youtubeBtn) {
+    musicBtnEl = document.getElementById('search-odst-music');
+    youtubeBtnEl = document.getElementById('search-odst-youtube');
+    if (musicBtnEl && youtubeBtnEl) {
         searchService.applyToggleUI('search-odst-music', 'search-odst-youtube');
-        musicBtn.addEventListener('click', () => setSearchOdstSource('ytmusic'));
-        youtubeBtn.addEventListener('click', () => setSearchOdstSource('youtube'));
+        onMusicSourceClick = () => setSearchOdstSource('ytmusic');
+        onYoutubeSourceClick = () => setSearchOdstSource('youtube');
+        musicBtnEl.addEventListener('click', onMusicSourceClick);
+        youtubeBtnEl.addEventListener('click', onYoutubeSourceClick);
     }
 
     inputEl.removeEventListener('input', onInput);
@@ -466,9 +517,10 @@ function init(opts = {}) {
     inputEl.addEventListener('paste', onPaste);
     
     // ## Section: Typeahead support
-    searchService.attach(inputEl, (val) => {
+    detachTypeahead = searchService.attach(inputEl, (val) => {
         if (val) runOdstFetch(val);
     }, {
+        shouldSuggest: () => isDiscoverPage && isDiscoverViewActive(),
         getLibraryMatches: (query) => {
             if (isDiscoverPage) return [];
             // Note: Use same filtering as main search
@@ -487,5 +539,6 @@ function init(opts = {}) {
 export const unifiedSearch = {
     init,
     clear,
+    destroy,
     updateDiscoverPanels
 };

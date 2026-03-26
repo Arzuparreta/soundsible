@@ -28,6 +28,7 @@ class SearchService {
         this._sourceMode = (saved === 'youtube') ? 'youtube' : 'ytmusic';
         this.suggestionDropdown = null;
         this.activeInput = null;
+        this._typeaheadBindings = new WeakMap();
     }
 
     get sourceMode() {
@@ -70,11 +71,21 @@ class SearchService {
      * @param {Object} options { getLibraryMatches: Function }
      */
     attach(inputEl, onSelect = null, options = {}) {
-        if (!inputEl) return;
-        this.activeInput = inputEl;
+        if (!inputEl) return () => {};
+        const previousBinding = this._typeaheadBindings.get(inputEl);
+        if (typeof previousBinding === 'function') previousBinding();
+
         const getLibraryMatches = options.getLibraryMatches || (() => []);
+        const shouldSuggest = options.shouldSuggest || (() => true);
+        let seq = 0;
         
         const handleInput = async () => {
+            if (!shouldSuggest()) {
+                if (this.activeInput === inputEl) this.hideSuggestions();
+                return;
+            }
+
+            this.activeInput = inputEl;
             const val = inputEl.value.trim();
             if (val.length < 2) {
                 this.hideSuggestions();
@@ -86,7 +97,10 @@ class SearchService {
             // Note: 2. Get local library matches (sync)
             const libMatches = getLibraryMatches(val) || [];
             
+            const currentSeq = ++seq;
             const list = await suggestPromise;
+            if (currentSeq !== seq) return;
+            if (document.activeElement !== inputEl) return;
             
             // ## Section: Format and merge
             const formattedLib = libMatches.slice(0, 5).map(m => ({ 
@@ -105,40 +119,66 @@ class SearchService {
             const combined = [...formattedLib, ...formattedGlobal];
 
             if (combined.length > 0) {
-                this.renderSuggestions(combined, onSelect);
+                this.renderSuggestions(combined, onSelect, inputEl);
             } else {
                 this.hideSuggestions();
             }
         };
 
-        inputEl.addEventListener('input', handleInput);
-        inputEl.addEventListener('focus', handleInput);
-        inputEl.addEventListener('keydown', (e) => {
+        const handleFocus = () => {
+            if (!shouldSuggest()) return;
+            this.activeInput = inputEl;
+            handleInput();
+        };
+
+        const handleKeydown = (e) => {
             if (e.key === 'Escape') this.hideSuggestions();
             if (e.key === 'Enter' && this.suggestionDropdown) {
                 // Note: If user hits enter and dropdown is visible, we could auto-select first one,
                 // Note: But usually the main search handles enter. let's just hide.
                 this.hideSuggestions();
             }
-        });
+        };
 
-        // Note: Hide on outside click
-        document.addEventListener('click', (e) => {
+        const handleDocumentClick = (e) => {
             if (this.suggestionDropdown && !this.suggestionDropdown.contains(e.target) && e.target !== inputEl) {
                 this.hideSuggestions();
             }
-        });
+        };
+
+        inputEl.addEventListener('input', handleInput);
+        inputEl.addEventListener('focus', handleFocus);
+        inputEl.addEventListener('keydown', handleKeydown);
+        document.addEventListener('click', handleDocumentClick);
+
+        const dispose = () => {
+            inputEl.removeEventListener('input', handleInput);
+            inputEl.removeEventListener('focus', handleFocus);
+            inputEl.removeEventListener('keydown', handleKeydown);
+            document.removeEventListener('click', handleDocumentClick);
+            if (this.activeInput === inputEl) {
+                this.hideSuggestions();
+                this.activeInput = null;
+            }
+            if (this._typeaheadBindings.get(inputEl) === dispose) {
+                this._typeaheadBindings.delete(inputEl);
+            }
+        };
+
+        this._typeaheadBindings.set(inputEl, dispose);
+        return dispose;
     }
 
-    renderSuggestions(list, onSelect) {
-        if (!this.activeInput) return;
+    renderSuggestions(list, onSelect, anchorInput = this.activeInput) {
+        if (!anchorInput) return;
+        this.activeInput = anchorInput;
         if (!this.suggestionDropdown) {
             this.suggestionDropdown = document.createElement('div');
             this.suggestionDropdown.className = 'search-suggestions-dropdown absolute z-[1000] bg-[var(--bg-card)] border border-[var(--glass-border)] rounded-2xl shadow-2xl overflow-hidden mt-2 min-w-[280px] max-h-[400px] overflow-y-auto animate-in fade-in zoom-in-95 duration-100 backdrop-blur-xl';
             document.body.appendChild(this.suggestionDropdown);
         }
 
-        const rect = this.activeInput.getBoundingClientRect();
+        const rect = anchorInput.getBoundingClientRect();
         this.suggestionDropdown.style.top = `${window.scrollY + rect.bottom}px`;
         this.suggestionDropdown.style.left = `${window.scrollX + rect.left}px`;
         this.suggestionDropdown.style.width = `${Math.max(rect.width, 320)}px`;
@@ -178,11 +218,11 @@ class SearchService {
                 if (type === 'library' && id && typeof window.playTrack === 'function') {
                     window.playTrack(id);
                     this.hideSuggestions();
-                    this.activeInput.value = '';
+                    anchorInput.value = '';
                 } else {
-                    this.activeInput.value = val;
+                    anchorInput.value = val;
                     this.hideSuggestions();
-                    this.activeInput.dispatchEvent(new Event('input'));
+                    anchorInput.dispatchEvent(new Event('input'));
                     if (onSelect) onSelect(val);
                 }
             });

@@ -1146,7 +1146,11 @@ function clearContentForView(viewId) {
             clearContainerContent(dom.playlistDetailTracks);
             break;
         case 'discover':
-            if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) window.unifiedSearch.clear();
+            if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.destroy) {
+                window.unifiedSearch.destroy();
+            } else if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) {
+                window.unifiedSearch.clear();
+            }
             break;
         case 'settings':
             break;
