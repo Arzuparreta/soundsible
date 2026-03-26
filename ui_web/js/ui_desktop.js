@@ -5,6 +5,8 @@ import { store } from './store.js';
 import { Resolver } from './resolver.js';
 import { audioEngine } from './audio.js';
 import * as renderers from './renderers.js';
+import { createMetadataEditor } from './metadata_editor.js';
+import { createCoverOverlayController } from './cover_overlay.js';
 
 function el(id) {
     return document.getElementById(id);
@@ -27,7 +29,38 @@ export const DesktopUI = {
     },
 
     init() {
-        this.applyTheme(store.state.theme);
+        store.applyTheme(store.state.theme);
+        const select = el('desktop-settings-theme-select');
+        if (select) select.value = store.state.theme;
+        this.coverOverlay = createCoverOverlayController({
+            getOverlay: () => el('full-cover-overlay'),
+            getImage: () => el('full-cover-image'),
+            getBackdrop: () => el('full-cover-overlay-backdrop'),
+            getCloseButton: () => el('full-cover-close-bottom'),
+            getFallbackCoverUrl: () => store.placeholderCoverUrl
+        });
+        this.coverOverlay.bind();
+        this.metadataEditor = createMetadataEditor({
+            store,
+            resolver: Resolver,
+            getTrackById: (trackId) => store.state.library.find((track) => track.id === trackId),
+            getElements: () => ({
+                metadataEditor: el('metadata-editor'),
+                metadataEditorContent: el('metadata-editor-content'),
+                editTitle: el('edit-title'),
+                editArtist: el('edit-artist'),
+                editAlbum: el('edit-album'),
+                editCoverPreview: el('edit-cover-preview'),
+                editSaveBtn: el('edit-save-btn'),
+                editAutoFetchBtn: el('edit-auto-fetch-btn'),
+                editUploadBtn: el('edit-upload-btn'),
+                editFileInput: el('edit-file-input'),
+                editStatus: el('edit-status'),
+                editRawYoutubeNote: el('edit-raw-youtube-note'),
+                autoFetchResults: el('auto-fetch-results')
+            }),
+            showToast: (message) => this.showToast(message)
+        });
         this.bindSidebar();
         this.bindNowPlayingBar();
         this.bindContextMenu();
@@ -86,21 +119,18 @@ export const DesktopUI = {
         const omniPlayIcon = el('desktop-omni-play-icon');
         if (omniPlayIcon) omniPlayIcon.className = state.isPlaying ? 'fas fa-pause text-sm' : 'fas fa-play text-sm';
 
-        const timeCurrent = el('desktop-np-time-current');
-        const timeDuration = el('desktop-np-time-duration');
-        const timebarRow = el('desktop-np-timebar-row');
-        const seek = el('desktop-np-seek');
         const trackId = track?.id ?? null;
         const trackJustChanged = trackId != null && trackId !== this._lastProgressTrackId;
         if (trackJustChanged) this._lastProgressTrackId = trackId;
-        const ct = trackJustChanged ? 0 : (audioEngine.audio?.currentTime ?? 0);
         const nowPlayingBar = el('desktop-now-playing');
         if (nowPlayingBar) nowPlayingBar.classList.toggle('has-track', !!track);
-        if (timeCurrent) timeCurrent.textContent = track ? renderers.formatTime(ct) : '0:00';
-        if (timeDuration) timeDuration.textContent = track ? renderers.formatTime(track.duration ?? 0) : '0:00';
-        if (seek && track?.duration) {
-            const pct = trackJustChanged ? 0 : (track.duration > 0 ? (100 * ct / track.duration) : 0);
-            seek.value = Math.min(100, Math.max(0, pct));
+        if (trackJustChanged) {
+            const timeCurrent = el('desktop-np-time-current');
+            const timeDuration = el('desktop-np-time-duration');
+            const seek = el('desktop-np-seek');
+            if (timeCurrent) timeCurrent.textContent = '0:00';
+            if (timeDuration) timeDuration.textContent = track ? renderers.formatTime(track.duration ?? 0) : '0:00';
+            if (seek) seek.value = 0;
         }
 
         const shuffleBtn = el('desktop-shuffle-btn');
@@ -383,157 +413,29 @@ export const DesktopUI = {
         }
     },
 
-    _editingTrack: null,
-    _edBound: false,
-
     showMetadataEditor(trackId) {
-        const t = store.state.library.find((x) => x.id === trackId);
-        if (!t) return;
         this.hideActionMenu();
-        this._editingTrack = t;
-
-        const modal = el('metadata-editor');
-        const content = el('metadata-editor-content');
-        el('edit-title').value = t.title;
-        el('edit-artist').value = t.artist;
-        el('edit-album').value = t.album;
-        el('edit-cover-preview').src = Resolver.getCoverUrl(t);
-
-        const rawNote = el('edit-raw-youtube-note');
-        if (rawNote) {
-            rawNote.textContent = '';
-            rawNote.classList.add('hidden');
-        }
-
-        if (modal) modal.classList.remove('hidden');
-        setTimeout(() => {
-            if (content) {
-                content.classList.replace('scale-95', 'scale-100');
-                content.classList.replace('opacity-0', 'opacity-100');
-            }
-        }, 10);
-
-        if (!this._edBound) {
-            el('edit-save-btn').onclick = () => this.saveMetadata();
-            el('edit-auto-fetch-btn').onclick = () => this.autoFetch();
-            const uploadBtn = el('edit-upload-btn');
-            const fileInput = el('edit-file-input');
-            if (uploadBtn && fileInput) {
-                uploadBtn.onclick = () => fileInput.click();
-                fileInput.onchange = (e) => this.handleCoverUpload(e);
-            }
-            this._edBound = true;
-        }
+        this.metadataEditor?.show(trackId);
     },
 
     hideMetadataEditor() {
-        const modal = el('metadata-editor');
-        const content = el('metadata-editor-content');
-        if (content) {
-            content.classList.replace('scale-100', 'scale-95');
-            content.classList.replace('opacity-100', 'opacity-0');
-        }
-        setTimeout(() => modal && modal.classList.add('hidden'), 300);
+        this.metadataEditor?.hide();
     },
 
     async saveMetadata() {
-        if (!this._editingTrack) return;
-        const status = el('edit-status');
-        status.textContent = 'Saving Changes...';
-
-        const metadata = {
-            title: el('edit-title').value,
-            artist: el('edit-artist').value,
-            album: el('edit-album').value
-        };
-
-        const success = await store.updateMetadata(this._editingTrack.id, metadata);
-        if (success) {
-            this.showToast('Metadata Updated');
-            this.hideMetadataEditor();
-        } else {
-            status.textContent = 'Save Failed';
-        }
+        await this.metadataEditor?.save();
     },
 
     async autoFetch() {
-        if (!this._editingTrack) return;
-        const status = el('edit-status');
-        const resultsContainer = el('auto-fetch-results');
-        status.textContent = 'Searching technical data...';
-        resultsContainer.innerHTML = '';
-        resultsContainer.classList.add('hidden');
-
-        const query = `${el('edit-title').value} ${el('edit-artist').value}`;
-        const results = await store.searchMetadata(query);
-
-        if (!results || results.length === 0) {
-            status.textContent = 'No matches found';
-            return;
-        }
-        status.textContent = 'Matches found';
-        resultsContainer.classList.remove('hidden');
-        resultsContainer.innerHTML = results.slice(0, 5).map((r) => {
-            const title = (r.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            const artist = (r.artist || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            const album = (r.album || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            const cover = (r.cover || '').replace(/"/g, '&quot;');
-            const placeholder = store.placeholderCoverUrl.replace(/'/g, "\\'");
-            return `<div class="flex items-center p-3 hover:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] cursor-pointer transition-colors border border-transparent active:border-[var(--accent)]/30 active:bg-[var(--accent)]/5" data-meta-title="${title}" data-meta-artist="${artist}" data-meta-album="${album}" data-meta-cover="${cover}">
-                <img src="${cover}" class="w-10 h-10 rounded-[var(--radius-omni-xs)] object-cover shadow-md" onerror="this.src='${placeholder}'">
-                <div class="ml-3 truncate">
-                    <div class="text-xs font-bold truncate text-[var(--text-main)]">${(r.title || '').replace(/</g, '&lt;')}</div>
-                    <div class="text-[9px] font-bold text-[var(--text-dim)] truncate uppercase tracking-widest font-mono">${(r.artist || '').replace(/</g, '&lt;')}</div>
-                </div>
-            </div>`;
-        }).join('');
-
-        resultsContainer.querySelectorAll('[data-meta-title]').forEach((node) => {
-            node.addEventListener('click', () => {
-                this.applyFetchedMetadata(
-                    node.getAttribute('data-meta-title') || '',
-                    node.getAttribute('data-meta-artist') || '',
-                    node.getAttribute('data-meta-album') || '',
-                    node.getAttribute('data-meta-cover') || ''
-                );
-            });
-        });
+        await this.metadataEditor?.autoFetch();
     },
 
     applyFetchedMetadata(title, artist, album, cover) {
-        el('edit-title').value = title;
-        el('edit-artist').value = artist;
-        el('edit-album').value = album;
-        el('edit-cover-preview').src = cover || store.placeholderCoverUrl;
-        el('auto-fetch-results').classList.add('hidden');
-        el('edit-status').textContent = 'Metadata applied locally';
+        this.metadataEditor?.applyFetched(title, artist, album, cover);
     },
 
     async handleCoverUpload(e) {
-        const file = e.target.files[0];
-        if (!file || !this._editingTrack) return;
-        const status = el('edit-status');
-        status.textContent = 'Uploading Cover Art...';
-
-        const success = await store.uploadCover(this._editingTrack.id, file);
-        if (success) {
-            this.showToast('Cover Art Updated');
-            el('edit-cover-preview').src = URL.createObjectURL(file);
-            status.textContent = 'Cover applied';
-        } else {
-            status.textContent = 'Upload Failed';
-        }
-        e.target.value = '';
-    },
-
-    applyTheme(theme) {
-        const valid = ['dark', 'light', 'odst'].includes(theme) ? theme : 'dark';
-        const root = document.documentElement;
-        root.setAttribute('data-theme', valid);
-        const meta = document.getElementById('meta-theme-color');
-        if (meta) meta.content = valid === 'light' ? '#f5f5f5' : valid === 'odst' ? '#1c2026' : '#0d0d0f';
-        const select = el('desktop-settings-theme-select');
-        if (select) select.value = valid;
+        await this.metadataEditor?.handleCoverUpload(e);
     },
 
     bindSidebar() {
@@ -613,7 +515,6 @@ export const DesktopUI = {
             });
         }
 
-        this.bindFullCoverOverlay();
         // Note: Progress bar and time labels must come from event detail only (never audio.currenttime here),
         // Note: So the bar resets to 0 when a new track starts instead of showing the previous track's position.
         window.addEventListener('audio:timeupdate', (e) => {
@@ -630,30 +531,15 @@ export const DesktopUI = {
     },
 
     showFullCoverView(coverUrl) {
-        const overlay = el('full-cover-overlay');
-        const img = el('full-cover-image');
-        if (!overlay || !img) return;
-        const url = (coverUrl || store.placeholderCoverUrl).replace(/"/g, '%22').replace(/'/g, '%27');
-        img.style.backgroundImage = `url("${url}")`;
-        overlay.classList.remove('hidden');
+        this.coverOverlay?.show(coverUrl);
     },
 
     hideFullCoverView() {
-        const overlay = el('full-cover-overlay');
-        if (overlay) overlay.classList.add('hidden');
+        this.coverOverlay?.hide();
     },
 
     bindFullCoverOverlay() {
-        const overlay = el('full-cover-overlay');
-        const backdrop = el('full-cover-overlay-backdrop');
-        const closeBottom = el('full-cover-close-bottom');
-        if (backdrop) backdrop.addEventListener('click', () => this.hideFullCoverView());
-        if (closeBottom) closeBottom.addEventListener('click', () => this.hideFullCoverView());
-        if (overlay) {
-            overlay.addEventListener('click', (e) => {
-                if (e.target === overlay) this.hideFullCoverView();
-            });
-        }
+        this.coverOverlay?.bind();
     },
 
     bindKeyboard() {

@@ -7,6 +7,8 @@ import { formatTime } from './renderers.js';
 import { audioEngine } from './audio.js';
 import { Haptics } from './haptics.js';
 import { wireActionMenu } from './wires.js';
+import { createMetadataEditor } from './metadata_editor.js';
+import { createCoverOverlayController } from './cover_overlay.js';
 
 // Note: Global availability for inline onclick handlers
 window.audioEngine = audioEngine;
@@ -24,7 +26,6 @@ export class UI {
     };
 
     static init() {
-        console.log("UI: Initializing Omni-Island Core...");
         const d = document.getElementById.bind(document);
         this.dom = {
             content: d('content'),
@@ -104,10 +105,7 @@ export class UI {
             miniPrevBtn: d('mini-prev-btn')
         };
         this.content = this.dom.content;
-        // ## Section: Platform detection notch safety
-        const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || 
-                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // Note: Ipad pro
-        if (isIOS) document.body.classList.add('is-ios');
+        if (this.detectPlatform() === 'ios') document.body.classList.add('is-ios');
 
         // ## Section: Navigation state
         this.viewStack = [];
@@ -117,15 +115,46 @@ export class UI {
         this.isIslandActive = false;
         this.isBlooming = false;
         this.isDraggingQueue = false;
-        this._keyboardHeight = 0;
-        this._platform = this.detectPlatform();
         /** Track id used to reset progress bar when track changes (avoids stale timebar position). */
         this._lastProgressTrackId = null;
+        this._nowPlayingHideTimer = null;
+        this._viewTransitionToken = 0;
+        this._showViewCleanupTimer = null;
 
         this.initGlobalListeners();
         this.initOmniIsland();
-        this.initKeyboardSync();
         this.updateLabel(this.currentView);
+        this.coverOverlay = createCoverOverlayController({
+            getOverlay: () => this.dom.fullCoverOverlay,
+            getImage: () => this.dom.fullCoverImage,
+            getBackdrop: () => this.dom.fullCoverOverlayBackdrop,
+            getCloseButton: () => this.dom.fullCoverCloseBottom,
+            getFallbackCoverUrl: () => store.placeholderCoverUrl
+        });
+        this.coverOverlay.bind();
+        this.metadataEditor = createMetadataEditor({
+            store,
+            resolver: Resolver,
+            getTrackById: (trackId) => store.state.library.find((t) => t.id === trackId),
+            getElements: () => ({
+                metadataEditor: this.dom.metadataEditor,
+                metadataEditorContent: this.dom.metadataEditorContent,
+                editTitle: this.dom.editTitle,
+                editArtist: this.dom.editArtist,
+                editAlbum: this.dom.editAlbum,
+                editCoverPreview: this.dom.editCoverPreview,
+                editSaveBtn: this.dom.editSaveBtn,
+                editAutoFetchBtn: this.dom.editAutoFetchBtn,
+                editUploadBtn: this.dom.editUploadBtn,
+                editFileInput: this.dom.editFileInput,
+                editStatus: this.dom.editStatus,
+                editRawYoutubeNote: this.dom.editRawYoutubeNote,
+                autoFetchResults: this.dom.autoFetchResults
+            }),
+            showToast: (message) => this.showToast(message),
+            triggerHaptics: (ms) => Haptics.trigger(ms)
+        });
+
         store.subscribe((state) => this.updatePlayer(state));
         this.updatePlayer(store.state);
 
@@ -210,16 +239,16 @@ export class UI {
             const npCurrent = this.dom.npTimeCurrent;
             const npDuration = this.dom.npTimeDuration;
             if (omniCurrent) { omniCurrent.textContent = '0:00'; omniCurrent.style.left = '8%'; }
-            if (omniDuration) omniDuration.textContent = UI.formatTime(dur);
+            if (omniDuration) omniDuration.textContent = formatTime(dur);
             if (npCurrent) { npCurrent.textContent = '0:00'; npCurrent.style.left = '0%'; }
-            if (npDuration) npDuration.textContent = UI.formatTime(dur);
+            if (npDuration) npDuration.textContent = formatTime(dur);
         }
 
         // ## Section: Omni-island state sync
         this.syncIsland(state);
 
         if (state.currentTrack) {
-            if (this.dom.nowPlayingView?.classList.contains('active')) {
+            if (this._npViewOpen) {
                 this.updateNowPlaying(state.currentTrack, state.isPlaying);
                 const npSeek = this.dom.npSeekContainer;
                 if (npSeek) npSeek.classList.add('np-timeline-expanded');
@@ -268,7 +297,9 @@ export class UI {
             logoWrap.classList.add('hidden');
             anchorIcon.classList.remove('hidden');
             anchorIcon.classList.remove('omni-grid-hint-pulse');
-            anchorIcon.className = state.isPlaying ? 'fas fa-pause text-lg text-[var(--text-main)]' : 'fas fa-play text-lg text-[var(--text-main)] ml-1';
+            anchorIcon.classList.remove('fa-play', 'fa-pause', 'ml-1');
+            anchorIcon.classList.add('fas', state.isPlaying ? 'fa-pause' : 'fa-play', 'text-lg', 'text-[var(--text-main)]');
+            if (!state.isPlaying) anchorIcon.classList.add('ml-1');
             this.updateMetadataScroller(state.currentTrack);
         } else {
             anchorIcon.classList.add('hidden');
@@ -325,7 +356,9 @@ export class UI {
         
         if (anchorIcon) {
             anchorIcon.classList.remove('omni-grid-hint-pulse');
-            anchorIcon.className = store.state.isPlaying ? 'fas fa-pause text-lg text-[var(--text-main)]' : 'fas fa-play text-lg text-[var(--text-main)] ml-1';
+            anchorIcon.classList.remove('fa-play', 'fa-pause', 'ml-1');
+            anchorIcon.classList.add('fas', store.state.isPlaying ? 'fa-pause' : 'fa-play', 'text-lg', 'text-[var(--text-main)]');
+            if (!store.state.isPlaying) anchorIcon.classList.add('ml-1');
             anchorIcon.classList.remove('hidden');
         }
         if (this.dom.omniAnchorLogoWrap) this.dom.omniAnchorLogoWrap.classList.add('hidden');
@@ -392,11 +425,6 @@ export class UI {
         return isIOS ? 'ios' : 'android';
     }
 
-    /** No-op: omnibar is pinned to layout viewport via #omni-bar-root so it does not move with the keyboard. */
-    static initKeyboardSync() {}
-
-    static handleKeyboardOpen() {}
-
     static handleKeyboardClose() {
         const container = this.dom.omniIslandContainer;
         const touchBlock = this.dom.omniBarTouchBlock;
@@ -433,10 +461,12 @@ export class UI {
         
         if (statusLed && statusText) {
             const isOnline = state.isOnline;
-            statusLed.className = `relative w-2 h-2 rounded-full bg-${isOnline ? 'green' : 'red'}-500 shadow-[0_0_12px_rgba(${isOnline ? '34,197,94' : '239,68,68'},0.8)]`;
-            if (statusPulse) statusPulse.className = `absolute inset-0 w-2 h-2 rounded-full bg-${isOnline ? 'green' : 'red'}-500 status-pulse`;
+            const ledClass = isOnline ? 'bg-green-500' : 'bg-red-500';
+            const textClass = isOnline ? 'text-green-500' : 'text-red-500';
+            statusLed.className = `relative w-2 h-2 rounded-full ${ledClass} shadow-[0_0_12px_rgba(${isOnline ? '34,197,94' : '239,68,68'},0.8)]`;
+            if (statusPulse) statusPulse.className = `absolute inset-0 w-2 h-2 rounded-full ${ledClass} status-pulse`;
             statusText.textContent = isOnline ? 'Connected' : 'Offline';
-            statusText.className = `text-${isOnline ? 'green' : 'red'}-500 font-bold`;
+            statusText.className = `${textClass} font-bold`;
         }
     }
 
@@ -466,6 +496,10 @@ export class UI {
         const npView = this.dom.nowPlayingView;
         if (!npView) return;
 
+        if (this._nowPlayingHideTimer) {
+            clearTimeout(this._nowPlayingHideTimer);
+            this._nowPlayingHideTimer = null;
+        }
         npView.classList.remove('hidden', 'np-closing');
         this._npViewOpen = true;
         this.updateOmniMetadataVisibility();
@@ -473,7 +507,7 @@ export class UI {
         document.body.classList.add('now-playing-open');
         this.updateNowPlaying(track, store.state.isPlaying);
 
-        setTimeout(() => {
+        requestAnimationFrame(() => {
             npView.classList.add('active');
             Haptics.heavy();
             requestAnimationFrame(() => {
@@ -481,7 +515,7 @@ export class UI {
                 if (npSeek) npSeek.classList.add('np-timeline-expanded');
                 document.body.classList.add('np-timeline-expanded');
             });
-        }, 10);
+        });
 
         if (!this._npGesturesBound) {
             this.initNowPlayingGestures();
@@ -507,47 +541,26 @@ export class UI {
         npView.classList.remove('active');
         npView.style.transform = '';
         document.body.classList.remove('now-playing-open');
-        setTimeout(() => {
+        if (this._nowPlayingHideTimer) clearTimeout(this._nowPlayingHideTimer);
+        this._nowPlayingHideTimer = setTimeout(() => {
             if (!npView.classList.contains('active')) {
                 npView.classList.add('hidden');
                 npView.classList.remove('np-closing');
             }
+            this._nowPlayingHideTimer = null;
         }, closeDurationMs);
     }
 
     static showFullCoverView(coverUrl) {
-        const overlay = this.dom.fullCoverOverlay;
-        const img = this.dom.fullCoverImage;
-        if (!overlay || !img) return;
-        const url = (coverUrl || store.placeholderCoverUrl).replace(/"/g, '%22').replace(/'/g, '%27');
-        img.style.backgroundImage = `url("${url}")`;
-        overlay.classList.remove('hidden');
+        this.coverOverlay?.show(coverUrl);
     }
 
     static hideFullCoverView() {
-        const overlay = this.dom.fullCoverOverlay;
-        if (overlay) overlay.classList.add('hidden');
+        this.coverOverlay?.hide();
     }
 
     static bindFullCoverOverlay() {
-        const overlay = this.dom.fullCoverOverlay;
-        const backdrop = this.dom.fullCoverOverlayBackdrop;
-        const closeBottom = this.dom.fullCoverCloseBottom;
-        if (!overlay) return;
-        if (backdrop) backdrop.addEventListener('click', () => this.hideFullCoverView());
-        if (closeBottom) closeBottom.addEventListener('click', () => this.hideFullCoverView());
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) this.hideFullCoverView();
-        });
-    }
-
-    /** Discover is a full content view; kept for any external callers (e.g. gestures). */
-    static showDiscover() {
-        this.showView('discover');
-    }
-
-    static hideDiscover() {
-        if (this.currentView === 'discover') this.goToPreviousView();
+        this.coverOverlay?.bind();
     }
 
     static toggleQueue() {
@@ -558,7 +571,6 @@ export class UI {
             popover.classList.remove('hidden');
             setTimeout(() => {
                 popover.classList.remove('pointer-events-none');
-                popover.style.pointerEvents = 'auto'; // Note: Ensure interaction
                 popover.classList.replace('scale-95', 'scale-100');
                 popover.classList.replace('opacity-0', 'opacity-100');
             }, 10);
@@ -575,7 +587,6 @@ export class UI {
         popover.classList.replace('scale-100', 'scale-95');
         popover.classList.replace('opacity-100', 'opacity-0');
         popover.classList.add('pointer-events-none');
-        popover.style.pointerEvents = 'none'; // Note: Block interaction
         setTimeout(() => popover.classList.add('hidden'), 300);
     }
 
@@ -612,7 +623,7 @@ export class UI {
     }
 
     static showView(viewId, saveToHistory = true) {
-        if (this.dom.nowPlayingView?.classList.contains('active')) {
+        if (this._npViewOpen) {
             this.hideNowPlaying();
         }
 
@@ -654,8 +665,10 @@ export class UI {
             });
         });
 
-        // 3. Post-transition cleanup (matching new 0.4s CSS)
-        setTimeout(() => {
+        const transitionToken = ++this._viewTransitionToken;
+        if (this._showViewCleanupTimer) clearTimeout(this._showViewCleanupTimer);
+        this._showViewCleanupTimer = setTimeout(() => {
+            if (transitionToken !== this._viewTransitionToken) return;
             const oldViewId = oldView && oldView.id ? oldView.id.replace(/^view-/, '') : null;
             if (oldViewId && typeof window.clearContentForView === 'function') {
                 window.clearContentForView(oldViewId);
@@ -665,6 +678,7 @@ export class UI {
                 oldView.classList.remove('view-outgoing');
             }
             targetView.classList.remove('view-incoming');
+            this._showViewCleanupTimer = null;
         }, 400);
 
         this.currentView = viewId;
@@ -755,17 +769,17 @@ export class UI {
             const omniCurrent = this.dom.omniTimeCurrent;
             const omniDuration = this.dom.omniTimeDuration;
             if (omniCurrent) {
-                omniCurrent.textContent = UI.formatTime(cur);
+                omniCurrent.textContent = formatTime(cur);
                 omniCurrent.style.left = `${Math.max(progress, OMNI_CURRENT_LABEL_MIN_PCT)}%`;
             }
-            if (omniDuration) omniDuration.textContent = UI.formatTime(dur);
+            if (omniDuration) omniDuration.textContent = formatTime(dur);
             const npCurrent = this.dom.npTimeCurrent;
             const npDuration = this.dom.npTimeDuration;
             if (npCurrent) {
-                npCurrent.textContent = UI.formatTime(cur);
+                npCurrent.textContent = formatTime(cur);
                 npCurrent.style.left = `${progress}%`;
             }
-            if (npDuration) npDuration.textContent = UI.formatTime(dur);
+            if (npDuration) npDuration.textContent = formatTime(dur);
         };
 
         const omniDragRef = { current: false };
@@ -930,9 +944,9 @@ export class UI {
 
             if (gesture.isEdgeSwipe) {
                 if (gesture.isEdgeSwipeFromFullCover) return;
-                if (this.currentView === 'home') return;
+                if (UI.currentView === 'home') return;
                 if (e.cancelable) e.preventDefault();
-                this.content.style.transform = `translateX(${Math.max(0, diffX)}px)`;
+                if (UI.content) UI.content.style.transform = `translateX(${Math.max(0, diffX)}px)`;
                 return;
             }
 
@@ -1037,7 +1051,7 @@ export class UI {
 
                 if (gesture.isEdgeSwipeFromFullCover) {
                     if (diffX > threshold) {
-                        this.vibrate(20);
+                        Haptics.trigger(20);
                         this.hideFullCoverView();
                     }
                 } else {
@@ -1046,7 +1060,7 @@ export class UI {
                         if (this.dom.content) this.dom.content.style.transform = 'translateX(0)';
                     }
                     if (diffX > threshold && this.currentView !== 'home') {
-                        this.vibrate(20);
+                        Haptics.trigger(20);
                         this.goToPreviousView();
                     }
                 }
@@ -1140,7 +1154,6 @@ export class UI {
 
         // ## Section: Action menu swipe-to-dismiss logic
         this.initBottomSheetGestures();
-        this.bindFullCoverOverlay();
     }
 
     static initNowPlayingGestures() {
@@ -1305,7 +1318,7 @@ export class UI {
                 }
                 // Note: Swipe down same as edge swipe from left — go to previous view (stack or close sub-view)
                 if (deltaY > deadzone) {
-                    if (this.currentView !== 'home') this.vibrate(20);
+                    if (this.currentView !== 'home') Haptics.trigger(20);
                     this.goToPreviousView();
                     this.resetOmniIsland();
                     return;
@@ -1493,10 +1506,6 @@ export class UI {
         
         // Note: Critical handle system gestures (swiping home) that cancel the touch event
         touchArea.addEventListener('touchcancel', () => this.resetOmniIsland());
-    }
-
-    static vibrate(ms) {
-        Haptics.trigger(ms);
     }
 
     /**
@@ -1726,141 +1735,27 @@ export class UI {
     }
 
     static showMetadataEditor(id) {
-        const t = store.state.library.find(x => x.id === id);
-        if (!t) return;
-        this.editingTrack = t;
-        
-        const modal = this.dom.metadataEditor;
-        const content = this.dom.metadataEditorContent;
-        
-        this.dom.editTitle.value = t.title;
-        this.dom.editArtist.value = t.artist;
-        this.dom.editAlbum.value = t.album;
-        this.dom.editCoverPreview.src = Resolver.getCoverUrl(t);
-
-        const rawNote = this.dom.editRawYoutubeNote;
-        if (rawNote) {
-            rawNote.textContent = '';
-            rawNote.classList.add('hidden');
-        }
-
-        if (modal) modal.classList.remove('hidden');
-        setTimeout(() => {
-            if (content) {
-                content.classList.replace('scale-95', 'scale-100');
-                content.classList.replace('opacity-0', 'opacity-100');
-            }
-        }, 10);
-
-        if (!this._edBound) {
-            this.dom.editSaveBtn.onclick = () => this.saveMetadata();
-            this.dom.editAutoFetchBtn.onclick = () => this.autoFetch();
-            
-            const uploadBtn = this.dom.editUploadBtn;
-            const fileInput = this.dom.editFileInput;
-            if (uploadBtn && fileInput) {
-                uploadBtn.onclick = () => { this.vibrate(10); fileInput.click(); };
-                fileInput.onchange = (e) => this.handleCoverUpload(e);
-            }
-            this._edBound = true;
-        }
+        this.metadataEditor?.show(id);
     }
 
     static hideMetadataEditor() {
-        const modal = this.dom.metadataEditor;
-        const content = this.dom.metadataEditorContent;
-        if (content) {
-            content.classList.replace('scale-100', 'scale-95');
-            content.classList.replace('opacity-100', 'opacity-0');
-        }
-        setTimeout(() => modal && modal.classList.add('hidden'), 300);
+        this.metadataEditor?.hide();
     }
 
     static async saveMetadata() {
-        if (!this.editingTrack) return;
-        this.vibrate(30);
-        const status = this.dom.editStatus;
-        if (status) status.textContent = 'Saving Changes...';
-
-        const metadata = {
-            title: this.dom.editTitle?.value ?? '',
-            artist: this.dom.editArtist?.value ?? '',
-            album: this.dom.editAlbum?.value ?? ''
-        };
-
-        const success = await store.updateMetadata(this.editingTrack.id, metadata);
-        if (success) {
-            this.showToast('Metadata Updated');
-            this.hideMetadataEditor();
-        } else {
-            status.textContent = 'Save Failed';
-        }
+        await this.metadataEditor?.save();
     }
 
     static async autoFetch() {
-        if (!this.editingTrack) return;
-        this.vibrate(20);
-        const status = this.dom.editStatus;
-        const resultsContainer = this.dom.autoFetchResults;
-        if (status) status.textContent = 'Searching technical data...';
-        if (resultsContainer) {
-            resultsContainer.innerHTML = '';
-            resultsContainer.classList.add('hidden');
-        }
-
-        const query = `${this.dom.editTitle?.value ?? ''} ${this.dom.editArtist?.value ?? ''}`;
-        const results = await store.searchMetadata(query);
-
-        if (!results || results.length === 0) {
-            if (status) status.textContent = 'No matches found';
-            return;
-        }
-
-        if (status) status.textContent = 'Matches found';
-        if (resultsContainer) {
-            resultsContainer.classList.remove('hidden');
-            resultsContainer.innerHTML = results.slice(0, 5).map(r => `
-            <div class="flex items-center p-3 hover:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] cursor-pointer transition-colors border border-transparent active:border-[var(--accent)]/30 active:bg-[var(--accent)]/5" onclick="UI.applyFetchedMetadata('${r.title.replace(/'/g, "\\'")}', '${r.artist.replace(/'/g, "\\'")}', '${r.album.replace(/'/g, "\\'")}', '${r.cover}')">
-                <img src="${r.cover}" class="w-10 h-10 rounded-[var(--radius-omni-xs)] object-cover shadow-md">
-                <div class="ml-3 truncate">
-                    <div class="text-xs font-bold truncate text-[var(--text-main)]">${r.title}</div>
-                    <div class="text-[9px] font-bold text-[var(--text-dim)] truncate uppercase tracking-widest font-mono">${r.artist}</div>
-                </div>
-            </div>
-        `).join('');
-        }
+        await this.metadataEditor?.autoFetch();
     }
 
     static applyFetchedMetadata(title, artist, album, cover) {
-        this.vibrate(10);
-        if (this.dom.editTitle) this.dom.editTitle.value = title;
-        if (this.dom.editArtist) this.dom.editArtist.value = artist;
-        if (this.dom.editAlbum) this.dom.editAlbum.value = album;
-        if (this.dom.editCoverPreview) this.dom.editCoverPreview.src = cover || store.placeholderCoverUrl;
-        if (this.dom.autoFetchResults) this.dom.autoFetchResults.classList.add('hidden');
-        if (this.dom.editStatus) this.dom.editStatus.textContent = 'Metadata applied locally';
+        this.metadataEditor?.applyFetched(title, artist, album, cover);
     }
 
     static async handleCoverUpload(e) {
-        const file = e.target.files[0];
-        if (!file || !this.editingTrack) return;
-        
-        this.vibrate(20);
-        const status = this.dom.editStatus;
-        if (status) status.textContent = 'Uploading Cover Art...';
-
-        const success = await store.uploadCover(this.editingTrack.id, file);
-        if (success) {
-            this.showToast('Cover Art Updated');
-            if (this.dom.editCoverPreview) this.dom.editCoverPreview.src = URL.createObjectURL(file);
-            if (status) status.textContent = 'Cover applied';
-        } else {
-            if (status) status.textContent = 'Upload Failed';
-        }
-    }
-
-    static formatTime(s) {
-        return formatTime(s);
+        await this.metadataEditor?.handleCoverUpload(e);
     }
 
     static showToast(m) {

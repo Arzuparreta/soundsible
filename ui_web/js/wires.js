@@ -98,10 +98,12 @@ export function wireSettings(selectors, deps) {
         if (hostDisplay) hostDisplay.textContent = state.activeHost || '';
         if (statusLed && serverStatus) {
             const isOnline = state.isOnline;
-            statusLed.className = `relative w-2 h-2 rounded-full bg-${isOnline ? 'green' : 'red'}-500 shadow-[0_0_12px_rgba(${isOnline ? '34,197,94' : '239,68,68'},0.8)]`;
-            if (statusPulse) statusPulse.className = `absolute inset-0 w-2 h-2 rounded-full bg-${isOnline ? 'green' : 'red'}-500 status-pulse`;
+            const ledClass = isOnline ? 'bg-green-500' : 'bg-red-500';
+            const textClass = isOnline ? 'text-green-500' : 'text-red-500';
+            statusLed.className = `relative w-2 h-2 rounded-full ${ledClass} shadow-[0_0_12px_rgba(${isOnline ? '34,197,94' : '239,68,68'},0.8)]`;
+            if (statusPulse) statusPulse.className = `absolute inset-0 w-2 h-2 rounded-full ${ledClass} status-pulse`;
             serverStatus.textContent = isOnline ? 'Connected' : 'Offline';
-            serverStatus.className = `text-sm font-bold text-${isOnline ? 'green' : 'red'}-500`;
+            serverStatus.className = `text-sm font-bold ${textClass}`;
         }
     };
     if (subscribeIndicators) {

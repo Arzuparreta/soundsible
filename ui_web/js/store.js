@@ -38,25 +38,25 @@ class Store {
             songsViewMode: (() => { const v = this.load('songs_view_mode', 'list'); const valid = ['list', 'grid', 'gridCompact', 'gridLarge']; return valid.includes(v) ? v : (v === 'gridXLarge' ? 'gridLarge' : 'list'); })(),
             artistViewMode: (() => { const v = this.load('artist_view_mode', 'gridCompact'); const valid = ['gridCompact', 'grid', 'gridLarge']; return valid.includes(v) ? v : (v === 'gridXLarge' ? 'gridLarge' : 'gridCompact'); })(),
             libraryTab: (() => { const v = this.load('library_tab', 'songs'); return v === 'artists' ? 'artists' : 'songs'; })(),
-            discoveryTab: (() => { const v = this.load('discovery_tab', 'soundsnap'); return v === 'soundsnap' ? 'soundsnap' : 'soundsnap'; })(),
+            discoveryTab: (() => {
+                const valid = ['soundsnap'];
+                const v = this.load('discovery_tab', 'soundsnap');
+                return valid.includes(v) ? v : 'soundsnap';
+            })(),
             volume: (() => {
                 const savedVolume = Number(this.load('volume', 1));
                 const v = Number.isFinite(savedVolume) ? Math.min(1, Math.max(0, savedVolume)) : 1;
-                const savedMuted = this.load('muted', false);
-                if (savedMuted) return 0;
                 return v;
             })(),
             volumeBeforeMute: (() => {
-                const savedMuted = this.load('muted', false);
-                if (savedMuted) {
-                    const savedVolume = Number(this.load('volume', 1));
-                    return Number.isFinite(savedVolume) ? Math.min(1, Math.max(0, savedVolume)) : 1;
-                }
                 const v = this.load('volumeBeforeMute', 1);
                 return Number.isFinite(Number(v)) ? Math.min(1, Math.max(0, Number(v))) : 1;
             })()
         };
         this.subscribers = [];
+        this._syncLibraryVersion = 0;
+        this._syncLibraryInFlight = false;
+        this._youtubeIdsVersion = 0;
         this.applyTheme(this.state.theme);
     }
 
@@ -105,7 +105,11 @@ class Store {
     }
 
     save(key, val) {
-        localStorage.setItem(`soundsible_${key}`, JSON.stringify(val));
+        try {
+            localStorage.setItem(`soundsible_${key}`, JSON.stringify(val));
+        } catch (e) {
+            console.error(`Failed to save key ${key}:`, e);
+        }
     }
 
     update(patch) {
@@ -136,7 +140,6 @@ class Store {
         if (patch.volume !== undefined) this.save('volume', patch.volume);
         if (patch.volumeBeforeMute !== undefined) this.save('volumeBeforeMute', patch.volumeBeforeMute);
         if (patch.playlists !== undefined) this.save('playlists', patch.playlists);
-        console.log("State Update:", Object.keys(patch));
         this.subscribers.forEach(cb => cb(this.state));
     }
 
@@ -193,12 +196,14 @@ class Store {
     }
 
     async syncLibrary() {
+        if (this._syncLibraryInFlight) return false;
+        this._syncLibraryInFlight = true;
+        const syncVersion = ++this._syncLibraryVersion;
         const host = this.state.activeHost;
         const port = this.state.config.port;
         const url = `http://${host}:${port}/api/library?t=${Date.now()}`;
         
         try {
-            console.log(`Syncing with ${url}...`);
             const res = await fetch(url);
             if (!res.ok) throw new Error("Sync failed");
             
@@ -208,10 +213,9 @@ class Store {
             await this.syncFavourites();
             await this.syncQueue();
 
+            if (syncVersion !== this._syncLibraryVersion) return false;
             const playlists = data.playlists && typeof data.playlists === 'object' ? data.playlists : {};
             this.update({ library: data.tracks, playlists, isOnline: true });
-            this.save('library', data.tracks);
-            this.save('playlists', playlists);
             await this.fetchLibraryYoutubeIds();
             return true;
         } catch (err) {
@@ -219,14 +223,18 @@ class Store {
             this.update({ isOnline: false });
             connectionManager.startReconnectionLoop();
             return false;
+        } finally {
+            this._syncLibraryInFlight = false;
         }
     }
 
     async fetchLibraryYoutubeIds() {
+        const version = ++this._youtubeIdsVersion;
         try {
             const res = await fetch(`${this.apiBase}/api/library/youtube-ids?t=${Date.now()}`);
             if (!res.ok) return;
             const data = await res.json();
+            if (version !== this._youtubeIdsVersion) return;
             const ids = Array.isArray(data.youtube_ids) ? data.youtube_ids : [];
             const map = data.youtube_to_track_id && typeof data.youtube_to_track_id === 'object' ? data.youtube_to_track_id : {};
             this.update({ libraryYoutubeIds: ids, youtubeToTrackId: map });
@@ -734,9 +742,9 @@ class Store {
                 this.save('priority_list', data.endpoints);
             }
             
-            this.state.config.syncToken = token;
-            this.save('config', this.state.config);
-            this.update({ config: this.state.config });
+            const nextConfig = { ...this.state.config, syncToken: token };
+            this.save('config', nextConfig);
+            this.update({ config: nextConfig });
             return true;
         } catch (e) {
             console.error("Token import failed:", e);

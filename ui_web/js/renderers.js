@@ -37,6 +37,21 @@ export function desktopPlayOverlaySmallHtml() {
     return `<div class="desktop-play-overlay absolute inset-0 flex items-center justify-center rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none"><span class="desktop-play-overlay-circle w-8 h-8 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm border border-white/10"><i class="fas fa-play text-white text-[10px] ml-0.5"></i></span></div>`;
 }
 
+function getTrackRenderState(track, options = {}) {
+    const state = store.state;
+    const activeId = options.activeTrackId ?? (state.currentTrack ? state.currentTrack.id : null);
+    const favIds = options.favIds ?? (state.favorites || []);
+    const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
+    const desktop = options.desktopClickBehavior === true;
+    const isPlaying = options.isPlaying ?? (desktop ? store.state.isPlaying : true);
+    const isActive = track.id === activeId;
+    const showPlayingIndicator = desktop ? (isActive && isPlaying) : isActive;
+    const isFav = favIds.includes(track.id);
+    const coverUrl = getCoverUrl(track);
+    const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+    return { desktop, isActive, showPlayingIndicator, isFav, coverStyle };
+}
+
 /**
  * Shared library search: filter tracks by query (title, artist, album).
  * Same engine used by Library and Search tab — single source of truth.
@@ -179,20 +194,10 @@ export function buildHomeArtistRowHtml(artistName, track, options = {}) {
  * @param {Object} options - { activeTrackId, favIds, getCoverUrl, addDataIndex, desktopClickBehavior }
  */
 export function buildSongRowsHtml(tracks, options = {}) {
-    const state = store.state;
-    const activeId = options.activeTrackId ?? (state.currentTrack ? state.currentTrack.id : null);
-    const favIds = options.favIds ?? (state.favorites || []);
-    const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
     const desktop = options.desktopClickBehavior === true;
     const playOverlay = desktop ? desktopPlayOverlaySmallHtml() : '';
-
-    const isPlaying = options.isPlaying ?? (desktop ? store.state.isPlaying : true);
     return tracks.map((t, idx) => {
-        const isActive = t.id === activeId;
-        const showPlayingIndicator = desktop ? (isActive && isPlaying) : isActive;
-        const isFav = favIds.includes(t.id);
-        const coverUrl = getCoverUrl(t);
-        const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+        const { isActive, showPlayingIndicator, isFav, coverStyle } = getTrackRenderState(t, options);
         const dataIndexAttr = options.addDataIndex ? ` data-index="${idx}"` : '';
         const wrapperClass = options.addDataIndex ? ' playlist-detail-row' : '';
         const rowOnclick = desktop ? '' : ` onclick="typeof playTrack==='function'&&playTrack('${t.id}')"`;
@@ -204,7 +209,7 @@ export function buildSongRowsHtml(tracks, options = {}) {
                 </div>
                 <div class="song-row relative z-10 flex items-center p-3 ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] border-transparent'} rounded-2xl border active:scale-[0.98] transition-all cursor-pointer" data-id="${t.id}"${rowOnclick}>
                     <div class="song-row-cover-wrapper relative w-12 h-12 flex-shrink-0${desktop ? ' group' : ''}">
-                        <div class="song-row-cover absolute inset-0 rounded-xl overflow-hidden bg-cover bg-center border border-[var(--glass-border)] shadow-lg" style="${coverStyle}" role="img" aria-label="Cover">
+                        <div class="song-row-cover absolute inset-0 rounded-xl overflow-hidden bg-cover bg-center border border-[var(--glass-border)] shadow-lg" style="${coverStyle}" role="img" aria-label="${esc(t.title || 'Cover')}">
                             <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 rounded-xl backdrop-blur-[1.6px] pointer-events-none ${showPlayingIndicator ? 'opacity-100' + (desktop ? '' : ' is-playing') : 'opacity-0'}">
                                 <i class="playing-icon fas fa-volume-high text-[var(--accent)] text-[14.4px]"></i>
                             </div>
@@ -218,7 +223,7 @@ export function buildSongRowsHtml(tracks, options = {}) {
                     </div>
                     <div class="flex items-center space-x-3 ml-4">
                         <div class="no-row-action text-[9px] font-bold font-mono text-[var(--text-dim)] opacity-50 tracking-tighter">${formatTime(t.duration)}</div>
-                        <button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}', this)" class="w-10 h-10 flex items-center justify-center text-[var(--text-dim)] active:text-[var(--text-main)] transition-colors rounded-full active:bg-[var(--surface-overlay)] focus:outline-none">
+                        <button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}', this)" class="w-10 h-10 flex items-center justify-center text-[var(--text-dim)] active:text-[var(--text-main)] transition-colors rounded-full active:bg-[var(--surface-overlay)] focus:outline-none" aria-label="More actions">
                             <i class="fas fa-ellipsis-v text-xs"></i>
                         </button>
                     </div>
@@ -235,34 +240,24 @@ export function buildSongRowsHtml(tracks, options = {}) {
  * @param {'grid'|'gridCompact'} gridSize - larger or smaller cards
  */
 export function buildSongGridHtml(tracks, options = {}, gridSize = 'grid') {
-    const state = store.state;
-    const activeId = options.activeTrackId ?? (state.currentTrack ? state.currentTrack.id : null);
-    const favIds = options.favIds ?? (state.favorites || []);
-    const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
     const isCompact = gridSize === 'gridCompact';
     const desktop = options.desktopClickBehavior === true;
     const playOverlay = desktop ? desktopPlayOverlayHtml() : '';
-
-    const isPlaying = options.isPlaying ?? (desktop ? store.state.isPlaying : true);
     return tracks.map(t => {
-        const isActive = t.id === activeId;
-        const showPlayingIndicator = desktop ? (isActive && isPlaying) : isActive;
-        const isFav = favIds.includes(t.id);
-        const coverUrl = getCoverUrl(t);
-        const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+        const { isActive, showPlayingIndicator, isFav, coverStyle } = getTrackRenderState(t, options);
         const cardClass = isCompact ? 'song-card song-card-compact' : 'song-card';
         const cardOnclickAttr = desktop ? '' : ` onclick="typeof playTrack==='function'&&playTrack('${t.id}')"`;
         return `
         <div class="${cardClass} group cursor-pointer rounded-2xl border border-[var(--glass-border)] bg-[var(--bg-card)] overflow-hidden transition-all duration-300 hover:border-[var(--accent)]/30 active:scale-[0.98]" data-id="${t.id}"${cardOnclickAttr}>
             <div class="song-card-cover-wrapper relative aspect-square w-full${desktop ? ' group' : ''}">
-                <div class="song-card-cover absolute inset-0 overflow-hidden bg-cover bg-center border-b border-[var(--glass-border)]" style="${coverStyle}" role="img" aria-label="Cover">
+                <div class="song-card-cover absolute inset-0 overflow-hidden bg-cover bg-center border-b border-[var(--glass-border)]" style="${coverStyle}" role="img" aria-label="${esc(t.title || 'Cover')}">
                     <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 backdrop-blur-[1.6px] pointer-events-none ${showPlayingIndicator ? 'opacity-100' + (desktop ? '' : ' is-playing') : 'opacity-0'}">
                         <i class="playing-icon fas fa-volume-high text-[var(--accent)] ${isCompact ? 'text-xs' : 'text-sm'}"></i>
                     </div>
                 </div>
                 ${playOverlay}
                 <div class="fav-indicator absolute top-1 right-1 w-3 h-3 bg-[var(--accent)] rounded-full border-2 border-[var(--bg-card)] z-10 ${isFav ? '' : 'hidden'}"></div>
-                <button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}', this)" class="absolute bottom-1 right-1 w-8 h-8 flex items-center justify-center rounded-full bg-black/50 text-white/90 opacity-0 group-hover:opacity-100 transition-opacity focus:outline-none z-10">
+                <button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}', this)" class="absolute bottom-1 right-1 w-8 h-8 flex items-center justify-center rounded-full bg-black/50 text-white/90 opacity-0 group-hover:opacity-100 transition-opacity focus:outline-none z-10" aria-label="More actions">
                     <i class="fas fa-ellipsis-v text-[10px]"></i>
                 </button>
             </div>
@@ -404,7 +399,7 @@ export function renderFavourites(state, searchInputEl, tracksContainerEl, option
         : fullFavTracks.filter(t =>
             t.title.toLowerCase().includes(query) ||
             t.artist.toLowerCase().includes(query) ||
-            t.album.toLowerCase().includes(query)
+            (t.album || '').toLowerCase().includes(query)
         );
     renderSongList(favTracks, tracksContainerEl, options);
 }
@@ -626,25 +621,17 @@ export function renderPlaylistList(playlists, library, listContainerEl, options 
  * @param {Object} options - { playlistName, activeTrackId, getCoverUrl, desktopClickBehavior }
  */
 export function buildPlaylistTrackRowsHtml(tracks, options = {}) {
-    const state = store.state;
-    const activeId = options.activeTrackId ?? (state.currentTrack ? state.currentTrack.id : null);
-    const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
     const playlistName = options.playlistName || '';
     const safeName = (playlistName || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const desktop = options.desktopClickBehavior === true;
     const playOverlay = desktop ? desktopPlayOverlaySmallHtml() : '';
-
-    const isPlaying = options.isPlaying ?? (desktop ? store.state.isPlaying : true);
     return tracks.map((t, idx) => {
-        const isActive = t.id === activeId;
-        const showPlayingIndicator = desktop ? (isActive && isPlaying) : isActive;
-        const coverUrl = getCoverUrl(t);
-        const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+        const { isActive, showPlayingIndicator, coverStyle } = getTrackRenderState(t, options);
         const rowOnclick = desktop ? '' : ` onclick="typeof playTrack==='function'&&playTrack('${t.id}')"`;
         return `
         <div class="playlist-track-row flex items-center p-3 rounded-2xl border border-transparent ${isActive ? 'bg-[var(--bg-selection)] border-[var(--glass-border)]' : 'bg-[var(--bg-card)] hover:bg-[var(--surface-overlay)]'} transition-all cursor-pointer group" data-id="${t.id}" data-index="${idx}"${rowOnclick}>
             <div class="song-row-cover-wrapper relative w-12 h-12 flex-shrink-0${desktop ? ' group' : ''}">
-                <div class="song-row-cover absolute inset-0 rounded-xl overflow-hidden bg-cover bg-center border border-[var(--glass-border)] shadow-lg" style="${coverStyle}" role="img" aria-label="Cover">
+                <div class="song-row-cover absolute inset-0 rounded-xl overflow-hidden bg-cover bg-center border border-[var(--glass-border)] shadow-lg" style="${coverStyle}" role="img" aria-label="${esc(t.title || 'Cover')}">
                     <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 rounded-xl backdrop-blur-[1.6px] pointer-events-none ${showPlayingIndicator ? 'opacity-100' + (desktop ? '' : ' is-playing') : 'opacity-0'}">
                         <i class="playing-icon fas fa-volume-high text-[var(--accent)] text-[14.4px]"></i>
                     </div>

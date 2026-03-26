@@ -19,6 +19,7 @@ import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 import { playPreview } from './preview_playback.js';
 import { initHoverTooltip } from './tooltip.js';
 import * as playback_context from './playback_context.js';
+import { filterPlaylistsBySearch, bindPlaylistWindowActions, showAddToPlaylistPicker, initLibraryMaintenanceControls, getPointerCoords } from './shared.js';
 
 const LIBRARY_SYNC_INTERVAL_MS = 300000;
 
@@ -31,8 +32,6 @@ function viewStateFromContext() {
         searchTracks: viewContext.searchTracks
     };
 }
-
-console.log("🚀 Soundsible Web Player Initializing...");
 
 /** Cached DOM refs for mobile; set at init. */
 let dom = null;
@@ -58,7 +57,6 @@ const MOBILE_SETTINGS_IDS = {
     libraryOrderSelect: 'settings-library-order',
     themeSelect: 'settings-theme-select',
     appIconSelect: 'settings-app-icon-select',
-    hapticsToggle: 'haptics-indicator',
     hapticsIndicator: 'haptics-indicator',
     statusLed: 'status-led',
     statusPulse: 'status-led-pulse',
@@ -137,126 +135,17 @@ const QUEUE_AUTO_SCROLL_THRESHOLD_PX = 60;
 const QUEUE_AUTO_SCROLL_STEP_PX = 4;
 const QUEUE_AUTO_SCROLL_INTERVAL_MS = 16;
 
-function initWipeLibraryModal() {
-    const modal = document.getElementById('wipe-library-modal');
-    const backdrop = document.getElementById('wipe-library-modal-backdrop');
-    const input = document.getElementById('wipe-library-confirm-input');
-    const cancelBtn = document.getElementById('wipe-library-cancel');
-    const submitBtn = document.getElementById('wipe-library-submit');
-    const errorEl = document.getElementById('wipe-library-error');
-    const openBtn = document.getElementById('settings-wipe-library-btn');
-    if (!modal || !input || !submitBtn || !openBtn) return;
-
-    function showModal() {
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        input.value = '';
-        submitBtn.disabled = true;
-        if (errorEl) { errorEl.classList.add('hidden'); errorEl.textContent = ''; }
-        input.focus();
-    }
-    function hideModal() {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-        input.value = '';
-        submitBtn.disabled = true;
-        if (errorEl) { errorEl.classList.add('hidden'); errorEl.textContent = ''; }
-    }
-    function checkConfirm() {
-        const v = input.value.trim();
-        submitBtn.disabled = v !== 'CONFIRM' && v !== 'confirm';
-        if (errorEl) errorEl.classList.add('hidden');
-    }
-
-    openBtn.addEventListener('click', showModal);
-    input.addEventListener('input', checkConfirm);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideModal(); });
-    cancelBtn?.addEventListener('click', hideModal);
-    backdrop?.addEventListener('click', hideModal);
-
-    submitBtn.addEventListener('click', async () => {
-        if (submitBtn.disabled) return;
-        const confirmVal = input.value.trim();
-        if (confirmVal !== 'CONFIRM' && confirmVal !== 'confirm') return;
-        submitBtn.disabled = true;
-        if (errorEl) { errorEl.classList.add('hidden'); errorEl.textContent = ''; }
-        try {
-            const res = await fetch(`${store.apiBase}/api/library/wipe`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ confirm: confirmVal })
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                if (errorEl) {
-                    errorEl.textContent = data.error || 'Wipe failed';
-                    errorEl.classList.remove('hidden');
-                }
-                submitBtn.disabled = false;
-                UI.showToast(data.error || 'Wipe failed');
-                return;
-            }
-            hideModal();
-            store.update({
-                library: [],
-                queue: [],
-                playlists: {},
-                favorites: [],
-                libraryYoutubeIds: [],
-                youtubeToTrackId: {},
-                currentTrack: null,
-                isPlaying: false
-            });
-            store.save('library', []);
-            store.save('playlists', {});
-            store.save('favorites', []);
-            if (typeof audioEngine !== 'undefined' && audioEngine.pause) audioEngine.pause();
-            await store.syncLibrary();
-            UI.showToast('Library wiped');
+function initLibraryMaintenance() {
+    initLibraryMaintenanceControls({
+        store,
+        audioEngine,
+        openButtonId: 'settings-wipe-library-btn',
+        purgeButtonId: 'settings-purge-missing-btn',
+        toast: (message) => UI.showToast(message),
+        onAfterSync: () => {
             renderLibraryContent();
             if (UI.currentView === 'playlists') renderPlaylistList(store.state);
             renderQueue(store.state);
-        } catch (err) {
-            if (errorEl) {
-                errorEl.textContent = err.message || 'Request failed';
-                errorEl.classList.remove('hidden');
-            }
-            submitBtn.disabled = false;
-            UI.showToast(err.message || 'Request failed');
-        }
-    });
-}
-
-function initPurgeMissingButton() {
-    const btn = document.getElementById('settings-purge-missing-btn');
-    if (!btn) return;
-    btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        btn.classList.add('opacity-60', 'cursor-wait');
-        try {
-            const res = await fetch(`${store.apiBase}/api/library/purge-missing`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                UI.showToast(data.error || 'Purge failed');
-            } else {
-                const checked = typeof data.checked === 'number' ? data.checked : 0;
-                const removed = typeof data.removed === 'number' ? data.removed : 0;
-                const msg = removed === 0
-                    ? 'No missing tracks found'
-                    : `Removed ${removed} missing ${removed === 1 ? 'track' : 'tracks'} (checked ${checked})`;
-                UI.showToast(msg);
-                await store.syncLibrary();
-                renderLibraryContent();
-                renderQueue(store.state);
-            }
-        } catch (err) {
-            UI.showToast(err?.message || 'Purge failed');
-        } finally {
-            btn.disabled = false;
-            btn.classList.remove('opacity-60', 'cursor-wait');
         }
     });
 }
@@ -283,11 +172,6 @@ function initQueueDrag() {
             clearTimeout(holdTimer);
             holdTimer = null;
         }
-    }
-
-    function getPointerCoords(e) {
-        if (e.touches && e.touches.length) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        return { x: e.clientX, y: e.clientY };
     }
 
     function stopAutoScroll() {
@@ -324,8 +208,9 @@ function initQueueDrag() {
 
     function updateClonePosition(x, y) {
         if (clone) {
-            const w = clone.getBoundingClientRect().width;
-            const h = clone.getBoundingClientRect().height;
+            const rect = clone.getBoundingClientRect();
+            const w = rect.width;
+            const h = rect.height;
             clone.style.transition = 'none';
             clone.style.left = `${x - w / 2}px`;
             clone.style.top = `${y - h / 2}px`;
@@ -661,8 +546,9 @@ function syncUIState(state) {
     const activeId = state.currentTrack ? state.currentTrack.id : null;
     const favIds = state.favorites || [];
 
-    // Note: 1. Update all visible song rows across the entire app
-    const rows = document.querySelectorAll('.song-row');
+    const activeView = document.getElementById(`view-${UI.currentView}`);
+    const scope = activeView || document;
+    const rows = scope.querySelectorAll('.song-row');
     rows.forEach(row => {
         const id = row.getAttribute('data-id');
         const isActive = id === activeId;
@@ -749,7 +635,6 @@ window.addEventListener('error', (e) => {
 });
 
 async function init() {
-    console.log("🚀 Soundsible App Init Sequence Started...");
     dom = {
         floatingQueue: document.getElementById('floating-queue-tracks'),
         allSongs: document.getElementById('all-songs'),
@@ -781,7 +666,6 @@ async function init() {
     };
     try {
         // Note: 1. Initialize UI first (navigation, player bar)
-        console.log("UI: Initializing...");
         UI.init();
         initHoverTooltip();
         initGlobalSearch();
@@ -793,39 +677,25 @@ async function init() {
         initScrollTracking();
 
         wireSettings(MOBILE_SETTINGS_IDS, { store, showToast: (msg) => UI.showToast(msg), onLibraryOrderChange: () => renderLibraryContent(), subscribeIndicators: false });
-        initWipeLibraryModal();
-        initPurgeMissingButton();
+        initLibraryMaintenance();
 
-        // Note: 2. Perform connection race
-        const endpoints = [...store.state.priorityList, window.location.hostname];
-        const uniqueEndpoints = [...new Set(endpoints)].filter(e => e);
-        console.log("NET: Probing endpoints:", uniqueEndpoints);
-        await connectionManager.findActiveHost(uniqueEndpoints);
-        
-        // Note: 3. Load library data (non-blocking)
-        console.log("DATA: Starting background library sync...");
-        store.syncLibrary().then(() => {
-            checkResumeFromOtherDevice();
-            import('./discover.js').then((m) => m.Discover && m.Discover.fillBuffer());
-        });
-
-        // Note: 3. Subscribe to state changes for re-rendering (optimized)
-        let lastLibraryJson = null; // Note: Force first render in subscription
+        // Note: 2. Subscribe to state changes for re-rendering (optimized)
+        let lastLibraryRef = null; // Note: Force first render in subscription
         let lastLibraryTab = store.state.libraryTab || 'songs';
         let lastDiscoveryTab = store.state.discoveryTab || 'soundsnap';
-        let lastPlaylistsJson = JSON.stringify(store.state.playlists || {});
-        let lastFavsJson = JSON.stringify(store.state.favorites);
-        let lastQueueJson = JSON.stringify(store.state.queue);
+        let lastPlaylistsRef = store.state.playlists || {};
+        let lastFavsRef = store.state.favorites || [];
+        let lastQueueRef = store.state.queue || [];
         let lastTrackId = store.state.currentTrack ? store.state.currentTrack.id : null;
         let lastIsPlaying = store.state.isPlaying;
 
         store.subscribe((state) => {
-            const currentLibJson = JSON.stringify(state.library);
+            const currentLibRef = state.library;
             const currentLibraryTab = state.libraryTab || 'songs';
             const currentDiscoveryTab = state.discoveryTab || 'soundsnap';
-            const currentPlaylistsJson = JSON.stringify(state.playlists || {});
-            const currentFavsJson = JSON.stringify(state.favorites);
-            const currentQueueJson = JSON.stringify(state.queue);
+            const currentPlaylistsRef = state.playlists || {};
+            const currentFavsRef = state.favorites || [];
+            const currentQueueRef = state.queue || [];
             const currentTrackId = state.currentTrack ? state.currentTrack.id : null;
             const currentIsPlaying = state.isPlaying;
 
@@ -845,9 +715,8 @@ async function init() {
             }
 
             // Note: 1 Details
-            if (currentLibJson !== lastLibraryJson) {
-                console.log("Library synced, re-render current view.");
-                lastLibraryJson = currentLibJson;
+            if (currentLibRef !== lastLibraryRef) {
+                lastLibraryRef = currentLibRef;
                 renderQueue(state);
                 const currentView = UI.currentView;
                 if (currentView === 'home') {
@@ -863,14 +732,14 @@ async function init() {
                 } else if (currentView === 'playlist-detail' && viewContext.currentPlaylistName) {
                     renderPlaylistDetail(viewContext.currentPlaylistName);
                 }
-            } else if (currentPlaylistsJson !== lastPlaylistsJson) {
-                lastPlaylistsJson = currentPlaylistsJson;
+            } else if (currentPlaylistsRef !== lastPlaylistsRef) {
+                lastPlaylistsRef = currentPlaylistsRef;
                 const currentView = UI.currentView;
                 if (currentView === 'playlists') renderPlaylistList(state);
                 if (currentView === 'playlist-detail' && viewContext.currentPlaylistName) renderPlaylistDetail(viewContext.currentPlaylistName);
             } else {
                 // Note: 2. If ONLY favorites changed, we update the indicators surgically
-                if (currentFavsJson !== lastFavsJson) {
+                if (currentFavsRef !== lastFavsRef) {
                     syncUIState(state);
                     if (UI.currentView === 'favourites') renderFavourites(state);
                     if (UI.currentView === 'home' && (state.libraryOrder || 'date_added') === 'favorites_first') {
@@ -878,7 +747,7 @@ async function init() {
                         setTimeout(() => applyFavFirstEntranceIfNeeded(), 0);
                     }
                 }
-                lastFavsJson = currentFavsJson;
+                lastFavsRef = currentFavsRef;
 
                 // Note: 3. If the active track or playing state changed, we update highlights surgically
                 if (currentTrackId !== lastTrackId || currentIsPlaying !== lastIsPlaying) {
@@ -887,7 +756,7 @@ async function init() {
                 }
 
                 // Note: 4. If ONLY the queue changed
-                if (currentQueueJson !== lastQueueJson) {
+                if (currentQueueRef !== lastQueueRef) {
                     // Note: If the user is dragging, do NOT re-render the queue or we'll break the interaction
                     if (!UI.isDraggingQueue) {
                         renderQueue(state);
@@ -900,16 +769,26 @@ async function init() {
             // Note: Dedicated search bars already own rendering for home/favourites.
             
             lastLibraryTab = currentLibraryTab;
-            lastFavsJson = currentFavsJson;
-            lastPlaylistsJson = currentPlaylistsJson;
-            lastQueueJson = currentQueueJson;
+            lastFavsRef = currentFavsRef;
+            lastPlaylistsRef = currentPlaylistsRef;
+            lastQueueRef = currentQueueRef;
             lastTrackId = currentTrackId;
             lastIsPlaying = currentIsPlaying;
         });
 
-        // Note: 4. Initial render — only default view (home) and queue (option B other views render when user navigates)
+        // Note: 3. Perform connection race after subscription is ready.
+        const endpoints = [...store.state.priorityList, window.location.hostname];
+        const uniqueEndpoints = [...new Set(endpoints)].filter(e => e);
+        await connectionManager.findActiveHost(uniqueEndpoints);
+
+        // Note: 4. Load library data (non-blocking)
+        store.syncLibrary().then(() => {
+            checkResumeFromOtherDevice();
+            import('./discover.js').then((m) => m.Discover && m.Discover.fillBuffer());
+        });
+
+        // Note: 5. Initial render — only default view (home) and queue (option B other views render when user navigates)
         if (store.state.library.length > 0 && dom) {
-            console.log("DATA: Performing initial render (home + queue)...");
             syncLibraryPanels();
             renderLibraryTabBar();
             renderLibraryContent();
@@ -929,7 +808,6 @@ async function init() {
 
     setInterval(() => {
         if (isVisible() && store.state.isOnline) {
-            console.log("Periodic Sync: Verifying library truth...");
             store.syncLibrary();
         }
     }, LIBRARY_SYNC_INTERVAL_MS);
@@ -937,10 +815,6 @@ async function init() {
     onVisibilityChange((visible) => {
         if (visible && store.state.isOnline) store.syncLibrary();
     });
-}
-
-function sortLibraryTracks(tracks, order, favorites) {
-    return renderers.sortLibraryTracks(tracks, order, favorites);
 }
 
 function renderSongList(tracks, containerId) {
@@ -995,9 +869,7 @@ function renderDiscoveryTabBar() {
                 store.update({ discoveryTab: id });
                 syncDiscoveryPanels();
                 renderDiscoveryTabBar();
-                if (id === 'soundsnap') {
-                    import('./discover.js').then((m) => { if (m.Discover) m.Discover.ensureInited({ mobile: true }); });
-                }
+                import('./discover.js').then((m) => { if (m.Discover) m.Discover.ensureInited({ mobile: true }); });
             }
         });
     });
@@ -1078,16 +950,6 @@ function renderLibraryContent() {
     else renderLibraryArtists();
 }
 
-function filterPlaylistsBySearch(playlists, query) {
-    if (!query) return playlists;
-    const q = query.trim().toLowerCase();
-    const out = {};
-    Object.keys(playlists || {}).forEach((name) => {
-        if (name.toLowerCase().includes(q)) out[name] = playlists[name];
-    });
-    return out;
-}
-
 function renderPlaylistList(state) {
     if (!dom || !dom.playlistListContainer) return;
     const query = dom.globalSearchInput ? dom.globalSearchInput.value.trim() : '';
@@ -1102,6 +964,7 @@ function renderPlaylistList(state) {
         return;
     }
     const options = hasAny && !hasFiltered && query ? { emptyMessage: 'No playlists match your search.' } : {};
+    options.preserveOrder = !query;
     renderers.renderPlaylistList(filtered, state.library || [], dom.playlistListContainer, options);
 }
 
@@ -1141,43 +1004,13 @@ window.showPlaylistDetail = (name) => {
     viewContext.currentPlaylistName = name;
     UI.showView('playlist-detail');
 };
-
-window.removeFromPlaylistTrack = (playlistName, trackId) => {
-    store.removeFromPlaylist(playlistName, trackId).then(() => {
-        if (UI.currentView === 'playlist-detail' && viewContext.currentPlaylistName === playlistName) renderPlaylistDetail(playlistName);
-    });
-};
-
-window.createPlaylistPrompt = () => {
-    const name = prompt('Playlist name');
-    if (name != null && name.trim()) store.createPlaylist(name.trim());
-};
-
-window.renamePlaylistPrompt = () => {
-    const current = viewContext.currentPlaylistName;
-    if (!current) return;
-    const newName = prompt('Rename playlist', current);
-    if (newName != null && newName.trim() && newName.trim() !== current) store.renamePlaylist(current, newName.trim()).then(() => { viewContext.currentPlaylistName = newName.trim(); renderPlaylistDetail(viewContext.currentPlaylistName); });
-};
-
-window.duplicatePlaylistPrompt = () => {
-    const current = viewContext.currentPlaylistName;
-    if (!current) return;
-    const newName = prompt('Duplicate as', `${current} (copy)`);
-    if (newName != null && newName.trim()) store.duplicatePlaylist(current, newName.trim());
-};
-
-window.deletePlaylistConfirm = () => {
-    const current = viewContext.currentPlaylistName;
-    if (!current) return;
-    if (confirm(`Delete playlist "${current}"?`)) {
-        store.deletePlaylist(current).then(() => {
-            viewContext.currentPlaylistName = null;
-            window._currentPlaylistTracks = null;
-            UI.showView('playlists');
-        });
-    }
-};
+bindPlaylistWindowActions({
+    store,
+    getCurrentPlaylistName: () => viewContext.currentPlaylistName,
+    setCurrentPlaylistName: (name) => { viewContext.currentPlaylistName = name; },
+    renderPlaylistDetail,
+    showPlaylistList: () => UI.showView('playlists')
+});
 
 function initGlobalSearch() {
     if (!dom || !dom.globalSearchInput) return;
@@ -1257,41 +1090,14 @@ function initScrollTracking() {
     });
 }
 
-window.showAddToPlaylistPicker = (trackId) => {
-    const picker = document.getElementById('add-to-playlist-picker');
-    const listEl = document.getElementById('add-to-playlist-picker-list');
-    const backdrop = document.getElementById('add-to-playlist-picker-backdrop');
-    const closeBtn = document.getElementById('add-to-playlist-picker-close');
-    if (!picker || !listEl) return;
-    window._addToPlaylistTrackId = trackId;
-    const playlists = store.state.playlists || {};
-    const names = Object.keys(playlists).sort((a, b) => a.localeCompare(b));
-    listEl.innerHTML = names.map((name) => `<button type="button" class="add-to-playlist-picker-item w-full flex items-center gap-3 p-4 rounded-xl active:bg-[var(--surface-overlay)] text-left font-bold text-sm text-[var(--text-main)] transition-colors" data-playlist-name="${renderers.esc(name)}"><i class="fas fa-layer-group text-[var(--text-dim)] w-4"></i><span>${renderers.esc(name)}</span></button>`).join('') + `<button type="button" class="add-to-playlist-picker-item w-full flex items-center gap-3 p-4 rounded-xl active:bg-[var(--accent)]/15 text-left font-bold text-sm text-[var(--accent)] transition-colors" data-new-playlist><i class="fas fa-plus w-4"></i><span>New playlist…</span></button>`;
-    function hide() {
-        picker.classList.add('hidden');
-        window._addToPlaylistTrackId = null;
-    }
-    listEl.querySelectorAll('.add-to-playlist-picker-item').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            const name = btn.getAttribute('data-playlist-name');
-            const isNew = btn.hasAttribute('data-new-playlist');
-            const tid = window._addToPlaylistTrackId;
-            hide();
-            if (!tid) return;
-            if (isNew) {
-                const newName = prompt('Playlist name');
-                if (newName != null && newName.trim()) {
-                    store.createPlaylist(newName.trim()).then(() => store.addToPlaylist(newName.trim(), tid)).then(() => UI.showToast(`Added to ${newName.trim()}`));
-                }
-            } else if (name) {
-                store.addToPlaylist(name, tid).then(() => UI.showToast(`Added to ${name}`));
-            }
-        });
-    });
-    if (backdrop) backdrop.addEventListener('click', hide, { once: true });
-    if (closeBtn) closeBtn.addEventListener('click', hide, { once: true });
-    picker.classList.remove('hidden');
-};
+window.showAddToPlaylistPicker = showAddToPlaylistPicker({
+    store,
+    esc: renderers.esc,
+    toast: (message) => UI.showToast(message),
+    itemPaddingClass: 'p-4',
+    itemHoverClass: 'active:bg-[var(--surface-overlay)]',
+    addHoverClass: 'active:bg-[var(--accent)]/15'
+});
 
 function clearContainerContent(el) {
     if (!el) return;
@@ -1523,7 +1329,6 @@ window.getTrackFromCurrentContext = (trackId) => {
 };
 
 window.playTrack = (trackId) => {
-    console.log("Playing track ID:", trackId);
     Haptics.tick();
     playback_context.playTrackFromContext(trackId, UI.currentView, viewStateFromContext());
 };

@@ -15,8 +15,7 @@ import { checkResumeFromOtherDevice } from './playback_resume.js';
 import { playPreview } from './preview_playback.js';
 import { initHoverTooltip } from './tooltip.js';
 import * as playback_context from './playback_context.js';
-
-console.log('Soundsible Desktop initializing...');
+import { filterPlaylistsBySearch, bindPlaylistWindowActions, showAddToPlaylistPicker, initLibraryMaintenanceControls, getPointerCoords } from './shared.js';
 
 function getDesktopViewState() {
     return {
@@ -38,15 +37,6 @@ function showArtistDetail(artistName) {
     DesktopUI.showView('artist-detail');
 }
 
-function filterPlaylistsBySearch(playlists, query) {
-    if (!query) return playlists;
-    const q = query.trim().toLowerCase();
-    const out = {};
-    Object.keys(playlists || {}).forEach((name) => {
-        if (name.toLowerCase().includes(q)) out[name] = playlists[name];
-    });
-    return out;
-}
 
 function renderPlaylists() {
     const state = store.state;
@@ -107,48 +97,13 @@ function showPlaylistDetail(name) {
     renderPlaylistDetail();
     DesktopUI.showView('playlist-detail');
 }
-
-window.removeFromPlaylistTrack = (playlistName, trackId) => {
-    store.removeFromPlaylist(playlistName, trackId).then(() => {
-        if (DesktopUI.currentView === 'playlist-detail' && window._currentPlaylistName === playlistName) renderPlaylistDetail();
-    });
-};
-
-window.createPlaylistPrompt = () => {
-    const name = prompt('Playlist name');
-    if (name != null && name.trim()) store.createPlaylist(name.trim());
-};
-
-window.renamePlaylistPrompt = () => {
-    const current = window._currentPlaylistName;
-    if (!current) return;
-    const newName = prompt('Rename playlist', current);
-    if (newName != null && newName.trim() && newName.trim() !== current) {
-        store.renamePlaylist(current, newName.trim()).then(() => {
-            window._currentPlaylistName = newName.trim();
-            renderPlaylistDetail();
-        });
-    }
-};
-
-window.duplicatePlaylistPrompt = () => {
-    const current = window._currentPlaylistName;
-    if (!current) return;
-    const newName = prompt('Duplicate as', `${current} (copy)`);
-    if (newName != null && newName.trim()) store.duplicatePlaylist(current, newName.trim());
-};
-
-window.deletePlaylistConfirm = () => {
-    const current = window._currentPlaylistName;
-    if (!current) return;
-    if (confirm(`Delete playlist "${current}"?`)) {
-        store.deletePlaylist(current).then(() => {
-            window._currentPlaylistName = null;
-            window._currentPlaylistTracks = null;
-            DesktopUI.showView('playlists');
-        });
-    }
-};
+bindPlaylistWindowActions({
+    store,
+    getCurrentPlaylistName: () => window._currentPlaylistName,
+    setCurrentPlaylistName: (name) => { window._currentPlaylistName = name; },
+    renderPlaylistDetail: () => renderPlaylistDetail(),
+    showPlaylistList: () => DesktopUI.showView('playlists')
+});
 
 const PLAYLIST_HOLD_MS = 400;
 const PLAYLIST_CANCEL_THRESHOLD_PX = 24;
@@ -173,12 +128,6 @@ function initDesktopQueueDrag() {
 
     function getContainer() {
         return document.getElementById('desktop-queue-tracks');
-    }
-
-    function getPointerCoords(e) {
-        if (e.clientX != null) return { x: e.clientX, y: e.clientY };
-        if (e.touches?.[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        return { x: 0, y: 0 };
     }
 
     function clearDropTarget() {
@@ -402,12 +351,6 @@ function initPlaylistTrackDrag() {
     let pointerId = null;
     let hasMoved = false;
 
-    function getPointerCoords(e) {
-        if (e.clientX != null) return { x: e.clientX, y: e.clientY };
-        if (e.touches?.[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        return { x: 0, y: 0 };
-    }
-
     function cleanupDrag() {
         if (holdTimer) {
             clearTimeout(holdTimer);
@@ -573,12 +516,6 @@ function initPlaylistListDrag() {
     let pointerId = null;
     let hasMoved = false;
 
-    function getPointerCoords(e) {
-        if (e.clientX != null) return { x: e.clientX, y: e.clientY };
-        if (e.touches?.[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        return { x: 0, y: 0 };
-    }
-
     function cleanupDrag() {
         if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
         dragStarted = false;
@@ -673,7 +610,7 @@ function initPlaylistListDrag() {
 
     document.addEventListener('pointerdown', (e) => {
         if (DesktopUI.currentView !== 'playlists') return;
-        const searchInput = document.getElementById('desktop-playlist-search-input');
+        const searchInput = document.getElementById('desktop-global-search-input');
         if (searchInput?.value.trim()) return;
         const item = e.target.closest('.playlist-card');
         const container = document.getElementById('desktop-playlist-list-container');
@@ -720,49 +657,14 @@ window.playPreview = playPreview;
 window.showToast = (msg) => { if (typeof DesktopUI !== 'undefined' && DesktopUI.showToast) DesktopUI.showToast(msg); };
 window.showArtistDetail = showArtistDetail;
 window.showPlaylistDetail = showPlaylistDetail;
-
-function esc(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
-
-window.showAddToPlaylistPicker = (trackId) => {
-    const picker = document.getElementById('add-to-playlist-picker');
-    const listEl = document.getElementById('add-to-playlist-picker-list');
-    const backdrop = document.getElementById('add-to-playlist-picker-backdrop');
-    const closeBtn = document.getElementById('add-to-playlist-picker-close');
-    if (!picker || !listEl) return;
-    window._addToPlaylistTrackId = trackId;
-    const playlists = store.state.playlists || {};
-    const names = Object.keys(playlists).sort((a, b) => a.localeCompare(b));
-    listEl.innerHTML = names.map((name) => `<button type="button" class="add-to-playlist-picker-item w-full flex items-center gap-3 p-3 rounded-xl hover:bg-[var(--surface-overlay)] text-left font-bold text-sm text-[var(--text-main)] transition-colors" data-playlist-name="${esc(name)}"><i class="fas fa-layer-group text-[var(--text-dim)] w-4"></i><span>${esc(name)}</span></button>`).join('') + `<button type="button" class="add-to-playlist-picker-item w-full flex items-center gap-3 p-3 rounded-xl hover:bg-[var(--accent)]/15 text-left font-bold text-sm text-[var(--accent)] transition-colors" data-new-playlist><i class="fas fa-plus w-4"></i><span>New playlist…</span></button>`;
-    function hide() {
-        picker.classList.add('hidden');
-        window._addToPlaylistTrackId = null;
-    }
-    listEl.querySelectorAll('.add-to-playlist-picker-item').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            const name = btn.getAttribute('data-playlist-name');
-            const isNew = btn.hasAttribute('data-new-playlist');
-            const tid = window._addToPlaylistTrackId;
-            hide();
-            if (!tid) return;
-            if (isNew) {
-                const newName = prompt('Playlist name');
-                if (newName != null && newName.trim()) {
-                    store.createPlaylist(newName.trim()).then(() => store.addToPlaylist(newName.trim(), tid)).then(() => DesktopUI.showToast(`Added to ${newName.trim()}`));
-                }
-            } else if (name) {
-                store.addToPlaylist(name, tid).then(() => DesktopUI.showToast(`Added to ${name}`));
-            }
-        });
-    });
-    if (backdrop) backdrop.addEventListener('click', hide, { once: true });
-    if (closeBtn) closeBtn.addEventListener('click', hide, { once: true });
-    picker.classList.remove('hidden');
-};
+window.showAddToPlaylistPicker = showAddToPlaylistPicker({
+    store,
+    esc: renderers.esc,
+    toast: (message) => DesktopUI.showToast(message),
+    itemPaddingClass: 'p-3',
+    itemHoverClass: 'hover:bg-[var(--surface-overlay)]',
+    addHoverClass: 'hover:bg-[var(--accent)]/15'
+});
 
 window.store = store;
 window.audioEngine = audioEngine;
@@ -770,7 +672,12 @@ window.UI = DesktopUI;
 
 window.toggleArtistAlbum = (ev) => {
     const card = ev?.currentTarget?.closest?.('.artist-album-card');
-    if (card) card.classList.toggle('artist-album-expanded');
+    if (!card) return;
+    const wasExpanded = card.classList.contains('artist-album-expanded');
+    document.querySelectorAll('.artist-album-card.artist-album-expanded').forEach((el) => {
+        if (el !== card) el.classList.remove('artist-album-expanded');
+    });
+    card.classList.toggle('artist-album-expanded', !wasExpanded);
 };
 
 function registerServiceWorker() {
@@ -783,121 +690,18 @@ function registerServiceWorker() {
     );
 }
 
-function initWipeLibraryModalDesktop() {
-    const modal = document.getElementById('wipe-library-modal');
-    const backdrop = document.getElementById('wipe-library-modal-backdrop');
-    const input = document.getElementById('wipe-library-confirm-input');
-    const cancelBtn = document.getElementById('wipe-library-cancel');
-    const submitBtn = document.getElementById('wipe-library-submit');
-    const errorEl = document.getElementById('wipe-library-error');
-    const openBtn = document.getElementById('desktop-settings-wipe-library-btn');
-    if (!modal || !input || !submitBtn || !openBtn) return;
-
-    function showModal() {
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        input.value = '';
-        submitBtn.disabled = true;
-        if (errorEl) { errorEl.classList.add('hidden'); errorEl.textContent = ''; }
-        input.focus();
-    }
-    function hideModal() {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-        input.value = '';
-        submitBtn.disabled = true;
-        if (errorEl) { errorEl.classList.add('hidden'); errorEl.textContent = ''; }
-    }
-    function checkConfirm() {
-        const v = input.value.trim();
-        submitBtn.disabled = v !== 'CONFIRM' && v !== 'confirm';
-        if (errorEl) errorEl.classList.add('hidden');
-    }
-
-    openBtn.addEventListener('click', showModal);
-    input.addEventListener('input', checkConfirm);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideModal(); });
-    cancelBtn?.addEventListener('click', hideModal);
-    backdrop?.addEventListener('click', hideModal);
-
-    submitBtn.addEventListener('click', async () => {
-        if (submitBtn.disabled) return;
-        const confirmVal = input.value.trim();
-        if (confirmVal !== 'CONFIRM' && confirmVal !== 'confirm') return;
-        submitBtn.disabled = true;
-        if (errorEl) { errorEl.classList.add('hidden'); errorEl.textContent = ''; }
-        try {
-            const res = await fetch(`${store.apiBase}/api/library/wipe`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ confirm: confirmVal })
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                if (errorEl) {
-                    errorEl.textContent = data.error || 'Wipe failed';
-                    errorEl.classList.remove('hidden');
-                }
-                submitBtn.disabled = false;
-                DesktopUI.showToast(data.error || 'Wipe failed');
-                return;
-            }
-            hideModal();
-            store.update({
-                library: [],
-                queue: [],
-                playlists: {},
-                favorites: [],
-                libraryYoutubeIds: [],
-                youtubeToTrackId: {},
-                currentTrack: null,
-                isPlaying: false
-            });
-            store.save('library', []);
-            store.save('playlists', {});
-            store.save('favorites', []);
-            if (audioEngine && audioEngine.pause) audioEngine.pause();
-            await store.syncLibrary();
-            DesktopUI.showToast('Library wiped');
-        } catch (err) {
-            if (errorEl) {
-                errorEl.textContent = err.message || 'Request failed';
-                errorEl.classList.remove('hidden');
-            }
-            submitBtn.disabled = false;
-            DesktopUI.showToast(err.message || 'Request failed');
-        }
-    });
-}
-
-function initPurgeMissingButtonDesktop() {
-    const btn = document.getElementById('desktop-settings-purge-missing-btn');
-    if (!btn) return;
-    btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        btn.classList.add('opacity-60', 'cursor-wait');
-        try {
-            const res = await fetch(`${store.apiBase}/api/library/purge-missing`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                DesktopUI.showToast(data.error || 'Purge failed');
-            } else {
-                const checked = typeof data.checked === 'number' ? data.checked : 0;
-                const removed = typeof data.removed === 'number' ? data.removed : 0;
-                const msg = removed === 0
-                    ? 'No missing tracks found'
-                    : `Removed ${removed} missing ${removed === 1 ? 'track' : 'tracks'} (checked ${checked})`;
-                DesktopUI.showToast(msg);
-                await store.syncLibrary();
-            }
-        } catch (err) {
-            DesktopUI.showToast(err?.message || 'Purge failed');
-        } finally {
-            btn.disabled = false;
-            btn.classList.remove('opacity-60', 'cursor-wait');
+function initLibraryMaintenanceDesktop() {
+    initLibraryMaintenanceControls({
+        store,
+        audioEngine,
+        openButtonId: 'desktop-settings-wipe-library-btn',
+        purgeButtonId: 'desktop-settings-purge-missing-btn',
+        toast: (message) => DesktopUI.showToast(message),
+        onAfterSync: () => {
+            renderHomeSongs();
+            renderPlaylists();
+            renderPlaylistDetail();
+            renderers.renderQueue(store.state, [document.getElementById('desktop-queue-tracks')].filter(Boolean), { desktopHandle: true, desktopClickBehavior: true });
         }
     });
 }
@@ -945,8 +749,7 @@ async function init() {
             hostDisplay: 'desktop-active-host-display',
             ytdlpAutoUpdate: 'desktop-settings-ytdlp-auto-update',
         }, { store, showToast: (m) => DesktopUI.showToast(m), onLibraryOrderChange: () => renderHomeSongs() });
-        initWipeLibraryModalDesktop();
-        initPurgeMissingButtonDesktop();
+        initLibraryMaintenanceDesktop();
 
         const themeSelect = document.getElementById('desktop-settings-theme-select');
         if (themeSelect) {
@@ -955,7 +758,6 @@ async function init() {
                 const value = themeSelect.value;
                 if (value && ['dark', 'light', 'odst'].includes(value)) {
                     store.setTheme(value);
-                    DesktopUI.applyTheme(value);
                 }
             });
         }
