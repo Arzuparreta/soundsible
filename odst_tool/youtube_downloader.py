@@ -545,6 +545,7 @@ class YouTubeDownloader:
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
+            'extract_flat': 'in_playlist',
             'noplaylist': False,
             'extractor_args': {
                 'youtube': {'player_client': ['android', 'ios', 'web']}

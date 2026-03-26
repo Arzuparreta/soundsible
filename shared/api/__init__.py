@@ -616,7 +616,15 @@ def start_api(port=STATION_PORT, debug=False):
             # Note: Always resolve the .env path from the repo root so auto-update works regardless of CWD.
             _env_path = Path(_REPO_ROOT) / "odst_tool" / ".env"
             _env = dotenv_values(_env_path) if _env_path.exists() else {}
-            _auto = (_env.get("YTDLP_AUTO_UPDATE", os.getenv("YTDLP_AUTO_UPDATE", "false")) or "false").strip().lower() in ("true", "1")
+            _raw_auto = (_env.get("YTDLP_AUTO_UPDATE", os.getenv("YTDLP_AUTO_UPDATE", "false")) or "false").strip()
+            _auto = _raw_auto.lower() in ("true", "1")
+            logger.info(
+                "API: yt-dlp auto-update config resolved (env_file=%s, exists=%s, raw=%r, enabled=%s)",
+                _env_path,
+                _env_path.exists(),
+                _raw_auto,
+                _auto,
+            )
             if _auto:
                 logger.info("API: yt-dlp auto-update requested (YTDLP_AUTO_UPDATE=true). Will run in background after startup banner.")
                 def _run_ytdlp_update():
@@ -644,12 +652,16 @@ def start_api(port=STATION_PORT, debug=False):
                             timeout=120,
                         )
                         if result.returncode == 0:
-                            logger.info("API: yt-dlp auto-update completed.")
+                            logger.info("API: yt-dlp auto-update completed successfully.")
+                            if result.stdout:
+                                logger.info("API: yt-dlp auto-update stdout (first 400 chars): %s", result.stdout[:400])
                         else:
                             logger.warning("API: yt-dlp auto-update failed: %s", result.stderr or result.stdout or 'unknown')
                     except Exception as e:
                         logger.warning("API: yt-dlp auto-update error: %s", e)
                 _defer_ytdlp_thread = True
+            else:
+                logger.info("API: yt-dlp auto-update disabled. Skipping update attempt.")
         except Exception:
             logger.debug("API: yt-dlp auto-update setup skipped due to error", exc_info=True)
 
