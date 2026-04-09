@@ -1,7 +1,7 @@
 # [<img src="branding/logo-app.png" alt="Soundsible" width="52" height="52" align="center"> **Soundsible**](https://arzuparreta.github.io/soundsible.github.io)
 
 <p align="left">
-  <a href="https://arzuparreta.github.io/soundsible.github.io"><img src="https://img.shields.io/badge/View%20project-Repository-6366f1?style=for-the-badge&logo=github&logoColor=white" alt="View Soundsible repository"></a>
+  <a href="https://arzuparreta.github.io/soundsible.github.io"><img src="https://img.shields.io/badge/GO%20TO%20WEBSITE-E0BC00?style=for-the-badge" alt="View Soundsible repository"></a>
 </p>
 
 **Self-hosted music environment** — this repo is the full stack (Station UI, engine, tooling). Overview, screenshots, and product details are on the site linked above.
