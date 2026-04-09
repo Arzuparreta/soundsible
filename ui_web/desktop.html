@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <base href="/player/">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" id="meta-theme-color" content="#0d0d0f">
+    <title>Soundsible Desktop</title>
+    <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+    <link rel="manifest" href="manifest-desktop.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/tailwind-compiled.css">
+    <script>
+        (function() {
+            try {
+                var raw = localStorage.getItem('soundsible_theme');
+                if (raw) {
+                    var theme = (typeof raw === 'string' && raw !== '') ? (function() { try { return JSON.parse(raw); } catch(e) { return null; } })() : null;
+                    if (theme && ['dark','light','odst'].indexOf(theme) !== -1) {
+                        document.documentElement.setAttribute('data-theme', theme);
+                        var meta = document.getElementById('meta-theme-color');
+                        if (meta) meta.setAttribute('content', theme === 'light' ? '#f5f5f5' : theme === 'odst' ? '#1c2026' : '#0d0d0f');
+                    }
+                }
+            } catch (e) {}
+        })();
+    </script>
+</head>
+<body>
+    <div id="initial-loader" class="fixed inset-0 z-[1000] flex flex-col items-center justify-center transition-opacity duration-700 initial-loader-bg">
+        <div class="relative w-24 h-24 mb-8">
+            <div class="absolute inset-0 border-4 border-[var(--accent)]/10 rounded-full"></div>
+            <div class="absolute inset-0 border-4 border-t-[var(--accent)] rounded-full animate-spin"></div>
+            <img src="assets/icons/logo-mark.svg" class="absolute inset-4 w-16 h-16 opacity-60" alt="Logo">
+        </div>
+        <div class="text-[10px] font-black uppercase tracking-[0.4em] text-[var(--accent)] animate-pulse">Initializing</div>
+    </div>
+
+    <div id="desktop-app" class="hidden">
+            <div id="desktop-body">
+            <div id="desktop-now-playing" class="glass-view desktop-np-bar">
+                <div class="desktop-np-left-cell flex items-center gap-3 min-w-0">
+                    <div class="desktop-np-left">
+                        <div class="desktop-np-cover-wrap flex items-center">
+                            <div id="desktop-np-cover" class="desktop-np-cover-art w-14 h-14 rounded-[var(--radius-omni-xs)] bg-cover bg-center flex-shrink-0 cursor-pointer bg-[var(--bg-card)]"></div>
+                        </div>
+                        <div class="desktop-np-center flex flex-col gap-1 items-stretch justify-center min-h-0">
+                            <div class="desktop-np-title-row flex items-center gap-2 min-w-0">
+                                <div id="desktop-np-title" class="font-bold text-[0.8125rem] leading-snug truncate text-[var(--text-main)] flex-1 min-w-0 tracking-tight"></div>
+                                <button type="button" id="desktop-np-download-btn" class="hidden flex-shrink-0 flex items-center justify-center w-8 h-8 min-w-[32px] min-h-[32px] rounded-[var(--radius-omni-xs)] text-[var(--text-dim)] hover:text-[var(--accent)] hover:bg-[var(--surface-overlay)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" aria-label="Add to download queue"><i class="fas fa-cloud-download-alt text-xs" aria-hidden="true"></i></button>
+                            </div>
+                            <div id="desktop-np-artist" class="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-dim)] truncate opacity-90"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="desktop-np-playback-cell">
+                    <div id="desktop-omni-island" class="desktop-omni-island-inner">
+                        <button type="button" id="desktop-omni-prev" class="desktop-omni-btn-side flex items-center justify-center rounded-full hover:bg-[var(--surface-overlay)] text-[var(--text-main)] transition-colors active:scale-95" aria-label="Previous"><i class="fas fa-backward-step text-xs"></i></button>
+                        <button type="button" id="desktop-omni-play" class="desktop-omni-btn-play flex items-center justify-center rounded-full bg-[var(--accent)] text-[var(--text-on-accent)] shadow-[0_0_20px_color-mix(in_srgb,var(--accent)_35%,transparent)] hover:opacity-92 transition-opacity active:scale-95" aria-label="Play"><i id="desktop-omni-play-icon" class="fas fa-play text-sm"></i></button>
+                        <button type="button" id="desktop-omni-next" class="desktop-omni-btn-side flex items-center justify-center rounded-full hover:bg-[var(--surface-overlay)] text-[var(--text-main)] transition-colors active:scale-95" aria-label="Next"><i class="fas fa-forward-step text-xs"></i></button>
+                    </div>
+                </div>
+                <div id="desktop-np-bubbles" class="desktop-np-right-cell flex items-center justify-end gap-1.5 flex-shrink-0">
+                    <div id="desktop-volume-wrap" class="desktop-volume-control flex items-center flex-shrink-0">
+                        <button type="button" id="desktop-volume-mute-btn" class="desktop-np-icon-btn flex items-center justify-center w-8 h-8 min-w-[32px] min-h-[32px] flex-shrink-0 text-[var(--text-dim)] transition-colors focus:outline-none rounded-full hover:bg-[var(--surface-overlay)] hover:text-[var(--text-main)]" aria-label="Mute">
+                            <i id="desktop-volume-icon" class="fas fa-volume-high text-xs" aria-hidden="true"></i>
+                        </button>
+                        <div class="desktop-volume-slider-shell">
+                            <input type="range" id="desktop-volume" class="desktop-volume-slider" min="0" max="100" value="100" aria-label="Volume" />
+                        </div>
+                    </div>
+                    <button type="button" id="desktop-shuffle-btn" class="desktop-np-icon-btn flex items-center justify-center w-8 h-8 min-w-[32px] min-h-[32px] text-[var(--text-dim)] transition-colors focus:outline-none rounded-full hover:bg-[var(--surface-overlay)] hover:text-[var(--text-main)]" aria-label="Shuffle"><i class="fas fa-shuffle text-xs"></i></button>
+                    <button type="button" id="desktop-repeat-btn" class="desktop-np-icon-btn flex items-center justify-center w-8 h-8 min-w-[32px] min-h-[32px] text-[var(--text-dim)] transition-colors focus:outline-none relative rounded-full hover:bg-[var(--surface-overlay)] hover:text-[var(--text-main)]" aria-label="Repeat"><i class="fas fa-repeat text-xs"></i><span id="desktop-repeat-one-indicator" class="absolute bottom-0.5 right-0.5 text-[7px] font-black text-[var(--accent)] hidden">1</span></button>
+                </div>
+                <div id="desktop-np-timebar-row" class="desktop-np-timebar-row">
+                    <span id="desktop-np-time-current" class="desktop-np-time-label tabular-nums" aria-hidden="true">0:00</span>
+                    <div id="desktop-np-seek-container" class="desktop-np-seek-wrap" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                        <div class="desktop-np-seek-track">
+                            <div id="desktop-np-seek-progress" class="desktop-np-seek-fill"></div>
+                        </div>
+                    </div>
+                    <span id="desktop-np-time-duration" class="desktop-np-time-label desktop-np-time-duration tabular-nums text-right" aria-hidden="true">0:00</span>
+                </div>
+            </div>
+            <div id="desktop-body-row">
+            <aside id="desktop-sidebar" class="glass-view">
+                <button type="button" class="desktop-nav-btn active" data-view="discover"><i class="fas fa-globe mr-3 w-4"></i>Discover</button>
+                <button type="button" class="desktop-nav-btn" data-view="home"><i class="fas fa-box mr-3 w-4"></i>Library</button>
+                <button type="button" class="desktop-nav-btn" data-view="favourites"><i class="fas fa-heart mr-3 w-4"></i>Favourites</button>
+                <button type="button" class="desktop-nav-btn" data-view="playlists"><i class="fas fa-layer-group mr-3 w-4"></i>Playlists</button>
+                <button type="button" class="desktop-nav-btn" data-view="artists"><i class="fas fa-user mr-3 w-4"></i>Artists</button>
+                <button type="button" class="desktop-nav-btn" data-view="podcast"><i class="fas fa-podcast mr-3 w-4"></i>Podcasts</button>
+                <button type="button" class="desktop-nav-btn" data-view="settings"><i class="fas fa-cog mr-3 w-4"></i>Settings</button>
+                <div class="flex items-center justify-between w-full mt-2 gap-2 flex-shrink-0">
+                    <button type="button" id="desktop-queue-btn" class="desktop-queue-status-btn flex items-center gap-2 px-3 py-2 rounded-[var(--radius-omni-xs)] hover:bg-[var(--surface-overlay)] text-[var(--text-dim)] hover:text-[var(--text-main)] font-semibold text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" aria-label="Queue" aria-expanded="false">
+                        <i class="fas fa-list-ul w-4"></i>
+                        <span>Queue</span>
+                        <span id="desktop-queue-count" class="opacity-70">0</span>
+                    </button>
+                    <button type="button" id="desktop-queue-clear-btn" class="text-[10px] font-bold uppercase tracking-wider text-[var(--text-dim)] hover:text-red-400 px-2 py-1 rounded transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" aria-label="Clear queue">Clear</button>
+                </div>
+                <div id="desktop-queue-panel" class="hidden overflow-y-auto min-h-0" style="max-height: 40vh;">
+                    <div id="desktop-queue-tracks" class="space-y-0 py-1"></div>
+                </div>
+                <div id="desktop-downloads-section" class="hidden flex-shrink-0 mt-2">
+                    <div class="flex items-center justify-between w-full mb-1 px-1">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Downloads</span>
+                    </div>
+                    <div id="desktop-downloads-panel" class="overflow-y-auto min-h-0 space-y-0 py-1" style="max-height: 40vh;">
+                        <div id="desktop-downloads-list" class="space-y-0"></div>
+                    </div>
+                </div>
+                <div class="flex-1 min-h-0"></div>
+                <div id="desktop-body-logo" aria-hidden="true"><img src="assets/icons/logo_sin_fondo.png" alt="" draggable="false" /></div>
+            </aside>
+
+            <main id="desktop-main">
+                <!-- Global Desktop Search -->
+                <div id="desktop-global-search-container">
+                    <div class="desktop-global-search-inner">
+                        <i class="fas fa-search text-[var(--placeholder)] text-sm"></i>
+                        <input type="text" id="desktop-global-search-input" placeholder="Search library..." autocomplete="off" spellcheck="false" />
+                        <button id="desktop-global-search-clear" class="hidden text-[var(--placeholder)] hover:text-[var(--text-main)] transition-colors">
+                            <i class="fas fa-times-circle"></i>
+                        </button>
+                        <div id="desktop-discover-odst-inline" class="desktop-discover-odst-inline segmented-pill flex-shrink-0">
+                            <button type="button" id="search-odst-music" aria-pressed="true">Music</button>
+                            <button type="button" id="search-odst-youtube" aria-pressed="false">YouTube</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="desktop-view-home" class="desktop-view min-w-0 w-full overflow-x-hidden">
+                    <div id="desktop-all-songs" class="space-y-1 mt-3"></div>
+                </div>
+                <div id="desktop-view-favourites" class="desktop-view">
+                    <div id="desktop-fav-tracks" class="space-y-1 mt-3"></div>
+                </div>
+                <div id="desktop-view-artists" class="desktop-view">
+                    <div id="desktop-all-artists" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+                </div>
+                <div id="desktop-view-artist-detail" class="desktop-view">
+                    <button type="button" id="desktop-artist-back" class="flex items-center text-[var(--secondary)] font-semibold text-sm mb-5 hover:underline">
+                        <i class="fas fa-chevron-left mr-2"></i>Back
+                    </button>
+                    <div id="desktop-artist-hero" class="flex flex-col sm:flex-row items-center sm:items-end gap-4 mb-7">
+                        <div id="desktop-artist-detail-cover" class="w-28 h-28 sm:w-36 sm:h-36 rounded-[var(--radius-omni-sm)] shadow-lg bg-cover bg-center border border-[var(--glass-border)] bg-[var(--bg-card)] flex-shrink-0"></div>
+                        <h1 id="desktop-artist-detail-title" class="text-3xl md:text-5xl font-bold tracking-tight leading-none text-center sm:text-left">Artist</h1>
+                    </div>
+                    <section class="mb-7">
+                        <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">All tracks</h2>
+                        <div id="desktop-artist-tracks" class="space-y-1"></div>
+                    </section>
+                    <section>
+                        <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">Albums</h2>
+                        <div id="desktop-artist-albums" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+                    </section>
+                </div>
+                <div id="desktop-view-playlists" class="desktop-view flex flex-col min-h-[60vh]">
+                    <div id="desktop-playlist-empty-state" class="flex-1 flex flex-col items-center justify-center text-center min-h-[min(70vh,600px)]">
+                        <i class="fas fa-layer-group text-4xl text-[var(--text-dim)]/50 mb-4"></i>
+                        <p class="text-[var(--text-dim)] font-bold text-sm uppercase tracking-widest mb-2">No playlists yet</p>
+                        <p class="text-[var(--text-dim)] text-xs mb-6">Create one or add tracks from Library.</p>
+                        <button type="button" id="desktop-playlist-create-btn" class="desktop-create-playlist-btn min-h-[44px] px-6 py-3 rounded-xl bg-[var(--accent)] text-[var(--text-on-accent)] font-bold text-sm transition-all hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" onclick="typeof createPlaylistPrompt==='function'&&createPlaylistPrompt()"><i class="fas fa-plus mr-2"></i>Create playlist</button>
+                    </div>
+                    <div id="desktop-playlist-has-list" class="hidden flex flex-col flex-1">
+                        <div class="flex justify-center mb-4 flex-shrink-0">
+                            <button type="button" id="desktop-playlist-create-btn-has" class="desktop-create-playlist-btn min-h-[44px] px-6 py-3 rounded-xl bg-[var(--accent)] text-[var(--text-on-accent)] font-bold text-sm transition-all hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" onclick="typeof createPlaylistPrompt==='function'&&createPlaylistPrompt()"><i class="fas fa-plus mr-2"></i>Create playlist</button>
+                        </div>
+                        <div id="desktop-playlist-list-container" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 content-start"></div>
+                    </div>
+                </div>
+                <div id="desktop-view-playlist-detail" class="desktop-view">
+                    <button type="button" id="desktop-playlist-detail-back" class="flex items-center text-[var(--secondary)] font-semibold text-sm mb-5 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" onclick="typeof DesktopUI!=='undefined'&&DesktopUI.navigateBack&&DesktopUI.navigateBack()">
+                        <i class="fas fa-chevron-left mr-2"></i>Back
+                    </button>
+                    <div id="desktop-playlist-detail-hero" class="flex flex-col sm:flex-row items-center sm:items-end gap-4 mb-7">
+                        <div id="desktop-playlist-detail-cover" class="w-28 h-28 sm:w-36 sm:h-36 rounded-[var(--radius-omni-sm)] shadow-lg bg-cover bg-center border border-[var(--glass-border)] bg-[var(--bg-card)] flex-shrink-0 flex items-center justify-center transition-[box-shadow,transform] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] hover:border-[var(--accent)]/30 active:scale-[0.98]">
+                            <i class="fas fa-layer-group text-4xl text-[var(--text-dim)]/40 hidden" id="desktop-playlist-detail-cover-icon"></i>
+                        </div>
+                        <div class="flex-1 min-w-0 text-center sm:text-left">
+                            <h1 id="desktop-playlist-detail-title" class="text-xl sm:text-3xl font-bold tracking-tight leading-none text-[var(--text-main)] truncate">Playlist</h1>
+                            <p id="desktop-playlist-detail-meta" class="text-[var(--text-dim)] text-sm mt-1 font-mono">0 tracks</p>
+                            <div class="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
+                                <button type="button" id="desktop-playlist-detail-rename-btn" class="px-3 py-1.5 rounded-lg bg-[var(--surface-overlay)] text-[var(--text-main)] text-xs font-bold hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" onclick="typeof renamePlaylistPrompt==='function'&&renamePlaylistPrompt()">Rename</button>
+                                <button type="button" id="desktop-playlist-detail-duplicate-btn" class="px-3 py-1.5 rounded-lg bg-[var(--surface-overlay)] text-[var(--text-main)] text-xs font-bold hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" onclick="typeof duplicatePlaylistPrompt==='function'&&duplicatePlaylistPrompt()">Duplicate</button>
+                                <button type="button" id="desktop-playlist-detail-delete-btn" class="px-3 py-1.5 rounded-lg bg-red-500/15 text-red-400 text-xs font-bold hover:bg-red-500/25 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400" onclick="typeof deletePlaylistConfirm==='function'&&deletePlaylistConfirm()">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="desktop-playlist-detail-tracks" class="space-y-1"></div>
+                </div>
+                <!-- YouTube preview modal (ODST result click from Search) -->
+                <div id="dl-preview-modal" class="fixed inset-0 z-[110] hidden flex-col backdrop-blur-sm" style="background-color: var(--overlay-bg);">
+                    <div class="flex-1 flex items-center justify-center p-4 flex-col">
+                        <div class="relative w-full max-w-2xl">
+                            <div id="dl-preview-iframe-wrap" class="w-full aspect-video rounded-xl overflow-hidden bg-black"></div>
+                            <button type="button" id="dl-preview-close" class="absolute top-3 right-3 z-10 w-12 h-12 flex items-center justify-center rounded-full bg-[var(--surface-overlay)] text-[var(--text-main)] shadow-lg hover:bg-black/40 transition-colors" aria-label="Close"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="flex justify-center pt-3">
+                            <button type="button" id="dl-preview-add-to-queue" class="w-12 h-12 rounded-full bg-[var(--surface-overlay)] hover:bg-[var(--accent)] text-[var(--text-main)] flex items-center justify-center transition-all hidden" aria-label="Add to download queue"><i class="fas fa-cloud-download-alt text-sm"></i></button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Cover choice modal (when premium cover fails) -->
+                <div id="dl-cover-choice-modal" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4 backdrop-blur-[9.6px]" style="background-color: var(--overlay-bg);">
+                    <div class="glass-view rounded-[var(--radius-omni)] w-full max-w-md p-8 border border-[var(--glass-border)] shadow-2xl">
+                        <h3 class="text-xl font-bold mb-2 text-[var(--text-main)]">No Premium Cover Found</h3>
+                        <p class="text-sm text-[var(--text-dim)] mb-6">Choose how to handle the cover art for this track:</p>
+                        <div id="dl-cover-choice-track-info" class="mb-6 p-4 rounded-lg" style="background-color: var(--input-bg);">
+                            <div class="text-sm font-bold" id="dl-cover-choice-title"></div>
+                            <div class="text-xs text-[var(--text-dim)] mt-1" id="dl-cover-choice-artist"></div>
+                        </div>
+                        <div class="space-y-3">
+                            <button id="dl-cover-choice-yt" class="w-full flex items-center space-x-3 p-4 bg-[var(--surface-overlay)] hover:opacity-80 rounded-lg transition-colors text-left">
+                                <i class="fas fa-image text-[var(--accent)]"></i>
+                                <div>
+                                    <div class="font-bold text-sm text-[var(--text-main)]">Use YouTube Cover</div>
+                                    <div class="text-xs text-[var(--text-dim)]">Use the YouTube thumbnail</div>
+                                </div>
+                            </button>
+                            <button id="dl-cover-choice-library" class="w-full flex items-center space-x-3 p-4 bg-[var(--surface-overlay)] hover:opacity-80 rounded-lg transition-colors text-left">
+                                <i class="fas fa-folder-open text-purple-400"></i>
+                                <div>
+                                    <div class="font-bold text-sm text-[var(--text-main)]">Choose from Library</div>
+                                    <div class="text-xs text-[var(--text-dim)]">Use cover from another song</div>
+                                </div>
+                            </button>
+                            <button id="dl-cover-choice-upload" class="w-full flex items-center space-x-3 p-4 bg-[var(--surface-overlay)] hover:opacity-80 rounded-lg transition-colors text-left">
+                                <i class="fas fa-upload text-blue-400"></i>
+                                <div>
+                                    <div class="font-bold text-sm text-[var(--text-main)]">Upload File</div>
+                                    <div class="text-xs text-[var(--text-dim)]">Upload your own cover image</div>
+                                </div>
+                            </button>
+                            <button id="dl-cover-choice-none" class="w-full flex items-center space-x-3 p-4 bg-[var(--surface-overlay)] hover:opacity-80 rounded-lg transition-colors text-left">
+                                <i class="fas fa-ban text-[var(--text-dim)]"></i>
+                                <div>
+                                    <div class="font-bold text-sm text-[var(--text-main)]">No Cover</div>
+                                    <div class="text-xs text-[var(--text-dim)]">Leave without cover art</div>
+                                </div>
+                            </button>
+                        </div>
+                        <button id="dl-cover-choice-close" class="w-full mt-6 py-3 text-[var(--text-dim)] font-bold hover:text-[var(--text-main)] transition-colors">Cancel</button>
+                    </div>
+                </div>
+                <div id="desktop-view-podcast" class="desktop-view">
+                    <div class="flex flex-col h-full w-full overflow-hidden p-6">
+                        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                            <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)]">Podcasts</h1>
+                            <span class="inline-flex items-center text-[9px] font-black uppercase tracking-[0.15em] text-[var(--accent)] bg-[var(--accent)]/10 px-3 py-1 rounded-full border border-[var(--accent)]/20" role="status">Work in progress</span>
+                        </div>
+                        <p class="text-sm text-[var(--text-dim)] mt-4">Listen to your podcasts.</p>
+                    </div>
+                </div>
+                <div id="desktop-view-discover" class="desktop-view active flex flex-col flex-1 min-h-0 w-full overflow-y-auto custom-scrollbar">
+                    <div id="desktop-discover-search-results" class="space-y-2 h-full min-h-0 px-2 pb-4"></div>
+                </div>
+                <div id="desktop-view-settings" class="desktop-view min-w-0 w-full overflow-x-hidden">
+                    <div class="w-full max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-10">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- Appearance -->
+                            <div class="glass-view rounded-[var(--radius-omni)] p-5 sm:p-6 border border-[var(--glass-border)] shadow-[var(--shadow-omni)]">
+                                <div class="flex items-start gap-3 mb-4">
+                                    <div class="w-10 h-10 rounded-[var(--radius-omni-xs)] bg-[var(--surface-overlay)] border border-[var(--glass-border)] flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                                        <i class="fas fa-palette text-[var(--accent)] text-sm"></i>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--accent)]">Look &amp; feel</p>
+                                        <h2 class="text-base font-bold text-[var(--text-main)] tracking-tight mt-1">Appearance</h2>
+                                    </div>
+                                </div>
+                                <div class="divide-y divide-[var(--glass-border)] border-t border-[var(--glass-border)]">
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between py-4 min-h-[44px]">
+                                        <div class="min-w-0">
+                                            <div class="text-sm font-semibold text-[var(--text-main)]">Theme</div>
+                                            <div class="text-xs text-[var(--text-dim)] mt-0.5">Color scheme</div>
+                                        </div>
+                                        <select id="desktop-settings-theme-select" class="input-theme w-full sm:w-auto sm:min-w-[160px] rounded-[var(--radius-omni-xs)] px-4 py-3 text-sm font-medium text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors" aria-label="Theme">
+                                            <option value="dark">Dark</option>
+                                            <option value="light">Light</option>
+                                            <option value="odst">ODST</option>
+                                        </select>
+                                    </div>
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between py-4 min-h-[44px]">
+                                        <div class="min-w-0">
+                                            <div class="text-sm font-semibold text-[var(--text-main)]">App icon</div>
+                                            <div class="text-xs text-[var(--text-dim)] mt-0.5">In-app artwork</div>
+                                        </div>
+                                        <select id="desktop-settings-app-icon-select" class="input-theme w-full sm:w-auto sm:min-w-[160px] rounded-[var(--radius-omni-xs)] px-4 py-3 text-sm font-medium text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors" aria-label="App icon">
+                                            <option value="default">Default</option>
+                                            <option value="alt">Secondary</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Library order -->
+                            <div class="glass-view rounded-[var(--radius-omni)] p-5 sm:p-6 border border-[var(--glass-border)] shadow-[var(--shadow-omni)]">
+                                <div class="flex items-start gap-3 mb-4">
+                                    <div class="w-10 h-10 rounded-[var(--radius-omni-xs)] bg-[var(--surface-overlay)] border border-[var(--glass-border)] flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                                        <i class="fas fa-arrow-down-wide-short text-[var(--accent)] text-sm"></i>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--accent)]">Library</p>
+                                        <h2 class="text-base font-bold text-[var(--text-main)] tracking-tight mt-1">Sorting</h2>
+                                        <p class="text-xs text-[var(--text-dim)] mt-1">Main list order on home.</p>
+                                    </div>
+                                </div>
+                                <div class="border-t border-[var(--glass-border)] pt-4">
+                                    <label class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)] block mb-2">Order by</label>
+                                    <select id="desktop-settings-library-order" class="input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-3 text-sm font-medium text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors" aria-label="Library sort order">
+                                        <option value="date_added">Date added</option>
+                                        <option value="alphabetical">Alphabetical</option>
+                                        <option value="favorites_first">Favorites first</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Sync -->
+                            <div class="glass-view rounded-[var(--radius-omni)] p-5 sm:p-6 border border-[var(--glass-border)] shadow-[var(--shadow-omni)]">
+                                <div class="flex items-start gap-3 mb-4">
+                                    <div class="w-10 h-10 rounded-[var(--radius-omni-xs)] bg-[var(--surface-overlay)] border border-[var(--glass-border)] flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                                        <i class="fas fa-link text-[var(--accent)] text-sm"></i>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--accent)]">Station</p>
+                                        <h2 class="text-base font-bold text-[var(--text-main)] tracking-tight mt-1">Sync &amp; connection</h2>
+                                    </div>
+                                </div>
+                                <div class="rounded-[var(--radius-omni-xs)] bg-[var(--surface-overlay)] border border-[var(--glass-border)] p-4 space-y-3 mb-4">
+                                    <textarea id="desktop-sync-token-input" rows="3" class="input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-3 text-sm font-mono text-[var(--secondary)] focus:outline-none focus:border-[var(--accent)] transition-colors" placeholder="Paste sync token…" aria-label="Sync token"></textarea>
+                                    <button type="button" id="desktop-import-token-btn" class="w-full bg-[var(--secondary)] hover:opacity-90 text-[var(--text-on-accent)] font-black py-3 rounded-[var(--radius-omni-xs)] text-sm tracking-wide transition-all active:scale-[0.99]">Import token</button>
+                                </div>
+                                <div class="divide-y divide-[var(--glass-border)] border-t border-[var(--glass-border)]">
+                                    <div class="flex flex-wrap items-center justify-between gap-2 py-3 min-h-[44px]">
+                                        <span class="text-sm text-[var(--text-dim)]">Engine status</span>
+                                        <span id="desktop-server-status" class="text-sm font-bold text-green-500">—</span>
+                                    </div>
+                                    <div class="flex flex-wrap items-center justify-between gap-2 py-3 min-h-[44px]">
+                                        <span class="text-sm text-[var(--text-dim)]">Active host</span>
+                                        <span id="desktop-active-host-display" class="font-mono text-xs text-[var(--secondary)] text-right break-all max-w-[55%]">—</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Storage -->
+                            <div class="glass-view rounded-[var(--radius-omni)] p-5 sm:p-6 border border-[var(--glass-border)] shadow-[var(--shadow-omni)]">
+                                <div class="flex items-start gap-3 mb-4">
+                                    <div class="w-10 h-10 rounded-[var(--radius-omni-xs)] bg-[var(--surface-overlay)] border border-[var(--glass-border)] flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                                        <i class="fas fa-hard-drive text-[var(--accent)] text-sm"></i>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--accent)]">Files</p>
+                                        <h2 class="text-base font-bold text-[var(--text-main)] tracking-tight mt-1">Storage</h2>
+                                        <p class="text-xs text-[var(--text-dim)] mt-1">Library path and downloads.</p>
+                                    </div>
+                                </div>
+                                <div class="border-t border-[var(--glass-border)] pt-4 flex flex-col sm:flex-row gap-2 sm:gap-3">
+                                    <input type="text" id="dl-conf-path" class="input-theme flex-1 min-w-0 rounded-[var(--radius-omni-xs)] px-4 py-3 text-sm text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors" placeholder="/path/to/music" aria-label="Storage path">
+                                    <button type="button" id="dl-save-conf-btn" class="px-5 py-3 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)] text-[var(--text-on-accent)] hover:opacity-90 transition-opacity shrink-0">Save</button>
+                                </div>
+                            </div>
+
+                            <!-- YouTube engine -->
+                            <div class="glass-view rounded-[var(--radius-omni)] p-5 sm:p-6 border border-[var(--glass-border)] shadow-[var(--shadow-omni)] lg:col-span-2">
+                                <div class="flex flex-col md:flex-row md:items-center gap-4 md:gap-8">
+                                    <div class="flex items-start gap-3 md:flex-1">
+                                        <div class="w-10 h-10 rounded-[var(--radius-omni-xs)] bg-[var(--surface-overlay)] border border-[var(--glass-border)] flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                                            <i class="fab fa-youtube text-[var(--accent)] text-base"></i>
+                                        </div>
+                                        <div class="min-w-0">
+                                            <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--accent)]">Downloads</p>
+                                            <h2 class="text-base font-bold text-[var(--text-main)] tracking-tight mt-1">YouTube engine</h2>
+                                            <p class="text-xs text-[var(--text-dim)] mt-1">yt-dlp updates on startup.</p>
+                                        </div>
+                                    </div>
+                                    <div class="md:flex-shrink-0 md:max-w-md w-full border-t md:border-t-0 md:border-l border-[var(--glass-border)] pt-4 md:pt-0 md:pl-8">
+                                        <label class="flex items-start gap-3 cursor-pointer group min-h-[44px]">
+                                            <input type="checkbox" id="desktop-settings-ytdlp-auto-update" class="mt-1 rounded border-[var(--input-border)] text-[var(--accent)] focus:ring-[var(--accent)] shrink-0">
+                                            <span class="text-sm font-medium text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">Automatically update yt-dlp on startup</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Library maintenance -->
+                            <div class="glass-view rounded-[var(--radius-omni)] p-5 sm:p-6 border border-[var(--glass-border)] shadow-[var(--shadow-omni)] lg:col-span-2">
+                                <div class="flex items-start gap-3 mb-4">
+                                    <div class="w-10 h-10 rounded-[var(--radius-omni-xs)] bg-[var(--surface-overlay)] border border-[var(--glass-border)] flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                                        <i class="fas fa-database text-[var(--accent)] text-sm"></i>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--accent)]">Maintenance</p>
+                                        <h2 class="text-base font-bold text-[var(--text-main)] tracking-tight mt-1">Library</h2>
+                                        <p class="text-xs text-[var(--text-dim)] mt-1">Cleanup and destructive actions.</p>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 border-t border-[var(--glass-border)] pt-5">
+                                    <div class="rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--surface-overlay)]/50 p-4">
+                                        <p class="text-sm font-semibold text-[var(--text-main)]">Purge missing tracks</p>
+                                        <p class="text-xs text-[var(--text-dim)] mt-2 leading-relaxed">Remove entries whose files no longer exist on disk (and cloud, if configured).</p>
+                                        <button type="button" id="desktop-settings-purge-missing-btn" class="mt-4 w-full px-4 py-3 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--surface-overlay)] text-[var(--text-main)] border border-[var(--glass-border)] hover:bg-[var(--bg-card)] transition-colors">Purge missing tracks</button>
+                                    </div>
+                                    <div class="rounded-[var(--radius-omni-xs)] border border-red-500/30 bg-red-500/[0.06] p-4">
+                                        <p class="text-[10px] font-black uppercase tracking-[0.2em] text-red-400">Danger zone</p>
+                                        <p class="text-sm text-[var(--text-dim)] mt-2 leading-relaxed">Wipe removes all tracks, playlists, and library data. Cannot be undone.</p>
+                                        <button type="button" id="desktop-settings-wipe-library-btn" class="mt-4 w-full px-4 py-3 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-red-500/15 text-red-400 border border-red-500/40 hover:bg-red-500/25 transition-colors">Wipe library</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+            </div>
+        </div>
+    </div>
+
+    <!-- Wipe library confirmation modal (desktop) -->
+    <div id="wipe-library-modal" class="fixed inset-0 z-[265] hidden flex items-center justify-center p-4" style="background-color: var(--overlay-bg);">
+        <div id="wipe-library-modal-backdrop" class="absolute inset-0" style="backdrop-filter: blur(4px);"></div>
+        <div class="glass-view rounded-[var(--radius-omni)] w-full max-w-md p-6 border border-[var(--glass-border)] shadow-2xl">
+            <h3 class="text-lg font-bold tracking-tight mb-2 text-[var(--text-main)]">Wipe library</h3>
+            <p class="text-sm text-[var(--text-dim)] mb-4">This will permanently delete all tracks, playlists, and library data from this device and cloud storage. This action cannot be undone.</p>
+            <p class="text-xs text-[var(--text-dim)] mb-2">Type <strong class="text-[var(--text-main)]">CONFIRM</strong> or <strong class="text-[var(--text-main)]">confirm</strong> to proceed:</p>
+            <input type="text" id="wipe-library-confirm-input" class="input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-2.5 text-sm mb-4" placeholder="Type CONFIRM or confirm" autocomplete="off">
+            <p id="wipe-library-error" class="text-xs text-red-400 mb-2 hidden"></p>
+            <div class="flex gap-3 justify-end">
+                <button type="button" id="wipe-library-cancel" class="px-4 py-2.5 rounded-[var(--radius-omni-xs)] text-sm font-bold text-[var(--text-dim)] hover:text-[var(--text-main)] transition-colors">Cancel</button>
+                <button type="button" id="wipe-library-submit" class="px-4 py-2.5 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>Wipe library</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Download queue FAB + popover: fixed to viewport, above all app content -->
+    <div id="desktop-dl-queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[5000] flex flex-col items-end pointer-events-none hidden">
+        <button id="desktop-dl-queue-fab" type="button" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)] relative">
+            <i class="fas fa-list-ul"></i>
+            <div id="desktop-dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)]">0</div>
+        </button>
+        <div id="desktop-dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
+            <div class="p-5">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Download queue</h3>
+                    <button type="button" id="desktop-dl-clear-queue-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-1 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
+                    <button type="button" id="desktop-dl-submit-download-btn" class="w-9 h-9 rounded-full bg-[var(--accent)] text-[var(--text-on-accent)] flex items-center justify-center shadow-lg hover:opacity-90 active:scale-90 pointer-events-auto transition-all duration-300" aria-label="Start download"><i class="fas fa-download text-xs"></i></button>
+                </div>
+                <div id="desktop-dl-download-queue-list" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Full-resolution cover overlay (hover-to-play) -->
+    <div id="full-cover-overlay" class="fixed inset-0 z-[130] hidden flex items-center justify-center p-4 transition-opacity duration-300 ease-out" style="background-color: var(--overlay-bg);">
+        <div id="full-cover-overlay-backdrop" class="absolute inset-0" aria-hidden="true"></div>
+        <div id="full-cover-overlay-content" class="relative flex flex-col items-center max-w-[min(90vw,400px)] w-full" onclick="event.stopPropagation()">
+            <div id="full-cover-image" class="w-full aspect-square max-w-[min(90vw,400px)] rounded-[var(--radius-omni)] bg-cover bg-center border border-[var(--glass-border)] shadow-[0_40px_80px_rgba(0,0,0,0.8)]" role="img" aria-label="Album art"></div>
+            <button type="button" id="full-cover-close-bottom" class="mt-4 py-2.5 min-h-[44px] text-[var(--text-dim)] hover:text-[var(--text-main)] font-bold text-xs uppercase tracking-widest transition-colors focus:outline-none bg-transparent border-0" aria-label="Close">Close</button>
+        </div>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[400] flex flex-col items-center gap-2 pointer-events-none max-w-xs"></div>
+
+    <div id="desktop-context-menu" class="hidden" role="menu" aria-label="Track actions">
+        <!-- Track actions -->
+        <button type="button" id="desktop-context-fav" class="desktop-context-item" role="menuitem"><i class="fas fa-heart text-[var(--accent)]"></i><span id="desktop-context-fav-text">Add to Favourites</span></button>
+        <button type="button" id="desktop-context-queue" class="desktop-context-item" role="menuitem"><i class="fas fa-list-ul text-[var(--secondary)]"></i><span id="desktop-context-queue-text">Add to Queue</span></button>
+        <button type="button" id="desktop-context-add-to-playlist" class="desktop-context-item" role="menuitem"><i class="fas fa-layer-group text-[var(--secondary)]"></i><span>Add to playlist</span></button>
+        <button type="button" id="desktop-context-edit-metadata" class="desktop-context-item" role="menuitem"><i class="fas fa-pen-to-square text-purple-400"></i><span>Edit Metadata</span></button>
+        <button type="button" id="desktop-context-share" class="desktop-context-item hidden" role="menuitem"><i class="fas fa-share-nodes text-[var(--secondary)]"></i><span>Share YouTube link</span></button>
+        <button type="button" id="desktop-context-remove-from-playlist" class="desktop-context-item delete-item hidden" role="menuitem"><i class="fas fa-eject"></i><span>Remove from playlist</span></button>
+        <button type="button" id="desktop-context-delete" class="desktop-context-item delete-item" role="menuitem"><i class="fas fa-trash-can"></i><span>Delete Track</span></button>
+        <!-- Playlist actions (playlist grid right-click) -->
+        <button type="button" id="desktop-context-play-playlist" class="desktop-context-item hidden" role="menuitem"><i class="fas fa-play text-[var(--secondary)]"></i><span>Reproduce playlist</span></button>
+        <button type="button" id="desktop-context-delete-playlist" class="desktop-context-item delete-item hidden" role="menuitem"><i class="fas fa-trash-can"></i><span>Delete playlist</span></button>
+    </div>
+
+    <div id="add-to-playlist-picker" class="fixed inset-0 z-[270] hidden flex items-center justify-center p-4" style="background-color: var(--overlay-bg);">
+        <div id="add-to-playlist-picker-backdrop" class="absolute inset-0" style="backdrop-filter: blur(4px);"></div>
+        <div class="add-to-playlist-picker-sheet glass-view rounded-2xl border border-[var(--glass-border)] shadow-2xl w-full max-w-sm overflow-hidden relative">
+            <div class="p-4 border-b border-[var(--glass-border)]">
+                <h3 class="text-sm font-black uppercase tracking-widest text-[var(--text-dim)]">Add to playlist</h3>
+            </div>
+            <div id="add-to-playlist-picker-list" class="max-h-64 overflow-y-auto p-2 space-y-1 custom-scrollbar"></div>
+            <button type="button" id="add-to-playlist-picker-close" class="w-full p-3 text-sm font-bold text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] transition-colors border-t border-[var(--glass-border)]">Cancel</button>
+        </div>
+    </div>
+
+    <div id="playlist-cover-picker" class="fixed inset-0 z-[1200] hidden flex items-center justify-center p-4" style="background-color: var(--overlay-bg);">
+        <div id="playlist-cover-picker-backdrop" class="absolute inset-0 z-0" aria-hidden="true"></div>
+        <div class="glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl w-full max-w-lg overflow-hidden relative z-10 max-h-[85vh] flex flex-col" style="box-shadow: var(--shadow-omni);">
+            <div class="p-4 border-b border-[var(--glass-border)] shrink-0">
+                <h3 id="playlist-cover-picker-heading" class="text-xs font-black uppercase tracking-widest text-[var(--text-dim)]">Playlist cover</h3>
+            </div>
+            <div class="p-3 shrink-0 border-b border-[var(--glass-border)]">
+                <button type="button" id="playlist-cover-picker-default" class="w-full py-3 px-4 rounded-[var(--radius-omni-xs)] text-left text-sm font-bold text-[var(--accent)] bg-[var(--accent)]/10 border border-[var(--accent)]/25 hover:bg-[var(--accent)]/15 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]">Use first track (default)</button>
+            </div>
+            <div id="playlist-cover-picker-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-2 p-3 overflow-y-auto custom-scrollbar flex-1 min-h-0"></div>
+            <button type="button" id="playlist-cover-picker-close" class="w-full p-3 text-sm font-bold text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] transition-colors border-t border-[var(--glass-border)] shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]">Cancel</button>
+        </div>
+    </div>
+
+    <div id="desktop-action-menu" class="fixed inset-0 z-[250] hidden" style="background: var(--overlay-bg);">
+        <div id="desktop-action-menu-overlay" class="absolute inset-0" style="backdrop-filter: blur(4px);"></div>
+        <div id="desktop-action-menu-sheet" class="absolute bottom-0 left-0 right-0 max-w-md mx-auto rounded-t-2xl p-6 border-t border-[var(--glass-border)] glass-view">
+            <div class="flex items-center gap-4 mb-4">
+                <div id="desktop-action-track-art" class="w-16 h-16 rounded-xl bg-cover bg-center flex-shrink-0" style="background-image: url('assets/icons/icon-512.png');"></div>
+                <div class="flex-1 min-w-0">
+                    <div id="desktop-action-track-title" class="font-bold truncate text-[var(--text-main)]">—</div>
+                    <div id="desktop-action-track-artist" class="text-sm text-[var(--text-dim)] truncate">—</div>
+                </div>
+            </div>
+            <div class="space-y-1">
+                <button type="button" id="desktop-action-fav" class="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--surface-overlay)] text-left font-bold text-sm text-[var(--text-main)]"><i class="fas fa-heart text-[var(--accent)] w-4"></i><span id="desktop-action-fav-text">Favourite</span></button>
+                <button type="button" id="desktop-action-queue" class="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--surface-overlay)] text-left font-bold text-sm text-[var(--text-main)]"><i class="fas fa-list-ul text-[var(--secondary)] w-4"></i><span id="desktop-action-queue-text">Add to Queue</span></button>
+                <button type="button" id="desktop-action-add-to-playlist" class="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--surface-overlay)] text-left font-bold text-sm text-[var(--text-main)]"><i class="fas fa-layer-group text-[var(--secondary)] w-4"></i><span>Add to playlist</span></button>
+                <button type="button" id="desktop-action-edit-metadata" class="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--surface-overlay)] text-left font-bold text-sm text-[var(--text-main)]"><i class="fas fa-pen-to-square text-purple-400 w-4"></i><span>Edit Metadata</span></button>
+                <button type="button" id="desktop-action-share" class="hidden w-full flex items-center gap-4 p-3 rounded-xl hover:bg-[var(--surface-overlay)] text-left font-bold text-sm text-[var(--text-main)]"><i class="fas fa-share-nodes text-[var(--secondary)] w-4"></i><span>Share YouTube link</span></button>
+                <button type="button" id="desktop-action-remove-from-playlist" class="hidden w-full flex items-center gap-4 p-3 rounded-xl hover:bg-red-500/10 text-red-400 text-left font-bold text-sm"><i class="fas fa-eject w-4"></i><span>Remove from playlist</span></button>
+                <button type="button" id="desktop-action-delete" class="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-red-500/10 text-red-400 text-left font-bold text-sm"><i class="fas fa-trash-can w-4"></i><span>Delete Track</span></button>
+            </div>
+            <button type="button" id="desktop-action-close" class="w-full mt-4 py-3 text-[var(--text-dim)] font-bold hover:text-[var(--text-main)]">Close</button>
+        </div>
+    </div>
+
+    <!-- Metadata Editor (same IDs as mobile for shared behaviour) -->
+    <div id="metadata-editor" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4 backdrop-blur-[9.6px] transition-all duration-150 ease-out" style="background-color: var(--overlay-bg);">
+        <div id="metadata-editor-content" class="glass-view rounded-[var(--radius-omni)] w-full max-w-lg p-8 border border-[var(--glass-border)] shadow-2xl transition-all transform scale-95 opacity-0" style="box-shadow: var(--shadow-omni); transition-duration: 600ms; transition-timing-function: cubic-bezier(0.19, 1, 0.22, 1);">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-2xl font-black tracking-tighter text-[var(--text-main)]">Edit Metadata</h2>
+                <div class="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--accent)] bg-[var(--accent)]/10 px-3 py-1 rounded-full border border-[var(--accent)]/20 font-mono">Surgical Mode</div>
+            </div>
+            <div class="space-y-6">
+                <div class="flex flex-col items-center space-y-4">
+                    <div class="relative group">
+                        <img id="edit-cover-preview" src="assets/icons/icon-512.png" class="w-40 h-40 rounded-[var(--radius-omni-sm)] shadow-2xl object-cover border border-[var(--glass-border)]" alt="Art">
+                        <div class="absolute inset-0 rounded-[var(--radius-omni-sm)] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none" style="background-color: var(--overlay-bg);">
+                            <i class="fas fa-camera text-2xl text-[var(--text-main)]"></i>
+                        </div>
+                    </div>
+                    <div class="flex space-x-3 w-full">
+                        <button id="edit-upload-btn" class="flex-1 bg-[var(--surface-overlay)] active:opacity-80 py-3 rounded-[var(--radius-omni-xs)] text-xs font-bold transition-all focus:outline-none border border-[var(--input-border)] active:scale-95 text-[var(--text-main)]">
+                            <i class="fas fa-upload mr-2 text-[var(--secondary)]"></i>Upload
+                        </button>
+                    </div>
+                    <p id="edit-raw-youtube-note" class="hidden text-[10px] text-[var(--text-dim)] mt-1"></p>
+                    <input type="file" id="edit-file-input" class="hidden" accept="image/*">
+                </div>
+                <div class="space-y-4">
+                    <div class="group">
+                        <label class="text-[10px] text-[var(--text-dim)] font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors font-mono">Track Title</label>
+                        <input type="text" id="edit-title" class="input-theme w-full rounded-[var(--radius-omni-xs)] px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] transition-all font-medium text-[var(--text-main)]">
+                    </div>
+                    <div class="group">
+                        <label class="text-[10px] text-[var(--text-dim)] font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors font-mono">Artist Name</label>
+                        <input type="text" id="edit-artist" class="input-theme w-full rounded-[var(--radius-omni-xs)] px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] transition-all font-medium text-[var(--text-main)]">
+                    </div>
+                    <div class="group">
+                        <label class="text-[10px] text-[var(--text-dim)] font-black uppercase tracking-widest mb-1.5 ml-1 block group-focus-within:text-[var(--accent)] transition-colors font-mono">Album Title</label>
+                        <input type="text" id="edit-album" class="input-theme w-full rounded-[var(--radius-omni-xs)] px-5 py-4 text-sm focus:outline-none focus:border-[var(--accent)] transition-all font-medium text-[var(--text-main)]">
+                    </div>
+                </div>
+                <div id="edit-status" class="text-[10px] font-bold text-center min-h-[1rem] uppercase tracking-widest text-[var(--accent)] opacity-60 font-mono"></div>
+                <div class="flex space-x-4 pt-4">
+                    <button type="button" onclick="UI.hideMetadataEditor()" class="flex-1 py-4 text-[var(--text-dim)] font-black uppercase tracking-widest text-[10px] hover:text-[var(--text-main)] transition-colors focus:outline-none font-mono">Cancel</button>
+                    <button type="button" id="edit-save-btn" class="flex-[2] bg-[var(--accent)] text-[var(--text-on-accent)] py-4 rounded-[var(--radius-omni-xs)] font-black uppercase tracking-widest text-xs shadow-lg shadow-[var(--accent)]/20 transition-all active:scale-95 active:brightness-110 focus:outline-none">
+                        Save & Sync
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

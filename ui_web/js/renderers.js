@@ -1,0 +1,721 @@
+/**
+ * Shared renderers: container-agnostic render functions for song lists, queue, artists.
+ * Used by both mobile (app.js) and desktop (app_desktop.js).
+ */
+import { store } from './store.js';
+import { Resolver } from './resolver.js';
+import { resolvePlaylistCoverTrack } from './shared.js';
+import { trackTrustBadgeHtml } from './track_badge.js';
+import { attachProgressiveChunks } from './virtual_list.js';
+
+/** Escape HTML to prevent XSS. */
+export function esc(str) {
+    if (!str) return "";
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+export function formatTime(seconds) {
+    if (seconds == null || isNaN(Number(seconds))) return '0:00';
+    const n = Number(seconds);
+    const m = Math.floor(n / 60);
+    const s = Math.floor(n % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+/** Escape URL for use in CSS background-image url(). */
+function escapeCssUrl(url) {
+    if (!url) return '';
+    return String(url).replace(/"/g, '%22').replace(/'/g, '%27');
+}
+
+/** Play overlay for desktop: glass circle with play icon, shown on hover. No pointer-events so wrapper receives click. */
+function desktopPlayOverlayHtml() {
+    return `<div class="desktop-play-overlay absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none"><span class="desktop-play-overlay-circle w-10 h-10 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm border border-white/10"><i class="fas fa-play text-white text-sm ml-0.5"></i></span></div>`;
+}
+
+/** Smaller overlay for queue/list row covers (w-12 h-12). Exported for search.js desktop rows. */
+export function desktopPlayOverlaySmallHtml() {
+    return `<div class="desktop-play-overlay absolute inset-0 flex items-center justify-center rounded-[var(--radius-list-cover)] opacity-0 group-hover:opacity-100 pointer-events-none"><span class="desktop-play-overlay-circle w-7 h-7 rounded-full bg-black/45 flex items-center justify-center backdrop-blur-sm border border-white/10"><i class="fas fa-play text-white text-[9px] ml-0.5"></i></span></div>`;
+}
+
+function getTrackRenderState(track, options = {}) {
+    const state = store.state;
+    const activeId = options.activeTrackId ?? (state.currentTrack ? state.currentTrack.id : null);
+    const favIds = options.favIds ?? (state.favorites || []);
+    const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
+    const desktop = options.desktopClickBehavior === true;
+    const isPlaying = options.isPlaying ?? (desktop ? store.state.isPlaying : true);
+    const isActive = track.id === activeId;
+    const showPlayingIndicator = desktop ? (isActive && isPlaying) : isActive;
+    const isFav = favIds.includes(track.id);
+    const coverUrl = getCoverUrl(track);
+    const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+    return { desktop, isActive, showPlayingIndicator, isFav, coverStyle };
+}
+
+/**
+ * Shared library search: filter tracks by query (title, artist, album).
+ * Same engine used by Library and Search tab — single source of truth.
+ */
+export function filterLibraryByQuery(library, query) {
+    const lib = library ?? [];
+    const q = (query ?? '').trim().toLowerCase();
+    if (!q) return lib;
+    return lib.filter((t) =>
+        (t.title && t.title.toLowerCase().includes(q)) ||
+        (t.artist && t.artist.toLowerCase().includes(q)) ||
+        (t.album && t.album.toLowerCase().includes(q))
+    );
+}
+
+export function sortLibraryTracks(tracks, order, favorites) {
+    if (!tracks.length) return tracks;
+    const favoritesSet = new Set(favorites || []);
+    const alphaCmp = (a, b) => {
+        const tc = (a.title || '').toLowerCase().localeCompare((b.title || '').toLowerCase());
+        if (tc !== 0) return tc;
+        return (a.artist || '').toLowerCase().localeCompare((b.artist || '').toLowerCase());
+    };
+    if (order === 'date_added') {
+        return [...tracks].reverse();
+    }
+    if (order === 'favorites_first') {
+        const fav = (favorites || []).map(id => tracks.find(t => t.id === id)).filter(Boolean);
+        const rest = tracks.filter(t => !favoritesSet.has(t.id));
+        return [...fav, ...rest];
+    }
+    if (order === 'alphabetical') {
+        return [...tracks].sort(alphaCmp);
+    }
+    return [...tracks];
+}
+
+/** Split "A, B", "A feat. B" etc. into trimmed unique names. */
+export function parseArtistNames(artistString) {
+    if (!artistString || typeof artistString !== 'string') return [];
+    const raw = artistString.trim();
+    if (!raw) return [];
+    const parts = raw.split(/\s*,\s*|\s+feat\.?\s+|\s+ft\.?\s+|\s+and\s+|\s+&\s+|\s+\+\s+|\s+x\s+/i)
+        .map(s => s.trim())
+        .filter(Boolean);
+    return [...new Set(parts)];
+}
+
+export function normalizeArtistName(name) {
+    return (name || '').trim().toLowerCase();
+}
+
+export function getArtistTracks(artistName, library) {
+    return (library || []).filter(t => {
+        const names = parseArtistNames(t.album_artist || t.artist);
+        return names.includes(artistName);
+    });
+}
+
+export function getArtistAlbums(artistName, library) {
+    const tracks = getArtistTracks(artistName, library);
+    const byAlbum = {};
+    tracks.forEach(t => {
+        const album = t.album || 'Unknown Album';
+        if (!byAlbum[album]) byAlbum[album] = { tracks: [], coverTrack: t };
+        byAlbum[album].tracks.push(t);
+        if (t.track_number != null && (byAlbum[album].coverTrack.track_number == null || t.track_number < byAlbum[album].coverTrack.track_number)) {
+            byAlbum[album].coverTrack = t;
+        }
+    });
+    return Object.entries(byAlbum)
+        .map(([album, { tracks: albumTracks, coverTrack }]) => ({
+            album,
+            tracks: albumTracks.sort((a, b) => (a.track_number ?? 999) - (b.track_number ?? 999)),
+            coverTrack
+        }))
+        .sort((a, b) => a.album.localeCompare(b.album));
+}
+
+/** Same aggregation as renderArtistList: unique artist names from library. */
+export function getArtistNamesFromLibrary(library) {
+    const byArtist = {};
+    (library || []).forEach(t => {
+        const raw = t.album_artist || t.artist;
+        const names = parseArtistNames(raw);
+        names.forEach(name => {
+            if (!byArtist[name]) byArtist[name] = { track: t };
+        });
+    });
+    return Object.keys(byArtist).sort((a, b) => a.localeCompare(b));
+}
+
+/** Artist names that match the query (name contains query, case-insensitive). */
+export function filterArtistsByQuery(library, query) {
+    const q = (query ?? '').trim().toLowerCase();
+    if (!q) return getArtistNamesFromLibrary(library);
+    const names = getArtistNamesFromLibrary(library);
+    return names.filter(name => name.toLowerCase().includes(q));
+}
+
+/** Returns { name, track } for each artist (one representative track for cover). Used by Library mixed search. */
+export function getArtistsWithRepresentativeTrack(library) {
+    const byArtist = {};
+    (library || []).forEach(t => {
+        const raw = t.album_artist || t.artist;
+        const names = parseArtistNames(raw);
+        names.forEach(name => {
+            if (!byArtist[name]) byArtist[name] = t;
+            else if (t.id < byArtist[name].id) byArtist[name] = t;
+        });
+    });
+    return Object.entries(byArtist).map(([name, track]) => ({ name, track }));
+}
+
+/** One compact artist row for Library mixed search (same row height as song row). Click → showArtistDetail(name). */
+export function buildHomeArtistRowHtml(artistName, track, options = {}) {
+    const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
+    const coverUrl = getCoverUrl(track);
+    const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+    const safeName = (artistName || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return `
+            <div class="relative overflow-hidden rounded-[var(--radius-omni-xs)] mb-1 group">
+                <div class="home-mixed-artist-row flex items-center py-2 pl-2 pr-3 rounded-[var(--radius-omni-xs)] border border-transparent hover:bg-[var(--surface-overlay)] transition-colors cursor-pointer" data-artist-name="${esc(artistName)}" onclick="typeof showArtistDetail==='function'&&showArtistDetail('${safeName}')">
+                    <div class="song-row-cover-wrapper relative w-11 h-11 flex-shrink-0">
+                        <div class="song-row-cover absolute inset-0 rounded-[var(--radius-list-cover)] overflow-hidden bg-cover bg-center" style="${coverStyle}" role="img" aria-label="${esc(artistName)}"></div>
+                    </div>
+                    <div class="ml-3 flex-1 truncate">
+                        <div class="text-[10px] font-medium uppercase tracking-wide text-[var(--text-dim)] mb-0.5">Artist</div>
+                        <div class="song-title font-semibold text-sm truncate text-[var(--text-main)]">${esc(artistName)}</div>
+                    </div>
+                    <div class="ml-2 text-[var(--text-dim)]"><i class="fas fa-chevron-right text-[11px]"></i></div>
+                </div>
+            </div>
+        `;
+}
+
+/**
+ * Build HTML for song rows. Uses div + background-image for covers (no img) per project rule.
+ * @param {Array} tracks
+ * @param {Object} options - { activeTrackId, favIds, getCoverUrl, addDataIndex, desktopClickBehavior }
+ */
+export function buildSongRowsHtml(tracks, options = {}) {
+    const desktop = options.desktopClickBehavior === true;
+    const playOverlay = desktop ? desktopPlayOverlaySmallHtml() : '';
+    return tracks.map((t, idx) => {
+        const { isActive, showPlayingIndicator, isFav, coverStyle } = getTrackRenderState(t, options);
+        const dataIndexAttr = options.addDataIndex ? ` data-index="${idx}"` : '';
+        const wrapperClass = options.addDataIndex ? ' playlist-detail-row' : '';
+        const rowOnclick = desktop ? '' : ` onclick="typeof playTrack==='function'&&playTrack('${t.id}')"`;
+        const rowBg = isActive
+            ? 'bg-[var(--bg-selection)]'
+            : (desktop ? 'bg-transparent hover:bg-[var(--surface-overlay)]' : 'bg-transparent');
+        return `
+            <div class="relative overflow-hidden rounded-[var(--radius-omni-xs)] mb-1 group${wrapperClass}"${dataIndexAttr}>
+                <div class="swipe-hints absolute inset-0 flex items-center justify-between px-8 z-0 pointer-events-none">
+                    <div class="text-[var(--secondary)] font-semibold text-[9px] uppercase tracking-wider">Queue</div>
+                    <div class="text-[var(--accent)] font-semibold text-[9px] uppercase tracking-wider">Favourite</div>
+                </div>
+                <div class="song-row relative z-10 flex items-center py-2 pl-2 pr-1 ${rowBg} rounded-[var(--radius-omni-xs)] border border-transparent transition-colors duration-200 cursor-pointer" data-id="${t.id}"${rowOnclick}>
+                    <div class="song-row-cover-wrapper relative w-11 h-11 flex-shrink-0${desktop ? ' group' : ''}">
+                        <div class="song-row-cover absolute inset-0 rounded-[var(--radius-list-cover)] overflow-hidden bg-cover bg-center" style="${coverStyle}" role="img" aria-label="${esc(t.title || 'Cover')}">
+                            <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/12 rounded-[var(--radius-list-cover)] pointer-events-none ${showPlayingIndicator ? 'opacity-100' + (desktop ? '' : ' is-playing') : 'opacity-0'}">
+                                <i class="playing-icon fas fa-volume-high text-[var(--accent)] text-[13px]"></i>
+                            </div>
+                        </div>
+                        ${playOverlay}
+                        <div class="fav-indicator absolute -top-0.5 -right-0.5 w-3 h-3 bg-[var(--accent)] rounded-full border-2 border-[var(--bg-deep)] z-10 ${isFav ? '' : 'hidden'}"></div>
+                    </div>
+                    <div class="ml-3 flex-1 min-w-0 truncate">
+                        <div class="song-title font-semibold text-[15px] leading-tight truncate ${isActive ? 'text-[var(--text-on-selection)]' : 'text-[var(--text-main)]'}">${esc(t.title)}</div>
+                        <div class="text-xs text-[var(--text-dim)] font-normal truncate mt-0.5">${esc(t.artist)}</div>
+                    </div>
+                    <div class="flex items-center gap-1 sm:gap-2 ml-2 flex-shrink-0">
+                        ${trackTrustBadgeHtml(t)}
+                        <div class="no-row-action text-[10px] font-medium text-[var(--text-dim)] opacity-55 tabular-nums">${formatTime(t.duration)}</div>
+                        <button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}', this)" class="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text-main)] transition-colors rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-0" aria-label="More actions">
+                            <i class="fas fa-ellipsis-vertical text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Build HTML for song grid cards (desktop). Same options as buildSongRowsHtml.
+ * @param {Array} tracks
+ * @param {Object} options - { activeTrackId, favIds, getCoverUrl }
+ * @param {'grid'|'gridCompact'} gridSize - larger or smaller cards
+ */
+export function buildSongGridHtml(tracks, options = {}, gridSize = 'grid') {
+    const isCompact = gridSize === 'gridCompact';
+    const desktop = options.desktopClickBehavior === true;
+    const playOverlay = desktop ? desktopPlayOverlayHtml() : '';
+    return tracks.map(t => {
+        const { isActive, showPlayingIndicator, isFav, coverStyle } = getTrackRenderState(t, options);
+        const cardClass = isCompact ? 'song-card song-card-compact' : 'song-card';
+        const cardOnclickAttr = desktop ? '' : ` onclick="typeof playTrack==='function'&&playTrack('${t.id}')"`;
+        return `
+        <div class="${cardClass} group cursor-pointer rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)] overflow-hidden transition-colors duration-200 hover:border-[var(--accent)]/25" data-id="${t.id}"${cardOnclickAttr}>
+            <div class="song-card-cover-wrapper relative aspect-square w-full${desktop ? ' group' : ''}">
+                <div class="song-card-cover absolute inset-0 overflow-hidden bg-cover bg-center border-b border-[var(--glass-border)]" style="${coverStyle}" role="img" aria-label="${esc(t.title || 'Cover')}">
+                    <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 backdrop-blur-[1.6px] pointer-events-none ${showPlayingIndicator ? 'opacity-100' + (desktop ? '' : ' is-playing') : 'opacity-0'}">
+                        <i class="playing-icon fas fa-volume-high text-[var(--accent)] ${isCompact ? 'text-xs' : 'text-sm'}"></i>
+                    </div>
+                </div>
+                ${playOverlay}
+                <div class="fav-indicator absolute top-1 right-1 w-3 h-3 bg-[var(--accent)] rounded-full border-2 border-[var(--bg-card)] z-10 ${isFav ? '' : 'hidden'}"></div>
+                <button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}', this)" class="absolute bottom-1 right-1 w-8 h-8 flex items-center justify-center rounded-full bg-black/50 text-white/90 opacity-0 group-hover:opacity-100 transition-opacity focus:outline-none z-10" aria-label="More actions">
+                    <i class="fas fa-ellipsis-v text-[10px]"></i>
+                </button>
+            </div>
+            <div class="song-card-body p-2 min-w-0">
+                <div class="flex items-center gap-1 min-w-0">
+                    <div class="song-card-title font-bold truncate ${isCompact ? 'text-xs' : 'text-sm'} ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-main)]'}">${esc(t.title)}</div>
+                    ${trackTrustBadgeHtml(t)}
+                </div>
+                <div class="song-card-artist overflow-hidden whitespace-nowrap text-[10px] font-bold text-[var(--text-dim)] uppercase tracking-widest mt-0.5 font-mono" title="${esc(t.artist)}">
+                    <span class="song-card-artist-text inline-block">${esc(t.artist || '')}</span>
+                </div>
+            </div>
+        </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Enable marquee animation on artist labels that overflow. Call after grid render.
+ * @param {HTMLElement|null} containerEl - element containing .song-card-artist nodes
+ */
+export function enableMarqueeIfNeeded(containerEl) {
+    if (!containerEl) return;
+    containerEl.querySelectorAll('.song-card-artist').forEach((wrapper) => {
+        const span = wrapper.querySelector('.song-card-artist-text');
+        if (!span) return;
+        wrapper.classList.remove('artist-marquee');
+        wrapper.style.removeProperty('--marquee-offset');
+        if (span.scrollWidth > wrapper.clientWidth) {
+            const offset = -(span.scrollWidth - wrapper.clientWidth);
+            wrapper.style.setProperty('--marquee-offset', `${offset}px`);
+            wrapper.classList.add('artist-marquee');
+        }
+    });
+}
+
+/**
+ * Full list render (one innerHTML). Virtual scrolling was removed: row height is not fixed (mb-2,
+ * wrapping), scroll ancestors differ on mobile/desktop — unreliable. Large libraries are still fine for typical sizes.
+ * @param {HTMLElement|null} containerEl
+ * @param {Object} options - passed to buildSongRowsHtml
+ */
+export function renderSongList(tracks, containerEl, options = {}) {
+    if (!containerEl) return;
+    if (containerEl.__progressiveCleanup) {
+        try {
+            containerEl.__progressiveCleanup();
+        } catch (_) {}
+        containerEl.__progressiveCleanup = null;
+    }
+    if (containerEl.__virtualList) {
+        try {
+            containerEl.__virtualList.destroy();
+        } catch (_) {}
+        containerEl.__virtualList = null;
+    }
+    if (tracks.length === 0) {
+        containerEl.innerHTML = '<div class="text-[var(--text-dim)] text-center py-10 italic text-sm">No songs found.</div>';
+        return;
+    }
+    if (!options.addDataIndex && tracks.length > 130) {
+        containerEl.__progressiveCleanup = attachProgressiveChunks(
+            containerEl,
+            tracks,
+            (slice) => buildSongRowsHtml(slice, options),
+            { threshold: 130, chunkSize: 72 }
+        );
+        return;
+    }
+    containerEl.innerHTML = buildSongRowsHtml(tracks, options);
+}
+
+/**
+ * Render queue into one or more container elements. Scroll cue (mobile) is handled by caller if needed.
+ * @param {Object} state - store.state
+ * @param {HTMLElement|HTMLElement[]} queueContainerEls - container(s) to fill; single element or array
+ * @param {Object} options - { getCoverUrl, desktopHandle, desktopClickBehavior } (desktopClickBehavior: cover + overlay, no play btn, delegation plays)
+ */
+export function renderQueue(state, queueContainerEls, options = {}) {
+    const containers = (Array.isArray(queueContainerEls) ? queueContainerEls : [queueContainerEls]).filter(c => c);
+    if (containers.length === 0) return;
+
+    const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
+    const desktopHandle = options.desktopHandle === true;
+    const desktopClicks = options.desktopClickBehavior === true && desktopHandle;
+
+    if (!state.queue || state.queue.length === 0) {
+        containers.forEach(c => c.innerHTML = '<div class="text-gray-500 text-center py-10 italic text-xs">Queue is empty.</div>');
+        return;
+    }
+
+    const btnSize = desktopHandle ? 'w-6 h-6' : 'w-8 h-8';
+    const rowPadding = desktopHandle ? 'py-1.5 pl-2 pr-0.5' : 'p-2';
+    const metaMargin = desktopHandle ? 'mr-1' : 'mr-2';
+    const btnGap = desktopHandle ? 'gap-0.5' : 'gap-1';
+    const html = state.queue.map((t, idx) => {
+        const coverUrl = getCoverUrl(t);
+        const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+        const queueLen = state.queue.length;
+        const handleHtml = desktopHandle
+            ? `<div class="queue-item-handle-wrap flex flex-col items-center flex-shrink-0 gap-0">
+                <button type="button" class="queue-move-btn queue-move-up w-5 h-4 flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--accent)] disabled:opacity-30 disabled:pointer-events-none rounded transition-colors" data-queue-index="${idx}" data-queue-move="up" aria-label="Move up" ${idx === 0 ? ' disabled' : ''}><i class="fas fa-chevron-up text-[8px]"></i></button>
+                <span class="queue-item-handle ${btnSize} flex items-center justify-center text-[var(--text-dim)] rounded-[var(--radius-omni-xs)]" role="button" tabindex="0" aria-label="Drag to reorder" data-index="${idx}"><i class="fas fa-grip-vertical text-[10px]"></i></span>
+                <button type="button" class="queue-move-btn queue-move-down w-5 h-4 flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--accent)] disabled:opacity-30 disabled:pointer-events-none rounded transition-colors" data-queue-index="${idx}" data-queue-move="down" aria-label="Move down" ${idx === queueLen - 1 ? ' disabled' : ''}><i class="fas fa-chevron-down text-[8px]"></i></button>
+            </div>`
+            : '';
+        let coverHtml;
+        if (desktopClicks) {
+            coverHtml = `<div class="queue-item-cover-wrapper relative w-10 h-10 flex-shrink-0 rounded-[var(--radius-list-cover)] overflow-hidden group">
+                <div class="queue-item-cover absolute inset-0 bg-cover bg-center" style="${coverStyle}" role="img" aria-label=""></div>
+                ${desktopPlayOverlaySmallHtml()}
+            </div>`;
+        } else if (desktopHandle) {
+            coverHtml = '';
+        } else {
+            coverHtml = `<div class="queue-item-cover w-10 h-10 flex-shrink-0 rounded-[var(--radius-list-cover)] overflow-hidden bg-cover bg-center" style="${coverStyle}" role="img" aria-label=""></div>`;
+        }
+        const titleMargin = desktopHandle && !desktopClicks ? '' : 'ml-3';
+        const playBtnHtml = desktopClicks ? '' : `
+                <button onclick="typeof playTrack==='function'&&playTrack('${t.id}')" class="${btnSize} flex items-center justify-center bg-blue-500/10 text-blue-400 rounded-full hover:bg-blue-500/20 active:scale-90 transition-all">
+                    <i class="fas fa-play text-xs"></i>
+                </button>`;
+        const isSecondInQueue = desktopHandle && idx === 1;
+        return `
+        <div class="queue-item flex items-center ${rowPadding} hover:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-xs)] transition-colors group cursor-pointer ${isSecondInQueue ? 'queue-item-second' : ''}" data-index="${idx}" data-id="${t.id}">
+            ${coverHtml}
+            <div class="${titleMargin} flex-1 truncate pointer-events-none min-w-0 ${metaMargin}">
+                <div class="flex items-center gap-1 min-w-0">
+                    <div class="font-bold text-[13px] truncate text-[var(--text-main)]">${esc(t.title)}</div>
+                    ${trackTrustBadgeHtml(t)}
+                </div>
+                <div class="text-[10px] text-[var(--text-dim)] truncate uppercase tracking-widest">${esc(t.artist)}</div>
+            </div>
+            <div class="flex items-center flex-shrink-0 ml-auto ${btnGap}">
+                ${playBtnHtml}
+                <button type="button" class="queue-remove-btn ${btnSize} flex items-center justify-center bg-[var(--surface-overlay)] text-[var(--text-dim)] rounded-full hover:bg-red-500/10 hover:text-red-400 active:scale-90 transition-all" data-queue-index="${idx}" data-queue-id="${t.id}" aria-label="Remove from queue">
+                    <i class="fas fa-times text-xs"></i>
+                </button>
+                ${handleHtml}
+            </div>
+        </div>
+    `;
+    }).join('');
+
+    containers.forEach(c => { c.innerHTML = html; });
+}
+
+/**
+ * @param {Object} state - store.state (for favorites list and query from searchInputEl)
+ * @param {HTMLElement|null} searchInputEl - optional; if present, filter by its value
+ * @param {HTMLElement|null} tracksContainerEl
+ * @param {Object} options - passed to renderSongList
+ */
+export function renderFavourites(state, searchInputEl, tracksContainerEl, options = {}) {
+    if (!tracksContainerEl) return;
+    const fullFavTracks = (state.favorites || []).map(id => state.library.find(t => t.id === id)).filter(t => t);
+    const query = searchInputEl ? searchInputEl.value.trim().toLowerCase() : '';
+    const favTracks = !query
+        ? fullFavTracks
+        : fullFavTracks.filter(t =>
+            t.title.toLowerCase().includes(query) ||
+            t.artist.toLowerCase().includes(query) ||
+            (t.album || '').toLowerCase().includes(query)
+        );
+    renderSongList(favTracks, tracksContainerEl, options);
+}
+
+/**
+ * @param {Array} library - full library
+ * @param {HTMLElement|null} containerEl
+ * @param {Object} options - { activeTrackId, isPlaying, getCoverUrl, onArtistClick } (onArtistClick(artistName))
+ */
+export function renderArtistList(library, containerEl, options = {}) {
+    if (!containerEl) return;
+
+    const byArtist = {};
+    (library || []).forEach(t => {
+        const raw = t.album_artist || t.artist;
+        const names = parseArtistNames(raw);
+        names.forEach(name => {
+            if (!byArtist[name]) byArtist[name] = { track: t, count: 0 };
+            byArtist[name].count += 1;
+            if (t.id < byArtist[name].track.id) byArtist[name].track = t;
+        });
+    });
+    const artistNames = Object.keys(byArtist).sort((a, b) => a.localeCompare(b));
+
+    const currentTrack = options.currentTrack ?? store.state.currentTrack;
+    const isPlaying = options.isPlaying ?? store.state.isPlaying;
+    const currentTrackArtistsSet = new Set(
+        (currentTrack && isPlaying ? parseArtistNames(currentTrack.album_artist || currentTrack.artist) : []).map(n => normalizeArtistName(n))
+    );
+    const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
+
+    if (artistNames.length === 0) {
+        containerEl.innerHTML = `
+            <div class="col-span-full flex flex-col items-center justify-center py-16 text-center">
+                <i class="fas fa-user-music text-4xl text-[var(--text-dim)]/50 mb-4"></i>
+                <p class="text-[var(--text-dim)] font-bold text-sm uppercase tracking-widest">No artists in library</p>
+            </div>
+        `;
+        return;
+    }
+
+    const artistHtml = artistNames.map(name => {
+        const { track: t, count } = byArtist[name];
+        const trackLabel = count === 1 ? '1 track' : `${count} tracks`;
+        const safeName = (name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const isCurrentlyPlaying = currentTrackArtistsSet.has(normalizeArtistName(name));
+        const coverUrl = getCoverUrl(t);
+        const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+        return `
+        <div class="artist-card group cursor-pointer" data-artist-name="${esc(name)}" onclick="typeof showArtistDetail==='function'&&showArtistDetail('${safeName}')">
+            <div class="artist-card-cover aspect-square w-full relative overflow-hidden rounded-[var(--radius-omni-sm)] shadow-md transition-transform ease-[cubic-bezier(0.19,1,0.22,1)] group-hover:scale-[1.02] border border-[var(--glass-border)] bg-[var(--bg-card)] bg-cover bg-center" style="${coverStyle}; transition-duration: 320ms;" role="img" aria-label="${esc(name)}">
+                <div class="artist-card-overlay absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 rounded-[var(--radius-omni-sm)] pointer-events-none ${isCurrentlyPlaying ? 'opacity-100 is-playing' : 'opacity-0'}">
+                    <i class="playing-icon fas fa-volume-high text-[var(--accent)] text-[13px]"></i>
+                </div>
+            </div>
+            <div class="mt-2.5 px-1">
+                <div class="artist-card-name font-semibold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${esc(name)}</div>
+                <div class="text-[11px] text-[var(--text-dim)] truncate mt-0.5">${esc(trackLabel)}</div>
+            </div>
+        </div>
+    `;
+    }).join('');
+
+    containerEl.innerHTML = artistHtml;
+}
+
+/**
+ * @param {string} artistName
+ * @param {Array} library
+ * @param {Object} heroElements - { titleEl, coverEl } (optional; coverEl can be img or div with background)
+ * @param {HTMLElement|null} tracksEl
+ * @param {HTMLElement|null} albumsEl
+ * @param {Object} options - passed to buildSongRowsHtml; searchQuery filters tracks/albums by title/album
+ */
+export function renderArtistDetail(artistName, library, heroElements, tracksEl, albumsEl, options = {}) {
+    let tracks = getArtistTracks(artistName, library);
+    const q = (options.searchQuery || '').trim().toLowerCase();
+    if (q) {
+        tracks = tracks.filter((t) =>
+            (t.title || '').toLowerCase().includes(q) ||
+            (t.album || '').toLowerCase().includes(q)
+        );
+    }
+    const { titleEl, coverEl } = heroElements || {};
+    const displayTracks = tracks;
+
+    if (titleEl) titleEl.textContent = artistName;
+    if (coverEl) {
+        const firstTrack = getArtistTracks(artistName, library)[0];
+        if (firstTrack) {
+            const url = (options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver))(firstTrack);
+            if (coverEl.tagName === 'IMG') {
+                coverEl.src = url;
+                coverEl.alt = artistName;
+                coverEl.classList.remove('hidden');
+            } else {
+                coverEl.style.backgroundImage = url ? `url(${escapeCssUrl(url)})` : '';
+                coverEl.classList.remove('hidden');
+            }
+        } else {
+            coverEl.classList.add('hidden');
+        }
+    }
+
+    if (albumsEl) {
+        const albums = q ? getArtistAlbums(artistName, displayTracks) : getArtistAlbums(artistName, library);
+        if (albums.length === 0) {
+            albumsEl.innerHTML = q
+                ? '<div class="col-span-full text-[var(--text-dim)] text-center py-8 text-sm">No songs or albums match</div>'
+                : '<div class="col-span-full text-[var(--text-dim)] text-center py-8 text-sm">No albums</div>';
+        } else {
+            const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
+            albumsEl.innerHTML = albums.map(({ album, tracks: albumTracks, coverTrack }) => {
+                const trackLabel = albumTracks.length === 1 ? '1 track' : `${albumTracks.length} tracks`;
+                const coverUrl = getCoverUrl(coverTrack);
+                const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+                return `
+                    <div class="artist-album-card flex flex-col" data-album="${esc(album)}">
+                        <div class="artist-album-header cursor-pointer group rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)] hover:border-[var(--accent)]/22 transition-colors" onclick="typeof toggleArtistAlbum==='function'&&toggleArtistAlbum(event)">
+                            <div class="relative">
+                                <div class="w-full aspect-square rounded-t-[var(--radius-omni-xs)] border-b border-[var(--glass-border)] bg-cover bg-center" style="${coverStyle}" role="img" aria-label="${esc(album)}"></div>
+                                <div class="absolute bottom-2 right-2 w-6 h-6 rounded-full bg-black/60 flex items-center justify-center">
+                                    <i class="fas fa-chevron-down text-[10px] text-white transition-transform artist-album-chevron"></i>
+                                </div>
+                            </div>
+                            <div class="p-3">
+                                <div class="font-bold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${esc(album)}</div>
+                                <div class="text-[10px] font-mono text-[var(--text-dim)] truncate mt-0.5">${esc(trackLabel)}</div>
+                            </div>
+                        </div>
+                        <div class="artist-album-tracks mt-2 hidden overflow-hidden">
+                            ${buildSongRowsHtml(albumTracks, options)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+
+    if (tracksEl) {
+        if (displayTracks.length === 0) {
+            tracksEl.innerHTML = q
+                ? '<div class="text-[var(--text-dim)] text-center py-10 italic text-sm">No songs or albums match</div>'
+                : '<div class="text-[var(--text-dim)] text-center py-10 italic text-sm">No tracks</div>';
+        } else {
+            const sorted = [...displayTracks].sort((a, b) => {
+                const albumCmp = (a.album || '').localeCompare(b.album || '');
+                if (albumCmp !== 0) return albumCmp;
+                return (a.track_number ?? 999) - (b.track_number ?? 999);
+            });
+            tracksEl.innerHTML = buildSongRowsHtml(sorted, options);
+        }
+    }
+}
+
+/**
+ * Build HTML for playlist list cards. Uses div + background-image for cover (no img). Playlists is { name: track_ids[] }.
+ * @param {Object} playlists - name -> array of track ids
+ * @param {Array} library - full track list
+ * @param {Object} options - { getCoverUrl, onCreateClick } (onCreateClick is optional handler name for "Create playlist" button)
+ */
+export function buildPlaylistCardsHtml(playlists, library, options = {}) {
+    const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
+    const names = options.preserveOrder ? Object.keys(playlists || {}) : Object.keys(playlists || {}).sort((a, b) => a.localeCompare(b));
+    if (names.length === 0) {
+        return '';
+    }
+    return names.map((name, idx) => {
+        const trackIds = playlists[name] || [];
+        const coverTrack = trackIds.length
+            ? resolvePlaylistCoverTrack(name, trackIds, library || [], store.state.librarySettings)
+            : null;
+        const coverUrl = coverTrack ? getCoverUrl(coverTrack) : '';
+        const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+        const count = trackIds.length;
+        const label = count === 1 ? '1 track' : `${count} tracks`;
+        const safeName = (name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        return `
+        <div class="playlist-card group cursor-pointer rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)] overflow-hidden transition-colors duration-200 hover:border-[var(--accent)]/25" data-playlist-name="${esc(name)}" data-index="${idx}" onclick="typeof showPlaylistDetail==='function'&&showPlaylistDetail('${safeName}')">
+            <div class="playlist-card-cover aspect-square w-full relative overflow-hidden rounded-t-[var(--radius-omni-xs)] bg-[var(--bg-card)] bg-cover bg-center border-b border-[var(--glass-border)]" style="${coverStyle}; min-height: 100px;" role="img" aria-label="${esc(name)}">
+                ${!coverUrl ? '<div class="absolute inset-0 flex items-center justify-center"><i class="fas fa-layer-group text-3xl text-[var(--text-dim)]/40"></i></div>' : ''}
+            </div>
+            <div class="p-3">
+                <div class="playlist-card-name font-bold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${esc(name)}</div>
+                <div class="text-[10px] font-mono text-[var(--text-dim)] truncate mt-0.5">${esc(label)}</div>
+            </div>
+        </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Render playlist list into container. Shows grid of cards or empty state.
+ * @param {Object} playlists - name -> track_ids[] (can be filtered)
+ * @param {Array} library
+ * @param {HTMLElement|null} listContainerEl - container for cards
+ * @param {Object} options - { getCoverUrl, emptyMessage } (emptyMessage when filtered and no results)
+ */
+export function renderPlaylistList(playlists, library, listContainerEl, options = {}) {
+    if (!listContainerEl) return;
+    const names = options.preserveOrder ? Object.keys(playlists || {}) : Object.keys(playlists || {}).sort((a, b) => a.localeCompare(b));
+    const html = buildPlaylistCardsHtml(playlists, library, { ...options, preserveOrder: options.preserveOrder });
+    if (!html) {
+        const msg = options.emptyMessage || 'No playlists yet. Create one or add tracks from Library.';
+        listContainerEl.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-16 text-center col-span-full">
+                <i class="fas fa-layer-group text-4xl text-[var(--text-dim)]/50 mb-4"></i>
+                <p class="text-[var(--text-dim)] font-bold text-sm uppercase tracking-widest mb-2">${options.emptyMessage ? 'No matches' : 'No playlists yet'}</p>
+                <p class="text-[var(--text-dim)] text-xs">${esc(msg)}</p>
+            </div>
+        `;
+        return;
+    }
+    listContainerEl.innerHTML = html;
+}
+
+/**
+ * Build HTML for track rows inside a playlist (play + remove from playlist). Uses div + background-image for cover (no img).
+ * @param {Array} tracks
+ * @param {Object} options - { playlistName, activeTrackId, getCoverUrl, desktopClickBehavior }
+ */
+export function buildPlaylistTrackRowsHtml(tracks, options = {}) {
+    const playlistName = options.playlistName || '';
+    const safeName = (playlistName || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const desktop = options.desktopClickBehavior === true;
+    const playOverlay = desktop ? desktopPlayOverlaySmallHtml() : '';
+    return tracks.map((t, idx) => {
+        const { isActive, showPlayingIndicator, coverStyle } = getTrackRenderState(t, options);
+        const rowOnclick = desktop ? '' : ` onclick="typeof playTrack==='function'&&playTrack('${t.id}')"`;
+        const rowBg = isActive
+            ? 'bg-[var(--bg-selection)]'
+            : (desktop ? 'bg-transparent hover:bg-[var(--surface-overlay)]' : 'bg-transparent');
+        return `
+        <div class="playlist-track-row flex items-center py-2 pl-2 pr-1 rounded-[var(--radius-omni-xs)] border border-transparent ${rowBg} transition-colors cursor-pointer group" data-id="${t.id}" data-index="${idx}"${rowOnclick}>
+            <div class="song-row-cover-wrapper relative w-11 h-11 flex-shrink-0${desktop ? ' group' : ''}">
+                <div class="song-row-cover absolute inset-0 rounded-[var(--radius-list-cover)] overflow-hidden bg-cover bg-center" style="${coverStyle}" role="img" aria-label="${esc(t.title || 'Cover')}">
+                    <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/12 rounded-[var(--radius-list-cover)] pointer-events-none ${showPlayingIndicator ? 'opacity-100' + (desktop ? '' : ' is-playing') : 'opacity-0'}">
+                        <i class="playing-icon fas fa-volume-high text-[var(--accent)] text-[13px]"></i>
+                    </div>
+                </div>
+                ${playOverlay}
+            </div>
+            <div class="ml-3 flex-1 min-w-0 truncate">
+                <div class="song-title font-semibold text-[15px] leading-tight truncate text-[var(--text-main)]">${esc(t.title)}</div>
+                <div class="text-xs text-[var(--text-dim)] truncate mt-0.5">${esc(t.artist)}</div>
+            </div>
+            <div class="flex items-center gap-1 ml-2 flex-shrink-0">
+                <div class="text-[10px] font-medium text-[var(--text-dim)] opacity-55 tabular-nums">${formatTime(t.duration)}</div>
+                <button type="button" onclick="event.stopPropagation(); typeof removeFromPlaylistTrack==='function'&&removeFromPlaylistTrack('${safeName}','${t.id}')" class="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full text-[var(--text-dim)] hover:text-red-400 hover:bg-red-500/10 transition-colors focus:outline-none" aria-label="Remove from playlist">
+                    <i class="fas fa-times text-sm"></i>
+                </button>
+            </div>
+        </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Render playlist detail (tracks) into container. Same row layout as "all songs"; optional search filter.
+ * @param {string} playlistName
+ * @param {Array} trackIds - ordered list of track ids
+ * @param {Array} library
+ * @param {HTMLElement|null} tracksContainerEl
+ * @param {Object} options - { searchQuery, getCoverUrl }
+ */
+export function renderPlaylistDetail(playlistName, trackIds, library, tracksContainerEl, options = {}) {
+    if (!tracksContainerEl) return;
+    const query = (options.searchQuery || '').trim().toLowerCase();
+    const tracks = (trackIds || [])
+        .map((id) => (library || []).find((t) => t.id === id))
+        .filter(Boolean);
+    const filtered = query
+        ? tracks.filter((t) =>
+            (t.title || '').toLowerCase().includes(query) ||
+            (t.artist || '').toLowerCase().includes(query) ||
+            (t.album || '').toLowerCase().includes(query))
+        : tracks;
+    if (filtered.length === 0) {
+        tracksContainerEl.innerHTML = query
+            ? '<div class="text-[var(--text-dim)] text-center py-10 italic text-sm">No matches in this playlist.</div>'
+            : '<div class="text-[var(--text-dim)] text-center py-10 italic text-sm">No tracks. Add some from Library.</div>';
+        return;
+    }
+    tracksContainerEl.innerHTML = buildSongRowsHtml(filtered, {
+        getCoverUrl: options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver),
+        addDataIndex: true,
+        desktopClickBehavior: options.desktopClickBehavior
+    });
+}
+

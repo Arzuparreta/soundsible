@@ -1,0 +1,36 @@
+# S3-Compatible Storage (Multi-Provider Support)
+boto3>=1.28.0              # AWS S3, Cloudflare R2, generic S3
+b2sdk>=1.19.0              # Backblaze B2 native SDK (fallback)
+
+# Audio Processing
+mutagen>=1.46.0            # Audio metadata extraction
+ffmpeg-python>=0.2.0       # Audio format conversion
+
+# CLI Framework
+click>=8.1.0               # Command-line interface
+rich>=13.5.0               # Progress bars and rich UI
+
+# Web Interface
+flask>=2.3.0               # Web server
+flask-socketio>=5.3.0      # Real-time progress updates
+flask-cors>=4.0.0          # Cross-Origin Resource Sharing
+
+# HTTP Client
+requests>=2.31.0           # Sync HTTP requests
+
+cryptography>=41.0.0       # Encrypt stored credentials
+pillow>=10.0.0             # Image processing (covers, branding)
+watchdog>=3.0.0            # Folder monitoring
+pyacoustid>=1.2.2          # Audio fingerprinting
+
+# Development
+pytest>=7.4.0              # Testing framework
+pytest-asyncio>=0.21.0     # Async test support
+black>=23.0.0              # Code formatting
+mypy>=1.5.0                # Type checking
+
+# ODST-Tool Dependencies (YouTube Downloader)
+yt-dlp==2026.2.21         # YouTube Downloader (update manually when needed)
+python-dotenv>=1.0.0       # Environment variables
+gevent>=24.2.0            # Async networking for SocketIO (concurrent requests)
+gevent-websocket>=0.10.1   # WebSocket support for Flask-SocketIO

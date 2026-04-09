@@ -1,0 +1,77 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv/
+
+# IDEs
+.vscode/
+.idea/
+.cursor/
+.cursorrules
+.cursorignore
+
+# Aider (local assistant history; never commit)
+.aider*
+
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.dmypy.json
+.ipynb_checkpoints/
+
+# Build artifacts
+dist/
+ui_web/node_modules/
+build/
+*.egg
+*.egg-info/
+*.egg-info
+
+# Configuration files with secrets
+config.json
+*.key
+*.pem
+.env
+.env.local
+.env.*.local
+
+# Cache and temporary files
+*.log
+logs/
+.cache/
+tmp/
+temp/
+.ruff_cache/
+*.bak
+*.backup
+*.orig
+*.rej
+
+# Music files (don't commit test libraries)
+*.mp3
+*.flac
+*.ogg
+*.m4a
+*.wav
+
+# Project-specific
+gha-creds-*.json

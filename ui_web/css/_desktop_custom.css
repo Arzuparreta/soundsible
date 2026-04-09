@@ -1,0 +1,599 @@
+        #desktop-app { display: flex; flex-direction: column; height: 100vh; }
+        #desktop-body { display: flex; flex-direction: column; flex: 1; min-height: 0; position: relative; }
+        #desktop-now-playing.desktop-np-bar { --desktop-np-bar-height: 64px; --desktop-np-bar-padding-y: 0.5rem; min-height: var(--desktop-np-bar-height); flex-shrink: 0; border-bottom: 1px solid var(--glass-border); background: color-mix(in srgb, var(--bg-surface) 92%, transparent); backdrop-filter: blur(var(--glass-blur)) saturate(180%); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%); display: grid; grid-template-columns: 1fr auto 1fr; grid-template-rows: auto auto; align-items: center; gap: 0 1.125rem; row-gap: 0.375rem; padding: var(--desktop-np-bar-padding-y) 1.125rem; box-shadow: 0 12px 40px rgba(0,0,0,0.22); }
+        #desktop-body-row { display: flex; flex: 1; min-height: 0; }
+        #desktop-sidebar { width: 240px; flex-shrink: 0; padding: 1rem; border-right: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: 0.5rem; }
+        #desktop-main { flex: 1; overflow-x: hidden; overflow-y: auto; padding: 0 1.25rem 1.25rem; position: relative; background-color: var(--bg-deep); }
+        /* Desktop Global Search */
+        #desktop-global-search-container {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            margin: 0 -1.25rem 1.25rem -1.25rem;
+            padding: 1.25rem;
+            background: linear-gradient(to bottom, var(--bg-deep) 60%, transparent);
+            transition: box-shadow 0.3s ease;
+        }
+
+        #desktop-global-search-container.scrolled {
+            background: var(--bg-deep);
+            border-bottom: 1px solid var(--bg-deep);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+
+        .desktop-global-search-inner {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            background: var(--input-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            -webkit-backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-omni);
+            padding: 6px 12px;
+            transition: border-color 0.2s ease, background 0.2s ease;
+            width: 100%;
+        }
+
+        .desktop-global-search-inner:focus-within {
+            border-color: color-mix(in srgb, var(--accent) 42%, var(--glass-border));
+            background: var(--surface-overlay);
+            box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
+        }
+
+        .segmented-pill {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px;
+            border-radius: 9999px;
+            background: var(--surface-overlay);
+            border: 1px solid var(--glass-border);
+            flex-shrink: 0;
+        }
+        .segmented-pill button {
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            padding: 6px 12px;
+            border-radius: 9999px;
+            color: var(--text-dim);
+            background: transparent;
+            transition: background 0.18s ease, color 0.18s ease;
+        }
+        .segmented-pill button[aria-pressed="true"] {
+            background: var(--accent);
+            color: var(--text-on-accent);
+        }
+        .segmented-pill button[aria-pressed="false"]:hover {
+            color: var(--text-main);
+        }
+
+        #desktop-global-search-input {
+            flex: 1;
+            min-width: 140px;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-main);
+            font-size: 15px;
+            font-weight: 500;
+            padding: 6px 0;
+            letter-spacing: -0.015em;
+        }
+
+        #desktop-global-search-input::placeholder {
+            color: var(--placeholder);
+        }
+
+        #desktop-global-search-container .desktop-discover-odst-inline { display: none; }
+        #desktop-global-search-container.show-discover-odst .desktop-discover-odst-inline { display: flex; }
+
+        .desktop-view { display: none; }
+        .desktop-view.active { display: block; }
+        /* Ensure inactive desktop views are fully hidden, even when Tailwind utility classes like .flex set display */
+        .desktop-view:not(.active) { display: none !important; }
+        /* Settings: search hidden — remove it from layout so config uses the top band */
+        #desktop-main.desktop-main--settings #desktop-global-search-container {
+            display: none;
+        }
+
+        /* Discover: same main padding and search bar as other views; view fills remaining space. Class toggled in showView() so scroll is restored when leaving discover. */
+        #desktop-main.desktop-main--discover {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #desktop-view-discover.active {
+            flex: 1;
+            min-height: 0;
+            min-width: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        #desktop-now-playing .desktop-queue-status-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        #desktop-sidebar .desktop-queue-status-btn.queue-panel-open { background: var(--surface-overlay); color: var(--text-main); }
+        #desktop-queue-count.queue-has-items { color: var(--accent); opacity: 1; }
+        .desktop-nav-btn { width: 100%; text-align: left; padding: 0.6rem 0.75rem; border-radius: var(--radius-omni-xs); color: var(--text-dim); font-weight: 600; font-size: 0.875rem; border: none; background: transparent; cursor: pointer; transition: background 0.2s, color 0.2s; }
+        .desktop-nav-btn:hover { background: var(--surface-overlay); color: var(--text-main); }
+        .desktop-nav-btn.active { background: var(--bg-selection); color: var(--accent); }
+        .song-row { transition: background-color 0.2s; }
+        /* Search view: positioning context for ODST toggle (one button height from bottom) */
+        /* Desktop: no mobile swipe/long-press; hide swipe hints so Favourite/Queue labels never show */
+        .swipe-hints { opacity: 0 !important; visibility: hidden; pointer-events: none; }
+        #desktop-main .song-row { transform: none !important; }
+        #desktop-now-playing button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        #desktop-now-playing #desktop-volume:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        /* Collapsing volume: icon first; slider expands away from the icon (LTR → 0 at icon, 100 farthest). */
+        #desktop-now-playing .desktop-volume-control {
+            display: flex;
+            align-items: center;
+            flex-direction: row;
+            gap: 2px;
+            height: 32px;
+            min-height: 32px;
+            padding: 0 2px;
+            border-radius: var(--radius-omni-xs);
+            background: transparent;
+            border: none;
+            overflow: visible;
+        }
+        #desktop-now-playing .desktop-volume-slider-shell {
+            max-width: 0;
+            opacity: 0;
+            overflow-x: hidden;
+            overflow-y: visible;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding-left: 4px;
+            padding-right: 0;
+            margin-right: 0;
+            pointer-events: none;
+            transition:
+                max-width 0.22s cubic-bezier(0.3, 0, 0, 1),
+                opacity 0.16s ease-out,
+                padding-left 0.22s cubic-bezier(0.3, 0, 0, 1);
+        }
+        #desktop-now-playing .desktop-volume-control:hover .desktop-volume-slider-shell,
+        #desktop-now-playing .desktop-volume-control:focus-within .desktop-volume-slider-shell,
+        #desktop-now-playing .desktop-volume-control.is-volume-open .desktop-volume-slider-shell {
+            max-width: 102px;
+            opacity: 1;
+            padding-left: 6px;
+            pointer-events: auto;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #desktop-now-playing .desktop-volume-slider-shell {
+                transition: opacity 0.12s ease-out;
+            }
+        }
+        #desktop-now-playing .desktop-volume-slider {
+            --desktop-vol-pad-y: 14px;
+            width: 92px;
+            min-width: 92px;
+            height: 6px;
+            padding: var(--desktop-vol-pad-y) 0;
+            box-sizing: content-box;
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            border-radius: 9999px;
+            cursor: pointer;
+            margin: 0;
+            accent-color: var(--accent);
+        }
+        #desktop-now-playing .desktop-volume-slider::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 9999px;
+            background: var(--seek-track);
+        }
+        #desktop-now-playing .desktop-volume-slider::-moz-range-track {
+            height: 6px;
+            border-radius: 9999px;
+            background: var(--seek-track);
+        }
+        /* Transparent border + box-shadow ring on range thumbs draws extra orange glitches in WebKit (side “squares”). */
+        #desktop-now-playing .desktop-volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 13px;
+            height: 13px;
+            margin-top: -3.5px;
+            border-radius: 50%;
+            background: var(--accent);
+            border: 2px solid color-mix(in srgb, var(--text-main) 20%, var(--accent));
+            box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 50%, transparent);
+            transition: transform 0.12s ease;
+        }
+        #desktop-now-playing .desktop-volume-slider:hover::-webkit-slider-thumb {
+            transform: scale(1.06);
+        }
+        #desktop-now-playing .desktop-volume-slider::-moz-range-thumb {
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            background: var(--accent);
+            border: 2px solid color-mix(in srgb, var(--text-main) 20%, var(--accent));
+            box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 50%, transparent);
+        }
+        #desktop-now-playing #desktop-volume-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1em;
+        }
+        #desktop-now-playing .desktop-np-icon-btn {
+            border: none;
+            background: transparent;
+        }
+        #desktop-now-playing .desktop-np-icon-btn:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+        #desktop-now-playing #desktop-shuffle-btn.desktop-np-mode-on,
+        #desktop-now-playing #desktop-repeat-btn.desktop-np-mode-on {
+            color: var(--accent);
+            background: color-mix(in srgb, var(--accent) 12%, transparent);
+        }
+        #desktop-sidebar .desktop-nav-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        #desktop-sidebar-playback button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        /* Cross-device resume: anchor at sidebar bottom; panel hangs over logo */
+        #resume-playback-desktop-anchor {
+            position: relative;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: flex-end;
+            min-height: 52px;
+        }
+        #resume-playback-modal.resume-playback-root--desktop {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 2;
+            pointer-events: none;
+            transition: opacity 0.22s ease, transform 0.32s cubic-bezier(0.19, 1, 0.22, 1);
+            opacity: 0;
+            transform: translateY(0.5rem);
+        }
+        #resume-playback-modal.resume-playback-root--desktop.resume-playback-root--open {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        #resume-playback-modal.resume-playback-root--desktop .resume-playback-panel {
+            pointer-events: auto;
+            background: var(--bg-surface);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-omni-xs);
+            padding: 0.5rem 0.65rem 0.6rem;
+            box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.35);
+        }
+        #resume-playback-modal.resume-playback-root--desktop .resume-playback-title {
+            font-size: 0.6875rem;
+            font-weight: 600;
+            color: var(--text-main);
+            line-height: 1.35;
+            margin: 0 0 0.45rem 0;
+        }
+        #resume-playback-modal.resume-playback-root--desktop .resume-playback-device:empty {
+            display: none;
+        }
+        #resume-playback-modal.resume-playback-root--desktop .resume-playback-actions {
+            display: flex;
+            gap: 0.35rem;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+        #resume-playback-modal.resume-playback-root--desktop .resume-playback-btn {
+            padding: 0.3rem 0.55rem;
+            border-radius: var(--radius-omni-xs);
+            font-size: 0.6875rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.15s ease;
+        }
+        #resume-playback-modal.resume-playback-root--desktop .resume-playback-btn--secondary {
+            background: var(--surface-overlay);
+            color: var(--text-dim);
+        }
+        #resume-playback-modal.resume-playback-root--desktop .resume-playback-btn--primary {
+            background: var(--accent);
+            color: var(--text-on-accent, #fff);
+        }
+        /* Same as web player mobile banner (rare fallback if sidebar anchor missing) */
+        #resume-playback-modal.resume-playback-root--mobile {
+            position: fixed;
+            left: 0.75rem;
+            right: 0.75rem;
+            top: max(0.5rem, env(safe-area-inset-top));
+            z-index: 128;
+            pointer-events: none;
+            transition: opacity 0.25s ease, transform 0.35s cubic-bezier(0.19, 1, 0.22, 1);
+            opacity: 0;
+            transform: translateY(-0.75rem);
+        }
+        #resume-playback-modal.resume-playback-root--mobile.resume-playback-root--open {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        #resume-playback-modal.resume-playback-root--mobile .resume-playback-panel {
+            pointer-events: auto;
+            background: var(--bg-surface);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-omni);
+            padding: 0.875rem 1rem;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
+        }
+        #resume-playback-modal.resume-playback-root--mobile .resume-playback-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-main);
+            line-height: 1.35;
+            margin: 0 0 0.75rem 0;
+        }
+        #resume-playback-modal.resume-playback-root--mobile .resume-playback-device:empty { display: none; }
+        #resume-playback-modal.resume-playback-root--mobile .resume-playback-actions {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+        #resume-playback-modal.resume-playback-root--mobile .resume-playback-btn {
+            padding: 0.45rem 0.9rem;
+            border-radius: var(--radius-omni-xs);
+            font-size: 0.8125rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.15s ease;
+        }
+        #resume-playback-modal.resume-playback-root--mobile .resume-playback-btn--secondary {
+            background: var(--surface-overlay);
+            color: var(--text-dim);
+        }
+        #resume-playback-modal.resume-playback-root--mobile .resume-playback-btn--primary {
+            background: var(--accent);
+            color: var(--text-on-accent, #fff);
+        }
+        /* Desktop app logo: decorative only, no interaction (paint on sidebar bottom) */
+        #desktop-body-logo { display: flex; justify-content: center; padding-top: 0.5rem; flex-shrink: 0; pointer-events: none; user-select: none; -webkit-user-select: none; position: relative; z-index: 0; }
+        #desktop-body-logo img { width: 40px; height: 40px; object-fit: contain; pointer-events: none; user-select: none; -webkit-user-select: none; }
+        /* Desktop playback controls: centered in status bar. */
+        #desktop-omni-island.desktop-omni-island-inner {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            height: 48px;
+            min-height: 48px;
+            padding: 0 14px;
+            border-radius: var(--radius-omni);
+            border: 1px solid color-mix(in srgb, var(--glass-border) 85%, transparent);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5), var(--shadow-omni);
+            background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        #desktop-now-playing .desktop-np-cover-art {
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+        }
+        #desktop-now-playing .desktop-np-timebar-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.5rem; min-width: 0; max-height: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: max-height 0.25s ease-out, opacity 0.2s ease-out; }
+        #desktop-now-playing.has-track .desktop-np-timebar-row { max-height: 2.75rem; opacity: 1; visibility: visible; }
+        #desktop-now-playing .desktop-np-seek-wrap {
+            flex: 1;
+            min-width: 0;
+            padding: 10px 0;
+            cursor: pointer;
+            touch-action: none;
+            border-radius: 4px;
+        }
+        #desktop-now-playing .desktop-np-seek-wrap:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+        #desktop-now-playing .desktop-np-seek-track {
+            height: 6px;
+            border-radius: 9999px;
+            overflow: hidden;
+            background-color: var(--seek-track);
+        }
+        #desktop-now-playing .desktop-np-seek-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 9999px;
+            background: var(--accent);
+            box-shadow: 0 0 10px var(--accent);
+            transition: width 0.1s linear;
+        }
+        #desktop-now-playing .desktop-np-seek-wrap.seeking .desktop-np-seek-fill {
+            box-shadow: 0 0 16px var(--accent);
+        }
+        #desktop-now-playing .desktop-np-timebar-row .desktop-np-time-label {
+            min-width: 2.75rem;
+            width: 2.75rem;
+            flex-shrink: 0;
+            font-size: 10px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+            color: var(--text-dim);
+            opacity: 0.85;
+        }
+        #desktop-now-playing .desktop-np-timebar-row .desktop-np-time-duration { text-align: right; }
+        #desktop-now-playing:not(.has-track) .desktop-np-timebar-row .desktop-np-time-label { visibility: hidden; }
+        #desktop-now-playing:not(.has-track) .desktop-np-cover-wrap { display: none; }
+        #desktop-now-playing .desktop-np-left { display: flex; align-items: center; gap: 1rem; min-width: 0; }
+        #desktop-now-playing .desktop-np-cover-wrap { width: 3.5rem; min-width: 3.5rem; flex-shrink: 0; }
+        #desktop-now-playing .desktop-np-center { flex: 1; min-width: 0; }
+        #desktop-now-playing .desktop-np-title-row { min-width: 0; }
+        #desktop-now-playing .desktop-np-playback-cell { display: flex; justify-content: center; align-items: center; }
+        #desktop-omni-island .desktop-omni-btn-side {
+            width: 32px;
+            height: 32px;
+            min-width: 32px;
+            min-height: 32px;
+            flex-shrink: 0;
+        }
+        #desktop-omni-island .desktop-omni-btn-play {
+            width: 40px;
+            height: 40px;
+            min-width: 40px;
+            min-height: 40px;
+            flex-shrink: 0;
+        }
+        .song-card { transition: opacity 0.2s, transform 0.2s, border-color 0.2s; }
+        .song-card-body { transition: opacity 0.2s; }
+        /* Desktop: play overlay on cover (hover), selection highlight */
+        .desktop-play-overlay { z-index: 2; transition: none; }
+        /* While this track is playing, hide the hover play overlay so the playing icon shows instead */
+        #desktop-app .is-currently-playing .desktop-play-overlay { opacity: 0 !important; pointer-events: none; }
+        /* Playing indicator: no breathing animation; fade in when playing, fade out when stopped */
+        #desktop-app .active-indicator-container .playing-icon { animation: none !important; }
+        #desktop-app .active-indicator-container { transition: opacity 0.25s ease-out; }
+        .song-row.selected, .playlist-track-row.selected { box-shadow: inset 0 0 0 2px var(--accent); }
+        .song-card.selected { box-shadow: 0 0 0 2px var(--accent); }
+        .queue-item.selected { box-shadow: inset 0 0 0 2px var(--accent); }
+        /* Playlist track reorder drag */
+        .playlist-drag-clone { position: fixed; z-index: 200; pointer-events: none; border-radius: 1rem; box-shadow: var(--shadow-omni); border: 1px solid var(--glass-border); }
+        .playlist-track-row.playlist-drag-source { opacity: 0.2; pointer-events: none; }
+        .playlist-track-row.queue-drop-target { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 1rem; }
+        .playlist-card.playlist-drag-source { opacity: 0.2; pointer-events: none; }
+        .playlist-card.queue-drop-target { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 1rem; }
+        /* Desktop queue panel: inside sidebar, no border, no window—just songs on sidebar background */
+        #desktop-queue-panel { flex-shrink: 0; background: transparent; border: none; box-sizing: border-box; }
+        #desktop-queue-panel .queue-item { border: none; width: 100%; min-width: 0; box-sizing: border-box; }
+        #desktop-queue-panel .queue-item:hover { background: var(--surface-overlay); }
+        #desktop-queue-panel .queue-item.queue-item-second { opacity: 0.6; }
+        #desktop-queue-panel::-webkit-scrollbar { width: 6px; }
+        #desktop-queue-panel::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 3px; opacity: 0.4; }
+        #desktop-downloads-panel { background: transparent; border: none; box-sizing: border-box; }
+        #desktop-downloads-panel::-webkit-scrollbar { width: 6px; }
+        #desktop-downloads-panel::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 3px; opacity: 0.4; }
+        @keyframes dl-progress-indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+        /* Queue row handle: visible on hover, no highlight on hover/focus/active */
+        .queue-item-handle-wrap { opacity: 0; transition: opacity 0.2s; }
+        .group:hover .queue-item-handle-wrap { opacity: 1; }
+        .queue-item-handle { cursor: grab; }
+        .queue-item-handle:hover,
+        .queue-item-handle:focus,
+        .queue-item-handle:active { background: transparent !important; outline: none; box-shadow: none; }
+        .queue-item-handle:active { cursor: grabbing; }
+        .queue-move-btn:focus { outline: none; }
+        /* Desktop queue reorder drag */
+        .queue-drag-clone { position: fixed; z-index: 200; pointer-events: none; border-radius: var(--radius-omni-xs); box-shadow: var(--shadow-omni); border: 1px solid var(--glass-border); background: var(--bg-surface); }
+        .queue-item.queue-drop-target { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-omni-xs); }
+        .queue-item.queue-drag-source { opacity: 0.2; pointer-events: none; }
+        /* Discover: grid layout, no horizontal scroll */
+        .discover-section { margin-bottom: 1.125rem; flex-shrink: 0; }
+        .discover-section h2 { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; }
+        .discover-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 0.625rem; }
+        .discover-card { display: flex; align-items: center; gap: 0.625rem; padding: 0.625rem; border-radius: var(--radius-omni-xs); background: var(--surface-overlay); border: 1px solid var(--glass-border); transition: background 0.18s ease; min-width: 0; }
+        .discover-card:hover { background: var(--bg-card); }
+        .discover-card-cover { width: 48px; height: 48px; flex-shrink: 0; border-radius: 0.75rem; background-size: cover; background-position: center; background-color: var(--input-bg); }
+        .discover-card.discover-card-resolving .discover-card-cover { opacity: 0.85; }
+        .discover-card-meta { flex: 1; min-width: 0; }
+        .discover-card-title { font-size: 0.8125rem; font-weight: 600; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .discover-card-artist { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* Skeleton convention: same DOM as loaded content + is-skeleton on container + CSS placeholder/shimmer. Reuse skeleton-shimmer for any view. */
+        @keyframes skeleton-shimmer { 0% { opacity: 0.3; } 50% { opacity: 0.5; } 100% { opacity: 0.3; } }
+        .discover-tinder-card-wrap.is-skeleton .discover-card-cover { background: var(--input-bg) !important; background-image: none !important; animation: skeleton-shimmer 1.5s ease-in-out infinite; }
+        .discover-tinder-card-wrap.is-skeleton .discover-card-title,
+        .discover-tinder-card-wrap.is-skeleton .discover-card-artist { color: transparent; background: var(--text-dim); opacity: 0.35; border-radius: 4px; min-height: 0.8125em; animation: skeleton-shimmer 1.5s ease-in-out infinite; }
+        .discover-tinder-card-wrap.is-skeleton .discover-card-artist { min-height: 0.625em; }
+        @media (prefers-reduced-motion: reduce) { .discover-tinder-card-wrap.is-skeleton .discover-card-cover, .discover-tinder-card-wrap.is-skeleton .discover-card-title, .discover-tinder-card-wrap.is-skeleton .discover-card-artist { animation: none; } }
+        /* Discover tinder — desktop */
+        #desktop-view-discover #desktop-discover-sections { display: flex; flex-direction: column; min-height: 0; align-items: center; justify-content: center; }
+        .discover-tinder-outer { position: relative; display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex: 1; min-height: 0; width: 100%; }
+        #desktop-view-discover .discover-tinder-wrap { flex: 0 0 auto; }
+        .discover-tinder-refresh-overlay { position: absolute; top: -2.5rem; left: 50%; transform: translateX(-50%); z-index: 2; padding: 0.5rem 1rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; background: var(--surface-overlay); color: var(--text-main); border: 1px solid var(--glass-border); box-shadow: 0 2px 8px rgba(0,0,0,0.2); pointer-events: auto; transition: background 0.2s, color 0.2s; }
+        .discover-tinder-refresh-overlay:hover { background: var(--accent); color: var(--text-on-accent); }
+        .discover-tinder-refresh-overlay:active { background: var(--accent); color: var(--text-on-accent); }
+        .discover-tinder-side-btn { width: 52px; height: 52px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid var(--glass-border); background: var(--surface-overlay); color: var(--text-main); font-size: 1rem; transition: transform 0.2s, background 0.2s, opacity 0.2s; }
+        .discover-tinder-side-btn:not(:disabled):hover { background: var(--bg-card); }
+        .discover-tinder-side-btn:not(:disabled):active { transform: scale(0.95); }
+        .discover-tinder-side-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .discover-tinder-wrap { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; justify-content: center; min-width: 0; }
+        .discover-tinder-card-wrap { position: relative; width: 320px; flex-shrink: 0; overflow: hidden; border-radius: var(--radius-omni-sm); border: 1px solid var(--glass-border); box-shadow: var(--shadow-omni); background: var(--surface-overlay); }
+        .discover-tinder-card-wrap .discover-card { flex-direction: column; padding: 1rem; text-align: center; display: flex; background: transparent; }
+        .discover-tinder-card-wrap .discover-card-cover-wrap { width: 100%; }
+        .discover-tinder-card-wrap .discover-card-cover { width: 100%; height: auto; aspect-ratio: 1; border-radius: 1rem; background-size: cover; background-position: center; }
+        .discover-tinder-card-wrap .discover-card-meta { width: 100%; margin-top: 0.75rem; }
+        .discover-tinder-card-wrap .discover-card-play { border-radius: 1rem; }
+        .discover-tinder-actions { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin-top: 1rem; padding-bottom: 1rem; }
+        .discover-tinder-btn { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: none; font-size: 1.25rem; transition: transform 0.2s, background 0.2s; }
+        .discover-tinder-btn:active { transform: scale(0.95); }
+        .discover-tinder-empty { text-align: center; padding: 2rem 1rem; color: var(--text-dim); font-size: 0.875rem; }
+        .discovery-tab-bar .discovery-tab-btn {
+            padding: 0.375rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 10px;
+            font-weight: 700;
+            transition: background 0.2s, color 0.2s;
+        }
+        @keyframes song-marquee {
+            0%, 15% { transform: translateX(0); }
+            85%, 100% { transform: translateX(var(--marquee-offset, -100%)); }
+        }
+        .artist-marquee .song-card-artist-text { animation: song-marquee 8s linear infinite; }
+        @media (prefers-reduced-motion: reduce) {
+            .artist-marquee .song-card-artist-text { animation: none; }
+            .artist-marquee { overflow: hidden; text-overflow: ellipsis; }
+            #desktop-now-playing .desktop-np-timebar-row { transition: none; }
+            #desktop-now-playing .desktop-np-seek-fill { transition: none; }
+        }
+        /* Right-click context menu: compact glass panel, theme-aware */
+        #desktop-context-menu {
+            position: fixed;
+            z-index: 260;
+            min-width: 180px;
+            padding: 6px 0;
+            background: var(--bg-surface);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-omni-xs);
+            box-shadow: var(--shadow-omni);
+        }
+        #desktop-context-menu .desktop-context-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+            padding: 8px 14px;
+            border: none;
+            background: transparent;
+            color: var(--text-main);
+            font-size: 0.875rem;
+            font-weight: 700;
+            text-align: left;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        #desktop-context-menu .desktop-context-item:hover { background: var(--surface-overlay); }
+        #desktop-context-menu .desktop-context-item i { width: 1rem; flex-shrink: 0; }
+        #desktop-context-menu .desktop-context-item.delete-item { color: rgb(248 113 113); }
+        #desktop-context-menu .desktop-context-item.delete-item:hover { background: rgba(239 68 68 / 0.1); }
+        #desktop-context-menu .desktop-context-item.hidden { display: none; }
+
+        /* Playlist cover picker: match mobile — blur main shell so search/rows are not left sharp under the overlay. */
+        body.playlist-cover-picker-open #desktop-app {
+            filter: blur(var(--glass-blur));
+            pointer-events: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }

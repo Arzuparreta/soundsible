@@ -1,0 +1,921 @@
+        :root {
+            color-scheme: dark;
+            --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, "Plus Jakarta Sans", sans-serif;
+            --bg-deep: #0a0a0c;
+            --bg-surface: rgba(28, 28, 32, 0.82);
+            --bg-card: #16161a;
+            --bg-selection: rgba(249, 122, 18, 0.14);
+            --accent: #f97a12;
+            --secondary: #3178c6;
+            --text-main: #ebebf0;
+            --text-dim: #8e8e93;
+            --glass-border: rgba(255, 255, 255, 0.07);
+            --shadow: rgba(0, 0, 0, 0.45);
+            --radius-omni: 28px;
+            --radius-omni-sm: 20px;
+            --radius-omni-sm-inset: 12px; /* parent radius − padding: parallel corners inside song/queue containers */
+            --radius-omni-xs: 14px;
+            --radius-list-cover: 10px;
+            --omni-stack-height: 118px;
+            --view-header-offset: 58px;
+            --view-scroll-bottom: calc(var(--omni-stack-height) + env(safe-area-inset-bottom, 0px) + 0.75rem);
+            --shadow-omni: 0 16px 40px rgba(0, 0, 0, 0.42);
+            --glass-blur: 24px;
+            /* Semantic theme vars (dark) */
+            --input-bg: rgba(0, 0, 0, 0.4);
+            --input-border: rgba(255, 255, 255, 0.1);
+            --placeholder: rgba(255, 255, 255, 0.4);
+            --overlay-bg: rgba(0, 0, 0, 0.8);
+            --sheet-bg: rgba(10, 10, 12, 0.85);
+            --text-on-accent: #ffffff;
+            --nav-icon: rgba(255, 255, 255, 0.4);
+            --surface-overlay: rgba(255, 255, 255, 0.05);
+            --np-view-bg: rgba(13, 13, 15, 0.85);
+            --seek-track: rgba(255, 255, 255, 0.1);
+            --scroll-cue-thumb: rgba(255, 255, 255, 0.42);
+            --omni-label-default: rgba(255, 255, 255, 0.2);
+            --omni-label-hovered: rgba(255, 255, 255, 0.6);
+            --omni-label-shade: rgba(255, 255, 255, 0.04);
+            --omni-label-text-shadow: 0 0 10px rgba(0, 0, 0, 0.6), 0 1px 2px rgba(0, 0, 0, 0.4);
+            --text-on-selection: #ffffff;
+            --drop-target-bg: rgba(255, 255, 255, 0.06);
+            --drop-target-border: rgba(255, 255, 255, 0.14);
+        }
+
+        [data-theme="light"] {
+            color-scheme: light;
+            --bg-deep: #f2f2f7;
+            --bg-surface: rgba(255, 255, 255, 0.78);
+            --bg-card: #ffffff;
+            --bg-selection: rgba(49, 120, 198, 0.12);
+            --accent: #3178c6;
+            --secondary: #f97a12;
+            --text-main: #1c1c1e;
+            --text-dim: #636366;
+            --glass-border: rgba(0, 0, 0, 0.07);
+            --shadow: rgba(0, 0, 0, 0.08);
+            --shadow-omni: 0 12px 32px rgba(0, 0, 0, 0.12);
+            /* Semantic theme vars (light) */
+            --input-bg: rgba(0, 0, 0, 0.06);
+            --input-border: rgba(0, 0, 0, 0.12);
+            --placeholder: rgba(0, 0, 0, 0.45);
+            --overlay-bg: rgba(0, 0, 0, 0.5);
+            --sheet-bg: rgba(255, 255, 255, 0.92);
+            --text-on-accent: #ffffff;
+            --nav-icon: rgba(0, 0, 0, 0.5);
+            --surface-overlay: rgba(0, 0, 0, 0.05);
+            --np-view-bg: rgba(250, 250, 250, 0.95);
+            --seek-track: rgba(0, 0, 0, 0.12);
+            --scroll-cue-thumb: rgba(0, 0, 0, 0.35);
+            --omni-label-default: rgba(0, 0, 0, 0.35);
+            --omni-label-hovered: rgba(0, 0, 0, 0.6);
+            --omni-label-shade: rgba(0, 0, 0, 0.04);
+            --omni-label-text-shadow: 0 0 8px rgba(255, 255, 255, 0.7), 0 1px 2px rgba(255, 255, 255, 0.3);
+            --text-on-selection: #1c1c1c;
+            --drop-target-bg: rgba(0, 0, 0, 0.05);
+            --drop-target-border: rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="odst"] {
+            color-scheme: dark;
+            /* Content (e.g. under "Library") = card/surface; background = slightly darker + very subtle gradient to ODST orange */
+            --bg-deep: #1c2026;
+            --bg-deep-mid: #1d1f24;
+            --bg-deep-end: #1e1f21;
+            --bg-surface: rgba(32, 34, 42, 0.94);
+            --bg-card: #242830;
+            --bg-selection: rgba(201, 162, 39, 0.15);
+            --accent: #c9a227;
+            --secondary: #a88b3a;
+            --text-main: #e8e6e3;
+            --text-dim: #9a968f;
+            --glass-border: rgba(255, 255, 255, 0.06);
+            --shadow: rgba(0, 0, 0, 0.25);
+            --radius-omni: 28px;
+            --radius-omni-sm: 20px;
+            --radius-omni-sm-inset: 12px;
+            --radius-omni-xs: 14px;
+            --shadow-omni: 0 12px 28px rgba(0, 0, 0, 0.22);
+            --input-bg: rgba(0, 0, 0, 0.25);
+            --input-border: rgba(255, 255, 255, 0.06);
+            --placeholder: rgba(232, 230, 227, 0.45);
+            --overlay-bg: rgba(28, 32, 38, 0.92);
+            --sheet-bg: rgba(32, 34, 42, 0.96);
+            --text-on-accent: #1a1e28;
+            --nav-icon: rgba(232, 230, 227, 0.45);
+            --surface-overlay: rgba(255, 255, 255, 0.04);
+            --np-view-bg: rgba(32, 34, 42, 0.96);
+            --seek-track: rgba(255, 255, 255, 0.08);
+            --scroll-cue-thumb: rgba(232, 230, 227, 0.35);
+            --omni-label-default: rgba(255, 255, 255, 0.14);
+            --omni-label-hovered: rgba(255, 255, 255, 0.5);
+            --omni-label-shade: rgba(255, 255, 255, 0.04);
+            --omni-label-text-shadow: 0 0 10px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.35);
+            --text-on-selection: #1a1e28;
+            --drop-target-bg: rgba(255, 255, 255, 0.04);
+            --drop-target-border: rgba(255, 255, 255, 0.08);
+        }
+
+        html[data-theme="odst"],
+        html[data-theme="odst"] body {
+            /* Slightly darker than content; subtle gradient toward ODST orange at bottom */
+            background: linear-gradient(to bottom, var(--bg-deep) 0%, var(--bg-deep-mid) 55%, var(--bg-deep-end) 100%);
+            background-attachment: fixed;
+        }
+
+        html[data-theme="odst"] #initial-loader.initial-loader-bg,
+        html[data-theme="odst"] .initial-loader-bg#initial-loader {
+            background: linear-gradient(to bottom, var(--bg-deep) 0%, var(--bg-deep-mid) 55%, var(--bg-deep-end) 100%) !important;
+        }
+
+        #initial-loader.initial-loader-bg,
+        .initial-loader-bg#initial-loader {
+            background-color: var(--bg-deep);
+        }
+
+        html {
+            background-color: var(--bg-deep);
+            min-height: 100dvh;
+            overscroll-behavior: none;
+        }
+
+        body { 
+            font-family: var(--font-sans);
+            touch-action: pan-y;
+            overscroll-behavior-x: none;
+            overscroll-behavior-y: none;
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            letter-spacing: -0.01em;
+            min-height: calc(100dvh + env(safe-area-inset-bottom, 0px));
+            width: 100%;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        .safe-top { padding-top: max(1.5rem, env(safe-area-inset-top)); }
+        .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+        .min-h-full-safe { min-height: calc(100dvh + env(safe-area-inset-bottom, 0px)); }
+        .bottom-safe { bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem); }
+        .is-ios .safe-top { padding-top: max(3.5rem, env(safe-area-inset-top)); }
+        
+        * { -webkit-tap-highlight-color: transparent; }
+        
+        .song-row {
+            transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1), background-color 0.3s ease;
+            background-color: var(--bg-card); /* Ensure solid background */
+        }
+        .is-swiping .song-row {
+            will-change: transform;
+        }
+
+        .swipe-hints {
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .is-swiping .swipe-hints {
+            opacity: 1;
+        }
+
+        .glass-view {
+            background: var(--bg-surface);
+            backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+            -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+            border: 1px solid var(--glass-border);
+            transition: backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
+        }
+
+        /* View Stacking Engine */
+        #content {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            overflow: hidden;
+            overscroll-behavior: none;
+        }
+
+        .view {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            overflow-x: hidden;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            padding: calc(max(1.5rem, env(safe-area-inset-top)) + var(--view-header-offset)) 1rem var(--view-scroll-bottom) 1rem;
+            background-color: var(--bg-deep);
+            transition: transform 0.4s cubic-bezier(0.33, 1, 0.68, 1);
+            transform: translate3d(0, 0, 0);
+            z-index: 1;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .is-ios .view {
+            padding-top: calc(max(3.5rem, env(safe-area-inset-top)) + var(--view-header-offset));
+        }
+
+        /* Config: search bar hidden; let content use the band normally reserved for it */
+        #view-settings.view {
+            padding-top: max(1.5rem, env(safe-area-inset-top));
+        }
+
+        .is-ios #view-settings.view {
+            padding-top: max(3.5rem, env(safe-area-inset-top));
+        }
+
+        /* Discover results panel: scroll inset matches main views */
+        #discover-search-results {
+            padding-bottom: var(--view-scroll-bottom) !important;
+        }
+
+        /* Cross-device resume: top notification banner (non-blocking) */
+        #resume-playback-modal.resume-playback-root--mobile {
+            position: fixed;
+            left: 0.75rem;
+            right: 0.75rem;
+            top: max(0.5rem, env(safe-area-inset-top));
+            z-index: 128;
+            pointer-events: none;
+            transition: opacity 0.25s ease, transform 0.35s cubic-bezier(0.19, 1, 0.22, 1);
+            opacity: 0;
+            transform: translateY(-0.75rem);
+        }
+        #resume-playback-modal.resume-playback-root--mobile.resume-playback-root--open {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        #resume-playback-modal.resume-playback-root--mobile .resume-playback-panel {
+            pointer-events: auto;
+            background: var(--bg-surface);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-omni);
+            padding: 0.875rem 1rem;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
+        }
+        #resume-playback-modal.resume-playback-root--mobile .resume-playback-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-main);
+            line-height: 1.35;
+            margin: 0 0 0.75rem 0;
+        }
+        #resume-playback-modal.resume-playback-root--mobile .resume-playback-device:empty {
+            display: none;
+        }
+        #resume-playback-modal.resume-playback-root--mobile .resume-playback-actions {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+        #resume-playback-modal.resume-playback-root--mobile .resume-playback-btn {
+            padding: 0.45rem 0.9rem;
+            border-radius: var(--radius-omni-xs);
+            font-size: 0.8125rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.15s ease;
+        }
+        #resume-playback-modal.resume-playback-root--mobile .resume-playback-btn--secondary {
+            background: var(--surface-overlay);
+            color: var(--text-dim);
+        }
+        #resume-playback-modal.resume-playback-root--mobile .resume-playback-btn--primary {
+            background: var(--accent);
+            color: var(--text-on-accent, #fff);
+        }
+
+        /* Global Search Bar */
+        #global-search-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: max(1.25rem, env(safe-area-inset-top)) 1rem 0.5rem 1rem;
+            background: linear-gradient(to bottom, var(--bg-deep) 52%, transparent);
+            transition: transform 0.3s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        #global-search-container .global-search-inner {
+            pointer-events: auto;
+        }
+
+        .is-ios #global-search-container {
+            padding-top: max(3.25rem, env(safe-area-inset-top));
+        }
+
+        #global-search-container.scrolled {
+            background: var(--bg-deep);
+            border-bottom: 1px solid var(--bg-deep);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+
+        .global-search-inner {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            row-gap: 8px;
+            background: var(--input-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            -webkit-backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-omni);
+            padding: 6px 12px;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .global-search-inner:focus-within {
+            border-color: color-mix(in srgb, var(--accent) 42%, var(--glass-border));
+            background: var(--surface-overlay);
+            box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
+        }
+
+        /* Unified segmented controls (library tabs + discover source): calmer, omnibar-aligned */
+        .segmented-pill {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px;
+            border-radius: 9999px;
+            background: var(--surface-overlay);
+            border: 1px solid var(--glass-border);
+            flex-shrink: 0;
+        }
+        .segmented-pill button {
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            padding: 6px 12px;
+            border-radius: 9999px;
+            color: var(--text-dim);
+            background: transparent;
+            transition: background 0.18s ease, color 0.18s ease;
+        }
+        .segmented-pill button[aria-pressed="true"] {
+            background: var(--accent);
+            color: var(--text-on-accent);
+        }
+        .segmented-pill button[aria-pressed="false"]:hover {
+            color: var(--text-main);
+        }
+
+        #global-search-input {
+            flex: 1;
+            min-width: 120px;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-main);
+            font-size: 15px;
+            font-weight: 500;
+            padding: 6px 0;
+            letter-spacing: -0.015em;
+        }
+
+        #global-search-input::placeholder {
+            color: var(--placeholder);
+        }
+
+        .view.hidden {
+            display: none !important;
+        }
+
+        /* Hyper-simple transition system */
+        .view-incoming { z-index: 20; transform: translate3d(0, 0, 0); }
+        .view-outgoing { z-index: 10; transform: translate3d(0, 0, 0); }
+        
+        .view-from-right { transform: translate3d(100%, 0, 0) !important; transition: none !important; }
+        .view-from-left { transform: translate3d(-100%, 0, 0) !important; transition: none !important; }
+
+        #now-playing-view {
+            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease, visibility 0.4s, backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
+            will-change: transform, opacity;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(100%) scale(0.98);
+            background: var(--np-view-bg);
+            backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+            -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+            border-top: 1px solid var(--glass-border);
+        }
+        /* Close 20% faster than open (open 0.6s -> close 0.48s) */
+        #now-playing-view.np-closing {
+            transition: transform 0.692s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.461s ease, visibility 0.461s, backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
+        }
+        #now-playing-view.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0) scale(1);
+        }
+
+        #action-menu {
+            visibility: hidden;
+            transition: visibility 0.4s;
+        }
+        #action-menu.active {
+            visibility: visible;
+        }
+        #action-menu-sheet {
+            background: var(--sheet-bg);
+            backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+            -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+            border-top: 1px solid var(--glass-border);
+            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), backdrop-filter 0.15s ease-out, -webkit-backdrop-filter 0.15s ease-out;
+            will-change: transform;
+        }
+        #action-menu.active #action-menu-sheet {
+            transform: translateY(0);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 0; }
+        .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; overscroll-behavior: contain; }
+        
+        /* Queue: modern Apple-like scroll cue (informative only) */
+        #floating-queue-tracks {
+            position: relative;
+        }
+        #floating-queue-tracks .queue-item {
+            padding-right: 14px;
+        }
+        .queue-scroll-cue {
+            position: absolute;
+            top: 10px;
+            bottom: 10px;
+            right: 1px;
+            width: 4px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s cubic-bezier(0.19, 1, 0.22, 1);
+            z-index: 5;
+        }
+        #floating-queue-tracks.has-scroll-cue .queue-scroll-cue {
+            opacity: 1;
+        }
+        .queue-scroll-cue-thumb {
+            position: absolute;
+            left: 0;
+            width: 4px;
+            height: 10px;
+            border-radius: 999px;
+            background: var(--scroll-cue-thumb);
+            box-shadow: 0 1px 8px rgba(0, 0, 0, 0.28);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        .status-pulse { animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.5); opacity: 0.4; }
+            100% { transform: scale(1); opacity: 0.8; }
+        }
+
+        /* Playing indicator: aggressive breathing animation */
+        .active-indicator-container.is-playing .playing-icon {
+            animation: playing-icon-breathe 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes playing-icon-breathe {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.12); opacity: 0.92; }
+        }
+
+        @keyframes omni-marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        /* Subtle Technical Inflation Feedback */
+        .omni-tap-inflate {
+            animation: omni-inflate 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        @keyframes omni-inflate {
+            0% { transform: scale(1); }
+            30% { transform: scale(1.08); }
+            100% { transform: scale(1); }
+        }
+
+        /* Seed state (56px pill): center transport content so anchor/icon are centered */
+        #omni-island.omni-seed #omni-transport {
+            justify-content: center;
+            padding-left: 0;
+            padding-right: 0;
+        }
+        /* Grid hint (seed state): subtle urge-to-hold pulse; only when collapsed */
+        @media (prefers-reduced-motion: no-preference) {
+            .omni-grid-hint-pulse {
+                animation: omni-grid-hint-pulse 2s ease-out infinite;
+            }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .omni-grid-hint-pulse { animation: none; }
+        }
+        @keyframes omni-grid-hint-pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.06); opacity: 0.92; }
+        }
+        .omni-anchor-logo-wrap.hidden { display: none !important; }
+        .omni-anchor-logo { width: 40px; height: 40px; object-fit: contain; }
+
+        /* Queue reorder: drag clone (visual only; original row stays in DOM to keep touch target) */
+        .queue-drag-clone {
+            position: fixed;
+            z-index: 9999;
+            pointer-events: none;
+            touch-action: none;
+            left: 0;
+            top: 0;
+            will-change: transform;
+            box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+            border-radius: var(--radius-omni);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(255, 255, 255, 0.10);
+            backdrop-filter: blur(22px) saturate(180%);
+            -webkit-backdrop-filter: blur(22px) saturate(180%);
+        }
+
+        /* Queue reorder: drop target highlight (subtle Apple-like glow) */
+        .queue-item.queue-drop-target {
+            background: var(--drop-target-bg);
+            border: 1px solid var(--drop-target-border);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+            transform: translateZ(0) scale(1.01);
+            transition: transform 0.18s cubic-bezier(0.19, 1, 0.22, 1), background 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        }
+
+        /* Queue reorder: dim source row slightly (keeps layout stable) */
+        .queue-item.queue-drag-source {
+            opacity: 0.18 !important;
+            transition: opacity 0.18s ease-out;
+        }
+
+        /* Discover: grid layout, no horizontal scroll */
+        .discover-section { margin-bottom: 1.125rem; flex-shrink: 0; }
+        .discover-section h2 { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; }
+        .discover-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 0.625rem; }
+        .discover-card { display: flex; align-items: center; gap: 0.625rem; padding: 0.625rem; border-radius: var(--radius-omni-xs); background: var(--surface-overlay); border: 1px solid var(--glass-border); transition: background 0.18s ease; min-width: 0; }
+        .discover-card:hover { background: var(--bg-card); }
+        .discover-card-cover { width: 48px; height: 48px; flex-shrink: 0; border-radius: 0.75rem; background-size: cover; background-position: center; background-color: var(--input-bg); }
+        .discover-card.discover-card-resolving .discover-card-cover { opacity: 0.85; }
+        .discover-card-meta { flex: 1; min-width: 0; }
+        .discover-card-title { font-size: 0.8125rem; font-weight: 600; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .discover-card-artist { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* Skeleton convention: same DOM as loaded content + is-skeleton on container + CSS placeholder/shimmer. Reuse skeleton-shimmer for any view. */
+        @keyframes skeleton-shimmer { 0% { opacity: 0.3; } 50% { opacity: 0.5; } 100% { opacity: 0.3; } }
+        .discover-tinder-card-wrap.is-skeleton .discover-card-cover { background: var(--input-bg) !important; background-image: none !important; animation: skeleton-shimmer 1.5s ease-in-out infinite; }
+        .discover-tinder-card-wrap.is-skeleton .discover-card-title,
+        .discover-tinder-card-wrap.is-skeleton .discover-card-artist { color: transparent; background: var(--text-dim); opacity: 0.35; border-radius: 4px; min-height: 0.8125em; animation: skeleton-shimmer 1.5s ease-in-out infinite; }
+        .discover-tinder-card-wrap.is-skeleton .discover-card-artist { min-height: 0.625em; }
+        @media (prefers-reduced-motion: reduce) { .discover-tinder-card-wrap.is-skeleton .discover-card-cover, .discover-tinder-card-wrap.is-skeleton .discover-card-title, .discover-tinder-card-wrap.is-skeleton .discover-card-artist { animation: none; } }
+        /* Tinder-style single card stack — mobile: centered in content area below header */
+        #view-discover #discover-sections { display: flex; flex-direction: column; min-height: 0; align-items: center; justify-content: center; }
+        .discover-tinder-outer { position: relative; display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex: 1; min-height: 0; width: 100%; }
+        .discover-tinder-refresh-overlay { position: absolute; top: -2.5rem; left: 50%; transform: translateX(-50%); z-index: 2; padding: 0.5rem 1rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; background: var(--surface-overlay); color: var(--text-main); border: 1px solid var(--glass-border); box-shadow: 0 2px 8px rgba(0,0,0,0.2); pointer-events: auto; transition: background 0.2s, color 0.2s; }
+        .discover-tinder-refresh-overlay:active { background: var(--accent); color: var(--text-on-accent); }
+        .discover-tinder-side-btn { width: 48px; height: 48px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid var(--glass-border); background: var(--surface-overlay); color: var(--text-main); font-size: 1rem; transition: transform 0.2s, background 0.2s, opacity 0.2s; }
+        .discover-tinder-side-btn:not(:disabled):active { transform: scale(0.95); }
+        .discover-tinder-side-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .discover-tinder-wrap { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; align-items: center; justify-content: center; min-width: 0; }
+        .discover-tinder-card-wrap { position: relative; width: 100%; max-width: min(400px, 95vw); display: flex; flex-direction: column; border-radius: var(--radius-omni-sm); overflow: hidden; background: var(--surface-overlay); border: 1px solid var(--glass-border); box-shadow: var(--shadow-omni); }
+        .discover-tinder-card-wrap .discover-card { flex-direction: column; padding: 1rem; text-align: center; display: flex; background: transparent; }
+        .discover-tinder-card-wrap .discover-card-cover-wrap { width: 100%; }
+        .discover-tinder-card-wrap .discover-card-cover { width: 100%; height: auto; aspect-ratio: 1; border-radius: 1rem; background-size: cover; background-position: center; }
+        .discover-tinder-card-wrap .discover-card-meta { width: 100%; margin-top: 0.75rem; }
+        .discover-tinder-card-wrap .discover-card-play { border-radius: 1rem; }
+        .discover-tinder-actions { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin-top: 1rem; padding-bottom: 1rem; }
+        .discover-tinder-btn { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: none; font-size: 1.25rem; transition: transform 0.2s, background 0.2s; }
+        .discover-tinder-btn:active { transform: scale(0.95); }
+        .discover-tinder-empty { text-align: center; padding: 2rem 1rem; color: var(--text-dim); font-size: 0.875rem; }
+
+        /* Omnibar root: pinned to layout viewport (100dvh) so the bar does not move when the keyboard opens (different layer from keyboard). */
+        #omni-bar-root {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 199;
+            transform: translateZ(0);
+            isolation: isolate;
+        }
+        #omni-bar-root > * { pointer-events: auto; }
+        #omni-bar-root > #omni-island-container { pointer-events: none; }
+        /* Block touches in the omnibar region from reaching the list so songs don't "follow the finger" when dragging in nav gaps */
+        #omni-bar-touch-block {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: calc(120px + env(safe-area-inset-bottom, 0px));
+            touch-action: none;
+        }
+
+        /* Dynamic Docking Labels: above omni bar (bar is bottom-safe + ~56px height; keep label 68px above bar bottom) */
+        #omni-label-container {
+            position: absolute;
+            bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem + 68px);
+            left: 0;
+            right: 0;
+            width: auto;
+            display: flex;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 220;
+            transition: opacity 0.28s ease;
+        }
+        #omni-label-container.omni-label-hidden {
+            opacity: 0;
+        }
+
+        #omni-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: var(--omni-label-default);
+            background: var(--omni-label-shade);
+            padding: 6px 12px;
+            border-radius: 999px;
+            text-shadow: var(--omni-label-text-shadow);
+            transition: transform 0.2s ease,
+                        color 0.2s ease,
+                        opacity 0.2s ease,
+                        background 0.2s ease;
+            will-change: transform, color;
+            white-space: nowrap;
+            transform-origin: center;
+            transform: translateX(var(--tx, 0)) scale(1);
+        }
+
+        #omni-label.hovered {
+            color: var(--omni-label-hovered);
+            font-weight: 900;
+        }
+
+        #omni-label.docked {
+            color: var(--accent);
+            font-weight: 900;
+            /* Perfectly centered mathematically */
+            transform: translateX(0px) scale(1.3);
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), 
+                        color 0.3s ease;
+        }
+
+        #omni-label.fade-out {
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        #omni-label.fade-in {
+            color: var(--accent);
+            font-weight: 900;
+            transform: translateX(0px) scale(1.3);
+            opacity: 0;
+            transition: opacity 0.2s ease, color 0.2s ease, transform 0.2s ease;
+        }
+
+        #omni-label.fade-in.fade-in-active {
+            opacity: 1;
+        }
+
+        /* Hitbox: expand touch area around island (keep horizontal padding ≤ gap so hitbox does not sit under side bubbles) */
+        #omni-island + #omni-touch-area {
+            inset-inline: -12px;
+            inset-block: -20px;
+        }
+
+        /* Shuffle/Repeat bubbles on sides of nav bar – visible when Now Playing is open */
+        .omni-side-bubble {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+            width: 43px;
+            height: 43px;
+            min-width: 43px;
+            min-height: 43px;
+            max-width: 43px;
+            max-height: 43px;
+            flex-shrink: 0;
+            border-radius: 50%;
+        }
+        body.now-playing-open .omni-side-bubble {
+            opacity: 1;
+            pointer-events: auto;
+            /* Above #omni-touch-area (z-index 210) so shuffle/repeat receive taps, not the expanded island hitbox */
+            position: relative;
+            z-index: 220;
+        }
+        /* Omnibar progress: always visible (single timebar); transition for seeking feedback */
+        #omni-progress-track {
+            transition: opacity 0.28s ease;
+            overflow: visible;
+        }
+        #omni-progress {
+            overflow: visible;
+        }
+
+        .input-theme {
+            background-color: var(--input-bg);
+            border-color: var(--input-border);
+        }
+        .input-theme::placeholder {
+            color: var(--placeholder);
+        }
+        select.input-theme {
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23dfe1e5' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 36px;
+        }
+        [data-theme="light"] select.input-theme {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231c1c1c' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        }
+        [data-theme="odst"] select.input-theme {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23e8e6e3' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        }
+        select.input-theme option {
+            background: var(--bg-card);
+            color: var(--text-main);
+        }
+
+        /* Keyboard Animation: Platform-specific */
+        #omni-bar-root #omni-island-container {
+            position: absolute;
+            bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem);
+            left: 0;
+            right: 0;
+        }
+        #omni-island-container {
+            transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+            will-change: transform;
+        }
+
+        /* Library tab bar (mobile): sliding pill indicator, Apple-like animation. Inline toggle only on home (single bar, different per tab). */
+        #global-search-container .library-tabs-inline { display: none; }
+        #global-search-container.show-library-tabs .library-tabs-inline { display: flex; }
+        #global-search-container .discover-odst-inline { display: none; }
+        #global-search-container.show-discover-odst .discover-odst-inline { display: flex; }
+        .library-tab-bar-mobile {
+            --library-tab-gap: 6px;
+            --library-tab-pad: 4px;
+        }
+        .library-tab-indicator {
+            left: var(--library-tab-pad);
+            top: var(--library-tab-pad);
+            bottom: var(--library-tab-pad);
+            width: calc(50% - var(--library-tab-gap) / 2 - var(--library-tab-pad));
+            transition: transform 0.28s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+        .library-tab-bar-mobile[data-active-tab="artists"] .library-tab-indicator {
+            transform: translateX(calc(100% + var(--library-tab-gap)));
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .library-tab-indicator { transition-duration: 0.12s; }
+        }
+
+        /* Artists: on touch, never use browser :hover/:active for card (wrong element gets selected). Only our .artist-card-tapped on real tap shows feedback. */
+        @media (hover: none) {
+            #library-artists .artist-card-cover { transform: none !important; }
+            #library-artists .artist-card-overlay { opacity: 0 !important; }
+            #library-artists .artist-card-name { color: var(--text-main) !important; }
+        }
+        /* Tap-driven selection: only the card that received the click gets this class (overrides touch suppress) */
+        #library-artists .artist-card.artist-card-tapped .artist-card-cover { transform: scale(0.95) !important; }
+        #library-artists .artist-card.artist-card-tapped .artist-card-overlay { opacity: 1 !important; }
+        #library-artists .artist-card.artist-card-tapped .artist-card-name { color: var(--accent) !important; }
+        /* During/after scroll or just after return: keep suppress so no stray :active shows (backup) */
+        #library-artists.artist-scroll-active .artist-card-cover { transform: none !important; }
+        #library-artists.artist-scroll-active .artist-card-overlay { opacity: 0 !important; }
+        #library-artists.artist-scroll-active .artist-card-name { color: var(--text-main) !important; }
+        #view-home.artist-just-returned .artist-card-cover { transform: none !important; }
+        #view-home.artist-just-returned .artist-card-overlay { opacity: 0 !important; }
+        #view-home.artist-just-returned .artist-card-name { color: var(--text-main) !important; }
+
+        /* List scroll safety (same pattern as library artists): keep, but do not disable song-row transforms so swipe animations still work */
+        #view-artist-detail.list-scroll-active .artist-album-header { transform: none !important; }
+        #view-playlists.list-scroll-active .playlist-card { transform: none !important; }
+        /* Discover: same scroll/touch as library — .view is the scroll container (no overrides). */
+        #view-discover.list-scroll-active .discover-card { background: var(--surface-overlay) !important; }
+        #view-discover.list-scroll-active .discover-card-play { background: transparent !important; }
+        /* Discover: same view structure as library/favourites (uses .view padding); inner panel scrolls. */
+        #view-discover {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        /* Artist detail: expandable album tracks */
+        .artist-album-expanded .artist-album-tracks { display: block !important; }
+        .artist-album-expanded .artist-album-chevron { transform: rotate(180deg); }
+
+        /* Now Playing: cover as div (no img) to avoid OS/browser image transition snapshot; 2px crop each side via background, same rounded corners as original */
+        #np-art {
+            background-image: url("assets/icons/icon-512.png");
+            background-size: calc(100% + 4px);
+            background-position: center;
+            border-radius: var(--radius-omni);
+            overflow: hidden;
+        }
+
+        #now-playing-view #np-seek-container {
+            display: block;
+            overflow: hidden;
+            max-height: 0;
+            opacity: 0;
+            transform: translateY(-32px);
+            transition: max-height 0.4s cubic-bezier(0.19, 1, 0.22, 1),
+                opacity 0.35s ease-out,
+                transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        #now-playing-view.active:not(.np-closing) #np-seek-container.np-timeline-expanded {
+            max-height: 72px;
+            opacity: 1;
+            transform: translateY(0);
+        }
+        #now-playing-view.np-closing #np-seek-container {
+            max-height: 0;
+            opacity: 0;
+            transform: translateY(-32px);
+            transition: none; /* no bar collapse; whole page slides */
+        }
+        /* Hide omnibar timebar when NP timeline is expanded (it "moved" into NP view) */
+        body.np-timeline-expanded #omni-progress-track {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+        #omni-progress-track.seeking {
+            opacity: 0.9;
+        }
+        #omni-progress-track.seeking #omni-progress {
+            box-shadow: 0 0 16px var(--accent);
+        }
+        #np-seek-container.seeking #np-seek-progress {
+            box-shadow: 0 0 16px var(--accent);
+        }
+        /* Skeleton Screen Styles */
+        @keyframes shimmer {
+            0% { background-position: -1000px 0; }
+            100% { background-position: 1000px 0; }
+        }
+        .skeleton-row {
+            height: 64px;
+            display: flex;
+            align-items: center;
+            padding: 8px 16px;
+            opacity: 0.6;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .skeleton-cover {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.05) 75%);
+            background-size: 1000px 100%;
+            animation: shimmer 2s infinite linear;
+        }
+        .skeleton-text-container {
+            margin-left: 12px;
+            flex: 1;
+        }
+        .skeleton-text-title {
+            height: 16px;
+            width: 60%;
+            border-radius: 4px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.05) 75%);
+            background-size: 1000px 100%;
+            animation: shimmer 2s infinite linear;
+            margin-bottom: 8px;
+        }
+        .skeleton-text-subtitle {
+            height: 12px;
+            width: 40%;
+            border-radius: 4px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.05) 75%);
+            background-size: 1000px 100%;
+            animation: shimmer 2s infinite linear;
+        }
+
+        /* Playlist cover picker: backdrop-filter often omits compositor-fixed UI (search bar, rows). Blur the whole #app while open. */
+        body.playlist-cover-picker-open #app {
+            filter: blur(var(--glass-blur));
+            pointer-events: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
