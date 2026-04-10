@@ -274,7 +274,7 @@ export class Downloader {
                 this.playPreview(videoId);
             });
             const addBtn = row.querySelector('.dl-add-one');
-            if (addBtn && result) addBtn.addEventListener('click', (e) => { e.stopPropagation(); this.addToDownloadQueue(result); });
+            if (addBtn && result) addBtn.addEventListener('click', (e) => { e.stopPropagation(); this.addToDownloadQueue(result); this.openDownloadQueue(); });
         });
     }
 
