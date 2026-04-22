@@ -294,10 +294,20 @@ class LibraryManager:
                 # Note: Now layer on local metadata (specifically paths)
                 for lt in local_lib.tracks:
                     if lt.id in track_map:
+                        rt = track_map[lt.id]
+                        # Note: User-edited metadata in library.json must win over stale remote titles
+                        if getattr(lt, "metadata_modified_by_user", False):
+                            rt.title = lt.title
+                            rt.artist = lt.artist
+                            rt.album = lt.album
+                            rt.album_artist = lt.album_artist
+                            rt.metadata_modified_by_user = True
+                            if lt.cover_source is not None:
+                                rt.cover_source = lt.cover_source
                         # Note: If we have a local path for a known track, use it (if valid)
                         if lt.local_path and os.path.exists(lt.local_path):
-                            track_map[lt.id].local_path = lt.local_path
-                            track_map[lt.id].is_local = True
+                            rt.local_path = lt.local_path
+                            rt.is_local = True
                     else:
                         # Note: This track is ONLY in local.
                         # Note: It's likely A new local scan that hasn't been uploaded yet.
@@ -495,6 +505,16 @@ class LibraryManager:
                 else:
                     self._log("Failed to download track.")
                     return False
+
+            # Note: Local library / ODST tracks live under OUTPUT_DIR; update tags in-place via temp copy
+            if not local_path:
+                resolved = resolve_local_track_path(track)
+                if resolved and os.path.isfile(resolved):
+                    fd, temp_path = tempfile.mkstemp(suffix=f".{track.format}")
+                    os.close(fd)
+                    shutil.copy2(resolved, temp_path)
+                    local_path = temp_path
+                    self._log(f"Using local file for metadata update: {resolved}")
             
             if not local_path:
                 return False

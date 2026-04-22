@@ -444,6 +444,36 @@ def get_track_by_id(lib, track_id: str) -> Optional[Track]:
     return None
 
 
+def _mirror_track_into_odst_downloader(track: Track) -> None:
+    """
+    Keep ODSTDownloader.library in sync with the main manifest.
+    Otherwise the next dl.save_library() overwrites library.json with stale titles/artists.
+    """
+    try:
+        dl = get_downloader(open_browser=False)
+    except Exception:
+        return
+    if not dl or not dl.library:
+        return
+    other = dl.library.get_track_by_id(track.id)
+    if not other:
+        return
+    other.title = track.title
+    other.artist = track.artist
+    other.album = track.album
+    other.album_artist = track.album_artist
+    other.duration = track.duration
+    other.original_filename = track.original_filename
+    other.year = track.year
+    other.track_number = track.track_number
+    other.cover_source = track.cover_source
+    other.metadata_modified_by_user = track.metadata_modified_by_user
+    other.file_hash = track.file_hash
+    other.file_size = track.file_size
+    other.bitrate = track.bitrate
+    other.format = track.format
+
+
 def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str] = None) -> bool:
     """Set track metadata flags, save, and emit library_updated. Returns True if track was found."""
     track = get_track_by_id(lib, track_id)
@@ -453,6 +483,7 @@ def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str]
         track.cover_source = cover_source
     track.metadata_modified_by_user = True
     lib._save_metadata()
+    _mirror_track_into_odst_downloader(track)
     socketio.emit('library_updated')
     return True
 

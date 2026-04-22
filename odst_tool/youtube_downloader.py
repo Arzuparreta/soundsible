@@ -47,6 +47,30 @@ def _is_valid_youtube_video_id(video_id: Optional[str]) -> bool:
     return all(c.isalnum() or c in "-_" for c in s)
 
 
+def _is_garbage_embedded_title(value: Any) -> bool:
+    """True if tags look like a placeholder (e.g. yt-dlp parse-metadata mistakes)."""
+    if value is None:
+        return True
+    t = str(value).strip().lower()
+    if not t:
+        return True
+    return t in (
+        "title",
+        "track",
+        "unknown",
+        "unknown title",
+        "audio",
+        "video",
+        "untitled",
+    )
+
+
+def _strip_hint_str(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
 def _extract_video_id_from_url(url: str) -> Optional[str]:
     """Extract YouTube video ID from youtube.com or youtu.be URL."""
     if not url or not isinstance(url, str):
@@ -229,28 +253,69 @@ class YouTubeDownloader:
 
         try:
             duration, bitrate, size = AudioProcessor.get_audio_details(str(temp_file))
+            video_id = _extract_video_id_from_url(url)
             clean_meta = AudioProcessor.get_metadata_from_file(str(temp_file))
+            if _is_garbage_embedded_title(clean_meta.get("title")):
+                clean_meta["title"] = ""
+            if _is_garbage_embedded_title(clean_meta.get("artist")):
+                clean_meta["artist"] = ""
+            clean_meta.setdefault('album', '')
+            clean_meta.setdefault('duration_sec', duration or 0)
+            clean_meta.setdefault('track_number', 1)
+            if isinstance(metadata_hint, dict):
+                ht = _strip_hint_str(metadata_hint.get("title"))
+                if ht and not _is_garbage_embedded_title(ht):
+                    clean_meta["title"] = ht
+                ha = _strip_hint_str(metadata_hint.get("artist"))
+                hc = _strip_hint_str(metadata_hint.get("channel"))
+                artist_hint = ha or hc
+                if artist_hint:
+                    clean_meta["artist"] = artist_hint
+                if metadata_hint.get("duration_sec") is not None:
+                    clean_meta["duration_sec"] = metadata_hint["duration_sec"]
+                if metadata_hint.get("album") is not None:
+                    alb = _strip_hint_str(metadata_hint.get("album"))
+                    clean_meta["album"] = alb
+            if _is_garbage_embedded_title(clean_meta.get("title")) or _is_garbage_embedded_title(
+                clean_meta.get("artist")
+            ):
+                peek = self._peek_video_metadata(url)
+                if peek:
+                    pt = _strip_hint_str(peek.get("track") or peek.get("title"))
+                    if pt and not _is_garbage_embedded_title(pt):
+                        clean_meta["title"] = pt
+                    pa = _strip_hint_str(
+                        peek.get("artist") or peek.get("channel") or peek.get("uploader") or ""
+                    )
+                    if pa and (_is_garbage_embedded_title(clean_meta.get("artist")) or not clean_meta.get("artist")):
+                        clean_meta["artist"] = pa
+                    if not clean_meta.get("album") and peek.get("album"):
+                        clean_meta["album"] = _strip_hint_str(peek.get("album"))
             clean_meta.setdefault('title', 'Unknown Title')
             clean_meta.setdefault('artist', 'Unknown Artist')
             clean_meta.setdefault('album', '')
             clean_meta.setdefault('duration_sec', duration or 0)
             clean_meta.setdefault('track_number', 1)
-            if isinstance(metadata_hint, dict):
-                if metadata_hint.get("title"):
-                    clean_meta["title"] = metadata_hint["title"]
-                if metadata_hint.get("artist") or metadata_hint.get("channel"):
-                    clean_meta["artist"] = metadata_hint.get("artist") or metadata_hint.get("channel")
-                if metadata_hint.get("duration_sec") is not None:
-                    clean_meta["duration_sec"] = metadata_hint["duration_sec"]
-                if metadata_hint.get("album") is not None:
-                    clean_meta["album"] = metadata_hint["album"]
+
+            try:
+                AudioProcessor.embed_metadata(
+                    str(temp_file),
+                    clean_meta,
+                    _yt_thumbnail_url(video_id),
+                )
+            except Exception as e:
+                logger.warning("Could not re-embed metadata on downloaded file: %s", e)
+
+            try:
+                size = os.path.getsize(str(temp_file))
+            except OSError:
+                pass
 
             file_hash = AudioProcessor.calculate_hash(str(temp_file))
             extension = temp_file.suffix[1:]
             final_path = self.tracks_dir / f"{file_hash}.{extension}"
             shutil.move(str(temp_file), str(final_path))
 
-            video_id = _extract_video_id_from_url(url)
             track = Track(
                 id=file_hash,
                 title=clean_meta['title'],
@@ -416,7 +481,6 @@ class YouTubeDownloader:
             "--add-metadata",
             "--embed-thumbnail",
             "--parse-metadata", "playlist_index:%(track_number)s",
-            "--parse-metadata", "%(track|title)s:%(title)s",
             "-o", output_template,
             "--retries", "10",
             "--no-warnings",
@@ -468,6 +532,25 @@ class YouTubeDownloader:
         for f in self.temp_dir.glob(f"{temp_filename}.*"):
             return f
         return None
+
+    def _peek_video_metadata(self, url: str) -> Dict[str, Any]:
+        """Single extract_info (no download) to recover title/artist when embedded tags are wrong."""
+        ydl_opts: Dict[str, Any] = {
+            "quiet": True,
+            "no_warnings": True,
+            "extractor_args": {"youtube": {"player_client": ["android", "ios", "web"]}},
+        }
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            ydl_opts["cookiefile"] = self.cookie_file
+        elif self.cookie_browser:
+            ydl_opts["cookiesfrombrowser"] = (self.cookie_browser, None, None, None)
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            return info if isinstance(info, dict) else {}
+        except Exception as e:
+            logger.warning("peek_video_metadata failed for %s: %s", url, e)
+            return {}
 
     def search_youtube(self, query: str, max_results: int = 10, use_ytmusic: bool = True) -> List[Dict[str, Any]]:
         """
