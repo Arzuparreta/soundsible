@@ -74,6 +74,8 @@ class Store {
         this.subscribers = [];
         this._syncLibraryVersion = 0;
         this._syncLibraryInFlight = false;
+        /** When true, another `library_updated` arrived during sync — run sync again so we don't miss mutations (e.g. create playlist + add track). */
+        this._syncLibraryPending = false;
         this._youtubeIdsVersion = 0;
         /** Set when the user has started playback this page load (not persisted). Used to avoid resume-sync racing the first tap. */
         this._userPlaybackStartedThisSession = false;
@@ -243,7 +245,10 @@ class Store {
     }
 
     async syncLibrary() {
-        if (this._syncLibraryInFlight) return false;
+        if (this._syncLibraryInFlight) {
+            this._syncLibraryPending = true;
+            return false;
+        }
         this._syncLibraryInFlight = true;
         const syncVersion = ++this._syncLibraryVersion;
         const host = this.state.activeHost;
@@ -320,6 +325,13 @@ class Store {
             return false;
         } finally {
             this._syncLibraryInFlight = false;
+            const runAgain = this._syncLibraryPending;
+            this._syncLibraryPending = false;
+            if (runAgain) {
+                queueMicrotask(() => {
+                    this.syncLibrary();
+                });
+            }
         }
     }
 

@@ -264,10 +264,27 @@ export function showAddToPlaylistPicker(options) {
                     const newName = prompt('Playlist name');
                     if (newName != null && newName.trim()) {
                         const trimmed = newName.trim();
-                        store.createPlaylist(trimmed).then(() => store.addToPlaylist(trimmed, tid)).then(() => toast(`Added to ${trimmed}`));
+                        const trackId = String(tid);
+                        void (async () => {
+                            const okCreate = await store.createPlaylist(trimmed);
+                            if (!okCreate) {
+                                toast('Could not create playlist');
+                                return;
+                            }
+                            const okAdd = await store.addToPlaylist(trimmed, trackId);
+                            if (!okAdd) {
+                                toast('Playlist created, but could not add the track');
+                                await store.syncLibrary();
+                                return;
+                            }
+                            toast(`Added to ${trimmed}`);
+                        })();
                     }
                 } else if (name) {
-                    store.addToPlaylist(name, tid).then(() => toast(`Added to ${name}`));
+                    void store.addToPlaylist(name, String(tid)).then((ok) => {
+                        if (ok) toast(`Added to ${name}`);
+                        else toast('Could not add to playlist');
+                    });
                 }
             });
         });
