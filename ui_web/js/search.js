@@ -209,9 +209,11 @@ function bindListeners(merged) {
             addBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 window.Downloader.addToDownloadQueue(item, { source: searchService.sourceMode });
-                // Open the download queue popover after adding item
-                if (typeof window.Downloader.openDownloadQueue === 'function') {
-                    window.Downloader.openDownloadQueue();
+                if (typeof window.Downloader.toggleDownloadQueue === 'function') {
+                    window.Downloader.toggleDownloadQueue();
+                }
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Added to download queue');
                 }
             });
         }
