@@ -427,7 +427,11 @@ export class Downloader {
 
     static addToDownloadQueue(result, options = {}) {
         if (!result || !result.id) return;
-        const canonicalUrl = searchService.normalizeYouTubeUrl(result.webpage_url || `https://www.youtube.com/watch?v=${result.id}`);
+        const idEnc = encodeURIComponent(result.id);
+        let canonicalUrl = searchService.normalizeYouTubeUrl(result.webpage_url || '');
+        if (!canonicalUrl) {
+            canonicalUrl = searchService.normalizeYouTubeUrl(`https://www.youtube.com/watch?v=${idEnc}`);
+        }
         if (!canonicalUrl) return;
 
         // Note: Distinguish between YT music and normal YT results for backend provider routing

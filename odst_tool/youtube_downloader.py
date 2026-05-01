@@ -558,10 +558,10 @@ class YouTubeDownloader:
         id, title, duration, thumbnail, webpage_url, channel, artist (same value from
         channel, uploader, or artist — whichever yt-dlp provides).
         No filtering — pass-through for UI; a proper search layer can be added later.
-        use_ytmusic=True: https://music.youtube.com/search?q=...#songs (full playlist
-        extract, not flat — flat YTM search omits uploader/channel/artist). No cookies
-        on this path: full extract + cookies often yields “Requested format is not
-        available”; downloads still use cookies elsewhere.
+        use_ytmusic=True: https://music.youtube.com/search?q=...#songs with extract_flat
+        (fast; channel/artist may be empty). Full per-video extract was very slow (~tens of
+        seconds) and often set url= relative paths that broke clients expecting absolute
+        watch URLs. No cookies on this path; downloads still use cookies elsewhere.
         use_ytmusic=False: ytsearchN:query with extract_flat (fast; uploader present).
         """
         if not query or not query.strip():
@@ -575,7 +575,7 @@ class YouTubeDownloader:
             }
         }
         if use_ytmusic:
-            ydl_opts['extract_flat'] = False
+            ydl_opts['extract_flat'] = True
             ydl_opts['playlistend'] = max_results
             ydl_opts['ignoreerrors'] = True
         else:
@@ -599,7 +599,19 @@ class YouTubeDownloader:
             title = (entry.get('title') or '').strip()
             if not title or title.lower() == 'unknown':
                 return None
-            webpage_url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
+            vid_s = str(video_id).strip()
+            if _is_valid_youtube_video_id(vid_s):
+                webpage_url = f"https://www.youtube.com/watch?v={vid_s}"
+            else:
+                raw = (entry.get('webpage_url') or entry.get('url') or '').strip()
+                if raw.startswith('http://') or raw.startswith('https://'):
+                    webpage_url = raw
+                elif raw.startswith('/'):
+                    webpage_url = f"https://www.youtube.com{raw}"
+                elif raw:
+                    webpage_url = f"https://www.youtube.com/{raw.lstrip('/')}"
+                else:
+                    webpage_url = f"https://www.youtube.com/watch?v={vid_s}"
             raw_creator = (
                 entry.get('channel')
                 or entry.get('uploader')
