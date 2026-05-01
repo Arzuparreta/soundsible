@@ -94,6 +94,11 @@ _YTDLP_PROGRESS_LINE = re.compile(
     r"(?:\s+at\s+(?P<speed>\S+))?(?:\s+ETA\s+(?P<eta>\S+))?",
     re.IGNORECASE,
 )
+# Note: Some yt-dlp builds use "100% of 3.21MiB in 00:05" (no at/ETA on that line).
+_YTDLP_PROGRESS_IN = re.compile(
+    r"\[download\]\s+(?P<pct>\d+\.?\d*)%\s+of\s+(?:~\s*)?(?P<total>[\d.]+)(?P<tunit>[KMGT]?i?B)\s+in\s+",
+    re.IGNORECASE,
+)
 
 
 def _size_str_to_bytes(amount: str, unit: str) -> Optional[int]:
@@ -121,12 +126,17 @@ def _parse_ytdlp_download_progress(line: str) -> Optional[Dict[str, Any]]:
     if "Post-processing" in line:
         return {"phase": "processing"}
     m = _YTDLP_PROGRESS_LINE.search(line)
+    speed = None
+    eta = None
+    if m:
+        speed = m.group("speed")
+        eta = m.group("eta")
+    else:
+        m = _YTDLP_PROGRESS_IN.search(line)
     if not m:
         return None
     pct = float(m.group("pct"))
     total_b = _size_str_to_bytes(m.group("total"), m.group("tunit"))
-    speed = m.group("speed")
-    eta = m.group("eta")
     out: Dict[str, Any] = {
         "phase": "downloading",
         "percent": min(100.0, max(0.0, pct)),
@@ -303,7 +313,7 @@ class YouTubeDownloader:
         """
         if progress_callback:
             try:
-                progress_callback({"phase": "preparing", "percent": 0.0})
+                progress_callback({"phase": "preparing"})
             except Exception:
                 pass
         temp_file = self._download_audio(url, progress_callback=progress_callback)
@@ -541,7 +551,7 @@ class YouTubeDownloader:
 
         codec = profile['format'] if profile['format'] != 'best' else 'flac'
         args = [
-            get_subprocess_python(), "-m", "yt_dlp",
+            get_subprocess_python(), "-u", "-m", "yt_dlp",
             "-f", YDL_FORMAT_AUDIO,
             "-x",
             "--audio-format", codec,
@@ -584,6 +594,7 @@ class YouTubeDownloader:
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                env={**os.environ, "PYTHONUNBUFFERED": "1"},
             )
             try:
                 if proc.stdout:

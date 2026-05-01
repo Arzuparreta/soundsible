@@ -9,6 +9,7 @@ import { formatTime, esc } from './renderers.js';
 import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 import { searchService, SourceType } from './search_service.js';
 import { isYtdlpPreviewStreamTrack } from './shared.js';
+import { getApiBase as stationApiUrl } from './config.js';
 
 /** Default element IDs for mobile (index.html). Desktop passes overrides so the same class works in desktop.html. */
 const DEFAULT_DL_SELECTORS = {
@@ -247,7 +248,10 @@ export class Downloader {
 
     /** Resolve pasted YouTube URL to title/thumbnail via Station Engine (peek). */
     static async peekUrlMetadata(songStr) {
-        const apiBase = searchService.getApiBase();
+        const host = (store?.state?.activeHost
+            || (typeof window !== 'undefined' ? window.location.hostname : '')
+            || 'localhost');
+        const apiBase = stationApiUrl(host);
         if (!apiBase || !songStr) return;
         try {
             const params = new URLSearchParams({ url: songStr });

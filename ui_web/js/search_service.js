@@ -5,6 +5,7 @@
  */
 import { store } from './store.js';
 import { Haptics } from './haptics.js';
+import { getApiBase as stationApiUrl } from './config.js';
 
 export const SourceType = {
     YOUTUBE_URL: 'youtube_url',
@@ -236,9 +237,10 @@ class SearchService {
     }
 
     getApiBase() {
-        if (store && store.apiBase && store.state && store.state.activeHost) return store.apiBase;
-        if (typeof window !== 'undefined' && window.location && window.location.origin) return window.location.origin;
-        return '';
+        const host = (store?.state?.activeHost
+            || (typeof window !== 'undefined' ? window.location.hostname : '')
+            || 'localhost');
+        return stationApiUrl(host);
     }
 
     esc(str) {

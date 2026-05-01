@@ -310,6 +310,69 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
     return downloader_service
 
 
+def _youtube_metadata_title_usable(title: Optional[Any], song_str: str) -> bool:
+    """Reject URLs and placeholders so we do not embed them as track titles."""
+    if title is None:
+        return False
+    t = str(title).strip()
+    if not t:
+        return False
+    s = str(song_str or "").strip()
+    if t == s:
+        return False
+    tl = t.lower()
+    if "youtube.com" in tl or "youtu.be" in tl:
+        return False
+    if tl.startswith("http://") or tl.startswith("https://"):
+        return False
+    return True
+
+
+def _fill_youtube_runtime_hint(dl, song_str: str, item: dict, metadata_evidence: dict) -> dict:
+    """Build metadata_hint for process_video; never prefer raw URLs over yt-dlp/peek titles."""
+    runtime_hint = dict(metadata_evidence or {})
+    if not _youtube_metadata_title_usable(runtime_hint.get("title"), song_str):
+        runtime_hint.pop("title", None)
+
+    if item.get("duration_sec") is not None:
+        runtime_hint.setdefault("duration_sec", item["duration_sec"])
+
+    dt = item.get("display_title")
+    if _youtube_metadata_title_usable(dt, song_str):
+        runtime_hint.setdefault("title", str(dt).strip())
+
+    da = item.get("display_artist")
+    if da and str(da).strip():
+        dls = str(da).strip().lower()
+        if dls not in ("unknown", "unknown artist", "resolving…", "resolving..."):
+            runtime_hint.setdefault("artist", str(da).strip())
+
+    if not _youtube_metadata_title_usable(runtime_hint.get("title"), song_str):
+        try:
+            brief = dl.downloader.peek_brief(song_str)
+            if brief:
+                bt = str(brief.get("title") or "").strip()
+                if _youtube_metadata_title_usable(bt, song_str):
+                    runtime_hint["title"] = bt
+                ch = brief.get("artist") or brief.get("channel") or ""
+                if ch and (
+                    not runtime_hint.get("artist")
+                    or str(runtime_hint.get("artist")).strip() in ("", "Unknown", "Unknown Artist")
+                ):
+                    runtime_hint["artist"] = str(ch).strip()
+                if brief.get("duration") and not runtime_hint.get("duration_sec"):
+                    try:
+                        runtime_hint["duration_sec"] = int(brief["duration"])
+                    except (TypeError, ValueError):
+                        pass
+        except Exception as ex:
+            logger.debug("peek_brief for queue item failed: %s", ex)
+
+    if not _youtube_metadata_title_usable(runtime_hint.get("title"), song_str):
+        runtime_hint.pop("title", None)
+    return runtime_hint
+
+
 def _process_single_queue_item(item):
     """Worker function for A single download queue item."""
     global downloader_service, queue_manager_dl
@@ -333,13 +396,7 @@ def _process_single_queue_item(item):
             if source_type in {"youtube_url", "ytmusic_search", "youtube_search"} or "youtube.com" in song_str or "youtu.be" in song_str:
                 song_str = normalize_youtube_url(song_str)
                 queue_manager_dl.add_log(f"Downloading direct YouTube: {song_str}...")
-                runtime_hint = dict(metadata_evidence or {})
-                if item.get("display_title"):
-                    runtime_hint.setdefault("title", item["display_title"])
-                if item.get("display_artist"):
-                    runtime_hint.setdefault("artist", item["display_artist"])
-                if item.get("duration_sec") is not None:
-                    runtime_hint.setdefault("duration_sec", item["duration_sec"])
+                runtime_hint = _fill_youtube_runtime_hint(dl, song_str, item, metadata_evidence)
 
                 def _on_progress(payload):
                     if not isinstance(payload, dict):
