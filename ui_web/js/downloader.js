@@ -9,7 +9,6 @@ import { formatTime, esc } from './renderers.js';
 import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 import { searchService, SourceType } from './search_service.js';
 import { isYtdlpPreviewStreamTrack } from './shared.js';
-import { getApiBase as stationApiUrl } from './config.js';
 
 /** Default element IDs for mobile (index.html). Desktop passes overrides so the same class works in desktop.html. */
 const DEFAULT_DL_SELECTORS = {
@@ -207,76 +206,12 @@ export class Downloader {
         if (!raw) return;
         const parsed = searchService.parseUrlLines(raw);
         if (parsed.mode === 'url') {
-            this.enqueueDirectUrls(parsed.accepted.map((x) => x.normalized));
-            this.searchInput.value = '';
+            const { runDiscoverUrlSearch } = await import('./search.js');
+            const ok = await runDiscoverUrlSearch(raw);
+            if (ok && this.searchInput) this.searchInput.value = '';
             return;
         }
         await this.runSearch(raw);
-    }
-
-    static enqueueDirectUrls(urls) {
-        const existing = new Set(this.downloadQueue.map((item) => item.song_str).filter(Boolean));
-        let added = 0;
-        const toPeek = [];
-        for (const url of urls) {
-            if (existing.has(url)) continue;
-            existing.add(url);
-            this.downloadQueue.push({
-                source_type: SourceType.YOUTUBE_URL,
-                song_str: url,
-                video_id: null,
-                title: url,
-                channel: '',
-                duration: 0,
-                thumbnail: '',
-                metadata_evidence: {},
-                _peekPending: true
-            });
-            toPeek.push(url);
-            added += 1;
-        }
-        this.renderDownloadQueueList();
-        this.updateFabAndPopover();
-        if (added > 0) {
-            this.addLog(`Added ${added} URL item(s) to pending queue.`);
-            Haptics.tick();
-            for (const u of toPeek) {
-                void this.peekUrlMetadata(u);
-            }
-        }
-    }
-
-    /** Resolve pasted YouTube URL to title/thumbnail via Station Engine (peek). */
-    static async peekUrlMetadata(songStr) {
-        const host = (store?.state?.activeHost
-            || (typeof window !== 'undefined' ? window.location.hostname : '')
-            || 'localhost');
-        const apiBase = stationApiUrl(host);
-        if (!apiBase || !songStr) return;
-        try {
-            const params = new URLSearchParams({ url: songStr });
-            const resp = await fetch(`${apiBase}/api/downloader/youtube/peek?${params.toString()}`);
-            const data = await resp.json().catch(() => ({}));
-            const p = data?.peek;
-            if (!p) return;
-            const item = this.downloadQueue.find((q) => q.song_str === songStr);
-            if (!item) return;
-            item.title = p.title || item.title;
-            item.channel = p.artist || p.channel || item.channel;
-            item.duration = Number(p.duration) || item.duration;
-            item.thumbnail = p.thumbnail || item.thumbnail;
-            item.video_id = p.id || item.video_id;
-            item._peekPending = false;
-            if (item.metadata_evidence && typeof item.metadata_evidence === 'object') {
-                item.metadata_evidence.title = p.title || item.metadata_evidence.title;
-                item.metadata_evidence.artist = p.artist || p.channel || item.metadata_evidence.artist;
-                item.metadata_evidence.duration_sec = item.duration;
-            }
-            this.renderDownloadQueueList();
-        } catch (err) {
-            const item = this.downloadQueue.find((q) => q.song_str === songStr);
-            if (item) item._peekPending = false;
-        }
     }
 
     static averageProgressPercent(queue) {
@@ -671,9 +606,7 @@ export class Downloader {
         }
         if (local.length > 0) {
             this.downloadQueueList.innerHTML = local.map((r, i) => {
-                const sub = r._peekPending
-                    ? 'Resolving…'
-                    : (r.channel || r.source_type || 'YouTube');
+                const sub = r.channel || r.source_type || 'YouTube';
                 return `
             <div class="queue-item flex items-center p-2 hover:bg-[var(--surface-overlay)] rounded-2xl transition-colors group">
                 <div class="w-10 h-10 rounded-xl flex-shrink-0 bg-cover bg-center" style="background-image:url('${(r.thumbnail || '').replace(/"/g, '%22')}'); background-color: var(--input-bg);"></div>

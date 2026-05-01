@@ -310,6 +310,18 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
     return downloader_service
 
 
+def _youtube_metadata_artist_usable(artist: Optional[Any]) -> bool:
+    """Flat YouTube Music search entries omit channel/uploader; empty artist must not block a peek fill."""
+    if artist is None:
+        return False
+    s = str(artist).strip()
+    if not s:
+        return False
+    if s.lower() in ("unknown", "unknown artist"):
+        return False
+    return True
+
+
 def _youtube_metadata_title_usable(title: Optional[Any], song_str: str) -> bool:
     """Reject URLs and placeholders so we do not embed them as track titles."""
     if title is None:
@@ -329,7 +341,13 @@ def _youtube_metadata_title_usable(title: Optional[Any], song_str: str) -> bool:
 
 
 def _fill_youtube_runtime_hint(dl, song_str: str, item: dict, metadata_evidence: dict) -> dict:
-    """Build metadata_hint for process_video; never prefer raw URLs over yt-dlp/peek titles."""
+    """Build metadata_hint for process_video; never prefer raw URLs over yt-dlp/peek titles.
+
+    YouTube Music text search uses yt-dlp with extract_flat on music.youtube.com results; those
+    entries often have title but no channel/uploader/artist (see youtube_downloader.search_youtube).
+    A usable title from search then skipped peek_brief previously, so artist stayed empty and
+    tags fell through to Unknown Artist. We call peek_brief when title or artist is still unusable.
+    """
     runtime_hint = dict(metadata_evidence or {})
     if not _youtube_metadata_title_usable(runtime_hint.get("title"), song_str):
         runtime_hint.pop("title", None)
@@ -347,26 +365,31 @@ def _fill_youtube_runtime_hint(dl, song_str: str, item: dict, metadata_evidence:
         if dls not in ("unknown", "unknown artist", "resolving…", "resolving..."):
             runtime_hint.setdefault("artist", str(da).strip())
 
-    if not _youtube_metadata_title_usable(runtime_hint.get("title"), song_str):
+    need_peek = (
+        not _youtube_metadata_title_usable(runtime_hint.get("title"), song_str)
+        or not _youtube_metadata_artist_usable(runtime_hint.get("artist"))
+    )
+    brief = None
+    if need_peek:
         try:
             brief = dl.downloader.peek_brief(song_str)
-            if brief:
-                bt = str(brief.get("title") or "").strip()
-                if _youtube_metadata_title_usable(bt, song_str):
-                    runtime_hint["title"] = bt
-                ch = brief.get("artist") or brief.get("channel") or ""
-                if ch and (
-                    not runtime_hint.get("artist")
-                    or str(runtime_hint.get("artist")).strip() in ("", "Unknown", "Unknown Artist")
-                ):
-                    runtime_hint["artist"] = str(ch).strip()
-                if brief.get("duration") and not runtime_hint.get("duration_sec"):
-                    try:
-                        runtime_hint["duration_sec"] = int(brief["duration"])
-                    except (TypeError, ValueError):
-                        pass
         except Exception as ex:
             logger.debug("peek_brief for queue item failed: %s", ex)
+
+    if brief:
+        if not _youtube_metadata_title_usable(runtime_hint.get("title"), song_str):
+            bt = str(brief.get("title") or "").strip()
+            if _youtube_metadata_title_usable(bt, song_str):
+                runtime_hint["title"] = bt
+        if not _youtube_metadata_artist_usable(runtime_hint.get("artist")):
+            ch = brief.get("artist") or brief.get("channel") or ""
+            if ch and str(ch).strip():
+                runtime_hint["artist"] = str(ch).strip()
+        if brief.get("duration") and not runtime_hint.get("duration_sec"):
+            try:
+                runtime_hint["duration_sec"] = int(brief["duration"])
+            except (TypeError, ValueError):
+                pass
 
     if not _youtube_metadata_title_usable(runtime_hint.get("title"), song_str):
         runtime_hint.pop("title", None)

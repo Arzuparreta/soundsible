@@ -638,23 +638,36 @@ class YouTubeDownloader:
         return None
 
     def _peek_video_metadata(self, url: str) -> Dict[str, Any]:
-        """Single extract_info (no download) to recover title/artist when embedded tags are wrong."""
-        ydl_opts: Dict[str, Any] = {
+        """Single extract_info (no download) to recover title/artist when embedded tags are wrong.
+
+        Try without cookies first: browser cookie jars can make yt-dlp fail format resolution for
+        metadata-only extracts ("Requested format is not available") while public URLs work anonymously.
+        Fall back to cookies.txt then browser cookies for age-restricted / signed-in cases.
+        """
+        base: Dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
+            "skip_download": True,
             "extractor_args": {"youtube": {"player_client": ["android", "ios", "web"]}},
         }
+        attempts: List[Dict[str, Any]] = [dict(base)]
         if self.cookie_file and os.path.exists(self.cookie_file):
-            ydl_opts["cookiefile"] = self.cookie_file
-        elif self.cookie_browser:
-            ydl_opts["cookiesfrombrowser"] = (self.cookie_browser, None, None, None)
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-            return info if isinstance(info, dict) else {}
-        except Exception as e:
-            logger.warning("peek_video_metadata failed for %s: %s", url, e)
-            return {}
+            attempts.append({**base, "cookiefile": self.cookie_file})
+        if self.cookie_browser:
+            attempts.append({**base, "cookiesfrombrowser": (self.cookie_browser, None, None, None)})
+        last_err: Optional[Exception] = None
+        for opts in attempts:
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                if isinstance(info, dict) and info:
+                    return info
+            except Exception as e:
+                last_err = e
+                logger.debug("peek_video_metadata attempt failed for %s: %s", url, e)
+        if last_err:
+            logger.warning("peek_video_metadata failed for %s: %s", url, last_err)
+        return {}
 
     def peek_brief(self, url_or_id: str) -> Optional[Dict[str, Any]]:
         """Lightweight YouTube metadata for UI (no download). Same general shape as search_youtube rows."""

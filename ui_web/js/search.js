@@ -1,7 +1,9 @@
 /**
  * Unified Search: Library + ODST in one bar.
  * Library: instant filter on input. ODST: debounced so internet search runs after user pauses typing.
- * Link paste → add to download queue and clear input (only case we clear input).
+ * Pasting a YouTube / YouTube Music watch URL resolves the video via /api/downloader/youtube/peek
+ * (watch URL; independent of Music vs YouTube search mode) and shows that row first, then runs a
+ * normal ODST query from the resolved title+artist so the rest of the list matches the current mode.
  */
 import { store } from './store.js';
 import * as renderers from './renderers.js';
@@ -10,6 +12,7 @@ import { Resolver } from './resolver.js';
 import { Haptics } from './haptics.js';
 import { searchService } from './search_service.js';
 import { scoreLibrary, scoreArtist, mergeAndSortByScore, scoreOdst } from './search_scoring.js';
+import { getApiBase } from './config.js';
 
 const ODST_DEBOUNCE_MS = 150;
 
@@ -34,6 +37,99 @@ let onMusicSourceClick = null;
 let onYoutubeSourceClick = null;
 
 const SEARCH_EMPTY_DEFAULT = 'Search library and ODST...';
+
+/** Resolve normalized watch URLs to ODST-shaped rows (same API as add-to-queue metadata). */
+async function fetchPeekOdstRows(normalizedUrls) {
+    const host = (store?.state?.activeHost
+        || (typeof window !== 'undefined' ? window.location.hostname : '')
+        || 'localhost');
+    const base = getApiBase(host);
+    const out = [];
+    for (const u of normalizedUrls) {
+        try {
+            const params = new URLSearchParams({ url: u });
+            const r = await fetch(`${base}/api/downloader/youtube/peek?${params.toString()}`);
+            const data = await r.json().catch(() => ({}));
+            const p = data?.peek;
+            if (!p || !p.id) continue;
+            out.push({
+                id: p.id,
+                title: p.title || 'Unknown',
+                channel: p.channel || p.artist || '',
+                artist: p.artist || p.channel || '',
+                duration: Number(p.duration) || 0,
+                thumbnail: p.thumbnail || '',
+                webpage_url: p.webpage_url || u
+            });
+        } catch (_) {
+            /* skip failed URL */
+        }
+    }
+    return out;
+}
+
+/**
+ * URL-only input: peek each link (watch URL; not tied to YTM vs YT toggle), prepend rows, then ODST search from resolved title.
+ */
+async function runOdstFetchWithResolvedUrls(raw, parsed) {
+    if (!resultsEl || !parsed?.accepted?.length) return;
+    if (isDiscoverPage) {
+        resultsEl.innerHTML = '<div class="search-odst-loading text-center py-4 text-[var(--text-dim)] text-sm">Loading...</div>';
+    }
+    try {
+        const normalizedUrls = parsed.accepted.map((x) => x.normalized);
+        const prefixRows = await fetchPeekOdstRows(normalizedUrls);
+        const prefixIds = new Set(prefixRows.map((r) => String(r.id)));
+        const searchQuery = prefixRows.length
+            ? `${prefixRows[0].title} ${prefixRows[0].channel || ''}`.trim()
+            : '';
+        if (!searchQuery) {
+            throw new Error('Could not resolve this link');
+        }
+        let odstItems = [];
+        try {
+            const results = await searchService.query(searchQuery, { debounce: 0 });
+            if (results === null) return;
+            lastOdstResults = results;
+            odstItems = results
+                .map((r) => ({ source: 'odst', ...r }))
+                .filter((item) => !prefixIds.has(String(item.id)));
+        } catch (qErr) {
+            lastOdstResults = [];
+            if (prefixRows.length === 0) throw qErr;
+        }
+        const prefixItems = prefixRows.map((r) => ({ source: 'odst', ...r }));
+        if (isDiscoverPage) {
+            render([...prefixItems, ...odstItems]);
+        } else {
+            const librarySorted = [...lastLibraryItems].sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score;
+                return (a.sortTitle || '').localeCompare(b.sortTitle || '');
+            });
+            render([...prefixItems, ...odstItems, ...librarySorted]);
+        }
+    } catch (err) {
+        if (isDiscoverPage) {
+            render([]);
+        } else {
+            const sorted = [...lastLibraryItems].sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score;
+                return (a.sortTitle || '').localeCompare(b.sortTitle || '');
+            });
+            render(sorted);
+        }
+        const errMsg = err.message || 'Could not open this link';
+        if (resultsEl) {
+            const msg = document.createElement('div');
+            msg.className = 'text-center py-3 text-[var(--text-dim)] text-sm';
+            msg.textContent = errMsg;
+            resultsEl.appendChild(msg);
+        }
+        if (typeof window.showToast === 'function') window.showToast(errMsg);
+    }
+    const loading = resultsEl?.querySelector('.search-odst-loading');
+    if (loading) loading.remove();
+}
 
 function updateDiscoverPanels() {
     /* Discover is a single results panel; no SoundSnap/Browse toggle. */
@@ -303,16 +399,13 @@ function onInput() {
 
     const parsed = searchService.parseUrlLines(raw);
     if (parsed.mode === 'url') {
-        const Downloader = window.Downloader;
-        if (Downloader && typeof Downloader.enqueueDirectUrls === 'function') {
-            Downloader.enqueueDirectUrls(parsed.accepted.map((x) => x.normalized));
-            if (inputEl) inputEl.value = '';
-            if (typeof window.showToast === 'function') window.showToast('Link added to download queue');
-            clear();
-            return;
+        if (!isDiscoverPage) {
+            runLibraryOnly(raw);
         }
+        void runOdstFetchWithResolvedUrls(raw, parsed);
+        return;
     }
-    
+
     if (isDiscoverPage) {
         resultsEl.innerHTML = '<div class="search-odst-loading text-center py-4 text-[var(--text-dim)] text-sm">Loading...</div>';
         runOdstFetch(raw);
@@ -320,23 +413,6 @@ function onInput() {
         runLibraryOnly(raw);
         runOdstFetch(raw);
     }
-}
-
-function onPaste() {
-    setTimeout(() => {
-        const raw = (inputEl && inputEl.value) ? inputEl.value.trim() : '';
-        if (!raw) return;
-        const parsed = searchService.parseUrlLines(raw);
-        if (parsed.mode === 'url') {
-            const Downloader = window.Downloader;
-            if (Downloader && typeof Downloader.enqueueDirectUrls === 'function') {
-                Downloader.enqueueDirectUrls(parsed.accepted.map((x) => x.normalized));
-                if (inputEl) inputEl.value = '';
-                if (typeof window.showToast === 'function') window.showToast('Link added to download queue');
-                clear();
-            }
-        }
-    }, 0);
 }
 
 function clear() {
@@ -368,7 +444,6 @@ function isDiscoverViewActive() {
 function destroy() {
     if (inputEl) {
         inputEl.removeEventListener('input', onInput);
-        inputEl.removeEventListener('paste', onPaste);
     }
     if (typeof detachTypeahead === 'function') {
         detachTypeahead();
@@ -398,7 +473,6 @@ function setSearchOdstSource(value) {
 function init(opts = {}) {
     if (inputEl) {
         inputEl.removeEventListener('input', onInput);
-        inputEl.removeEventListener('paste', onPaste);
     }
     if (typeof detachTypeahead === 'function') {
         detachTypeahead();
@@ -434,9 +508,7 @@ function init(opts = {}) {
     }
 
     inputEl.removeEventListener('input', onInput);
-    inputEl.removeEventListener('paste', onPaste);
     inputEl.addEventListener('input', onInput);
-    inputEl.addEventListener('paste', onPaste);
     
     // ## Section: Typeahead support
     detachTypeahead = searchService.attach(inputEl, (val) => {
@@ -464,3 +536,12 @@ export const unifiedSearch = {
     destroy,
     updateDiscoverPanels
 };
+
+/** Returns true if raw was treated as YouTube URL(s) and discover/search UI was updated. */
+export async function runDiscoverUrlSearch(raw) {
+    const parsed = searchService.parseUrlLines((raw || '').trim());
+    if (parsed.mode !== 'url' || !parsed.accepted.length) return false;
+    if (!resultsEl) return false;
+    await runOdstFetchWithResolvedUrls(raw, parsed);
+    return true;
+}
