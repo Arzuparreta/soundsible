@@ -485,6 +485,11 @@
         #desktop-downloads-panel::-webkit-scrollbar { width: 6px; }
         #desktop-downloads-panel::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 3px; opacity: 0.4; }
         @keyframes dl-progress-indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+        .dl-active-row.desktop-download-item { min-width: 0; }
+        .dl-active-row .dl-active-cover { box-shadow: inset 0 0 0 1px var(--glass-border); }
+        .dl-active-row .dl-pct-text { min-width: 2.25rem; text-align: right; }
+        #mobile-downloads-list::-webkit-scrollbar { width: 6px; }
+        #mobile-downloads-list::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 3px; opacity: 0.4; }
         /* Queue row handle: visible on hover, no highlight on hover/focus/active */
         .queue-item-handle-wrap { opacity: 0; transition: opacity 0.2s; }
         .group:hover .queue-item-handle-wrap { opacity: 1; }

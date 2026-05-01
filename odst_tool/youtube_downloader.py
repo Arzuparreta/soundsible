@@ -7,7 +7,7 @@ import time
 import re
 import uuid
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Iterator
+from typing import Optional, Dict, Any, List, Iterator, Callable
 from urllib.parse import quote, urlparse, parse_qs
 import yt_dlp
 import requests
@@ -88,6 +88,54 @@ def _extract_video_id_from_url(url: str) -> Optional[str]:
 
 # Note: Same as A normal CLI download. no extractor_args (see docs/troubleshooting-yt-dlp-formats.md).
 YDL_FORMAT_AUDIO = "bestaudio/bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best/worstaudio"
+
+_YTDLP_PROGRESS_LINE = re.compile(
+    r"\[download\]\s+(?P<pct>\d+\.?\d*)%\s+of\s+(?:~\s*)?(?P<total>[\d.]+)(?P<tunit>[KMGT]?i?B)"
+    r"(?:\s+at\s+(?P<speed>\S+))?(?:\s+ETA\s+(?P<eta>\S+))?",
+    re.IGNORECASE,
+)
+
+
+def _size_str_to_bytes(amount: str, unit: str) -> Optional[int]:
+    try:
+        v = float(amount)
+    except (TypeError, ValueError):
+        return None
+    u = (unit or "").strip().upper().replace("İ", "I")
+    if u in ("B",):
+        return int(v)
+    if u in ("KIB", "KB"):
+        return int(v * 1024)
+    if u in ("MIB", "MB"):
+        return int(v * 1024**2)
+    if u in ("GIB", "GB"):
+        return int(v * 1024**3)
+    if u in ("TIB", "TB"):
+        return int(v * 1024**4)
+    return None
+
+
+def _parse_ytdlp_download_progress(line: str) -> Optional[Dict[str, Any]]:
+    if "[ExtractAudio]" in line or "[Metadata]" in line or "[Merger]" in line:
+        return {"phase": "processing"}
+    if "Post-processing" in line:
+        return {"phase": "processing"}
+    m = _YTDLP_PROGRESS_LINE.search(line)
+    if not m:
+        return None
+    pct = float(m.group("pct"))
+    total_b = _size_str_to_bytes(m.group("total"), m.group("tunit"))
+    speed = m.group("speed")
+    eta = m.group("eta")
+    out: Dict[str, Any] = {
+        "phase": "downloading",
+        "percent": min(100.0, max(0.0, pct)),
+        "speed": speed.strip() if speed else None,
+        "eta": eta.strip() if eta else None,
+    }
+    if total_b is not None:
+        out["total_bytes"] = total_b
+    return out
 
 
 class YouTubeDownloader:
@@ -242,16 +290,32 @@ class YouTubeDownloader:
         
         return False
 
-    def process_video(self, url: str, metadata_hint: Optional[Dict[str, Any]] = None, source: str = "youtube_url") -> Optional[Track]:
+    def process_video(
+        self,
+        url: str,
+        metadata_hint: Optional[Dict[str, Any]] = None,
+        source: str = "youtube_url",
+        progress_callback: Optional[Callable[..., None]] = None,
+    ) -> Optional[Track]:
         """
         Process a direct YouTube URL. Single yt-dlp run (download only), then read metadata from file.
         Matches CLI behavior: one format selection, one download.
         """
-        temp_file = self._download_audio(url)
+        if progress_callback:
+            try:
+                progress_callback({"phase": "preparing", "percent": 0.0})
+            except Exception:
+                pass
+        temp_file = self._download_audio(url, progress_callback=progress_callback)
         if not temp_file or not temp_file.exists():
             raise Exception("Download failed: Audio file was not created by yt-dlp. Check if ffmpeg is installed.")
 
         try:
+            if progress_callback:
+                try:
+                    progress_callback({"phase": "processing", "percent": 92.0})
+                except Exception:
+                    pass
             duration, bitrate, size = AudioProcessor.get_audio_details(str(temp_file))
             video_id = _extract_video_id_from_url(url)
             clean_meta = AudioProcessor.get_metadata_from_file(str(temp_file))
@@ -311,6 +375,11 @@ class YouTubeDownloader:
             except OSError:
                 pass
 
+            if progress_callback:
+                try:
+                    progress_callback({"phase": "processing", "percent": 97.0})
+                except Exception:
+                    pass
             file_hash = AudioProcessor.calculate_hash(str(temp_file))
             extension = temp_file.suffix[1:]
             final_path = self.tracks_dir / f"{file_hash}.{extension}"
@@ -461,7 +530,9 @@ class YouTubeDownloader:
     def _calculate_similarity(self, a: str, b: str) -> float:
         return difflib.SequenceMatcher(None, a, b).ratio()
 
-    def _download_audio(self, url: str) -> Optional[Path]:
+    def _download_audio(
+        self, url: str, progress_callback: Optional[Callable[..., None]] = None
+    ) -> Optional[Path]:
         """Download via yt-dlp CLI (subprocess) so behavior matches a normal terminal download."""
         import time
         temp_filename = f"temp_{os.getpid()}_{time.time_ns()}_{uuid.uuid4().hex[:6]}"
@@ -484,7 +555,8 @@ class YouTubeDownloader:
             "-o", output_template,
             "--retries", "10",
             "--no-warnings",
-            "--quiet",
+            "--newline",
+            "--progress",
         ])
         if self.cookie_file and os.path.exists(self.cookie_file):
             args.extend(["--cookies", self.cookie_file])
@@ -492,38 +564,59 @@ class YouTubeDownloader:
             args.extend(["--cookies-from-browser", self.cookie_browser])
         args.append(url)
 
-        result = subprocess.run(
-            args,
-            cwd=str(self.temp_dir),
-            timeout=600,
-            capture_output=True,
-            text=True,
-        )
+        def _strip_cookie_args(args_list):
+            out = []
+            i = 0
+            while i < len(args_list):
+                if args_list[i] in ("--cookies", "--cookies-from-browser") and i + 1 < len(args_list):
+                    i += 2
+                    continue
+                out.append(args_list[i])
+                i += 1
+            return out
+
+        def _run_stream(args_list):
+            combined_chunks = []
+            proc = subprocess.Popen(
+                args_list,
+                cwd=str(self.temp_dir),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+            try:
+                if proc.stdout:
+                    for line in proc.stdout:
+                        combined_chunks.append(line)
+                        if progress_callback:
+                            try:
+                                parsed = _parse_ytdlp_download_progress(line.rstrip())
+                                if parsed:
+                                    progress_callback(parsed)
+                            except Exception as ex:
+                                logger.debug("progress_callback error: %s", ex)
+                proc.wait(timeout=600)
+            except subprocess.TimeoutExpired:
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+                raise
+            return proc.returncode, "".join(combined_chunks)
+
+        returncode, combined_output = _run_stream(args)
         # Note: With cookies, youtube can return a format list that doesn't match or a "page needs to be reloaded" error.
         # In both cases, retry once without cookies (same as a normal terminal fallback).
-        combined_output = (result.stderr or "") + (result.stdout or "")
-        if result.returncode != 0 and (
+        if returncode != 0 and (
             "Requested format is not available" in combined_output
             or "The page needs to be reloaded" in combined_output
         ):
             if self.cookie_file or self.cookie_browser:
-                i, no_cookies = 0, []
-                while i < len(args):
-                    if args[i] in ("--cookies", "--cookies-from-browser") and i + 1 < len(args):
-                        i += 2
-                        continue
-                    no_cookies.append(args[i])
-                    i += 1
-                result = subprocess.run(
-                    no_cookies,
-                    cwd=str(self.temp_dir),
-                    timeout=600,
-                    capture_output=True,
-                    text=True,
-                )
-                combined_output = (result.stderr or "") + (result.stdout or "")
-        if result.returncode != 0:
-            raise Exception(combined_output or f"yt-dlp exited {result.returncode}")
+                returncode, combined_output = _run_stream(_strip_cookie_args(args))
+
+        if returncode != 0:
+            raise Exception(combined_output or f"yt-dlp exited {returncode}")
 
         ext = codec
         expected_path = self.temp_dir / f"{temp_filename}.{ext}"
@@ -551,6 +644,52 @@ class YouTubeDownloader:
         except Exception as e:
             logger.warning("peek_video_metadata failed for %s: %s", url, e)
             return {}
+
+    def peek_brief(self, url_or_id: str) -> Optional[Dict[str, Any]]:
+        """Lightweight YouTube metadata for UI (no download). Same general shape as search_youtube rows."""
+        raw = (url_or_id or "").strip()
+        if not raw:
+            return None
+        if raw.startswith("http://") or raw.startswith("https://"):
+            url = raw
+        elif _is_valid_youtube_video_id(raw):
+            url = f"https://www.youtube.com/watch?v={raw}"
+        else:
+            return None
+        info = self._peek_video_metadata(url)
+        if not info:
+            return None
+        vid_raw = info.get("id") or _extract_video_id_from_url(url)
+        vid_s = str(vid_raw).strip() if vid_raw is not None else ""
+        title = (info.get("track") or info.get("title") or "").strip() or "Unknown"
+        raw_creator = info.get("artist") or info.get("channel") or info.get("uploader")
+        if raw_creator is None:
+            channel = ""
+        elif isinstance(raw_creator, str):
+            channel = raw_creator.strip()
+        elif isinstance(raw_creator, (list, tuple)):
+            channel = ", ".join(str(x) for x in raw_creator if x).strip()
+        else:
+            channel = str(raw_creator).strip()
+        duration = int(info.get("duration") or 0)
+        thumb = (info.get("thumbnail") or "").strip()
+        if not thumb and vid_s and _is_valid_youtube_video_id(vid_s):
+            thumb = _yt_thumbnail_url(vid_s) or ""
+        webpage = (info.get("webpage_url") or "").strip()
+        if vid_s and _is_valid_youtube_video_id(vid_s):
+            webpage = f"https://www.youtube.com/watch?v={vid_s}"
+        elif not webpage:
+            webpage = url
+        out_id = vid_s if _is_valid_youtube_video_id(vid_s) else vid_raw
+        return {
+            "id": out_id,
+            "title": title,
+            "duration": duration,
+            "thumbnail": thumb,
+            "webpage_url": webpage,
+            "channel": channel,
+            "artist": channel,
+        }
 
     def search_youtube(self, query: str, max_results: int = 10, use_ytmusic: bool = True) -> List[Dict[str, Any]]:
         """

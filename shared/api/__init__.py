@@ -334,7 +334,36 @@ def _process_single_queue_item(item):
                 song_str = normalize_youtube_url(song_str)
                 queue_manager_dl.add_log(f"Downloading direct YouTube: {song_str}...")
                 runtime_hint = dict(metadata_evidence or {})
-                track = dl.downloader.process_video(song_str, metadata_hint=runtime_hint, source=source_type)
+                if item.get("display_title"):
+                    runtime_hint.setdefault("title", item["display_title"])
+                if item.get("display_artist"):
+                    runtime_hint.setdefault("artist", item["display_artist"])
+                if item.get("duration_sec") is not None:
+                    runtime_hint.setdefault("duration_sec", item["duration_sec"])
+
+                def _on_progress(payload):
+                    if not isinstance(payload, dict):
+                        return
+                    kwargs = {}
+                    if payload.get("percent") is not None:
+                        kwargs["percent"] = float(payload["percent"])
+                    if payload.get("speed") is not None:
+                        kwargs["speed"] = payload["speed"]
+                    if payload.get("eta") is not None:
+                        kwargs["eta"] = payload["eta"]
+                    if payload.get("phase") is not None:
+                        kwargs["phase"] = payload["phase"]
+                    if payload.get("total_bytes") is not None:
+                        kwargs["total_bytes"] = payload["total_bytes"]
+                    if kwargs:
+                        queue_manager_dl.update_progress(item_id, **kwargs)
+
+                track = dl.downloader.process_video(
+                    song_str,
+                    metadata_hint=runtime_hint,
+                    source=source_type,
+                    progress_callback=_on_progress,
+                )
             else:
                 fake_meta = {
                     'title': song_str,

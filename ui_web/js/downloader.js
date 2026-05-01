@@ -41,7 +41,9 @@ const DEFAULT_DL_SELECTORS = {
     dlQueueProgressRing: 'dl-queue-progress-ring',
     downloadsSection: 'desktop-downloads-section',
     downloadsPanel: 'desktop-downloads-panel',
-    downloadsList: 'desktop-downloads-list'
+    downloadsList: 'desktop-downloads-list',
+    mobileDownloadsSection: 'mobile-downloads-section',
+    mobileDownloadsList: 'mobile-downloads-list'
 };
 
 /** ODST search source (UI toggle). */
@@ -80,6 +82,8 @@ export class Downloader {
         this.downloadsSection = document.getElementById(sel.downloadsSection);
         this.downloadsPanel = document.getElementById(sel.downloadsPanel);
         this.downloadsList = document.getElementById(sel.downloadsList);
+        this.mobileDownloadsSection = document.getElementById(sel.mobileDownloadsSection);
+        this.mobileDownloadsList = document.getElementById(sel.mobileDownloadsList);
         this.downloadQueueList = document.getElementById(sel.downloadQueueList);
         this.clearQueueBtn = document.getElementById(sel.clearQueueBtn);
         this.submitDownloadBtn = document.getElementById(sel.submitDownloadBtn);
@@ -136,10 +140,20 @@ export class Downloader {
     static bindEvents() {
         window.addEventListener('downloader_log', (e) => this.addLog(e.detail.data));
         window.addEventListener('downloader_update', (e) => {
-            this.refreshStatusThrottled();
-            if (e?.detail?.status === 'completed') {
-                store.syncLibrary();
+            const d = e?.detail;
+            if (d?.status === 'completed' || d?.status === 'failed') {
+                this.refreshStatus();
+                if (d?.status === 'completed') {
+                    store.syncLibrary();
+                }
+                return;
             }
+            if (d?.id && d?.status === 'downloading' && (d.progress_percent != null || d.phase)) {
+                this.applyProgressEvent(d);
+                this.syncFabProgressFromStatus();
+                return;
+            }
+            this.refreshStatusThrottled();
         });
 
         if (this.searchBtn) this.searchBtn.addEventListener('click', () => this.handlePrimaryInput());
@@ -202,16 +216,22 @@ export class Downloader {
     static enqueueDirectUrls(urls) {
         const existing = new Set(this.downloadQueue.map((item) => item.song_str).filter(Boolean));
         let added = 0;
+        const toPeek = [];
         for (const url of urls) {
             if (existing.has(url)) continue;
             existing.add(url);
             this.downloadQueue.push({
                 source_type: SourceType.YOUTUBE_URL,
                 song_str: url,
+                video_id: null,
                 title: url,
                 channel: '',
-                duration: 0
+                duration: 0,
+                thumbnail: '',
+                metadata_evidence: {},
+                _peekPending: true
             });
+            toPeek.push(url);
             added += 1;
         }
         this.renderDownloadQueueList();
@@ -219,7 +239,178 @@ export class Downloader {
         if (added > 0) {
             this.addLog(`Added ${added} URL item(s) to pending queue.`);
             Haptics.tick();
+            for (const u of toPeek) {
+                void this.peekUrlMetadata(u);
+            }
         }
+    }
+
+    /** Resolve pasted YouTube URL to title/thumbnail via Station Engine (peek). */
+    static async peekUrlMetadata(songStr) {
+        const apiBase = searchService.getApiBase();
+        if (!apiBase || !songStr) return;
+        try {
+            const params = new URLSearchParams({ url: songStr });
+            const resp = await fetch(`${apiBase}/api/downloader/youtube/peek?${params.toString()}`);
+            const data = await resp.json().catch(() => ({}));
+            const p = data?.peek;
+            if (!p) return;
+            const item = this.downloadQueue.find((q) => q.song_str === songStr);
+            if (!item) return;
+            item.title = p.title || item.title;
+            item.channel = p.artist || p.channel || item.channel;
+            item.duration = Number(p.duration) || item.duration;
+            item.thumbnail = p.thumbnail || item.thumbnail;
+            item.video_id = p.id || item.video_id;
+            item._peekPending = false;
+            if (item.metadata_evidence && typeof item.metadata_evidence === 'object') {
+                item.metadata_evidence.title = p.title || item.metadata_evidence.title;
+                item.metadata_evidence.artist = p.artist || p.channel || item.metadata_evidence.artist;
+                item.metadata_evidence.duration_sec = item.duration;
+            }
+            this.renderDownloadQueueList();
+        } catch (err) {
+            const item = this.downloadQueue.find((q) => q.song_str === songStr);
+            if (item) item._peekPending = false;
+        }
+    }
+
+    static averageProgressPercent(queue) {
+        const active = (queue || []).filter((i) => i.status === 'downloading');
+        if (active.length === 0) return null;
+        let sum = 0;
+        let n = 0;
+        for (const i of active) {
+            const p = i.progress_percent;
+            if (p != null && !Number.isNaN(Number(p))) {
+                sum += Number(p);
+                n += 1;
+            }
+        }
+        if (n === 0) return null;
+        return sum / n;
+    }
+
+    /**
+     * HTML for one engine-queue row (sidebar, mobile, FAB popover). Uses data-dl-id for live progress patches.
+     * @param {object} item - Queue item from /api/downloader/queue/status
+     */
+    static buildActiveDownloadRowHtml(item) {
+        const id = item.id;
+        const title = item.display_title || item.title || item.song_str || 'Track';
+        const artist = item.display_artist || item.channel || '';
+        const thumbRaw = (item.thumbnail_url || '').trim();
+        const thumbEsc = thumbRaw.replace(/"/g, '%22').replace(/'/g, '%27');
+        const status = item.status || 'pending';
+        const phase = item.phase || '';
+        let pct = null;
+        if (status === 'failed') pct = 0;
+        else if (status === 'pending') pct = 0;
+        else if (status === 'downloading') {
+            if (item.progress_percent != null && !Number.isNaN(Number(item.progress_percent))) {
+                pct = Number(item.progress_percent);
+            }
+        }
+        const preparing = status === 'downloading' && pct == null && (phase === 'preparing' || !item.progress_percent);
+        const barWidth = pct != null ? Math.min(100, Math.max(0, pct)) : 0;
+        const barInner = preparing
+            ? `<div class="dl-bar-indeterminate h-full w-[40%] rounded-full bg-[var(--accent)]" style="animation: dl-progress-indeterminate 1.2s ease-in-out infinite;"></div>`
+            : `<div class="dl-bar-inner h-full rounded-full bg-[var(--accent)] transition-[width] duration-200 ease-out" style="width: ${barWidth}%"></div>`;
+        const pctLabel = pct != null ? `${Math.round(pct)}%` : (preparing ? '…' : status === 'pending' ? '0%' : '');
+        const phaseLabel = phase === 'preparing' ? 'Preparing'
+            : phase === 'processing' ? 'Processing'
+                : phase === 'downloading' || status === 'downloading' ? 'Downloading'
+                    : status === 'pending' ? 'Pending' : status;
+        const speed = item.speed || '';
+        const eta = item.eta || '';
+        const speedEta = [speed, eta].filter(Boolean).join(' · ');
+        return `
+            <div class="dl-active-row desktop-download-item flex flex-col gap-1.5 py-2.5 px-2 rounded-[var(--radius-omni-xs)] hover:bg-[var(--surface-overlay)] min-w-0" data-dl-id="${esc(id)}">
+                <div class="flex gap-2.5 items-start min-w-0">
+                    <div class="w-8 h-8 rounded-[10px] flex-shrink-0 bg-cover bg-center dl-active-cover" style="background-image:url('${thumbEsc}'); background-color: var(--input-bg);"></div>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-xs font-semibold truncate text-[var(--text-main)] dl-active-title">${esc(title)}</div>
+                        <div class="text-[10px] text-[var(--text-dim)] truncate dl-active-subtitle">${esc(artist)}</div>
+                    </div>
+                    <div class="text-[10px] font-mono text-[var(--text-dim)] flex-shrink-0 dl-pct-text">${esc(pctLabel)}</div>
+                </div>
+                <div class="h-1.5 rounded-full overflow-hidden bg-[var(--input-bg)] relative dl-bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct != null ? Math.round(pct) : ''}">
+                    ${barInner}
+                </div>
+                <div class="flex justify-between items-center gap-2 text-[9px] text-[var(--text-dim)] min-w-0">
+                    <span class="dl-phase-label uppercase tracking-wider font-bold truncate">${esc(phaseLabel)}</span>
+                    <span class="dl-speed-eta truncate text-right font-mono">${esc(speedEta)}</span>
+                </div>
+            </div>`;
+    }
+
+    static renderActiveDownloadsLists(queue) {
+        const q = queue || [];
+        const html = [...q].reverse().map((item) => this.buildActiveDownloadRowHtml(item)).join('');
+        if (this.downloadsList) {
+            this.downloadsList.innerHTML = html || '<div class="text-center text-[var(--text-dim)] py-4 italic text-xs">No active downloads</div>';
+        }
+        if (this.mobileDownloadsList) {
+            this.mobileDownloadsList.innerHTML = html || '<div class="text-center text-[var(--text-dim)] py-3 italic text-xs">No active downloads</div>';
+        }
+    }
+
+    /** Patch live progress from socket without full re-render. */
+    static applyProgressEvent(detail) {
+        const id = detail?.id;
+        if (!id) return;
+        let row = null;
+        document.querySelectorAll('[data-dl-id]').forEach((el) => {
+            if (el.getAttribute('data-dl-id') === id) row = el;
+        });
+        if (!row) return;
+        const pctEl = row.querySelector('.dl-pct-text');
+        const barInner = row.querySelector('.dl-bar-inner');
+        const indet = row.querySelector('.dl-bar-indeterminate');
+        const phaseEl = row.querySelector('.dl-phase-label');
+        const metaEl = row.querySelector('.dl-speed-eta');
+        const track = row.querySelector('.dl-bar-track');
+        const p = detail.progress_percent;
+        if (pctEl && p != null && !Number.isNaN(Number(p))) {
+            pctEl.textContent = `${Math.round(Number(p))}%`;
+        }
+        if (indet && p != null && barInner == null) {
+            indet.remove();
+            const nu = document.createElement('div');
+            nu.className = 'dl-bar-inner h-full rounded-full bg-[var(--accent)] transition-[width] duration-200 ease-out';
+            nu.style.width = `${Math.min(100, Math.max(0, Number(p)))}%`;
+            const tr = row.querySelector('.dl-bar-track');
+            if (tr) tr.appendChild(nu);
+        } else if (barInner && p != null) {
+            barInner.style.width = `${Math.min(100, Math.max(0, Number(p)))}%`;
+        }
+        if (phaseEl && detail.phase) {
+            const ph = detail.phase;
+            phaseEl.textContent = ph === 'preparing' ? 'PREPARING' : ph === 'processing' ? 'PROCESSING' : ph === 'downloading' ? 'DOWNLOADING' : String(ph).toUpperCase();
+        }
+        if (metaEl) {
+            const speed = detail.speed || '';
+            const eta = detail.eta || '';
+            metaEl.textContent = [speed, eta].filter(Boolean).join(' · ');
+        }
+        if (track && p != null && !Number.isNaN(Number(p))) {
+            track.setAttribute('aria-valuenow', String(Math.round(Number(p))));
+        }
+    }
+
+    static syncFabProgressFromStatus() {
+        const st = this.lastDownloaderStatus;
+        if (!st) return;
+        const q = st.queue || [];
+        const avg = this.averageProgressPercent(q);
+        const backendCount = q.filter((i) => i.status === 'pending' || i.status === 'downloading').length;
+        const n = this.downloadQueue.length;
+        this.updateFabProgress({
+            isProcessing: !!st.is_processing,
+            activeCount: backendCount,
+            avgPercent: avg,
+            localQueueCount: n
+        });
     }
 
     static async runSearch(queryText = null) {
@@ -464,78 +655,115 @@ export class Downloader {
 
     static renderDownloadQueueList() {
         if (!this.downloadQueueList) return;
-        if (this.downloadQueue.length === 0) {
+        const local = this.downloadQueue;
+        const st = this.lastDownloaderStatus;
+        const backendQ = st?.queue || [];
+        const backendActive = backendQ.some((i) => i.status === 'pending' || i.status === 'downloading');
+        const showBackend = local.length === 0 && backendActive;
+
+        if (local.length === 0 && !showBackend) {
             this.downloadQueueList.innerHTML = '<div class="text-center text-gray-500 py-10 italic text-xs">No songs in queue</div>';
             return;
         }
-        this.downloadQueueList.innerHTML = this.downloadQueue.map((r, i) => `
+        if (local.length > 0) {
+            this.downloadQueueList.innerHTML = local.map((r, i) => {
+                const sub = r._peekPending
+                    ? 'Resolving…'
+                    : (r.channel || r.source_type || 'YouTube');
+                return `
             <div class="queue-item flex items-center p-2 hover:bg-[var(--surface-overlay)] rounded-2xl transition-colors group">
                 <div class="w-10 h-10 rounded-xl flex-shrink-0 bg-cover bg-center" style="background-image:url('${(r.thumbnail || '').replace(/"/g, '%22')}'); background-color: var(--input-bg);"></div>
                 <div class="ml-3 flex-1 min-w-0 truncate">
                     <div class="font-bold text-[13px] truncate text-[var(--text-main)]">${esc(r.title || r.song_str || 'Queue item')}</div>
-                    <div class="text-[10px] text-[var(--text-dim)] truncate uppercase tracking-widest">${esc(r.source_type || 'manual')}</div>
+                    <div class="text-[10px] text-[var(--text-dim)] truncate">${esc(sub)}</div>
                 </div>
                 <button type="button" class="dl-remove-queue w-10 h-10 flex items-center justify-center bg-[var(--surface-overlay)] text-[var(--text-dim)] rounded-full hover:bg-red-500/10 hover:text-red-400 active:scale-90 transition-all opacity-0 group-hover:opacity-100" data-index="${i}"><i class="fas fa-times text-xs"></i></button>
-            </div>
-        `).join('');
-        this.downloadQueueList.querySelectorAll('.dl-remove-queue').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const i = parseInt(btn.getAttribute('data-index'), 10);
-                this.downloadQueue.splice(i, 1);
-                this.renderDownloadQueueList();
-                this.updateFabAndPopover();
+            </div>`;
+            }).join('');
+            this.downloadQueueList.querySelectorAll('.dl-remove-queue').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const i = parseInt(btn.getAttribute('data-index'), 10);
+                    this.downloadQueue.splice(i, 1);
+                    this.renderDownloadQueueList();
+                    this.updateFabAndPopover();
+                });
             });
-        });
+            return;
+        }
+        this.downloadQueueList.innerHTML = [...backendQ].reverse().map((item) => this.buildActiveDownloadRowHtml(item)).join('');
     }
 
     static updateFabAndPopover() {
         const n = this.downloadQueue.length;
-        // Only show the queue FAB for the local pre-submit queue. While the backend downloads,
-        // progress is shown in the sidebar (desktop) / downloads UI — hide this widget so it
-        // does not duplicate that state.
-        const showFab = n > 0;
+        const st = this.lastDownloaderStatus;
+        const q = st?.queue || [];
+        const backendActive = !!(st?.is_processing
+            || q.some((i) => i.status === 'pending' || i.status === 'downloading'));
+        const backendCount = q.filter((i) => i.status === 'pending' || i.status === 'downloading').length;
+        const showFab = n > 0 || backendActive;
         const fab = this.dlQueueFab;
         const badge = this.dlQueueBadge;
         if (fab && badge) {
             if (showFab) {
                 fab.classList.replace('scale-0', 'scale-100');
                 fab.classList.replace('opacity-0', 'opacity-100');
-                badge.textContent = String(n);
-                this.updateFabProgress(0, 1, false);
+                badge.textContent = String(n > 0 ? n : Math.max(0, backendCount));
+                const avg = this.averageProgressPercent(q);
+                this.updateFabProgress({
+                    isProcessing: !!st?.is_processing,
+                    activeCount: backendCount,
+                    avgPercent: avg,
+                    localQueueCount: n
+                });
             } else {
                 fab.classList.replace('scale-100', 'scale-0');
                 fab.classList.replace('opacity-100', 'opacity-0');
                 badge.textContent = '0';
-                this.updateFabProgress(0, 1, false);
+                this.updateFabProgress({ isProcessing: false, activeCount: 0, avgPercent: null, localQueueCount: 0 });
                 this.hideDownloadQueue();
             }
         }
         if (this.queueContainer) {
             this.queueContainer.classList.toggle('hidden', !showFab);
         }
+        this.renderDownloadQueueList();
     }
 
     /**
-     * Updates FAB circular progress ring and badge when backend is processing.
-     * @param {number} completed - Completed items in current batch
-     * @param {number} total - Total items in batch
-     * @param {boolean} isProcessing - Whether backend is actively processing
+     * FAB ring: average percent of active downloads, or full ring when processing without parsed percent yet.
+     * @param {object} opts
      */
-    static updateFabProgress(completed, total, isProcessing) {
+    static updateFabProgress(opts = {}) {
+        const {
+            isProcessing = false,
+            activeCount = 0,
+            avgPercent = null,
+            localQueueCount = 0
+        } = opts;
         const ring = this.dlQueueProgressRing;
         const badge = this.dlQueueBadge;
         if (ring) {
-            // Note: Simple on/off indicator show full circle while backend has active downloads.
-            const isActive = isProcessing && total > 0;
             const radius = (ring.r && ring.r.baseVal && ring.r.baseVal.value) || 22;
             const circumference = 2 * Math.PI * radius;
             ring.style.strokeDasharray = String(circumference);
-            ring.style.strokeDashoffset = isActive ? '0' : String(circumference);
-            ring.style.opacity = isActive ? '1' : '0';
+            let offset = circumference;
+            let show = false;
+            if (localQueueCount > 0) {
+                offset = circumference;
+                show = false;
+            } else if (avgPercent != null && !Number.isNaN(Number(avgPercent))) {
+                const p = Math.min(100, Math.max(0, Number(avgPercent)));
+                offset = circumference * (1 - p / 100);
+                show = true;
+            } else if (isProcessing && activeCount > 0) {
+                offset = 0;
+                show = true;
+            }
+            ring.style.strokeDashoffset = String(offset);
+            ring.style.opacity = show ? '1' : '0';
         }
-        if (badge && isProcessing && total > 0) {
-            const remaining = Math.max(0, total - completed);
-            badge.textContent = String(remaining);
+        if (badge && isProcessing && activeCount > 0 && localQueueCount === 0) {
+            badge.textContent = String(Math.max(0, activeCount));
         }
     }
 
@@ -578,6 +806,10 @@ export class Downloader {
             song_str: r.song_str,
             video_id: r.video_id,
             output_dir: r.output_dir,
+            display_title: r.title,
+            display_artist: r.channel,
+            thumbnail_url: r.thumbnail,
+            duration_sec: r.duration,
             metadata_evidence: r.metadata_evidence || null
         })).filter((item) => !!item.song_str);
         if (items.length === 0) {
@@ -736,8 +968,8 @@ export class Downloader {
         const html = sortedQueue.map(item => `
             <div class="bg-gray-900/50 p-3 rounded-xl border border-gray-700/50 flex items-center justify-between group">
                 <div class="truncate flex-1 mr-4">
-                    <div class="text-xs font-bold truncate">${esc(item.song_str) || 'Track'}</div>
-                    <div class="text-[9px] text-gray-500 mt-0.5">${new Date(item.added_at).toLocaleString()}</div>
+                    <div class="text-xs font-bold truncate">${esc(item.display_title || item.song_str) || 'Track'}</div>
+                    <div class="text-[9px] text-gray-500 mt-0.5">${item.display_artist ? esc(item.display_artist) + ' · ' : ''}${new Date(item.added_at).toLocaleString()}</div>
                 </div>
                 <div class="flex items-center space-x-2">
                     ${this.getStatusBadge(item.status)}
@@ -753,35 +985,21 @@ export class Downloader {
 
     static renderDesktopDownloadsPanel(queue, isProcessing) {
         const section = this.downloadsSection;
+        const mobileSec = this.mobileDownloadsSection;
         const list = this.downloadsList;
-        if (!section || !list) return;
         const hasItems = queue?.length > 0 || isProcessing;
-        section.classList.toggle('hidden', !hasItems);
+        if (section) section.classList.toggle('hidden', !hasItems);
+        if (mobileSec) mobileSec.classList.toggle('hidden', !hasItems);
         if (!hasItems) return;
+        if (!list && !this.mobileDownloadsList) return;
         if (!queue || queue.length === 0) {
-            list.innerHTML = '<div class="text-center text-[var(--text-dim)] py-4 italic text-xs">No active downloads</div>';
+            const empty = '<div class="text-center text-[var(--text-dim)] py-4 italic text-xs">No active downloads</div>';
+            const emptyM = '<div class="text-center text-[var(--text-dim)] py-3 italic text-xs">No active downloads</div>';
+            if (list) list.innerHTML = empty;
+            if (this.mobileDownloadsList) this.mobileDownloadsList.innerHTML = emptyM;
             return;
         }
-        const sortedQueue = [...queue].reverse();
-        list.innerHTML = sortedQueue.map(item => {
-            const name = esc(item.song_str) || 'Track';
-            const status = item.status || 'pending';
-            const isIndeterminate = status === 'downloading';
-            const pct = status === 'completed' ? 100 : status === 'failed' ? 0 : 0;
-            const barClass = status === 'failed'
-                ? 'bg-red-500/60'
-                : 'bg-[var(--accent)]';
-            const barInner = isIndeterminate
-                ? `<div class="h-full w-[40%] rounded-full ${barClass}" style="animation: dl-progress-indeterminate 1.2s ease-in-out infinite;"></div>`
-                : `<div class="h-full rounded-full ${barClass}" style="width: ${pct}%; transition: width 0.2s ease;"></div>`;
-            return `
-            <div class="desktop-download-item flex flex-col gap-1.5 py-2 px-2 rounded-[var(--radius-omni-xs)] hover:bg-[var(--surface-overlay)] min-w-0">
-                <div class="text-xs font-semibold truncate text-[var(--text-main)]">${name}</div>
-                <div class="h-1 rounded-full overflow-hidden bg-[var(--input-bg)]" role="progressbar" aria-valuenow="${isIndeterminate ? '' : pct}" aria-valuemin="0" aria-valuemax="100">
-                    ${barInner}
-                </div>
-            </div>`;
-        }).join('');
+        this.renderActiveDownloadsLists(queue);
     }
 
     static getStatusBadge(status) {

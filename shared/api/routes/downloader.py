@@ -5,16 +5,21 @@ Downloader queue, YouTube search, discover, and downloader config routes.
 import hashlib
 import json
 import logging
+import time
 from pathlib import Path
 
 from flask import Blueprint, request, jsonify
 
 from shared.text_utils import sanitize_cli_message
 from shared.hardening import require_admin, rate_limit
+from shared.url_utils import extract_youtube_video_id, normalize_youtube_url
 
 logger = logging.getLogger(__name__)
 
 downloader_bp = Blueprint("downloader", __name__, url_prefix="")
+
+_PEEK_CACHE_TTL_SEC = 60
+_peek_cache: dict[str, tuple[float, dict]] = {}
 
 
 def _get_api():
@@ -54,6 +59,42 @@ def youtube_search():
     except Exception as e:
         logger.warning("API: YouTube search error: %s", e)
         return jsonify({"results": [], "error": sanitize_cli_message(str(e))}), 500
+
+
+@downloader_bp.route("/api/downloader/youtube/peek", methods=["GET"])
+def youtube_peek():
+    """Resolve YouTube URL or video id to title/thumbnail for UI (no download)."""
+    url = (request.args.get("url") or "").strip()
+    video_id_arg = (request.args.get("id") or "").strip()
+    raw = url or video_id_arg
+    if not raw:
+        return jsonify({"peek": None, "error": "missing url or id"}), 400
+    api = _get_api()
+    cache_key = None
+    try:
+        if "youtube.com" in raw or "youtu.be" in raw:
+            nu = normalize_youtube_url(raw)
+            cache_key = extract_youtube_video_id(nu or raw)
+        elif len(raw) == 11:
+            cache_key = raw
+    except Exception:
+        cache_key = None
+    cache_key = cache_key or raw
+    now = time.time()
+    cached = _peek_cache.get(cache_key)
+    if cached and now - cached[0] < _PEEK_CACHE_TTL_SEC:
+        return jsonify({"peek": cached[1]})
+    try:
+        dl = api["get_downloader"](open_browser=False)
+        peek = dl.downloader.peek_brief(raw)
+        if peek:
+            vid = peek.get("id")
+            ck = str(vid).strip() if vid is not None else cache_key
+            _peek_cache[ck] = (now, peek)
+        return jsonify({"peek": peek})
+    except Exception as e:
+        logger.warning("API: YouTube peek error: %s", e)
+        return jsonify({"peek": None, "error": sanitize_cli_message(str(e))}), 500
 
 
 @downloader_bp.route("/api/downloader/youtube/suggest", methods=["GET"])
