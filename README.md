@@ -8,6 +8,20 @@
 
 [Advanced install & deployment](docs/INSTALL.md) · [Documentation](#documentation)
 
+### Mobile
+
+<p align="center">
+  <img src="https://arzuparreta.github.io/soundsible.github.io/screenshots/mobile-yt-search.PNG" alt="Mobile YouTube Search" width="200">
+  <img src="https://arzuparreta.github.io/soundsible.github.io/screenshots/mobile-songs-library.PNG" alt="Mobile Songs Library" width="200">
+  <img src="https://arzuparreta.github.io/soundsible.github.io/screenshots/mobile-now-playing.PNG" alt="Mobile Now Playing" width="200">
+</p>
+
+### Desktop
+
+<p align="center">
+  <img src="https://arzuparreta.github.io/soundsible.github.io/screenshots/desktop-player-dark.png" alt="Desktop Player Dark" width="600">
+</p>
+
 ---
 
 ## Legal disclaimer
