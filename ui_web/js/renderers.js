@@ -559,8 +559,8 @@ export function renderArtistDetail(artistName, library, heroElements, tracksEl, 
         const albums = q ? getArtistAlbums(artistName, displayTracks) : getArtistAlbums(artistName, library);
         if (albums.length === 0) {
             albumsEl.innerHTML = q
-                ? '<div class="col-span-full text-[var(--text-dim)] text-center py-8 text-sm">No songs or albums match</div>'
-                : '<div class="col-span-full text-[var(--text-dim)] text-center py-8 text-sm">No albums</div>';
+                ? '<div class="w-full text-[var(--text-dim)] text-center py-8 text-sm">No songs or albums match</div>'
+                : '<div class="w-full text-[var(--text-dim)] text-center py-8 text-sm">No albums</div>';
         } else {
             const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
             albumsEl.innerHTML = albums.map(({ album, tracks: albumTracks, coverTrack }) => {
@@ -569,19 +569,19 @@ export function renderArtistDetail(artistName, library, heroElements, tracksEl, 
                 const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
                 return `
                     <div class="artist-album-card flex flex-col" data-album="${esc(album)}">
-                        <div class="artist-album-header cursor-pointer group rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)] hover:border-[var(--accent)]/22 transition-colors" onclick="typeof toggleArtistAlbum==='function'&&toggleArtistAlbum(event)">
-                            <div class="relative">
-                                <div class="w-full aspect-square rounded-t-[var(--radius-omni-xs)] border-b border-[var(--glass-border)] bg-cover bg-center" style="${coverStyle}" role="img" aria-label="${esc(album)}"></div>
-                                <div class="absolute bottom-2 right-2 w-6 h-6 rounded-full bg-black/60 flex items-center justify-center">
-                                    <i class="fas fa-chevron-down text-[10px] text-white transition-transform artist-album-chevron"></i>
-                                </div>
+                        <div class="artist-album-header cursor-pointer group flex items-center py-2 pl-2 pr-3 rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)] hover:border-[var(--accent)]/22 transition-colors" onclick="typeof toggleArtistAlbum==='function'&&toggleArtistAlbum(event)">
+                            <div class="song-row-cover-wrapper relative w-11 h-11 flex-shrink-0">
+                                <div class="song-row-cover absolute inset-0 rounded-[var(--radius-list-cover)] overflow-hidden bg-[var(--bg-card)] bg-cover bg-center border border-[var(--glass-border)]/50" style="${coverStyle}" role="img" aria-label="${esc(album)}"></div>
                             </div>
-                            <div class="p-3">
-                                <div class="font-bold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${esc(album)}</div>
+                            <div class="ml-3 flex-1 min-w-0">
+                                <div class="font-semibold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${esc(album)}</div>
                                 <div class="text-[10px] font-mono text-[var(--text-dim)] truncate mt-0.5">${esc(trackLabel)}</div>
                             </div>
+                            <div class="ml-2 flex-shrink-0 text-[var(--text-dim)]">
+                                <i class="fas fa-chevron-down text-[11px] transition-transform artist-album-chevron"></i>
+                            </div>
                         </div>
-                        <div class="artist-album-tracks mt-2 hidden overflow-hidden">
+                        <div class="artist-album-tracks mt-2 pl-2 sm:pl-3 border-l border-[var(--glass-border)] hidden overflow-hidden">
                             ${buildSongRowsHtml(albumTracks, options)}
                         </div>
                     </div>

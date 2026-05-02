@@ -41,8 +41,11 @@ htmlcov/
 
 # Build artifacts
 dist/
-ui_web/node_modules/
+node_modules/
 build/
+
+# Frontend: Socket.IO bundle copied from node_modules by `npm install` (postinstall)
+ui_web/js/vendor/socket.io-client.esm.min.js
 *.egg
 *.egg-info/
 *.egg-info
