@@ -350,10 +350,14 @@ class SearchService {
     }
 
     normalizeResult(r) {
+        const ch = (r.channel || '').trim();
+        const art = (r.artist || '').trim();
+        const creator = art || ch;
         return {
             id: r.id,
             title: r.title || 'Unknown Title',
-            channel: r.channel || r.artist || 'Unknown Channel',
+            artist: creator,
+            channel: creator,
             duration: r.duration || 0,
             thumbnail: r.thumbnail || '',
             webpage_url: r.webpage_url || (r.id ? `https://www.youtube.com/watch?v=${r.id}` : '')

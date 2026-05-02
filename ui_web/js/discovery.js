@@ -44,15 +44,31 @@ function isYoutubeVideoId(id) {
   return typeof id === 'string' && id.length === 11 && !id.startsWith('raw-');
 }
 
+function isDeezerApiError(data) {
+  return Boolean(data && typeof data === 'object' && data.error);
+}
+
+function isPlaceholderCreator(str) {
+  if (typeof str !== 'string') return true;
+  const s = str.trim();
+  if (!s) return true;
+  return /^unknown channel$/i.test(s) || /^unknown artist$/i.test(s);
+}
+
 /** Map ODST search row → shape expected by playPreview / addPreviewToQueue. */
 function odstItemFromSearchRow(row) {
   if (!row || !isYoutubeVideoId(row.id)) return null;
+  const ch = typeof row.channel === 'string' ? row.channel.trim() : '';
+  const art = typeof row.artist === 'string' ? row.artist.trim() : '';
+  let artist = '';
+  if (!isPlaceholderCreator(art)) artist = art;
+  else if (!isPlaceholderCreator(ch)) artist = ch;
   return {
     id: row.id,
     video_id: row.id,
     title: row.title || 'Unknown',
-    artist: row.channel || row.artist || '',
-    channel: row.channel || '',
+    artist,
+    channel: artist,
     duration: row.duration || 0,
     thumbnail: row.thumbnail || ''
   };
@@ -66,7 +82,9 @@ export async function resolveDeezerTrackToOdstItem(trackLike) {
     typeof trackLike.artist === 'string'
       ? trackLike.artist
       : (trackLike.artist && trackLike.artist.name) || '';
-  const q = `${trackLike.title || ''} ${artist}`.trim();
+  const displayTitle = (trackLike.title || '').trim();
+  const displayArtist = (artist || '').trim();
+  const q = `${displayTitle} ${displayArtist}`.trim();
   if (!q) return null;
   let results;
   try {
@@ -77,7 +95,15 @@ export async function resolveDeezerTrackToOdstItem(trackLike) {
   if (!results || !results.length) return null;
   for (const row of results) {
     const item = odstItemFromSearchRow(row);
-    if (item) return item;
+    if (!item) continue;
+    return {
+      ...item,
+      title: displayTitle || item.title,
+      artist: displayArtist || item.artist,
+      channel: displayArtist || item.channel,
+      thumbnail:
+        (typeof trackLike.cover === 'string' && trackLike.cover.trim()) || item.thumbnail || ''
+    };
   }
   return null;
 }
@@ -85,15 +111,15 @@ export async function resolveDeezerTrackToOdstItem(trackLike) {
 // Curated playlists for discovery (Spotify "Home" style)
 const DISCOVERY_PLAYLISTS = [
   { id: '3155776842', title: 'Global Top 50', description: 'The hottest tracks worldwide', type: 'charts' },
-  { id: '1963962142', title: 'Chill Hits', description: 'Relax and unwind', type: 'mood' },
+  { id: '1976454162', title: 'Chill Hits', description: 'Relax and unwind', type: 'mood' },
   { id: '1479458365', title: 'Hip-Hop Central', description: 'The best in hip-hop', type: 'genre' },
   { id: '1306932615', title: 'Rock Classics', description: 'Legendary rock anthems', type: 'genre' },
   { id: '908622995', title: 'Electronic Rising', description: 'New electronic music', type: 'genre' },
-  { id: '599273585', title: 'Workout Beast', description: 'Fuel your workout', type: 'mood' },
-  { id: '498538565', title: 'Focus Flow', description: 'Concentration music', type: 'mood' },
-  { id: '354949861', title: 'Party Anthems', description: 'Get the party started', type: 'mood' },
-  { id: '749497422', title: 'Indie Mix', description: 'Alternative discoveries', type: 'genre' },
-  { id: '1109731', title: 'Jazz Vibes', description: 'Smooth jazz collection', type: 'genre' }
+  { id: '1924357302', title: 'Workout Beast', description: 'Fuel your workout', type: 'mood' },
+  { id: '7618096342', title: 'Focus Flow', description: 'Concentration music', type: 'mood' },
+  { id: '1950512362', title: 'Party Anthems', description: 'Get the party started', type: 'mood' },
+  { id: '9372936102', title: 'Indie Mix', description: 'Alternative discoveries', type: 'genre' },
+  { id: '1675392701', title: 'Jazz Vibes', description: 'Smooth jazz collection', type: 'genre' }
 ];
 
 class DiscoveryService {
@@ -121,6 +147,10 @@ class DiscoveryService {
 
       const data = await response.json();
 
+      if (isDeezerApiError(data)) {
+        return null;
+      }
+
       this.cache.set(cacheKey, {
         data,
         timestamp: Date.now()
@@ -141,16 +171,21 @@ class DiscoveryService {
 
     for (const playlist of DISCOVERY_PLAYLISTS) {
       const data = await this.fetchDeezer(`/playlist/${playlist.id}`);
-      if (data) {
-        playlists.push({
-          id: data.id,
-          title: data.title,
-          description: playlist.description,
-          cover: deezerCoverUrl(data),
-          trackCount: data.nb_tracks || 0,
-          tracks: data.tracks?.data || []
-        });
+      if (!data || isDeezerApiError(data) || data.id == null) continue;
+      let cover = deezerCoverUrl(data);
+      if (!cover) {
+        const t0 = data.tracks?.data?.[0];
+        cover = deezerCoverUrl(t0?.album) || deezerCoverUrl(t0) || '';
       }
+      const apiTitle = typeof data.title === 'string' ? data.title.trim() : '';
+      playlists.push({
+        id: data.id,
+        title: apiTitle || playlist.title || 'Playlist',
+        description: playlist.description,
+        cover,
+        trackCount: data.nb_tracks || 0,
+        tracks: data.tracks?.data || []
+      });
     }
 
     return playlists;
@@ -254,7 +289,7 @@ async function trackLikeForDeezerId(deezerId) {
   const cached = discoveryService.getCachedTracks().find((t) => String(t.deezerId) === idStr);
   if (cached) return cached;
   const data = await discoveryService.fetchDeezer(`/track/${deezerId}`);
-  if (!data) return null;
+  if (!data || isDeezerApiError(data)) return null;
   return {
     title: data.title || 'Unknown',
     artist: typeof data.artist === 'string' ? data.artist : (data.artist?.name || ''),
@@ -299,13 +334,21 @@ export async function addDeezerTrackToQueueByNumericId(deezerId) {
 /** Open Deezer playlist in the same shell as native playlists (mobile + desktop). */
 export async function openDeezerPlaylistById(playlistId) {
   const data = await discoveryService.fetchDeezer(`/playlist/${playlistId}`);
-  if (!data) return;
+  if (!data || isDeezerApiError(data) || data.id == null) {
+    window.showToast?.('Playlist unavailable');
+    return;
+  }
   const tracks = (data.tracks?.data || []).map((t) => discoveryService.normalizeTrack(t));
+  let coverUrl = deezerCoverUrl(data);
+  if (!coverUrl && tracks.length) {
+    const t0 = data.tracks?.data?.[0];
+    coverUrl = deezerCoverUrl(t0?.album) || deezerCoverUrl(t0) || '';
+  }
   window._deezerPlaylistDetail = {
     deezerPlaylistId: data.id,
-    title: data.title || 'Playlist',
+    title: (typeof data.title === 'string' && data.title.trim()) || 'Playlist',
     subtitle: typeof data.description === 'string' ? data.description.trim() : '',
-    coverUrl: deezerCoverUrl(data),
+    coverUrl,
     tracks
   };
   window._currentPlaylistTracks = tracks;
