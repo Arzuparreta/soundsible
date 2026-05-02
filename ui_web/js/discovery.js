@@ -1,17 +1,22 @@
 /**
- * Discovery Service - Spotify-like music discovery using Deezer API
- *
- * This provides instant, curated recommendations without server-side processing.
- * All API calls are made directly from the client to Deezer's public API.
+ * Discovery Service — Deezer metadata via Station proxy.
+ * Browsers cannot call api.deezer.com (no CORS); the engine proxies allowlisted GET paths.
  */
 
 import { store } from './store.js';
 import { Haptics } from './haptics.js';
 import * as renderers from './renderers.js';
 import { Resolver } from './resolver.js';
+import { getApiBase } from './config.js';
 
-// Deezer's public API (no auth required for basic read operations)
-const DEEZER_API_BASE = 'https://api.deezer.com';
+function deezerProxyUrl(endpoint) {
+  const host =
+    store?.state?.activeHost ||
+    (typeof window !== 'undefined' ? window.location.hostname : '') ||
+    'localhost';
+  const slug = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+  return `${getApiBase(host)}/api/discovery/deezer/${slug}`;
+}
 
 // Curated playlists for discovery (Spotify "Home" style)
 const DISCOVERY_PLAYLISTS = [
@@ -47,7 +52,7 @@ class DiscoveryService {
     }
 
     try {
-      const response = await fetch(`${DEEZER_API_BASE}${endpoint}`);
+      const response = await fetch(deezerProxyUrl(endpoint));
       if (!response.ok) throw new Error('Deezer API error');
 
       const data = await response.json();
