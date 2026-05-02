@@ -1527,7 +1527,7 @@ export class UI {
         this.updateOmniMetadataVisibility();
     }
 
-    static async showActionMenu(trackId, sourceEl) {
+    static showActionMenu(trackId, sourceEl) {
         // Note: Critical blur any active element to prevent auto-focus/highlight on mobile
         if (document.activeElement) document.activeElement.blur();
 
@@ -1550,9 +1550,11 @@ export class UI {
             }
             const inPlaylistDetail = this.currentView === 'playlist-detail'
                 || !!(sourceEl && sourceEl.closest && sourceEl.closest('#playlist-detail-tracks'));
-            await hydrateDeezerVirtualTrack(v);
-            if (this.currentActionTrack !== v) return;
             applyDeezerActionMenuChrome(v, 'mobile-action', { inPlaylistDetail });
+            void hydrateDeezerVirtualTrack(v).then(() => {
+                if (this.currentActionTrack !== v) return;
+                applyDeezerActionMenuChrome(v, 'mobile-action', { inPlaylistDetail });
+            });
             const menu = this.dom.actionMenu;
             const sheet = this.dom.actionMenuSheet;
             if (menu) menu.classList.remove('hidden');

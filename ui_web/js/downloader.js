@@ -592,6 +592,9 @@ export class Downloader {
         Haptics.tick();
     }
 
+    /** While > 0, FAB stays visible and popover shows a resolving hint (Deezer → YouTube match). */
+    static _downloadUiPrimeDepth = 0;
+
     static renderDownloadQueueList() {
         if (!this.downloadQueueList) return;
         const local = this.downloadQueue;
@@ -601,7 +604,10 @@ export class Downloader {
         const showBackend = local.length === 0 && backendActive;
 
         if (local.length === 0 && !showBackend) {
-            this.downloadQueueList.innerHTML = '<div class="text-center text-gray-500 py-10 italic text-xs">No songs in queue</div>';
+            const priming = this._downloadUiPrimeDepth > 0;
+            this.downloadQueueList.innerHTML = priming
+                ? '<div class="text-center text-[var(--text-dim)] py-8 italic text-xs">Finding YouTube match…</div>'
+                : '<div class="text-center text-gray-500 py-10 italic text-xs">No songs in queue</div>';
             return;
         }
         if (local.length > 0) {
@@ -629,9 +635,6 @@ export class Downloader {
         }
         this.downloadQueueList.innerHTML = [...backendQ].reverse().map((item) => this.buildActiveDownloadRowHtml(item)).join('');
     }
-
-    /** While > 0, FAB stays visible (Deezer → YouTube resolve before add). */
-    static _downloadUiPrimeDepth = 0;
 
     static primeDownloadQueueUi() {
         this._downloadUiPrimeDepth++;
