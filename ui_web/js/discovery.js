@@ -18,6 +18,27 @@ function deezerProxyUrl(endpoint) {
   return `${getApiBase(host)}/api/discovery/deezer/${slug}`;
 }
 
+/** First string URL from Deezer playlist/album/track-shaped objects (picture_* vs cover_*). */
+function deezerCoverUrl(obj) {
+  if (obj == null) return '';
+  if (typeof obj === 'string') return obj.trim();
+  if (typeof obj !== 'object') return '';
+  const keys = [
+    'picture_xl', 'picture_big', 'picture_medium', 'picture_small', 'picture',
+    'cover_xl', 'cover_big', 'cover_medium', 'cover_small', 'cover'
+  ];
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return '';
+}
+
+function escapeCssUrlFragment(url) {
+  if (typeof url !== 'string' || !url) return '';
+  return url.replace(/'/g, "\\'");
+}
+
 // Curated playlists for discovery (Spotify "Home" style)
 const DISCOVERY_PLAYLISTS = [
   { id: '3155776842', title: 'Global Top 50', description: 'The hottest tracks worldwide', type: 'charts' },
@@ -82,7 +103,7 @@ class DiscoveryService {
           id: data.id,
           title: data.title,
           description: playlist.description,
-          cover: data.cover_big || data.cover_xl || data.cover || '',
+          cover: deezerCoverUrl(data),
           trackCount: data.nb_tracks || 0,
           tracks: data.tracks?.data || []
         });
@@ -142,7 +163,7 @@ class DiscoveryService {
       artist: track.artist?.name || 'Unknown Artist',
       album: track.album?.title || '',
       duration: track.duration || 0,
-      cover: track.album?.cover_xl || track.album?.cover_big || track.album?.cover || this.placeholderCover,
+      cover: deezerCoverUrl(track.album) || this.placeholderCover,
       preview: track.preview || ''
     };
   }
@@ -270,8 +291,11 @@ class DiscoveryUI {
   }
 
   buildCardHtml(track) {
-    const coverUrl = track.cover || this.placeholderCover;
-    const coverStyle = coverUrl ? `background-image: url('${coverUrl.replace(/'/g, "\\'")}')` : '';
+    const coverUrl =
+      (typeof track.cover === 'string' && track.cover) ||
+      deezerCoverUrl(track.album) ||
+      this.placeholderCover;
+    const coverStyle = coverUrl ? `background-image: url('${escapeCssUrlFragment(coverUrl)}')` : '';
 
     return `
       <div class="discovery-track-card group cursor-pointer" data-track-id="${track.id}" data-deezer-id="${track.deezerId}">
@@ -286,8 +310,9 @@ class DiscoveryUI {
   }
 
   buildPlaylistCardHtml(playlist) {
-    const coverUrl = playlist.cover || this.placeholderCover;
-    const coverStyle = coverUrl ? `background-image: url('${coverUrl.replace(/'/g, "\\'")}')` : '';
+    const coverUrl =
+      (typeof playlist.cover === 'string' && playlist.cover) || this.placeholderCover;
+    const coverStyle = coverUrl ? `background-image: url('${escapeCssUrlFragment(coverUrl)}')` : '';
 
     return `
       <div class="discovery-playlist-card group cursor-pointer" data-playlist-id="${playlist.id}">
@@ -312,7 +337,7 @@ class DiscoveryUI {
             <i class="fas fa-arrow-left"></i>
           </button>
           <div class="flex-1">
-            <img src="${playlist.cover}" alt="${playlist.title}" class="w-24 h-24 rounded-xl shadow-lg mb-3">
+            <img src="${(typeof playlist.cover === 'string' ? playlist.cover : '').replace(/"/g, '&quot;')}" alt="${this.esc(playlist.title)}" class="w-24 h-24 rounded-xl shadow-lg mb-3">
             <h1 class="text-2xl font-bold text-[var(--text-main)]">${this.esc(playlist.title)}</h1>
             <p class="text-sm text-[var(--text-dim)]">${playlist.description} • ${playlist.trackCount} tracks</p>
           </div>
@@ -328,11 +353,12 @@ class DiscoveryUI {
   }
 
   buildTrackRowHtml(track, index) {
-    const coverUrl = track.album?.cover_medium || track.album?.cover || this.placeholderCover;
-    const coverStyle = coverUrl ? `background-image: url('${coverUrl.replace(/'/g, "\\'")}')` : '';
+    const rowId = typeof track.id === 'number' || typeof track.id === 'string' ? `deezer_${track.id}` : track.id;
+    const coverUrl = deezerCoverUrl(track.album) || this.placeholderCover;
+    const coverStyle = coverUrl ? `background-image: url('${escapeCssUrlFragment(coverUrl)}')` : '';
 
     return `
-      <div class="discovery-track-row flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--bg-surface)] transition-colors group" data-track-id="${track.id}">
+      <div class="discovery-track-row flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--bg-surface)] transition-colors group" data-track-id="${rowId}">
         <span class="text-xs text-[var(--text-dim)] w-6">${index + 1}</span>
         <div class="w-12 h-12 rounded-lg bg-cover bg-center flex-shrink-0" style="${coverStyle}"></div>
         <div class="flex-1 min-w-0">
@@ -353,8 +379,8 @@ class DiscoveryUI {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
-  placeholderCover() {
-    return store.placeholderCoverUrl || '';
+  get placeholderCover() {
+    return store?.placeholderCoverUrl || '';
   }
 
   esc(str) {
@@ -475,7 +501,7 @@ class DiscoveryUI {
       id: data.id,
       title: data.title,
       description: data.description || 'Playlist',
-      cover: data.cover_big || data.cover_xl || data.cover || '',
+      cover: deezerCoverUrl(data),
       trackCount: data.nb_tracks || 0,
       tracks: data.tracks?.data || []
     };
