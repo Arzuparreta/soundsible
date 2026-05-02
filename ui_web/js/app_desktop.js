@@ -22,6 +22,7 @@ import {
     initLibraryMaintenanceControls,
     getPointerCoords
 } from './shared.js';
+import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
 
 function getDesktopViewState() {
     return {
@@ -99,6 +100,7 @@ function renderPlaylistDetail() {
         });
         const searchQuery = searchInput?.value.trim() || '';
         renderers.renderDeezerPlaylistDetailTracks(tracks, tracksEl, { searchQuery, desktopClickBehavior: true });
+        if (tracksEl) bindDiscoverSurfaceQuickActionButtons(tracksEl);
         return;
     }
 

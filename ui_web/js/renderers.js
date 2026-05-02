@@ -24,6 +24,17 @@ export function formatTime(seconds) {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+/** ODST search–style queue + download buttons for Deezer surface rows (discover / editorial playlists). */
+function deezerSurfaceQuickActionsHtml(trackId) {
+    if (typeof trackId !== 'string' || !trackId.startsWith('deezer_')) return '';
+    const raw = trackId.slice('deezer_'.length);
+    if (!/^\d+$/.test(raw)) return '';
+    const safe = esc(raw);
+    return `
+            <button type="button" class="dl-playback-queue w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--input-bg)] hover:bg-[var(--accent)] hover:text-[var(--text-on-accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 transition-colors" data-deezer-id="${safe}" aria-label="Add to playback queue" title="Add to playback queue" onclick="event.stopPropagation()"><i class="fas fa-list-ul text-sm"></i></button>
+            <button type="button" class="dl-add-one w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--input-bg)] hover:bg-[var(--accent)] hover:text-[var(--text-on-accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 transition-colors" data-deezer-id="${safe}" aria-label="Add to download queue" title="Add to download queue" onclick="event.stopPropagation()"><i class="fas fa-cloud-download-alt text-sm"></i></button>`;
+}
+
 /** Escape URL for use in CSS background-image url(). */
 function escapeCssUrl(url) {
     if (!url) return '';
@@ -220,6 +231,8 @@ export function buildSongRowsHtml(tracks, options = {}) {
             : `<button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}', this)" class="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text-main)] transition-colors rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-0" aria-label="More actions">
                             <i class="fas fa-ellipsis-vertical text-sm"></i>
                         </button>`;
+        const deezerQuickHtml =
+            options.discoverDeezerSurface === true ? deezerSurfaceQuickActionsHtml(t.id) : '';
         return `
             <div class="relative overflow-hidden rounded-[var(--radius-omni-xs)] mb-1 group${wrapperClass}"${dataIndexAttr}>
                 ${swipeHints}
@@ -240,6 +253,7 @@ export function buildSongRowsHtml(tracks, options = {}) {
                     <div class="flex items-center gap-1 sm:gap-2 ml-2 flex-shrink-0">
                         ${trackTrustBadgeHtml(t)}
                         <div class="no-row-action text-[10px] font-medium text-[var(--text-dim)] opacity-55 tabular-nums">${formatTime(t.duration)}</div>
+                        ${deezerQuickHtml}
                         ${actionCell}
                     </div>
                 </div>

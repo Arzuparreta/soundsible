@@ -4,6 +4,7 @@
  */
 import { store } from './store.js';
 import { getYouTubeWatchUrlForTrack, shareYouTubeTrack } from './shared.js';
+import { searchService } from './search_service.js';
 
 export function isDeezerSurfaceActionTrack(track) {
     if (!track || typeof track !== 'object') return false;
@@ -192,4 +193,67 @@ export async function actionMenuAddToPlaylistDeezer(track, showToast, onAddToPla
         return;
     }
     onAddToPlaylistLibId?.(libId);
+}
+
+/**
+ * ODST search–style playback-queue and download buttons on Deezer rows (discover + editorial playlists).
+ * @param {HTMLElement|null} containerEl
+ */
+export function bindDiscoverSurfaceQuickActionButtons(containerEl) {
+    if (!containerEl) return;
+    containerEl.querySelectorAll('.dl-playback-queue[data-deezer-id]').forEach((btn) => {
+        const raw = btn.getAttribute('data-deezer-id');
+        if (!raw) return;
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            void import('./discovery.js').then((m) => {
+                if (typeof m.addDeezerTrackToQueueByNumericId === 'function') {
+                    void m.addDeezerTrackToQueueByNumericId(raw);
+                }
+            });
+        });
+    });
+    containerEl.querySelectorAll('.dl-add-one[data-deezer-id]').forEach((btn) => {
+        const raw = btn.getAttribute('data-deezer-id');
+        if (!raw) return;
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+                const rowId = `deezer_${raw}`;
+                let like = null;
+                const st = findDeezerSurfaceTrackByRowId(rowId);
+                if (st) {
+                    like = {
+                        title: st.title,
+                        artist: st.artist,
+                        deezerId: st.deezerId != null ? st.deezerId : Number(raw)
+                    };
+                } else {
+                    const m = await import('./discovery.js');
+                    if (typeof m.fetchDeezerTrackLikeByNumericId === 'function') {
+                        like = await m.fetchDeezerTrackLikeByNumericId(raw);
+                    }
+                }
+                if (!like) {
+                    window.showToast?.('Could not load track');
+                    return;
+                }
+                const { resolveDeezerTrackToOdstItem } = await import('./discovery.js');
+                const odst = await resolveDeezerTrackToOdstItem(like);
+                if (!odst?.id) {
+                    window.showToast?.('No YouTube match — try search');
+                    return;
+                }
+                if (typeof window.Downloader !== 'undefined' && window.Downloader.addToDownloadQueue) {
+                    window.Downloader.addToDownloadQueue(odst, { source: searchService.sourceMode });
+                    if (typeof window.Downloader.toggleDownloadQueue === 'function') {
+                        window.Downloader.toggleDownloadQueue();
+                    }
+                    window.showToast?.('Added to download queue');
+                }
+            } catch (_) {
+                window.showToast?.('Could not add to download queue');
+            }
+        });
+    });
 }

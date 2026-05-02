@@ -26,6 +26,7 @@ import {
     initLibraryMaintenanceControls,
     getPointerCoords
 } from './shared.js';
+import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
 const LIBRARY_SYNC_INTERVAL_MS = 300000;
 const DISCOVER_SEARCH_DEBOUNCE_MS = 200;
 let discoverSearchDebounceTimer = null;
@@ -974,6 +975,7 @@ function renderMobileDeezerPlaylistDetail() {
     });
     const searchQuery = dom.globalSearchInput ? dom.globalSearchInput.value.trim() : '';
     renderers.renderDeezerPlaylistDetailTracks(tracks, dom.playlistDetailTracks, { searchQuery, desktopClickBehavior: false });
+    if (dom.playlistDetailTracks) bindDiscoverSurfaceQuickActionButtons(dom.playlistDetailTracks);
 }
 
 function renderPlaylistDetail(playlistName) {

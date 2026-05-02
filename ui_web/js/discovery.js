@@ -9,6 +9,7 @@ import { getApiBase } from './config.js';
 import { searchService } from './search_service.js';
 import { playPreview, paintOptimisticDeezerPreview } from './preview_playback.js';
 import * as renderers from './renderers.js';
+import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
 
 function deezerProxyUrl(endpoint) {
   const host =
@@ -287,6 +288,11 @@ export const discoveryService = new DiscoveryService();
 /** Last-wins guard so a stale YouTube resolve cannot toast or play after a newer tap. */
 let _deezerPreviewPlayGeneration = 0;
 
+/** Exported for Deezer row download button when list context is missing. */
+export async function fetchDeezerTrackLikeByNumericId(deezerId) {
+  return trackLikeForDeezerId(deezerId);
+}
+
 async function trackLikeForDeezerId(deezerId) {
   const idStr = String(deezerId);
   const cached = discoveryService.getCachedTracks().find((t) => String(t.deezerId) === idStr);
@@ -483,6 +489,10 @@ class DiscoveryUI {
         if (id) void openDeezerPlaylistById(id);
       });
     });
+    const topTracks = this.container.querySelector('#discovery-home-top-tracks');
+    if (topTracks) bindDiscoverSurfaceQuickActionButtons(topTracks);
+    const searchTracks = this.container.querySelector('#discovery-search-track-list');
+    if (searchTracks) bindDiscoverSurfaceQuickActionButtons(searchTracks);
   }
 }
 
