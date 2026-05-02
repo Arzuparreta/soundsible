@@ -202,7 +202,7 @@ export const DesktopUI = {
         setTimeout(() => div.remove(), 2500);
     },
 
-    showActionMenu(trackId, sourceEl) {
+    async showActionMenu(trackId, sourceEl) {
         const menu = el('desktop-action-menu');
         const titleEl = el('desktop-action-track-title');
         const artistEl = el('desktop-action-track-artist');
@@ -221,11 +221,9 @@ export const DesktopUI = {
             const inPlaylistDetail = sourceEl
                 ? !!sourceEl.closest('#desktop-playlist-detail-tracks')
                 : this.currentView === 'playlist-detail';
+            await hydrateDeezerVirtualTrack(v);
+            if (this.currentActionTrack !== v) return;
             applyDeezerActionMenuChrome(v, 'desktop-action', { inPlaylistDetail });
-            void hydrateDeezerVirtualTrack(v).then(() => {
-                if (this.currentActionTrack !== v) return;
-                applyDeezerActionMenuChrome(v, 'desktop-action', { inPlaylistDetail });
-            });
             if (menu) menu.classList.remove('hidden');
             return;
         }
@@ -282,27 +280,27 @@ export const DesktopUI = {
             if (ctxDeletePlaylist) ctxDeletePlaylist.classList.add('hidden');
             el('desktop-context-fav')?.classList.remove('hidden');
             el('desktop-context-queue')?.classList.remove('hidden');
-            applyDeezerActionMenuChrome(v, 'desktop-context', { inPlaylistDetail });
-            void hydrateDeezerVirtualTrack(v).then(() => {
+            void (async () => {
+                await hydrateDeezerVirtualTrack(v);
                 if (this.currentActionTrack !== v) return;
                 applyDeezerActionMenuChrome(v, 'desktop-context', { inPlaylistDetail });
-            });
-            if (!menu) return;
-            menu.style.left = `${clientX + 4}px`;
-            menu.style.top = `${clientY + 4}px`;
-            menu.classList.remove('hidden');
-            requestAnimationFrame(() => {
-                const rect = menu.getBoundingClientRect();
-                const pad = 8;
-                let left = parseFloat(menu.style.left) || clientX + 4;
-                let top = parseFloat(menu.style.top) || clientY + 4;
-                if (left + rect.width > window.innerWidth - pad) left = window.innerWidth - rect.width - pad;
-                if (top + rect.height > window.innerHeight - pad) top = window.innerHeight - rect.height - pad;
-                if (left < pad) left = pad;
-                if (top < pad) top = pad;
-                menu.style.left = `${left}px`;
-                menu.style.top = `${top}px`;
-            });
+                if (!menu) return;
+                menu.style.left = `${clientX + 4}px`;
+                menu.style.top = `${clientY + 4}px`;
+                menu.classList.remove('hidden');
+                requestAnimationFrame(() => {
+                    const rect = menu.getBoundingClientRect();
+                    const pad = 8;
+                    let left = parseFloat(menu.style.left) || clientX + 4;
+                    let top = parseFloat(menu.style.top) || clientY + 4;
+                    if (left + rect.width > window.innerWidth - pad) left = window.innerWidth - rect.width - pad;
+                    if (top + rect.height > window.innerHeight - pad) top = window.innerHeight - rect.height - pad;
+                    if (left < pad) left = pad;
+                    if (top < pad) top = pad;
+                    menu.style.left = `${left}px`;
+                    menu.style.top = `${top}px`;
+                });
+            })();
             return;
         }
 

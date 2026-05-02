@@ -218,6 +218,8 @@ export function bindDiscoverSurfaceQuickActionButtons(containerEl) {
         if (!raw) return;
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();
+            const Dl = typeof window.Downloader !== 'undefined' ? window.Downloader : null;
+            if (Dl?.primeDownloadQueueUi) Dl.primeDownloadQueueUi();
             try {
                 const rowId = `deezer_${raw}`;
                 let like = null;
@@ -244,15 +246,14 @@ export function bindDiscoverSurfaceQuickActionButtons(containerEl) {
                     window.showToast?.('No YouTube match — try search');
                     return;
                 }
-                if (typeof window.Downloader !== 'undefined' && window.Downloader.addToDownloadQueue) {
-                    window.Downloader.addToDownloadQueue(odst, { source: searchService.sourceMode });
-                    if (typeof window.Downloader.toggleDownloadQueue === 'function') {
-                        window.Downloader.toggleDownloadQueue();
-                    }
+                if (Dl?.addToDownloadQueue) {
+                    Dl.addToDownloadQueue(odst, { source: searchService.sourceMode });
                     window.showToast?.('Added to download queue');
                 }
             } catch (_) {
                 window.showToast?.('Could not add to download queue');
+            } finally {
+                if (Dl?.releaseDownloadQueueUiPrime) Dl.releaseDownloadQueueUiPrime();
             }
         });
     });
