@@ -7,6 +7,7 @@ class SourceType:
     YOUTUBE_URL = "youtube_url"
     YOUTUBE_SEARCH = "youtube_search"  # Note: Canonical: youtube
     YTMUSIC_SEARCH = "ytmusic_search"    # Note: Canonical: music (youtube music)
+    PODCAST_ENCLOSURE = "podcast_enclosure"
 
 # Note: Library metadata
 LIBRARY_VERSION = "1.0"

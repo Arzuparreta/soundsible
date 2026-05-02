@@ -155,7 +155,9 @@ class UploadEngine:
             version=new_version,
             tracks=updated_tracks,
             playlists=existing_library.playlists,
-            settings=existing_library.settings
+            settings=existing_library.settings,
+            podcast_subscriptions=getattr(existing_library, "podcast_subscriptions", []) or [],
+            podcast_episode_cache=getattr(existing_library, "podcast_episode_cache", {}) or {},
         )
         
         # Note: Save library to cloud

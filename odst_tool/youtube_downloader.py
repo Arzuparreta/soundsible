@@ -428,6 +428,81 @@ class YouTubeDownloader:
                     pass
             raise Exception(f"Post-processing error: {e}")
 
+    def finalize_local_audio_file(
+        self,
+        temp_file: Path,
+        clean_meta: Dict[str, Any],
+        *,
+        cover_art_url: Optional[str] = None,
+        youtube_id: Optional[str] = None,
+        cover_source: str = "manual",
+    ) -> Optional[Track]:
+        """Process an already-downloaded audio file (e.g. podcast enclosure) into a library Track."""
+        if not temp_file or not temp_file.exists():
+            return None
+        clean_meta = dict(clean_meta or {})
+        clean_meta.setdefault("title", "Unknown Title")
+        clean_meta.setdefault("artist", "Unknown Artist")
+        clean_meta.setdefault("album", "")
+        clean_meta.setdefault("duration_sec", 0)
+        clean_meta.setdefault("track_number", 1)
+        try:
+            duration, bitrate, size = AudioProcessor.get_audio_details(str(temp_file))
+            try:
+                AudioProcessor.embed_metadata(
+                    str(temp_file),
+                    clean_meta,
+                    cover_art_url,
+                )
+            except Exception as e:
+                logger.warning("Could not embed metadata on local file: %s", e)
+            try:
+                size = os.path.getsize(str(temp_file))
+            except OSError:
+                pass
+            file_hash = AudioProcessor.calculate_hash(str(temp_file))
+            extension = (temp_file.suffix[1:] or "mp3").lower()
+            if not extension:
+                extension = "mp3"
+            final_path = self.tracks_dir / f"{file_hash}.{extension}"
+            shutil.move(str(temp_file), str(final_path))
+            return Track(
+                id=file_hash,
+                title=clean_meta["title"],
+                artist=clean_meta["artist"],
+                album=clean_meta.get("album") or "",
+                album_artist=clean_meta.get("album_artist"),
+                duration=duration if duration > 0 else int(clean_meta.get("duration_sec") or 0),
+                file_hash=file_hash,
+                original_filename=f"{clean_meta['artist']} - {clean_meta['title']}.{extension}",
+                compressed=(self.quality != "ultra"),
+                file_size=size,
+                bitrate=bitrate,
+                format=extension,
+                year=clean_meta.get("year"),
+                genre=clean_meta.get("genre"),
+                track_number=clean_meta.get("track_number") or 1,
+                is_local=True,
+                local_path=None,
+                musicbrainz_id=None,
+                isrc=None,
+                cover_source=cover_source,
+                metadata_modified_by_user=False,
+                youtube_id=youtube_id,
+                media_kind=clean_meta.get("media_kind"),
+                podcast_feed_id=clean_meta.get("podcast_feed_id"),
+                podcast_episode_guid=clean_meta.get("podcast_episode_guid"),
+                podcast_rss_url=clean_meta.get("podcast_rss_url"),
+            )
+        except Exception as e:
+            if temp_file.exists():
+                try:
+                    os.remove(temp_file)
+                except OSError:
+                    pass
+            logger.error("finalize_local_audio_file failed: %s", e)
+            return None
+
     def _search_youtube(self, metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Search YouTube using configured strategies.

@@ -796,6 +796,10 @@ function init() {
         DesktopUI.init();
         initHoverTooltip();
 
+        void import('./podcasts.js').then((m) => {
+            m.PodcastsUI.init({ mobile: false });
+        });
+
         void import('./downloader.js').then((m) => {
             m.Downloader.init({
                 searchInput: 'desktop-dl-search-input',

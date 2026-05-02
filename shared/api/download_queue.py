@@ -65,6 +65,50 @@ def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
             logger.info("API: Normalizing legacy source '%s' to '%s'", source_type, SourceType.YOUTUBE_SEARCH)
         source_type = SourceType.YOUTUBE_SEARCH
 
+    if source_type in ("podcast_enclosure", SourceType.PODCAST_ENCLOSURE):
+        source_type = SourceType.PODCAST_ENCLOSURE
+        enclosure_url = (item.get("enclosure_url") or song_str or "").strip()
+        if not enclosure_url:
+            return None, "Missing enclosure_url"
+        try:
+            from shared.podcast_rss import assert_safe_http_url
+
+            assert_safe_http_url(enclosure_url)
+        except ValueError as e:
+            return None, str(e)
+        feed_id = (item.get("feed_id") or item.get("podcast_feed_id") or "").strip()
+        episode_guid = (item.get("episode_guid") or item.get("guid") or "").strip()
+        title = (item.get("title") or item.get("display_title") or "").strip() or "Episode"
+        show_title = (item.get("show_title") or item.get("display_artist") or "").strip() or "Podcast"
+        album = (item.get("album") or "").strip() or show_title
+        thumb = (item.get("thumbnail_url") or "").strip()
+        rss_url = (item.get("podcast_rss_url") or "").strip()
+        duration_int = 0
+        ds = item.get("duration_sec")
+        if ds is not None:
+            try:
+                duration_int = int(ds)
+            except (TypeError, ValueError):
+                pass
+        base = {
+            "source_type": SourceType.PODCAST_ENCLOSURE,
+            "song_str": enclosure_url,
+            "enclosure_url": enclosure_url,
+            "output_dir": output_dir,
+            "metadata_evidence": metadata_evidence,
+            "podcast_feed_id": feed_id,
+            "episode_guid": episode_guid,
+            "podcast_title": title,
+            "podcast_show_title": show_title,
+            "podcast_album": album,
+            "thumbnail_url": thumb or None,
+            "duration_sec": duration_int,
+            "podcast_rss_url": rss_url or None,
+        }
+        if thumb:
+            base["thumbnail_url"] = thumb
+        return base, None
+
     if source_type in {SourceType.YOUTUBE_URL, SourceType.YOUTUBE_SEARCH, SourceType.YTMUSIC_SEARCH}:
         normalized = normalize_youtube_url(song_str)
         extracted_id = extract_youtube_video_id(normalized or song_str)

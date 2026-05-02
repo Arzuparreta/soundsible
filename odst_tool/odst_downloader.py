@@ -48,6 +48,15 @@ class ODSTDownloader:
 
     def save_library(self) -> None:
         with self._lock:
+            # Preserve podcast subscription metadata written by the Station API (same library.json).
+            if self.library_path.exists():
+                try:
+                    with open(self.library_path, "r") as rf:
+                        disk = LibraryMetadata.from_json(rf.read())
+                    self.library.podcast_subscriptions = disk.podcast_subscriptions
+                    self.library.podcast_episode_cache = disk.podcast_episode_cache
+                except Exception:
+                    pass
             with open(self.library_path, "w") as f:
                 f.write(self.library.to_json())
 

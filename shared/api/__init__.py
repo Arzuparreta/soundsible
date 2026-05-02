@@ -19,7 +19,7 @@ from flask_cors import CORS
 logger = logging.getLogger(__name__)
 
 from shared.models import PlayerConfig, Track, LibraryMetadata, StorageProvider
-from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, DEFAULT_CACHE_DIR, STATION_PORT, DEFAULT_OUTPUT_DIR_FALLBACK
+from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, DEFAULT_CACHE_DIR, STATION_PORT, DEFAULT_OUTPUT_DIR_FALLBACK, SourceType
 from shared.path_resolver import resolve_local_track_path
 from shared.app_config import set_output_dir as set_app_output_dir
 from shared.playback_state import get_state as get_playback_state, put_state as put_playback_state, get_scope_from_request
@@ -415,7 +415,92 @@ def _process_single_queue_item(item):
         queue_manager_dl.add_log(f"Processing: {song_str or item_id}...")
 
         track = None
-        if song_str:
+        st = (source_type or "").strip()
+        if st == SourceType.PODCAST_ENCLOSURE or st == "podcast_enclosure":
+            enclosure_url = (item.get("enclosure_url") or song_str or "").strip()
+            if not enclosure_url:
+                raise Exception("Missing podcast enclosure URL")
+            lib_early, _, _ = get_core()
+            fid = (item.get("podcast_feed_id") or "").strip()
+            eg = (item.get("episode_guid") or "").strip()
+            if lib_early.metadata and fid and eg:
+                for t in lib_early.metadata.tracks:
+                    if (getattr(t, "podcast_feed_id", None) or "") == fid and (
+                        getattr(t, "podcast_episode_guid", None) or ""
+                    ) == eg:
+                        td = t.to_dict()
+                        td.pop("local_path", None)
+                        queue_manager_dl.update_status(item_id, "completed")
+                        with app.app_context():
+                            queue_manager_dl.remove_item(item_id)
+                            socketio.emit(
+                                "downloader_update",
+                                {"id": item_id, "status": "completed", "track": td, "duplicate": True},
+                            )
+                        queue_manager_dl.add_log(f"Already in library: {t.title}")
+                        return
+            from shared.podcast_rss import assert_safe_http_url
+
+            assert_safe_http_url(enclosure_url)
+            queue_manager_dl.add_log(f"Downloading podcast enclosure...")
+            _max_bytes = 600 * 1024 * 1024
+            headers = {"User-Agent": "SoundsiblePodcast/1.0"}
+            r = requests.get(enclosure_url, stream=True, timeout=(15, 600), headers=headers, allow_redirects=True)
+            r.raise_for_status()
+            ctype = (r.headers.get("Content-Type") or "").lower()
+            if not (
+                ctype.startswith("audio/")
+                or "mpeg" in ctype
+                or "mp3" in ctype
+                or "mp4" in ctype
+                or "octet-stream" in ctype
+                or ctype.startswith("binary/")
+            ):
+                raise Exception(f"Unexpected content type: {ctype or 'unknown'}")
+            suf = ".mp3"
+            if "mp4" in ctype or "m4a" in ctype or "aac" in ctype:
+                suf = ".m4a"
+            elif "ogg" in ctype or "opus" in ctype:
+                suf = ".ogg"
+            total = 0
+            tmp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suf) as tmp:
+                    tmp_path = tmp.name
+                    for chunk in r.iter_content(chunk_size=65536):
+                        if not chunk:
+                            continue
+                        total += len(chunk)
+                        if total > _max_bytes:
+                            raise Exception("Episode file too large")
+                        tmp.write(chunk)
+                p = Path(tmp_path)
+                clean_meta = {
+                    "title": (item.get("podcast_title") or "Episode").strip(),
+                    "artist": (item.get("podcast_show_title") or "Podcast").strip(),
+                    "album": (item.get("podcast_album") or item.get("podcast_show_title") or "Podcasts").strip(),
+                    "duration_sec": int(item.get("duration_sec") or 0),
+                    "track_number": 1,
+                    "media_kind": "podcast_episode",
+                    "podcast_feed_id": fid or None,
+                    "podcast_episode_guid": eg or None,
+                    "podcast_rss_url": (item.get("podcast_rss_url") or "").strip() or None,
+                    "genre": "Podcast",
+                }
+                cover = (item.get("thumbnail_url") or "").strip() or None
+                track = dl.downloader.finalize_local_audio_file(
+                    p,
+                    clean_meta,
+                    cover_art_url=cover,
+                    cover_source="podcast" if cover else "none",
+                )
+            finally:
+                if tmp_path and track is None:
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
+        elif song_str:
             if source_type in {"youtube_url", "ytmusic_search", "youtube_search"} or "youtube.com" in song_str or "youtu.be" in song_str:
                 song_str = normalize_youtube_url(song_str)
                 queue_manager_dl.add_log(f"Downloading direct YouTube: {song_str}...")
@@ -581,6 +666,10 @@ def _mirror_track_into_odst_downloader(track: Track) -> None:
     other.file_size = track.file_size
     other.bitrate = track.bitrate
     other.format = track.format
+    other.media_kind = getattr(track, "media_kind", None)
+    other.podcast_feed_id = getattr(track, "podcast_feed_id", None)
+    other.podcast_episode_guid = getattr(track, "podcast_episode_guid", None)
+    other.podcast_rss_url = getattr(track, "podcast_rss_url", None)
 
 
 def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str] = None) -> bool:
@@ -725,11 +814,13 @@ from shared.api.routes.playback import playback_bp
 from shared.api.routes.downloader import downloader_bp
 from shared.api.routes.config import config_bp
 from shared.api.routes.discovery import discovery_bp
+from shared.api.routes.podcasts import podcasts_bp
 app.register_blueprint(library_bp)
 app.register_blueprint(playback_bp)
 app.register_blueprint(downloader_bp)
 app.register_blueprint(config_bp)
 app.register_blueprint(discovery_bp)
+app.register_blueprint(podcasts_bp)
 
 
 @app.route('/api/health')

@@ -43,6 +43,7 @@ class Store {
             favorites: this.load('favorites', []),
             playlists: this.load('playlists', {}),
             librarySettings: this.load('library_settings', {}),
+            podcastSubscriptions: [],
             queue: [],
             repeatMode: 'off', // Note: Off = no repeat, one = infinite repeat of current song, once = repeat current song one time then continue
             shuffleEnabled: false,
@@ -306,6 +307,9 @@ class Store {
                 favorites: favIds,
                 isOnline: true
             };
+            if (Array.isArray(data.podcast_subscriptions)) {
+                patch.podcastSubscriptions = data.podcast_subscriptions;
+            }
             if (settings) patch.librarySettings = settings;
             if (queueFromSync !== null) {
                 patch.queue = queueFromSync;

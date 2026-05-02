@@ -1389,6 +1389,11 @@ function fillViewBody(viewId) {
         case 'playlist-detail':
             if (viewContext.currentPlaylistName || window._deezerPlaylistDetail) renderPlaylistDetail(viewContext.currentPlaylistName);
             break;
+        case 'podcast':
+            import('./podcasts.js').then((m) => {
+                m.PodcastsUI.init({ mobile: true });
+            });
+            break;
         case 'discover':
             import('./downloader.js').then((dm) => {
                 dm.Downloader.init();
