@@ -6,6 +6,8 @@
 
 **Self-hosted music environment** — this repo is the full stack (Station UI, engine, tooling). Overview, screenshots, and product details are on the site linked above.
 
+The **Station** UI includes your **library**, **YouTube / YouTube Music search** (ODST downloader), and **Discover**: charts and editorial playlists powered by **read-only Deezer metadata** from the engine (browsers do not call Deezer directly). Playing or queueing a Discover track **resolves a matching YouTube result** via the same search path as ODST, then streams through the existing preview pipeline (`/api/preview/stream/...`). Downloads from Discover use that same resolution.
+
 [Advanced install & deployment](docs/INSTALL.md) · [Documentation](#documentation)
 
 ### Mobile
@@ -55,8 +57,8 @@
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/Arzuparreta/Arzuparreta.git
-cd Arzuparreta/projects/repos/soundsible
+git clone https://github.com/Arzuparreta/soundsible.git
+cd soundsible
 ```
 
 ### 2. First run (recommended, self-healing)
@@ -133,7 +135,7 @@ This forces a clean bootstrap and dependency reinstall for the new clone locatio
 ## Documentation
 
 - [docs/INSTALL.md](docs/INSTALL.md) — headless server, Tailscale, reverse proxy, storage
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — architecture and data flow
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — architecture and data flow (includes **Discover / Deezer proxy**)
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — configuration, environment variables, storage backends
 - [docs/LEGAL.md](docs/LEGAL.md) — legal and acceptable use
 
@@ -148,6 +150,7 @@ Troubleshooting:
 Soundsible depends on the following. FFmpeg is system-installed; others are pulled in via `pip` where applicable.
 
 - **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** — Unlicense (public domain). YouTube / YouTube Music download and search.
+- **[Deezer public API](https://developers.deezer.com/)** — Discover uses read-only metadata (charts, playlists, tracks) via the Station’s allowlisted HTTP proxy; audio is **not** streamed from Deezer.
 - **[FFmpeg](https://ffmpeg.org/)** — LGPL/GPL. Audio conversion and extraction.
 - **[ffmpeg-python](https://github.com/kkroening/ffmpeg-python)** — Apache 2.0. Python bindings for FFmpeg.
 

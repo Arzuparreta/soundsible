@@ -32,7 +32,7 @@ A powerful tool to download music from YouTube Music and YouTube links. Fully co
 
 ### Web (embedded)
 
-Use the **main Soundsible webapp**: start the API (e.g. from `run.py` → Launch Web Player), then open `http://localhost:5005/player/`. The downloader is built into the player UI.
+Use the **main Soundsible webapp**: start the API (e.g. from `run.py` → Launch Web Player), then open `http://localhost:5005/player/`. The downloader is built into the player UI (Search and **Discover**; Discover uses Deezer for browsing only, then the same YouTube search path to queue downloads — see `docs/ARCHITECTURE.md`).
 
 ### Desktop GUI (legacy)
 

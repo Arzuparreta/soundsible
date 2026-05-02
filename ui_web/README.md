@@ -1,5 +1,7 @@
 # Soundsible web UI
 
+The Station UI includes **Library**, **Search** (ODST / YouTube Music–style results), **Discover** (Deezer metadata for charts and editorial playlists; playback resolves to YouTube via the same search API as the downloader), and **Downloads**. Discover-related logic lives mainly in `js/discovery.js`, `js/deezer_actions.js`, and shared list code in `js/renderers.js` (with `playback_context.js` routing `deezer_*` ids to preview playback).
+
 ## Development (Flask serves source)
 
 1. `npm install` (copies `socket.io-client`’s browser ESM build into `js/vendor/` for native module loading—Flask does not resolve npm package names)

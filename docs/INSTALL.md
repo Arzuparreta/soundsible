@@ -29,8 +29,8 @@ The steps are the same as for local installation, but executed over SSH.
 1. SSH into your server and install Soundsible:
 
    ```bash
-   git clone https://github.com/Arzuparreta/Arzuparreta.git
-   cd Arzuparreta/projects/repos/soundsible
+   git clone https://github.com/Arzuparreta/soundsible.git
+   cd soundsible
    python3 -m venv venv
    ./venv/bin/pip install -r requirements.txt
    ```
