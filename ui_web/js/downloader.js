@@ -592,6 +592,9 @@ export class Downloader {
         Haptics.tick();
     }
 
+    /** While > 0, FAB stays visible and popover shows a resolving hint (Deezer → YouTube match). */
+    static _downloadUiPrimeDepth = 0;
+
     static renderDownloadQueueList() {
         if (!this.downloadQueueList) return;
         const local = this.downloadQueue;
@@ -601,7 +604,10 @@ export class Downloader {
         const showBackend = local.length === 0 && backendActive;
 
         if (local.length === 0 && !showBackend) {
-            this.downloadQueueList.innerHTML = '<div class="text-center text-gray-500 py-10 italic text-xs">No songs in queue</div>';
+            const priming = this._downloadUiPrimeDepth > 0;
+            this.downloadQueueList.innerHTML = priming
+                ? '<div class="text-center text-[var(--text-dim)] py-8 italic text-xs">Finding YouTube match…</div>'
+                : '<div class="text-center text-gray-500 py-10 italic text-xs">No songs in queue</div>';
             return;
         }
         if (local.length > 0) {
@@ -630,6 +636,32 @@ export class Downloader {
         this.downloadQueueList.innerHTML = [...backendQ].reverse().map((item) => this.buildActiveDownloadRowHtml(item)).join('');
     }
 
+    static primeDownloadQueueUi() {
+        this._downloadUiPrimeDepth++;
+        this.updateFabAndPopover();
+        this.openDownloadQueuePopoverIfNeeded();
+    }
+
+    static releaseDownloadQueueUiPrime() {
+        this._downloadUiPrimeDepth = Math.max(0, this._downloadUiPrimeDepth - 1);
+        this.updateFabAndPopover();
+    }
+
+    /** Open the download queue popover only if it is hidden (does not toggle closed). */
+    static openDownloadQueuePopoverIfNeeded() {
+        const popover = this.downloadQueuePopover;
+        if (!popover || !popover.classList.contains('hidden')) return;
+        this._downloadQueueOpenedAt = Date.now();
+        popover.classList.remove('hidden');
+        setTimeout(() => {
+            popover.classList.remove('pointer-events-none');
+            popover.style.pointerEvents = 'auto';
+            popover.classList.replace('scale-95', 'scale-100');
+            popover.classList.replace('opacity-0', 'opacity-100');
+        }, 10);
+        this.renderDownloadQueueList();
+    }
+
     static updateFabAndPopover() {
         const n = this.downloadQueue.length;
         const st = this.lastDownloaderStatus;
@@ -637,7 +669,7 @@ export class Downloader {
         const backendActive = !!(st?.is_processing
             || q.some((i) => i.status === 'pending' || i.status === 'downloading'));
         const backendCount = q.filter((i) => i.status === 'pending' || i.status === 'downloading').length;
-        const showFab = n > 0 || backendActive;
+        const showFab = n > 0 || backendActive || this._downloadUiPrimeDepth > 0;
         const fab = this.dlQueueFab;
         const badge = this.dlQueueBadge;
         if (fab && badge) {
@@ -708,15 +740,7 @@ export class Downloader {
         const popover = this.downloadQueuePopover;
         if (!popover) return;
         if (popover.classList.contains('hidden')) {
-            this._downloadQueueOpenedAt = Date.now();
-            popover.classList.remove('hidden');
-            setTimeout(() => {
-                popover.classList.remove('pointer-events-none');
-                popover.style.pointerEvents = 'auto';
-                popover.classList.replace('scale-95', 'scale-100');
-                popover.classList.replace('opacity-0', 'opacity-100');
-            }, 10);
-            this.renderDownloadQueueList();
+            this.openDownloadQueuePopoverIfNeeded();
         } else {
             this.hideDownloadQueue();
         }

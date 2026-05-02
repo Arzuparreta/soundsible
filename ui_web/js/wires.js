@@ -4,6 +4,13 @@
  */
 
 import { getYouTubeWatchUrlForTrack, shareYouTubeTrack } from './shared.js';
+import {
+    isDeezerSurfaceActionTrack,
+    hydrateDeezerVirtualTrack,
+    actionMenuToggleQueueDeezer,
+    actionMenuShareDeezer,
+    actionMenuAddToPlaylistDeezer
+} from './deezer_actions.js';
 
 function getElement(root, selector) {
     if (!selector) return null;
@@ -160,28 +167,64 @@ export function wireActionMenu(selectors, deps) {
     if (closeBtn) closeBtn.addEventListener('click', () => onClose?.());
 
     if (queueBtn) {
-        queueBtn.addEventListener('click', () => {
+        queueBtn.addEventListener('click', async () => {
             const track = getCurrentActionTrack?.();
-            if (track) store.toggleQueue(track.id);
+            if (!track) {
+                onClose?.();
+                return;
+            }
+            if (isDeezerSurfaceActionTrack(track)) {
+                await actionMenuToggleQueueDeezer(track, store, showToast);
+                onClose?.();
+                return;
+            }
+            store.toggleQueue(track.id);
             onClose?.();
         });
     }
 
     if (shareBtn) {
-        shareBtn.addEventListener('click', () => {
+        shareBtn.addEventListener('click', async () => {
             const track = getCurrentActionTrack?.();
-            if (track && getYouTubeWatchUrlForTrack(track)) shareYouTubeTrack(track, showToast);
+            if (!track) {
+                onClose?.();
+                return;
+            }
+            if (isDeezerSurfaceActionTrack(track)) {
+                await actionMenuShareDeezer(track, showToast);
+                onClose?.();
+                return;
+            }
+            if (getYouTubeWatchUrlForTrack(track)) shareYouTubeTrack(track, showToast);
             onClose?.();
         });
     }
 
     if (favBtn) {
-        favBtn.addEventListener('click', () => {
+        favBtn.addEventListener('click', async () => {
+            const track = getCurrentActionTrack?.();
+            if (!track) return;
+            if (isDeezerSurfaceActionTrack(track)) {
+                await hydrateDeezerVirtualTrack(track);
+                const libId = track._libraryTrackId;
+                if (!libId) {
+                    showToast?.('Download to library to use favourites');
+                    onClose?.();
+                    return;
+                }
+                const libTrack = store.state.library.find((t) => t.id === libId);
+                if (onFavClick && libTrack) {
+                    onFavClick(libTrack);
+                } else {
+                    store.toggleFavourite(libId);
+                    onClose?.();
+                }
+                return;
+            }
             if (onFavClick) {
-                onFavClick(getCurrentActionTrack?.());
+                onFavClick(track);
             } else {
-                const track = getCurrentActionTrack?.();
-                if (track) store.toggleFavourite(track.id);
+                store.toggleFavourite(track.id);
                 onClose?.();
             }
         });
@@ -190,6 +233,10 @@ export function wireActionMenu(selectors, deps) {
     if (deleteBtn) {
         deleteBtn.addEventListener('click', () => {
             const track = getCurrentActionTrack?.();
+            if (isDeezerSurfaceActionTrack(track)) {
+                onClose?.();
+                return;
+            }
             if (track && confirm('Delete?')) store.deleteTrack(track.id);
             onClose?.();
         });
@@ -199,23 +246,35 @@ export function wireActionMenu(selectors, deps) {
         editBtn.addEventListener('click', () => {
             const track = getCurrentActionTrack?.();
             onClose?.();
+            if (isDeezerSurfaceActionTrack(track)) return;
             if (track) onShowMetadataEditor?.(track.id);
         });
     }
 
     if (addToPlaylistBtn && onAddToPlaylist) {
-        addToPlaylistBtn.addEventListener('click', () => {
+        addToPlaylistBtn.addEventListener('click', async () => {
             const track = getCurrentActionTrack?.();
             onClose?.();
-            if (track) onAddToPlaylist(track.id);
+            if (!track) return;
+            if (isDeezerSurfaceActionTrack(track)) {
+                await actionMenuAddToPlaylistDeezer(track, showToast, onAddToPlaylist);
+                return;
+            }
+            onAddToPlaylist(track.id);
         });
     }
 
     if (removeFromPlaylistBtn && onRemoveFromPlaylist) {
-        removeFromPlaylistBtn.addEventListener('click', () => {
+        removeFromPlaylistBtn.addEventListener('click', async () => {
             const track = getCurrentActionTrack?.();
             onClose?.();
-            if (track) onRemoveFromPlaylist(track);
+            if (!track) return;
+            if (isDeezerSurfaceActionTrack(track)) {
+                await hydrateDeezerVirtualTrack(track);
+                if (track._libraryTrackId) onRemoveFromPlaylist({ id: track._libraryTrackId });
+                return;
+            }
+            onRemoveFromPlaylist(track);
         });
     }
 }

@@ -7,6 +7,28 @@ import { store } from './store.js';
 import { audioEngine } from './audio.js';
 
 /**
+ * Show Deezer title/artist in the omnibar immediately while YouTube resolution is in flight.
+ * @param {{ title?: string, artist?: string, duration?: number, cover?: string }} trackLike
+ * @param {string|number} deezerId
+ */
+export function paintOptimisticDeezerPreview(trackLike, deezerId) {
+    if (!trackLike) return;
+    const artist =
+        typeof trackLike.artist === 'string'
+            ? trackLike.artist
+            : (trackLike.artist && trackLike.artist.name) || '';
+    const syntheticTrack = {
+        id: `deezer_resolving_${deezerId}`,
+        title: trackLike.title || 'Unknown',
+        artist: (artist || '').trim(),
+        duration: Math.max(0, Number(trackLike.duration) || 0),
+        thumbnail: (typeof trackLike.cover === 'string' && trackLike.cover.trim()) || '',
+        source: 'preview-pending',
+    };
+    store.update({ currentTrack: syntheticTrack, isPlaying: false });
+}
+
+/**
  * @param {{ id: string, title?: string, artist?: string, channel?: string, duration?: number, duration_sec?: number, thumbnail?: string, webpage_url?: string }} item
  */
 function isYoutubeId(id) {

@@ -176,6 +176,9 @@ class AudioEngine {
      * Single path for all in-app preview (Discover, Search, queue, context).
      */
     async playTrack(track) {
+        if (track?.source === 'preview-pending') {
+            return;
+        }
         // Note: Mark immediately (before await play) so post-sync resume logic cannot race the play event.
         if (!store.state.resumeSyncActive) {
             store.markUserPlaybackStarted();

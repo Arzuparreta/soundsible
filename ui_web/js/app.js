@@ -26,7 +26,10 @@ import {
     initLibraryMaintenanceControls,
     getPointerCoords
 } from './shared.js';
+import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
 const LIBRARY_SYNC_INTERVAL_MS = 300000;
+const DISCOVER_SEARCH_DEBOUNCE_MS = 200;
+let discoverSearchDebounceTimer = null;
 
 function viewStateFromContext() {
     return {
@@ -34,7 +37,8 @@ function viewStateFromContext() {
         favTracks: viewContext.favTracks,
         artistTracks: viewContext.artistTracks,
         playlistTracks: window._currentPlaylistTracks,
-        searchTracks: viewContext.searchTracks
+        searchTracks: viewContext.searchTracks,
+        discoverSurfaceTracks: window._discoverSurfaceTracks ?? null
     };
 }
 
@@ -734,14 +738,14 @@ function init() {
                     renderArtistDetail(viewContext.artistName);
                 } else if (currentView === 'playlists') {
                     renderPlaylistList(state);
-                } else if (currentView === 'playlist-detail' && viewContext.currentPlaylistName) {
+                } else if (currentView === 'playlist-detail' && (viewContext.currentPlaylistName || window._deezerPlaylistDetail)) {
                     renderPlaylistDetail(viewContext.currentPlaylistName);
                 }
             } else if (currentPlaylistsRef !== lastPlaylistsRef) {
                 lastPlaylistsRef = currentPlaylistsRef;
                 const currentView = UI.currentView;
                 if (currentView === 'playlists') renderPlaylistList(state);
-                if (currentView === 'playlist-detail' && viewContext.currentPlaylistName) renderPlaylistDetail(viewContext.currentPlaylistName);
+                if (currentView === 'playlist-detail' && (viewContext.currentPlaylistName || window._deezerPlaylistDetail)) renderPlaylistDetail(viewContext.currentPlaylistName);
             } else {
                 // Note: 2. If ONLY favorites changed, we update the indicators surgically
                 if (currentFavsRef !== lastFavsRef) {
@@ -944,8 +948,46 @@ function renderPlaylistList(state) {
     renderers.renderPlaylistList(filtered, state.library || [], dom.playlistListContainer, options);
 }
 
+function renderMobileDeezerPlaylistDetail() {
+    const d = window._deezerPlaylistDetail;
+    if (!dom || !d) return;
+    const tracks = d.tracks || [];
+    window._currentPlaylistTracks = tracks;
+    if (dom.playlistDetailTitle) dom.playlistDetailTitle.textContent = d.title || 'Playlist';
+    const n = tracks.length;
+    if (dom.playlistDetailMeta) dom.playlistDetailMeta.textContent = n === 1 ? '1 track' : `${n} tracks`;
+    const coverEl = dom.playlistDetailCover;
+    const iconEl = dom.playlistDetailCoverIcon;
+    if (coverEl) {
+        const u = (d.coverUrl || '').trim();
+        coverEl.style.backgroundImage = u ? `url("${String(u).replace(/"/g, '%22')}")` : '';
+        if (iconEl) iconEl.classList.toggle('hidden', !!u);
+        coverEl.classList.remove('cursor-pointer', 'touch-manipulation');
+        coverEl.removeAttribute('role');
+        coverEl.removeAttribute('tabindex');
+        coverEl.removeAttribute('aria-label');
+        coverEl.removeAttribute('aria-haspopup');
+        coverEl.onclick = null;
+        coverEl.onkeydown = null;
+    }
+    ['playlist-detail-rename-btn', 'playlist-detail-duplicate-btn', 'playlist-detail-delete-btn'].forEach((id) => {
+        document.getElementById(id)?.classList.add('hidden');
+    });
+    const searchQuery = dom.globalSearchInput ? dom.globalSearchInput.value.trim() : '';
+    renderers.renderDeezerPlaylistDetailTracks(tracks, dom.playlistDetailTracks, { searchQuery, desktopClickBehavior: false });
+    if (dom.playlistDetailTracks) bindDiscoverSurfaceQuickActionButtons(dom.playlistDetailTracks);
+}
+
 function renderPlaylistDetail(playlistName) {
-    if (!dom || !viewContext.currentPlaylistName) return;
+    if (!dom) return;
+    if (window._deezerPlaylistDetail) {
+        renderMobileDeezerPlaylistDetail();
+        return;
+    }
+    ['playlist-detail-rename-btn', 'playlist-detail-duplicate-btn', 'playlist-detail-delete-btn'].forEach((id) => {
+        document.getElementById(id)?.classList.remove('hidden');
+    });
+    if (!viewContext.currentPlaylistName) return;
     const state = store.state;
     const playlists = state.playlists || {};
     const trackIds = playlists[playlistName] || [];
@@ -1005,6 +1047,7 @@ function renderPlaylistDetail(playlistName) {
 }
 
 window.showPlaylistDetail = (name) => {
+    window._deezerPlaylistDetail = null;
     viewContext.currentPlaylistName = name;
     UI.showView('playlist-detail');
 };
@@ -1048,9 +1091,29 @@ function initGlobalSearch() {
         } else if (view === 'playlists') {
             renderPlaylistList(store.state);
         } else if (view === 'playlist-detail') {
-            if (viewContext.currentPlaylistName) renderPlaylistDetail(viewContext.currentPlaylistName);
+            if (viewContext.currentPlaylistName || window._deezerPlaylistDetail) renderPlaylistDetail(viewContext.currentPlaylistName);
         } else if (view === 'artist-detail' && viewContext.artistName) {
             renderArtistDetail(viewContext.artistName);
+        } else if (view === 'discover') {
+            if (discoverSearchDebounceTimer) {
+                clearTimeout(discoverSearchDebounceTimer);
+                discoverSearchDebounceTimer = null;
+            }
+            if (!query) {
+                void import('./discovery.js').then((m) => {
+                    if (m.initDiscovery) m.initDiscovery('discover-search-results');
+                });
+                return;
+            }
+            discoverSearchDebounceTimer = setTimeout(() => {
+                discoverSearchDebounceTimer = null;
+                void import('./discovery.js').then((m) => {
+                    const el = document.getElementById('discover-search-results');
+                    if (!el || !m.discoveryUI) return;
+                    m.discoveryUI.container = el;
+                    void m.discoveryUI.renderSearchResults(query);
+                });
+            }, DISCOVER_SEARCH_DEBOUNCE_MS);
         }
     });
 
@@ -1150,18 +1213,27 @@ function clearContentForView(viewId) {
         case 'playlist-detail':
             viewContext.currentPlaylistName = null;
             window._currentPlaylistTracks = null;
+            window._deezerPlaylistDetail = null;
             if (dom.playlistDetailTitle) dom.playlistDetailTitle.textContent = 'Playlist';
             if (dom.playlistDetailMeta) dom.playlistDetailMeta.textContent = '0 tracks';
             if (dom.playlistDetailCover) dom.playlistDetailCover.style.backgroundImage = '';
             if (dom.playlistDetailCoverIcon) dom.playlistDetailCoverIcon.classList.add('hidden');
+            ['playlist-detail-rename-btn', 'playlist-detail-duplicate-btn', 'playlist-detail-delete-btn'].forEach((id) => {
+                document.getElementById(id)?.classList.remove('hidden');
+            });
             clearContainerContent(dom.playlistDetailTracks);
             break;
         case 'discover':
+            if (discoverSearchDebounceTimer) {
+                clearTimeout(discoverSearchDebounceTimer);
+                discoverSearchDebounceTimer = null;
+            }
             if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.destroy) {
                 window.unifiedSearch.destroy();
             } else if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) {
                 window.unifiedSearch.clear();
             }
+            window._discoverSurfaceTracks = null;
             break;
         case 'settings':
             break;
@@ -1285,7 +1357,9 @@ function applyViewChrome(viewId) {
             case 'favourites': input.placeholder = 'Search favorites...'; break;
             case 'playlists': input.placeholder = 'Search playlists...'; break;
             case 'playlist-detail': input.placeholder = 'Search in playlist...'; break;
-            case 'discover': input.placeholder = 'Search anything...'; break;
+            case 'discover':
+                input.placeholder = 'Search anything...';
+                break;
             case 'artist-detail': input.placeholder = 'Search songs & albums...'; break;
         }
     }
@@ -1309,16 +1383,24 @@ function fillViewBody(viewId) {
             renderPlaylistList(state);
             viewContext.currentPlaylistName = null;
             window._currentPlaylistTracks = null;
+            window._deezerPlaylistDetail = null;
             break;
         case 'playlist-detail':
-            if (viewContext.currentPlaylistName) renderPlaylistDetail(viewContext.currentPlaylistName);
+            if (viewContext.currentPlaylistName || window._deezerPlaylistDetail) renderPlaylistDetail(viewContext.currentPlaylistName);
             break;
         case 'discover':
-            import('./downloader.js').then((dm) => { dm.Downloader.init(); });
-            import('./search.js').then((searchMod) => {
-                window.unifiedSearch = searchMod.unifiedSearch;
-                searchMod.unifiedSearch.init({ mobile: true, resultsContainerId: 'discover-search-results' });
+            import('./downloader.js').then((dm) => {
+                dm.Downloader.init();
             });
+            import('./discovery.js')
+                .then((discoveryMod) => {
+                    if (discoveryMod.initDiscovery) {
+                        discoveryMod.initDiscovery('discover-search-results');
+                    }
+                })
+                .catch((err) => {
+                    console.error('[app.js] Failed to load discovery.js:', err);
+                });
             break;
         case 'settings':
             import('./downloader.js').then((dm) => {
