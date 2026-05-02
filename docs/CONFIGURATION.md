@@ -42,7 +42,13 @@ Refer to `odst_tool/README.md` for more details on standalone ODST usage.
 
 If downloads fail with yt‑dlp “Requested format is not available” when using cookies, see [troubleshooting-yt-dlp-formats.md](troubleshooting-yt-dlp-formats.md).
 
-### 4. Storage configuration overview
+### 4. Discover (Deezer metadata)
+
+- **No Deezer API key** is required for the built-in Discover experience. The Station proxies **public** Deezer GET endpoints (see [ARCHITECTURE.md](ARCHITECTURE.md)).
+- The engine must be able to reach **`https://api.deezer.com`** outbound. If that fails, Discover lists and search will be empty or error.
+- Playback still depends on **YouTube / YouTube Music search** (ODST) and your existing downloader configuration; Discover does not add a separate audio backend.
+
+### 5. Storage configuration overview
 
 At a high level, storage can be configured in three ways:
 

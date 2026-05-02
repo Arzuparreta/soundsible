@@ -20,7 +20,7 @@ The **Station** UI is static assets under `ui_web/`, served by the engine at **`
 | `run.py` | Universal entry: venv bootstrap, optional **TUI** menu, or **`--daemon`** to run the Station Engine only. |
 | `shared/` | Cross-cutting code: Flask API app (`shared/api/`), models, config paths, security helpers, SQLite access, job orchestration. |
 | `player/` | Library manager, queue, favourites, cache — **core playback and library** logic used by the API. |
-| `ui_web/` | Station front-end (HTML, JS, Tailwind/Vite build). |
+| `ui_web/` | Station front-end (HTML, JS, Tailwind/Vite build); includes **Discover** (Deezer metadata + YouTube resolution). |
 | `launcher_web/` | Small Flask app for the launcher pages and “launch/stop ecosystem” API. |
 | `odst_tool/` | Download pipeline (yt-dlp, FFmpeg), ODST library format, cloud sync helpers; embedded in the API for downloads. |
 | `setup_tool/` | Storage providers (local, S3-compatible), scanning, uploads, audio/cover helpers used by library and sync paths. |
@@ -58,7 +58,7 @@ flowchart LR
 
 The Flask application lives in `shared/api/__init__.py`. It:
 
-- Registers blueprints for **library**, **playback**, **downloader**, and **config** (`shared/api/routes/`).
+- Registers blueprints for **library**, **playback**, **downloader**, **config**, and **discovery** (`shared/api/routes/`).
 - Serves `ui_web` (or `ui_web/dist` when `SOUNDSIBLE_WEB_UI_DIST` is enabled) under `/player/`.
 - Holds singletons for **LibraryManager**, **QueueManager**, **FavouritesManager**, and the download subsystem.
 - Uses **Socket.IO** for live updates (e.g. library changes, downloader progress, playback coordination).
@@ -68,6 +68,16 @@ The Flask application lives in `shared/api/__init__.py`. It:
 **Download path**: queued items are processed in the background; completed tracks are merged into the main library metadata (`_sync_odst_to_main_core` and related helpers). FFmpeg and yt-dlp are used via `odst_tool/`.
 
 **Library path**: `player/library.py` loads **`library.json`** (see `LIBRARY_METADATA_FILENAME`) and **`~/.config/soundsible/config.json`** for `PlayerConfig`, talks to **SQLite** (`shared/database.py`) for fast search and manifest sync, and can use **storage providers** from `setup_tool/` for cloud-backed libraries.
+
+**Discover / Deezer proxy** (`shared/api/routes/discovery.py`):
+
+- The browser cannot call `api.deezer.com` (CORS). The Station exposes **`GET /api/discovery/deezer/<path>`**, which forwards **allowlisted** Deezer paths only (e.g. `chart`, `search`, `playlist/<id>`, `track/<id>`, `artist/<id>/top`) and returns Deezer’s JSON unchanged.
+- Requests are **rate-limited** per IP (`discovery_deezer`). The engine needs **outbound HTTPS** to Deezer.
+- **Discover** in `ui_web` (`discovery.js`, `deezer_actions.js`, shared list renderers) uses this for charts, curated editorial playlists, and search. Track rows use Deezer ids in the UI (`deezer_<numericId>`).
+- **Playback and downloads** for those rows do **not** use Deezer audio. The UI runs **YouTube / YouTube Music text search** (same ODST `/api/downloader/youtube/search` path as the downloader) using Deezer title + artist, picks a matching video id, then:
+  - **In-app preview** streams via **`GET /api/preview/stream/<video_id>`** (playback blueprint).
+  - **Download queue** uses the resolved item like any other ODST search result.
+- Resolution can take a few seconds; the download-queue popover may show a short **“Finding YouTube match…”** state while that search runs.
 
 ### 5. Data and configuration (conceptual)
 

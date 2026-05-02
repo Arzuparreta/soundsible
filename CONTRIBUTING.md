@@ -7,8 +7,8 @@ Thanks for your interest in contributing – every bug report, idea, and pull re
 1. **Fork and clone**
 
    ```bash
-   git clone https://github.com/Arzuparreta/Arzuparreta.git
-   cd Arzuparreta/projects/repos/soundsible
+   git clone https://github.com/Arzuparreta/soundsible.git
+   cd soundsible
    ```
 
 2. **Create a virtual environment and install dependencies**
@@ -39,11 +39,11 @@ Thanks for your interest in contributing – every bug report, idea, and pull re
 
 ### Submitting pull requests
 
-1. Create a feature branch from `main`.
+1. Create a feature branch from **`dev`** (integration branch for ongoing work). Use **`main`** only if you are explicitly targeting a release/stable line.
 2. Make small, focused changes.
 3. Add or update tests when touching non‑trivial logic.
 4. Run the app locally to verify core flows (launch, play music, basic navigation).
-5. Open a PR against `main` with a clear description of what you changed and why.
+5. Open a PR against **`dev`** by default, with a clear description of what you changed and why. Open against **`main`** when that matches maintainer guidance (e.g. hotfixes or release process).
 
 ### Code style
 
