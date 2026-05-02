@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -9,5 +9,6 @@ if (!existsSync(src)) {
     console.warn('sync-vendor-socket: socket.io-client not installed, skip');
     process.exit(0);
 }
+mkdirSync(dirname(dest), { recursive: true });
 copyFileSync(src, dest);
 console.log('sync-vendor-socket: updated js/vendor/socket.io-client.esm.min.js');

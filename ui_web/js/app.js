@@ -1289,19 +1289,20 @@ function mobileArtistGridSkeletonHtml(count = 6) {
     return `<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">${Array.from({ length: count }, card).join('')}</div>`;
 }
 
-/** Matches artist-album-card header: aspect-square cover + p-3 (grid on artist-detail). */
+/** Matches artist-album-card: horizontal row header + small cover (artist-detail albums). */
 function mobileArtistAlbumSkeletonHtml(count = 4) {
     const card = () => `
         <div class="artist-album-card flex flex-col pointer-events-none" aria-hidden="true">
-            <div class="rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)] overflow-hidden">
-                <div class="relative w-full aspect-square rounded-t-[var(--radius-omni-xs)] bg-[var(--surface-overlay)] animate-pulse border-b border-[var(--glass-border)]"></div>
-                <div class="p-3">
-                    <div class="h-4 w-4/5 rounded-md bg-[var(--surface-overlay)]/90 animate-pulse mb-2"></div>
-                    <div class="h-3 w-2/5 rounded-md bg-[var(--surface-overlay)]/50 animate-pulse font-mono"></div>
+            <div class="artist-album-header flex items-center py-2 pl-2 pr-3 rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)]">
+                <div class="w-11 h-11 flex-shrink-0 rounded-[var(--radius-list-cover)] bg-[var(--surface-overlay)] animate-pulse border border-[var(--glass-border)]/50"></div>
+                <div class="ml-3 flex-1 min-w-0 space-y-2">
+                    <div class="h-4 max-w-[85%] rounded-md bg-[var(--surface-overlay)]/90 animate-pulse"></div>
+                    <div class="h-3 w-24 rounded-md bg-[var(--surface-overlay)]/50 animate-pulse font-mono"></div>
                 </div>
+                <div class="ml-2 w-3 h-3 rounded-sm bg-[var(--surface-overlay)]/40 animate-pulse flex-shrink-0"></div>
             </div>
         </div>`;
-    return `<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">${Array.from({ length: count }, card).join('')}</div>`;
+    return `<div class="flex flex-col gap-2">${Array.from({ length: count }, card).join('')}</div>`;
 }
 
 /** Pulse placeholders for heavy views; real data is filled in fillViewBody (deferred). */
