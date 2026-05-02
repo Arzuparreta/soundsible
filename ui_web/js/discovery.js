@@ -7,7 +7,7 @@ import { store } from './store.js';
 import { Haptics } from './haptics.js';
 import { getApiBase } from './config.js';
 import { searchService } from './search_service.js';
-import { playPreview } from './preview_playback.js';
+import { playPreview, paintOptimisticDeezerPreview } from './preview_playback.js';
 import * as renderers from './renderers.js';
 
 function deezerProxyUrl(endpoint) {
@@ -88,7 +88,7 @@ export async function resolveDeezerTrackToOdstItem(trackLike) {
   if (!q) return null;
   let results;
   try {
-    results = await searchService.query(q, { debounce: 0 });
+    results = await searchService.query(q, { debounce: 0, isolated: true });
   } catch {
     return null;
   }
@@ -284,6 +284,9 @@ class DiscoveryService {
 
 export const discoveryService = new DiscoveryService();
 
+/** Last-wins guard so a stale YouTube resolve cannot toast or play after a newer tap. */
+let _deezerPreviewPlayGeneration = 0;
+
 async function trackLikeForDeezerId(deezerId) {
   const idStr = String(deezerId);
   const cached = discoveryService.getCachedTracks().find((t) => String(t.deezerId) === idStr);
@@ -302,14 +305,22 @@ async function trackLikeForDeezerId(deezerId) {
 /** YouTube preview playback for a Deezer numeric id (used from Library-style rows / playTrack). */
 export async function playDeezerTrackByNumericId(deezerId) {
   Haptics.tick();
+  const gen = ++_deezerPreviewPlayGeneration;
   const trackLike = await trackLikeForDeezerId(deezerId);
   if (!trackLike) {
+    if (gen !== _deezerPreviewPlayGeneration) return;
     window.showToast?.('Could not load track');
     return;
   }
+  paintOptimisticDeezerPreview(trackLike, deezerId);
   const item = await resolveDeezerTrackToOdstItem(trackLike);
+  if (gen !== _deezerPreviewPlayGeneration) return;
   if (!item) {
     window.showToast?.('No YouTube match — try search above');
+    const ct = store.state.currentTrack;
+    if (ct?.source === 'preview-pending' && String(ct.id) === `deezer_resolving_${deezerId}`) {
+      store.update({ currentTrack: null });
+    }
     return;
   }
   playPreview(item);

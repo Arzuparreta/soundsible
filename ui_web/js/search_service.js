@@ -298,7 +298,8 @@ class SearchService {
     /**
      * Executes a search query with debounce and abort support.
      * @param {string} query - The search text.
-     * @param {Object} options - { debounce, limit, source }
+     * @param {Object} options - { debounce, limit, source, isolated }
+     *   isolated: use a one-shot AbortSignal so ODST search box cannot abort this fetch.
      * @returns {Promise<Array>} Normalized results.
      */
     async query(query, options = {}) {
@@ -326,17 +327,25 @@ class SearchService {
     }
 
     async _performFetch(query, options = {}) {
-        if (this.abortController) this.abortController.abort();
-        this.abortController = new AbortController();
-
         const limit = options.limit || 10;
         const source = options.source || this.sourceMode;
         // Note: Sourcemode is already standardized to 'ytmusic' or 'youtube'
         const sourceParam = (source === 'youtube') ? 'youtube' : 'ytmusic';
         const url = `${this.getApiBase()}/api/downloader/youtube/search?q=${encodeURIComponent(query)}&limit=${limit}&source=${sourceParam}`;
 
+        let signal;
+        if (options.isolated) {
+            // Note: Programmatic resolves (e.g. Deezer → YouTube) must not be aborted by the
+            // shared controller used for the ODST search box, or the first tap loses the race.
+            signal = new AbortController().signal;
+        } else {
+            if (this.abortController) this.abortController.abort();
+            this.abortController = new AbortController();
+            signal = this.abortController.signal;
+        }
+
         try {
-            const resp = await fetch(url, { signal: this.abortController.signal });
+            const resp = await fetch(url, { signal });
             if (!resp.ok) {
                 const data = await resp.json().catch(() => ({}));
                 throw new Error(data.error || (resp.status === 500 ? 'Server error' : `HTTP ${resp.status}`));
