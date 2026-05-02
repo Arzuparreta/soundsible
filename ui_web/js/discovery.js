@@ -5,9 +5,9 @@
 
 import { store } from './store.js';
 import { Haptics } from './haptics.js';
-import * as renderers from './renderers.js';
-import { Resolver } from './resolver.js';
 import { getApiBase } from './config.js';
+import { searchService } from './search_service.js';
+import { playPreview } from './preview_playback.js';
 
 function deezerProxyUrl(endpoint) {
   const host =
@@ -37,6 +37,48 @@ function deezerCoverUrl(obj) {
 function escapeCssUrlFragment(url) {
   if (typeof url !== 'string' || !url) return '';
   return url.replace(/'/g, "\\'");
+}
+
+function isYoutubeVideoId(id) {
+  return typeof id === 'string' && id.length === 11 && !id.startsWith('raw-');
+}
+
+/** Map ODST search row → shape expected by playPreview / addPreviewToQueue. */
+function odstItemFromSearchRow(row) {
+  if (!row || !isYoutubeVideoId(row.id)) return null;
+  return {
+    id: row.id,
+    video_id: row.id,
+    title: row.title || 'Unknown',
+    artist: row.channel || row.artist || '',
+    channel: row.channel || '',
+    duration: row.duration || 0,
+    thumbnail: row.thumbnail || ''
+  };
+}
+
+/**
+ * Match a Deezer listing to the first YouTube ODST hit (same audio path as Discover search results).
+ */
+async function resolveDeezerTrackToOdstItem(trackLike) {
+  const artist =
+    typeof trackLike.artist === 'string'
+      ? trackLike.artist
+      : (trackLike.artist && trackLike.artist.name) || '';
+  const q = `${trackLike.title || ''} ${artist}`.trim();
+  if (!q) return null;
+  let results;
+  try {
+    results = await searchService.query(q, { debounce: 0 });
+  } catch {
+    return null;
+  }
+  if (!results || !results.length) return null;
+  for (const row of results) {
+    const item = odstItemFromSearchRow(row);
+    if (item) return item;
+  }
+  return null;
 }
 
 // Curated playlists for discovery (Spotify "Home" style)
@@ -442,54 +484,59 @@ class DiscoveryUI {
     });
   }
 
-  async handleTrackClick(trackId, deezerId) {
+  async _trackLikeForDeezerId(deezerId) {
+    const idStr = String(deezerId);
+    const cached = discoveryService.getCachedTracks().find((t) => String(t.deezerId) === idStr);
+    if (cached) return cached;
+    const data = await discoveryService.fetchDeezer(`/track/${deezerId}`);
+    if (!data) return null;
+    return {
+      title: data.title || 'Unknown',
+      artist: typeof data.artist === 'string' ? data.artist : (data.artist?.name || ''),
+      deezerId: data.id,
+      duration: data.duration || 0,
+      cover: deezerCoverUrl(data.album)
+    };
+  }
+
+  async handleTrackClick(_trackId, deezerId) {
     Haptics.tick();
-    // For now, just add to queue on click
-    await this.handleAddToQueue(deezerId);
+    const trackLike = await this._trackLikeForDeezerId(deezerId);
+    if (!trackLike) {
+      if (typeof window.showToast === 'function') {
+        window.showToast('Could not load track');
+      }
+      return;
+    }
+    const item = await resolveDeezerTrackToOdstItem(trackLike);
+    if (!item) {
+      if (typeof window.showToast === 'function') {
+        window.showToast('No YouTube match — try search above');
+      }
+      return;
+    }
+    playPreview(item);
   }
 
   async handleAddToQueue(deezerId) {
     Haptics.tick();
-
-    const track = discoveryService.getCachedTracks().find(t => t.deezerId === deezerId);
-    if (!track) {
-      // Fetch track details if not cached
-      const data = await discoveryService.fetchDeezer(`/track/${deezerId}`);
-      if (data) {
-        await this.queuePreviewTrack(data);
+    const trackLike = await this._trackLikeForDeezerId(deezerId);
+    if (!trackLike) {
+      if (typeof window.showToast === 'function') {
+        window.showToast('Could not load track');
       }
-    } else {
-      await this.queuePreviewTrack(track);
+      return;
     }
-
+    const item = await resolveDeezerTrackToOdstItem(trackLike);
+    if (!item) {
+      if (typeof window.showToast === 'function') {
+        window.showToast('No YouTube match — try search above');
+      }
+      return;
+    }
+    const ok = await store.addPreviewToQueue(item);
     if (typeof window.showToast === 'function') {
-      window.showToast('Added to preview queue');
-    }
-  }
-
-  async queuePreviewTrack(track) {
-    // Create a preview item for the queue
-    const preview = {
-      video_id: `deezer_${track.deezerId || track.id}`,
-      title: track.title,
-      artist: track.artist,
-      duration: track.duration || 0,
-      thumbnail: track.cover
-    };
-
-    try {
-      const apiBase = store.apiBase;
-      const res = await fetch(`${apiBase}/api/playback/queue`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ preview })
-      });
-
-      if (res.ok) {
-        await store.syncQueue();
-      }
-    } catch (err) {
-      console.error('Add to queue error:', err);
+      window.showToast(ok ? 'Added to queue' : 'Could not add to queue');
     }
   }
 
