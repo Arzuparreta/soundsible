@@ -415,7 +415,8 @@ function onInput() {
     }
 }
 
-function clear() {
+function clear(options = {}) {
+    const skipDiscoverRestore = options.skipDiscoverRestore === true;
     if (searchService.debounceTimer) {
         clearTimeout(searchService.debounceTimer);
         searchService.debounceTimer = null;
@@ -427,7 +428,27 @@ function clear() {
     searchService.hideSuggestions();
     updateDiscoverPanels();
     if (resultsEl) {
-        resultsEl.innerHTML = isDiscoverPage ? '' : `<div class="text-center py-8 text-[var(--text-dim)]">${SEARCH_EMPTY_DEFAULT}</div>`;
+        if (isDiscoverPage) {
+            if (skipDiscoverRestore) {
+                resultsEl.innerHTML = '';
+            } else {
+                const rid = resultsEl.id;
+                if (rid) {
+                    void import('./discovery.js').then((m) => {
+                        if (!m.initDiscovery) return;
+                        const el = document.getElementById(rid);
+                        if (!el) return;
+                        const discoverActive = !!(window.DesktopUI?.currentView === 'discover' || window.UI?.currentView === 'discover');
+                        if (!discoverActive) return;
+                        m.initDiscovery(rid);
+                    });
+                } else {
+                    resultsEl.innerHTML = '';
+                }
+            }
+        } else {
+            resultsEl.innerHTML = `<div class="text-center py-8 text-[var(--text-dim)]">${SEARCH_EMPTY_DEFAULT}</div>`;
+        }
     }
     lastLibraryItems = [];
     lastOdstResults = [];
@@ -455,7 +476,7 @@ function destroy() {
     youtubeBtnEl = null;
     onMusicSourceClick = null;
     onYoutubeSourceClick = null;
-    clear();
+    clear({ skipDiscoverRestore: true });
     inputEl = null;
     resultsEl = null;
 }

@@ -27,6 +27,8 @@ import {
     getPointerCoords
 } from './shared.js';
 const LIBRARY_SYNC_INTERVAL_MS = 300000;
+const DISCOVER_SEARCH_DEBOUNCE_MS = 200;
+let discoverSearchDebounceTimer = null;
 
 function viewStateFromContext() {
     return {
@@ -1051,6 +1053,26 @@ function initGlobalSearch() {
             if (viewContext.currentPlaylistName) renderPlaylistDetail(viewContext.currentPlaylistName);
         } else if (view === 'artist-detail' && viewContext.artistName) {
             renderArtistDetail(viewContext.artistName);
+        } else if (view === 'discover') {
+            if (discoverSearchDebounceTimer) {
+                clearTimeout(discoverSearchDebounceTimer);
+                discoverSearchDebounceTimer = null;
+            }
+            if (!query) {
+                void import('./discovery.js').then((m) => {
+                    if (m.initDiscovery) m.initDiscovery('discover-search-results');
+                });
+                return;
+            }
+            discoverSearchDebounceTimer = setTimeout(() => {
+                discoverSearchDebounceTimer = null;
+                void import('./discovery.js').then((m) => {
+                    const el = document.getElementById('discover-search-results');
+                    if (!el || !m.discoveryUI) return;
+                    m.discoveryUI.container = el;
+                    void m.discoveryUI.renderSearchResults(query);
+                });
+            }, DISCOVER_SEARCH_DEBOUNCE_MS);
         }
     });
 
@@ -1157,6 +1179,10 @@ function clearContentForView(viewId) {
             clearContainerContent(dom.playlistDetailTracks);
             break;
         case 'discover':
+            if (discoverSearchDebounceTimer) {
+                clearTimeout(discoverSearchDebounceTimer);
+                discoverSearchDebounceTimer = null;
+            }
             if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.destroy) {
                 window.unifiedSearch.destroy();
             } else if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) {
@@ -1285,7 +1311,9 @@ function applyViewChrome(viewId) {
             case 'favourites': input.placeholder = 'Search favorites...'; break;
             case 'playlists': input.placeholder = 'Search playlists...'; break;
             case 'playlist-detail': input.placeholder = 'Search in playlist...'; break;
-            case 'discover': input.placeholder = 'Search anything...'; break;
+            case 'discover':
+                input.placeholder = 'Search anything...';
+                break;
             case 'artist-detail': input.placeholder = 'Search songs & albums...'; break;
         }
     }
@@ -1314,16 +1342,18 @@ function fillViewBody(viewId) {
             if (viewContext.currentPlaylistName) renderPlaylistDetail(viewContext.currentPlaylistName);
             break;
         case 'discover':
-            import('./downloader.js').then((dm) => { dm.Downloader.init(); });
-            import('./search.js').then((searchMod) => {
-                window.unifiedSearch = searchMod.unifiedSearch;
-                searchMod.unifiedSearch.init({ mobile: true, resultsContainerId: 'discover-search-results' });
+            import('./downloader.js').then((dm) => {
+                dm.Downloader.init();
             });
-  import('./discovery.js').then((discoveryMod) => {
-    if (discoveryMod.initDiscovery) {
-      discoveryMod.initDiscovery('discover-search-results');
-    }
-  });
+            import('./discovery.js')
+                .then((discoveryMod) => {
+                    if (discoveryMod.initDiscovery) {
+                        discoveryMod.initDiscovery('discover-search-results');
+                    }
+                })
+                .catch((err) => {
+                    console.error('[app.js] Failed to load discovery.js:', err);
+                });
             break;
         case 'settings':
             import('./downloader.js').then((dm) => {
