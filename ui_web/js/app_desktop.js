@@ -29,7 +29,8 @@ function getDesktopViewState() {
         favTracks: window._currentFavTracks,
         artistTracks: window._currentArtistTracks,
         playlistTracks: window._currentPlaylistTracks,
-        searchTracks: window._currentSearchTracks
+        searchTracks: window._currentSearchTracks,
+        discoverSurfaceTracks: window._discoverSurfaceTracks ?? null
     };
 }
 
@@ -67,6 +68,44 @@ function renderPlaylists() {
 }
 
 function renderPlaylistDetail() {
+    if (window._deezerPlaylistDetail) {
+        const d = window._deezerPlaylistDetail;
+        const tracks = d.tracks || [];
+        window._currentPlaylistTracks = tracks;
+
+        const titleEl = document.getElementById('desktop-playlist-detail-title');
+        const metaEl = document.getElementById('desktop-playlist-detail-meta');
+        const coverEl = document.getElementById('desktop-playlist-detail-cover');
+        const iconEl = document.getElementById('desktop-playlist-detail-cover-icon');
+        const tracksEl = document.getElementById('desktop-playlist-detail-tracks');
+        const searchInput = document.getElementById('desktop-global-search-input');
+        if (titleEl) titleEl.textContent = d.title || 'Playlist';
+        const n = tracks.length;
+        if (metaEl) metaEl.textContent = n === 1 ? '1 track' : `${n} tracks`;
+        if (coverEl) {
+            const u = (d.coverUrl || '').trim();
+            coverEl.style.backgroundImage = u ? `url("${String(u).replace(/"/g, '%22')}")` : '';
+            if (iconEl) iconEl.classList.toggle('hidden', !!u);
+            coverEl.classList.remove('cursor-pointer');
+            coverEl.removeAttribute('role');
+            coverEl.removeAttribute('tabindex');
+            coverEl.removeAttribute('aria-label');
+            coverEl.removeAttribute('aria-haspopup');
+            coverEl.onclick = null;
+            coverEl.onkeydown = null;
+        }
+        ['desktop-playlist-detail-rename-btn', 'desktop-playlist-detail-duplicate-btn', 'desktop-playlist-detail-delete-btn'].forEach((id) => {
+            document.getElementById(id)?.classList.add('hidden');
+        });
+        const searchQuery = searchInput?.value.trim() || '';
+        renderers.renderDeezerPlaylistDetailTracks(tracks, tracksEl, { searchQuery, desktopClickBehavior: true });
+        return;
+    }
+
+    ['desktop-playlist-detail-rename-btn', 'desktop-playlist-detail-duplicate-btn', 'desktop-playlist-detail-delete-btn'].forEach((id) => {
+        document.getElementById(id)?.classList.remove('hidden');
+    });
+
     const name = window._currentPlaylistName;
     if (!name) return;
     const state = store.state;
@@ -126,6 +165,7 @@ function renderPlaylistDetail() {
 }
 
 function showPlaylistDetail(name) {
+    window._deezerPlaylistDetail = null;
     window._currentPlaylistName = name;
     renderPlaylistDetail();
     DesktopUI.showView('playlist-detail');
@@ -685,6 +725,7 @@ function initPlaylistListDrag() {
     document.addEventListener('pointercancel', () => { if (!dragStarted && holdTimer) { clearTimeout(holdTimer); holdTimer = null; } });
 }
 
+window.renderDesktopPlaylistDetail = renderPlaylistDetail;
 window.playTrack = playTrack;
 window.playPreview = playPreview;
 window.showToast = (msg) => { if (typeof DesktopUI !== 'undefined' && DesktopUI.showToast) DesktopUI.showToast(msg); };
@@ -1002,7 +1043,7 @@ function init() {
             if (DesktopUI.currentView === 'artists') renderDesktopArtists();
             if (DesktopUI.currentView === 'artist-detail' && window._currentArtistName) renderDesktopArtistDetail();
             if (DesktopUI.currentView === 'playlists') renderPlaylists();
-            if (DesktopUI.currentView === 'playlist-detail' && window._currentPlaylistName) renderPlaylistDetail();
+            if (DesktopUI.currentView === 'playlist-detail' && (window._currentPlaylistName || window._deezerPlaylistDetail)) renderPlaylistDetail();
         });
 
         function initDesktopGlobalSearch() {
@@ -1124,7 +1165,7 @@ function init() {
                     if (targetView === 'home') renderHomeSongs();
                     if (targetView === 'favourites') renderFavourites();
                     if (targetView === 'playlists') renderPlaylists();
-                    if (targetView === 'playlist-detail' && window._currentPlaylistName) renderPlaylistDetail();
+                    if (targetView === 'playlist-detail' && (window._currentPlaylistName || window._deezerPlaylistDetail)) renderPlaylistDetail();
                     if (targetView === 'artists') renderDesktopArtists();
                     if (targetView === 'artist-detail' && window._currentArtistName) renderDesktopArtistDetail();
                     if (targetView === 'settings' && window.Downloader && typeof window.Downloader.loadConfig === 'function') {

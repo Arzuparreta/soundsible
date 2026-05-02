@@ -194,11 +194,14 @@ export function buildHomeArtistRowHtml(artistName, track, options = {}) {
 /**
  * Build HTML for song rows. Uses div + background-image for covers (no img) per project rule.
  * @param {Array} tracks
- * @param {Object} options - { activeTrackId, favIds, getCoverUrl, addDataIndex, desktopClickBehavior }
+ * @param {Object} options - { activeTrackId, favIds, getCoverUrl, addDataIndex, desktopClickBehavior, suppressActionMenu, discoverDeezerSurface }
  */
 export function buildSongRowsHtml(tracks, options = {}) {
     const desktop = options.desktopClickBehavior === true;
     const playOverlay = desktop ? desktopPlayOverlaySmallHtml() : '';
+    const suppressSwipeHints = options.discoverDeezerSurface === true;
+    const deezerSurfaceAttr = options.discoverDeezerSurface === true ? ' data-deezer-surface="1"' : '';
+    const suppressActionMenu = options.suppressActionMenu === true;
     return tracks.map((t, idx) => {
         const { isActive, showPlayingIndicator, isFav, coverStyle } = getTrackRenderState(t, options);
         const dataIndexAttr = options.addDataIndex ? ` data-index="${idx}"` : '';
@@ -207,13 +210,20 @@ export function buildSongRowsHtml(tracks, options = {}) {
         const rowBg = isActive
             ? 'bg-[var(--bg-selection)]'
             : (desktop ? 'bg-transparent hover:bg-[var(--surface-overlay)]' : 'bg-transparent');
-        return `
-            <div class="relative overflow-hidden rounded-[var(--radius-omni-xs)] mb-1 group${wrapperClass}"${dataIndexAttr}>
+        const swipeHints = suppressSwipeHints ? '' : `
                 <div class="swipe-hints absolute inset-0 flex items-center justify-between px-8 z-0 pointer-events-none">
                     <div class="text-[var(--secondary)] font-semibold text-[9px] uppercase tracking-wider">Queue</div>
                     <div class="text-[var(--accent)] font-semibold text-[9px] uppercase tracking-wider">Favourite</div>
-                </div>
-                <div class="song-row relative z-10 flex items-center py-2 pl-2 pr-1 ${rowBg} rounded-[var(--radius-omni-xs)] border border-transparent transition-colors duration-200 cursor-pointer" data-id="${t.id}"${rowOnclick}>
+                </div>`;
+        const actionCell = suppressActionMenu
+            ? '<div class="w-11 h-11 min-w-[44px] min-h-[44px] flex-shrink-0" aria-hidden="true"></div>'
+            : `<button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}', this)" class="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text-main)] transition-colors rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-0" aria-label="More actions">
+                            <i class="fas fa-ellipsis-vertical text-sm"></i>
+                        </button>`;
+        return `
+            <div class="relative overflow-hidden rounded-[var(--radius-omni-xs)] mb-1 group${wrapperClass}"${dataIndexAttr}>
+                ${swipeHints}
+                <div class="song-row relative z-10 flex items-center py-2 pl-2 pr-1 ${rowBg} rounded-[var(--radius-omni-xs)] border border-transparent transition-colors duration-200 cursor-pointer" data-id="${t.id}"${deezerSurfaceAttr}${rowOnclick}>
                     <div class="song-row-cover-wrapper relative w-11 h-11 flex-shrink-0${desktop ? ' group' : ''}">
                         <div class="song-row-cover absolute inset-0 rounded-[var(--radius-list-cover)] overflow-hidden bg-cover bg-center" style="${coverStyle}" role="img" aria-label="${esc(t.title || 'Cover')}">
                             <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/12 rounded-[var(--radius-list-cover)] pointer-events-none ${showPlayingIndicator ? 'opacity-100' + (desktop ? '' : ' is-playing') : 'opacity-0'}">
@@ -230,9 +240,7 @@ export function buildSongRowsHtml(tracks, options = {}) {
                     <div class="flex items-center gap-1 sm:gap-2 ml-2 flex-shrink-0">
                         ${trackTrustBadgeHtml(t)}
                         <div class="no-row-action text-[10px] font-medium text-[var(--text-dim)] opacity-55 tabular-nums">${formatTime(t.duration)}</div>
-                        <button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}', this)" class="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text-main)] transition-colors rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-0" aria-label="More actions">
-                            <i class="fas fa-ellipsis-vertical text-sm"></i>
-                        </button>
+                        ${actionCell}
                     </div>
                 </div>
             </div>
@@ -590,6 +598,33 @@ export function renderArtistDetail(artistName, library, heroElements, tracksEl, 
  * @param {Array} library - full track list
  * @param {Object} options - { getCoverUrl, onCreateClick } (onCreateClick is optional handler name for "Create playlist" button)
  */
+/**
+ * Deezer editorial playlists on Discover: same card chrome as native playlist grid, different open handler.
+ * @param {Array<{ id: string|number, title: string, cover?: string, trackCount?: number }>} items
+ */
+export function buildDeezerPlaylistCardsHtml(items) {
+    const list = Array.isArray(items) ? items : [];
+    if (!list.length) return '';
+    return list.map((pl, idx) => {
+        const coverUrl = (typeof pl.cover === 'string' && pl.cover.trim()) ? pl.cover.trim() : '';
+        const coverStyle = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+        const count = Number(pl.trackCount) || 0;
+        const label = count === 1 ? '1 track' : `${count} tracks`;
+        const pid = pl.id != null ? String(pl.id) : '';
+        return `
+        <div class="playlist-card deezer-playlist-card group cursor-pointer rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)] overflow-hidden transition-colors duration-200 hover:border-[var(--accent)]/25" data-deezer-playlist-id="${esc(pid)}" data-index="${idx}">
+            <div class="playlist-card-cover aspect-square w-full relative overflow-hidden rounded-t-[var(--radius-omni-xs)] bg-[var(--bg-card)] bg-cover bg-center border-b border-[var(--glass-border)]" style="${coverStyle}; min-height: 100px;" role="img" aria-label="${esc(pl.title || 'Playlist')}">
+                ${!coverUrl ? '<div class="absolute inset-0 flex items-center justify-center"><i class="fas fa-layer-group text-3xl text-[var(--text-dim)]/40"></i></div>' : ''}
+            </div>
+            <div class="p-3">
+                <div class="playlist-card-name font-bold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${esc(pl.title || 'Playlist')}</div>
+                <div class="text-[10px] font-mono text-[var(--text-dim)] truncate mt-0.5">${esc(label)}</div>
+            </div>
+        </div>
+        `;
+    }).join('');
+}
+
 export function buildPlaylistCardsHtml(playlists, library, options = {}) {
     const getCoverUrl = options.getCoverUrl || Resolver.getCoverUrl.bind(Resolver);
     const names = options.preserveOrder ? Object.keys(playlists || {}) : Object.keys(playlists || {}).sort((a, b) => a.localeCompare(b));
@@ -694,6 +729,37 @@ export function buildPlaylistTrackRowsHtml(tracks, options = {}) {
  * @param {HTMLElement|null} tracksContainerEl
  * @param {Object} options - { searchQuery, getCoverUrl }
  */
+/**
+ * Deezer playlist detail in the native shell: same row chrome as library playlist, no edit/remove.
+ * @param {Array<{ id: string, title?: string, artist?: string, album?: string, duration?: number, cover?: string }>} tracks
+ * @param {HTMLElement|null} tracksContainerEl
+ * @param {{ searchQuery?: string, desktopClickBehavior?: boolean }} options
+ */
+export function renderDeezerPlaylistDetailTracks(tracks, tracksContainerEl, options = {}) {
+    if (!tracksContainerEl) return;
+    const query = (options.searchQuery || '').trim().toLowerCase();
+    const list = tracks || [];
+    const filtered = query
+        ? list.filter((t) =>
+            (t.title || '').toLowerCase().includes(query) ||
+            (t.artist || '').toLowerCase().includes(query) ||
+            ((t.album || '').toLowerCase().includes(query)))
+        : list;
+    if (filtered.length === 0) {
+        tracksContainerEl.innerHTML = query
+            ? '<div class="text-[var(--text-dim)] text-center py-10 italic text-sm">No matches in this playlist.</div>'
+            : '<div class="text-[var(--text-dim)] text-center py-10 italic text-sm">No tracks.</div>';
+        return;
+    }
+    const getCoverUrl = (t) => ((typeof t.cover === 'string' && t.cover.trim()) ? t.cover.trim() : '');
+    tracksContainerEl.innerHTML = buildSongRowsHtml(filtered, {
+        getCoverUrl,
+        addDataIndex: false,
+        desktopClickBehavior: options.desktopClickBehavior === true,
+        discoverDeezerSurface: true
+    });
+}
+
 export function renderPlaylistDetail(playlistName, trackIds, library, tracksContainerEl, options = {}) {
     if (!tracksContainerEl) return;
     const query = (options.searchQuery || '').trim().toLowerCase();

@@ -8,6 +8,7 @@ import { Haptics } from './haptics.js';
 import { getApiBase } from './config.js';
 import { searchService } from './search_service.js';
 import { playPreview } from './preview_playback.js';
+import * as renderers from './renderers.js';
 
 function deezerProxyUrl(endpoint) {
   const host =
@@ -60,7 +61,7 @@ function odstItemFromSearchRow(row) {
 /**
  * Match a Deezer listing to the first YouTube ODST hit (same audio path as Discover search results).
  */
-async function resolveDeezerTrackToOdstItem(trackLike) {
+export async function resolveDeezerTrackToOdstItem(trackLike) {
   const artist =
     typeof trackLike.artist === 'string'
       ? trackLike.artist
@@ -248,14 +249,86 @@ class DiscoveryService {
 
 export const discoveryService = new DiscoveryService();
 
+async function trackLikeForDeezerId(deezerId) {
+  const idStr = String(deezerId);
+  const cached = discoveryService.getCachedTracks().find((t) => String(t.deezerId) === idStr);
+  if (cached) return cached;
+  const data = await discoveryService.fetchDeezer(`/track/${deezerId}`);
+  if (!data) return null;
+  return {
+    title: data.title || 'Unknown',
+    artist: typeof data.artist === 'string' ? data.artist : (data.artist?.name || ''),
+    deezerId: data.id,
+    duration: data.duration || 0,
+    cover: deezerCoverUrl(data.album)
+  };
+}
+
+/** YouTube preview playback for a Deezer numeric id (used from Library-style rows / playTrack). */
+export async function playDeezerTrackByNumericId(deezerId) {
+  Haptics.tick();
+  const trackLike = await trackLikeForDeezerId(deezerId);
+  if (!trackLike) {
+    window.showToast?.('Could not load track');
+    return;
+  }
+  const item = await resolveDeezerTrackToOdstItem(trackLike);
+  if (!item) {
+    window.showToast?.('No YouTube match — try search above');
+    return;
+  }
+  playPreview(item);
+}
+
+export async function addDeezerTrackToQueueByNumericId(deezerId) {
+  Haptics.tick();
+  const trackLike = await trackLikeForDeezerId(deezerId);
+  if (!trackLike) {
+    window.showToast?.('Could not load track');
+    return;
+  }
+  const item = await resolveDeezerTrackToOdstItem(trackLike);
+  if (!item) {
+    window.showToast?.('No YouTube match — try search above');
+    return;
+  }
+  const ok = await store.addPreviewToQueue(item);
+  window.showToast?.(ok ? 'Added to queue' : 'Could not add to queue');
+}
+
+/** Open Deezer playlist in the same shell as native playlists (mobile + desktop). */
+export async function openDeezerPlaylistById(playlistId) {
+  const data = await discoveryService.fetchDeezer(`/playlist/${playlistId}`);
+  if (!data) return;
+  const tracks = (data.tracks?.data || []).map((t) => discoveryService.normalizeTrack(t));
+  window._deezerPlaylistDetail = {
+    deezerPlaylistId: data.id,
+    title: data.title || 'Playlist',
+    subtitle: typeof data.description === 'string' ? data.description.trim() : '',
+    coverUrl: deezerCoverUrl(data),
+    tracks
+  };
+  window._currentPlaylistTracks = tracks;
+  if (typeof window.viewContext !== 'undefined') {
+    window.viewContext.currentPlaylistName = null;
+  }
+  window._currentPlaylistName = null;
+  if (window.UI?.showView) window.UI.showView('playlist-detail');
+  if (window.DesktopUI?.showView) {
+    window.DesktopUI.showView('playlist-detail');
+    if (typeof window.renderDesktopPlaylistDetail === 'function') {
+      window.renderDesktopPlaylistDetail();
+    }
+  }
+}
+
 /**
  * Discovery UI Management
  */
 class DiscoveryUI {
   constructor() {
     this.container = null;
-    this.currentView = 'home'; // home, search, playlist
-    this.currentPlaylist = null;
+    this.currentView = 'home';
   }
 
   init(containerId) {
@@ -268,161 +341,77 @@ class DiscoveryUI {
 
   async renderHome() {
     this.currentView = 'home';
+    if (!this.container) return;
     this.container.innerHTML = '<div class="discovery-loading text-center py-10 text-[var(--text-dim)]">Loading discoveries...</div>';
 
     const playlists = await discoveryService.fetchPlaylists();
     const topTracks = await discoveryService.fetchTopTracks();
     discoveryService.currentTracks = topTracks;
 
-    this.container.innerHTML = this.buildHomeHtml(playlists, topTracks);
+    const list = topTracks.slice(0, 12);
+    window._discoverSurfaceTracks = list;
+    this.container.innerHTML = `
+      <div class="discovery-home space-y-8 pb-8">
+        <section>
+          <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">Today's Top Hits</h2>
+          <div id="discovery-home-top-tracks" class="space-y-1"></div>
+        </section>
+        <section>
+          <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">Browse by Mood & Genre</h2>
+          <div id="discovery-playlist-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start"></div>
+        </section>
+      </div>`;
+    const tracksEl = this.container.querySelector('#discovery-home-top-tracks');
+    const grid = this.container.querySelector('#discovery-playlist-grid');
+    if (tracksEl) {
+      renderers.renderSongList(list, tracksEl, {
+        getCoverUrl: (t) => (typeof t.cover === 'string' && t.cover) ? t.cover : '',
+        discoverDeezerSurface: true
+      });
+    }
+    if (grid) {
+      grid.innerHTML = renderers.buildDeezerPlaylistCardsHtml(
+        playlists.map((pl) => ({
+          id: pl.id,
+          title: pl.title,
+          cover: pl.cover,
+          trackCount: pl.trackCount
+        }))
+      );
+    }
     this.bindEvents();
   }
 
   async renderSearchResults(query) {
     this.currentView = 'search';
+    if (!this.container) return;
     this.container.innerHTML = '<div class="discovery-loading text-center py-10 text-[var(--text-dim)]">Searching...</div>';
 
     const tracks = await discoveryService.search(query);
     discoveryService.currentTracks = tracks;
 
-    this.container.innerHTML = this.buildSearchResultsHtml(query, tracks);
-    this.bindEvents();
-  }
-
-  buildSearchResultsHtml(query, tracks) {
     if (tracks.length === 0) {
-      return `<div class="text-center py-10 text-[var(--text-dim)]">No results found for "${this.esc(query)}"</div>`;
+      this.container.innerHTML = `<div class="text-center py-10 text-[var(--text-dim)]">No results found for "${this.esc(query)}"</div>`;
+      window._discoverSurfaceTracks = null;
+      return;
     }
-
-    let html = `
-      <div class="discovery-search-results space-y-6">
-        <section>
-          <h2 class="text-lg font-bold text-[var(--text-main)] mb-4">Results for "${this.esc(query)}"</h2>
-          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-            ${tracks.slice(0, 20).map(track => this.buildCardHtml(track)).join('')}
-          </div>
-        </section>
-      </div>
-    `;
-
-    return html;
-  }
-
-  buildHomeHtml(playlists, tracks) {
-    let html = `
-      <div class="discovery-home space-y-8">
-        <!-- Quick Add Section -->
-        <section>
-          <h2 class="text-lg font-bold text-[var(--text-main)] mb-4">Today's Top Hits</h2>
-          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-            ${tracks.slice(0, 12).map(track => this.buildCardHtml(track)).join('')}
-          </div>
-        </section>
-
-        <!-- Playlists Section -->
-        <section>
-          <h2 class="text-lg font-bold text-[var(--text-main)] mb-4">Browse by Mood & Genre</h2>
-          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            ${playlists.map(pl => this.buildPlaylistCardHtml(pl)).join('')}
-          </div>
-        </section>
-      </div>
-    `;
-
-    return html;
-  }
-
-  buildCardHtml(track) {
-    const coverUrl =
-      (typeof track.cover === 'string' && track.cover) ||
-      deezerCoverUrl(track.album) ||
-      this.placeholderCover;
-    const coverStyle = coverUrl ? `background-image: url('${escapeCssUrlFragment(coverUrl)}')` : '';
-
-    return `
-      <div class="discovery-track-card group cursor-pointer" data-track-id="${track.id}" data-deezer-id="${track.deezerId}">
-        <div class="aspect-square rounded-xl overflow-hidden bg-[var(--bg-surface)] bg-cover bg-center mb-3 shadow-sm transition-transform group-hover:scale-105" style="${coverStyle}"></div>
-        <h3 class="font-semibold text-sm text-[var(--text-main)] truncate">${this.esc(track.title)}</h3>
-        <p class="text-xs text-[var(--text-dim)] truncate">${this.esc(track.artist)}</p>
-        <button class="add-to-queue-btn absolute bottom-2 right-2 w-10 h-10 rounded-full bg-[var(--accent)] text-[var(--text-on-accent)] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-lg" aria-label="Add to queue">
-          <i class="fas fa-plus text-xs"></i>
-        </button>
-      </div>
-    `;
-  }
-
-  buildPlaylistCardHtml(playlist) {
-    const coverUrl =
-      (typeof playlist.cover === 'string' && playlist.cover) || this.placeholderCover;
-    const coverStyle = coverUrl ? `background-image: url('${escapeCssUrlFragment(coverUrl)}')` : '';
-
-    return `
-      <div class="discovery-playlist-card group cursor-pointer" data-playlist-id="${playlist.id}">
-        <div class="aspect-square rounded-xl overflow-hidden bg-[var(--bg-surface)] bg-cover bg-center mb-3 shadow-sm transition-transform group-hover:scale-105" style="${coverStyle}"></div>
-        <h3 class="font-semibold text-sm text-[var(--text-main)] truncate">${this.esc(playlist.title)}</h3>
-        <p class="text-xs text-[var(--text-dim)] truncate">${this.esc(playlist.description)}</p>
-        <span class="text-[10px] text-[var(--text-dim)] uppercase tracking-wide">${playlist.trackCount} tracks</span>
-      </div>
-    `;
-  }
-
-  renderPlaylist(playlist) {
-    this.currentView = 'playlist';
-    this.currentPlaylist = playlist;
-
-    const tracks = playlist.tracks || [];
-
+    const show = tracks.slice(0, 20);
+    window._discoverSurfaceTracks = show;
     this.container.innerHTML = `
-      <div class="discovery-playlist space-y-6">
-        <div class="flex items-center gap-4 mb-6">
-          <button class="back-btn text-[var(--text-dim)] hover:text-[var(--text-main)] transition-colors" aria-label="Go back">
-            <i class="fas fa-arrow-left"></i>
-          </button>
-          <div class="flex-1">
-            <img src="${(typeof playlist.cover === 'string' ? playlist.cover : '').replace(/"/g, '&quot;')}" alt="${this.esc(playlist.title)}" class="w-24 h-24 rounded-xl shadow-lg mb-3">
-            <h1 class="text-2xl font-bold text-[var(--text-main)]">${this.esc(playlist.title)}</h1>
-            <p class="text-sm text-[var(--text-dim)]">${playlist.description} • ${playlist.trackCount} tracks</p>
-          </div>
-        </div>
-
-        <div class="discovery-playlist-tracks space-y-2">
-          ${tracks.map((track, index) => this.buildTrackRowHtml(track, index)).join('')}
-        </div>
-      </div>
-    `;
-
+      <div class="discovery-search-results">
+        <section>
+          <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">Results for "${this.esc(query)}"</h2>
+          <div id="discovery-search-track-list" class="space-y-1"></div>
+        </section>
+      </div>`;
+    const tracksEl = this.container.querySelector('#discovery-search-track-list');
+    if (tracksEl) {
+      renderers.renderSongList(show, tracksEl, {
+        getCoverUrl: (t) => (typeof t.cover === 'string' && t.cover) ? t.cover : '',
+        discoverDeezerSurface: true
+      });
+    }
     this.bindEvents();
-  }
-
-  buildTrackRowHtml(track, index) {
-    const rowId = typeof track.id === 'number' || typeof track.id === 'string' ? `deezer_${track.id}` : track.id;
-    const coverUrl = deezerCoverUrl(track.album) || this.placeholderCover;
-    const coverStyle = coverUrl ? `background-image: url('${escapeCssUrlFragment(coverUrl)}')` : '';
-
-    return `
-      <div class="discovery-track-row flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--bg-surface)] transition-colors group" data-track-id="${rowId}">
-        <span class="text-xs text-[var(--text-dim)] w-6">${index + 1}</span>
-        <div class="w-12 h-12 rounded-lg bg-cover bg-center flex-shrink-0" style="${coverStyle}"></div>
-        <div class="flex-1 min-w-0">
-          <div class="font-medium text-sm text-[var(--text-main)] truncate">${this.esc(track.title)}</div>
-          <div class="text-xs text-[var(--text-dim)] truncate">${this.esc(track.artist?.name)}</div>
-        </div>
-        <button class="add-to-queue-btn w-10 h-10 rounded-full bg-[var(--bg-surface)] hover:bg-[var(--accent)] hover:text-[var(--text-on-accent)] transition-colors flex items-center justify-center" aria-label="Add to queue">
-          <i class="fas fa-plus text-xs"></i>
-        </button>
-        <span class="text-xs text-[var(--text-dim)] tabular-nums">${this.formatDuration(track.duration)}</span>
-      </div>
-    `;
-  }
-
-  formatDuration(seconds) {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }
-
-  get placeholderCover() {
-    return store?.placeholderCoverUrl || '';
   }
 
   esc(str) {
@@ -434,126 +423,12 @@ class DiscoveryUI {
 
   bindEvents() {
     if (!this.container) return;
-
-    // Track card clicks
-    this.container.querySelectorAll('.discovery-track-card').forEach(card => {
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('.add-to-queue-btn')) return;
-
-        const trackId = card.dataset.trackId;
-        const deezerId = card.dataset.deezerId;
-        this.handleTrackClick(trackId, deezerId);
-      });
-
-      const addBtn = card.querySelector('.add-to-queue-btn');
-      if (addBtn) {
-        addBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const deezerId = card.dataset.deezerId;
-          this.handleAddToQueue(deezerId);
-        });
-      }
-    });
-
-    // Playlist card clicks
-    this.container.querySelectorAll('.discovery-playlist-card').forEach(card => {
-      card.addEventListener('click', async () => {
-        const playlistId = card.dataset.playlistId;
-        await this.loadAndRenderPlaylist(playlistId);
+    this.container.querySelectorAll('.deezer-playlist-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        const id = card.getAttribute('data-deezer-playlist-id');
+        if (id) void openDeezerPlaylistById(id);
       });
     });
-
-    // Back button
-    const backBtn = this.container.querySelector('.back-btn');
-    if (backBtn) {
-      backBtn.addEventListener('click', () => {
-        this.renderHome();
-      });
-    }
-
-    // Playlist track adds
-    this.container.querySelectorAll('.discovery-playlist-tracks .add-to-queue-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const row = btn.closest('.discovery-track-row');
-        const deezerId = row?.dataset?.trackId?.replace('deezer_', '');
-        if (deezerId) {
-          this.handleAddToQueue(deezerId);
-        }
-      });
-    });
-  }
-
-  async _trackLikeForDeezerId(deezerId) {
-    const idStr = String(deezerId);
-    const cached = discoveryService.getCachedTracks().find((t) => String(t.deezerId) === idStr);
-    if (cached) return cached;
-    const data = await discoveryService.fetchDeezer(`/track/${deezerId}`);
-    if (!data) return null;
-    return {
-      title: data.title || 'Unknown',
-      artist: typeof data.artist === 'string' ? data.artist : (data.artist?.name || ''),
-      deezerId: data.id,
-      duration: data.duration || 0,
-      cover: deezerCoverUrl(data.album)
-    };
-  }
-
-  async handleTrackClick(_trackId, deezerId) {
-    Haptics.tick();
-    const trackLike = await this._trackLikeForDeezerId(deezerId);
-    if (!trackLike) {
-      if (typeof window.showToast === 'function') {
-        window.showToast('Could not load track');
-      }
-      return;
-    }
-    const item = await resolveDeezerTrackToOdstItem(trackLike);
-    if (!item) {
-      if (typeof window.showToast === 'function') {
-        window.showToast('No YouTube match — try search above');
-      }
-      return;
-    }
-    playPreview(item);
-  }
-
-  async handleAddToQueue(deezerId) {
-    Haptics.tick();
-    const trackLike = await this._trackLikeForDeezerId(deezerId);
-    if (!trackLike) {
-      if (typeof window.showToast === 'function') {
-        window.showToast('Could not load track');
-      }
-      return;
-    }
-    const item = await resolveDeezerTrackToOdstItem(trackLike);
-    if (!item) {
-      if (typeof window.showToast === 'function') {
-        window.showToast('No YouTube match — try search above');
-      }
-      return;
-    }
-    const ok = await store.addPreviewToQueue(item);
-    if (typeof window.showToast === 'function') {
-      window.showToast(ok ? 'Added to queue' : 'Could not add to queue');
-    }
-  }
-
-  async loadAndRenderPlaylist(playlistId) {
-    const data = await discoveryService.fetchDeezer(`/playlist/${playlistId}`);
-    if (!data) return;
-
-    const playlist = {
-      id: data.id,
-      title: data.title,
-      description: data.description || 'Playlist',
-      cover: deezerCoverUrl(data),
-      trackCount: data.nb_tracks || 0,
-      tracks: data.tracks?.data || []
-    };
-
-    this.renderPlaylist(playlist);
   }
 }
 

@@ -7,6 +7,10 @@ import { store } from './store.js';
 import { audioEngine } from './audio.js';
 import * as renderers from './renderers.js';
 
+function isDeezerRowId(id) {
+    return typeof id === 'string' && id.startsWith('deezer_');
+}
+
 /**
  * @param {string} currentView - 'home' | 'favourites' | 'playlists' | 'playlist-detail' | 'artist-detail' | 'discover'
  * @param {{ homeTracks?: unknown[]|null, favTracks?: unknown[]|null, artistTracks?: unknown[]|null, playlistTracks?: unknown[]|null, searchTracks?: unknown[]|null }} viewState
@@ -23,7 +27,12 @@ export function getCurrentTrackList(currentView, viewState) {
     if (currentView === 'favourites') return viewState.favTracks ?? library;
     if (currentView === 'playlists' || currentView === 'playlist-detail') return viewState.playlistTracks ?? library;
     if (currentView === 'artist-detail') return viewState.artistTracks ?? library;
-    if (currentView === 'discover' && viewState.searchTracks) return viewState.searchTracks;
+    if (currentView === 'discover') {
+        const st = viewState.searchTracks;
+        if (Array.isArray(st) && st.length > 0) return st;
+        const ds = viewState.discoverSurfaceTracks;
+        if (Array.isArray(ds) && ds.length > 0) return ds;
+    }
     return library;
 }
 
@@ -48,6 +57,15 @@ export function getTrackFromContext(trackId, currentView, viewState) {
  * @param {Parameters<typeof getCurrentTrackList>[1]} viewState
  */
 export function playTrackFromContext(trackId, currentView, viewState) {
+    if (isDeezerRowId(trackId)) {
+        const raw = String(trackId).replace(/^deezer_/, '');
+        void import('./discovery.js').then((m) => {
+            if (typeof m.playDeezerTrackByNumericId === 'function') {
+                void m.playDeezerTrackByNumericId(raw);
+            }
+        });
+        return;
+    }
     const context = getCurrentTrackList(currentView, viewState);
     let track = context && context.find((t) => t.id === trackId);
     let list = context;

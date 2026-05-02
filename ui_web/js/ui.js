@@ -8,6 +8,11 @@ import { audioEngine } from './audio.js';
 import { Haptics } from './haptics.js';
 import { wireActionMenu } from './wires.js';
 import { getYouTubeWatchUrlForTrack, isYtdlpPreviewStreamTrack } from './shared.js';
+import {
+    buildVirtualTrackForDeezerRow,
+    hydrateDeezerVirtualTrack,
+    applyDeezerActionMenuChrome
+} from './deezer_actions.js';
 import { attachSeekBar } from './seek_bar.js';
 // Note: Global availability for inline onclick handlers
 window.audioEngine = audioEngine;
@@ -1005,8 +1010,9 @@ export class UI {
             if (gesture.activeRow) {
                 const diff = e.changedTouches[0].clientX - gesture.startX;
                 const trackId = gesture.activeRow.getAttribute('data-id');
+                const isDeezerSurfaceRow = gesture.activeRow.getAttribute('data-deezer-surface') === '1';
                 const isFav = trackId && store.state.favorites.includes(trackId);
-                const isFavFirstAdd = gesture.isHorizontal && diff < -70 && !isFav &&
+                const isFavFirstAdd = !isDeezerSurfaceRow && gesture.isHorizontal && diff < -70 && !isFav &&
                     this.currentView === 'home' && (store.state.libraryOrder || 'date_added') === 'favorites_first';
 
                 if (isFavFirstAdd) {
@@ -1015,7 +1021,7 @@ export class UI {
                     if (typeof window.scheduleFavFirstAnimation === 'function') window.scheduleFavFirstAnimation(trackId, gesture.activeRow);
                     gesture.activeRow = null;
                 } else {
-                    const fastSwipeFavFirstAdd = !gesture.isHorizontal && diff < -70 && !isFav &&
+                    const fastSwipeFavFirstAdd = !isDeezerSurfaceRow && !gesture.isHorizontal && diff < -70 && !isFav &&
                         this.currentView === 'home' && (store.state.libraryOrder || 'date_added') === 'favorites_first';
                     if (fastSwipeFavFirstAdd) {
                         Haptics.tick();
@@ -1025,7 +1031,7 @@ export class UI {
                     } else {
                         gesture.activeRow.style.transition = 'transform 0.4s cubic-bezier(0.19, 1, 0.22, 1)';
                         gesture.activeRow.style.transform = 'translateX(0)';
-                        if (gesture.isHorizontal) {
+                        if (gesture.isHorizontal && !isDeezerSurfaceRow) {
                             if (diff > 70) {
                                 const inQueue = store.state.queue.some(t => t.id === trackId);
                                 store.toggleQueue(trackId);
@@ -1521,14 +1527,56 @@ export class UI {
         this.updateOmniMetadataVisibility();
     }
 
-    static showActionMenu(trackId) {
+    static showActionMenu(trackId, sourceEl) {
         // Note: Critical blur any active element to prevent auto-focus/highlight on mobile
         if (document.activeElement) document.activeElement.blur();
+
+        if (typeof trackId === 'string' && trackId.startsWith('deezer_')) {
+            const v = buildVirtualTrackForDeezerRow(trackId);
+            if (!v) return;
+            this.currentActionTrack = v;
+            const actionTrackTitle = document.getElementById('action-track-title');
+            const actionTrackArtist = document.getElementById('action-track-artist');
+            const actionTrackArt = document.getElementById('action-track-art');
+            if (actionTrackTitle) actionTrackTitle.textContent = v.title;
+            if (actionTrackArtist) {
+                actionTrackArtist.textContent = v.artist;
+                actionTrackArtist.classList.add('font-mono');
+            }
+            if (actionTrackArt) {
+                const u = (v.cover || '').trim();
+                actionTrackArt.src = u || store.placeholderCoverUrl192;
+                actionTrackArt.onerror = function () { this.src = store.placeholderCoverUrl192; };
+            }
+            const inPlaylistDetail = this.currentView === 'playlist-detail'
+                || !!(sourceEl && sourceEl.closest && sourceEl.closest('#playlist-detail-tracks'));
+            applyDeezerActionMenuChrome(v, 'mobile-action', { inPlaylistDetail });
+            void hydrateDeezerVirtualTrack(v).then(() => {
+                if (this.currentActionTrack !== v) return;
+                applyDeezerActionMenuChrome(v, 'mobile-action', { inPlaylistDetail });
+            });
+            const menu = this.dom.actionMenu;
+            const sheet = this.dom.actionMenuSheet;
+            if (menu) menu.classList.remove('hidden');
+            setTimeout(() => {
+                if (menu) {
+                    menu.classList.add('active');
+                    menu.querySelector('#action-menu-overlay').classList.replace('opacity-0', 'opacity-100');
+                }
+                if (sheet) {
+                    sheet.style.transform = '';
+                    sheet.classList.remove('translate-y-full');
+                }
+            }, 10);
+            return;
+        }
 
         const track = store.state.library.find(t => t.id === trackId);
         if (!track) return;
 
         this.currentActionTrack = track;
+        document.getElementById('action-edit-metadata')?.classList.remove('hidden');
+        document.getElementById('action-delete')?.classList.remove('hidden');
         const actionTrackTitle = document.getElementById('action-track-title');
         const actionTrackArtist = document.getElementById('action-track-artist');
         const actionTrackArt = document.getElementById('action-track-art');
@@ -1578,6 +1626,9 @@ export class UI {
 
     static hideActionMenu() {
         if (document.activeElement) document.activeElement.blur();
+
+        document.getElementById('action-edit-metadata')?.classList.remove('hidden');
+        document.getElementById('action-delete')?.classList.remove('hidden');
         
         const menu = this.dom.actionMenu;
         const sheet = this.dom.actionMenuSheet;

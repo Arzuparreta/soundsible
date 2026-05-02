@@ -5,6 +5,15 @@ import { store } from './store.js';
 import { Resolver } from './resolver.js';
 import { audioEngine } from './audio.js';
 import { getYouTubeWatchUrlForTrack, shareYouTubeTrack, isYtdlpPreviewStreamTrack } from './shared.js';
+import {
+    buildVirtualTrackForDeezerRow,
+    hydrateDeezerVirtualTrack,
+    applyDeezerActionMenuChrome,
+    isDeezerSurfaceActionTrack,
+    actionMenuToggleQueueDeezer,
+    actionMenuShareDeezer,
+    actionMenuAddToPlaylistDeezer
+} from './deezer_actions.js';
 import * as renderers from './renderers.js';
 import { createCoverOverlayController } from './cover_overlay.js';
 import { attachSeekBar, bindSeekSliderKeys } from './seek_bar.js';
@@ -71,6 +80,10 @@ export const DesktopUI = {
     },
 
     showView(viewId) {
+        const prev = this.currentView;
+        if (prev === 'playlist-detail' && viewId !== 'playlist-detail' && typeof window !== 'undefined') {
+            window._deezerPlaylistDetail = null;
+        }
         this.currentView = viewId;
         document.querySelectorAll('.desktop-view').forEach((v) => v.classList.remove('active'));
         document.querySelectorAll('.desktop-nav-btn').forEach((b) => b.classList.remove('active'));
@@ -86,8 +99,16 @@ export const DesktopUI = {
     },
 
     navigateBack() {
-        if (this.currentView === 'playlist-detail') this.showView('playlists');
-        else if (this.currentView === 'artist-detail') this.showView('artists');
+        if (this.currentView === 'playlist-detail') {
+            if (typeof window !== 'undefined' && window._deezerPlaylistDetail) {
+                window._deezerPlaylistDetail = null;
+                window._currentPlaylistTracks = null;
+                window._currentPlaylistName = null;
+                this.showView('discover');
+                return;
+            }
+            this.showView('playlists');
+        } else if (this.currentView === 'artist-detail') this.showView('artists');
         else this.showView('discover');
     },
 
@@ -182,14 +203,40 @@ export const DesktopUI = {
     },
 
     showActionMenu(trackId, sourceEl) {
-        const track = store.state.library.find((t) => t.id === trackId);
-        if (!track) return;
-        this.currentActionTrack = track;
-
         const menu = el('desktop-action-menu');
         const titleEl = el('desktop-action-track-title');
         const artistEl = el('desktop-action-track-artist');
         const artEl = el('desktop-action-track-art');
+
+        if (typeof trackId === 'string' && trackId.startsWith('deezer_')) {
+            const v = buildVirtualTrackForDeezerRow(trackId);
+            if (!v) return;
+            this.currentActionTrack = v;
+            if (titleEl) titleEl.textContent = v.title;
+            if (artistEl) artistEl.textContent = v.artist;
+            if (artEl) {
+                const u = (v.cover || '').trim();
+                artEl.style.backgroundImage = u ? `url("${String(u).replace(/"/g, '%22')}")` : '';
+            }
+            const inPlaylistDetail = sourceEl
+                ? !!sourceEl.closest('#desktop-playlist-detail-tracks')
+                : this.currentView === 'playlist-detail';
+            applyDeezerActionMenuChrome(v, 'desktop-action', { inPlaylistDetail });
+            void hydrateDeezerVirtualTrack(v).then(() => {
+                if (this.currentActionTrack !== v) return;
+                applyDeezerActionMenuChrome(v, 'desktop-action', { inPlaylistDetail });
+            });
+            if (menu) menu.classList.remove('hidden');
+            return;
+        }
+
+        const track = store.state.library.find((t) => t.id === trackId);
+        if (!track) return;
+        this.currentActionTrack = track;
+
+        el('desktop-action-edit-metadata')?.classList.remove('hidden');
+        el('desktop-action-delete')?.classList.remove('hidden');
+
         const favText = el('desktop-action-fav-text');
         const queueText = el('desktop-action-queue-text');
 
@@ -214,17 +261,55 @@ export const DesktopUI = {
     },
 
     hideActionMenu() {
+        el('desktop-action-edit-metadata')?.classList.remove('hidden');
+        el('desktop-action-delete')?.classList.remove('hidden');
         const menu = el('desktop-action-menu');
         if (menu) menu.classList.add('hidden');
         this.currentActionTrack = null;
     },
 
     showContextMenu(trackId, clientX, clientY, row) {
+        const menu = el('desktop-context-menu');
+
+        if (typeof trackId === 'string' && trackId.startsWith('deezer_')) {
+            const v = buildVirtualTrackForDeezerRow(trackId);
+            if (!v) return;
+            this.currentActionTrack = v;
+            const inPlaylistDetail = row ? !!row.closest('#desktop-playlist-detail-tracks') : this.currentView === 'playlist-detail';
+            const ctxPlayPlaylist = el('desktop-context-play-playlist');
+            const ctxDeletePlaylist = el('desktop-context-delete-playlist');
+            if (ctxPlayPlaylist) ctxPlayPlaylist.classList.add('hidden');
+            if (ctxDeletePlaylist) ctxDeletePlaylist.classList.add('hidden');
+            el('desktop-context-fav')?.classList.remove('hidden');
+            el('desktop-context-queue')?.classList.remove('hidden');
+            applyDeezerActionMenuChrome(v, 'desktop-context', { inPlaylistDetail });
+            void hydrateDeezerVirtualTrack(v).then(() => {
+                if (this.currentActionTrack !== v) return;
+                applyDeezerActionMenuChrome(v, 'desktop-context', { inPlaylistDetail });
+            });
+            if (!menu) return;
+            menu.style.left = `${clientX + 4}px`;
+            menu.style.top = `${clientY + 4}px`;
+            menu.classList.remove('hidden');
+            requestAnimationFrame(() => {
+                const rect = menu.getBoundingClientRect();
+                const pad = 8;
+                let left = parseFloat(menu.style.left) || clientX + 4;
+                let top = parseFloat(menu.style.top) || clientY + 4;
+                if (left + rect.width > window.innerWidth - pad) left = window.innerWidth - rect.width - pad;
+                if (top + rect.height > window.innerHeight - pad) top = window.innerHeight - rect.height - pad;
+                if (left < pad) left = pad;
+                if (top < pad) top = pad;
+                menu.style.left = `${left}px`;
+                menu.style.top = `${top}px`;
+            });
+            return;
+        }
+
         const track = store.state.library.find((t) => t.id === trackId);
         if (!track) return;
         this.currentActionTrack = track;
 
-        const menu = el('desktop-context-menu');
         const queueText = el('desktop-context-queue-text');
         const favText = el('desktop-context-fav-text');
         if (queueText) queueText.textContent = store.state.queue.some((t) => t.id === trackId) ? 'Remove from Queue' : 'Add to Queue';
@@ -374,8 +459,13 @@ export const DesktopUI = {
         const favBtn = el('desktop-context-fav');
         const deleteBtn = el('desktop-context-delete');
         if (queueBtn) {
-            queueBtn.addEventListener('click', () => {
+            queueBtn.addEventListener('click', async () => {
                 const track = this.currentActionTrack;
+                if (isDeezerSurfaceActionTrack(track)) {
+                    await actionMenuToggleQueueDeezer(track, store, (m) => this.showToast(m));
+                    this.hideContextMenu();
+                    return;
+                }
                 if (track) store.toggleQueue(track.id);
                 this.hideContextMenu();
             });
@@ -384,20 +474,37 @@ export const DesktopUI = {
             editBtn.addEventListener('click', () => {
                 const track = this.currentActionTrack;
                 this.hideContextMenu();
+                if (isDeezerSurfaceActionTrack(track)) return;
                 if (track) this.showMetadataEditor(track.id);
             });
         }
         if (favBtn) {
-            favBtn.addEventListener('click', () => {
+            favBtn.addEventListener('click', async () => {
                 const track = this.currentActionTrack;
+                if (isDeezerSurfaceActionTrack(track)) {
+                    await hydrateDeezerVirtualTrack(track);
+                    if (!track._libraryTrackId) {
+                        this.showToast('Download to library to use favourites');
+                        this.hideContextMenu();
+                        return;
+                    }
+                    store.toggleFavourite(track._libraryTrackId);
+                    this.hideContextMenu();
+                    return;
+                }
                 if (track) store.toggleFavourite(track.id);
                 this.hideContextMenu();
             });
         }
         const shareBtn = el('desktop-context-share');
         if (shareBtn) {
-            shareBtn.addEventListener('click', () => {
+            shareBtn.addEventListener('click', async () => {
                 const track = this.currentActionTrack;
+                if (isDeezerSurfaceActionTrack(track)) {
+                    await actionMenuShareDeezer(track, (m) => this.showToast(m));
+                    this.hideContextMenu();
+                    return;
+                }
                 if (track && getYouTubeWatchUrlForTrack(track)) shareYouTubeTrack(track, (m) => this.showToast(m));
                 this.hideContextMenu();
             });
@@ -406,13 +513,21 @@ export const DesktopUI = {
             deleteBtn.addEventListener('click', () => {
                 const track = this.currentActionTrack;
                 this.hideContextMenu();
+                if (isDeezerSurfaceActionTrack(track)) return;
                 if (track && confirm('Delete?')) store.deleteTrack(track.id);
             });
         }
         const addToPlaylistBtn = el('desktop-context-add-to-playlist');
         if (addToPlaylistBtn) {
-            addToPlaylistBtn.addEventListener('click', () => {
+            addToPlaylistBtn.addEventListener('click', async () => {
                 const track = this.currentActionTrack;
+                if (isDeezerSurfaceActionTrack(track)) {
+                    await actionMenuAddToPlaylistDeezer(track, (m) => this.showToast(m), (libId) => {
+                        if (typeof window.showAddToPlaylistPicker === 'function') window.showAddToPlaylistPicker(libId);
+                    });
+                    this.hideContextMenu();
+                    return;
+                }
                 this.hideContextMenu();
                 if (track && typeof window.showAddToPlaylistPicker === 'function') window.showAddToPlaylistPicker(track.id);
             });
@@ -440,10 +555,15 @@ export const DesktopUI = {
         }
         const removeFromPlaylistBtn = el('desktop-context-remove-from-playlist');
         if (removeFromPlaylistBtn) {
-            removeFromPlaylistBtn.addEventListener('click', () => {
+            removeFromPlaylistBtn.addEventListener('click', async () => {
                 const track = this.currentActionTrack;
                 const name = window._currentPlaylistName;
                 this.hideContextMenu();
+                if (isDeezerSurfaceActionTrack(track)) {
+                    await hydrateDeezerVirtualTrack(track);
+                    if (track._libraryTrackId && name) store.removeFromPlaylist(name, track._libraryTrackId);
+                    return;
+                }
                 if (track && name) store.removeFromPlaylist(name, track.id);
             });
         }
