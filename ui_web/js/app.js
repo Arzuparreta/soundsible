@@ -1319,6 +1319,11 @@ function fillViewBody(viewId) {
                 window.unifiedSearch = searchMod.unifiedSearch;
                 searchMod.unifiedSearch.init({ mobile: true, resultsContainerId: 'discover-search-results' });
             });
+  import('./discovery.js').then((discoveryMod) => {
+    if (discoveryMod.initDiscovery) {
+      discoveryMod.initDiscovery('discover-search-results');
+    }
+  });
             break;
         case 'settings':
             import('./downloader.js').then((dm) => {

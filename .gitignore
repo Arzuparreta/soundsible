@@ -16,6 +16,7 @@ ENV/
 .cursor/
 .cursorrules
 .cursorignore
+CLAUDE.md
 
 # Aider (local assistant history; never commit)
 .aider*
