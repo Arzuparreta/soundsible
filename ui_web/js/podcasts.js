@@ -169,6 +169,8 @@ export class PodcastsUI {
 
         const searchBtn = document.getElementById(sel.searchBtn);
         const searchInput = document.getElementById(sel.searchInput);
+        // Note: Podcast search now uses the global search bar; these elements no longer exist in DOM
+        // Keeping the code for safety but they will be null after HTML changes
         if (searchBtn) searchBtn.addEventListener('click', () => this.runSearch());
         if (searchInput) {
             searchInput.addEventListener('keydown', (e) => {
@@ -382,9 +384,9 @@ export class PodcastsUI {
         }
     }
 
-    static async runSearch() {
+    static async runSearch(query) {
         const sel = this._selectors;
-        const q = (document.getElementById(sel.searchInput)?.value || '').trim();
+        const q = query || (document.getElementById(sel.searchInput)?.value || '').trim();
         const box = document.getElementById(sel.searchResults);
         if (!box) return;
         if (!q) {
@@ -448,6 +450,77 @@ export class PodcastsUI {
         } catch (e) {
             box.innerHTML = `<p class="text-sm text-red-400">${esc(String(e.message || e))}</p>`;
         }
+    }
+
+    static filterShowDetailEpisodes(query) {
+        const sel = this._selectors;
+        const epEl = document.getElementById(sel.showDetailEpisodes);
+        if (!epEl) return;
+
+        if (this._isFetchingEpisodes) return;
+
+        let eps = this._currentEpisodes || [];
+        const dlOnlyEl = document.getElementById(sel.showDetailDownloadedOnly);
+        const onlyDl = dlOnlyEl?.checked;
+        if (onlyDl) {
+            eps = eps.filter((ep) => ep._libraryTrackId);
+        }
+
+        const q = query.toLowerCase().trim();
+        if (q) {
+            eps = eps.filter((ep) => {
+                const title = (ep.title || '').toLowerCase();
+                return title.includes(q);
+            });
+        }
+
+        if (!eps.length) {
+            epEl.innerHTML = `<p class="text-sm text-[var(--text-dim)] text-center py-4">${q ? 'No matching episodes.' : (onlyDl ? 'No downloaded episodes.' : 'No episodes in feed.')}</p>`;
+            return;
+        }
+
+        const options = {
+            activeTrackId: store.state.currentTrack?.id,
+            favIds: store.state.favorites || [],
+            desktopClickBehavior: !this._mobileInit && this._desktopInit,
+            suppressActionMenu: true,
+            getCoverUrl: (t) => (t.thumbnail || '').trim() || Resolver.getCoverUrl(t),
+        };
+        epEl.innerHTML = renderers.buildSongRowsHtml(eps, options);
+
+        epEl.querySelectorAll('.song-row').forEach((row) => {
+            const id = row.getAttribute('data-id');
+            const ep = eps.find((e) => e.id === id);
+            if (!ep) return;
+
+            const slot = row.querySelector('.song-row-actions-slot');
+            if (slot) {
+                slot.removeAttribute('aria-hidden');
+                slot.innerHTML = `
+                        <button type="button" class="podcast-ep-queue w-8 h-8 flex items-center justify-center rounded-full bg-[var(--surface-overlay)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition-colors" title="Add to queue" aria-label="Add to queue">
+                            <i class="fas fa-list-ul text-xs"></i>
+                        </button>
+                        ${ep._libraryTrackId ? '' : `
+                        <button type="button" class="podcast-ep-download w-8 h-8 flex items-center justify-center rounded-full bg-[var(--surface-overlay)] text-[var(--accent)] hover:opacity-80 transition-colors" title="Download" aria-label="Download">
+                            <i class="fas fa-cloud-download-alt text-xs"></i>
+                        </button>`}
+                    `;
+                slot.querySelector('.podcast-ep-queue')?.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.queueEpisode(ep);
+                });
+                slot.querySelector('.podcast-ep-download')?.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.downloadEpisode(ep);
+                });
+            }
+
+            row.onclick = (e) => {
+                if (e.target.closest('button')) return;
+                e.stopPropagation();
+                playEpisodeById(ep.id);
+            };
+        });
     }
 
     static async subscribeFromItunes(meta, opts = {}) {

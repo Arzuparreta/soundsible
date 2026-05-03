@@ -243,6 +243,17 @@
             padding-top: max(3.5rem, env(safe-area-inset-top));
         }
 
+        /* Podcast views: global search bar is now always visible; reclaim the header-offset band */
+        #view-podcast.view,
+        #view-podcast-show-detail.view {
+            padding-top: max(1.5rem, env(safe-area-inset-top));
+        }
+
+        .is-ios #view-podcast.view,
+        .is-ios #view-podcast-show-detail.view {
+            padding-top: max(3.5rem, env(safe-area-inset-top));
+        }
+
         /* Discover results panel: scroll inset matches main views */
         #discover-search-results {
             padding-bottom: var(--view-scroll-bottom) !important;

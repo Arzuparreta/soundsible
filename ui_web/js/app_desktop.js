@@ -24,6 +24,9 @@ import {
 } from './shared.js';
 import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
 
+let discoverSearchDebounceTimer = null;
+let podcastSearchDebounceTimer = null;
+
 function getDesktopViewState() {
     return {
         homeTracks: window._currentHomeTracks,
@@ -1083,7 +1086,26 @@ function init() {
                 else if (view === 'artists') renderDesktopArtists();
                 else if (view === 'artist-detail' && window._currentArtistName) renderDesktopArtistDetail();
                 else if (view === 'discover' && typeof window.unifiedSearch !== 'undefined') {
-                    // Note: Discover search uses its own debounced listener
+                } else if (view === 'podcast') {
+                    if (podcastSearchDebounceTimer) {
+                        clearTimeout(podcastSearchDebounceTimer);
+                        podcastSearchDebounceTimer = null;
+                    }
+                    if (!query) {
+                        const box = document.getElementById('desktop-podcast-search-results');
+                        if (box) box.innerHTML = '';
+                        return;
+                    }
+                    podcastSearchDebounceTimer = setTimeout(() => {
+                        podcastSearchDebounceTimer = null;
+                        void import('./podcasts.js').then((m) => {
+                            m.PodcastsUI.runSearch(query);
+                        });
+                    }, 300);
+                } else if (view === 'podcast-show-detail') {
+                    void import('./podcasts.js').then((m) => {
+                        m.PodcastsUI.filterShowDetailEpisodes(query);
+                    });
                 }
                 // Note: Podcast search uses its own dedicated input inside the podcast view
             });
@@ -1143,7 +1165,7 @@ function init() {
             }
             if (container) container.classList.remove('scrolled');
 
-            const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'discover', 'artists', 'artist-detail'];
+            const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'discover', 'artists', 'artist-detail', 'podcast', 'podcast-show-detail'];
             if (container) {
                 if (searchVisibleViews.includes(viewId)) {
                     container.classList.remove('opacity-0', 'pointer-events-none');
@@ -1162,7 +1184,14 @@ function init() {
                     case 'discover': input.placeholder = 'Search anything...'; break;
                     case 'artists': input.placeholder = 'Search artists...'; break;
                     case 'artist-detail': input.placeholder = 'Search songs & albums...'; break;
+                    case 'podcast': input.placeholder = 'Search podcasts...'; break;
+                    case 'podcast-show-detail': input.placeholder = 'Search in show...'; break;
                 }
+            }
+
+            if (!['podcast', 'podcast-show-detail'].includes(viewId)) {
+                const box = document.getElementById('desktop-podcast-search-results');
+                if (box) box.innerHTML = '';
             }
 
             if (viewId !== 'discover' && typeof window.unifiedSearch !== 'undefined') {

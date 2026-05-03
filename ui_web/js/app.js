@@ -30,6 +30,7 @@ import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
 const LIBRARY_SYNC_INTERVAL_MS = 300000;
 const DISCOVER_SEARCH_DEBOUNCE_MS = 200;
 let discoverSearchDebounceTimer = null;
+let podcastSearchDebounceTimer = null;
 
 function viewStateFromContext() {
     return {
@@ -1114,6 +1115,26 @@ function initGlobalSearch() {
                     void m.discoveryUI.renderSearchResults(query);
                 });
             }, DISCOVER_SEARCH_DEBOUNCE_MS);
+        } else if (view === 'podcast') {
+            if (podcastSearchDebounceTimer) {
+                clearTimeout(podcastSearchDebounceTimer);
+                podcastSearchDebounceTimer = null;
+            }
+            if (!query) {
+                const box = document.getElementById('podcast-search-results');
+                if (box) box.innerHTML = '';
+                return;
+            }
+            podcastSearchDebounceTimer = setTimeout(() => {
+                podcastSearchDebounceTimer = null;
+                void import('./podcasts.js').then((m) => {
+                    m.PodcastsUI.runSearch(query);
+                });
+            }, 300);
+        } else if (view === 'podcast-show-detail') {
+            void import('./podcasts.js').then((m) => {
+                m.PodcastsUI.filterShowDetailEpisodes(query);
+            });
         }
     });
 
@@ -1366,7 +1387,7 @@ function applyViewChrome(viewId) {
     if (dom?.globalSearchClear) dom.globalSearchClear.classList.add('hidden');
     if (container) container.classList.remove('scrolled');
 
-        const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'discover', 'artist-detail'];
+        const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'discover', 'artist-detail', 'podcast', 'podcast-show-detail'];
         if (container) {
             if (searchVisibleViews.includes(viewId)) {
                 container.classList.remove('opacity-0', 'pointer-events-none');
@@ -1387,7 +1408,14 @@ function applyViewChrome(viewId) {
                     input.placeholder = 'Search anything...';
                     break;
                 case 'artist-detail': input.placeholder = 'Search songs & albums...'; break;
+                case 'podcast': input.placeholder = 'Search podcasts...'; break;
+                case 'podcast-show-detail': input.placeholder = 'Search in show...'; break;
             }
+        }
+
+        if (!['podcast', 'podcast-show-detail'].includes(viewId)) {
+            const box = document.getElementById('podcast-search-results');
+            if (box) box.innerHTML = '';
         }
 }
 
