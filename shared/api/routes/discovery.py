@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 
 import requests
 from flask import Blueprint, Response, jsonify, request
@@ -23,6 +24,12 @@ _ALLOWED_PATH = re.compile(
 )
 
 _ITUNES_SEARCH = "https://itunes.apple.com/search"
+_ITUNES_LOOKUP = "https://itunes.apple.com/lookup"
+_APPLE_PODCAST_TOP = "https://rss.itunes.apple.com/api/v1/{country}/podcasts/top-podcasts/all/{limit}/{explicit}.json"
+
+_PODCAST_TOP_CACHE: dict[str, tuple[float, list]] = {}
+_PODCAST_TOP_TTL_SEC = 45 * 60
+_LOOKUP_CHUNK = 40
 
 
 @discovery_bp.route("/api/discovery/podcasts/search", methods=["GET"])
@@ -67,6 +74,155 @@ def itunes_podcast_search():
                 "image_url": (r.get("artworkUrl600") or r.get("artworkUrl100") or "").strip(),
             }
         )
+    return jsonify({"results": results})
+
+
+def _country_code(raw: str | None) -> str:
+    c = (raw or "us").strip().lower()
+    if re.fullmatch(r"[a-z]{2}", c):
+        return c
+    return "us"
+
+
+def _explicit_segment_from_request() -> str:
+    v = (request.args.get("explicit") or "1").strip().lower()
+    if v in ("0", "false", "no", "non-explicit", "clean"):
+        return "non-explicit"
+    return "explicit"
+
+
+def _extract_top_podcast_chart(data: object) -> list[dict]:
+    if not isinstance(data, dict):
+        return []
+    feed = data.get("feed")
+    results = None
+    if isinstance(feed, dict):
+        results = feed.get("results")
+    if results is None:
+        results = data.get("results")
+    if not isinstance(results, list):
+        return []
+    out: list[dict] = []
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        cid = item.get("id")
+        if cid is None:
+            cid = item.get("collectionId")
+        if cid is None:
+            continue
+        try:
+            cid_str = str(int(cid))
+        except (TypeError, ValueError):
+            cid_str = str(cid).strip()
+            if not cid_str:
+                continue
+        name = (item.get("name") or item.get("collectionName") or "").strip() or "Podcast"
+        author = (item.get("artistName") or "").strip()
+        img = (
+            item.get("artworkUrl600")
+            or item.get("artworkUrl100")
+            or item.get("artworkUrl512")
+            or ""
+        )
+        img = img.strip() if isinstance(img, str) else ""
+        out.append(
+            {
+                "itunes_collection_id": cid_str,
+                "title": name,
+                "author": author,
+                "image_url": img,
+            }
+        )
+    return out
+
+
+def _lookup_feed_urls(collection_ids: list[str]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for i in range(0, len(collection_ids), _LOOKUP_CHUNK):
+        part = [x for x in collection_ids[i : i + _LOOKUP_CHUNK] if x]
+        if not part:
+            continue
+        try:
+            resp = requests.get(
+                _ITUNES_LOOKUP,
+                params={"id": ",".join(part), "entity": "podcast"},
+                timeout=20,
+                headers={"User-Agent": "SoundsibleDiscovery/1.0"},
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+        except Exception as exc:
+            logger.warning("iTunes podcast lookup failed: %s", exc)
+            continue
+        for row in payload.get("results") or []:
+            if not isinstance(row, dict):
+                continue
+            if row.get("kind") != "podcast":
+                continue
+            cid = row.get("collectionId")
+            if cid is None:
+                continue
+            try:
+                cid_str = str(int(cid))
+            except (TypeError, ValueError):
+                continue
+            feed = (row.get("feedUrl") or "").strip()
+            if feed:
+                mapping[cid_str] = feed
+    return mapping
+
+
+@discovery_bp.route("/api/discovery/podcasts/top", methods=["GET"])
+@rate_limit("discovery_podcasts_top", limit=60, window_sec=60)
+def itunes_podcast_top():
+    country = _country_code(request.args.get("country"))
+    limit = min(50, max(1, request.args.get("limit", type=int) or 24))
+    explicit_seg = _explicit_segment_from_request()
+    cache_key = f"{country}:{limit}:{explicit_seg}"
+    now = time.time()
+    cached = _PODCAST_TOP_CACHE.get(cache_key)
+    if cached and cached[0] > now:
+        return jsonify({"results": cached[1]})
+
+    url = _APPLE_PODCAST_TOP.format(country=country, limit=limit, explicit=explicit_seg)
+    try:
+        resp = requests.get(
+            url,
+            timeout=25,
+            headers={"User-Agent": "SoundsibleDiscovery/1.0"},
+        )
+        resp.raise_for_status()
+        chart_data = resp.json()
+    except Exception as exc:
+        logger.warning("Apple top podcasts chart failed: %s", exc)
+        return jsonify({"error": "Chart unreachable", "results": []}), 502
+
+    rows = _extract_top_podcast_chart(chart_data)
+    if not rows:
+        _PODCAST_TOP_CACHE[cache_key] = (now + _PODCAST_TOP_TTL_SEC, [])
+        return jsonify({"results": []})
+
+    ids = [r["itunes_collection_id"] for r in rows]
+    feeds = _lookup_feed_urls(ids)
+
+    results = []
+    for r in rows:
+        cid = r["itunes_collection_id"]
+        feed = feeds.get(cid)
+        if not feed:
+            continue
+        results.append(
+            {
+                "itunes_collection_id": cid,
+                "title": r["title"],
+                "author": r["author"],
+                "feed_url": feed,
+                "image_url": r["image_url"],
+            }
+        )
+
+    _PODCAST_TOP_CACHE[cache_key] = (now + _PODCAST_TOP_TTL_SEC, results)
     return jsonify({"results": results})
 
 

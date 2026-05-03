@@ -1142,13 +1142,14 @@ function initGlobalSearch() {
 }
 
 function initScrollTracking() {
-    // Note: Mobile views scroll individually
+    // Note: Mobile views scroll individually. Podcast views delegate scroll to .view-scroll-inner.
     const views = document.querySelectorAll('.view');
-    views.forEach(view => {
-        view.addEventListener('scroll', () => {
+    views.forEach((view) => {
+        const scrollEl = view.querySelector(':scope > .view-scroll-inner') || view;
+        scrollEl.addEventListener('scroll', () => {
             const container = dom?.globalSearchContainer;
             if (!container) return;
-            if (view.scrollTop > 10) {
+            if (scrollEl.scrollTop > 10) {
                 container.classList.add('scrolled');
             } else {
                 container.classList.remove('scrolled');

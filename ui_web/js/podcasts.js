@@ -12,7 +12,6 @@ import {
     normalizeEpisode,
     findLibraryEpisode,
     resolveEpisodeForPlayback,
-    PODCAST_RECOMMENDATIONS,
     getPodcastSubscriptions,
     getDownloadedEpisodes,
     fetchEpisodesForFeed,
@@ -22,6 +21,18 @@ import * as renderers from './renderers.js';
 
 function apiBase() {
     return getApiBase(store.state.activeHost);
+}
+
+/** Card id → row from /api/discovery/podcasts/top (for subscribe / open detail). */
+const _podcastTopRecByCardId = new Map();
+let _podcastTopRecsRows = null;
+/** @type {'idle' | 'loading' | 'ok' | 'error'} */
+let _podcastTopRecsLoadState = 'idle';
+let _podcastTopRecsErrorMsg = '';
+
+function topPodcastCardId(row) {
+    const cid = row && row.itunes_collection_id != null ? String(row.itunes_collection_id) : '';
+    return cid ? `top_${cid}` : '';
 }
 
 /** Build CSS url() value for HTML style="…" attributes.
@@ -64,6 +75,8 @@ function playEpisodeById(episodeId) {
     const track = resolveEpisodeForPlayback(ep);
     if (track.source === 'library') {
         if (typeof window.playTrack === 'function') window.playTrack(track.id);
+    } else if (!track.enclosure_url) {
+        if (typeof window.showToast === 'function') window.showToast('No audio URL for this episode');
     } else {
         playPodcastPreview({
             enclosure_url: track.enclosure_url,
@@ -80,10 +93,20 @@ function playEpisodeById(episodeId) {
 
 window.playPodcastEpisode = playEpisodeById;
 
+function navigateToPodcastShowDetail() {
+    if (typeof DesktopUI !== 'undefined' && DesktopUI.showView && document.getElementById('desktop-view-podcast-show-detail')) {
+        DesktopUI.showView('podcast-show-detail');
+        return;
+    }
+    if (typeof UI !== 'undefined' && UI.showView) UI.showView('podcast-show-detail');
+}
+
 export class PodcastsUI {
     static _selectors = null;
     static _desktopInit = false;
     static _mobileInit = false;
+    /** @type {WeakSet<Element>} */
+    static _subsClickBoundRoots = new WeakSet();
 
     static init(opts = {}) {
         const mobile = !!opts.mobile;
@@ -114,6 +137,22 @@ export class PodcastsUI {
         const sel = this._selectors;
         const root = document.getElementById(sel.root);
         if (!root) return;
+
+        if (!this._subsClickBoundRoots.has(root)) {
+            this._subsClickBoundRoots.add(root);
+            root.addEventListener('click', (e) => {
+                const card = e.target.closest('[data-podcast-sub-card]');
+                if (!card) return;
+                const list = document.getElementById(sel.subsList);
+                if (!list || !list.contains(card)) return;
+                const fid = card.getAttribute('data-feed-id');
+                if (fid) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    PodcastsUI.openShowDetail(fid);
+                }
+            });
+        }
 
         const searchBtn = document.getElementById(sel.searchBtn);
         const searchInput = document.getElementById(sel.searchInput);
@@ -161,6 +200,10 @@ export class PodcastsUI {
     }
 
     static async refreshFromServer() {
+        _podcastTopRecsRows = null;
+        _podcastTopRecsLoadState = 'idle';
+        _podcastTopRecByCardId.clear();
+        _podcastTopRecsErrorMsg = '';
         try {
             const r = await fetch(`${apiBase()}/api/podcasts/subscriptions`);
             if (r.ok) {
@@ -170,6 +213,31 @@ export class PodcastsUI {
                 }
             }
         } catch (_) {}
+        this.renderHome();
+    }
+
+    static async _loadTopRecommendations() {
+        if (_podcastTopRecsLoadState !== 'idle') return;
+        _podcastTopRecsLoadState = 'loading';
+        this.renderHome();
+        try {
+            const r = await fetch(`${apiBase()}/api/discovery/podcasts/top?limit=24`);
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(d.error || r.statusText || 'Failed to load recommendations');
+            const results = Array.isArray(d.results) ? d.results : [];
+            _podcastTopRecByCardId.clear();
+            for (const row of results) {
+                const cid = topPodcastCardId(row);
+                if (cid) _podcastTopRecByCardId.set(cid, row);
+            }
+            _podcastTopRecsRows = results;
+            _podcastTopRecsLoadState = 'ok';
+            _podcastTopRecsErrorMsg = '';
+        } catch (e) {
+            _podcastTopRecsLoadState = 'error';
+            _podcastTopRecsErrorMsg = String(e.message || e);
+            _podcastTopRecsRows = null;
+        }
         this.renderHome();
     }
 
@@ -191,11 +259,10 @@ export class PodcastsUI {
             } else {
                 subsEl.innerHTML = subs.map((s) => {
                     const safeId = esc(s.id);
-                    const safeName = (s.title || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                     const imgUrl = s.image_url || '';
                     return `
                     <div class="playlist-card group cursor-pointer rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)] overflow-hidden transition-colors duration-200 hover:border-[var(--accent)]/25"
-                         data-feed-id="${safeId}" onclick="typeof PodcastsUI!=='undefined'&&PodcastsUI.openShowDetail('${safeId}')">
+                         data-podcast-sub-card="1" data-feed-id="${safeId}" role="button" tabindex="0">
                         <div class="playlist-card-cover aspect-square w-full relative overflow-hidden rounded-t-[var(--radius-omni-xs)] bg-[var(--bg-card)] border-b border-[var(--glass-border)]">
                             ${imgUrl
                                 ? `<img class="absolute inset-0 w-full h-full object-cover" src="${esc(imgUrl)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div class="absolute inset-0 hidden items-center justify-center"><i class="fas fa-podcast text-3xl text-[var(--text-dim)]/40"></i></div>`
@@ -226,15 +293,27 @@ export class PodcastsUI {
             }
         }
 
-        // Render Discover / Recommendations
+        // Discover / chart recommendations (Apple top podcasts via station)
         const recEl = document.getElementById(sel.recsGrid);
         if (recEl) {
-            recEl.innerHTML = PODCAST_RECOMMENDATIONS.map((rec) => {
-                const isSubbed = subs.some((s) => s.rss_url === rec.rss_url);
-                const imgUrl = rec.image_url || '';
-                return `
+            if (_podcastTopRecsRows === null && _podcastTopRecsLoadState === 'idle') {
+                void this._loadTopRecommendations();
+            }
+            if (_podcastTopRecsLoadState === 'loading' && !_podcastTopRecsRows) {
+                recEl.innerHTML = `<p class="text-xs text-[var(--text-dim)] px-2"><i class="fas fa-circle-notch fa-spin text-[var(--accent)] mr-2"></i>Loading recommendations…</p>`;
+            } else if (_podcastTopRecsLoadState === 'error' && !_podcastTopRecsRows) {
+                recEl.innerHTML = `<p class="text-xs text-[var(--text-dim)] px-2">${esc(_podcastTopRecsErrorMsg || 'Could not load recommendations.')} Use refresh to retry.</p>`;
+            } else if (Array.isArray(_podcastTopRecsRows) && _podcastTopRecsRows.length === 0 && _podcastTopRecsLoadState === 'ok') {
+                recEl.innerHTML = `<p class="text-xs text-[var(--text-dim)] px-2">No chart results right now. Try search above.</p>`;
+            } else if (Array.isArray(_podcastTopRecsRows) && _podcastTopRecsRows.length) {
+                recEl.innerHTML = _podcastTopRecsRows.map((rec) => {
+                    const cardId = topPodcastCardId(rec);
+                    if (!cardId) return '';
+                    const isSubbed = subs.some((s) => s.rss_url === rec.feed_url);
+                    const imgUrl = rec.image_url || '';
+                    return `
                 <div class="podcast-rec-card playlist-card group cursor-pointer rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)] overflow-hidden transition-colors duration-200 hover:border-[var(--accent)]/25"
-                     data-rec-id="${esc(rec.id)}">
+                     data-rec-id="${esc(cardId)}">
                     <div class="playlist-card-cover aspect-square w-full relative overflow-hidden rounded-t-[var(--radius-omni-xs)] bg-[var(--bg-card)] border-b border-[var(--glass-border)]">
                         ${imgUrl
                             ? `<img class="absolute inset-0 w-full h-full object-cover" src="${esc(imgUrl)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div class="absolute inset-0 hidden items-center justify-center"><i class="fas fa-podcast text-3xl text-[var(--text-dim)]/40"></i></div>`
@@ -245,27 +324,29 @@ export class PodcastsUI {
                         <div class="text-[10px] font-mono text-[var(--text-dim)] truncate mt-0.5">${esc(rec.author || '')}</div>
                         ${isSubbed ? '<div class="mt-1 text-[10px] font-black uppercase tracking-wider text-[var(--accent)]">Subscribed</div>' : `
                         <button type="button" class="podcast-rec-subscribe-btn mt-2 w-full py-1.5 rounded-lg text-xs font-bold bg-[var(--accent)] text-black"
-                            data-rss="${esc(rec.rss_url)}" data-title="${esc(rec.title)}" data-author="${esc(rec.author)}" data-img="${esc(rec.image_url || '')}">Subscribe</button>`}
+                            data-rss="${esc(rec.feed_url)}" data-title="${esc(rec.title)}" data-author="${esc(rec.author)}" data-img="${esc(rec.image_url || '')}" data-itunes="${esc(rec.itunes_collection_id || '')}">Subscribe</button>`}
                     </div>
                 </div>`;
-            }).join('');
-            recEl.querySelectorAll('.podcast-rec-subscribe-btn').forEach((btn) => {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.subscribeFromItunes({
-                        rss_url: btn.getAttribute('data-rss'),
-                        title: btn.getAttribute('data-title'),
-                        author: btn.getAttribute('data-author'),
-                        image_url: btn.getAttribute('data-img') || undefined,
+                }).join('');
+                recEl.querySelectorAll('.podcast-rec-subscribe-btn').forEach((btn) => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.subscribeFromItunes({
+                            rss_url: btn.getAttribute('data-rss'),
+                            title: btn.getAttribute('data-title'),
+                            author: btn.getAttribute('data-author'),
+                            image_url: btn.getAttribute('data-img') || undefined,
+                            itunes_collection_id: btn.getAttribute('data-itunes') || undefined,
+                        });
                     });
                 });
-            });
-            recEl.querySelectorAll('.podcast-rec-card').forEach((card) => {
-                card.addEventListener('click', () => {
-                    const recId = card.getAttribute('data-rec-id');
-                    if (recId) this.handleRecCardClick(recId);
+                recEl.querySelectorAll('.podcast-rec-card').forEach((card) => {
+                    card.addEventListener('click', () => {
+                        const recId = card.getAttribute('data-rec-id');
+                        if (recId) this.handleRecCardClick(recId);
+                    });
                 });
-            });
+            }
         }
     }
 
@@ -404,18 +485,19 @@ export class PodcastsUI {
     static _isFetchingEpisodes = false;
 
     static handleRecCardClick(recId) {
-        const rec = PODCAST_RECOMMENDATIONS.find((r) => r.id === recId);
-        if (!rec) return;
+        const rec = _podcastTopRecByCardId.get(recId);
+        if (!rec || !rec.feed_url) return;
         const subs = getPodcastSubscriptions();
-        const existing = subs.find((s) => s.rss_url === rec.rss_url);
+        const existing = subs.find((s) => s.rss_url === rec.feed_url);
         if (existing) {
             this.openShowDetail(existing.id);
         } else {
             this.subscribeFromItunes({
-                rss_url: rec.rss_url,
+                rss_url: rec.feed_url,
                 title: rec.title,
                 author: rec.author,
                 image_url: rec.image_url,
+                itunes_collection_id: rec.itunes_collection_id,
             }, { openDetail: true });
         }
     }
@@ -427,18 +509,21 @@ export class PodcastsUI {
 
         // If not found locally, try to find by RSS URL (e.g. optimistic sub replaced by real one)
         if (!subscription) {
-            // Check if any recommendation matches this feed ID
-            const rec = PODCAST_RECOMMENDATIONS.find((r) => r.id === feedId);
-            if (rec) {
-                subscription = { id: feedId, title: rec.title, author: rec.author, rss_url: rec.rss_url, image_url: rec.image_url };
+            const rec = _podcastTopRecByCardId.get(feedId);
+            if (rec && rec.feed_url) {
+                subscription = {
+                    id: feedId,
+                    title: rec.title,
+                    author: rec.author,
+                    rss_url: rec.feed_url,
+                    image_url: rec.image_url,
+                };
             }
         }
         if (!subscription) {
             if (typeof window.showToast === 'function') window.showToast('Podcast not found');
             return;
         }
-
-        const mobile = this._mobileInit;
 
         // Render hero immediately BEFORE navigating so the user sees content right away
         const sel = this._selectors;
@@ -472,13 +557,7 @@ export class PodcastsUI {
             this._currentSubscription = subscription;
             this._currentEpisodes = [];
             window._currentPodcastEpisodes = [];
-            // Navigate to detail view AFTER hero is rendered
-            if (mobile && typeof UI !== 'undefined' && UI.showView) {
-                UI.showView('podcast-show-detail');
-            }
-            if (!mobile && typeof DesktopUI !== 'undefined' && DesktopUI.showView) {
-                DesktopUI.showView('podcast-show-detail');
-            }
+            navigateToPodcastShowDetail();
             return;
         }
 
@@ -490,13 +569,7 @@ export class PodcastsUI {
             epEl.innerHTML = `<div class="flex items-center justify-center py-8"><i class="fas fa-circle-notch fa-spin text-[var(--accent)] text-xl"></i></div>`;
         }
 
-        // Navigate to detail view AFTER hero is rendered
-        if (mobile && typeof UI !== 'undefined' && UI.showView) {
-            UI.showView('podcast-show-detail');
-        }
-        if (!mobile && typeof DesktopUI !== 'undefined' && DesktopUI.showView) {
-            DesktopUI.showView('podcast-show-detail');
-        }
+        navigateToPodcastShowDetail();
 
         // Fetch episodes in background
         const { episodes, error } = await fetchEpisodesForFeed(feedId);
@@ -549,12 +622,10 @@ export class PodcastsUI {
             const ep = eps.find((e) => e.id === id);
             if (!ep) return;
 
-            // Replace the ellipsis button with podcast-specific actions
-            const actionCell = row.querySelector('.fa-ellipsis-vertical')?.closest('button');
-            if (actionCell) {
-                const parent = actionCell.parentElement;
-                if (parent) {
-                    parent.innerHTML = `
+            const slot = row.querySelector('.song-row-actions-slot');
+            if (slot) {
+                slot.removeAttribute('aria-hidden');
+                slot.innerHTML = `
                         <button type="button" class="podcast-ep-queue w-8 h-8 flex items-center justify-center rounded-full bg-[var(--surface-overlay)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition-colors" title="Add to queue" aria-label="Add to queue">
                             <i class="fas fa-list-ul text-xs"></i>
                         </button>
@@ -563,15 +634,14 @@ export class PodcastsUI {
                             <i class="fas fa-cloud-download-alt text-xs"></i>
                         </button>`}
                     `;
-                    parent.querySelector('.podcast-ep-queue')?.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        this.queueEpisode(ep);
-                    });
-                    parent.querySelector('.podcast-ep-download')?.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        this.downloadEpisode(ep);
-                    });
-                }
+                slot.querySelector('.podcast-ep-queue')?.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.queueEpisode(ep);
+                });
+                slot.querySelector('.podcast-ep-download')?.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.downloadEpisode(ep);
+                });
             }
 
             // Override click to play episode — stop propagation so desktop click delegation doesn't interfere

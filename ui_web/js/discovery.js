@@ -109,20 +109,6 @@ export async function resolveDeezerTrackToOdstItem(trackLike) {
   return null;
 }
 
-// Curated playlists for discovery (Spotify "Home" style)
-const DISCOVERY_PLAYLISTS = [
-  { id: '3155776842', title: 'Global Top 50', description: 'The hottest tracks worldwide', type: 'charts' },
-  { id: '1976454162', title: 'Chill Hits', description: 'Relax and unwind', type: 'mood' },
-  { id: '1479458365', title: 'Hip-Hop Central', description: 'The best in hip-hop', type: 'genre' },
-  { id: '1306932615', title: 'Rock Classics', description: 'Legendary rock anthems', type: 'genre' },
-  { id: '908622995', title: 'Electronic Rising', description: 'New electronic music', type: 'genre' },
-  { id: '1924357302', title: 'Workout Beast', description: 'Fuel your workout', type: 'mood' },
-  { id: '7618096342', title: 'Focus Flow', description: 'Concentration music', type: 'mood' },
-  { id: '1950512362', title: 'Party Anthems', description: 'Get the party started', type: 'mood' },
-  { id: '9372936102', title: 'Indie Mix', description: 'Alternative discoveries', type: 'genre' },
-  { id: '1675392701', title: 'Jazz Vibes', description: 'Smooth jazz collection', type: 'genre' }
-];
-
 class DiscoveryService {
   constructor() {
     this.cache = new Map();
@@ -165,41 +151,30 @@ class DiscoveryService {
   }
 
   /**
-   * Fetch curated playlists (Home section)
+   * Single chart request: top tracks + trending playlist cards (no per-playlist round trips).
    */
-  async fetchPlaylists() {
-    const playlists = [];
-
-    for (const playlist of DISCOVERY_PLAYLISTS) {
-      const data = await this.fetchDeezer(`/playlist/${playlist.id}`);
-      if (!data || isDeezerApiError(data) || data.id == null) continue;
-      let cover = deezerCoverUrl(data);
-      if (!cover) {
-        const t0 = data.tracks?.data?.[0];
-        cover = deezerCoverUrl(t0?.album) || deezerCoverUrl(t0) || '';
-      }
-      const apiTitle = typeof data.title === 'string' ? data.title.trim() : '';
-      playlists.push({
-        id: data.id,
-        title: apiTitle || playlist.title || 'Playlist',
-        description: playlist.description,
-        cover,
-        trackCount: data.nb_tracks || 0,
-        tracks: data.tracks?.data || []
-      });
+  async fetchDiscoverHome(chartLimit = 50, maxPlaylistCards = 12) {
+    const data = await this.fetchDeezer(`/chart?limit=${chartLimit}`);
+    if (!data || !data.tracks || !Array.isArray(data.tracks.data)) {
+      return { topTracks: [], gridPlaylists: [] };
     }
-
-    return playlists;
+    const topTracks = data.tracks.data.map((track) => this.normalizeTrack(track));
+    const raw = (data.playlists && Array.isArray(data.playlists.data)) ? data.playlists.data : [];
+    const gridPlaylists = raw.slice(0, maxPlaylistCards).map((pl) => ({
+      id: pl.id,
+      title: (typeof pl.title === 'string' && pl.title.trim()) || 'Playlist',
+      cover: deezerCoverUrl(pl),
+      trackCount: typeof pl.nb_tracks === 'number' ? pl.nb_tracks : 0
+    }));
+    return { topTracks, gridPlaylists };
   }
 
   /**
    * Fetch top tracks for quick add
    */
   async fetchTopTracks(limit = 50) {
-    const data = await this.fetchDeezer(`/chart?limit=${limit}`);
-    if (!data || !data.tracks) return [];
-
-    return data.tracks.data.map(track => this.normalizeTrack(track));
+    const { topTracks } = await this.fetchDiscoverHome(limit, 0);
+    return topTracks;
   }
 
   /**
@@ -266,17 +241,15 @@ class DiscoveryService {
   }
 
   /**
-   * Pre-warm cache with top tracks and playlists
+   * Pre-warm cache with one chart request
    */
   async warmCache() {
     if (this.isLoading) return;
     this.isLoading = true;
 
     try {
-      await Promise.all([
-        this.fetchTopTracks(30),
-        this.fetchPlaylists()
-      ]);
+      const { topTracks } = await this.fetchDiscoverHome(50, 12);
+      this.currentTracks = topTracks.slice(0, 30);
     } finally {
       this.isLoading = false;
     }
@@ -404,8 +377,7 @@ class DiscoveryUI {
     if (!this.container) return;
     this.container.innerHTML = '<div class="discovery-loading text-center py-10 text-[var(--text-dim)]">Loading discoveries...</div>';
 
-    const playlists = await discoveryService.fetchPlaylists();
-    const topTracks = await discoveryService.fetchTopTracks();
+    const { topTracks, gridPlaylists } = await discoveryService.fetchDiscoverHome(50, 12);
     discoveryService.currentTracks = topTracks;
 
     const list = topTracks.slice(0, 12);
@@ -417,7 +389,7 @@ class DiscoveryUI {
           <div id="discovery-home-top-tracks" class="space-y-1"></div>
         </section>
         <section>
-          <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">Browse by Mood & Genre</h2>
+          <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">Trending playlists</h2>
           <div id="discovery-playlist-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start"></div>
         </section>
       </div>`;
@@ -430,14 +402,18 @@ class DiscoveryUI {
       });
     }
     if (grid) {
-      grid.innerHTML = renderers.buildDeezerPlaylistCardsHtml(
-        playlists.map((pl) => ({
-          id: pl.id,
-          title: pl.title,
-          cover: pl.cover,
-          trackCount: pl.trackCount
-        }))
-      );
+      if (!gridPlaylists.length) {
+        grid.innerHTML = '<p class="text-sm text-[var(--text-dim)] col-span-full">No playlists in this chart right now.</p>';
+      } else {
+        grid.innerHTML = renderers.buildDeezerPlaylistCardsHtml(
+          gridPlaylists.map((pl) => ({
+            id: pl.id,
+            title: pl.title,
+            cover: pl.cover,
+            trackCount: pl.trackCount
+          }))
+        );
+      }
     }
     this.bindEvents();
   }

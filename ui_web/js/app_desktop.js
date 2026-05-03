@@ -1245,6 +1245,9 @@ function init() {
                 if (!row || e.target.closest('button') || e.target.closest(COVER_SELECTORS)) return;
                 const id = row.getAttribute('data-id');
                 if (id && typeof DesktopUI.setSelectedTrackId === 'function') DesktopUI.setSelectedTrackId(id);
+                // Podcast home lists use the same row chrome as Library but have no per-row onclick;
+                // single-click should start playback like mobile, not only select.
+                if (id && DesktopUI.currentView === 'podcast') playTrack(id);
             });
         })();
 
