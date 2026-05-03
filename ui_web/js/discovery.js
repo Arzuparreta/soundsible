@@ -56,6 +56,73 @@ function isPlaceholderCreator(str) {
   return /^unknown channel$/i.test(s) || /^unknown artist$/i.test(s);
 }
 
+function shuffleInPlace(arr) {
+  const a = arr;
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = a[i];
+    a[i] = a[j];
+    a[j] = t;
+  }
+  return a;
+}
+
+/** Coherent wall-clock refresh for the personalized rail (independent of taste). */
+const PERSONAL_RAIL_REFRESH_MS = 5 * 60 * 1000;
+
+/** Bump when taste inputs change so the personalized rail can rebuild. */
+let _personalTasteEpoch = 0;
+let _songHistRef = null;
+let _favRef = null;
+let _libRef = null;
+let _personalRailCacheEpoch = -1;
+let _personalRailCacheTimerGen = -1;
+let _personalRailTimerGen = 0;
+let _personalRailCacheTracks = null;
+let _tasteListenerBound = false;
+let _personalRailIntervalId = null;
+
+function syncPersonalTasteEpochFromStore() {
+  const s = store.state;
+  if (s.songPlayHistory !== _songHistRef || s.favorites !== _favRef || s.library !== _libRef) {
+    _songHistRef = s.songPlayHistory;
+    _favRef = s.favorites;
+    _libRef = s.library;
+    _personalTasteEpoch += 1;
+  }
+}
+
+function ensurePersonalTasteStoreListener() {
+  if (_tasteListenerBound) return;
+  _tasteListenerBound = true;
+  store.subscribe(() => {
+    const epochBefore = _personalTasteEpoch;
+    syncPersonalTasteEpochFromStore();
+    if (
+      _personalTasteEpoch !== epochBefore &&
+      discoveryUI.container &&
+      discoveryUI.currentView === 'home'
+    ) {
+      void discoveryUI.renderHome();
+    }
+  });
+}
+
+function ensurePersonalRailRefreshTimer() {
+  if (_personalRailIntervalId != null || typeof window === 'undefined') return;
+  _personalRailIntervalId = window.setInterval(() => {
+    _personalRailTimerGen += 1;
+    if (discoveryUI.container && discoveryUI.currentView === 'home') {
+      void discoveryUI.renderHome();
+    }
+  }, PERSONAL_RAIL_REFRESH_MS);
+}
+
+function isChartEndpoint(endpoint) {
+  const path = (endpoint || '').split('?')[0];
+  return path === '/chart' || path === 'chart';
+}
+
 /** Map ODST search row → shape expected by playPreview / addPreviewToQueue. */
 function odstItemFromSearchRow(row) {
   if (!row || !isYoutubeVideoId(row.id)) return null;
@@ -122,9 +189,10 @@ class DiscoveryService {
    */
   async fetchDeezer(endpoint) {
     const cacheKey = endpoint;
-    const cached = this.cache.get(cacheKey);
+    const chart = isChartEndpoint(endpoint);
+    const cached = !chart ? this.cache.get(cacheKey) : null;
 
-    if (cached && Date.now() - cached.timestamp < this.cacheTTL) {
+    if (!chart && cached && Date.now() - cached.timestamp < this.cacheTTL) {
       return cached.data;
     }
 
@@ -138,10 +206,12 @@ class DiscoveryService {
         return null;
       }
 
-      this.cache.set(cacheKey, {
-        data,
-        timestamp: Date.now()
-      });
+      if (!chart) {
+        this.cache.set(cacheKey, {
+          data,
+          timestamp: Date.now()
+        });
+      }
 
       return data;
     } catch (error) {
@@ -187,6 +257,77 @@ class DiscoveryService {
     if (!data || !data.data) return [];
 
     return data.data.map(track => this.normalizeTrack(track));
+  }
+
+  /**
+   * Personalized picks from local play history + favorites (Deezer search → artist top).
+   * @param {number} desired max tracks
+   */
+  async buildPersonalizedTracks(desired = 18) {
+    const hist = (store.state.songPlayHistory || []).filter((h) => h && (h.title || '').trim());
+    const favIds = store.state.favorites || [];
+    const lib = store.state.library || [];
+    const favTracks = favIds
+      .map((id) => lib.find((t) => t.id === id))
+      .filter((t) => t && t.media_kind !== 'podcast_episode');
+
+    const shH = [...hist];
+    const shF = [...favTracks];
+    shuffleInPlace(shH);
+    shuffleInPlace(shF);
+
+    const queries = [];
+    const seenQ = new Set();
+    const pushQ = (q) => {
+      const s = (q || '').trim();
+      if (s.length < 2) return;
+      const k = s.toLowerCase();
+      if (seenQ.has(k)) return;
+      seenQ.add(k);
+      queries.push(s);
+    };
+
+    if (shH.length && shF.length) {
+      for (let i = 0; i < 3 && i < shH.length; i++) {
+        pushQ(`${shH[i].title} ${(shH[i].artist || '').trim()}`.trim());
+      }
+      for (let i = 0; i < 3 && i < shF.length; i++) {
+        const t = shF[i];
+        pushQ(`${(t.title || '').trim()} ${(t.album_artist || t.artist || '').trim()}`.trim());
+      }
+    } else if (shH.length) {
+      for (let i = 0; i < 6 && i < shH.length; i++) {
+        pushQ(`${shH[i].title} ${(shH[i].artist || '').trim()}`.trim());
+      }
+    } else if (shF.length) {
+      for (let i = 0; i < 6 && i < shF.length; i++) {
+        const t = shF[i];
+        pushQ(`${(t.title || '').trim()} ${(t.album_artist || t.artist || '').trim()}`.trim());
+      }
+    }
+
+    if (!queries.length) return [];
+
+    const merged = [];
+    const seenDeezer = new Set();
+    for (const q of queries.slice(0, 8)) {
+      const data = await this.fetchDeezer(`/search?q=${encodeURIComponent(q)}&limit=5`);
+      if (!data || !Array.isArray(data.data) || !data.data.length) continue;
+      const first = data.data[0];
+      const aid = first?.artist?.id;
+      if (aid == null) continue;
+      const top = await this.fetchDeezer(`/artist/${aid}/top?limit=15`);
+      if (!top || !Array.isArray(top.data)) continue;
+      for (const tr of top.data) {
+        const n = this.normalizeTrack(tr);
+        if (seenDeezer.has(n.deezerId)) continue;
+        seenDeezer.add(n.deezerId);
+        merged.push(n);
+        if (merged.length >= desired) break;
+      }
+      if (merged.length >= desired) break;
+    }
+    return merged.slice(0, desired);
   }
 
   /**
@@ -257,6 +398,20 @@ class DiscoveryService {
 }
 
 export const discoveryService = new DiscoveryService();
+
+async function getPersonalizedRailTracks(desired = 18) {
+  syncPersonalTasteEpochFromStore();
+  const tasteOk = _personalRailCacheEpoch === _personalTasteEpoch;
+  const timerOk = _personalRailCacheTimerGen === _personalRailTimerGen;
+  if (tasteOk && timerOk && Array.isArray(_personalRailCacheTracks)) {
+    return _personalRailCacheTracks;
+  }
+  const tracks = await discoveryService.buildPersonalizedTracks(desired);
+  _personalRailCacheEpoch = _personalTasteEpoch;
+  _personalRailCacheTimerGen = _personalRailTimerGen;
+  _personalRailCacheTracks = tracks;
+  return tracks;
+}
 
 /** Last-wins guard so a stale YouTube resolve cannot toast or play after a newer tap. */
 let _deezerPreviewPlayGeneration = 0;
@@ -377,13 +532,21 @@ class DiscoveryUI {
     if (!this.container) return;
     this.container.innerHTML = '<div class="discovery-loading text-center py-10 text-[var(--text-dim)]">Loading discoveries...</div>';
 
-    const { topTracks, gridPlaylists } = await discoveryService.fetchDiscoverHome(50, 12);
+    const [personalTracks, { topTracks, gridPlaylists }] = await Promise.all([
+      getPersonalizedRailTracks(18),
+      discoveryService.fetchDiscoverHome(50, 12)
+    ]);
     discoveryService.currentTracks = topTracks;
 
     const list = topTracks.slice(0, 12);
-    window._discoverSurfaceTracks = list;
+    const personalShow = personalTracks.slice(0, 12);
+    window._discoverSurfaceTracks = [...personalShow, ...list];
     this.container.innerHTML = `
       <div class="discovery-home space-y-8 pb-8">
+        <section>
+          <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">Recommended for you</h2>
+          <div id="discovery-personal-tracks" class="space-y-1"></div>
+        </section>
         <section>
           <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">Today's Top Hits</h2>
           <div id="discovery-home-top-tracks" class="space-y-1"></div>
@@ -393,8 +556,20 @@ class DiscoveryUI {
           <div id="discovery-playlist-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start"></div>
         </section>
       </div>`;
+    const personalEl = this.container.querySelector('#discovery-personal-tracks');
     const tracksEl = this.container.querySelector('#discovery-home-top-tracks');
     const grid = this.container.querySelector('#discovery-playlist-grid');
+    if (personalEl) {
+      if (!personalShow.length) {
+        personalEl.innerHTML =
+          '<p class="text-sm text-[var(--text-dim)] py-2">Play tracks from your library and add favourites to see picks tailored to you.</p>';
+      } else {
+        renderers.renderSongList(personalShow, personalEl, {
+          getCoverUrl: (t) => (typeof t.cover === 'string' && t.cover) ? t.cover : '',
+          discoverDeezerSurface: true
+        });
+      }
+    }
     if (tracksEl) {
       renderers.renderSongList(list, tracksEl, {
         getCoverUrl: (t) => (typeof t.cover === 'string' && t.cover) ? t.cover : '',
@@ -465,6 +640,8 @@ class DiscoveryUI {
         if (id) void openDeezerPlaylistById(id);
       });
     });
+    const personalTracksEl = this.container.querySelector('#discovery-personal-tracks');
+    if (personalTracksEl) bindDiscoverSurfaceQuickActionButtons(personalTracksEl);
     const topTracks = this.container.querySelector('#discovery-home-top-tracks');
     if (topTracks) bindDiscoverSurfaceQuickActionButtons(topTracks);
     const searchTracks = this.container.querySelector('#discovery-search-track-list');
@@ -478,10 +655,10 @@ export const discoveryUI = new DiscoveryUI();
  * Initialize discovery view
  */
 export function initDiscovery(containerId) {
+  ensurePersonalTasteStoreListener();
+  ensurePersonalRailRefreshTimer();
+  syncPersonalTasteEpochFromStore();
   discoveryUI.init(containerId);
-
-  // Pre-warm cache in background
-  discoveryService.warmCache();
 }
 
 /**

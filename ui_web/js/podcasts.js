@@ -30,6 +30,77 @@ let _podcastTopRecsRows = null;
 /** @type {'idle' | 'loading' | 'ok' | 'error'} */
 let _podcastTopRecsLoadState = 'idle';
 let _podcastTopRecsErrorMsg = '';
+let _podcastLastTopFetchAt = 0;
+const _PODCAST_TOP_SOFT_TTL_MS = 90_000;
+
+/** Personalized directory picks (search from history + subscriptions). */
+const _podcastForYouByCardId = new Map();
+let _podcastForYouRows = null;
+/** @type {'idle' | 'loading' | 'ok' | 'error'} */
+let _podcastForYouLoadState = 'idle';
+let _podcastForYouErrorMsg = '';
+let _forYouTasteEpoch = 0;
+let _forYouRenderedEpoch = -1;
+let _forYouHistRef = null;
+let _forYouSubsRef = null;
+
+function shufflePodcastArray(arr) {
+    const a = arr;
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = a[i];
+        a[i] = a[j];
+        a[j] = t;
+    }
+    return a;
+}
+
+function syncPodcastForYouTasteFromStore() {
+    const s = store.state;
+    if (s.podcastPlayHistory !== _forYouHistRef || s.podcastSubscriptions !== _forYouSubsRef) {
+        _forYouHistRef = s.podcastPlayHistory;
+        _forYouSubsRef = s.podcastSubscriptions;
+        _forYouTasteEpoch += 1;
+    }
+}
+
+function buildPodcastForYouSearchTerms() {
+    const hist = (store.state.podcastPlayHistory || []).filter((h) => h && ((h.showTitle || '').trim() || (h.author || '').trim()));
+    const subs = getPodcastSubscriptions();
+    const shH = [...hist];
+    const shS = [...subs];
+    shufflePodcastArray(shH);
+    shufflePodcastArray(shS);
+    const terms = [];
+    const seen = new Set();
+    const push = (raw) => {
+        const s = String(raw || '').trim();
+        if (s.length < 2) return;
+        const k = s.toLowerCase();
+        if (seen.has(k)) return;
+        seen.add(k);
+        terms.push(s);
+    };
+    if (shH.length && shS.length) {
+        for (let i = 0; i < 4 && i < shH.length; i++) {
+            push(`${(shH[i].showTitle || '').trim()} ${(shH[i].author || '').trim()}`.trim());
+        }
+        for (let i = 0; i < 4 && i < shS.length; i++) {
+            const su = shS[i];
+            push(`${(su.title || '').trim()} ${(su.author || '').trim()}`.trim());
+        }
+    } else if (shH.length) {
+        for (let i = 0; i < 8 && i < shH.length; i++) {
+            push(`${(shH[i].showTitle || '').trim()} ${(shH[i].author || '').trim()}`.trim());
+        }
+    } else if (shS.length) {
+        for (let i = 0; i < 8 && i < shS.length; i++) {
+            const su = shS[i];
+            push(`${(su.title || '').trim()} ${(su.author || '').trim()}`.trim());
+        }
+    }
+    return terms.slice(0, 8);
+}
 
 function topPodcastCardId(row) {
     const cid = row && row.itunes_collection_id != null ? String(row.itunes_collection_id) : '';
@@ -138,6 +209,7 @@ export class PodcastsUI {
             subsList: mobile ? 'podcast-subs-list' : 'desktop-podcast-subs-list',
             downloadedList: mobile ? 'podcast-downloaded-list' : 'desktop-podcast-downloaded-list',
             recsGrid: mobile ? 'podcast-recs-grid' : 'desktop-podcast-recs-grid',
+            forYouGrid: mobile ? 'podcast-for-you-grid' : 'desktop-podcast-for-you-grid',
             showDetailRoot: mobile ? 'view-podcast-show-detail' : 'desktop-view-podcast-show-detail',
             showDetailTitle: mobile ? 'podcast-show-detail-title' : 'desktop-podcast-show-detail-title',
             showDetailMeta: mobile ? 'podcast-show-detail-meta' : 'desktop-podcast-show-detail-meta',
@@ -237,6 +309,12 @@ export class PodcastsUI {
         _podcastTopRecsLoadState = 'idle';
         _podcastTopRecByCardId.clear();
         _podcastTopRecsErrorMsg = '';
+        _podcastLastTopFetchAt = 0;
+        _podcastForYouRows = null;
+        _podcastForYouLoadState = 'idle';
+        _podcastForYouByCardId.clear();
+        _podcastForYouErrorMsg = '';
+        _forYouRenderedEpoch = -1;
         try {
             const r = await fetch(`${apiBase()}/api/podcasts/subscriptions`);
             if (r.ok) {
@@ -250,10 +328,27 @@ export class PodcastsUI {
         this._syncShowDetailSubscribeButton();
     }
 
-    static async _loadTopRecommendations() {
-        if (_podcastTopRecsLoadState !== 'idle') return;
-        _podcastTopRecsLoadState = 'loading';
-        this.renderHome();
+    static async _loadTopRecommendations(opts = {}) {
+        const force = !!opts.force;
+        if (_podcastTopRecsLoadState === 'loading') return;
+        const now = Date.now();
+        const softFresh =
+            !force &&
+            _podcastTopRecsLoadState === 'ok' &&
+            Array.isArray(_podcastTopRecsRows) &&
+            _podcastTopRecsRows.length > 0 &&
+            now - _podcastLastTopFetchAt < _PODCAST_TOP_SOFT_TTL_MS;
+        if (softFresh) return;
+
+        const showSpinner =
+            force ||
+            !Array.isArray(_podcastTopRecsRows) ||
+            _podcastTopRecsRows.length === 0 ||
+            _podcastTopRecsLoadState === 'idle';
+        if (showSpinner) {
+            _podcastTopRecsLoadState = 'loading';
+            this.renderHome();
+        }
         try {
             const r = await fetch(`${apiBase()}/api/discovery/podcasts/top?limit=24`);
             const d = await r.json().catch(() => ({}));
@@ -267,10 +362,75 @@ export class PodcastsUI {
             _podcastTopRecsRows = results;
             _podcastTopRecsLoadState = 'ok';
             _podcastTopRecsErrorMsg = '';
+            _podcastLastTopFetchAt = Date.now();
         } catch (e) {
             _podcastTopRecsLoadState = 'error';
             _podcastTopRecsErrorMsg = String(e.message || e);
-            _podcastTopRecsRows = null;
+            if (showSpinner) _podcastTopRecsRows = null;
+        }
+        this.renderHome();
+    }
+
+    static async _loadPodcastForYou() {
+        if (_podcastForYouLoadState === 'loading') return;
+        syncPodcastForYouTasteFromStore();
+        if (
+            _podcastForYouLoadState === 'ok' &&
+            _forYouRenderedEpoch === _forYouTasteEpoch &&
+            Array.isArray(_podcastForYouRows)
+        ) {
+            return;
+        }
+        _podcastForYouLoadState = 'loading';
+        this.renderHome();
+        try {
+            const terms = buildPodcastForYouSearchTerms();
+            const subRss = new Set(
+                getPodcastSubscriptions()
+                    .map((s) => (s.rss_url || '').trim())
+                    .filter(Boolean)
+            );
+            if (!terms.length) {
+                _podcastForYouByCardId.clear();
+                _podcastForYouRows = [];
+                _podcastForYouLoadState = 'ok';
+                _podcastForYouErrorMsg = '';
+                _forYouRenderedEpoch = _forYouTasteEpoch;
+                this.renderHome();
+                return;
+            }
+            const merged = [];
+            const seenFeed = new Set();
+            for (const q of terms) {
+                const r = await fetch(
+                    `${apiBase()}/api/discovery/podcasts/search?q=${encodeURIComponent(q)}&limit=10`
+                );
+                const d = await r.json().catch(() => ({}));
+                if (!r.ok) continue;
+                const results = Array.isArray(d.results) ? d.results : [];
+                for (const row of results) {
+                    const feed = (row.feed_url || '').trim();
+                    if (!feed || subRss.has(feed)) continue;
+                    if (seenFeed.has(feed)) continue;
+                    seenFeed.add(feed);
+                    merged.push(row);
+                    if (merged.length >= 24) break;
+                }
+                if (merged.length >= 24) break;
+            }
+            _podcastForYouByCardId.clear();
+            for (const row of merged) {
+                const cid = topPodcastCardId(row);
+                if (cid) _podcastForYouByCardId.set(cid, row);
+            }
+            _podcastForYouRows = merged;
+            _podcastForYouLoadState = 'ok';
+            _podcastForYouErrorMsg = '';
+            _forYouRenderedEpoch = _forYouTasteEpoch;
+        } catch (e) {
+            _podcastForYouLoadState = 'error';
+            _podcastForYouErrorMsg = String(e.message || e);
+            _podcastForYouRows = null;
         }
         this.renderHome();
     }
@@ -327,12 +487,65 @@ export class PodcastsUI {
             }
         }
 
-        // Discover / chart recommendations (Apple top podcasts via station)
+        syncPodcastForYouTasteFromStore();
+        if (document.getElementById(sel.forYouGrid)) void this._loadPodcastForYou();
+        if (document.getElementById(sel.recsGrid)) void this._loadTopRecommendations({});
+
+        const forYouEl = document.getElementById(sel.forYouGrid);
+        if (forYouEl) {
+            if (_podcastForYouLoadState === 'loading' && !_podcastForYouRows) {
+                forYouEl.innerHTML = `<p class="text-xs text-[var(--text-dim)] px-2"><i class="fas fa-circle-notch fa-spin text-[var(--accent)] mr-2"></i>Loading picks for you…</p>`;
+            } else if (_podcastForYouLoadState === 'error' && !_podcastForYouRows) {
+                forYouEl.innerHTML = `<p class="text-xs text-[var(--text-dim)] px-2">${esc(_podcastForYouErrorMsg || 'Could not load personalized picks.')}</p>`;
+            } else if (Array.isArray(_podcastForYouRows) && _podcastForYouRows.length === 0 && _podcastForYouLoadState === 'ok') {
+                forYouEl.innerHTML = `<p class="text-xs text-[var(--text-dim)] px-2">Listen to episodes and subscribe to shows to get suggestions here.</p>`;
+            } else if (Array.isArray(_podcastForYouRows) && _podcastForYouRows.length) {
+                forYouEl.innerHTML = _podcastForYouRows.map((rec) => {
+                    const cardId = topPodcastCardId(rec);
+                    if (!cardId) return '';
+                    const isSubbed = subs.some((s) => s.rss_url === rec.feed_url);
+                    const imgUrl = rec.image_url || '';
+                    return `
+                <div class="podcast-rec-card playlist-card group cursor-pointer rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)] overflow-hidden transition-colors duration-200 hover:border-[var(--accent)]/25"
+                     data-rec-id="${esc(cardId)}">
+                    <div class="playlist-card-cover aspect-square w-full relative overflow-hidden rounded-t-[var(--radius-omni-xs)] bg-[var(--bg-card)] border-b border-[var(--glass-border)]">
+                        ${imgUrl
+                            ? `<img class="absolute inset-0 w-full h-full object-cover" src="${esc(imgUrl)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div class="absolute inset-0 hidden items-center justify-center"><i class="fas fa-podcast text-3xl text-[var(--text-dim)]/40"></i></div>`
+                            : '<div class="absolute inset-0 flex items-center justify-center"><i class="fas fa-podcast text-3xl text-[var(--text-dim)]/40"></i></div>'}
+                    </div>
+                    <div class="p-3">
+                        <div class="playlist-card-name font-bold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${esc(rec.title)}</div>
+                        <div class="text-[10px] font-mono text-[var(--text-dim)] truncate mt-0.5">${esc(rec.author || '')}</div>
+                        ${isSubbed ? '<div class="mt-1 text-[10px] font-black uppercase tracking-wider text-[var(--accent)]">Subscribed</div>' : `
+                        <button type="button" class="podcast-rec-subscribe-btn mt-2 w-full py-1.5 rounded-lg text-xs font-bold bg-[var(--accent)] text-black"
+                            data-rss="${esc(rec.feed_url)}" data-title="${esc(rec.title)}" data-author="${esc(rec.author)}" data-img="${esc(rec.image_url || '')}" data-itunes="${esc(rec.itunes_collection_id || '')}">Subscribe</button>`}
+                    </div>
+                </div>`;
+                }).join('');
+                forYouEl.querySelectorAll('.podcast-rec-subscribe-btn').forEach((btn) => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.subscribeFromItunes({
+                            rss_url: btn.getAttribute('data-rss'),
+                            title: btn.getAttribute('data-title'),
+                            author: btn.getAttribute('data-author'),
+                            image_url: btn.getAttribute('data-img') || undefined,
+                            itunes_collection_id: btn.getAttribute('data-itunes') || undefined,
+                        });
+                    });
+                });
+                forYouEl.querySelectorAll('.podcast-rec-card').forEach((card) => {
+                    card.addEventListener('click', () => {
+                        const recId = card.getAttribute('data-rec-id');
+                        if (recId) this.handleRecCardClick(recId);
+                    });
+                });
+            }
+        }
+
+        // Top podcasts chart (Apple directory)
         const recEl = document.getElementById(sel.recsGrid);
         if (recEl) {
-            if (_podcastTopRecsRows === null && _podcastTopRecsLoadState === 'idle') {
-                void this._loadTopRecommendations();
-            }
             if (_podcastTopRecsLoadState === 'loading' && !_podcastTopRecsRows) {
                 recEl.innerHTML = `<p class="text-xs text-[var(--text-dim)] px-2"><i class="fas fa-circle-notch fa-spin text-[var(--accent)] mr-2"></i>Loading recommendations…</p>`;
             } else if (_podcastTopRecsLoadState === 'error' && !_podcastTopRecsRows) {
@@ -733,6 +946,7 @@ export class PodcastsUI {
 
         const meta =
             _podcastTopRecByCardId.get(feedId) ||
+            _podcastForYouByCardId.get(feedId) ||
             PodcastsUI._sessionBrowseById.get(feedId);
         if (meta) {
             const feedUrl = (meta.feed_url || '').trim();

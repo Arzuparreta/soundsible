@@ -6,6 +6,7 @@
 import { store } from './store.js';
 import { getApiBase } from './config.js';
 import { audioEngine } from './audio.js';
+import { makeEpisodeId } from './podcast_model.js';
 
 /**
  * Show Deezer title/artist in the omnibar immediately while YouTube resolution is in flight.
@@ -76,6 +77,16 @@ export async function playPodcastPreview(item) {
         podcast_rss_url: item.podcast_rss_url || null,
     };
     store.update({ currentTrack: syntheticTrack });
+    const fid = item.podcast_feed_id != null ? String(item.podcast_feed_id) : '';
+    const guid = item.podcast_episode_guid != null ? String(item.podcast_episode_guid) : '';
+    const episodeKey =
+        fid && guid ? makeEpisodeId(fid, guid) : syntheticTrack.id;
+    store.recordPodcastPlay({
+        episodeId: episodeKey,
+        showTitle: (item.artist || '').trim() || 'Podcast',
+        author: '',
+        rssUrl: item.podcast_rss_url || ''
+    });
     audioEngine.playTrack(syntheticTrack);
 }
 
