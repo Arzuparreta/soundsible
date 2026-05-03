@@ -5,6 +5,8 @@
 </p>
 
 **Soundsible is a self-hosted music environment** — Browse privately and **for free** through **YouTube**, **Youtube Music** and **iTunes Podcasts**. Listen to or save music with original and reliable metadata and covers. Create your playlists. Explore through top grade **local, private recommendations** based on your listenings and favorites for music and podcasts.  
+
+
 This is an open-source project with no ads or revenue. Everything is **local**, **private**, and aims to prrovide users a sensible self-hosted alternative to the predatory music streaming services everyone uses today, without sacrificing any comodity whatsoever.
 
 [Advanced install & deployment](docs/INSTALL.md) · [Documentation](#documentation)
