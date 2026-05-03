@@ -4,7 +4,7 @@
   <a href="https://arzuparreta.github.io/soundsible.github.io"><img src="https://img.shields.io/badge/GO%20TO%20WEBSITE-E0BC00?style=for-the-badge" alt="View Soundsible repository"></a>
 </p>
 
-**Soundsible is a self-hosted music environment** — Browse privately and for free through yt, yt-music and itunes podcasts. Save music with original metadata and covers. Create playlists. Explore through top grade **local, private recommendations** for music and podcasts.
+**Soundsible is a self-hosted music environment** — Browse privately and for free through yt, yt-music and itunes podcasts. Save music with original metadata and covers. Create playlists. Explore through top grade **local, private recommendations** based on your listenings and favorites for music and podcasts.
 
 [Advanced install & deployment](docs/INSTALL.md) · [Documentation](#documentation)
 
