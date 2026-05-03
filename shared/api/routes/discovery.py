@@ -38,7 +38,7 @@ _HTTP_HEADERS_RSS = {
 _HTTP_HEADERS_ITUNES = {"User-Agent": "SoundsibleDiscovery/1.0"}
 
 _PODCAST_TOP_CACHE: dict[str, tuple[float, list]] = {}
-_PODCAST_TOP_TTL_SEC = 45 * 60
+_PODCAST_TOP_TTL_SEC = 90
 _LOOKUP_CHUNK = 40
 # Short search terms — merged and deduped when RSS chart is unavailable.
 _ITUNES_TOP_FALLBACK_TERMS = ("podcast", "news", "comedy", "technology", "sports")

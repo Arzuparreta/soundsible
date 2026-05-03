@@ -86,6 +86,16 @@ export function playTrackFromContext(trackId, currentView, viewState) {
     if (track) {
         audioEngine.setContext(list);
         store.update({ currentTrack: track });
+        if (track.media_kind === 'podcast_episode') {
+            store.recordPodcastPlay({
+                episodeId: track.id,
+                showTitle: (track.artist || track.album || '').trim(),
+                author: (track.author || '').trim(),
+                rssUrl: track.podcast_rss_url || ''
+            });
+        } else {
+            store.recordSongPlay(track);
+        }
         audioEngine.playTrack(track);
     }
 }

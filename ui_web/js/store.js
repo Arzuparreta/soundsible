@@ -4,6 +4,14 @@
 import { connectionManager } from './connection.js';
 import { STATION_PORT, getApiBase } from './config.js';
 
+const MAX_SONG_PLAY_HISTORY = 300;
+const MAX_PODCAST_PLAY_HISTORY = 300;
+
+function clampHistoryArray(arr, maxLen) {
+    if (!Array.isArray(arr)) return [];
+    return arr.slice(0, maxLen);
+}
+
 /** Best-effort IndexedDB mirror for disaster recovery (localStorage remains source of truth). */
 function scheduleLibraryIdbMirror(library) {
     if (typeof indexedDB === 'undefined' || !Array.isArray(library) || library.length === 0) return;
@@ -70,7 +78,9 @@ class Store {
             volumeBeforeMute: (() => {
                 const v = this.load('volumeBeforeMute', 1);
                 return Number.isFinite(Number(v)) ? Math.min(1, Math.max(0, Number(v))) : 1;
-            })()
+            })(),
+            songPlayHistory: clampHistoryArray(this.load('song_play_history', []), MAX_SONG_PLAY_HISTORY),
+            podcastPlayHistory: clampHistoryArray(this.load('podcast_play_history', []), MAX_PODCAST_PLAY_HISTORY)
         };
         this.subscribers = [];
         this._syncLibraryVersion = 0;
@@ -172,7 +182,57 @@ class Store {
             this.save('library', patch.library);
             scheduleLibraryIdbMirror(patch.library);
         }
+        if (patch.songPlayHistory !== undefined) this.save('song_play_history', patch.songPlayHistory);
+        if (patch.podcastPlayHistory !== undefined) this.save('podcast_play_history', patch.podcastPlayHistory);
         this.subscribers.forEach(cb => cb(this.state));
+    }
+
+    /**
+     * Persist a music play for personalized Discover (library / queue tracks only; not Deezer rows).
+     * @param {{ id?: string, title?: string, artist?: string, album_artist?: string, media_kind?: string, source?: string }} track
+     */
+    recordSongPlay(track) {
+        if (!track || typeof track.id !== 'string') return;
+        const id = track.id;
+        if (
+            id.startsWith('deezer_') ||
+            id.startsWith('pcast_') ||
+            id.startsWith('deezer_resolving_')
+        ) {
+            return;
+        }
+        if (track.media_kind === 'podcast_episode') return;
+        if (track.source === 'podcast-preview' || track.source === 'preview' || track.source === 'preview-pending') return;
+        const title = (track.title || '').trim() || 'Unknown';
+        const artist = (track.album_artist || track.artist || '').trim();
+        const ts = Date.now();
+        const prev = Array.isArray(this.state.songPlayHistory) ? this.state.songPlayHistory : [];
+        const next = clampHistoryArray(
+            [{ trackId: id, title, artist, ts }, ...prev.filter((e) => e && e.trackId !== id)],
+            MAX_SONG_PLAY_HISTORY
+        );
+        this.save('song_play_history', next);
+        this.update({ songPlayHistory: next });
+    }
+
+    /**
+     * Persist a podcast episode play for personalized podcast discovery.
+     * @param {{ episodeId: string, showTitle?: string, author?: string, rssUrl?: string }} meta
+     */
+    recordPodcastPlay(meta) {
+        if (!meta || typeof meta.episodeId !== 'string' || !meta.episodeId.trim()) return;
+        const episodeId = meta.episodeId.trim();
+        const showTitle = (meta.showTitle || '').trim() || 'Podcast';
+        const author = (meta.author || '').trim();
+        const rssUrl = typeof meta.rssUrl === 'string' ? meta.rssUrl.trim() : '';
+        const ts = Date.now();
+        const prev = Array.isArray(this.state.podcastPlayHistory) ? this.state.podcastPlayHistory : [];
+        const next = clampHistoryArray(
+            [{ episodeId, showTitle, author, rssUrl, ts }, ...prev.filter((e) => e && e.episodeId !== episodeId)],
+            MAX_PODCAST_PLAY_HISTORY
+        );
+        this.save('podcast_play_history', next);
+        this.update({ podcastPlayHistory: next });
     }
 
     subscribe(cb) {
