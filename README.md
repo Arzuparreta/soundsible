@@ -4,9 +4,7 @@
   <a href="https://arzuparreta.github.io/soundsible.github.io"><img src="https://img.shields.io/badge/GO%20TO%20WEBSITE-E0BC00?style=for-the-badge" alt="View Soundsible repository"></a>
 </p>
 
-**Self-hosted music environment** — this repo is the full stack (Station UI, engine, tooling). Official site linked above.
-
-The **Station** UI includes your **library**, **YouTube / YouTube Music search** (ODST downloader), and **Discover**: charts and editorial playlists powered by **read-only Deezer metadata** from the engine (browsers do not call Deezer directly). Playing or queueing a Discover track **resolves a matching YouTube result** via the same search path as ODST, then streams through the existing preview pipeline (`/api/preview/stream/...`). Downloads from Discover use that same resolution.
+**Soundsible is a self-hosted music environment** — Browse privately and for free through yt, yt-music and itunes podcasts. Save music with original metadata and covers. Create playlists. Explore through top grade **local, private recommendations** for music and podcasts.
 
 [Advanced install & deployment](docs/INSTALL.md) · [Documentation](#documentation)
 
