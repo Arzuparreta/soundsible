@@ -83,6 +83,25 @@ export function getDownloadedEpisodes(library) {
     return (library || []).filter((t) => t.media_kind === 'podcast_episode');
 }
 
+/** Episodes for RSS URL without subscribing (browse). subscriptionStub must include id, title, rss_url, etc. */
+export async function fetchEpisodesByRssUrl(rssUrl, subscriptionStub) {
+    const apiBase = getApiBase(store.state.activeHost);
+    try {
+        const r = await fetch(
+            `${apiBase}/api/podcasts/episodes-by-url?rss_url=${encodeURIComponent(rssUrl)}`
+        );
+        const d = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(d?.error || r.statusText || 'Failed to fetch episodes');
+        const rawEpisodes = d?.episodes || [];
+        if (!Array.isArray(rawEpisodes)) throw new Error('Invalid episode data from server');
+        const episodes = rawEpisodes.map((ep) => normalizeEpisode(ep, subscriptionStub));
+        return { episodes, error: null };
+    } catch (e) {
+        console.error('fetchEpisodesByRssUrl error:', e);
+        return { episodes: [], error: e.message || 'Failed to load episodes' };
+    }
+}
+
 /** Fetch episodes for a feed. Returns { subscription, episodes, error }. */
 export async function fetchEpisodesForFeed(feedId) {
     const subs = getPodcastSubscriptions();

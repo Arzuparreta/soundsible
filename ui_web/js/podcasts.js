@@ -15,6 +15,7 @@ import {
     getPodcastSubscriptions,
     getDownloadedEpisodes,
     fetchEpisodesForFeed,
+    fetchEpisodesByRssUrl,
     makeEpisodeId
 } from './podcast_model.js';
 import * as renderers from './renderers.js';
@@ -33,6 +34,16 @@ let _podcastTopRecsErrorMsg = '';
 function topPodcastCardId(row) {
     const cid = row && row.itunes_collection_id != null ? String(row.itunes_collection_id) : '';
     return cid ? `top_${cid}` : '';
+}
+
+/** Stable session id for directory rows (search / browse) — matches top_* when iTunes id exists. */
+function browseFeedSessionId(meta) {
+    const cid = meta && meta.itunes_collection_id != null ? String(meta.itunes_collection_id).trim() : '';
+    if (cid) return `top_${cid}`;
+    const rss = String((meta && (meta.feed_url || meta.rss_url)) || '').trim();
+    let h = 0;
+    for (let i = 0; i < rss.length; i++) h = (Math.imul(31, h) + rss.charCodeAt(i)) | 0;
+    return `browse_${(h >>> 0).toString(16)}`;
 }
 
 /** Build CSS url() value for HTML style="…" attributes.
@@ -105,6 +116,8 @@ export class PodcastsUI {
     static _selectors = null;
     static _desktopInit = false;
     static _mobileInit = false;
+    /** Directory rows opened from search (feed_url, title, …) keyed by session id. */
+    static _sessionBrowseById = new Map();
     /** @type {WeakSet<Element>} */
     static _subsClickBoundRoots = new WeakSet();
 
@@ -184,8 +197,11 @@ export class PodcastsUI {
         const subBtn = document.getElementById(sel.showDetailSubscribeBtn);
         if (subBtn) subBtn.addEventListener('click', () => this.toggleCurrentSubscription());
 
-        // Subscribe to store changes — re-render podcast home when library/subscription state changes
-        store.subscribe(() => this.renderHome());
+        // Subscribe to store changes — home list + show-detail subscribe button
+        store.subscribe(() => {
+            this.renderHome();
+            this._syncShowDetailSubscribeButton();
+        });
 
         // Refresh subscriptions when entering the view
         const mo = new MutationObserver(() => {
@@ -197,6 +213,21 @@ export class PodcastsUI {
         mo.observe(root, { attributes: true, attributeFilter: ['class'] });
 
         this.refreshFromServer();
+    }
+
+    /** Merge subscriptions from server without clearing chart recommendations. */
+    static async syncSubscriptionsFromServer() {
+        try {
+            const r = await fetch(`${apiBase()}/api/podcasts/subscriptions`);
+            if (r.ok) {
+                const d = await r.json();
+                if (Array.isArray(d.subscriptions)) {
+                    store.update({ podcastSubscriptions: d.subscriptions });
+                }
+            }
+        } catch (_) {}
+        this.renderHome();
+        this._syncShowDetailSubscribeButton();
     }
 
     static async refreshFromServer() {
@@ -214,6 +245,7 @@ export class PodcastsUI {
             }
         } catch (_) {}
         this.renderHome();
+        this._syncShowDetailSubscribeButton();
     }
 
     static async _loadTopRecommendations() {
@@ -371,23 +403,39 @@ export class PodcastsUI {
             box.innerHTML = results.map((row) => {
                 const imgUrl = row.image_url || '';
                 return `
-                <div class="flex items-center gap-3 p-3 rounded-lg bg-[var(--surface-overlay)] border border-[var(--glass-border)] mb-2">
-                    <div class="w-14 h-14 rounded-md overflow-hidden bg-[var(--bg-card)] flex-shrink-0 relative">
+                <div class="podcast-search-row flex items-center gap-3 p-3 rounded-lg bg-[var(--surface-overlay)] border border-[var(--glass-border)] mb-2 cursor-pointer hover:border-[var(--accent)]/30 transition-colors"
+                     role="button" tabindex="0"
+                     data-feed="${esc(row.feed_url)}" data-title="${esc(row.title)}" data-author="${esc(row.author)}"
+                     data-img="${esc(row.image_url || '')}" data-itunes="${esc(row.itunes_collection_id || '')}">
+                    <div class="w-14 h-14 rounded-md overflow-hidden bg-[var(--bg-card)] flex-shrink-0 relative pointer-events-none">
                         ${imgUrl
                             ? `<img class="absolute inset-0 w-full h-full object-cover" src="${esc(imgUrl)}" alt="" loading="lazy" onerror="this.style.display='none'" />`
                             : '<div class="absolute inset-0 flex items-center justify-center"><i class="fas fa-podcast text-sm text-[var(--text-dim)]/40"></i></div>'}
                     </div>
-                    <div class="min-w-0 flex-1">
+                    <div class="min-w-0 flex-1 pointer-events-none">
                         <div class="font-bold text-sm text-[var(--text-main)] truncate">${esc(row.title)}</div>
                         <div class="text-xs text-[var(--text-dim)] truncate">${esc(row.author)}</div>
                     </div>
-                    <button type="button" class="podcast-subscribe-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-[var(--accent)] text-black"
+                    <button type="button" class="podcast-subscribe-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-[var(--accent)] text-black shrink-0"
                       data-feed="${esc(row.feed_url)}" data-title="${esc(row.title)}" data-author="${esc(row.author)}"
                       data-img="${esc(row.image_url || '')}" data-itunes="${esc(row.itunes_collection_id || '')}">Subscribe</button>
                 </div>`;
             }).join('');
+            box.querySelectorAll('.podcast-search-row').forEach((srow) => {
+                srow.addEventListener('click', (e) => {
+                    if (e.target.closest('.podcast-subscribe-btn')) return;
+                    this.openBrowseFromDirectoryMeta({
+                        feed_url: srow.getAttribute('data-feed'),
+                        title: srow.getAttribute('data-title'),
+                        author: srow.getAttribute('data-author'),
+                        image_url: srow.getAttribute('data-img') || '',
+                        itunes_collection_id: srow.getAttribute('data-itunes') || '',
+                    });
+                });
+            });
             box.querySelectorAll('.podcast-subscribe-btn').forEach((btn) => {
-                btn.addEventListener('click', () => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
                     this.subscribeFromItunes({
                         rss_url: btn.getAttribute('data-feed'),
                         title: btn.getAttribute('data-title'),
@@ -403,10 +451,12 @@ export class PodcastsUI {
     }
 
     static async subscribeFromItunes(meta, opts = {}) {
+        const rss = (meta.rss_url || '').trim();
+        if (!rss) return;
         const subs = getPodcastSubscriptions();
-        const existing = subs.find((s) => s.rss_url === meta.rss_url);
+        const existing = subs.find((s) => (s.rss_url || '').trim() === rss);
         if (existing) {
-            if (opts.openDetail) this.openShowDetail(existing.id);
+            if (opts.openDetail) void this.openShowDetail(existing.id);
             return;
         }
 
@@ -415,67 +465,153 @@ export class PodcastsUI {
             id: optId,
             title: meta.title || 'Podcast',
             author: meta.author || '',
-            rss_url: meta.rss_url,
+            rss_url: rss,
             image_url: meta.image_url || '',
+            itunes_collection_id: meta.itunes_collection_id || '',
         };
-        // Single store update — subscribers will call renderHome() automatically
+
+        Haptics.tick();
+        if (typeof window.showToast === 'function') window.showToast('Subscribed');
         store.update({ podcastSubscriptions: [...subs, optimisticSub] });
 
         if (opts.openDetail) {
-            this.openShowDetail(optId);
+            void this.openShowDetail(optId);
         }
 
         try {
             const r = await fetch(`${apiBase()}/api/podcasts/subscribe`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(meta)
+                body: JSON.stringify({ ...meta, rss_url: rss })
             });
             const d = await r.json().catch(() => ({}));
             if (!r.ok) throw new Error(d.error || r.statusText);
-            Haptics.tick();
-            if (typeof window.showToast === 'function') window.showToast('Subscribed');
-            // Refresh from server replaces optimistic sub with real one
-            await this.refreshFromServer();
-            if (opts.openDetail) {
-                const newSubs = getPodcastSubscriptions();
-                const realSub = newSubs.find((s) => s.rss_url === meta.rss_url);
-                if (realSub && this._currentFeedId === optId) {
-                    // Re-open detail with real subscription ID
-                    this._currentFeedId = realSub.id;
-                    this._currentEpisodes = [];
+
+            const serverSub = d.subscription;
+            if (serverSub && serverSub.id) {
+                const cur = getPodcastSubscriptions().filter(
+                    (s) => s.id !== optId && (s.rss_url || '').trim() !== rss
+                );
+                cur.push(serverSub);
+                store.update({ podcastSubscriptions: cur });
+
+                const curRss = (this._currentSubscription?.rss_url || '').trim();
+                const viewingThisFeed =
+                    this._currentFeedId === optId ||
+                    (curRss === rss && curRss !== '');
+
+                if (viewingThisFeed) {
+                    this._currentFeedId = serverSub.id;
+                    this._currentSubscription = serverSub;
+                    this._syncShowDetailSubscribeButton();
+                    this._isFetchingEpisodes = true;
                     const sel = this._selectors;
-                    // Re-fetch episodes for real subscription
-                    const { episodes } = await fetchEpisodesForFeed(realSub.id);
-                    this._currentEpisodes = episodes;
-                    window._currentPodcastEpisodes = episodes;
-                    this.renderShowDetailEpisodes();
+                    const epEl = document.getElementById(sel.showDetailEpisodes);
+                    if (epEl) {
+                        epEl.innerHTML = `<div class="flex items-center justify-center py-8"><i class="fas fa-circle-notch fa-spin text-[var(--accent)] text-xl"></i></div>`;
+                    }
+                    const { episodes, error } = await fetchEpisodesForFeed(serverSub.id);
+                    this._isFetchingEpisodes = false;
+                    if (error) {
+                        if (epEl) {
+                            epEl.innerHTML = `<p class="text-sm text-red-400 text-center py-4">${esc(error)}</p>`;
+                        }
+                        this._currentEpisodes = [];
+                        window._currentPodcastEpisodes = [];
+                    } else {
+                        this._currentEpisodes = episodes;
+                        window._currentPodcastEpisodes = episodes;
+                        this.renderShowDetailEpisodes();
+                    }
                 }
             }
+            void this.syncSubscriptionsFromServer();
         } catch (e) {
-            // Rollback optimistic subscription
             const currentSubs = getPodcastSubscriptions();
             store.update({ podcastSubscriptions: currentSubs.filter((s) => s.id !== optId) });
             Haptics.error();
             if (typeof window.showToast === 'function') window.showToast(String(e.message || e));
+            if (this._currentFeedId === optId) {
+                const bid = browseFeedSessionId({
+                    feed_url: rss,
+                    itunes_collection_id: meta.itunes_collection_id,
+                });
+                PodcastsUI._sessionBrowseById.set(bid, {
+                    feed_url: rss,
+                    title: meta.title || 'Podcast',
+                    author: meta.author || '',
+                    image_url: meta.image_url || '',
+                    itunes_collection_id: meta.itunes_collection_id || '',
+                });
+                void this.openShowDetail(bid);
+            }
         }
     }
 
     static async unsubscribe(feedId) {
+        const subs = getPodcastSubscriptions();
+        const victim = subs.find((s) => s.id === feedId);
+        if (!victim) return;
+        const prevSubs = [...subs];
+        const onThisDetail = this._currentFeedId === feedId;
+
+        Haptics.tick();
+        if (typeof window.showToast === 'function') window.showToast('Unsubscribed');
+        store.update({ podcastSubscriptions: subs.filter((s) => s.id !== feedId) });
+
+        let browseMeta = null;
+        if (onThisDetail) {
+            browseMeta = {
+                feed_url: victim.rss_url,
+                title: victim.title,
+                author: victim.author,
+                image_url: victim.image_url || '',
+                itunes_collection_id: victim.itunes_collection_id || '',
+            };
+            const bid = browseFeedSessionId(browseMeta);
+            PodcastsUI._sessionBrowseById.set(bid, browseMeta);
+            this._currentFeedId = bid;
+            this._currentSubscription = { id: bid, ...browseMeta };
+            this._syncShowDetailSubscribeButton();
+        }
+
         try {
             const r = await fetch(`${apiBase()}/api/podcasts/subscriptions/${encodeURIComponent(feedId)}`, { method: 'DELETE' });
             if (!r.ok) throw new Error('Unsubscribe failed');
-            Haptics.tick();
-            if (typeof window.showToast === 'function') window.showToast('Unsubscribed');
-            await this.refreshFromServer();
-            // If currently in show detail for this feed, navigate back
-            if (this._currentFeedId === feedId) {
-                if (this._mobileInit && typeof UI !== 'undefined' && UI.goToPreviousView) UI.goToPreviousView();
-                if (this._desktopInit && typeof DesktopUI !== 'undefined' && DesktopUI.navigateBack) DesktopUI.navigateBack();
-            }
+            void this.syncSubscriptionsFromServer();
         } catch (e) {
+            store.update({ podcastSubscriptions: prevSubs });
             Haptics.error();
             if (typeof window.showToast === 'function') window.showToast(String(e.message || e));
+            if (onThisDetail) {
+                this._currentFeedId = feedId;
+                this._currentSubscription = victim;
+                this._syncShowDetailSubscribeButton();
+            }
+            return;
+        }
+
+        if (onThisDetail && browseMeta) {
+            this._isFetchingEpisodes = true;
+            const sel = this._selectors;
+            const epEl = document.getElementById(sel.showDetailEpisodes);
+            if (epEl) {
+                epEl.innerHTML = `<div class="flex items-center justify-center py-8"><i class="fas fa-circle-notch fa-spin text-[var(--accent)] text-xl"></i></div>`;
+            }
+            const stub = { id: this._currentFeedId, ...this._currentSubscription };
+            const { episodes, error } = await fetchEpisodesByRssUrl(browseMeta.feed_url, stub);
+            this._isFetchingEpisodes = false;
+            if (error) {
+                if (epEl) {
+                    epEl.innerHTML = `<p class="text-sm text-red-400 text-center py-4">${esc(error)}</p>`;
+                }
+                this._currentEpisodes = [];
+                window._currentPodcastEpisodes = [];
+            } else {
+                this._currentEpisodes = episodes;
+                window._currentPodcastEpisodes = episodes;
+                this.renderShowDetailEpisodes();
+            }
         }
     }
 
@@ -485,85 +621,150 @@ export class PodcastsUI {
     static _isFetchingEpisodes = false;
 
     static handleRecCardClick(recId) {
-        const rec = _podcastTopRecByCardId.get(recId);
-        if (!rec || !rec.feed_url) return;
+        void this.openShowDetail(recId);
+    }
+
+    static openBrowseFromDirectoryMeta(meta) {
+        const row = {
+            feed_url: (meta.feed_url || meta.rss_url || '').trim(),
+            title: meta.title || 'Podcast',
+            author: meta.author || '',
+            image_url: meta.image_url || '',
+            itunes_collection_id: meta.itunes_collection_id || '',
+        };
+        if (!row.feed_url) return;
+        const id = browseFeedSessionId(row);
+        PodcastsUI._sessionBrowseById.set(id, row);
+        void this.openShowDetail(id);
+    }
+
+    static _resolveShowSubscription(feedId) {
         const subs = getPodcastSubscriptions();
-        const existing = subs.find((s) => s.rss_url === rec.feed_url);
-        if (existing) {
-            this.openShowDetail(existing.id);
+        const byId = subs.find((s) => s.id === feedId);
+        if (byId && String(feedId).startsWith('opt_')) {
+            return {
+                subscription: byId,
+                effectiveFeedId: feedId,
+                subscribed: false,
+                subscribing: true,
+            };
+        }
+        if (byId) {
+            return {
+                subscription: byId,
+                effectiveFeedId: feedId,
+                subscribed: true,
+                subscribing: false,
+            };
+        }
+
+        const meta =
+            _podcastTopRecByCardId.get(feedId) ||
+            PodcastsUI._sessionBrowseById.get(feedId);
+        if (meta) {
+            const feedUrl = (meta.feed_url || '').trim();
+            if (!feedUrl) return null;
+            const ex = subs.find((s) => (s.rss_url || '').trim() === feedUrl);
+            if (ex) {
+                return {
+                    subscription: ex,
+                    effectiveFeedId: ex.id,
+                    subscribed: true,
+                    subscribing: false,
+                };
+            }
+            return {
+                subscription: {
+                    id: feedId,
+                    title: meta.title || 'Podcast',
+                    author: meta.author || '',
+                    rss_url: feedUrl,
+                    image_url: meta.image_url || '',
+                    itunes_collection_id: meta.itunes_collection_id || '',
+                },
+                effectiveFeedId: feedId,
+                subscribed: false,
+                subscribing: false,
+            };
+        }
+        return null;
+    }
+
+    static _syncShowDetailSubscribeButton() {
+        const sel = this._selectors;
+        if (!sel) return;
+        const root = document.getElementById(sel.showDetailRoot);
+        if (!root || root.classList.contains('hidden')) return;
+        const subBtn = document.getElementById(sel.showDetailSubscribeBtn);
+        if (!subBtn || !this._currentSubscription) return;
+
+        const fid = this._currentFeedId;
+        if (fid != null && String(fid).startsWith('opt_')) {
+            subBtn.disabled = true;
+            subBtn.textContent = 'Subscribing…';
+            subBtn.className =
+                'px-4 py-2 rounded-lg text-xs font-bold bg-[var(--surface-overlay)] text-[var(--text-dim)] border border-[var(--glass-border)] cursor-wait';
+            return;
+        }
+
+        subBtn.disabled = false;
+        const rss = (this._currentSubscription.rss_url || '').trim();
+        const subs = getPodcastSubscriptions();
+        const subbed = subs.some(
+            (s) => s.id === fid || (rss !== '' && (s.rss_url || '').trim() === rss)
+        );
+
+        if (subbed) {
+            subBtn.textContent = 'Unsubscribe';
+            subBtn.className =
+                'px-4 py-2 rounded-lg text-xs font-bold bg-[var(--surface-overlay)] text-[var(--text-main)] border border-[var(--glass-border)]';
         } else {
-            this.subscribeFromItunes({
-                rss_url: rec.feed_url,
-                title: rec.title,
-                author: rec.author,
-                image_url: rec.image_url,
-                itunes_collection_id: rec.itunes_collection_id,
-            }, { openDetail: true });
+            subBtn.textContent = 'Subscribe';
+            subBtn.className = 'px-4 py-2 rounded-lg text-xs font-bold bg-[var(--accent)] text-black';
         }
     }
 
     static async openShowDetail(feedId) {
-        this._currentFeedId = feedId;
-        const subs = getPodcastSubscriptions();
-        let subscription = subs.find((s) => s.id === feedId);
-
-        // If not found locally, try to find by RSS URL (e.g. optimistic sub replaced by real one)
-        if (!subscription) {
-            const rec = _podcastTopRecByCardId.get(feedId);
-            if (rec && rec.feed_url) {
-                subscription = {
-                    id: feedId,
-                    title: rec.title,
-                    author: rec.author,
-                    rss_url: rec.feed_url,
-                    image_url: rec.image_url,
-                };
-            }
-        }
-        if (!subscription) {
+        const resolved = this._resolveShowSubscription(feedId);
+        if (!resolved) {
             if (typeof window.showToast === 'function') window.showToast('Podcast not found');
             return;
         }
 
-        // Render hero immediately BEFORE navigating so the user sees content right away
+        const { subscription, effectiveFeedId, subscribed, subscribing } = resolved;
+        this._currentFeedId = effectiveFeedId;
+        this._currentSubscription = subscription;
+
         const sel = this._selectors;
         const titleEl = document.getElementById(sel.showDetailTitle);
         const metaEl = document.getElementById(sel.showDetailMeta);
         const coverEl = document.getElementById(sel.showDetailCover);
-        const subBtn = document.getElementById(sel.showDetailSubscribeBtn);
         const epEl = document.getElementById(sel.showDetailEpisodes);
 
         if (titleEl) titleEl.textContent = subscription.title || 'Podcast';
         if (metaEl) metaEl.textContent = subscription.author || '';
         if (coverEl) {
             const url = (subscription.image_url || '').trim();
-            // Use an <img> element for reliable rendering (no CSS quoting issues)
             if (url) {
                 coverEl.innerHTML = `<img class="w-full h-full object-cover rounded-[var(--radius-omni-sm)]" src="${esc(url)}" alt="${esc(subscription.title || 'Podcast cover')}" onerror="this.style.display='none'" />`;
             } else {
-                coverEl.innerHTML = '<div class="w-full h-full flex items-center justify-center"><i class="fas fa-podcast text-3xl text-[var(--text-dim)]/40"></i></div>';
+                coverEl.innerHTML =
+                    '<div class="w-full h-full flex items-center justify-center"><i class="fas fa-podcast text-3xl text-[var(--text-dim)]/40"></i></div>';
             }
         }
-        if (subBtn) {
-            subBtn.textContent = 'Unsubscribe';
-            subBtn.className = 'px-4 py-2 rounded-lg text-xs font-bold bg-[var(--surface-overlay)] text-[var(--text-main)] border border-[var(--glass-border)]';
-        }
 
-        // Optimistic subscriptions are still being processed on the server
-        if (String(feedId).startsWith('opt_')) {
+        this._syncShowDetailSubscribeButton();
+
+        if (subscribing) {
             if (epEl) {
                 epEl.innerHTML = `<div class="flex items-center justify-center py-8 text-sm text-[var(--text-dim)]"><i class="fas fa-circle-notch fa-spin text-[var(--accent)] mr-2"></i>Subscribing…</div>`;
             }
-            this._currentSubscription = subscription;
             this._currentEpisodes = [];
             window._currentPodcastEpisodes = [];
             navigateToPodcastShowDetail();
             return;
         }
 
-        this._currentSubscription = subscription;
-
-        // Show loading state
         this._isFetchingEpisodes = true;
         if (epEl) {
             epEl.innerHTML = `<div class="flex items-center justify-center py-8"><i class="fas fa-circle-notch fa-spin text-[var(--accent)] text-xl"></i></div>`;
@@ -571,8 +772,14 @@ export class PodcastsUI {
 
         navigateToPodcastShowDetail();
 
-        // Fetch episodes in background
-        const { episodes, error } = await fetchEpisodesForFeed(feedId);
+        let episodes;
+        let error;
+        if (subscribed) {
+            ({ episodes, error } = await fetchEpisodesForFeed(effectiveFeedId));
+        } else {
+            ({ episodes, error } = await fetchEpisodesByRssUrl(subscription.rss_url, subscription));
+        }
+
         this._isFetchingEpisodes = false;
         if (error) {
             if (epEl) {
@@ -654,14 +861,23 @@ export class PodcastsUI {
     }
 
     static toggleCurrentSubscription() {
-        if (!this._currentFeedId) return;
+        if (!this._currentFeedId || String(this._currentFeedId).startsWith('opt_')) return;
         const subs = getPodcastSubscriptions();
-        const isSubbed = subs.some((s) => s.id === this._currentFeedId);
-        if (isSubbed) {
-            this.unsubscribe(this._currentFeedId);
+        const fid = this._currentFeedId;
+        const rss = (this._currentSubscription?.rss_url || '').trim();
+        const byRss = rss ? subs.find((s) => (s.rss_url || '').trim() === rss) : null;
+        const byId = subs.find((s) => s.id === fid);
+        if (byRss || byId) {
+            const victim = byRss || byId;
+            void this.unsubscribe(victim.id);
         } else {
-            // Should not happen from detail, but handle gracefully
-            this.subscribeFromItunes({ rss_url: this._currentSubscription?.rss_url });
+            void this.subscribeFromItunes({
+                rss_url: this._currentSubscription?.rss_url,
+                title: this._currentSubscription?.title,
+                author: this._currentSubscription?.author,
+                image_url: this._currentSubscription?.image_url,
+                itunes_collection_id: this._currentSubscription?.itunes_collection_id,
+            });
         }
     }
 

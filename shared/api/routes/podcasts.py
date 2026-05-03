@@ -195,6 +195,28 @@ def feed_episodes(feed_id: str):
     return jsonify({"feed_id": feed_id, "subscription": sub, "episodes": episodes})
 
 
+@podcasts_bp.route("/api/podcasts/episodes-by-url", methods=["GET"])
+@rate_limit("podcasts_episodes_browse", limit=120, window_sec=60)
+def episodes_by_feed_url():
+    """
+    Episodes for an RSS URL without a subscription (browse / preview).
+    Same SSRF rules as subscribe; does not write library metadata.
+    """
+    rss_url = (request.args.get("rss_url") or "").strip()
+    if not rss_url:
+        return jsonify({"error": "rss_url required"}), 400
+    try:
+        assert_safe_http_url(rss_url)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    try:
+        episodes = fetch_episodes_for_feed(rss_url)
+    except Exception as e:
+        logger.warning("RSS browse fetch failed: %s", e)
+        return jsonify({"error": str(e)}), 502
+    return jsonify({"rss_url": rss_url, "episodes": episodes})
+
+
 @podcasts_bp.route("/api/podcasts/enclosure/peek", methods=["POST"])
 @rate_limit("podcasts_peek", limit=120, window_sec=60)
 def enclosure_peek():
