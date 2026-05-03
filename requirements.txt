@@ -18,6 +18,9 @@ flask-cors>=4.0.0          # Cross-Origin Resource Sharing
 # HTTP Client
 requests>=2.31.0           # Sync HTTP requests
 
+# Podcasts (RSS)
+feedparser>=6.0.10         # Parse podcast feeds
+
 cryptography>=41.0.0       # Encrypt stored credentials
 pillow>=10.0.0             # Image processing (covers, branding)
 watchdog>=3.0.0            # Folder monitoring

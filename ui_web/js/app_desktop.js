@@ -24,6 +24,9 @@ import {
 } from './shared.js';
 import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
 
+let discoverSearchDebounceTimer = null;
+let podcastSearchDebounceTimer = null;
+
 function getDesktopViewState() {
     return {
         homeTracks: window._currentHomeTracks,
@@ -796,6 +799,10 @@ function init() {
         DesktopUI.init();
         initHoverTooltip();
 
+        void import('./podcasts.js').then((m) => {
+            m.PodcastsUI.init({ mobile: false });
+        });
+
         void import('./downloader.js').then((m) => {
             m.Downloader.init({
                 searchInput: 'desktop-dl-search-input',
@@ -1046,6 +1053,20 @@ function init() {
             if (DesktopUI.currentView === 'artist-detail' && window._currentArtistName) renderDesktopArtistDetail();
             if (DesktopUI.currentView === 'playlists') renderPlaylists();
             if (DesktopUI.currentView === 'playlist-detail' && (window._currentPlaylistName || window._deezerPlaylistDetail)) renderPlaylistDetail();
+            if (DesktopUI.currentView === 'podcast') {
+                import('./podcasts.js').then((m) => {
+                    m.PodcastsUI.init({ mobile: false });
+                    m.PodcastsUI.renderHome();
+                });
+            }
+            if (DesktopUI.currentView === 'podcast-show-detail') {
+                import('./podcasts.js').then((m) => {
+                    m.PodcastsUI.init({ mobile: false });
+                    if (m.PodcastsUI._currentFeedId) {
+                        m.PodcastsUI.renderShowDetailEpisodes();
+                    }
+                });
+            }
         });
 
         function initDesktopGlobalSearch() {
@@ -1065,8 +1086,28 @@ function init() {
                 else if (view === 'artists') renderDesktopArtists();
                 else if (view === 'artist-detail' && window._currentArtistName) renderDesktopArtistDetail();
                 else if (view === 'discover' && typeof window.unifiedSearch !== 'undefined') {
-                    // Note: Discover search uses its own debounced listener
+                } else if (view === 'podcast') {
+                    if (podcastSearchDebounceTimer) {
+                        clearTimeout(podcastSearchDebounceTimer);
+                        podcastSearchDebounceTimer = null;
+                    }
+                    if (!query) {
+                        const box = document.getElementById('desktop-podcast-search-results');
+                        if (box) box.innerHTML = '';
+                        return;
+                    }
+                    podcastSearchDebounceTimer = setTimeout(() => {
+                        podcastSearchDebounceTimer = null;
+                        void import('./podcasts.js').then((m) => {
+                            m.PodcastsUI.runSearch(query);
+                        });
+                    }, 300);
+                } else if (view === 'podcast-show-detail') {
+                    void import('./podcasts.js').then((m) => {
+                        m.PodcastsUI.filterShowDetailEpisodes(query);
+                    });
                 }
+                // Note: Podcast search uses its own dedicated input inside the podcast view
             });
 
             input.addEventListener('keydown', (e) => {
@@ -1124,7 +1165,7 @@ function init() {
             }
             if (container) container.classList.remove('scrolled');
 
-            const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'podcast', 'discover', 'artists', 'artist-detail'];
+            const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'discover', 'artists', 'artist-detail', 'podcast', 'podcast-show-detail'];
             if (container) {
                 if (searchVisibleViews.includes(viewId)) {
                     container.classList.remove('opacity-0', 'pointer-events-none');
@@ -1144,7 +1185,13 @@ function init() {
                     case 'artists': input.placeholder = 'Search artists...'; break;
                     case 'artist-detail': input.placeholder = 'Search songs & albums...'; break;
                     case 'podcast': input.placeholder = 'Search podcasts...'; break;
+                    case 'podcast-show-detail': input.placeholder = 'Search in show...'; break;
                 }
+            }
+
+            if (!['podcast', 'podcast-show-detail'].includes(viewId)) {
+                const box = document.getElementById('desktop-podcast-search-results');
+                if (box) box.innerHTML = '';
             }
 
             if (viewId !== 'discover' && typeof window.unifiedSearch !== 'undefined') {
@@ -1170,6 +1217,20 @@ function init() {
                     if (targetView === 'playlist-detail' && (window._currentPlaylistName || window._deezerPlaylistDetail)) renderPlaylistDetail();
                     if (targetView === 'artists') renderDesktopArtists();
                     if (targetView === 'artist-detail' && window._currentArtistName) renderDesktopArtistDetail();
+                    if (targetView === 'podcast') {
+                        import('./podcasts.js').then((m) => {
+                            m.PodcastsUI.init({ mobile: false });
+                            m.PodcastsUI.renderHome();
+                        });
+                    }
+                    if (targetView === 'podcast-show-detail') {
+                        import('./podcasts.js').then((m) => {
+                            m.PodcastsUI.init({ mobile: false });
+                            if (m.PodcastsUI._currentFeedId) {
+                                m.PodcastsUI.renderShowDetailEpisodes();
+                            }
+                        });
+                    }
                     if (targetView === 'settings' && window.Downloader && typeof window.Downloader.loadConfig === 'function') {
                         window.Downloader.loadConfig();
                     }
@@ -1179,6 +1240,7 @@ function init() {
 
         document.getElementById('desktop-artist-back')?.addEventListener('click', () => DesktopUI.navigateBack());
         document.getElementById('desktop-playlist-detail-back')?.addEventListener('click', () => DesktopUI.navigateBack());
+        document.getElementById('desktop-podcast-show-detail-back')?.addEventListener('click', () => DesktopUI.navigateBack());
 
         initPlaylistTrackDrag();
         initPlaylistListDrag();
@@ -1212,6 +1274,9 @@ function init() {
                 if (!row || e.target.closest('button') || e.target.closest(COVER_SELECTORS)) return;
                 const id = row.getAttribute('data-id');
                 if (id && typeof DesktopUI.setSelectedTrackId === 'function') DesktopUI.setSelectedTrackId(id);
+                // Podcast home lists use the same row chrome as Library but have no per-row onclick;
+                // single-click should start playback like mobile, not only select.
+                if (id && DesktopUI.currentView === 'podcast') playTrack(id);
             });
         })();
 

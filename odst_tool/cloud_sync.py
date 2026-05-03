@@ -211,7 +211,9 @@ class CloudSync:
             version=1,
             tracks=validated_tracks,
             playlists=remote_lib.playlists if remote_lib else {}, # Note: Keep remote playlists
-            settings=remote_lib.settings if remote_lib else {}
+            settings=remote_lib.settings if remote_lib else {},
+            podcast_subscriptions=getattr(remote_lib, "podcast_subscriptions", []) if remote_lib else [],
+            podcast_episode_cache=getattr(remote_lib, "podcast_episode_cache", {}) if remote_lib else {},
         )
         
         try:

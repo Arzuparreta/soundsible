@@ -213,6 +213,23 @@
             -webkit-overflow-scrolling: touch;
         }
 
+        /* Podcast (and similar): one scroll container only — nested .view + inner overflow-y-auto causes
+           wheel/touch scroll to stick when overscroll-behavior splits gestures between parents. */
+        .view.view-scroll-inner-only {
+            overflow-y: hidden;
+            overscroll-behavior-y: none;
+        }
+
+        .view.view-scroll-inner-only > .view-scroll-inner {
+            flex: 1;
+            min-height: 0;
+            overflow-x: hidden;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
+            overscroll-behavior-y: auto;
+        }
+
         .is-ios .view {
             padding-top: calc(max(3.5rem, env(safe-area-inset-top)) + var(--view-header-offset));
         }
@@ -223,6 +240,17 @@
         }
 
         .is-ios #view-settings.view {
+            padding-top: max(3.5rem, env(safe-area-inset-top));
+        }
+
+        /* Podcast views: global search bar is now always visible; reclaim the header-offset band */
+        #view-podcast.view,
+        #view-podcast-show-detail.view {
+            padding-top: max(1.5rem, env(safe-area-inset-top));
+        }
+
+        .is-ios #view-podcast.view,
+        .is-ios #view-podcast-show-detail.view {
             padding-top: max(3.5rem, env(safe-area-inset-top));
         }
 

@@ -8,7 +8,7 @@ import os
 import threading
 from pathlib import Path
 from typing import Dict, List, Optional
-from shared.models import LibraryMetadata, Track, PlayerConfig, StorageProvider, merge_playlist_maps
+from shared.models import LibraryMetadata, Track, PlayerConfig, StorageProvider, merge_playlist_maps, merge_podcast_subscriptions
 from shared.constants import LIBRARY_METADATA_FILENAME, DEFAULT_CONFIG_DIR
 from shared.path_resolver import resolve_local_track_path
 from shared.app_config import get_output_dir
@@ -319,6 +319,13 @@ class LibraryManager:
                 # Note: Track merge used remote as base; playlists/settings must merge too or local edits vanish.
                 remote_lib.playlists = merge_playlist_maps(remote_lib.playlists, local_lib.playlists)
                 remote_lib.settings = {**local_lib.settings, **remote_lib.settings}
+                remote_lib.podcast_subscriptions = merge_podcast_subscriptions(
+                    remote_lib.podcast_subscriptions, local_lib.podcast_subscriptions
+                )
+                remote_lib.podcast_episode_cache = {
+                    **(local_lib.podcast_episode_cache or {}),
+                    **(remote_lib.podcast_episode_cache or {}),
+                }
                 self.metadata = remote_lib
 
             # Note: 4. Save back using unified method

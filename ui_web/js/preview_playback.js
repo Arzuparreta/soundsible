@@ -4,6 +4,7 @@
  * from the CDN; bytes do not go through our server.
  */
 import { store } from './store.js';
+import { getApiBase } from './config.js';
 import { audioEngine } from './audio.js';
 
 /**
@@ -33,6 +34,49 @@ export function paintOptimisticDeezerPreview(trackLike, deezerId) {
  */
 function isYoutubeId(id) {
     return id && typeof id === 'string' && id.length === 11 && !id.startsWith('raw-');
+}
+
+/**
+ * Stream podcast enclosure via Station signed URL (same-origin).
+ * @param {{ enclosure_url: string, title?: string, artist?: string, duration?: number, thumbnail?: string }} item
+ */
+export async function playPodcastPreview(item) {
+    const url = item?.enclosure_url;
+    if (!url) return;
+    const apiBase = getApiBase(store.state.activeHost);
+    let streamToken = null;
+    try {
+        const r = await fetch(`${apiBase}/api/podcasts/enclosure/peek`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enclosure_url: url })
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d.stream_token) {
+            if (typeof window.showToast === 'function') window.showToast(d.error || 'Preview unavailable');
+            return;
+        }
+        streamToken = d.stream_token;
+    } catch (e) {
+        if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
+        return;
+    }
+    const syntheticTrack = {
+        id: item.episode_id || `pcast_${String(streamToken).slice(0, 28)}`,
+        title: item.title || 'Episode',
+        artist: item.artist || '',
+        album: item.album || '',
+        duration: Math.max(0, Number(item.duration) || 0),
+        thumbnail: item.thumbnail || '',
+        source: 'podcast-preview',
+        _streamToken: streamToken,
+        enclosure_url: url,
+        podcast_feed_id: item.podcast_feed_id || null,
+        podcast_episode_guid: item.podcast_episode_guid || null,
+        podcast_rss_url: item.podcast_rss_url || null,
+    };
+    store.update({ currentTrack: syntheticTrack });
+    audioEngine.playTrack(syntheticTrack);
 }
 
 export function playPreview(item) {

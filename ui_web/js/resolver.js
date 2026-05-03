@@ -14,7 +14,7 @@ function sameOriginBase() {
 export class Resolver {
     static getTrackUrl(track) {
         // Note: Preview playback is handled in audio.js via GET /api/preview/stream/<ID> (server proxy).
-        if (track && track.source === 'preview') {
+        if (track && (track.source === 'preview' || track.source === 'podcast-preview')) {
             return '';
         }
         if (!track?.id) return '';
@@ -25,7 +25,11 @@ export class Resolver {
     }
 
     static getCoverUrl(track) {
-        if (track && track.source === 'preview' && track.thumbnail) {
+        if (
+            track &&
+            (track.source === 'preview' || track.source === 'podcast-preview') &&
+            track.thumbnail
+        ) {
             return track.thumbnail;
         }
         if (!track?.id) return '';

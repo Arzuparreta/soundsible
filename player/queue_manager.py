@@ -68,6 +68,33 @@ class QueueManager:
             album=album,
         ))
 
+    def add_podcast_preview(
+        self,
+        episode_id: str,
+        title: str,
+        artist: str,
+        duration: int,
+        thumbnail: Optional[str] = None,
+        enclosure_url: Optional[str] = None,
+        podcast_feed_id: Optional[str] = None,
+        podcast_episode_guid: Optional[str] = None,
+        podcast_rss_url: Optional[str] = None,
+        album: Optional[str] = None,
+    ) -> None:
+        """Add a podcast preview item to the queue."""
+        self.add_item(QueueItem.from_podcast_preview(
+            episode_id=episode_id,
+            title=title,
+            artist=artist,
+            duration=duration,
+            thumbnail=thumbnail,
+            enclosure_url=enclosure_url,
+            podcast_feed_id=podcast_feed_id,
+            podcast_episode_guid=podcast_episode_guid,
+            podcast_rss_url=podcast_rss_url,
+            album=album,
+        ))
+
     def add(self, track: Track) -> None:
         """Add a library track to the end of the queue (convenience for GTK/API)."""
         self.add_library_track(track)

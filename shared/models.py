@@ -73,6 +73,11 @@ class Track:
     cover_source: Optional[str] = None
     metadata_modified_by_user: bool = False
     youtube_id: Optional[str] = None
+    # Podcast episodes stored as tracks (optional; default music)
+    media_kind: Optional[str] = None  # "music" | "podcast_episode"
+    podcast_feed_id: Optional[str] = None
+    podcast_episode_guid: Optional[str] = None
+    podcast_rss_url: Optional[str] = None
 
     @staticmethod
     def generate_id() -> str:
@@ -93,12 +98,59 @@ class Track:
 
 
 @dataclass
+class PodcastSubscription:
+    """Subscribed podcast feed (RSS). Serialized inside library.json."""
+    id: str
+    title: str
+    author: str
+    rss_url: str
+    image_url: Optional[str] = None
+    itunes_collection_id: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {k: v for k, v in asdict(self).items() if v is not None}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PodcastSubscription":
+        import dataclasses
+        field_names = {f.name for f in dataclasses.fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in field_names}
+        return cls(**filtered)
+
+
+def merge_podcast_subscriptions(
+    remote: List[Dict[str, Any]],
+    local: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Union subscriptions by rss_url; remote wins on title/author when both exist."""
+    by_url: Dict[str, Dict[str, Any]] = {}
+    for s in local or []:
+        if not isinstance(s, dict):
+            continue
+        u = (s.get("rss_url") or "").strip()
+        if u:
+            by_url[u] = dict(s)
+    for s in remote or []:
+        if not isinstance(s, dict):
+            continue
+        u = (s.get("rss_url") or "").strip()
+        if not u:
+            continue
+        if u not in by_url:
+            by_url[u] = dict(s)
+        else:
+            merged = {**by_url[u], **s}
+            by_url[u] = merged
+    return list(by_url.values())
+
+
+@dataclass
 class QueueItem:
     """
     A single playable item in the playback queue (library track or preview).
     id is the canonical identifier: library UUID or video_id for preview.
     """
-    source: Literal["library", "preview"]
+    source: Literal["library", "preview", "podcast_preview"]
     id: str
     title: str
     artist: str
@@ -106,6 +158,10 @@ class QueueItem:
     thumbnail: Optional[str] = None
     library_track_id: Optional[str] = None
     album: Optional[str] = None
+    enclosure_url: Optional[str] = None
+    podcast_feed_id: Optional[str] = None
+    podcast_episode_guid: Optional[str] = None
+    podcast_rss_url: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Stable JSON for API and web (source, id, title, artist, duration, thumbnail)."""
@@ -122,6 +178,14 @@ class QueueItem:
             out["library_track_id"] = self.library_track_id
         if self.album is not None:
             out["album"] = self.album
+        if self.enclosure_url is not None:
+            out["enclosure_url"] = self.enclosure_url
+        if self.podcast_feed_id is not None:
+            out["podcast_feed_id"] = self.podcast_feed_id
+        if self.podcast_episode_guid is not None:
+            out["podcast_episode_guid"] = self.podcast_episode_guid
+        if self.podcast_rss_url is not None:
+            out["podcast_rss_url"] = self.podcast_rss_url
         return out
 
     @classmethod
@@ -161,6 +225,35 @@ class QueueItem:
             album=album,
         )
 
+    @classmethod
+    def from_podcast_preview(
+        cls,
+        episode_id: str,
+        title: str,
+        artist: str,
+        duration: int,
+        thumbnail: Optional[str] = None,
+        enclosure_url: Optional[str] = None,
+        podcast_feed_id: Optional[str] = None,
+        podcast_episode_guid: Optional[str] = None,
+        podcast_rss_url: Optional[str] = None,
+        album: Optional[str] = None,
+    ) -> 'QueueItem':
+        """Build a podcast preview QueueItem."""
+        return cls(
+            source="podcast_preview",
+            id=episode_id,
+            title=title,
+            artist=artist,
+            duration=duration,
+            thumbnail=thumbnail,
+            enclosure_url=enclosure_url,
+            podcast_feed_id=podcast_feed_id,
+            podcast_episode_guid=podcast_episode_guid,
+            podcast_rss_url=podcast_rss_url,
+            album=album,
+        )
+
 
 @dataclass
 class LibraryMetadata:
@@ -175,6 +268,9 @@ class LibraryMetadata:
     playlists: Dict[str, List[str]]  # Note: Playlist_name -> [track_ids]
     settings: Dict[str, Any]
     last_updated: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    podcast_subscriptions: List[Dict[str, Any]] = field(default_factory=list)
+    # feed_id -> {"fetched_at": iso, "episodes": [ {...}, ... ]}
+    podcast_episode_cache: Dict[str, Any] = field(default_factory=dict)
     
     def to_json(self, indent: int = 2) -> str:
         """
@@ -192,7 +288,9 @@ class LibraryMetadata:
             "tracks": [{k: v for k, v in track.to_dict().items() if k != "local_path"} for track in self.tracks],
             "playlists": self.playlists,
             "settings": self.settings,
-            "last_updated": self.last_updated
+            "last_updated": self.last_updated,
+            "podcast_subscriptions": list(self.podcast_subscriptions),
+            "podcast_episode_cache": dict(self.podcast_episode_cache),
         }
         return json.dumps(data, indent=indent)
     
@@ -214,12 +312,20 @@ class LibraryMetadata:
         except (ValueError, TypeError):
             version = 1
             
+        subs = data.get("podcast_subscriptions")
+        if not isinstance(subs, list):
+            subs = []
+        cache = data.get("podcast_episode_cache")
+        if not isinstance(cache, dict):
+            cache = {}
         return cls(
             version=version,
             tracks=tracks,
             playlists=data.get("playlists", {}),
             settings=data.get("settings", {}),
-            last_updated=data.get("last_updated", datetime.utcnow().isoformat())
+            last_updated=data.get("last_updated", datetime.utcnow().isoformat()),
+            podcast_subscriptions=subs,
+            podcast_episode_cache=cache,
         )
     
     @classmethod
@@ -231,7 +337,7 @@ class LibraryMetadata:
         try:
             data = json.loads(json_str)
         except json.JSONDecodeError:
-            return cls(version=1, tracks=[], playlists={}, settings={})
+            return cls(version=1, tracks=[], playlists={}, settings={}, podcast_subscriptions=[], podcast_episode_cache={})
         return cls.from_dict(data)
     
     def get_track_by_id(self, track_id: str) -> Optional[Track]:

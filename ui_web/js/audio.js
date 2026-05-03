@@ -68,7 +68,7 @@ class AudioEngine {
 
     _preloadTrack(track) {
         if (!track?.id) return;
-        if (track.source === 'preview') return; // Note: Avoid hitting preview stream until user actually plays next
+        if (track.source === 'preview' || track.source === 'podcast-preview') return; // Note: Avoid hitting preview stream until user actually plays next
         const url = Resolver.getTrackUrl(track);
         const el = this._getPreloadAudio();
         el.src = url;
@@ -120,7 +120,10 @@ class AudioEngine {
             const track = store.state.currentTrack;
             store.update({ isPlaying: false });
             Haptics.error();
-            if (track?.source === 'preview' && typeof window.showToast === 'function') {
+            if (
+                (track?.source === 'preview' || track?.source === 'podcast-preview') &&
+                typeof window.showToast === 'function'
+            ) {
                 window.showToast('Preview unavailable');
             }
         });
@@ -196,6 +199,65 @@ class AudioEngine {
         }
 
         this._invalidatePreload();
+
+        if (track.source === 'podcast-preview') {
+            this._previewEndedTriggered = false;
+            const host =
+                typeof store !== 'undefined' && store.state && store.state.activeHost
+                    ? store.state.activeHost
+                    : typeof window !== 'undefined' && window.location
+                      ? window.location.hostname
+                      : 'localhost';
+            const apiBase = getApiBase(host);
+            let tok = track._streamToken;
+            // Note: If no token (e.g. from queue), fetch one from enclosure_url
+            if (!tok && track.enclosure_url) {
+                try {
+                    const r = await fetch(`${apiBase}/api/podcasts/enclosure/peek`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ enclosure_url: track.enclosure_url })
+                    });
+                    const d = await r.json().catch(() => ({}));
+                    if (r.ok && d.stream_token) tok = d.stream_token;
+                } catch (_) {}
+            }
+            if (!tok) {
+                if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
+                return;
+            }
+            const streamUrl = `${apiBase}/api/podcasts/stream/${encodeURIComponent(tok)}`;
+            try {
+                this.audio.src = streamUrl;
+                this.audio.load();
+                await this.audio.play();
+                store.update({ currentTrack: { ...track, _streamToken: tok }, isPlaying: true });
+                store.pushPlaybackState(track.id, 0, true);
+                this._suppressStaleTimeUpdates = true;
+                this._dispatchTimeUpdate(0, 0, track?.duration ?? 0);
+                if ('mediaSession' in navigator) {
+                    const coverUrl = track?.thumbnail || null;
+                    const sizes = ['96x96', '128x128', '192x192', '256x256', '384x384', '512x512'];
+                    const artwork = coverUrl
+                        ? [...sizes.map((size) => ({ src: coverUrl, sizes: size, type: 'image/jpeg' }))]
+                        : [
+                              { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+                              { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
+                          ];
+                    navigator.mediaSession.metadata = new MediaMetadata({
+                        title: track.title,
+                        artist: track.artist,
+                        album: track.album,
+                        artwork
+                    });
+                    this.setMediaSessionHandlers();
+                }
+            } catch (err) {
+                store.update({ isPlaying: false });
+                console.error('Podcast preview playback failed:', err);
+            }
+            return;
+        }
 
         // Note: Preview stream through our server (same-origin) so playback works. direct YT urls are CORS-blocked.
         // Note: Always use HTTP; app and API are never HTTPS.
@@ -356,7 +418,8 @@ class AudioEngine {
 
         console.log("Playback sequence finished.");
         this._invalidatePreload();
-        const isPreview = currentTrack?.source === 'preview';
+        const isPreview =
+            currentTrack?.source === 'preview' || currentTrack?.source === 'podcast-preview';
         if (isPreview) {
             store.update({ isPlaying: false });
         } else {
@@ -419,7 +482,12 @@ class AudioEngine {
         }
 
         const currentTrack = store.state.currentTrack;
-        if (currentTrack?.source === 'preview' && duration > 0 && !this._previewEndedTriggered && currentTime >= duration - 1.2) {
+        if (
+            (currentTrack?.source === 'preview' || currentTrack?.source === 'podcast-preview') &&
+            duration > 0 &&
+            !this._previewEndedTriggered &&
+            currentTime >= duration - 1.2
+        ) {
             this._previewEndedTriggered = true;
             this.next();
         }

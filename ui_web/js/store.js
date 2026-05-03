@@ -43,6 +43,7 @@ class Store {
             favorites: this.load('favorites', []),
             playlists: this.load('playlists', {}),
             librarySettings: this.load('library_settings', {}),
+            podcastSubscriptions: [],
             queue: [],
             repeatMode: 'off', // Note: Off = no repeat, one = infinite repeat of current song, once = repeat current song one time then continue
             shuffleEnabled: false,
@@ -306,6 +307,9 @@ class Store {
                 favorites: favIds,
                 isOnline: true
             };
+            if (Array.isArray(data.podcast_subscriptions)) {
+                patch.podcastSubscriptions = data.podcast_subscriptions;
+            }
             if (settings) patch.librarySettings = settings;
             if (queueFromSync !== null) {
                 patch.queue = queueFromSync;
@@ -728,23 +732,32 @@ class Store {
     }
 
     /**
-     * Add a preview (Discover/Search) item to the playback queue.
-     * @param {{ video_id?: string, id?: string, title?: string, artist?: string, duration?: number, duration_sec?: number, thumbnail?: string, library_track_id?: string, _libraryTrackId?: string }} item
+     * Add a preview (Discover/Search) or podcast preview item to the playback queue.
+     * @param {{ video_id?: string, id?: string, enclosure_url?: string, episode_id?: string, title?: string, artist?: string, duration?: number, duration_sec?: number, thumbnail?: string, library_track_id?: string, _libraryTrackId?: string, podcast_feed_id?: string, podcast_episode_guid?: string, podcast_rss_url?: string }} item
      */
     async addPreviewToQueue(item) {
         if (!item) return false;
         const videoId = item.video_id ?? item.id;
-        if (!videoId) return false;
+        const enclosureUrl = item.enclosure_url;
+        if (!videoId && !enclosureUrl) return false;
         try {
             const preview = {
-                video_id: videoId,
                 title: item.title ?? 'Unknown',
                 artist: item.artist ?? item.channel ?? '',
                 duration: Number(item.duration ?? item.duration_sec ?? 0) || 0,
                 thumbnail: item.thumbnail ?? null
             };
-            if (item.library_track_id ?? item._libraryTrackId) {
-                preview.library_track_id = item.library_track_id ?? item._libraryTrackId;
+            if (enclosureUrl) {
+                preview.enclosure_url = enclosureUrl;
+                preview.episode_id = item.episode_id ?? item.id;
+                preview.podcast_feed_id = item.podcast_feed_id ?? null;
+                preview.podcast_episode_guid = item.podcast_episode_guid ?? null;
+                preview.podcast_rss_url = item.podcast_rss_url ?? null;
+            } else {
+                preview.video_id = videoId;
+                if (item.library_track_id ?? item._libraryTrackId) {
+                    preview.library_track_id = item.library_track_id ?? item._libraryTrackId;
+                }
             }
             const res = await fetch(`${this.apiBase}/api/playback/queue`, {
                 method: 'POST',

@@ -4,7 +4,7 @@ The Station UI includes **Library**, **Search** (ODST / YouTube Music–style re
 
 ## Development (Flask serves source)
 
-1. `npm install` (copies `socket.io-client`’s browser ESM build into `js/vendor/` for native module loading—Flask does not resolve npm package names)
+1. `npm install` (optional for JS work; `postinstall` refreshes `js/vendor/socket.io-client.esm.min.js` from `socket.io-client`. That vendor file is **committed** so `http://<station>:5005/player/` works on machines that never run npm—without it, the browser gets HTML 404s and the app stays on “Initializing”.)
 2. `npm run css:build` (or `npm run css:watch` in another terminal)
 3. Start the Python API as usual; open `http://localhost:<port>/player/`
 

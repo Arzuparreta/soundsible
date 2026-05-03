@@ -227,7 +227,7 @@ export function buildSongRowsHtml(tracks, options = {}) {
                     <div class="text-[var(--accent)] font-semibold text-[9px] uppercase tracking-wider">Favourite</div>
                 </div>`;
         const actionCell = suppressActionMenu
-            ? '<div class="w-11 h-11 min-w-[44px] min-h-[44px] flex-shrink-0" aria-hidden="true"></div>'
+            ? '<div class="song-row-actions-slot w-11 min-w-[44px] min-h-[44px] flex-shrink-0 flex items-center justify-end gap-1" aria-hidden="true"></div>'
             : `<button onclick="event.stopPropagation(); typeof UI!=='undefined'&&UI.showActionMenu&&UI.showActionMenu('${t.id}', this)" class="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--text-dim)] hover:text-[var(--text-main)] transition-colors rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-0" aria-label="More actions">
                             <i class="fas fa-ellipsis-vertical text-sm"></i>
                         </button>`;

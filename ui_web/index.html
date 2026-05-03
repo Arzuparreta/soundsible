@@ -243,13 +243,51 @@
                     <button id="dl-cover-choice-close" class="w-full mt-6 py-3 text-[var(--text-dim)] font-bold hover:text-[var(--text-main)] transition-colors">Cancel</button>
                 </div>
             </div>
-            <div id="view-podcast" class="view hidden">
-                <div class="flex flex-col flex-1 min-h-0 px-8 pb-8">
-                    <div class="flex flex-wrap items-center gap-2 sm:gap-3 pt-4">
-                        <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)]">Podcasts</h1>
-                        <span class="inline-flex items-center text-[9px] font-black uppercase tracking-[0.15em] text-[var(--accent)] bg-[var(--accent)]/10 px-3 py-1 rounded-full border border-[var(--accent)]/20" role="status">Work in progress</span>
+            <div id="view-podcast" class="view view-scroll-inner-only hidden flex flex-col flex-1 min-h-0">
+                <div class="view-scroll-inner flex flex-col flex-1 min-h-0 px-4 sm:px-6 pb-6 gap-4 pt-4 overflow-y-auto">
+                    <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)]">Podcasts</h1>
+                    <div id="podcast-search-results" class="space-y-2"></div>
+                    <section>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-[10px] font-black uppercase tracking-wider text-[var(--accent)]">Your Shows</span>
+                            <button type="button" id="podcast-refresh-subs" class="text-xs text-[var(--accent)]">Refresh</button>
+                        </div>
+                        <div id="podcast-subs-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start"></div>
+                    </section>
+                    <section>
+                        <span class="text-[10px] font-black uppercase tracking-wider text-[var(--accent)] block mb-2">Downloaded Episodes</span>
+                        <div id="podcast-downloaded-list" class="space-y-1"></div>
+                    </section>
+                    <section>
+                        <span class="text-[10px] font-black uppercase tracking-wider text-[var(--accent)] block mb-2">Discover</span>
+                        <div id="podcast-recs-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start"></div>
+                    </section>
+                </div>
+            </div>
+            <div id="view-podcast-show-detail" class="view view-scroll-inner-only hidden flex flex-col flex-1 min-h-0">
+                <div class="view-scroll-inner flex flex-col flex-1 min-h-0 px-4 sm:px-6 pb-6 gap-4 pt-4 overflow-y-auto">
+                    <button type="button" id="podcast-show-detail-back" class="flex items-center text-[var(--secondary)] font-semibold text-sm mb-2 group">
+                        <i class="fas fa-chevron-left mr-2 group-active:-translate-x-1 transition-transform"></i>
+                        <span>Back</span>
+                    </button>
+                    <div class="flex flex-col sm:flex-row items-center sm:items-end gap-4 mb-4">
+                        <div id="podcast-show-detail-cover" class="w-28 h-28 sm:w-36 sm:h-36 rounded-[var(--radius-omni-sm)] shadow-lg bg-cover bg-center border border-[var(--glass-border)] bg-[var(--bg-card)] flex-shrink-0"></div>
+                        <div class="flex-1 min-w-0 text-center sm:text-left">
+                            <h1 id="podcast-show-detail-title" class="text-xl sm:text-3xl font-bold tracking-tight leading-none text-[var(--text-main)] truncate">Podcast</h1>
+                            <p id="podcast-show-detail-meta" class="text-[var(--text-dim)] text-sm mt-1"></p>
+                            <div class="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
+                                <button type="button" id="podcast-show-detail-subscribe-btn" class="px-4 py-2 rounded-lg text-xs font-bold bg-[var(--surface-overlay)] text-[var(--text-main)] border border-[var(--glass-border)]">Unsubscribe</button>
+                            </div>
+                        </div>
                     </div>
-                    <p class="text-sm text-[var(--text-dim)] mt-4">Listen to your podcasts.</p>
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider">Episodes</h2>
+                        <label class="flex items-center gap-2 text-xs text-[var(--text-dim)] cursor-pointer">
+                            <input type="checkbox" id="podcast-show-detail-downloaded-only" class="rounded" />
+                            Downloaded only
+                        </label>
+                    </div>
+                    <div id="podcast-show-detail-episodes" class="space-y-1"></div>
                 </div>
             </div>
             <div id="view-settings" class="view hidden">

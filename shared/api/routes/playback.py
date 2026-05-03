@@ -269,7 +269,29 @@ def add_to_playback_queue():
         return jsonify({"error": "Track not found"}), 404
     if "preview" in data:
         preview = data["preview"]
+        # Podcast preview: enclosure_url present and no video_id
+        enclosure_url = preview.get("enclosure_url")
         video_id = preview.get("video_id") or preview.get("id")
+        if enclosure_url and not video_id:
+            title = preview.get("title") or "Unknown"
+            artist = preview.get("artist") or ""
+            duration = int(preview.get("duration") or preview.get("duration_sec") or 0)
+            thumbnail = preview.get("thumbnail") or None
+            album = preview.get("album") or None
+            episode_id = preview.get("episode_id") or f"pcast_{preview.get('podcast_feed_id') or 'unknown'}_{preview.get('podcast_episode_guid') or 'unknown'}"
+            queue.add_podcast_preview(
+                episode_id=str(episode_id),
+                title=title,
+                artist=artist,
+                duration=max(0, duration),
+                thumbnail=thumbnail,
+                enclosure_url=str(enclosure_url),
+                podcast_feed_id=preview.get("podcast_feed_id") or None,
+                podcast_episode_guid=preview.get("podcast_episode_guid") or None,
+                podcast_rss_url=preview.get("podcast_rss_url") or None,
+                album=album,
+            )
+            return jsonify({"status": "success", "size": queue.size()})
         if not video_id or not validate_youtube_video_id(str(video_id)):
             return jsonify({"error": "Invalid or missing video_id"}), 400
         title = preview.get("title") or "Unknown"
