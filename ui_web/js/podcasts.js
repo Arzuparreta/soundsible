@@ -1,6 +1,6 @@
 /**
- * Podcasts UI — full integration with app shell, shared renderers, and playback context.
- * Two-level navigation: Podcast Home -> Show Detail (like Playlists -> Playlist Detail).
+ * Podcasts UI — reliable core for playback, subscriptions, and show detail.
+ * Two-level navigation: Podcast Home -> Show Detail.
  */
 import { store } from './store.js';
 import { getApiBase } from './config.js';
@@ -24,17 +24,43 @@ function apiBase() {
     return getApiBase(store.state.activeHost);
 }
 
-/** Escape URL for use in CSS background-image url(). */
-function escapeCssUrl(url) {
+/** Build CSS url() value for HTML style="…" attributes.
+ *  Uses an unquoted url(…) with percent-encoding for all characters that
+ *  could break CSS parsing — no quote-conflict risk whatsoever.
+ */
+function cssBgUrl(url) {
     if (!url) return '';
-    return String(url).replace(/"/g, '%22').replace(/'/g, '%27');
+    // Percent-encode characters that could break unquoted CSS url()
+    const safe = String(url)
+        .replace(/\\/g, '%5C')
+        .replace(/'/g, '%27')
+        .replace(/"/g, '%22')
+        .replace(/ /g, '%20')
+        .replace(/\(/g, '%28')
+        .replace(/\)/g, '%29')
+        .replace(/,/g, '%2C')
+        .replace(/#/g, '%23')
+        .replace(/</g, '%3C')
+        .replace(/>/g, '%3E');
+    return `url(${safe})`;
 }
 
-/** Resolve a playable object and start playback. */
+/** Resolve a playable podcast episode and start playback. Works from any context. */
 function playEpisodeById(episodeId) {
     const eps = window._currentPodcastEpisodes || [];
     const ep = eps.find((e) => e.id === episodeId);
-    if (!ep) return;
+    if (!ep) {
+        // Fallback: try to find a downloaded episode in the library
+        const lib = store.state.library || [];
+        const libTrack = lib.find((t) => t.id === episodeId);
+        if (libTrack && typeof window.playTrack === 'function') {
+            window.playTrack(libTrack.id);
+            return;
+        }
+        console.warn('[podcasts] Episode not found:', episodeId);
+        if (typeof window.showToast === 'function') window.showToast('Episode not available');
+        return;
+    }
     const track = resolveEpisodeForPlayback(ep);
     if (track.source === 'library') {
         if (typeof window.playTrack === 'function') window.playTrack(track.id);
@@ -98,6 +124,10 @@ export class PodcastsUI {
             });
         }
 
+        // Refresh subscriptions button on podcast home
+        const refreshBtn = document.getElementById(mobile ? 'podcast-refresh-subs' : 'desktop-podcast-refresh-subs');
+        if (refreshBtn) refreshBtn.addEventListener('click', () => this.refreshFromServer());
+
         // Show detail back button
         const backBtn = document.getElementById(mobile ? 'podcast-show-detail-back' : 'desktop-podcast-show-detail-back');
         if (backBtn) {
@@ -115,6 +145,7 @@ export class PodcastsUI {
         const subBtn = document.getElementById(sel.showDetailSubscribeBtn);
         if (subBtn) subBtn.addEventListener('click', () => this.toggleCurrentSubscription());
 
+        // Subscribe to store changes — re-render podcast home when library/subscription state changes
         store.subscribe(() => this.renderHome());
 
         // Refresh subscriptions when entering the view
@@ -146,6 +177,8 @@ export class PodcastsUI {
         const sel = this._selectors;
         const root = document.getElementById(sel.root);
         if (!root) return;
+        // Only render if the root view is visible (avoid re-rendering hidden views)
+        if (root.classList.contains('hidden')) return;
 
         const subs = getPodcastSubscriptions();
         const downloaded = getDownloadedEpisodes(store.state.library);
@@ -157,14 +190,16 @@ export class PodcastsUI {
                 subsEl.innerHTML = `<p class="text-xs text-[var(--text-dim)] px-2">No subscriptions yet. Search or browse recommendations.</p>`;
             } else {
                 subsEl.innerHTML = subs.map((s) => {
-                    const img = escapeCssUrl(s.image_url || '');
+                    const safeId = esc(s.id);
                     const safeName = (s.title || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                    const imgUrl = s.image_url || '';
                     return `
                     <div class="playlist-card group cursor-pointer rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)] overflow-hidden transition-colors duration-200 hover:border-[var(--accent)]/25"
-                         data-feed-id="${esc(s.id)}" onclick="typeof PodcastsUI!=='undefined'&&PodcastsUI.openShowDetail('${esc(s.id)}')">
-                        <div class="playlist-card-cover aspect-square w-full relative overflow-hidden rounded-t-[var(--radius-omni-xs)] bg-[var(--bg-card)] bg-cover bg-center border-b border-[var(--glass-border)]"
-                             style="background-image:url('${img}'); min-height:100px;" role="img" aria-label="${esc(s.title || 'Show')}">
-                             ${!img ? '<div class="absolute inset-0 flex items-center justify-center"><i class="fas fa-podcast text-3xl text-[var(--text-dim)]/40"></i></div>' : ''}
+                         data-feed-id="${safeId}" onclick="typeof PodcastsUI!=='undefined'&&PodcastsUI.openShowDetail('${safeId}')">
+                        <div class="playlist-card-cover aspect-square w-full relative overflow-hidden rounded-t-[var(--radius-omni-xs)] bg-[var(--bg-card)] border-b border-[var(--glass-border)]">
+                            ${imgUrl
+                                ? `<img class="absolute inset-0 w-full h-full object-cover" src="${esc(imgUrl)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div class="absolute inset-0 hidden items-center justify-center"><i class="fas fa-podcast text-3xl text-[var(--text-dim)]/40"></i></div>`
+                                : '<div class="absolute inset-0 flex items-center justify-center"><i class="fas fa-podcast text-3xl text-[var(--text-dim)]/40"></i></div>'}
                         </div>
                         <div class="p-3">
                             <div class="playlist-card-name font-bold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${esc(s.title || 'Show')}</div>
@@ -195,14 +230,15 @@ export class PodcastsUI {
         const recEl = document.getElementById(sel.recsGrid);
         if (recEl) {
             recEl.innerHTML = PODCAST_RECOMMENDATIONS.map((rec) => {
-                const img = escapeCssUrl(rec.image_url || '');
                 const isSubbed = subs.some((s) => s.rss_url === rec.rss_url);
+                const imgUrl = rec.image_url || '';
                 return `
                 <div class="podcast-rec-card playlist-card group cursor-pointer rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)] overflow-hidden transition-colors duration-200 hover:border-[var(--accent)]/25"
                      data-rec-id="${esc(rec.id)}">
-                    <div class="playlist-card-cover aspect-square w-full relative overflow-hidden rounded-t-[var(--radius-omni-xs)] bg-[var(--bg-card)] bg-cover bg-center border-b border-[var(--glass-border)]"
-                         style="background-image:url('${img}'); min-height:100px;" role="img" aria-label="${esc(rec.title)}">
-                        ${!img ? '<div class="absolute inset-0 flex items-center justify-center"><i class="fas fa-podcast text-3xl text-[var(--text-dim)]/40"></i></div>' : ''}
+                    <div class="playlist-card-cover aspect-square w-full relative overflow-hidden rounded-t-[var(--radius-omni-xs)] bg-[var(--bg-card)] border-b border-[var(--glass-border)]">
+                        ${imgUrl
+                            ? `<img class="absolute inset-0 w-full h-full object-cover" src="${esc(imgUrl)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div class="absolute inset-0 hidden items-center justify-center"><i class="fas fa-podcast text-3xl text-[var(--text-dim)]/40"></i></div>`
+                            : '<div class="absolute inset-0 flex items-center justify-center"><i class="fas fa-podcast text-3xl text-[var(--text-dim)]/40"></i></div>'}
                     </div>
                     <div class="p-3">
                         <div class="playlist-card-name font-bold text-sm truncate text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">${esc(rec.title)}</div>
@@ -252,10 +288,14 @@ export class PodcastsUI {
                 return;
             }
             box.innerHTML = results.map((row) => {
-                const img = escapeCssUrl(row.image_url || '');
+                const imgUrl = row.image_url || '';
                 return `
                 <div class="flex items-center gap-3 p-3 rounded-lg bg-[var(--surface-overlay)] border border-[var(--glass-border)] mb-2">
-                    <div class="w-14 h-14 rounded-md bg-cover bg-center flex-shrink-0" style="background-image:url('${img}')"></div>
+                    <div class="w-14 h-14 rounded-md overflow-hidden bg-[var(--bg-card)] flex-shrink-0 relative">
+                        ${imgUrl
+                            ? `<img class="absolute inset-0 w-full h-full object-cover" src="${esc(imgUrl)}" alt="" loading="lazy" onerror="this.style.display='none'" />`
+                            : '<div class="absolute inset-0 flex items-center justify-center"><i class="fas fa-podcast text-sm text-[var(--text-dim)]/40"></i></div>'}
+                    </div>
                     <div class="min-w-0 flex-1">
                         <div class="font-bold text-sm text-[var(--text-main)] truncate">${esc(row.title)}</div>
                         <div class="text-xs text-[var(--text-dim)] truncate">${esc(row.author)}</div>
@@ -297,8 +337,8 @@ export class PodcastsUI {
             rss_url: meta.rss_url,
             image_url: meta.image_url || '',
         };
+        // Single store update — subscribers will call renderHome() automatically
         store.update({ podcastSubscriptions: [...subs, optimisticSub] });
-        this.renderHome();
 
         if (opts.openDetail) {
             this.openShowDetail(optId);
@@ -314,16 +354,27 @@ export class PodcastsUI {
             if (!r.ok) throw new Error(d.error || r.statusText);
             Haptics.tick();
             if (typeof window.showToast === 'function') window.showToast('Subscribed');
+            // Refresh from server replaces optimistic sub with real one
             await this.refreshFromServer();
             if (opts.openDetail) {
                 const newSubs = getPodcastSubscriptions();
                 const realSub = newSubs.find((s) => s.rss_url === meta.rss_url);
-                if (realSub) this.openShowDetail(realSub.id);
+                if (realSub && this._currentFeedId === optId) {
+                    // Re-open detail with real subscription ID
+                    this._currentFeedId = realSub.id;
+                    this._currentEpisodes = [];
+                    const sel = this._selectors;
+                    // Re-fetch episodes for real subscription
+                    const { episodes } = await fetchEpisodesForFeed(realSub.id);
+                    this._currentEpisodes = episodes;
+                    window._currentPodcastEpisodes = episodes;
+                    this.renderShowDetailEpisodes();
+                }
             }
         } catch (e) {
+            // Rollback optimistic subscription
             const currentSubs = getPodcastSubscriptions();
             store.update({ podcastSubscriptions: currentSubs.filter((s) => s.id !== optId) });
-            this.renderHome();
             Haptics.error();
             if (typeof window.showToast === 'function') window.showToast(String(e.message || e));
         }
@@ -350,6 +401,7 @@ export class PodcastsUI {
     static _currentFeedId = null;
     static _currentSubscription = null;
     static _currentEpisodes = [];
+    static _isFetchingEpisodes = false;
 
     static handleRecCardClick(recId) {
         const rec = PODCAST_RECOMMENDATIONS.find((r) => r.id === recId);
@@ -371,20 +423,24 @@ export class PodcastsUI {
     static async openShowDetail(feedId) {
         this._currentFeedId = feedId;
         const subs = getPodcastSubscriptions();
-        const subscription = subs.find((s) => s.id === feedId);
-        if (!subscription) return;
+        let subscription = subs.find((s) => s.id === feedId);
+
+        // If not found locally, try to find by RSS URL (e.g. optimistic sub replaced by real one)
+        if (!subscription) {
+            // Check if any recommendation matches this feed ID
+            const rec = PODCAST_RECOMMENDATIONS.find((r) => r.id === feedId);
+            if (rec) {
+                subscription = { id: feedId, title: rec.title, author: rec.author, rss_url: rec.rss_url, image_url: rec.image_url };
+            }
+        }
+        if (!subscription) {
+            if (typeof window.showToast === 'function') window.showToast('Podcast not found');
+            return;
+        }
 
         const mobile = this._mobileInit;
 
-        // Navigate to detail view IMMEDIATELY so the user sees feedback
-        if (mobile && typeof UI !== 'undefined' && UI.showView) {
-            UI.showView('podcast-show-detail');
-        }
-        if (!mobile && typeof DesktopUI !== 'undefined' && DesktopUI.showView) {
-            DesktopUI.showView('podcast-show-detail');
-        }
-
-        // Render hero immediately
+        // Render hero immediately BEFORE navigating so the user sees content right away
         const sel = this._selectors;
         const titleEl = document.getElementById(sel.showDetailTitle);
         const metaEl = document.getElementById(sel.showDetailMeta);
@@ -392,16 +448,20 @@ export class PodcastsUI {
         const subBtn = document.getElementById(sel.showDetailSubscribeBtn);
         const epEl = document.getElementById(sel.showDetailEpisodes);
 
-        if (titleEl) titleEl.textContent = subscription?.title || 'Podcast';
-        if (metaEl) metaEl.textContent = subscription?.author || '';
+        if (titleEl) titleEl.textContent = subscription.title || 'Podcast';
+        if (metaEl) metaEl.textContent = subscription.author || '';
         if (coverEl) {
-            const url = (subscription?.image_url || '').trim();
-            coverEl.style.backgroundImage = url ? `url("${escapeCssUrl(url)}")` : '';
+            const url = (subscription.image_url || '').trim();
+            // Use an <img> element for reliable rendering (no CSS quoting issues)
+            if (url) {
+                coverEl.innerHTML = `<img class="w-full h-full object-cover rounded-[var(--radius-omni-sm)]" src="${esc(url)}" alt="${esc(subscription.title || 'Podcast cover')}" onerror="this.style.display='none'" />`;
+            } else {
+                coverEl.innerHTML = '<div class="w-full h-full flex items-center justify-center"><i class="fas fa-podcast text-3xl text-[var(--text-dim)]/40"></i></div>';
+            }
         }
         if (subBtn) {
             subBtn.textContent = 'Unsubscribe';
-            subBtn.classList.remove('bg-[var(--accent)]', 'text-black');
-            subBtn.classList.add('bg-[var(--surface-overlay)]', 'text-[var(--text-main)]');
+            subBtn.className = 'px-4 py-2 rounded-lg text-xs font-bold bg-[var(--surface-overlay)] text-[var(--text-main)] border border-[var(--glass-border)]';
         }
 
         // Optimistic subscriptions are still being processed on the server
@@ -412,16 +472,43 @@ export class PodcastsUI {
             this._currentSubscription = subscription;
             this._currentEpisodes = [];
             window._currentPodcastEpisodes = [];
+            // Navigate to detail view AFTER hero is rendered
+            if (mobile && typeof UI !== 'undefined' && UI.showView) {
+                UI.showView('podcast-show-detail');
+            }
+            if (!mobile && typeof DesktopUI !== 'undefined' && DesktopUI.showView) {
+                DesktopUI.showView('podcast-show-detail');
+            }
             return;
         }
 
+        this._currentSubscription = subscription;
+
+        // Show loading state
+        this._isFetchingEpisodes = true;
         if (epEl) {
             epEl.innerHTML = `<div class="flex items-center justify-center py-8"><i class="fas fa-circle-notch fa-spin text-[var(--accent)] text-xl"></i></div>`;
         }
 
+        // Navigate to detail view AFTER hero is rendered
+        if (mobile && typeof UI !== 'undefined' && UI.showView) {
+            UI.showView('podcast-show-detail');
+        }
+        if (!mobile && typeof DesktopUI !== 'undefined' && DesktopUI.showView) {
+            DesktopUI.showView('podcast-show-detail');
+        }
+
         // Fetch episodes in background
-        const { subscription: freshSub, episodes } = await fetchEpisodesForFeed(feedId);
-        this._currentSubscription = freshSub || subscription;
+        const { episodes, error } = await fetchEpisodesForFeed(feedId);
+        this._isFetchingEpisodes = false;
+        if (error) {
+            if (epEl) {
+                epEl.innerHTML = `<p class="text-sm text-red-400 text-center py-4">${esc(error)}</p>`;
+            }
+            this._currentEpisodes = [];
+            window._currentPodcastEpisodes = [];
+            return;
+        }
         this._currentEpisodes = episodes;
         window._currentPodcastEpisodes = episodes;
         this.renderShowDetailEpisodes();
@@ -432,6 +519,9 @@ export class PodcastsUI {
         const epEl = document.getElementById(sel.showDetailEpisodes);
         if (!epEl) return;
 
+        // Don't override loading spinner while fetch is in progress
+        if (this._isFetchingEpisodes) return;
+
         let eps = this._currentEpisodes || [];
         const dlOnlyEl = document.getElementById(sel.showDetailDownloadedOnly);
         const onlyDl = dlOnlyEl?.checked;
@@ -440,7 +530,7 @@ export class PodcastsUI {
         }
 
         if (!eps.length) {
-            epEl.innerHTML = `<p class="text-sm text-[var(--text-dim)]">${onlyDl ? 'No downloaded episodes.' : 'No episodes in feed.'}</p>`;
+            epEl.innerHTML = `<p class="text-sm text-[var(--text-dim)] text-center py-4">${onlyDl ? 'No downloaded episodes.' : 'No episodes in feed.'}</p>`;
             return;
         }
 
@@ -484,9 +574,10 @@ export class PodcastsUI {
                 }
             }
 
-            // Override click to play episode
+            // Override click to play episode — stop propagation so desktop click delegation doesn't interfere
             row.onclick = (e) => {
                 if (e.target.closest('button')) return;
+                e.stopPropagation();
                 playEpisodeById(ep.id);
             };
         });

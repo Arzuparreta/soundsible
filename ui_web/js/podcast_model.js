@@ -135,19 +135,22 @@ export function getDownloadedEpisodes(library) {
     return (library || []).filter((t) => t.media_kind === 'podcast_episode');
 }
 
+/** Fetch episodes for a feed. Returns { subscription, episodes, error }. */
 export async function fetchEpisodesForFeed(feedId) {
     const subs = getPodcastSubscriptions();
     const sub = subs.find((s) => s.id === feedId);
-    if (!sub) return { subscription: null, episodes: [] };
+    if (!sub) return { subscription: null, episodes: [], error: 'Subscription not found' };
     const apiBase = getApiBase(store.state.activeHost);
     try {
         const r = await fetch(`${apiBase}/api/podcasts/feeds/${encodeURIComponent(feedId)}/episodes`);
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || 'Failed');
-        const episodes = (d.episodes || []).map((ep) => normalizeEpisode(ep, sub));
-        return { subscription: sub, episodes };
+        const d = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(d?.error || r.statusText || 'Failed to fetch episodes');
+        const rawEpisodes = d?.episodes || [];
+        if (!Array.isArray(rawEpisodes)) throw new Error('Invalid episode data from server');
+        const episodes = rawEpisodes.map((ep) => normalizeEpisode(ep, sub));
+        return { subscription: sub, episodes, error: null };
     } catch (e) {
         console.error('fetchEpisodesForFeed error:', e);
-        return { subscription: sub, episodes: [] };
+        return { subscription: sub, episodes: [], error: e.message || 'Failed to load episodes' };
     }
 }
