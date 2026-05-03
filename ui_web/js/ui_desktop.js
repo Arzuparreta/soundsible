@@ -109,6 +109,7 @@ export const DesktopUI = {
             }
             this.showView('playlists');
         } else if (this.currentView === 'artist-detail') this.showView('artists');
+        else if (this.currentView === 'podcast-show-detail') this.showView('podcast');
         else this.showView('discover');
     },
 

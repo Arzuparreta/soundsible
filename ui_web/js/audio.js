@@ -209,7 +209,19 @@ class AudioEngine {
                       ? window.location.hostname
                       : 'localhost';
             const apiBase = getApiBase(host);
-            const tok = track._streamToken;
+            let tok = track._streamToken;
+            // Note: If no token (e.g. from queue), fetch one from enclosure_url
+            if (!tok && track.enclosure_url) {
+                try {
+                    const r = await fetch(`${apiBase}/api/podcasts/enclosure/peek`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ enclosure_url: track.enclosure_url })
+                    });
+                    const d = await r.json().catch(() => ({}));
+                    if (r.ok && d.stream_token) tok = d.stream_token;
+                } catch (_) {}
+            }
             if (!tok) {
                 if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
                 return;
@@ -219,7 +231,7 @@ class AudioEngine {
                 this.audio.src = streamUrl;
                 this.audio.load();
                 await this.audio.play();
-                store.update({ currentTrack: track, isPlaying: true });
+                store.update({ currentTrack: { ...track, _streamToken: tok }, isPlaying: true });
                 store.pushPlaybackState(track.id, 0, true);
                 this._suppressStaleTimeUpdates = true;
                 this._dispatchTimeUpdate(0, 0, track?.duration ?? 0);

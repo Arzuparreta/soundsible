@@ -25,6 +25,7 @@ export class UI {
         'playlists': 'PLAYLISTS',
         'playlist-detail': 'PLAYLIST',
         'podcast': 'PODCASTS',
+        'podcast-show-detail': 'SHOW',
         'settings': 'CONFIG',
         'discover': 'DISCOVER'
     };

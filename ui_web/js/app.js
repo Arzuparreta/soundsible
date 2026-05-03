@@ -1235,6 +1235,30 @@ function clearContentForView(viewId) {
             }
             window._discoverSurfaceTracks = null;
             break;
+        case 'podcast':
+            {
+                const pc = document.getElementById('podcast-search-results');
+                const ps = document.getElementById('podcast-subs-list');
+                const pd = document.getElementById('podcast-downloaded-list');
+                const pr = document.getElementById('podcast-recs-grid');
+                if (pc) pc.innerHTML = '';
+                if (ps) ps.innerHTML = '';
+                if (pd) pd.innerHTML = '';
+                if (pr) pr.innerHTML = '';
+            }
+            break;
+        case 'podcast-show-detail':
+            {
+                const pt = document.getElementById('podcast-show-detail-episodes');
+                if (pt) pt.innerHTML = '';
+                const ptitle = document.getElementById('podcast-show-detail-title');
+                if (ptitle) ptitle.textContent = 'Podcast';
+                const pmeta = document.getElementById('podcast-show-detail-meta');
+                if (pmeta) pmeta.textContent = '';
+                const pcover = document.getElementById('podcast-show-detail-cover');
+                if (pcover) pcover.style.backgroundImage = '';
+            }
+            break;
         case 'settings':
             break;
         default:
@@ -1341,29 +1365,29 @@ function applyViewChrome(viewId) {
     if (dom?.globalSearchClear) dom.globalSearchClear.classList.add('hidden');
     if (container) container.classList.remove('scrolled');
 
-    const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'discover', 'artist-detail'];
-    if (container) {
-        if (searchVisibleViews.includes(viewId)) {
-            container.classList.remove('opacity-0', 'pointer-events-none');
-        } else {
-            container.classList.add('opacity-0', 'pointer-events-none');
+        const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'discover', 'artist-detail'];
+        if (container) {
+            if (searchVisibleViews.includes(viewId)) {
+                container.classList.remove('opacity-0', 'pointer-events-none');
+            } else {
+                container.classList.add('opacity-0', 'pointer-events-none');
+            }
+            container.classList.toggle('show-library-tabs', viewId === 'home');
+            container.classList.toggle('show-discover-odst', viewId === 'discover');
         }
-        container.classList.toggle('show-library-tabs', viewId === 'home');
-        container.classList.toggle('show-discover-odst', viewId === 'discover');
-    }
 
-    if (input) {
-        switch (viewId) {
-            case 'home': input.placeholder = (store.state.libraryTab || 'songs') === 'artists' ? 'Search artists...' : 'Search library...'; break;
-            case 'favourites': input.placeholder = 'Search favorites...'; break;
-            case 'playlists': input.placeholder = 'Search playlists...'; break;
-            case 'playlist-detail': input.placeholder = 'Search in playlist...'; break;
-            case 'discover':
-                input.placeholder = 'Search anything...';
-                break;
-            case 'artist-detail': input.placeholder = 'Search songs & albums...'; break;
+        if (input) {
+            switch (viewId) {
+                case 'home': input.placeholder = (store.state.libraryTab || 'songs') === 'artists' ? 'Search artists...' : 'Search library...'; break;
+                case 'favourites': input.placeholder = 'Search favorites...'; break;
+                case 'playlists': input.placeholder = 'Search playlists...'; break;
+                case 'playlist-detail': input.placeholder = 'Search in playlist...'; break;
+                case 'discover':
+                    input.placeholder = 'Search anything...';
+                    break;
+                case 'artist-detail': input.placeholder = 'Search songs & albums...'; break;
+            }
         }
-    }
 }
 
 function fillViewBody(viewId) {
@@ -1392,6 +1416,16 @@ function fillViewBody(viewId) {
         case 'podcast':
             import('./podcasts.js').then((m) => {
                 m.PodcastsUI.init({ mobile: true });
+                m.PodcastsUI.renderHome();
+            });
+            break;
+        case 'podcast-show-detail':
+            // Note: Data is loaded by PodcastsUI.openShowDetail; re-render if needed
+            import('./podcasts.js').then((m) => {
+                m.PodcastsUI.init({ mobile: true });
+                if (m.PodcastsUI._currentFeedId) {
+                    m.PodcastsUI.renderShowDetailEpisodes();
+                }
             });
             break;
         case 'discover':

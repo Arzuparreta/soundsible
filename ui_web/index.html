@@ -244,33 +244,54 @@
                 </div>
             </div>
             <div id="view-podcast" class="view hidden flex flex-col flex-1 min-h-0">
-                <div class="flex flex-col flex-1 min-h-0 px-4 sm:px-6 pb-6 gap-3 pt-4">
+                <div class="flex flex-col flex-1 min-h-0 px-4 sm:px-6 pb-6 gap-4 pt-4 overflow-y-auto">
                     <h1 class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)]">Podcasts</h1>
                     <div class="flex gap-2">
-                        <input type="search" id="podcast-search-input" class="flex-1 rounded-lg bg-[var(--surface-overlay)] border border-[var(--glass-border)] px-3 py-2 text-sm" placeholder="Search…" />
+                        <input type="search" id="podcast-search-input" class="flex-1 rounded-lg bg-[var(--surface-overlay)] border border-[var(--glass-border)] px-3 py-2 text-sm" placeholder="Search iTunes directory…" />
                         <button type="button" id="podcast-search-btn" class="px-3 py-2 rounded-lg font-bold text-sm bg-[var(--accent)] text-black">Search</button>
                     </div>
-                    <div id="podcast-search-results" class="min-h-[80px] space-y-2"></div>
-                    <div class="border-t border-[var(--glass-border)] pt-2">
-                        <p class="text-[10px] text-[var(--text-dim)] mb-1">RSS URL</p>
-                        <div class="flex gap-2">
-                            <input type="url" id="podcast-add-rss-input" class="flex-1 rounded-lg bg-[var(--surface-overlay)] border px-2 py-2 text-sm" placeholder="https://…" />
-                            <button type="button" id="podcast-add-rss-btn" class="px-2 py-2 rounded-lg text-xs font-bold bg-[var(--surface-overlay)]">Add</button>
+                    <div id="podcast-search-results" class="space-y-2"></div>
+                    <section>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-[10px] font-black uppercase tracking-wider text-[var(--accent)]">Your Shows</span>
+                            <button type="button" id="podcast-refresh-subs" class="text-xs text-[var(--accent)]">Refresh</button>
+                        </div>
+                        <div id="podcast-subs-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start"></div>
+                    </section>
+                    <section>
+                        <span class="text-[10px] font-black uppercase tracking-wider text-[var(--accent)] block mb-2">Downloaded Episodes</span>
+                        <div id="podcast-downloaded-list" class="space-y-1"></div>
+                    </section>
+                    <section>
+                        <span class="text-[10px] font-black uppercase tracking-wider text-[var(--accent)] block mb-2">Discover</span>
+                        <div id="podcast-recs-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start"></div>
+                    </section>
+                </div>
+            </div>
+            <div id="view-podcast-show-detail" class="view hidden flex flex-col flex-1 min-h-0">
+                <div class="flex flex-col flex-1 min-h-0 px-4 sm:px-6 pb-6 gap-4 pt-4 overflow-y-auto">
+                    <button type="button" id="podcast-show-detail-back" class="flex items-center text-[var(--secondary)] font-semibold text-sm mb-2 group">
+                        <i class="fas fa-chevron-left mr-2 group-active:-translate-x-1 transition-transform"></i>
+                        <span>Back</span>
+                    </button>
+                    <div class="flex flex-col sm:flex-row items-center sm:items-end gap-4 mb-4">
+                        <div id="podcast-show-detail-cover" class="w-28 h-28 sm:w-36 sm:h-36 rounded-[var(--radius-omni-sm)] shadow-lg bg-cover bg-center border border-[var(--glass-border)] bg-[var(--bg-card)] flex-shrink-0"></div>
+                        <div class="flex-1 min-w-0 text-center sm:text-left">
+                            <h1 id="podcast-show-detail-title" class="text-xl sm:text-3xl font-bold tracking-tight leading-none text-[var(--text-main)] truncate">Podcast</h1>
+                            <p id="podcast-show-detail-meta" class="text-[var(--text-dim)] text-sm mt-1"></p>
+                            <div class="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
+                                <button type="button" id="podcast-show-detail-subscribe-btn" class="px-4 py-2 rounded-lg text-xs font-bold bg-[var(--surface-overlay)] text-[var(--text-main)] border border-[var(--glass-border)]">Unsubscribe</button>
+                            </div>
                         </div>
                     </div>
                     <div class="flex items-center justify-between">
-                        <span class="text-[10px] font-black uppercase text-[var(--accent)]">Shows</span>
-                        <button type="button" id="podcast-refresh-subs" class="text-xs text-[var(--accent)]">Refresh</button>
-                    </div>
-                    <div id="podcast-subs-list" class="max-h-[160px] overflow-y-auto space-y-1"></div>
-                    <div class="border border-[var(--glass-border)] rounded-lg p-3 flex flex-col flex-1 min-h-0">
-                        <h2 id="podcast-detail-title" class="text-sm font-bold">Select a show</h2>
-                        <p id="podcast-detail-meta" class="text-[10px] text-[var(--text-dim)] break-all"></p>
-                        <label class="mt-2 flex items-center gap-2 text-[10px] text-[var(--text-dim)]">
-                            <input type="checkbox" id="podcast-downloaded-only" /> Downloaded only
+                        <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider">Episodes</h2>
+                        <label class="flex items-center gap-2 text-xs text-[var(--text-dim)] cursor-pointer">
+                            <input type="checkbox" id="podcast-show-detail-downloaded-only" class="rounded" />
+                            Downloaded only
                         </label>
-                        <div id="podcast-episodes-list" class="flex-1 overflow-y-auto mt-2 min-h-[180px]"></div>
                     </div>
+                    <div id="podcast-show-detail-episodes" class="space-y-1"></div>
                 </div>
             </div>
             <div id="view-settings" class="view hidden">

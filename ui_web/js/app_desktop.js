@@ -1050,6 +1050,20 @@ function init() {
             if (DesktopUI.currentView === 'artist-detail' && window._currentArtistName) renderDesktopArtistDetail();
             if (DesktopUI.currentView === 'playlists') renderPlaylists();
             if (DesktopUI.currentView === 'playlist-detail' && (window._currentPlaylistName || window._deezerPlaylistDetail)) renderPlaylistDetail();
+            if (DesktopUI.currentView === 'podcast') {
+                import('./podcasts.js').then((m) => {
+                    m.PodcastsUI.init({ mobile: false });
+                    m.PodcastsUI.renderHome();
+                });
+            }
+            if (DesktopUI.currentView === 'podcast-show-detail') {
+                import('./podcasts.js').then((m) => {
+                    m.PodcastsUI.init({ mobile: false });
+                    if (m.PodcastsUI._currentFeedId) {
+                        m.PodcastsUI.renderShowDetailEpisodes();
+                    }
+                });
+            }
         });
 
         function initDesktopGlobalSearch() {
@@ -1071,6 +1085,7 @@ function init() {
                 else if (view === 'discover' && typeof window.unifiedSearch !== 'undefined') {
                     // Note: Discover search uses its own debounced listener
                 }
+                // Note: Podcast search uses its own dedicated input inside the podcast view
             });
 
             input.addEventListener('keydown', (e) => {
@@ -1128,7 +1143,7 @@ function init() {
             }
             if (container) container.classList.remove('scrolled');
 
-            const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'podcast', 'discover', 'artists', 'artist-detail'];
+            const searchVisibleViews = ['home', 'favourites', 'playlists', 'playlist-detail', 'discover', 'artists', 'artist-detail'];
             if (container) {
                 if (searchVisibleViews.includes(viewId)) {
                     container.classList.remove('opacity-0', 'pointer-events-none');
@@ -1147,7 +1162,6 @@ function init() {
                     case 'discover': input.placeholder = 'Search anything...'; break;
                     case 'artists': input.placeholder = 'Search artists...'; break;
                     case 'artist-detail': input.placeholder = 'Search songs & albums...'; break;
-                    case 'podcast': input.placeholder = 'Search podcasts...'; break;
                 }
             }
 
@@ -1174,6 +1188,20 @@ function init() {
                     if (targetView === 'playlist-detail' && (window._currentPlaylistName || window._deezerPlaylistDetail)) renderPlaylistDetail();
                     if (targetView === 'artists') renderDesktopArtists();
                     if (targetView === 'artist-detail' && window._currentArtistName) renderDesktopArtistDetail();
+                    if (targetView === 'podcast') {
+                        import('./podcasts.js').then((m) => {
+                            m.PodcastsUI.init({ mobile: false });
+                            m.PodcastsUI.renderHome();
+                        });
+                    }
+                    if (targetView === 'podcast-show-detail') {
+                        import('./podcasts.js').then((m) => {
+                            m.PodcastsUI.init({ mobile: false });
+                            if (m.PodcastsUI._currentFeedId) {
+                                m.PodcastsUI.renderShowDetailEpisodes();
+                            }
+                        });
+                    }
                     if (targetView === 'settings' && window.Downloader && typeof window.Downloader.loadConfig === 'function') {
                         window.Downloader.loadConfig();
                     }
@@ -1183,6 +1211,7 @@ function init() {
 
         document.getElementById('desktop-artist-back')?.addEventListener('click', () => DesktopUI.navigateBack());
         document.getElementById('desktop-playlist-detail-back')?.addEventListener('click', () => DesktopUI.navigateBack());
+        document.getElementById('desktop-podcast-show-detail-back')?.addEventListener('click', () => DesktopUI.navigateBack());
 
         initPlaylistTrackDrag();
         initPlaylistListDrag();

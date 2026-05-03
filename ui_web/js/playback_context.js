@@ -11,6 +11,10 @@ function isDeezerRowId(id) {
     return typeof id === 'string' && id.startsWith('deezer_');
 }
 
+function isPodcastEpisodeId(id) {
+    return typeof id === 'string' && id.startsWith('pcast_');
+}
+
 /**
  * @param {string} currentView - 'home' | 'favourites' | 'playlists' | 'playlist-detail' | 'artist-detail' | 'discover'
  * @param {{ homeTracks?: unknown[]|null, favTracks?: unknown[]|null, artistTracks?: unknown[]|null, playlistTracks?: unknown[]|null, searchTracks?: unknown[]|null }} viewState
@@ -64,6 +68,12 @@ export function playTrackFromContext(trackId, currentView, viewState) {
                 void m.playDeezerTrackByNumericId(raw);
             }
         });
+        return;
+    }
+    if (isPodcastEpisodeId(trackId)) {
+        if (typeof window.playPodcastEpisode === 'function') {
+            window.playPodcastEpisode(trackId);
+        }
         return;
     }
     const context = getCurrentTrackList(currentView, viewState);

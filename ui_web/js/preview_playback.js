@@ -62,13 +62,18 @@ export async function playPodcastPreview(item) {
         return;
     }
     const syntheticTrack = {
-        id: `pcast_${String(streamToken).slice(0, 28)}`,
+        id: item.episode_id || `pcast_${String(streamToken).slice(0, 28)}`,
         title: item.title || 'Episode',
         artist: item.artist || '',
+        album: item.album || '',
         duration: Math.max(0, Number(item.duration) || 0),
         thumbnail: item.thumbnail || '',
         source: 'podcast-preview',
-        _streamToken: streamToken
+        _streamToken: streamToken,
+        enclosure_url: url,
+        podcast_feed_id: item.podcast_feed_id || null,
+        podcast_episode_guid: item.podcast_episode_guid || null,
+        podcast_rss_url: item.podcast_rss_url || null,
     };
     store.update({ currentTrack: syntheticTrack });
     audioEngine.playTrack(syntheticTrack);

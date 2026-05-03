@@ -158,6 +158,10 @@ class QueueItem:
     thumbnail: Optional[str] = None
     library_track_id: Optional[str] = None
     album: Optional[str] = None
+    enclosure_url: Optional[str] = None
+    podcast_feed_id: Optional[str] = None
+    podcast_episode_guid: Optional[str] = None
+    podcast_rss_url: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Stable JSON for API and web (source, id, title, artist, duration, thumbnail)."""
@@ -174,6 +178,14 @@ class QueueItem:
             out["library_track_id"] = self.library_track_id
         if self.album is not None:
             out["album"] = self.album
+        if self.enclosure_url is not None:
+            out["enclosure_url"] = self.enclosure_url
+        if self.podcast_feed_id is not None:
+            out["podcast_feed_id"] = self.podcast_feed_id
+        if self.podcast_episode_guid is not None:
+            out["podcast_episode_guid"] = self.podcast_episode_guid
+        if self.podcast_rss_url is not None:
+            out["podcast_rss_url"] = self.podcast_rss_url
         return out
 
     @classmethod
@@ -210,6 +222,35 @@ class QueueItem:
             duration=duration,
             thumbnail=thumbnail,
             library_track_id=library_track_id,
+            album=album,
+        )
+
+    @classmethod
+    def from_podcast_preview(
+        cls,
+        episode_id: str,
+        title: str,
+        artist: str,
+        duration: int,
+        thumbnail: Optional[str] = None,
+        enclosure_url: Optional[str] = None,
+        podcast_feed_id: Optional[str] = None,
+        podcast_episode_guid: Optional[str] = None,
+        podcast_rss_url: Optional[str] = None,
+        album: Optional[str] = None,
+    ) -> 'QueueItem':
+        """Build a podcast preview QueueItem."""
+        return cls(
+            source="podcast_preview",
+            id=episode_id,
+            title=title,
+            artist=artist,
+            duration=duration,
+            thumbnail=thumbnail,
+            enclosure_url=enclosure_url,
+            podcast_feed_id=podcast_feed_id,
+            podcast_episode_guid=podcast_episode_guid,
+            podcast_rss_url=podcast_rss_url,
             album=album,
         )
 
