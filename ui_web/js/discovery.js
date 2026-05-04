@@ -7,7 +7,8 @@ import { store } from './store.js';
 import { Haptics } from './haptics.js';
 import { getApiBase } from './config.js';
 import { searchService } from './search_service.js';
-import { playPreview, paintOptimisticDeezerPreview } from './preview_playback.js';
+import { audioEngine } from './audio.js';
+import { playPreview, paintOptimisticDeezerPreview, odstItemToPreviewTrack } from './preview_playback.js';
 import * as renderers from './renderers.js';
 import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
 
@@ -436,10 +437,19 @@ async function trackLikeForDeezerId(deezerId) {
   };
 }
 
-/** YouTube preview playback for a Deezer numeric id (used from Library-style rows / playTrack). */
-export async function playDeezerTrackByNumericId(deezerId) {
+/**
+ * YouTube preview playback for a Deezer numeric id (used from Library-style rows / playTrack / audio next).
+ * @param {string|number} deezerId
+ * @param {{ surfaceList?: unknown[]|null, index?: number }} [opts] - When set, keeps list autoplay: slot `index` is patched to the resolved preview track so `currentTrack.id` matches context.
+ */
+export async function playDeezerTrackByNumericId(deezerId, opts = {}) {
   Haptics.tick();
   const gen = ++_deezerPreviewPlayGeneration;
+  const surfaceList = Array.isArray(opts.surfaceList) ? opts.surfaceList : null;
+  const index = typeof opts.index === 'number' && opts.index >= 0 ? opts.index : -1;
+  if (surfaceList && surfaceList.length && index >= 0) {
+    audioEngine.setContext(surfaceList.slice());
+  }
   const trackLike = await trackLikeForDeezerId(deezerId);
   if (!trackLike) {
     if (gen !== _deezerPreviewPlayGeneration) return;
@@ -455,6 +465,19 @@ export async function playDeezerTrackByNumericId(deezerId) {
     if (ct?.source === 'preview-pending' && String(ct.id) === `deezer_resolving_${deezerId}`) {
       store.update({ currentTrack: null });
     }
+    return;
+  }
+  const synthetic = odstItemToPreviewTrack(item);
+  if (!synthetic) {
+    window.showToast?.('No YouTube match — try search above');
+    return;
+  }
+  if (surfaceList && surfaceList.length && index >= 0 && index < surfaceList.length) {
+    const ctx = surfaceList.slice();
+    ctx[index] = synthetic;
+    audioEngine.setContext(ctx);
+    store.update({ currentTrack: synthetic });
+    audioEngine.playTrack(synthetic);
     return;
   }
   playPreview(item);

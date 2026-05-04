@@ -17,7 +17,7 @@ function isPodcastEpisodeId(id) {
 
 /**
  * @param {string} currentView - 'home' | 'favourites' | 'playlists' | 'playlist-detail' | 'artist-detail' | 'discover'
- * @param {{ homeTracks?: unknown[]|null, favTracks?: unknown[]|null, artistTracks?: unknown[]|null, playlistTracks?: unknown[]|null, searchTracks?: unknown[]|null }} viewState
+ * @param {{ homeTracks?: unknown[]|null, favTracks?: unknown[]|null, artistTracks?: unknown[]|null, playlistTracks?: unknown[]|null, searchTracks?: unknown[]|null, discoverSearchActive?: boolean, discoverSearchOdstItems?: unknown[]|null }} viewState
  * @returns {unknown[]}
  */
 export function getCurrentTrackList(currentView, viewState) {
@@ -32,6 +32,8 @@ export function getCurrentTrackList(currentView, viewState) {
     if (currentView === 'playlists' || currentView === 'playlist-detail') return viewState.playlistTracks ?? library;
     if (currentView === 'artist-detail') return viewState.artistTracks ?? library;
     if (currentView === 'discover') {
+        const dso = viewState.discoverSearchOdstItems;
+        if (viewState.discoverSearchActive && Array.isArray(dso) && dso.length > 0) return dso;
         const st = viewState.searchTracks;
         if (Array.isArray(st) && st.length > 0) return st;
         const ds = viewState.discoverSurfaceTracks;
@@ -63,8 +65,13 @@ export function getTrackFromContext(trackId, currentView, viewState) {
 export function playTrackFromContext(trackId, currentView, viewState) {
     if (isDeezerRowId(trackId)) {
         const raw = String(trackId).replace(/^deezer_/, '');
+        const list = getCurrentTrackList(currentView, viewState);
+        const idx = Array.isArray(list) ? list.findIndex((t) => t && t.id === trackId) : -1;
         void import('./discovery.js').then((m) => {
-            if (typeof m.playDeezerTrackByNumericId === 'function') {
+            if (typeof m.playDeezerTrackByNumericId !== 'function') return;
+            if (Array.isArray(list) && list.length && idx >= 0) {
+                void m.playDeezerTrackByNumericId(raw, { surfaceList: list, index: idx });
+            } else {
                 void m.playDeezerTrackByNumericId(raw);
             }
         });

@@ -6,6 +6,8 @@
  * normal ODST query from the resolved title+artist so the rest of the list matches the current mode.
  */
 import { store } from './store.js';
+import { audioEngine } from './audio.js';
+import { odstItemToPreviewTrack } from './preview_playback.js';
 import * as renderers from './renderers.js';
 import { esc } from './renderers.js';
 import { Resolver } from './resolver.js';
@@ -15,6 +17,62 @@ import { scoreLibrary, scoreArtist, mergeAndSortByScore, scoreOdst } from './sea
 import { getApiBase } from './config.js';
 
 const ODST_DEBOUNCE_MS = 150;
+
+/**
+ * Play one row from the merged library + ODST search list (render order). Sets audio context for autoplay.
+ * @param {Array<{ source: string, track?: unknown, id?: string }>} mergedList
+ * @param {number} index
+ */
+export function playMusicSearchAtIndex(mergedList, index) {
+    if (!Array.isArray(mergedList) || index < 0 || index >= mergedList.length) return;
+    const context = mergedList.map((m) => {
+        if (m.source === 'library') return m.track;
+        if (m.source === 'odst') return odstItemToPreviewTrack(m);
+        return null;
+    });
+    if (context.some((c) => c == null)) return;
+    const track = context[index];
+    if (!track) return;
+    audioEngine.setContext(context);
+    store.update({ currentTrack: track });
+    if (track.media_kind === 'podcast_episode') {
+        store.recordPodcastPlay({
+            episodeId: track.id,
+            showTitle: (track.artist || track.album || '').trim(),
+            author: (track.author || '').trim(),
+            rssUrl: track.podcast_rss_url || ''
+        });
+    } else if (track.source !== 'preview' && track.source !== 'podcast-preview') {
+        store.recordSongPlay(track);
+    }
+    audioEngine.playTrack(track);
+}
+
+/**
+ * Desktop: library / ODST rows inside the download search panel use merged order instead of playTrackFromContext alone.
+ * @param {HTMLElement} row
+ * @returns {boolean} true if playback started
+ */
+export function tryPlayUnifiedMusicSearch(row) {
+    const merged = typeof window !== 'undefined' ? window._musicSearchPlaybackMerged : null;
+    if (!Array.isArray(merged) || !merged.length || !row) return false;
+    const panel = row.closest('#desktop-dl-search-results') || row.closest('#dl-search-results');
+    if (!panel) return false;
+    const libId = row.getAttribute('data-id');
+    const odstHost = row.closest('[data-source="odst"]') || (row.getAttribute('data-source') === 'odst' ? row : null);
+    const effectiveVid =
+        (odstHost || row).getAttribute('data-video-id') || row.getAttribute('data-video-id');
+    let idx = -1;
+    if (libId) {
+        idx = merged.findIndex((m) => m && m.source === 'library' && m.track && m.track.id === libId);
+    }
+    if (idx < 0 && effectiveVid) {
+        idx = merged.findIndex((m) => m && m.source === 'odst' && String(m.id) === String(effectiveVid));
+    }
+    if (idx < 0) return false;
+    playMusicSearchAtIndex(merged, idx);
+    return true;
+}
 
 function escapeCssUrl(url) {
     if (!url) return '';
@@ -205,6 +263,16 @@ function buildOdstRowHtml(r, opts = {}) {
 function render(merged) {
     if (!resultsEl) return;
     const list = Array.isArray(merged) ? merged : [];
+    if (typeof window !== 'undefined') {
+        if (isDiscoverPage) {
+            const o = list.filter((m) => m.source === 'odst');
+            window._discoverSearchOdstItems = o.length ? o : null;
+            window._musicSearchPlaybackMerged = null;
+        } else {
+            window._discoverSearchOdstItems = null;
+            window._musicSearchPlaybackMerged = list.length ? list.slice() : null;
+        }
+    }
     const libraryTracks = list.filter((m) => m.source === 'library').map((m) => m.track);
     
     if (isDiscoverPage) {
@@ -278,6 +346,15 @@ function bindListeners(merged) {
             if (!id) return;
             row.addEventListener('click', (e) => {
                 if (e.target.closest('.dl-add-one')) return;
+                if (!isDiscoverPage && Array.isArray(window._musicSearchPlaybackMerged)) {
+                    const idx = window._musicSearchPlaybackMerged.findIndex(
+                        (m) => m && m.source === 'library' && m.track && m.track.id === id
+                    );
+                    if (idx >= 0) {
+                        playMusicSearchAtIndex(window._musicSearchPlaybackMerged, idx);
+                        return;
+                    }
+                }
                 if (typeof window.playTrack === 'function') window.playTrack(id);
             });
         });
@@ -290,7 +367,17 @@ function bindListeners(merged) {
         row.addEventListener('click', (e) => {
             if (e.target.closest('.dl-add-one') || e.target.closest('.dl-playback-queue')) return;
             if (item && typeof window.playPreview === 'function') {
-                window.playPreview(item);
+                if (isDiscoverPage && Array.isArray(window._discoverSearchOdstItems) && window._discoverSearchOdstItems.length) {
+                    window.playPreview(item, { contextItems: window._discoverSearchOdstItems });
+                } else if (!isDiscoverPage && Array.isArray(window._musicSearchPlaybackMerged)) {
+                    const idx = window._musicSearchPlaybackMerged.findIndex(
+                        (m) => m && m.source === 'odst' && String(m.id) === String(videoId)
+                    );
+                    if (idx >= 0) playMusicSearchAtIndex(window._musicSearchPlaybackMerged, idx);
+                    else window.playPreview(item, { contextItems: odstItems });
+                } else {
+                    window.playPreview(item, { contextItems: odstItems });
+                }
             }
         });
         const playbackQueueBtn = row.querySelector('.dl-playback-queue');
@@ -454,6 +541,10 @@ function clear(options = {}) {
     lastOdstResults = [];
     if (typeof window.viewContext !== 'undefined') window.viewContext.searchTracks = null;
     window._currentSearchTracks = null;
+    if (typeof window !== 'undefined') {
+        window._discoverSearchOdstItems = null;
+        window._musicSearchPlaybackMerged = null;
+    }
 }
 
 function isDiscoverViewActive() {
@@ -555,7 +646,9 @@ export const unifiedSearch = {
     init,
     clear,
     destroy,
-    updateDiscoverPanels
+    updateDiscoverPanels,
+    playMusicSearchAtIndex,
+    tryPlayUnifiedMusicSearch
 };
 
 /** Returns true if raw was treated as YouTube URL(s) and discover/search UI was updated. */

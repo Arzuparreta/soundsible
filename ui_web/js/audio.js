@@ -69,6 +69,7 @@ class AudioEngine {
     _preloadTrack(track) {
         if (!track?.id) return;
         if (track.source === 'preview' || track.source === 'podcast-preview') return; // Note: Avoid hitting preview stream until user actually plays next
+        if (typeof track.id === 'string' && track.id.startsWith('deezer_')) return; // Note: URL unknown until ODST resolve
         const url = Resolver.getTrackUrl(track);
         const el = this._getPreloadAudio();
         el.src = url;
@@ -83,6 +84,29 @@ class AudioEngine {
 
     setContext(tracks) {
         this.currentContext = tracks;
+    }
+
+    /**
+     * Advance to a context or queue track: Deezer surface rows resolve to YouTube preview; everything else uses playTrack.
+     * @param {unknown} track
+     */
+    async playContextTrack(track) {
+        if (!track) return;
+        if (typeof track.id === 'string' && track.id.startsWith('deezer_')) {
+            const raw = track.id.replace(/^deezer_/, '');
+            const ctx = Array.isArray(this.currentContext) && this.currentContext.length ? this.currentContext : [track];
+            let idx = ctx.findIndex((t) => t && t.id === track.id);
+            if (idx < 0 && track.deezerId != null) {
+                idx = ctx.findIndex((t) => t && String(t.deezerId || '') === String(track.deezerId));
+            }
+            if (idx < 0) idx = 0;
+            const m = await import('./discovery.js');
+            if (typeof m.playDeezerTrackByNumericId === 'function') {
+                await m.playDeezerTrackByNumericId(raw, { surfaceList: ctx, index: idx });
+            }
+            return;
+        }
+        await this.playTrack(track);
     }
 
     /** Pick a random track from context. If excludeId is set, exclude that track (avoids instant replay). */
@@ -395,7 +419,7 @@ class AudioEngine {
         console.log("Playing next track from queue...");
         const nextTrack = await store.popNextFromQueue();
         if (nextTrack) {
-            this.playTrack(nextTrack);
+            await this.playContextTrack(nextTrack);
             return;
         }
 
@@ -410,7 +434,7 @@ class AudioEngine {
                     : this.currentContext[currentIndex + 1];
                 if (nextTrack) {
                     console.log("Queue empty, falling back to context:", nextTrack.title, shuffleOn ? "(shuffle)" : "");
-                    this.playTrack(nextTrack);
+                    await this.playContextTrack(nextTrack);
                     return;
                 }
             }
@@ -436,7 +460,7 @@ class AudioEngine {
             const currentIndex = this.currentContext.findIndex(t => t.id === store.state.currentTrack.id);
             if (currentIndex > 0) {
                 const prevTrack = this.currentContext[currentIndex - 1];
-                this.playTrack(prevTrack);
+                void this.playContextTrack(prevTrack);
                 return;
             }
         }
