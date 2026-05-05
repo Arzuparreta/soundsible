@@ -28,7 +28,7 @@ def _get_api():
         put_playback_state,
         socketio,
     )
-    from shared.playback_state import get_registered_device, list_registered_devices
+    from shared.playback_state import list_registered_devices, resolve_registered_device
 
     return {
         "get_core": get_core,
@@ -37,8 +37,8 @@ def _get_api():
         "get_playback_state": get_playback_state,
         "put_playback_state": put_playback_state,
         "socketio": socketio,
-        "get_registered_device": get_registered_device,
         "list_registered_devices": list_registered_devices,
+        "resolve_registered_device": resolve_registered_device,
     }
 
 
@@ -86,16 +86,31 @@ def _playback_room(scope: str, device_id: str) -> str:
 
 def _pick_target_device(api, scope: str, requested_device_id: Optional[str]) -> Optional[dict]:
     if requested_device_id:
-        return api["get_registered_device"](scope, requested_device_id) or {
-            "device_id": requested_device_id,
-            "device_name": requested_device_id,
-            "device_type": "desktop",
-        }
+        return api["resolve_registered_device"](scope, requested_device_id)
     devices = api["list_registered_devices"](scope)
+    for device in devices:
+        if device.get("device_type") != "agent" and device.get("active_sid"):
+            return device
     for device in devices:
         if device.get("device_type") != "agent":
             return device
+    for device in devices:
+        if device.get("active_sid"):
+            return device
     return devices[0] if devices else None
+
+
+def _offline_warning(target: Optional[dict]) -> Optional[str]:
+    if target and not target.get("active_sid"):
+        return "Device appears offline (no active socket)"
+    return None
+
+
+def _with_offline_warning(payload: dict, target: Optional[dict]) -> dict:
+    warning = _offline_warning(target)
+    if warning:
+        payload["warning"] = warning
+    return payload
 
 
 def _emit_start(api, scope: str, device_id: str, state: dict, track: Optional[dict] = None) -> None:
@@ -158,6 +173,8 @@ def agent_play():
     data = request.json or {}
     requested_device_id = data.get("device_id") or data.get("target_device_id")
     target = _pick_target_device(api, scope, requested_device_id)
+    if requested_device_id and not target:
+        return jsonify({"error": "Target device not found", "device_id": requested_device_id}), 404
 
     lib, engine, _ = api["get_core"]()
     track = None
@@ -201,7 +218,11 @@ def agent_play():
         }
         api["put_playback_state"](scope, target_state)
         _emit_start(api, scope, target["device_id"], target_state, track=payload)
-        return jsonify({"status": "sent", "device_id": target["device_id"], "track": payload})
+        return jsonify(_with_offline_warning({
+            "status": "sent",
+            "device_id": target["device_id"],
+            "track": payload,
+        }, target))
 
     if not track or not engine:
         return jsonify({"error": "No target device registered and local engine cannot play this item"}), 409
@@ -223,6 +244,8 @@ def agent_command():
 
     requested_device_id = data.get("device_id") or data.get("target_device_id")
     target = _pick_target_device(api, scope, requested_device_id)
+    if requested_device_id and not target:
+        return jsonify({"error": "Target device not found", "device_id": requested_device_id}), 404
     if target:
         device_id = target["device_id"]
         if command == "pause":
@@ -242,7 +265,11 @@ def agent_command():
             _emit_start(api, scope, device_id, target_state, track=track_payload)
         else:
             api["socketio"].emit("playback_next_requested", {}, room=_playback_room(scope, device_id))
-        return jsonify({"status": "sent", "command": command, "device_id": device_id})
+        return jsonify(_with_offline_warning({
+            "status": "sent",
+            "command": command,
+            "device_id": device_id,
+        }, target))
 
     lib, engine, queue = api["get_core"]()
     if not engine:
@@ -260,3 +287,49 @@ def agent_command():
             return jsonify({"error": "Next queue item is not a local library track"}), 409
         engine.play(lib.get_track_url(track), track)
     return jsonify({"status": "ok", "command": command})
+
+@agent_bp.route('/api/agent/debug/socketio', methods=['GET'])
+@require_agent_token
+def debug_socketio():
+    """Debug: Show Socket.IO rooms and registered devices."""
+    api = _get_api()
+    socketio = api.get("socketio")
+
+    result = {
+        "registered_devices": _list_registered_devices_detailed(),
+        "socketio_info": str(socketio),
+    }
+
+    # Try to get server rooms if accessible
+    try:
+        if hasattr(socketio, 'server'):
+            server = socketio.server
+            if hasattr(server, 'rooms'):
+                result["rooms"] = {str(k): str(v) for k, v in server.rooms.items()}
+            if hasattr(server, 'sockets'):
+                result["sockets_count"] = len(server.sockets)
+    except Exception as e:
+        result["error"] = str(e)
+
+    return jsonify(result)
+
+def _list_registered_devices_detailed():
+    """Get detailed info about registered devices."""
+    from shared.playback_state import list_registered_devices
+    from shared.api import get_scope_from_request
+
+    scope = get_scope_from_request()
+    devices = list_registered_devices(scope)
+
+    result = []
+    for d in devices:
+        device_id = d.get("device_id")
+        result.append({
+            "device_id": device_id,
+            "device_name": d.get("device_name"),
+            "device_type": d.get("device_type"),
+            "last_seen_ts": d.get("last_seen_ts"),
+            "active_sid": d.get("active_sid"),
+            "socket_connected": bool(d.get("active_sid")),
+        })
+    return result

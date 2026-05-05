@@ -19,6 +19,7 @@ STATE_TTL_SEC = 24 * 3600  # Note: 24H optional; state older can be ignored on G
 _lock = threading.Lock()
 _active_devices: dict[str, dict[str, dict[str, Any]]] = {}  # Note: Scope -> device_id -> state
 _registered_devices: dict[str, dict[str, dict[str, Any]]] = {}  # Note: Scope -> device_id -> metadata
+_socket_devices: dict[str, tuple[str, str]] = {}  # Note: Socket.IO sid -> (scope, device_id)
 
 
 def _config_dir() -> Path:
@@ -35,14 +36,14 @@ def _cleanup_scope(scope: str) -> None:
     to_drop = [
         device_id
         for device_id, data in _active_devices.get(scope, {}).items()
-        if (now - data.get("last_seen_ts", 0)) > ACTIVE_DEVICE_TTL_SEC
+        if not data.get("active_sid") and (now - data.get("last_seen_ts", 0)) > ACTIVE_DEVICE_TTL_SEC
     ]
     for device_id in to_drop:
         _active_devices[scope].pop(device_id, None)
     registered_to_drop = [
         device_id
         for device_id, data in _registered_devices.get(scope, {}).items()
-        if (now - data.get("last_seen_ts", 0)) > ACTIVE_DEVICE_TTL_SEC
+        if not data.get("active_sid") and (now - data.get("last_seen_ts", 0)) > ACTIVE_DEVICE_TTL_SEC
     ]
     for device_id in registered_to_drop:
         _registered_devices[scope].pop(device_id, None)
@@ -87,6 +88,10 @@ def register_device(
         existing = _registered_devices[scope].get(normalized_device_id) or {}
         if existing.get("registered_at"):
             device["registered_at"] = existing["registered_at"]
+        if existing.get("active_sid"):
+            device["active_sid"] = existing["active_sid"]
+            device["socket_connected"] = True
+            device["last_socket_seen_ts"] = existing.get("last_socket_seen_ts")
         _registered_devices[scope][normalized_device_id] = device
         active = _active_devices[scope].get(normalized_device_id)
         if active:
@@ -96,12 +101,99 @@ def register_device(
     return device.copy()
 
 
+def mark_device_socket_active(scope: str, device_id: str, sid: str) -> Optional[dict[str, Any]]:
+    normalized_device_id = str(device_id or "").strip()
+    if not normalized_device_id or not sid:
+        return None
+    now = time.time()
+    with _lock:
+        _ensure_scope(scope)
+        _cleanup_scope(scope)
+        device = _registered_devices[scope].get(normalized_device_id)
+        if not device:
+            device = {
+                "device_id": normalized_device_id,
+                "device_name": normalized_device_id,
+                "device_type": "desktop",
+                "scope": scope,
+                "registered_at": now,
+            }
+            _registered_devices[scope][normalized_device_id] = device
+        old = _socket_devices.get(sid)
+        if old and old != (scope, normalized_device_id):
+            old_scope, old_device_id = old
+            old_device = _registered_devices.get(old_scope, {}).get(old_device_id)
+            if old_device and old_device.get("active_sid") == sid:
+                old_device.pop("active_sid", None)
+                old_device["socket_connected"] = False
+        device["active_sid"] = sid
+        device["socket_connected"] = True
+        device["last_seen_ts"] = now
+        device["last_socket_seen_ts"] = now
+        _socket_devices[sid] = (scope, normalized_device_id)
+        return device.copy()
+
+
+def unregister_socket(sid: str) -> Optional[dict[str, Any]]:
+    if not sid:
+        return None
+    with _lock:
+        bound = _socket_devices.pop(sid, None)
+        if not bound:
+            return None
+        scope, device_id = bound
+        device = _registered_devices.get(scope, {}).get(device_id)
+        if device and device.get("active_sid") == sid:
+            device.pop("active_sid", None)
+            device["socket_connected"] = False
+            device["last_seen_ts"] = time.time()
+            return device.copy()
+    return None
+
+
+def is_device_socket_active(scope: str, device_id: str) -> bool:
+    with _lock:
+        _ensure_scope(scope)
+        _cleanup_scope(scope)
+        device = _registered_devices.get(scope, {}).get(device_id)
+        return bool(device and device.get("active_sid"))
+
+
 def get_registered_device(scope: str, device_id: str) -> Optional[dict[str, Any]]:
     with _lock:
         _ensure_scope(scope)
         _cleanup_scope(scope)
         device = _registered_devices.get(scope, {}).get(device_id)
         return device.copy() if device else None
+
+
+def resolve_registered_device(scope: str, identifier: str) -> Optional[dict[str, Any]]:
+    normalized = str(identifier or "").strip()
+    if not normalized:
+        return None
+    with _lock:
+        _ensure_scope(scope)
+        _cleanup_scope(scope)
+        devices = _registered_devices.get(scope, {})
+        exact = devices.get(normalized)
+        if exact:
+            return exact.copy()
+        folded = normalized.casefold()
+        matches = [
+            device
+            for device in devices.values()
+            if str(device.get("device_name") or "").casefold() == folded
+        ]
+        if not matches:
+            return None
+        matches.sort(
+            key=lambda item: (
+                1 if item.get("active_sid") else 0,
+                item.get("last_seen_ts", 0),
+            ),
+            reverse=True,
+        )
+        return matches[0].copy()
 
 
 def list_registered_devices(scope: str) -> list[dict[str, Any]]:
@@ -180,6 +272,10 @@ def get_state(
             return None
         updated = state.get("updated_at") or 0
         if STATE_TTL_SEC and (now - updated) > STATE_TTL_SEC:
+            return None
+        if device_id and state.get("device_id") != device_id:
+            return None
+        if exclude_device_id and state.get("device_id") != exclude_device_id:
             return None
         return state
 

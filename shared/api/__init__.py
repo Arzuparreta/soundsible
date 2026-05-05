@@ -27,6 +27,8 @@ from shared.playback_state import (
     put_state as put_playback_state,
     get_scope_from_request,
     register_device,
+    mark_device_socket_active,
+    unregister_socket,
 )
 from player.library import LibraryManager
 from player.queue_manager import QueueManager
@@ -188,6 +190,12 @@ def on_playback_register(data):
     )
     room = f"playback:{scope}:{device_id}"
     join_room(room, sid=request.sid)
+    mark_device_socket_active(scope, device_id, request.sid)
+
+
+@socketio.on("disconnect")
+def on_socket_disconnect():
+    unregister_socket(request.sid)
 
 
 # Note: Path to the new web UI and repo branding

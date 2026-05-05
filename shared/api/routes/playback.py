@@ -469,10 +469,12 @@ def playback_handoff():
         return jsonify({"error": "No active playback state for source device"}), 404
 
     target_device = api["get_registered_device"](scope, to_device_id)
+    if not target_device:
+        return jsonify({"error": "Target device not found", "device_id": to_device_id}), 404
     target_state = {
         **state,
         "device_id": to_device_id,
-        "device_name": (target_device or {}).get("device_name") or state.get("device_name"),
+        "device_name": target_device.get("device_name") or state.get("device_name"),
         "is_playing": True,
     }
     api["put_playback_state"](scope, target_state)
@@ -490,12 +492,15 @@ def playback_handoff():
         track_payload = target_state["track"]
 
     _emit_playback_start(api, scope, to_device_id, target_state, track=track_payload)
-    return jsonify({
+    response = {
         "status": "sent",
         "from_device_id": from_device_id,
         "to_device_id": to_device_id,
         "state": target_state,
-    })
+    }
+    if not target_device.get("active_sid"):
+        response["warning"] = "Device appears offline (no active socket)"
+    return jsonify(response)
 
 
 @playback_bp.route("/api/playback/notify-stop", methods=["POST"])
