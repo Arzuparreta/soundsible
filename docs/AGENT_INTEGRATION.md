@@ -318,6 +318,26 @@ Important: `/api/playback/next` pops an item. Do not call it just to inspect the
 
 This queue downloads audio into the persistent library. It is not the same as playback queue.
 
+Use this endpoint only when the user wants to **download/import music into the library**:
+
+```http
+POST /api/downloader/queue
+```
+
+The request body is always an object with an `items` array:
+
+```json
+{
+  "items": [
+    {
+      "song_str": "..."
+    }
+  ]
+}
+```
+
+Do not send a bare item object. Do not send a bare `video_id`. Do not use playback queue `preview` objects here.
+
 Search YouTube / YouTube Music:
 
 ```bash
@@ -332,13 +352,29 @@ music
 youtube
 ```
 
-Peek a YouTube URL or ID:
+`source=ytmusic` and `source=music` search YouTube Music. `source=youtube` searches regular YouTube.
+
+Peek a YouTube URL or ID, without queueing or downloading:
 
 ```bash
 curl 'http://localhost:5005/api/downloader/youtube/peek?id=dQw4w9WgXcQ'
 ```
 
-Queue downloads:
+### Download Queue Item Formats
+
+There are three supported music item shapes.
+
+#### 1. Recommended: resolved YouTube / YouTube Music result
+
+Use this when the agent has searched `/api/downloader/youtube/search` and selected a result. Send a full YouTube URL in `song_str` and include `video_id`.
+
+If the search result has `webpage_url`, use it. If it only has an 11-character `id`, build:
+
+```text
+https://www.youtube.com/watch?v=<id>
+```
+
+Example:
 
 ```bash
 curl -X POST http://localhost:5005/api/downloader/queue \
@@ -347,12 +383,125 @@ curl -X POST http://localhost:5005/api/downloader/queue \
   -d '{
     "items": [
       {
-        "song_str": "Daft Punk One More Time",
-        "source_type": "ytmusic_search"
+        "source_type": "ytmusic_search",
+        "song_str": "https://www.youtube.com/watch?v=FGBhQbmPwH8",
+        "video_id": "FGBhQbmPwH8",
+        "display_title": "One More Time",
+        "display_artist": "Daft Punk",
+        "duration_sec": 320,
+        "thumbnail_url": "https://img.youtube.com/vi/FGBhQbmPwH8/mqdefault.jpg",
+        "metadata_evidence": {
+          "title": "One More Time",
+          "artist": "Daft Punk",
+          "album": "Discovery"
+        }
       }
     ]
   }'
 ```
+
+Use `source_type: "ytmusic_search"` for a result selected from YouTube Music search. Use `source_type: "youtube_search"` for a result selected from regular YouTube search. Use `source_type: "youtube_url"` for a user-provided YouTube URL.
+
+Important: explicit YouTube source types require a YouTube URL in `song_str`. This is invalid:
+
+```json
+{
+  "items": [
+    {
+      "source_type": "ytmusic_search",
+      "song_str": "Daft Punk One More Time"
+    }
+  ]
+}
+```
+
+#### 2. User-provided YouTube URL
+
+Use this when the user gives a YouTube URL directly. `source_type` is optional because Soundsible can infer YouTube URLs, but including it is clearer.
+
+```bash
+curl -X POST http://localhost:5005/api/downloader/queue \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <SOUNDSIBLE_ADMIN_TOKEN>' \
+  -d '{
+    "items": [
+      {
+        "source_type": "youtube_url",
+        "song_str": "https://www.youtube.com/watch?v=FGBhQbmPwH8",
+        "video_id": "FGBhQbmPwH8"
+      }
+    ]
+  }'
+```
+
+Do not send only the video id:
+
+```json
+{
+  "items": [
+    {
+      "video_id": "FGBhQbmPwH8"
+    }
+  ]
+}
+```
+
+That is rejected because the downloader needs `song_str` to say what to download.
+
+#### 3. Plain text fallback
+
+Use this only when the agent has no resolved YouTube result yet and wants Soundsible to search during processing. Do not set `source_type`.
+
+```bash
+curl -X POST http://localhost:5005/api/downloader/queue \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <SOUNDSIBLE_ADMIN_TOKEN>' \
+  -d '{
+    "items": [
+      {
+        "song_str": "Daft Punk - One More Time",
+        "metadata_evidence": {
+          "title": "One More Time",
+          "artist": "Daft Punk"
+        }
+      }
+    ]
+  }'
+```
+
+This path is less precise. For agent workflows, prefer searching first, selecting a result, then queueing the resolved URL format.
+
+### Accepted Response
+
+Successful queueing returns accepted item IDs:
+
+```json
+{
+  "status": "queued",
+  "ids": ["download-job-id"],
+  "accepted": [
+    {
+      "index": 0,
+      "id": "download-job-id",
+      "source_type": "ytmusic_search"
+    }
+  ],
+  "rejected": []
+}
+```
+
+Partial failure is possible. Always inspect both `accepted` and `rejected`.
+
+Common rejected reasons:
+
+| Reason | Meaning | Fix |
+|---|---|---|
+| `No JSON data received` | Body was empty or not JSON | Send `Content-Type: application/json` and a JSON object |
+| `Item must be an object` | An `items` entry was not an object | Put objects inside `items` |
+| `Missing source_type/song_str` | No usable input | Include `song_str` |
+| `Invalid or unsupported YouTube URL or missing video_id` | Explicit YouTube source type had no full YouTube URL/video id | Send full URL in `song_str` and `video_id` |
+| `Playlist-only or invalid YouTube URL (missing v=)` | URL is not a single video URL | Pick a specific video |
+| `This link type is not supported` | Spotify link or unsupported source | Resolve through YouTube Music first |
 
 Start processing:
 
@@ -368,6 +517,14 @@ curl http://localhost:5005/api/downloader/queue/status
 ```
 
 When downloads finish, Soundsible emits `library_updated` and the track appears in `/api/library`.
+
+### Agent Decision Rules for Downloads
+
+1. If the user says "download this YouTube link", queue `source_type: "youtube_url"` with `song_str` as the full URL.
+2. If the user says "download Song by Artist", first call `/api/downloader/youtube/search?source=ytmusic`, pick the best result, then queue the resolved URL format.
+3. If search is unavailable or inconclusive, queue plain text with only `song_str` and optional `metadata_evidence`; do not add `source_type`.
+4. Never use Deezer IDs, Spotify URLs, playback queue preview objects, or raw `video_id`-only payloads for `/api/downloader/queue`.
+5. After queueing, call `/api/downloader/start`; queueing alone does not begin processing.
 
 ## Deezer Discovery
 
@@ -490,10 +647,17 @@ For "add X to the queue":
 
 For "download X":
 
-1. Queue a download with `POST /api/downloader/queue`.
+1. Search YouTube Music: `GET /api/downloader/youtube/search?q=X&source=ytmusic&limit=5`.
+2. Pick the best result. Use `webpage_url` as `song_str`; if missing, build `https://www.youtube.com/watch?v=<id>`.
+3. Queue it with `POST /api/downloader/queue` as `{"items":[{"source_type":"ytmusic_search","song_str":"https://www.youtube.com/watch?v=<id>","video_id":"<id>","display_title":"...","display_artist":"..."}]}`.
+4. Start processing with `POST /api/downloader/start`.
+5. Poll `/api/downloader/queue/status`.
+6. Refresh library after completion.
+
+For "download this YouTube URL":
+
+1. Queue it with `POST /api/downloader/queue` as `{"items":[{"source_type":"youtube_url","song_str":"<full-youtube-url>"}]}`.
 2. Start processing with `POST /api/downloader/start`.
-3. Poll `/api/downloader/queue/status`.
-4. Refresh library after completion.
 
 For "play this Deezer track":
 
@@ -519,6 +683,8 @@ Common problems:
 | Command returns `sent` but nothing plays | Usually no active socket or browser autoplay blocked | Check `active_sid`; after reload, tap the remote playback prompt once |
 | Deezer ID fails | Deezer IDs are metadata only | Resolve by title/artist through YouTube Music |
 | `/api/playback/next` changed queue | It pops the next item | Use `GET /api/playback/queue` to inspect |
+| Download queue rejects raw `video_id` | `/api/downloader/queue` requires `items[].song_str` | Send full YouTube URL in `song_str` plus `video_id` |
+| Download queue rejects `ytmusic_search` with plain text | Explicit YouTube source types require resolved YouTube URLs | Search first, then queue the selected result URL; or omit `source_type` for plain text fallback |
 | Downloaded song not visible | Download job not finished or library not synced | Check `/api/downloader/queue/status`, then `/api/library/sync` if needed |
 
 ## Minimal OpenAPI-Style Summary
