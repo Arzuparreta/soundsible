@@ -27,6 +27,8 @@ class AudioEngine {
         this._previewEndedTriggered = false;
         /** After starting a new track, ignore timeupdate with high currentTime (stale from previous track). */
         this._suppressStaleTimeUpdates = false;
+        this._pendingRemotePlayback = null;
+        this._remoteUnlockOverlay = null;
         this.init();
     }
 
@@ -79,6 +81,115 @@ class AudioEngine {
     _invalidatePreload() {
         this._preloadedTrackId = null;
         if (this._preloadAudio) this._preloadAudio.src = '';
+    }
+
+    _isAutoplayBlocked(err) {
+        const name = String(err?.name || '');
+        const message = String(err?.message || '');
+        return (
+            name === 'NotAllowedError' ||
+            /user.*interact|not allowed|play\(\) failed/i.test(message)
+        );
+    }
+
+    _applyRequestedPosition(positionSec) {
+        const position = Number(positionSec) || 0;
+        if (position <= 0) return;
+        const applySeek = () => {
+            const duration = this.audio.duration;
+            if (Number.isFinite(duration) && duration > 0) {
+                this.audio.currentTime = Math.min(position, duration);
+            }
+        };
+        if (Number.isFinite(this.audio.duration) && this.audio.duration > 0) {
+            applySeek();
+        } else {
+            this.audio.addEventListener('loadedmetadata', applySeek, { once: true });
+        }
+    }
+
+    _stageRemotePlayback(track, positionSec = 0) {
+        if (!track) return;
+        this._pendingRemotePlayback = { track, positionSec: Number(positionSec) || 0 };
+        store.update({ currentTrack: track, isPlaying: false });
+        store.pushPlaybackState(track.id, Number(positionSec) || 0, false);
+        this._showRemoteUnlockOverlay(track);
+    }
+
+    _hideRemoteUnlockOverlay() {
+        if (this._remoteUnlockOverlay) {
+            this._remoteUnlockOverlay.remove();
+            this._remoteUnlockOverlay = null;
+        }
+    }
+
+    _clearPendingRemotePlayback() {
+        this._pendingRemotePlayback = null;
+        this._hideRemoteUnlockOverlay();
+    }
+
+    _showRemoteUnlockOverlay(track) {
+        if (typeof document === 'undefined') return;
+        this._hideRemoteUnlockOverlay();
+        const overlay = document.createElement('button');
+        overlay.type = 'button';
+        overlay.setAttribute('aria-label', 'Start remote playback');
+        overlay.style.cssText = [
+            'position:fixed',
+            'left:50%',
+            'bottom:calc(env(safe-area-inset-bottom, 0px) + 92px)',
+            'transform:translateX(-50%)',
+            'z-index:9999',
+            'width:min(360px, calc(100vw - 32px))',
+            'border:1px solid rgba(255,255,255,.16)',
+            'border-radius:18px',
+            'padding:14px 16px',
+            'background:rgba(18,18,22,.94)',
+            'color:#fff',
+            'box-shadow:0 20px 60px rgba(0,0,0,.45)',
+            'backdrop-filter:blur(18px) saturate(160%)',
+            '-webkit-backdrop-filter:blur(18px) saturate(160%)',
+            'font:600 14px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+            'text-align:left',
+            'cursor:pointer'
+        ].join(';');
+        overlay.innerHTML = `
+            <span style="display:block;font-size:12px;opacity:.72;margin-bottom:4px">Remote playback is ready</span>
+            <span style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${this._escapeHtml(track.title || 'Start playback')}</span>
+            <span style="display:block;font-size:12px;opacity:.72;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${this._escapeHtml(track.artist || '')}</span>
+        `;
+        overlay.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this._consumePendingRemotePlayback();
+        });
+        document.body.appendChild(overlay);
+        this._remoteUnlockOverlay = overlay;
+    }
+
+    _escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        })[ch]);
+    }
+
+    async _consumePendingRemotePlayback() {
+        const pending = this._pendingRemotePlayback;
+        if (!pending) return;
+        this._pendingRemotePlayback = null;
+        this._hideRemoteUnlockOverlay();
+        const result = await this.playTrack(pending.track, {
+            remoteRequest: true,
+            positionSec: pending.positionSec,
+            suppressAlerts: true,
+            restageOnAutoplayBlock: false
+        });
+        if (result?.ok) this._applyRequestedPosition(pending.positionSec);
+        else if (result?.blocked) this._stageRemotePlayback(pending.track, pending.positionSec);
     }
 
     setContext(tracks) {
@@ -156,21 +267,13 @@ class AudioEngine {
                     }
                 }
                 if (!track) return;
-                await this.playTrack(track);
                 const positionSec = Number(state.position_sec) || 0;
-                if (positionSec > 0) {
-                    const applySeek = () => {
-                        const duration = this.audio.duration;
-                        if (Number.isFinite(duration) && duration > 0) {
-                            this.audio.currentTime = Math.min(positionSec, duration);
-                        }
-                    };
-                    if (Number.isFinite(this.audio.duration) && this.audio.duration > 0) {
-                        applySeek();
-                    } else {
-                        this.audio.addEventListener('loadedmetadata', applySeek, { once: true });
-                    }
-                }
+                const result = await this.playTrack(track, {
+                    remoteRequest: true,
+                    positionSec,
+                    suppressAlerts: true
+                });
+                if (result?.ok) this._applyRequestedPosition(positionSec);
             });
         }
 
@@ -208,12 +311,12 @@ class AudioEngine {
      * Preview tracks use GET /api/preview/stream/<id> (server proxies YT audio; same-origin so playback works).
      * Single path for all in-app preview (Discover, Search, queue, context).
      */
-    async playTrack(track) {
+    async playTrack(track, options = {}) {
         if (track?.source === 'preview-pending') {
-            return;
+            return { ok: false };
         }
         // Note: Mark immediately (before await play) so post-sync resume logic cannot race the play event.
-        if (!store.state.resumeSyncActive) {
+        if (!store.state.resumeSyncActive && !options.remoteRequest) {
             store.markUserPlaybackStarted();
         }
         // Note: Any song change (different track) resets repeat
@@ -225,7 +328,7 @@ class AudioEngine {
         // Note: Prevent redundant loads if tapping the same track rapidly
         if (this.audio.src.includes(track.id) && !this.audio.paused) {
             console.log("Track already playing, ignoring redundant request.");
-            return;
+            return { ok: true, alreadyPlaying: true };
         }
 
         this._invalidatePreload();
@@ -254,13 +357,14 @@ class AudioEngine {
             }
             if (!tok) {
                 if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
-                return;
+                return { ok: false };
             }
             const streamUrl = `${apiBase}/api/podcasts/stream/${encodeURIComponent(tok)}`;
             try {
                 this.audio.src = streamUrl;
                 this.audio.load();
                 await this.audio.play();
+                this._clearPendingRemotePlayback();
                 store.update({ currentTrack: { ...track, _streamToken: tok }, isPlaying: true });
                 store.pushPlaybackState(track.id, 0, true);
                 this._suppressStaleTimeUpdates = true;
@@ -282,11 +386,17 @@ class AudioEngine {
                     });
                     this.setMediaSessionHandlers();
                 }
+                return { ok: true };
             } catch (err) {
+                if (options.remoteRequest && this._isAutoplayBlocked(err)) {
+                    if (options.restageOnAutoplayBlock !== false) this._stageRemotePlayback(track, options.positionSec);
+                    return { ok: false, blocked: true };
+                }
                 store.update({ isPlaying: false });
                 console.error('Podcast preview playback failed:', err);
+                return { ok: false, error: err };
             }
-            return;
+            return { ok: false };
         }
 
         // Note: Preview stream through our server (same-origin) so playback works. direct YT urls are CORS-blocked.
@@ -302,7 +412,7 @@ class AudioEngine {
                 const ytId = track.id && !String(track.id).startsWith('raw-') && String(track.id).length === 11 ? track.id : null;
                 if (!ytId) {
                     if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
-                    return;
+                    return { ok: false };
                 }
                 streamUrl = `${apiBase}/api/preview/stream/${encodeURIComponent(ytId)}`;
             }
@@ -310,6 +420,7 @@ class AudioEngine {
                 this.audio.src = streamUrl;
                 this.audio.load();
                 await this.audio.play();
+                this._clearPendingRemotePlayback();
                 store.update({ currentTrack: track, isPlaying: true });
                 store.pushPlaybackState(track.id, 0, true);
                 this._suppressStaleTimeUpdates = true;
@@ -335,12 +446,18 @@ class AudioEngine {
                     });
                     this.setMediaSessionHandlers();
                 }
+                return { ok: true };
             } catch (err) {
+                if (options.remoteRequest && this._isAutoplayBlocked(err)) {
+                    if (options.restageOnAutoplayBlock !== false) this._stageRemotePlayback(track, options.positionSec);
+                    return { ok: false, blocked: true };
+                }
                 store.update({ isPlaying: false });
                 // Note: Don't toast here the audio 'error' listener already shows "preview unavailable" when load fails
                 console.error("Preview playback failed:", err);
+                return { ok: false, error: err };
             }
-            return;
+            return { ok: false };
         }
 
         const url = Resolver.getTrackUrl(track);
@@ -350,6 +467,7 @@ class AudioEngine {
             this.audio.src = url;
             this.audio.load();
             await this.audio.play();
+            this._clearPendingRemotePlayback();
             store.update({ currentTrack: track, isPlaying: true });
             store.pushPlaybackState(track.id, 0, true);
             this._suppressStaleTimeUpdates = true;
@@ -376,14 +494,20 @@ class AudioEngine {
                 });
                 this.setMediaSessionHandlers();
             }
+            return { ok: true };
         } catch (err) {
             // Note: Security & UX aborterror is normal when switching tracks quickly (e.g. double tap)
             // Note: We catch it silently. other errors (404, network) still show alerts.
             if (err.name === 'AbortError') {
                 console.log("Playback aborted (interrupted by new request).");
+                return { ok: false, aborted: true };
+            } else if (options.remoteRequest && this._isAutoplayBlocked(err)) {
+                if (options.restageOnAutoplayBlock !== false) this._stageRemotePlayback(track, options.positionSec);
+                return { ok: false, blocked: true };
             } else {
                 console.error("Playback failed:", err);
-                alert("Playback failed. Check if server is running or file is accessible.");
+                if (!options.suppressAlerts) alert("Playback failed. Check if server is running or file is accessible.");
+                return { ok: false, error: err };
             }
         }
     }

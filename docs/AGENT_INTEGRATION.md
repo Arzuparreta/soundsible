@@ -216,6 +216,20 @@ If the device is registered but offline:
 
 Treat that as not actually played.
 
+### Browser Autoplay Limitation
+
+After a browser reload, the page may have no user activation. In that state, Chrome, Safari, and Firefox can reject audible `audio.play()` calls that originate from Socket.IO or HTTP-triggered agent commands.
+
+Soundsible handles this by staging the remote request in the player. The target device shows a **Remote playback is ready** prompt with the requested track. One tap starts the staged playback and unlocks the browser audio session for later agent commands in that page session.
+
+Agent behavior:
+
+1. If `/api/agent/play` returns `status: "sent"` and the device has `active_sid`, the command reached the browser.
+2. If playback does not audibly start immediately after a fresh reload, tell the user to tap the remote playback prompt on that device.
+3. Once the user has started any audio in that page session, later agent playback, pause, resume, and next commands should work without this prompt.
+
+This is a browser security policy, not a Soundsible API failure. To avoid the prompt completely, use a native playback surface or server-side playback engine instead of browser audio.
+
 ## Library
 
 Get the full library:
@@ -502,7 +516,7 @@ Common problems:
 |---|---|---|
 | `warning: Device appears offline` | Device is registered but has no active Socket.IO room join | Open/reload the player on that device |
 | `Target device not found` | Agent used an unknown device ID/name | Call `/api/devices` and target a real device |
-| Command returns `sent` but nothing plays | Usually no active socket or browser autoplay blocked | Check `active_sid`, reload the PWA, tap play once |
+| Command returns `sent` but nothing plays | Usually no active socket or browser autoplay blocked | Check `active_sid`; after reload, tap the remote playback prompt once |
 | Deezer ID fails | Deezer IDs are metadata only | Resolve by title/artist through YouTube Music |
 | `/api/playback/next` changed queue | It pops the next item | Use `GET /api/playback/queue` to inspect |
 | Downloaded song not visible | Download job not finished or library not synced | Check `/api/downloader/queue/status`, then `/api/library/sync` if needed |
@@ -548,4 +562,3 @@ GET /api/discovery/deezer/<allowlisted-path>
 GET /api/discovery/podcasts/search?q=
 GET /api/discovery/podcasts/top
 ```
-
