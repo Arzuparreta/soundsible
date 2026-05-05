@@ -254,6 +254,10 @@ class AudioEngine {
         if (typeof window !== 'undefined') {
             window.addEventListener('playback_stop_requested', () => this.pause());
             window.addEventListener('playback_next_requested', () => this.next());
+            window.addEventListener('playback_seek_requested', (event) => {
+                const positionSec = Number(event.detail?.position_sec);
+                this.seekToSeconds(positionSec);
+            });
             window.addEventListener('playback_start_requested', async (event) => {
                 const detail = event.detail || {};
                 const state = detail.state || {};
@@ -599,8 +603,36 @@ class AudioEngine {
     seek(percent) {
         if (!this.audio.duration) return;
         const time = (percent / 100) * this.audio.duration;
-        this.audio.currentTime = time;
-        store.pushPlaybackState(store.state.currentTrack?.id, time, !this.audio.paused);
+        this.seekToSeconds(time);
+    }
+
+    seekToSeconds(positionSec) {
+        const position = Number(positionSec);
+        if (!Number.isFinite(position) || position < 0) return false;
+        const applySeek = () => {
+            const duration = this.audio.duration;
+            const target = Number.isFinite(duration) && duration > 0
+                ? Math.min(position, duration)
+                : position;
+            try {
+                this.audio.currentTime = target;
+            } catch (err) {
+                console.error("Seek failed:", err);
+                return false;
+            }
+            this.currentPosition = target;
+            store.pushPlaybackState(store.state.currentTrack?.id, target, !this.audio.paused);
+            const effectiveDuration = Number.isFinite(duration) && duration > 0
+                ? duration
+                : Number(store.state.currentTrack?.duration) || 0;
+            const progress = effectiveDuration > 0 ? (target / effectiveDuration) * 100 : 0;
+            this._dispatchTimeUpdate(progress, target, effectiveDuration);
+            return true;
+        };
+
+        if (this.audio.readyState >= 1) return applySeek();
+        this.audio.addEventListener('loadedmetadata', applySeek, { once: true });
+        return true;
     }
 
     getVolume() {

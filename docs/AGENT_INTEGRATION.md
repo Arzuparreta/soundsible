@@ -154,13 +154,27 @@ curl -X POST http://localhost:5005/api/agent/command \
   -d '{"command":"next","device_id":"Desktop"}'
 ```
 
+Seek to an absolute position in the current track:
+
+```bash
+curl -X POST http://localhost:5005/api/agent/command \
+  -H 'Authorization: Bearer <agent-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"command":"seek","position_sec":75.5,"device_id":"Desktop"}'
+```
+
+Seek uses absolute seconds from the start of the current track. To seek to 1:15, send `position_sec: 75`. To jump forward or backward, first read `/api/playback/state`, add or subtract seconds from `position_sec`, then send the new absolute value.
+
 Supported commands:
 
 ```json
 {"command":"pause"}
 {"command":"play"}
 {"command":"next"}
+{"command":"seek","position_sec":75.5}
 ```
+
+For `seek`, `position_sec` is required and must be a number greater than or equal to `0`. `position_ms` is also accepted for millisecond-based clients. The target browser clamps positions beyond the loaded track duration to the end of the track.
 
 If `device_id` is omitted, Soundsible targets the most recently registered non-agent device, preferring devices with an active socket.
 
@@ -610,6 +624,15 @@ Handoff behavior:
 
 If `to_device_id` has no active socket, the response includes an offline warning.
 
+Seek behavior:
+
+1. `POST /api/agent/command` with `{"command":"seek","position_sec":...}` reads the target device playback state.
+2. The API writes the requested `position_sec` into playback state.
+3. The API emits `playback_seek_requested` to `playback:default:<device_id>`.
+4. The browser player sets `audio.currentTime` and persists the new position.
+
+If the target has no current playback state, the API returns `404` with `No playback state available for target device`.
+
 ## Podcasts
 
 Podcast discovery and playback is separate from music search.
@@ -644,6 +667,12 @@ For "add X to the queue":
 2. If a good library match exists, `POST /api/playback/queue` with `{"track_id":"..."}`.
 3. If not, search YouTube Music with `/api/downloader/youtube/search`.
 4. Add the chosen result as `{"preview": {...}}`.
+
+For "seek to 1:15" or "jump to 75 seconds":
+
+1. Read devices with `GET /api/devices` and target an active browser player.
+2. Send `POST /api/agent/command` with `{"command":"seek","position_sec":75,"device_id":"Desktop"}`.
+3. For relative seeking, read `/api/playback/state`, compute the new absolute position, then send `seek`.
 
 For "download X":
 
@@ -681,6 +710,8 @@ Common problems:
 | `warning: Device appears offline` | Device is registered but has no active Socket.IO room join | Open/reload the player on that device |
 | `Target device not found` | Agent used an unknown device ID/name | Call `/api/devices` and target a real device |
 | Command returns `sent` but nothing plays | Usually no active socket or browser autoplay blocked | Check `active_sid`; after reload, tap the remote playback prompt once |
+| Seek returns `seek requires position_sec` | Agent sent `seek` without an absolute position | Send `{"command":"seek","position_sec":75}` |
+| Seek returns no playback state | Target device has not reported a current track | Start playback first or target the active device from `/api/devices` |
 | Deezer ID fails | Deezer IDs are metadata only | Resolve by title/artist through YouTube Music |
 | `/api/playback/next` changed queue | It pops the next item | Use `GET /api/playback/queue` to inspect |
 | Download queue rejects raw `video_id` | `/api/downloader/queue` requires `items[].song_str` | Send full YouTube URL in `song_str` plus `video_id` |
@@ -697,7 +728,7 @@ POST /api/devices/register
 POST /api/agent/token          admin
 GET  /api/agent/verify         agent token
 POST /api/agent/play           agent token
-POST /api/agent/command        agent token
+POST /api/agent/command        agent token; pause/play/next/seek
 GET  /api/agent/debug/socketio agent token
 
 GET  /api/library

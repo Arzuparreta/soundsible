@@ -113,6 +113,26 @@ def _with_offline_warning(payload: dict, target: Optional[dict]) -> dict:
     return payload
 
 
+def _parse_seek_position_sec(data: dict) -> tuple[Optional[float], Optional[str]]:
+    raw = data.get("position_sec")
+    if raw is None:
+        raw = data.get("position")
+    if raw is None and data.get("position_ms") is not None:
+        try:
+            raw = float(data.get("position_ms")) / 1000
+        except (TypeError, ValueError):
+            return None, "position_ms must be a number"
+    if raw is None:
+        return None, "seek requires position_sec"
+    try:
+        position_sec = float(raw)
+    except (TypeError, ValueError):
+        return None, "position_sec must be a number"
+    if position_sec < 0:
+        return None, "position_sec must be greater than or equal to 0"
+    return position_sec, None
+
+
 def _emit_start(api, scope: str, device_id: str, state: dict, track: Optional[dict] = None) -> None:
     payload = {"state": state}
     if track:
@@ -241,8 +261,8 @@ def agent_command():
     scope = _scope()
     data = request.json or {}
     command = (data.get("command") or "").strip().lower()
-    if command not in {"pause", "play", "next"}:
-        return jsonify({"error": "command must be pause, play, or next"}), 400
+    if command not in {"pause", "play", "next", "seek"}:
+        return jsonify({"error": "command must be pause, play, next, or seek"}), 400
 
     requested_device_id = data.get("device_id") or data.get("target_device_id")
     target = _pick_target_device(api, scope, requested_device_id)
@@ -265,12 +285,32 @@ def agent_command():
             api["put_playback_state"](scope, target_state)
             track_payload = target_state.get("track") if isinstance(target_state.get("track"), dict) else None
             _emit_start(api, scope, device_id, target_state, track=track_payload)
-        else:
+        elif command == "next":
             api["socketio"].emit("playback_next_requested", {}, room=_playback_room(scope, device_id))
+        else:
+            position_sec, error = _parse_seek_position_sec(data)
+            if error:
+                return jsonify({"error": error}), 400
+            state = api["get_playback_state"](scope, device_id=device_id) or api["get_playback_state"](scope)
+            if not state or not state.get("track_id"):
+                return jsonify({"error": "No playback state available for target device"}), 404
+            target_state = {
+                **state,
+                "device_id": device_id,
+                "device_name": target.get("device_name") or state.get("device_name"),
+                "position_sec": position_sec,
+            }
+            api["put_playback_state"](scope, target_state)
+            api["socketio"].emit(
+                "playback_seek_requested",
+                {"position_sec": position_sec},
+                room=_playback_room(scope, device_id),
+            )
         return jsonify(_with_offline_warning({
             "status": "sent",
             "command": command,
             "device_id": device_id,
+            **({"position_sec": position_sec} if command == "seek" else {}),
         }, target))
 
     lib, engine, queue = api["get_core"]()
@@ -280,6 +320,8 @@ def agent_command():
         engine.pause()
     elif command == "play":
         engine.pause()
+    elif command == "seek":
+        return jsonify({"error": "No target device registered and local engine does not support agent seek"}), 409
     else:
         item = queue.get_next()
         if not item:
