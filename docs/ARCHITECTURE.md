@@ -114,6 +114,7 @@ Exact filenames and fields may evolve; treat the code under `shared/` and `playe
 ### 7. Related documentation
 
 - [INSTALL.md](INSTALL.md) — headless operation, reverse proxy, Tailscale.
+- [AGENT_INTEGRATION.md](AGENT_INTEGRATION.md) — API guide for OpenClaw, Hermes agents, and local assistants.
 - [CONFIGURATION.md](CONFIGURATION.md) — configuration surfaces and environment variables.
 - [troubleshooting-yt-dlp-formats.md](troubleshooting-yt-dlp-formats.md) — yt-dlp format issues when using cookies.
 - [LEGAL.md](LEGAL.md) — acceptable use.

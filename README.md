@@ -136,6 +136,7 @@ This forces a clean bootstrap and dependency reinstall for the new clone locatio
 
 - [docs/INSTALL.md](docs/INSTALL.md) — headless server, Tailscale, reverse proxy, storage
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — architecture and data flow (includes **Discover / Deezer proxy**)
+- [docs/AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md) — API guide for OpenClaw, Hermes agents, and local assistants
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — configuration, environment variables, storage backends
 - [docs/LEGAL.md](docs/LEGAL.md) — legal and acceptable use
 
