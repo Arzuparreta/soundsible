@@ -79,6 +79,7 @@ def _get_api():
         put_playback_state,
         get_scope_from_request,
     )
+    from shared.playback_state import register_device, get_registered_device, list_registered_devices
     return {
         "get_core": get_core,
         "get_track_by_id": get_track_by_id,
@@ -90,7 +91,50 @@ def _get_api():
         "get_playback_state": get_playback_state,
         "put_playback_state": put_playback_state,
         "get_scope_from_request": get_scope_from_request,
+        "register_device": register_device,
+        "get_registered_device": get_registered_device,
+        "list_registered_devices": list_registered_devices,
     }
+
+
+def _playback_room(scope: str, device_id: str) -> str:
+    return f"playback:{scope}:{device_id}"
+
+
+def _emit_playback_stop(api, scope: str, device_id: str) -> None:
+    api["socketio"].emit("playback_stop_requested", {}, room=_playback_room(scope, device_id))
+
+
+def _emit_playback_start(api, scope: str, device_id: str, state: dict, track: dict | None = None) -> None:
+    payload = {"state": state}
+    if track:
+        payload["track"] = track
+    api["socketio"].emit("playback_start_requested", payload, room=_playback_room(scope, device_id))
+
+
+@playback_bp.route("/api/devices/register", methods=["POST"])
+def register_playback_device():
+    api = _get_api()
+    scope = api["get_scope_from_request"]()
+    data = request.json or {}
+    device = api["register_device"](
+        scope,
+        device_id=data.get("device_id"),
+        device_name=data.get("device_name"),
+        device_type=data.get("device_type"),
+    )
+    return jsonify({
+        "status": "registered",
+        "device": device,
+        "room": _playback_room(scope, device["device_id"]),
+    })
+
+
+@playback_bp.route("/api/devices", methods=["GET"])
+def list_playback_devices():
+    api = _get_api()
+    scope = api["get_scope_from_request"]()
+    return jsonify({"devices": api["list_registered_devices"](scope)})
 
 
 @playback_bp.route("/api/static/stream/<track_id>", methods=["GET"])
@@ -408,6 +452,57 @@ def playback_put_state():
     return jsonify({"status": "ok"})
 
 
+@playback_bp.route("/api/playback/handoff", methods=["POST"])
+def playback_handoff():
+    api = _get_api()
+    scope = api["get_scope_from_request"]()
+    data = request.json or {}
+    from_device_id = (data.get("from_device_id") or "").strip()
+    to_device_id = (data.get("to_device_id") or "").strip()
+    if not from_device_id or not to_device_id:
+        return jsonify({"error": "from_device_id and to_device_id required"}), 400
+    if from_device_id == to_device_id:
+        return jsonify({"error": "from_device_id and to_device_id must differ"}), 400
+
+    state = api["get_playback_state"](scope, device_id=from_device_id)
+    if not state or not state.get("track_id"):
+        return jsonify({"error": "No active playback state for source device"}), 404
+
+    target_device = api["get_registered_device"](scope, to_device_id)
+    if not target_device:
+        return jsonify({"error": "Target device not found", "device_id": to_device_id}), 404
+    target_state = {
+        **state,
+        "device_id": to_device_id,
+        "device_name": target_device.get("device_name") or state.get("device_name"),
+        "is_playing": True,
+    }
+    api["put_playback_state"](scope, target_state)
+    _emit_playback_stop(api, scope, from_device_id)
+
+    track_payload = None
+    try:
+        lib, _, _ = api["get_core"]()
+        track = api["get_track_by_id"](lib, target_state.get("track_id"))
+        if track:
+            track_payload = track.to_dict()
+    except Exception as e:
+        logger.debug("API: handoff track payload lookup failed: %s", e)
+    if not track_payload and isinstance(target_state.get("track"), dict):
+        track_payload = target_state["track"]
+
+    _emit_playback_start(api, scope, to_device_id, target_state, track=track_payload)
+    response = {
+        "status": "sent",
+        "from_device_id": from_device_id,
+        "to_device_id": to_device_id,
+        "state": target_state,
+    }
+    if not target_device.get("active_sid"):
+        response["warning"] = "Device appears offline (no active socket)"
+    return jsonify(response)
+
+
 @playback_bp.route("/api/playback/notify-stop", methods=["POST"])
 def playback_notify_stop():
     api = _get_api()
@@ -416,6 +511,5 @@ def playback_notify_stop():
     device_id = data.get("device_id")
     if not device_id:
         return jsonify({"error": "device_id required"}), 400
-    room = f"playback:{scope}:{device_id}"
-    api["socketio"].emit("playback_stop_requested", {}, room=room)
+    _emit_playback_stop(api, scope, device_id)
     return jsonify({"status": "sent"})

@@ -125,6 +125,25 @@ class QueueManager:
             print(f"Dequeued: {item.title}")
             self._notify_change()
             return item
+
+    def consume_head_if_id(self, item_id: str) -> Optional[QueueItem]:
+        """
+        Remove the queued head only if it matches item_id.
+
+        Direct external playback, such as the Agent API, can start the same track
+        that is already queued first. Consuming that head keeps the next automatic
+        advance from replaying the just-started track.
+        """
+        if not item_id:
+            return None
+        with self._lock:
+            if not self._queue or self._queue[0].id != item_id:
+                return None
+            item = self._queue.pop(0)
+            self._history.append(item)
+            print(f"Consumed queued head: {item.title}")
+            self._notify_change()
+            return item
     
     def peek(self) -> Optional[QueueItem]:
         """View the next item without removing it. Returns None if queue is empty."""

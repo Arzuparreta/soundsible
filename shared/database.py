@@ -145,6 +145,18 @@ class DatabaseManager:
                         PRIMARY KEY (artist, title)
                     )
                 """)
+
+                # Note: Agent API tokens are random bearer tokens; only hashes are stored.
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS agent_tokens (
+                        id TEXT PRIMARY KEY,
+                        name TEXT,
+                        token_hash TEXT NOT NULL UNIQUE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_used_at TIMESTAMP,
+                        revoked_at TIMESTAMP
+                    )
+                """)
                 
                 # Note: 5. Performance indexes for common access patterns
                 # - get_all_tracks orders by artist, album, track_number
@@ -383,3 +395,37 @@ class DatabaseManager:
             except Exception as e:
                 conn.execute("ROLLBACK")
                 logger.warning("Error caching YouTube resolution: %s", e)
+
+    # Note: Agent token storage
+
+    def create_agent_token(self, token_id: str, token_hash: str, name: Optional[str] = None) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO agent_tokens (id, name, token_hash)
+                VALUES (?, ?, ?)
+            """, (token_id, name or None, token_hash))
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("""
+                SELECT id, name, created_at, last_used_at, revoked_at
+                FROM agent_tokens
+                WHERE id = ?
+            """, (token_id,)).fetchone()
+            return dict(row)
+
+    def get_agent_token_by_hash(self, token_hash: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("""
+                SELECT id, name, token_hash, created_at, last_used_at, revoked_at
+                FROM agent_tokens
+                WHERE token_hash = ? AND revoked_at IS NULL
+            """, (token_hash,)).fetchone()
+            return dict(row) if row else None
+
+    def touch_agent_token(self, token_id: str) -> None:
+        with self._get_connection() as conn:
+            conn.execute("""
+                UPDATE agent_tokens
+                SET last_used_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND revoked_at IS NULL
+            """, (token_id,))

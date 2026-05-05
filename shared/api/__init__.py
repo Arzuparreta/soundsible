@@ -22,7 +22,14 @@ from shared.models import PlayerConfig, Track, LibraryMetadata, StorageProvider
 from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, DEFAULT_CACHE_DIR, STATION_PORT, DEFAULT_OUTPUT_DIR_FALLBACK, SourceType
 from shared.path_resolver import resolve_local_track_path
 from shared.app_config import set_output_dir as set_app_output_dir
-from shared.playback_state import get_state as get_playback_state, put_state as put_playback_state, get_scope_from_request
+from shared.playback_state import (
+    get_state as get_playback_state,
+    put_state as put_playback_state,
+    get_scope_from_request,
+    register_device,
+    mark_device_socket_active,
+    unregister_socket,
+)
 from player.library import LibraryManager
 from player.queue_manager import QueueManager
 from player.favourites_manager import FavouritesManager
@@ -110,7 +117,13 @@ CORS(
     app,
     origins=_build_cors_origins(),
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Soundsible-Admin-Token", "Range"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Soundsible-Admin-Token",
+        "X-Soundsible-Agent-Token",
+        "Range",
+    ],
 )
 socketio = SocketIO(app, cors_allowed_origins=_socket_cors_origins, async_mode="gevent")
 
@@ -169,8 +182,20 @@ def on_playback_register(data):
     if not device_id:
         return
     scope = get_scope_from_request()
+    register_device(
+        scope,
+        device_id=device_id,
+        device_name=(data or {}).get("device_name"),
+        device_type=(data or {}).get("device_type") or "desktop",
+    )
     room = f"playback:{scope}:{device_id}"
     join_room(room, sid=request.sid)
+    mark_device_socket_active(scope, device_id, request.sid)
+
+
+@socketio.on("disconnect")
+def on_socket_disconnect():
+    unregister_socket(request.sid)
 
 
 # Note: Path to the new web UI and repo branding
@@ -815,12 +840,14 @@ from shared.api.routes.downloader import downloader_bp
 from shared.api.routes.config import config_bp
 from shared.api.routes.discovery import discovery_bp
 from shared.api.routes.podcasts import podcasts_bp
+from shared.api.routes.agent import agent_bp
 app.register_blueprint(library_bp)
 app.register_blueprint(playback_bp)
 app.register_blueprint(downloader_bp)
 app.register_blueprint(config_bp)
 app.register_blueprint(discovery_bp)
 app.register_blueprint(podcasts_bp)
+app.register_blueprint(agent_bp)
 
 
 @app.route('/api/health')
