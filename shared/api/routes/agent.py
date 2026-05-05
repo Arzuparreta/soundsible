@@ -176,7 +176,7 @@ def agent_play():
     if requested_device_id and not target:
         return jsonify({"error": "Target device not found", "device_id": requested_device_id}), 404
 
-    lib, engine, _ = api["get_core"]()
+    lib, engine, queue = api["get_core"]()
     track = None
     payload = None
     track_id = (data.get("track_id") or "").strip()
@@ -208,6 +208,7 @@ def agent_play():
         return jsonify({"error": "track_id or query required"}), 400
 
     if target:
+        queue.consume_head_if_id(track_id)
         target_state = {
             "track_id": track_id,
             "track": payload,
@@ -227,6 +228,7 @@ def agent_play():
     if not track or not engine:
         return jsonify({"error": "No target device registered and local engine cannot play this item"}), 409
 
+    queue.consume_head_if_id(track_id)
     url = lib.get_track_url(track)
     engine.play(url, track)
     return jsonify({"status": "playing", "track": payload})
