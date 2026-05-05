@@ -68,10 +68,17 @@ export class ConnectionManager {
         this.socket.on('connect', () => {
             console.log("Socket connected");
             store.update({ isOnline: true });
-            this.socket.emit('playback_register', {
+            const registration = {
                 device_id: store.getDeviceId(),
-                device_name: store.getDeviceName()
-            });
+                device_name: store.getDeviceName(),
+                device_type: store.getDeviceType()
+            };
+            this.socket.emit('playback_register', registration);
+            fetch(`${getApiBase(host)}/api/devices/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(registration)
+            }).catch(() => {});
         });
 
         this.socket.on('disconnect', () => {
@@ -95,6 +102,14 @@ export class ConnectionManager {
 
         this.socket.on('playback_stop_requested', () => {
             window.dispatchEvent(new CustomEvent('playback_stop_requested'));
+        });
+
+        this.socket.on('playback_start_requested', (data) => {
+            window.dispatchEvent(new CustomEvent('playback_start_requested', { detail: data }));
+        });
+
+        this.socket.on('playback_next_requested', () => {
+            window.dispatchEvent(new CustomEvent('playback_next_requested'));
         });
     }
 

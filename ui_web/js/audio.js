@@ -142,6 +142,36 @@ class AudioEngine {
         // Note: Stop when another device resumes (server sends playback_stop_requested)
         if (typeof window !== 'undefined') {
             window.addEventListener('playback_stop_requested', () => this.pause());
+            window.addEventListener('playback_next_requested', () => this.next());
+            window.addEventListener('playback_start_requested', async (event) => {
+                const detail = event.detail || {};
+                const state = detail.state || {};
+                const trackId = state.track_id;
+                let track = detail.track || null;
+                if (!track && trackId) {
+                    track = store.state.library.find(t => t.id === trackId) || null;
+                    if (!track) {
+                        await store.syncLibrary().catch(() => {});
+                        track = store.state.library.find(t => t.id === trackId) || null;
+                    }
+                }
+                if (!track) return;
+                await this.playTrack(track);
+                const positionSec = Number(state.position_sec) || 0;
+                if (positionSec > 0) {
+                    const applySeek = () => {
+                        const duration = this.audio.duration;
+                        if (Number.isFinite(duration) && duration > 0) {
+                            this.audio.currentTime = Math.min(positionSec, duration);
+                        }
+                    };
+                    if (Number.isFinite(this.audio.duration) && this.audio.duration > 0) {
+                        applySeek();
+                    } else {
+                        this.audio.addEventListener('loadedmetadata', applySeek, { once: true });
+                    }
+                }
+            });
         }
 
         // Note: Persist playback state on close so same-device resume works after reload

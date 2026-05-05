@@ -279,16 +279,23 @@ class Store {
         return (typeof window !== 'undefined' && window.location.pathname.includes('desktop')) ? 'Desktop' : 'Mobile';
     }
 
+    getDeviceType() {
+        return (typeof window !== 'undefined' && window.location.pathname.includes('desktop')) ? 'desktop' : 'mobile';
+    }
+
     /** Push current playback state to server (for cross-device resume). Fire-and-forget. */
     pushPlaybackState(trackId, positionSec, isPlaying) {
         const deviceId = this.getDeviceId();
         const deviceName = this.getDeviceName();
+        const currentTrack = this.state.currentTrack && this.state.currentTrack.id === trackId ? this.state.currentTrack : null;
         const body = JSON.stringify({
             track_id: trackId || null,
+            track: currentTrack,
             position_sec: typeof positionSec === 'number' ? positionSec : 0,
             is_playing: !!isPlaying,
             device_id: deviceId,
-            device_name: deviceName
+            device_name: deviceName,
+            device_type: this.getDeviceType()
         });
         fetch(`${this.apiBase}/api/playback/state`, {
             method: 'PUT',
