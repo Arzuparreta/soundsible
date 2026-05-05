@@ -1,18 +1,42 @@
-# [<img src="branding/logo-app.png" alt="Soundsible" width="52" height="52" align="center"> **Soundsible**](https://arzuparreta.github.io/soundsible.github.io)
+# 🎧 Soundsible
 
-<p align="left">
-  <a href="https://arzuparreta.github.io/soundsible.github.io"><img src="https://img.shields.io/badge/GO%20TO%20WEBSITE-E0BC00?style=for-the-badge" alt="View Soundsible repository"></a>
-</p>
+**A self-hosted music environment that respects your privacy and your wallet.**
 
-**Soundsible is a self-hosted music environment** — Browse privately and **for free** through **YouTube**, **Youtube Music** and **iTunes Podcasts**. Listen to or save music with original and reliable metadata and covers. Create your playlists. Explore through top grade **local, private recommendations** based on your listenings and favorites for music and podcasts.  
+> "I built Soundsible because I'm a musician who understands how predatory music streaming services have become. As a Linux SysAdmin, I had the tools to create something better: a private, free alternative that doesn't sacrifice any commodity."
 
+— **Arzuparreta** (Musician & Linux SysAdmin)
 
-This is an open-source project with no ads or revenue. Everything is **local**, **private**, and aims to prrovide users a sensible self-hosted alternative to the predatory music streaming services everyone uses today, without sacrificing any comodity whatsoever.
+[![Go to WEBSITE](https://img.shields.io/badge/GO%20TO%20WEBSITE-E0BC00?style=for-the-badge)](https://arzuparreta.github.io/soundsible.github.io)
 
-[Advanced install & deployment](docs/INSTALL.md) · [Documentation](#documentation)
+## 🎵 What is Soundsible?
+
+Soundsible is a **self-hosted music streaming environment** that lets you browse, listen, and save music **privately and for free** through:
+
+- **YouTube** (vast catalog)
+- **YouTube Music** (personalized recommendations)
+- **iTunes Podcasts** (podcast integration)
+
+Unlike commercial services, Soundsible gives you:
+- ✅ **Original metadata and cover art** (reliable, not algorithmically twisted)
+- ✅ **Local, private recommendations** based on YOUR listening history
+- ✅ **Zero ads, zero tracking, zero revenue models** — just your music
+- ✅ **Complete control** over your data (it's YOUR server after all)
+
+## 🛡️ Why Soundsible?
+
+As a **musician**, I've seen how streaming platforms exploit artists and listeners alike. As a **Linux SysAdmin**, I know that self-hosting is the only true path to digital freedom.
+
+Soundsible aims to be a **sensible self-hosted alternative** to predatory music streaming services — without sacrificing any commodity whatsoever.
+
+### The Philosophy
+- **Privacy by design**: Everything stays local on your server
+- **Free forever**: No subscriptions, no premium tiers, no hidden costs
+- **Open source**: MIT License — inspect, modify, contribute
+- **Musician-approved**: Built by someone who actually understands music
+
+## 📱 Screenshots
 
 ### Mobile
-
 <p align="center">
   <img src="https://arzuparreta.github.io/soundsible.github.io/screenshots/mobile-yt-search.PNG" alt="Mobile YouTube Search" width="200">
   <img src="https://arzuparreta.github.io/soundsible.github.io/screenshots/mobile-songs-library.PNG" alt="Mobile Songs Library" width="200">
@@ -20,39 +44,33 @@ This is an open-source project with no ads or revenue. Everything is **local**, 
 </p>
 
 ### Desktop
-
 <p align="center">
   <img src="https://arzuparreta.github.io/soundsible.github.io/screenshots/desktop-player-dark.png" alt="Desktop Player Dark" width="600">
 </p>
 
 ---
 
-## Legal disclaimer
+## ⚠️ Legal Disclaimer
 
-> [!WARNING]
-> **Soundsible does not encourage or support piracy or Terms‑of‑Service violations.**  
-> It is a neutral tool for managing and streaming your own, legally obtained media; **you are solely responsible** for how you use it and for complying with all applicable laws and platform terms.  
-> See [docs/LEGAL.md](docs/LEGAL.md) for full legal and acceptable‑use details.
-
----
-
-## Contents
-
-- [Install & run](#install--run)
-- [Documentation](#documentation)
-- [Third-party components](#third-party-components)
-- [Contributing](#contributing)
-- [License](#license)
+> **Soundsible does not encourage or support piracy or Terms-of-Service violations.**
+> 
+> It is a neutral tool for managing and streaming your own, legally obtained media; **you are solely responsible** for how you use it and for complying with all applicable laws and platform terms.
+> 
+> See [docs/LEGAL.md](docs/LEGAL.md) for full legal and acceptable-use details.
 
 ---
 
-## Install & run
+## 🚀 Quick Start
 
 ### Prerequisites
 
 - **Python 3.10+**
 - **git**
-- **FFmpeg** — required for downloading and audio conversion; install with your OS package manager (not bundled). Examples: `sudo apt install ffmpeg` (Debian/Ubuntu), `sudo pacman -S ffmpeg` (Arch), `brew install ffmpeg` (macOS). Windows: see [FFmpeg](https://ffmpeg.org/download.html) or `winget install ffmpeg`. More notes in [docs/INSTALL.md](docs/INSTALL.md).
+- **FFmpeg** — required for downloading and audio conversion
+  - Debian/Ubuntu: `sudo apt install ffmpeg`
+  - Arch: `sudo pacman -S ffmpeg`
+  - macOS: `brew install ffmpeg`
+  - Windows: [FFmpeg download](https://ffmpeg.org/download.html) or `winget install ffmpeg`
 - **Linux**: `python3-venv` and `python3-pip` (package names may vary by distro)
 
 ### 1. Clone the repository
@@ -62,112 +80,107 @@ git clone https://github.com/Arzuparreta/soundsible.git
 cd soundsible
 ```
 
-### 2. First run (recommended, self-healing)
+### 2. First run (self-healing)
 
 ```bash
 python3 run.py
 ```
 
-This command now bootstraps automatically on fresh clones:
-- creates `./venv` if missing
-- installs/updates `requirements.txt`
-- starts the launcher/CLI flow
-
-If `python3` is missing, install from [python.org](https://www.python.org/downloads/) or your package manager, for example:
-
-```bash
-sudo apt install python3 python3-venv python3-pip
-```
-
-**Windows (PowerShell):**
-
-```powershell
-python run.py
-```
+This command bootstraps automatically on fresh clones:
+- Creates `./venv` if missing
+- Installs/updates `requirements.txt`
+- Starts the launcher/CLI flow
 
 ### 3. Run Soundsible
 
-**Launcher (recommended)** — from the project root, using the venv’s Python:
+**Launcher (recommended)** — from the project root:
 
 ```bash
 ./venv/bin/python start_launcher.py
 ```
 
-- Open **http://localhost:5099** and click **Launch Ecosystem** to start the Station engine and open the Station.
-- **Keep this terminal open** while you use Soundsible; closing it stops the engine.
-- Use **Stop** on the launcher page to shut down the engine cleanly.
+- Open **http://localhost:5099** and click **Launch Ecosystem** to start the Station engine and open the Station
+- **Keep this terminal open** while using Soundsible; closing it stops the engine
+- Use **Stop** on the launcher page to shut down the engine cleanly
 
-**Windows:** use `venv\Scripts\python.exe` instead of `./venv/bin/python` (same for `pip` above).
-
-**CLI / SSH** — alternative when you prefer a terminal menu:
+**CLI / SSH** — alternative for terminal lovers:
 
 ```bash
 python3 run.py
 ```
 
-- Choose **Start Station Engine & Open Station**.
-- Keep the terminal open while the engine runs.
-- Open **http://localhost:5005/player/** (or `http://<server-LAN-IP>:5005/player/` from another machine on the same network).
+- Choose **Start Station Engine & Open Station**
+- Keep the terminal open while the engine runs
+- Open **http://localhost:5005/player/** (or `http://<server-LAN-IP>:5005/player/` from another machine)
 
-Remote access over [Tailscale](https://tailscale.com/): use **http://\<your-tailscale-ip\>:5005/player/** from a device on your tailnet. Further steps (headless servers, reverse proxies, storage) are in [docs/INSTALL.md](docs/INSTALL.md).
+**Remote access** via [Tailscale](https://tailscale.com/): use **http://<your-tailscale-ip>:5005/player/** from any device on your tailnet.
 
-**Native share** (the device share sheet on iOS/Android for WhatsApp, Messages, etc.) needs a **secure context**: use **HTTPS** or open the player as **`http://localhost`**. Over plain HTTP using the server’s LAN address, browsers usually block **Web Share**; the player still copies the YouTube link.
-
-The player UI adapts to desktop and mobile layouts.
-
-### 4. Troubleshooting fresh clone errors
-
-If you moved/re-cloned the repo and hit dependency errors (for example `ModuleNotFoundError: gevent`), run:
-
-```bash
-rm -rf venv
-python3 run.py
-```
-
-This forces a clean bootstrap and dependency reinstall for the new clone location.
-
-### Install as a web app (PWA)
+### 4. Install as a web app (PWA)
 
 - **iOS / Safari**: Share → **Add to Home Screen**
 - **Android / Chrome**: Menu → **Install app**
 
 ---
 
-## Documentation
+## 📚 Documentation
 
-- [docs/INSTALL.md](docs/INSTALL.md) — headless server, Tailscale, reverse proxy, storage
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — architecture and data flow (includes **Discover / Deezer proxy**)
-- [docs/AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md) — API guide for OpenClaw, Hermes agents, and local assistants
-- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — configuration, environment variables, storage backends
-- [docs/LEGAL.md](docs/LEGAL.md) — legal and acceptable use
-
-Troubleshooting:
-
-- [docs/troubleshooting-yt-dlp-formats.md](docs/troubleshooting-yt-dlp-formats.md)
+- [Install & Deployment](docs/INSTALL.md) — headless server, Tailscale, reverse proxy, storage
+- [Architecture](docs/ARCHITECTURE.md) — architecture and data flow (includes **Discover / Deezer proxy**)
+- [Agent Integration](docs/AGENT_INTEGRATION.md) — API guide for OpenClaw, Hermes agents, and local assistants
+- [Configuration](docs/CONFIGURATION.md) — configuration, environment variables, storage backends
+- [Legal & Acceptable Use](docs/LEGAL.md) — legal details
+- [Troubleshooting yt-dlp formats](docs/troubleshooting-yt-dlp-formats.md)
 
 ---
 
-## Third-party components
+## 🔧 Third-party Components
 
-Soundsible depends on the following. FFmpeg is system-installed; others are pulled in via `pip` where applicable.
+Soundsible depends on these excellent projects. FFmpeg is system-installed; others are pulled in via `pip`:
 
 - **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** — Unlicense (public domain). YouTube / YouTube Music download and search.
-- **[Deezer public API](https://developers.deezer.com/)** — Discover uses read-only metadata (charts, playlists, tracks) via the Station’s allowlisted HTTP proxy; audio is **not** streamed from Deezer.
+- **[Deezer public API](https://developers.deezer.com/)** — Discover uses read-only metadata (charts, playlists, tracks) via the Station's allowlisted HTTP proxy; audio is **not** streamed from Deezer.
 - **[FFmpeg](https://ffmpeg.org/)** — LGPL/GPL. Audio conversion and extraction.
 - **[ffmpeg-python](https://github.com/kkroening/ffmpeg-python)** — Apache 2.0. Python bindings for FFmpeg.
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
-Contributions, bug reports, and feature requests are welcome.
+Contributions, bug reports, and feature requests are welcome!
 
 - See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
-- Open an issue for bugs or proposals; pull requests for fixes and features are appreciated.
+- Open an issue for bugs or proposals.
+- Pull requests for fixes and features are appreciated.
 
 ---
 
-## License
+## 📄 License
 
-Soundsible is released under the **MIT License**.  
+Soundsible is released under the **MIT License**.
+
 See [LICENSE](LICENSE) for the full text.
+
+---
+
+## 🎼 Who's Behind This?
+
+I'm **Arzuparreta**, a musician who refused to accept the predatory music streaming status quo. As a **Linux SysAdmin**, I had the power to build something better.
+
+- 🎵 **Musician**: I create music and understand what artists and listeners truly need.
+- 🐧 **Linux SysAdmin**: I know how to build, deploy, and maintain self-hosted solutions.
+- 🤖 **AI Builder**: I use AI to automate simple tasks and enhance creativity.
+
+Soundsible is my contribution to the self-hosted community — a privacy-first, free alternative that doesn't compromise on features.
+
+**If you like my work:**
+- ⭐ Give this repo a star!
+- 👤 Follow me on [GitHub](https://github.com/Arzuparreta)
+- 🐦 Follow me on [Twitter/X](https://twitter.com/Arzuparreta)
+- 💼 Connect on [LinkedIn](https://linkedin.com/in/Arzuparreta)
+
+---
+
+*Building in public — Linux, Music, and Code.* 🚀
+
+[![GitHub followers](https://img.shields.io/github/followers/Arzuparreta?label=Follow&style=social)](https://github.com/Arzuparreta)
+[![Twitter Follow](https://img.shields.io/twitter/follow/Arzuparreta?style=social)](https://twitter.com/Arzuparreta)
