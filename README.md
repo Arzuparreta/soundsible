@@ -26,7 +26,7 @@ Unlike commercial services, Soundsible gives you:
 
 ## 🛡️ Why Soundsible?
 
-As a **musician**, I've seen how streaming platforms exploit artists and listeners alike. As a **Linux SysAdmin**, I know that self-hosting is the only true path to digital freedom.
+As a **musician**, I've seen how streaming platforms exploit artists and listeners alike. As a system designer I know that self-hosting is the only true path to digital freedom.
 
 Soundsible aims to be a **sensible self-hosted alternative** to predatory music streaming services — without sacrificing any commodity whatsoever.
 
@@ -166,7 +166,7 @@ See [LICENSE](LICENSE) for the full text.
 
 ## 🎼 Who's Behind This?
 
-I'm **Arzuparreta**, a musician who refused to accept the predatory music streaming status quo. As a **Linux SysAdmin**, I had the power to build something better.
+I'm **Arzuparreta**, a musician who refused to accept the predatory music streaming status quo. As a **person that lives for music, technology and freedom**, I had the power to build something better.
 
 - 🎵 **Musician**: I create music and understand what artists and listeners truly need.
 - 🐧 **Linux SysAdmin**: I know how to build, deploy, and maintain self-hosted solutions.
