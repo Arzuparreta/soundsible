@@ -2,7 +2,7 @@
 
 **A self-hosted music environment that respects your privacy and your wallet.**
 
-> "I built Soundsible because I'm a musician who understands how predatory music streaming services have become. As a Linux SysAdmin, I had the tools to create something better: a private, free alternative that doesn't sacrifice any commodity."
+> "I built Soundsible because I'm a musician who understands how predatory music streaming services have become. As a system designer, I had the tools to create something better: a private, free alternative that doesn't sacrifice any commodity."
 
 — **Arzuparreta** (Musician & Linux SysAdmin)
 
