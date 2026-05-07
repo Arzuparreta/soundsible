@@ -6,6 +6,7 @@
 import { store } from './store.js';
 import { audioEngine } from './audio.js';
 import * as renderers from './renderers.js';
+import { radioService } from './radio.js';
 
 function isDeezerRowId(id) {
     return typeof id === 'string' && id.startsWith('deezer_');
@@ -62,6 +63,7 @@ export function getTrackFromContext(trackId, currentView, viewState) {
  */
 export function playTrackFromContext(trackId, currentView, viewState) {
     if (isDeezerRowId(trackId)) {
+        if (store.state.radioMode) radioService.exitRadio();
         const raw = String(trackId).replace(/^deezer_/, '');
         void import('./discovery.js').then((m) => {
             if (typeof m.playDeezerTrackByNumericId === 'function') {
@@ -71,6 +73,7 @@ export function playTrackFromContext(trackId, currentView, viewState) {
         return;
     }
     if (isPodcastEpisodeId(trackId)) {
+        if (store.state.radioMode) radioService.exitRadio();
         if (typeof window.playPodcastEpisode === 'function') {
             window.playPodcastEpisode(trackId);
         }
@@ -84,6 +87,7 @@ export function playTrackFromContext(trackId, currentView, viewState) {
         if (track) list = store.state.queue;
     }
     if (track) {
+        if (store.state.radioMode) radioService.exitRadio();
         audioEngine.setContext(list);
         store.update({ currentTrack: track });
         if (track.media_kind === 'podcast_episode') {

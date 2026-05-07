@@ -8,6 +8,7 @@ import { Haptics } from './haptics.js';
 import { getApiBase } from './config.js';
 import { searchService } from './search_service.js';
 import { playPreview, paintOptimisticDeezerPreview } from './preview_playback.js';
+import { showLoadingToast } from './shared.js';
 import * as renderers from './renderers.js';
 import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
 
@@ -462,17 +463,21 @@ export async function playDeezerTrackByNumericId(deezerId) {
 
 export async function addDeezerTrackToQueueByNumericId(deezerId) {
   Haptics.tick();
+  const loading = showLoadingToast('Resolving track...');
   const trackLike = await trackLikeForDeezerId(deezerId);
   if (!trackLike) {
+    loading.dismiss();
     window.showToast?.('Could not load track');
     return;
   }
   const item = await resolveDeezerTrackToOdstItem(trackLike);
   if (!item) {
+    loading.dismiss();
     window.showToast?.('No YouTube match — try search above');
     return;
   }
   const ok = await store.addPreviewToQueue(item);
+  loading.dismiss();
   window.showToast?.(ok ? 'Added to queue' : 'Could not add to queue');
 }
 

@@ -177,6 +177,71 @@ export async function shareOrCopyUrl(url, showToast) {
     await shareOrCopyPayload({ url }, showToast);
 }
 
+/**
+ * Show a persistent toast with a spinner that auto-dismisses when a promise settles.
+ * @param {string} message - Loading message to display
+ * @param {{ showToast?: (msg: string) => void }} [options]
+ * @returns {{ dismiss(): void, update(msg: string): void, promise<T>(p: Promise<T>, successMsg?: string, errorMsg?: string): Promise<T> }}
+ */
+export function showLoadingToast(message = 'Loading...', options = {}) {
+    const { showToast } = options;
+    const toastFn = showToast || (typeof window !== 'undefined' ? window.showToast : null);
+    if (!toastFn) {
+        return {
+            dismiss() {},
+            update() {},
+            async promise(p, successMsg, errorMsg) {
+                try { return await p; } catch (e) { throw e; }
+            }
+        };
+    }
+    const container = document.getElementById('toast-container');
+    if (!container) {
+        return {
+            dismiss() {},
+            update() {},
+            async promise(p, successMsg, errorMsg) {
+                try { return await p; } catch (e) { throw e; }
+            }
+        };
+    }
+    let el = document.createElement('div');
+    el.className = 'glass-view px-4 py-2 rounded-xl text-sm font-medium text-[var(--text-main)] border border-[var(--glass-border)] flex items-center gap-2';
+    el.style.backdropFilter = 'blur(32px)';
+    el.style.webkitBackdropFilter = 'blur(32px)';
+    el.style.backgroundColor = 'var(--bg-surface)';
+    el.innerHTML = `<i class="fas fa-spinner animate-spin text-[var(--accent)] text-xs"></i><span class="loading-toast-msg"></span>`;
+    el.querySelector('.loading-toast-msg').textContent = message;
+    container.appendChild(el);
+
+    return {
+        dismiss() {
+            if (el) {
+                el.remove();
+                el = null;
+            }
+        },
+        update(msg) {
+            if (el) {
+                const span = el.querySelector('.loading-toast-msg');
+                if (span) span.textContent = msg;
+            }
+        },
+        async promise(p, successMsg, errorMsg) {
+            try {
+                const result = await p;
+                this.dismiss();
+                if (successMsg) toastFn(successMsg);
+                return result;
+            } catch (e) {
+                this.dismiss();
+                if (errorMsg) toastFn(errorMsg);
+                throw e;
+            }
+        }
+    };
+}
+
 export function bindPlaylistWindowActions(options) {
     const {
         store,

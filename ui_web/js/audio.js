@@ -7,6 +7,7 @@ import { Resolver } from './resolver.js';
 import { connectionManager } from './connection.js';
 import { Haptics } from './haptics.js';
 import { isVisible } from './visibility.js';
+import { radioService } from './radio.js';
 
 const PRELOAD_THRESHOLD_SEC = 45;
 const PUSH_DEBOUNCE_VISIBLE_SEC = 5;
@@ -554,7 +555,22 @@ class AudioEngine {
         const nextTrack = await store.popNextFromQueue();
         if (nextTrack) {
             this.playTrack(nextTrack);
+            if (store.state.radioMode) radioService.refillIfNeeded();
             return;
+        }
+
+        // Note: 1b. Queue empty — if radio mode, try to refill before falling back
+        if (store.state.radioMode) {
+            const refilled = await radioService.refillIfNeeded();
+            if (refilled) {
+                const retryTrack = await store.popNextFromQueue();
+                if (retryTrack) {
+                    this.playTrack(retryTrack);
+                    return;
+                }
+            }
+            radioService.exitRadio();
+            window.showToast?.('Radio ended');
         }
 
         // Note: 2. Try context fallback (sequential or shuffled)

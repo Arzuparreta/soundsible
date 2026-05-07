@@ -175,7 +175,8 @@ export class UI {
             favBtn: 'action-fav',
             addToPlaylistBtn: 'action-add-to-playlist',
             deleteBtn: 'action-delete',
-            removeFromPlaylistBtn: 'action-remove-from-playlist'
+            removeFromPlaylistBtn: 'action-remove-from-playlist',
+            startRadioBtn: 'action-start-radio'
         }, {
             store,
             showToast: (message) => this.showToast(message),
@@ -479,7 +480,21 @@ export class UI {
             const fallback = store.placeholderCoverUrl.replace(/"/g, '%22');
             art.style.backgroundImage = url ? `url("${String(url).replace(/"/g, '%22')}")` : `url("${fallback}")`;
         }
-        if (title) title.textContent = track.title;
+        if (title) {
+            const radioOn = !!store.state.radioMode;
+            const existingBadge = title.querySelector('.radio-badge');
+            if (radioOn && !existingBadge) {
+                const badge = document.createElement('span');
+                badge.className = 'radio-badge inline-flex items-center gap-1 ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-green-500/15 text-green-400 border border-green-500/20';
+                badge.innerHTML = '<i class="fas fa-tower-broadcast text-[7px]"></i>Radio';
+                title.textContent = track.title;
+                title.appendChild(badge);
+            } else if (!radioOn && existingBadge) {
+                title.textContent = track.title;
+            } else {
+                title.textContent = track.title;
+            }
+        }
         if (artistEl) artistEl.textContent = track.artist;
         if (album) album.textContent = track.album;
         const npDl = this.dom.npDownloadWrap;
