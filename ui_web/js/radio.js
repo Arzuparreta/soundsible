@@ -116,6 +116,14 @@ function collectTrackIdentity(track) {
     return ids;
 }
 
+function getRadioRequestKey(track) {
+    const ids = [...collectTrackIdentity(track)];
+    if (ids.length) return ids.sort().join('|');
+    const title = (track?.title || '').trim().toLowerCase();
+    const artist = (track?.artist || track?.album_artist || track?.channel || '').trim().toLowerCase();
+    return `${title}|${artist}`;
+}
+
 function isSeedCurrentPlayingTrack(seedTrack, currentTrack, seedVideoId) {
     if (!seedTrack || !currentTrack) return false;
     const currentIds = collectTrackIdentity(currentTrack);
@@ -126,6 +134,11 @@ function isSeedCurrentPlayingTrack(seedTrack, currentTrack, seedVideoId) {
         if (currentIds.has(id)) return true;
     }
     return false;
+}
+
+function isCurrentTrackAudiblyPlaying() {
+    const audio = audioEngine.audio;
+    return store.state.isPlaying || !!(audio && !audio.paused && !audio.ended);
 }
 
 function makeSeedPlaybackTrack(seedTrack, seed) {
@@ -163,6 +176,8 @@ function makeSeedPlaybackTrack(seedTrack, seed) {
 class RadioService {
     constructor() {
         this._refilling = false;
+        this._startSeq = 0;
+        this._activeStart = null;
     }
 
     /**
@@ -171,21 +186,42 @@ class RadioService {
      * @returns {Promise<boolean>} true if radio started successfully
      */
     async startRadio(track) {
-        if (store.state.radioMode) this.exitRadio();
+        if (!track) return false;
+        const requestKey = getRadioRequestKey(track);
+        if (this._activeStart?.key === requestKey) {
+            console.debug('[radio] duplicate start ignored', { requestKey });
+            return this._activeStart.promise;
+        }
 
-        const title = (track.title || 'Unknown').trim();
-        const artist = (track.artist || track.album_artist || track.channel || '').trim();
-        const loading = showLoadingToast(`Starting radio for "${title}"...`);
+        const title = (track.title || 'Unknown').trim() || 'Unknown';
+        const token = ++this._startSeq;
+        if (this._activeStart) this._activeStart.loading?.dismiss();
+        const loading = showLoadingToast(`Loading radio for "${title}"...`);
+
+        const promise = this._startRadioSession(track, token, loading);
+        this._activeStart = { key: requestKey, token, loading, promise };
+        return promise;
+    }
+
+    _isCurrentStart(token) {
+        return this._activeStart?.token === token;
+    }
+
+    async _startRadioSession(track, token, loading) {
+        if (store.state.radioMode) this.exitRadio();
 
         try {
             const seed = await resolveSeedVideoId(track);
+            if (!this._isCurrentStart(token)) return false;
             if (!seed) {
                 loading.dismiss();
                 window.showToast?.('Could not find this track on YouTube');
                 return false;
             }
+            loading.update(`Loading radio for "${seed.title || track.title || 'Unknown'}"...`);
 
             const related = await fetchRelatedVideos(seed.videoId);
+            if (!this._isCurrentStart(token)) return false;
             if (!related.length) {
                 loading.dismiss();
                 window.showToast?.('No related tracks found');
@@ -213,22 +249,39 @@ class RadioService {
 
             const currentTrack = store.state.currentTrack;
             const keepCurrentSeedPlaying =
-                store.state.isPlaying &&
+                isCurrentTrackAudiblyPlaying() &&
                 isSeedCurrentPlayingTrack(track, currentTrack, seed.videoId);
             const seedPlaybackTrack = keepCurrentSeedPlaying
                 ? currentTrack
                 : makeSeedPlaybackTrack(track, seed);
             const radioTrackList = [seedPlaybackTrack, ...previewItems];
 
+            console.debug('[radio] start commit', {
+                token,
+                seedVideoId: seed.videoId,
+                seedTitle: seed.title,
+                currentTrackId: currentTrack?.id,
+                keepCurrentSeedPlaying,
+                generatedCount: previewItems.length
+            });
+
             await store.clearQueue();
+            if (!this._isCurrentStart(token)) return false;
 
             for (const item of previewItems) {
                 await store.addPreviewToQueue(item);
+                if (!this._isCurrentStart(token)) return false;
             }
 
             if (!keepCurrentSeedPlaying) {
                 audioEngine.setContext(radioTrackList);
-                await audioEngine.playTrack(seedPlaybackTrack);
+                const result = await audioEngine.playTrack(seedPlaybackTrack);
+                if (!this._isCurrentStart(token)) return false;
+                if (!result?.ok) {
+                    loading.dismiss();
+                    window.showToast?.('Could not play radio seed');
+                    return false;
+                }
             }
 
             store.update({
@@ -251,6 +304,8 @@ class RadioService {
             window.showToast?.('Could not start radio');
             console.error('Radio start error:', err);
             return false;
+        } finally {
+            if (this._isCurrentStart(token)) this._activeStart = null;
         }
     }
 
