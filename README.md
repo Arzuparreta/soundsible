@@ -22,7 +22,7 @@ Unlike commercial services, Soundsible gives you:
 - ✅ **Radio mode** for discovering similar music without leaving your own Station
 - ✅ **Discover, search, podcasts, favourites, playlists, and downloads** in one place
 - ✅ **Zero ads, zero tracking, zero revenue models** — just your music
-- ✅ **Complete control** over your data (it's YOUR server after all)
+- ✅ **Complete control** over your data (it's your server after all)
 
 ## 🛡️ Why Soundsible?
 
@@ -34,7 +34,7 @@ Soundsible aims to be a **sensible self-hosted alternative** to predatory music 
 - **Privacy by design**: Everything stays local on your server
 - **Free forever**: No subscriptions, no premium tiers, no hidden costs
 - **Open source**: MIT License — inspect, modify, contribute
-- **Musician-approved**: Built by someone who actually understands music
+- **Musician-approved**: Built by someone who actually needs to carry music around
 
 ## 📱 Screenshots
 
