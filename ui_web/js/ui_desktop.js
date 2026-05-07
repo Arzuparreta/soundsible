@@ -131,7 +131,7 @@ export const DesktopUI = {
 
         if (cover) cover.style.backgroundImage = track ? `url("${String(Resolver.getCoverUrl(track)).replace(/"/g, '%22')}")` : '';
         if (title) {
-            const radioOn = !!store.state.radioMode;
+            const radioOn = track?.source === 'radio';
             title.textContent = track?.title ?? '';
             if (radioOn) {
                 const badge = document.createElement('span');
