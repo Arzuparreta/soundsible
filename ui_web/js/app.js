@@ -696,7 +696,7 @@ function init() {
             if (vHome) vHome.classList.remove('hidden');
         }
         if (typeof window.renderContentForView === 'function') window.renderContentForView(initialView, { immediate: true });
-        initArtistScrollSuppress();
+        initMobileScrollSuppress();
         initArtistDetailBack();
         initQueueDrag();
         initScrollTracking();
@@ -1556,40 +1556,67 @@ window.toggleArtistAlbum = (ev) => {
     card.classList.toggle('artist-album-expanded', !wasExpanded);
 };
 
+const SCROLL_TOUCH_TARGET_SELECTOR = [
+    '.song-row',
+    '.playlist-track-row',
+    '.home-mixed-artist-row',
+    '.artist-card',
+    '.artist-album-header',
+    '.playlist-card',
+    '.podcast-search-row',
+    '.discover-card',
+    '.discover-surface-row',
+    '.discover-odst-row',
+    '.queue-item',
+    '.add-to-playlist-picker-item',
+    '.playlist-cover-picker-tile',
+    'button',
+    '[role="button"]',
+    'a'
+].join(',');
+
 /**
- * Same scroll/touch safety as library artists: touchstart/touchmove/touchend + class flag
- * so list items don't show ghost :active during scroll. Call for every view that has a scrollable list.
+ * Shared mobile scroll/touch safety. It only enters suppress mode for vertical scroll gestures,
+ * so horizontal song-row swipes and dedicated drag interactions keep their own transforms.
  */
 function initListScrollSuppress(containerEl, activeClass) {
     if (!containerEl) return;
+    if (containerEl.__listScrollSuppressBound) return;
+    containerEl.__listScrollSuppressBound = true;
     let scrollActive = false;
+    let startX = 0;
+    let startY = 0;
     const finishScroll = () => {
         if (!scrollActive) return;
         containerEl.__listScrollSuppressUntil = Date.now() + 220;
         setTimeout(() => { containerEl.classList.remove(activeClass); scrollActive = false; }, 180);
     };
-    containerEl.addEventListener('touchstart', () => {
+    containerEl.addEventListener('touchstart', (event) => {
+        const touch = event.touches?.[0];
+        startX = touch ? touch.clientX : 0;
+        startY = touch ? touch.clientY : 0;
         scrollActive = false;
+        containerEl.classList.remove(activeClass);
     }, { passive: true });
-    containerEl.addEventListener('touchmove', () => {
-        if (!scrollActive) {
-            scrollActive = true;
-            containerEl.classList.add(activeClass);
-        }
+    containerEl.addEventListener('touchmove', (event) => {
+        if (UI.isDraggingQueue) return;
+        if (scrollActive) return;
+        const touch = event.touches?.[0];
+        if (!touch) return;
+        const dx = Math.abs(touch.clientX - startX);
+        const dy = Math.abs(touch.clientY - startY);
+        if (dy <= 8 || dy <= dx) return;
+        scrollActive = true;
+        containerEl.classList.add(activeClass);
     }, { passive: true });
     containerEl.addEventListener('touchend', finishScroll, { passive: true });
     containerEl.addEventListener('touchcancel', finishScroll, { passive: true });
-}
-
-function initDiscoverScrollClickSuppress(containerEl) {
-    if (!containerEl || containerEl.__discoverScrollClickSuppress) return;
-    containerEl.__discoverScrollClickSuppress = true;
     containerEl.addEventListener('click', (event) => {
         const suppressUntil = Number(containerEl.__listScrollSuppressUntil || 0);
-        const shouldSuppress = containerEl.classList.contains('list-scroll-active') || Date.now() < suppressUntil;
+        const shouldSuppress = containerEl.classList.contains(activeClass) || Date.now() < suppressUntil;
         if (!shouldSuppress) return;
 
-        const target = event.target?.closest?.('.discover-surface-row, .discover-odst-row, .discover-primary-action, .discover-secondary-action');
+        const target = event.target?.closest?.(SCROLL_TOUCH_TARGET_SELECTOR);
         if (!target || !containerEl.contains(target)) return;
 
         event.preventDefault();
@@ -1597,16 +1624,24 @@ function initDiscoverScrollClickSuppress(containerEl) {
     }, { capture: true });
 }
 
-function initArtistScrollSuppress() {
-    initListScrollSuppress(dom?.libraryArtists || document.getElementById('library-artists'), 'artist-scroll-active');
-    initListScrollSuppress(document.getElementById('view-home'), 'list-scroll-active');
-    initListScrollSuppress(document.getElementById('view-favourites'), 'list-scroll-active');
-    const discoverView = document.getElementById('view-discover');
-    initListScrollSuppress(discoverView, 'list-scroll-active');
-    initDiscoverScrollClickSuppress(discoverView);
-    initListScrollSuppress(document.getElementById('view-playlists'), 'list-scroll-active');
-    initListScrollSuppress(document.getElementById('view-playlist-detail'), 'list-scroll-active');
-    initListScrollSuppress(document.getElementById('view-artist-detail'), 'list-scroll-active');
+function initMobileScrollSuppress() {
+    [
+        dom?.libraryArtists || document.getElementById('library-artists'),
+        document.getElementById('view-home'),
+        document.getElementById('view-favourites'),
+        document.getElementById('view-discover'),
+        document.getElementById('view-playlists'),
+        document.getElementById('view-playlist-detail'),
+        document.getElementById('view-artist-detail'),
+        document.getElementById('view-settings'),
+        document.querySelector('#view-podcast > .view-scroll-inner'),
+        document.querySelector('#view-podcast-show-detail > .view-scroll-inner'),
+        document.getElementById('floating-queue-tracks'),
+        document.getElementById('dl-download-queue-list'),
+        document.getElementById('mobile-downloads-list'),
+        document.getElementById('add-to-playlist-picker-list'),
+        document.getElementById('playlist-cover-picker-grid')
+    ].forEach((container) => initListScrollSuppress(container, 'list-scroll-active'));
 }
 
 function initArtistDetailBack() {

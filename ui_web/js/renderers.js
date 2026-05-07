@@ -715,7 +715,7 @@ export function buildPlaylistTrackRowsHtml(tracks, options = {}) {
             ? 'bg-[var(--bg-selection)]'
             : (desktop ? 'bg-transparent hover:bg-[var(--surface-overlay)]' : 'bg-transparent');
         return `
-        <div class="playlist-track-row flex items-center py-2 pl-2 pr-1 rounded-[var(--radius-omni-xs)] border border-transparent ${rowBg} transition-colors cursor-pointer group" data-id="${t.id}" data-index="${idx}"${rowOnclick}>
+        <div class="song-row playlist-track-row flex items-center py-2 pl-2 pr-1 rounded-[var(--radius-omni-xs)] border border-transparent ${rowBg} transition-colors cursor-pointer group" data-id="${t.id}" data-index="${idx}"${rowOnclick}>
             <div class="song-row-cover-wrapper relative w-11 h-11 flex-shrink-0${desktop ? ' group' : ''}">
                 <div class="song-row-cover absolute inset-0 rounded-[var(--radius-list-cover)] overflow-hidden bg-cover bg-center" style="${coverStyle}" role="img" aria-label="${esc(t.title || 'Cover')}">
                     <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/12 rounded-[var(--radius-list-cover)] pointer-events-none ${showPlayingIndicator ? 'opacity-100' + (desktop ? '' : ' is-playing') : 'opacity-0'}">
