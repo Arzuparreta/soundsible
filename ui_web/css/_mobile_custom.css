@@ -254,9 +254,9 @@
             padding-top: max(3.5rem, env(safe-area-inset-top));
         }
 
-        /* Discover results panel: scroll inset matches main views */
+        /* Discover uses the same single-scroll view model as Library. */
         #discover-search-results {
-            padding-bottom: var(--view-scroll-bottom) !important;
+            padding-bottom: 0 !important;
         }
 
         /* Cross-device resume: top notification banner (non-blocking) */
@@ -588,7 +588,52 @@
             transition: opacity 0.18s ease-out;
         }
 
-        /* Discover: grid layout, no horizontal scroll */
+        /* Discover: Library-aligned browsing surface. */
+        .discover-results-shell {
+            overflow: visible;
+            -webkit-overflow-scrolling: auto;
+        }
+        .discovery-home {
+            padding-bottom: 0;
+        }
+        .discovery-home section,
+        .discovery-search-results section {
+            min-width: 0;
+        }
+        .discovery-home h2,
+        .discovery-search-results h2,
+        .search-section-header {
+            padding-left: 0.25rem;
+            padding-right: 0.25rem;
+            color: var(--text-dim);
+        }
+        .discovery-home h2,
+        .discovery-search-results h2 {
+            font-size: 0.6875rem;
+            font-weight: 650;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin-bottom: 0.65rem;
+        }
+        #view-discover .discover-surface-row,
+        #view-discover .discover-odst-row,
+        #desktop-view-discover .discover-surface-row,
+        #desktop-view-discover .discover-odst-row {
+            background-color: var(--bg-card);
+            border-color: var(--glass-border);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+        }
+        .discover-primary-action,
+        .discover-secondary-action {
+            border: 1px solid var(--glass-border);
+            background: var(--surface-overlay);
+        }
+        .discover-primary-action {
+            color: var(--accent);
+        }
+        .discover-secondary-action {
+            color: var(--text-dim);
+        }
         .discover-section { margin-bottom: 1.125rem; flex-shrink: 0; }
         .discover-section h2 { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; }
         .discover-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 0.625rem; }
@@ -801,6 +846,15 @@
         #global-search-container.show-library-tabs .library-tabs-inline { display: flex; }
         #global-search-container .discover-odst-inline { display: none; }
         #global-search-container.show-discover-odst .discover-odst-inline { display: flex; }
+        body[data-current-view="discover"] #queue-container,
+        body[data-current-view="discover"] #dl-queue-container {
+            top: auto;
+            bottom: calc(var(--view-scroll-bottom) + 0.75rem);
+            right: 1rem;
+        }
+        body[data-current-view="discover"] #dl-queue-container {
+            bottom: calc(var(--view-scroll-bottom) + 4.25rem);
+        }
         .library-tab-bar-mobile {
             --library-tab-gap: 6px;
             --library-tab-pad: 4px;
@@ -840,15 +894,18 @@
         /* List scroll safety (same pattern as library artists): keep, but do not disable song-row transforms so swipe animations still work */
         #view-artist-detail.list-scroll-active .artist-album-header { transform: none !important; }
         #view-playlists.list-scroll-active .playlist-card { transform: none !important; }
-        /* Discover: same scroll/touch as library — .view is the scroll container (no overrides). */
-        #view-discover.list-scroll-active .discover-card { background: var(--surface-overlay) !important; }
-        #view-discover.list-scroll-active .discover-card-play { background: transparent !important; }
-        /* Discover: same view structure as library/favourites (uses .view padding); inner panel scrolls. */
-        #view-discover {
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
+        /* Discover: same scroll/touch safety as library list views. */
+        #view-discover.list-scroll-active .discover-surface-row,
+        #view-discover.list-scroll-active .discover-odst-row {
+            background: var(--bg-card) !important;
+            transform: none !important;
         }
+        #view-discover.list-scroll-active .discover-primary-action,
+        #view-discover.list-scroll-active .discover-secondary-action {
+            background: var(--surface-overlay) !important;
+        }
+        /* Discover: same view structure as library/favourites (uses .view padding); inner panel scrolls. */
+        #view-discover { min-height: 0; }
         /* Artist detail: expandable album tracks */
         .artist-album-expanded .artist-album-tracks { display: block !important; }
         .artist-album-expanded .artist-album-chevron { transform: rotate(180deg); }

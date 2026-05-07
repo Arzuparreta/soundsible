@@ -111,6 +111,7 @@ export class UI {
         // ## Section: Navigation state
         this.viewStack = [];
         this.currentView = store.hasLocalLibrarySignal() ? 'home' : 'discover';
+        document.body.dataset.currentView = this.currentView;
         this._npGesturesBound = false;
         this._npViewOpen = false; // Note: True when now playing view is visible (omni label fades out)
         this.isIslandActive = false;
@@ -661,6 +662,7 @@ export class UI {
         if (oldView) oldView.classList.add('view-outgoing');
 
         this.currentView = viewId;
+        document.body.dataset.currentView = viewId;
 
         const applySlideEnd = () => {
             const oldViewId = oldView && oldView.id ? oldView.id.replace(/^view-/, '') : null;

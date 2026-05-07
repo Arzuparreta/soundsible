@@ -31,8 +31,7 @@ function deezerSurfaceQuickActionsHtml(trackId) {
     if (!/^\d+$/.test(raw)) return '';
     const safe = esc(raw);
     return `
-            <button type="button" class="dl-playback-queue w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--input-bg)] hover:bg-[var(--accent)] hover:text-[var(--text-on-accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 transition-colors" data-deezer-id="${safe}" aria-label="Add to playback queue" title="Add to playback queue" onclick="event.stopPropagation()"><i class="fas fa-list-ul text-sm"></i></button>
-            <button type="button" class="dl-add-one w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--input-bg)] hover:bg-[var(--accent)] hover:text-[var(--text-on-accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 transition-colors" data-deezer-id="${safe}" aria-label="Add to download queue" title="Add to download queue" onclick="event.stopPropagation()"><i class="fas fa-cloud-download-alt text-sm"></i></button>`;
+            <button type="button" class="dl-add-one discover-primary-action w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--input-bg)] hover:bg-[var(--accent)] hover:text-[var(--text-on-accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 transition-colors" data-deezer-id="${safe}" aria-label="Add to download queue" title="Add to download queue" onclick="event.stopPropagation()"><i class="fas fa-cloud-download-alt text-sm"></i></button>`;
 }
 
 /** Escape URL for use in CSS background-image url(). */
@@ -210,7 +209,8 @@ export function buildHomeArtistRowHtml(artistName, track, options = {}) {
 export function buildSongRowsHtml(tracks, options = {}) {
     const desktop = options.desktopClickBehavior === true;
     const playOverlay = desktop ? desktopPlayOverlaySmallHtml() : '';
-    const suppressSwipeHints = options.discoverDeezerSurface === true;
+    const discoverSurface = options.discoverDeezerSurface === true;
+    const suppressSwipeHints = discoverSurface;
     const deezerSurfaceAttr = options.discoverDeezerSurface === true ? ' data-deezer-surface="1"' : '';
     const suppressActionMenu = options.suppressActionMenu === true;
     return tracks.map((t, idx) => {
@@ -233,10 +233,14 @@ export function buildSongRowsHtml(tracks, options = {}) {
                         </button>`;
         const deezerQuickHtml =
             options.discoverDeezerSurface === true ? deezerSurfaceQuickActionsHtml(t.id) : '';
+        const durationHtml = discoverSurface
+            ? ''
+            : `<div class="no-row-action text-[10px] font-medium text-[var(--text-dim)] opacity-55 tabular-nums">${formatTime(t.duration)}</div>`;
+        const rowExtraClass = discoverSurface ? ' discover-surface-row' : '';
         return `
             <div class="relative overflow-hidden rounded-[var(--radius-omni-xs)] mb-1 group${wrapperClass}"${dataIndexAttr}>
                 ${swipeHints}
-                <div class="song-row relative z-10 flex items-center py-2 pl-2 pr-1 ${rowBg} rounded-[var(--radius-omni-xs)] border border-transparent transition-colors duration-200 cursor-pointer" data-id="${t.id}"${deezerSurfaceAttr}${rowOnclick}>
+                <div class="song-row${rowExtraClass} relative z-10 flex items-center py-2 pl-2 pr-1 ${rowBg} rounded-[var(--radius-omni-xs)] border border-transparent transition-colors duration-200 cursor-pointer" data-id="${t.id}"${deezerSurfaceAttr}${rowOnclick}>
                     <div class="song-row-cover-wrapper relative w-11 h-11 flex-shrink-0${desktop ? ' group' : ''}">
                         <div class="song-row-cover absolute inset-0 rounded-[var(--radius-list-cover)] overflow-hidden bg-cover bg-center" style="${coverStyle}" role="img" aria-label="${esc(t.title || 'Cover')}">
                             <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/12 rounded-[var(--radius-list-cover)] pointer-events-none ${showPlayingIndicator ? 'opacity-100' + (desktop ? '' : ' is-playing') : 'opacity-0'}">
@@ -252,7 +256,7 @@ export function buildSongRowsHtml(tracks, options = {}) {
                     </div>
                     <div class="flex items-center gap-1 sm:gap-2 ml-2 flex-shrink-0">
                         ${trackTrustBadgeHtml(t)}
-                        <div class="no-row-action text-[10px] font-medium text-[var(--text-dim)] opacity-55 tabular-nums">${formatTime(t.duration)}</div>
+                        ${durationHtml}
                         ${deezerQuickHtml}
                         ${actionCell}
                     </div>
@@ -798,4 +802,3 @@ export function renderPlaylistDetail(playlistName, trackIds, library, tracksCont
         desktopClickBehavior: options.desktopClickBehavior
     });
 }
-

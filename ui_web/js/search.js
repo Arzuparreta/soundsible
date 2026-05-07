@@ -248,14 +248,16 @@ function buildOdstRowHtml(r, opts = {}) {
     return `
     <div class="search-result-item mb-1">
         ${labelBlock}
-        <div class="flex items-center gap-2.5 py-2 pl-2 pr-2 rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] transition-colors group cursor-pointer hover:bg-[var(--surface-overlay)] bg-[var(--surface-overlay)]" data-video-id="${esc(r.id)}" data-source="odst">
+        <div class="song-row discover-odst-row flex items-center gap-2.5 py-2 pl-2 pr-1 rounded-[var(--radius-omni-xs)] border border-transparent transition-colors group cursor-pointer" data-video-id="${esc(r.id)}" data-source="odst">
             ${thumbHtml}
             <div class="flex-1 min-w-0">
                 ${titleLine}
                 <div class="text-xs text-[var(--text-dim)] truncate">${esc(r.channel)} ${duration ? ' · ' + duration : ''}</div>
             </div>
-            <button type="button" class="dl-playback-queue w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--input-bg)] hover:bg-[var(--accent)] hover:text-[var(--text-on-accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 transition-colors" aria-label="Add to playback queue" title="Add to playback queue"><i class="fas fa-list-ul text-sm"></i></button>
-            <button type="button" class="dl-add-one w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--input-bg)] hover:bg-[var(--accent)] hover:text-[var(--text-on-accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 transition-colors" data-video-id="${esc(r.id)}" aria-label="${esc(dlAria)}"${tooltipAttrs}><i class="fas ${dlIcon} text-sm"></i></button>
+            <div class="flex items-center gap-1 ml-1 flex-shrink-0">
+                <button type="button" class="dl-playback-queue discover-secondary-action w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--input-bg)] hover:bg-[var(--accent)] hover:text-[var(--text-on-accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 transition-colors" aria-label="Add to playback queue" title="Add to playback queue"><i class="fas fa-list-ul text-sm"></i></button>
+                <button type="button" class="dl-add-one discover-primary-action w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--input-bg)] hover:bg-[var(--accent)] hover:text-[var(--text-on-accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 transition-colors" data-video-id="${esc(r.id)}" aria-label="${esc(dlAria)}"${tooltipAttrs}><i class="fas ${dlIcon} text-sm"></i></button>
+            </div>
         </div>
     </div>`;
 }
@@ -605,6 +607,10 @@ function init(opts = {}) {
     inputEl = document.getElementById(inputId);
     resultsEl = document.getElementById(resultsId);
     if (!inputEl || !resultsEl) return;
+
+    if (isDiscoverPage) {
+        searchService.sourceMode = 'ytmusic';
+    }
 
     clear();
     updateDiscoverPanels();

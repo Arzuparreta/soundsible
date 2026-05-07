@@ -30,8 +30,6 @@ import {
 } from './shared.js';
 import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
 const LIBRARY_SYNC_INTERVAL_MS = 300000;
-const DISCOVER_SEARCH_DEBOUNCE_MS = 200;
-let discoverSearchDebounceTimer = null;
 let podcastSearchDebounceTimer = null;
 
 function viewStateFromContext() {
@@ -1112,25 +1110,13 @@ function initGlobalSearch() {
         } else if (view === 'artist-detail' && viewContext.artistName) {
             renderArtistDetail(viewContext.artistName);
         } else if (view === 'discover') {
-            if (discoverSearchDebounceTimer) {
-                clearTimeout(discoverSearchDebounceTimer);
-                discoverSearchDebounceTimer = null;
-            }
-            if (!query) {
-                void import('./discovery.js').then((m) => {
-                    if (m.initDiscovery) m.initDiscovery('discover-search-results');
+            if (typeof window.unifiedSearch === 'undefined') {
+                void import('./search.js').then((m) => {
+                    window.unifiedSearch = m.unifiedSearch;
+                    m.unifiedSearch.init({ mobile: true, resultsContainerId: 'discover-search-results' });
+                    if (query) dom.globalSearchInput?.dispatchEvent(new Event('input'));
                 });
-                return;
             }
-            discoverSearchDebounceTimer = setTimeout(() => {
-                discoverSearchDebounceTimer = null;
-                void import('./discovery.js').then((m) => {
-                    const el = document.getElementById('discover-search-results');
-                    if (!el || !m.discoveryUI) return;
-                    m.discoveryUI.container = el;
-                    void m.discoveryUI.renderSearchResults(query);
-                });
-            }, DISCOVER_SEARCH_DEBOUNCE_MS);
         } else if (view === 'podcast') {
             if (podcastSearchDebounceTimer) {
                 clearTimeout(podcastSearchDebounceTimer);
@@ -1262,15 +1248,12 @@ function clearContentForView(viewId) {
             clearContainerContent(dom.playlistDetailTracks);
             break;
         case 'discover':
-            if (discoverSearchDebounceTimer) {
-                clearTimeout(discoverSearchDebounceTimer);
-                discoverSearchDebounceTimer = null;
-            }
             if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.destroy) {
                 window.unifiedSearch.destroy();
             } else if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) {
                 window.unifiedSearch.clear();
             }
+            window.unifiedSearch = undefined;
             window._discoverSurfaceTracks = null;
             break;
         case 'podcast':
@@ -1477,14 +1460,13 @@ function fillViewBody(viewId) {
             import('./downloader.js').then((dm) => {
                 dm.Downloader.init();
             });
-            import('./discovery.js')
-                .then((discoveryMod) => {
-                    if (discoveryMod.initDiscovery) {
-                        discoveryMod.initDiscovery('discover-search-results');
-                    }
+            import('./search.js')
+                .then((searchMod) => {
+                    window.unifiedSearch = searchMod.unifiedSearch;
+                    searchMod.unifiedSearch.init({ mobile: true, resultsContainerId: 'discover-search-results' });
                 })
                 .catch((err) => {
-                    console.error('[app.js] Failed to load discovery.js:', err);
+                    console.error('[app.js] Failed to load search.js:', err);
                 });
             break;
         case 'settings':
@@ -1581,6 +1563,11 @@ window.toggleArtistAlbum = (ev) => {
 function initListScrollSuppress(containerEl, activeClass) {
     if (!containerEl) return;
     let scrollActive = false;
+    const finishScroll = () => {
+        if (!scrollActive) return;
+        containerEl.__listScrollSuppressUntil = Date.now() + 220;
+        setTimeout(() => { containerEl.classList.remove(activeClass); scrollActive = false; }, 180);
+    };
     containerEl.addEventListener('touchstart', () => {
         scrollActive = false;
     }, { passive: true });
@@ -1590,16 +1577,33 @@ function initListScrollSuppress(containerEl, activeClass) {
             containerEl.classList.add(activeClass);
         }
     }, { passive: true });
-    containerEl.addEventListener('touchend', () => {
-        if (scrollActive) setTimeout(() => { containerEl.classList.remove(activeClass); scrollActive = false; }, 180);
-    }, { passive: true });
+    containerEl.addEventListener('touchend', finishScroll, { passive: true });
+    containerEl.addEventListener('touchcancel', finishScroll, { passive: true });
+}
+
+function initDiscoverScrollClickSuppress(containerEl) {
+    if (!containerEl || containerEl.__discoverScrollClickSuppress) return;
+    containerEl.__discoverScrollClickSuppress = true;
+    containerEl.addEventListener('click', (event) => {
+        const suppressUntil = Number(containerEl.__listScrollSuppressUntil || 0);
+        const shouldSuppress = containerEl.classList.contains('list-scroll-active') || Date.now() < suppressUntil;
+        if (!shouldSuppress) return;
+
+        const target = event.target?.closest?.('.discover-surface-row, .discover-odst-row, .discover-primary-action, .discover-secondary-action');
+        if (!target || !containerEl.contains(target)) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+    }, { capture: true });
 }
 
 function initArtistScrollSuppress() {
     initListScrollSuppress(dom?.libraryArtists || document.getElementById('library-artists'), 'artist-scroll-active');
     initListScrollSuppress(document.getElementById('view-home'), 'list-scroll-active');
     initListScrollSuppress(document.getElementById('view-favourites'), 'list-scroll-active');
-    initListScrollSuppress(document.getElementById('view-discover'), 'list-scroll-active');
+    const discoverView = document.getElementById('view-discover');
+    initListScrollSuppress(discoverView, 'list-scroll-active');
+    initDiscoverScrollClickSuppress(discoverView);
     initListScrollSuppress(document.getElementById('view-playlists'), 'list-scroll-active');
     initListScrollSuppress(document.getElementById('view-playlist-detail'), 'list-scroll-active');
     initListScrollSuppress(document.getElementById('view-artist-detail'), 'list-scroll-active');
