@@ -71,7 +71,7 @@ class AudioEngine {
 
     _preloadTrack(track) {
         if (!track?.id) return;
-        if (track.source === 'preview' || track.source === 'podcast-preview') return; // Note: Avoid hitting preview stream until user actually plays next
+        if (track.source === 'preview' || track.source === 'radio' || track.source === 'podcast-preview') return; // Note: Avoid hitting preview stream until user actually plays next
         if (typeof track.id === 'string' && track.id.startsWith('deezer_')) return; // Note: URL unknown until ODST resolve
         const url = Resolver.getTrackUrl(track);
         const el = this._getPreloadAudio();
@@ -428,17 +428,19 @@ class AudioEngine {
             return { ok: false };
         }
 
-        // Note: Preview stream through our server (same-origin) so playback works. direct YT urls are CORS-blocked.
+        // Note: Preview/radio stream through our server (same-origin) so playback works. direct YT urls are CORS-blocked.
         // Note: Always use HTTP; app and API are never HTTPS.
-        if (track.source === 'preview') {
+        if (track.source === 'preview' || track.source === 'radio') {
             this._previewEndedTriggered = false;
             const host = (typeof store !== 'undefined' && store.state && store.state.activeHost) ? store.state.activeHost : (typeof window !== 'undefined' && window.location ? window.location.hostname : 'localhost');
             const apiBase = getApiBase(host);
             let streamUrl;
-            if (track._libraryTrackId) {
-                streamUrl = `${apiBase}/api/static/stream/${encodeURIComponent(track._libraryTrackId)}`;
+            const ytId = track.video_id || (track.id && !String(track.id).startsWith('raw-') && String(track.id).length === 11 ? track.id : null);
+            const libraryTrackId = track._libraryTrackId || (ytId ? (store.state.youtubeToTrackId || {})[ytId] : null);
+            const playbackTrack = libraryTrackId ? { ...track, _libraryTrackId: libraryTrackId } : track;
+            if (libraryTrackId) {
+                streamUrl = `${apiBase}/api/static/stream/${encodeURIComponent(libraryTrackId)}`;
             } else {
-                const ytId = track.id && !String(track.id).startsWith('raw-') && String(track.id).length === 11 ? track.id : null;
                 if (!ytId) {
                     if (typeof window.showToast === 'function') window.showToast('Preview unavailable');
                     return { ok: false };
@@ -450,12 +452,12 @@ class AudioEngine {
                 this.audio.load();
                 await this.audio.play();
                 this._clearPendingRemotePlayback();
-                store.update({ currentTrack: track, isPlaying: true });
-                store.pushPlaybackState(track.id, 0, true);
+                store.update({ currentTrack: playbackTrack, isPlaying: true });
+                store.pushPlaybackState(playbackTrack.id, 0, true);
                 this._suppressStaleTimeUpdates = true;
-                this._dispatchTimeUpdate(0, 0, track?.duration ?? 0);
+                this._dispatchTimeUpdate(0, 0, playbackTrack?.duration ?? 0);
                 if ('mediaSession' in navigator) {
-                    const coverUrl = track?.id ? Resolver.getCoverUrl(track) : null;
+                    const coverUrl = playbackTrack?.id ? Resolver.getCoverUrl(playbackTrack) : null;
                     const sizes = ['96x96', '128x128', '192x192', '256x256', '384x384', '512x512'];
                     const artwork = coverUrl
                         ? [
@@ -468,9 +470,9 @@ class AudioEngine {
                             { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
                         ];
                     navigator.mediaSession.metadata = new MediaMetadata({
-                        title: track.title,
-                        artist: track.artist,
-                        album: track.album,
+                        title: playbackTrack.title,
+                        artist: playbackTrack.artist,
+                        album: playbackTrack.album,
                         artwork
                     });
                     this.setMediaSessionHandlers();
@@ -574,24 +576,20 @@ class AudioEngine {
             this._repeatOnceUsedTrackId = null; // Note: Consumed; continue to next
         }
 
-        // Note: 1. Try queue first
+        // Note: 1. User-managed queue always takes priority, even while radio is active.
         console.log("Playing next track from queue...");
         const nextTrack = await store.popNextFromQueue();
         if (nextTrack) {
             await this.playContextTrack(nextTrack);
-            if (store.state.radioMode) radioService.refillIfNeeded();
             return;
         }
 
-        // Note: 1b. Queue empty — if radio mode, try to refill before falling back
+        // Note: 1b. Queue empty — radio supplies hidden generated tracks without touching the queue.
         if (store.state.radioMode) {
-            const refilled = await radioService.refillIfNeeded();
-            if (refilled) {
-                const retryTrack = await store.popNextFromQueue();
-                if (retryTrack) {
-                    await this.playContextTrack(retryTrack);
-                    return;
-                }
+            const radioTrack = await radioService.nextTrack();
+            if (radioTrack) {
+                await this.playTrack(radioTrack);
+                return;
             }
             radioService.exitRadio();
             window.showToast?.('Radio ended');
@@ -617,7 +615,7 @@ class AudioEngine {
         console.log("Playback sequence finished.");
         this._invalidatePreload();
         const isPreview =
-            currentTrack?.source === 'preview' || currentTrack?.source === 'podcast-preview';
+            currentTrack?.source === 'preview' || currentTrack?.source === 'radio' || currentTrack?.source === 'podcast-preview';
         if (isPreview) {
             store.update({ isPlaying: false });
         } else {
@@ -709,7 +707,7 @@ class AudioEngine {
 
         const currentTrack = store.state.currentTrack;
         if (
-            (currentTrack?.source === 'preview' || currentTrack?.source === 'podcast-preview') &&
+            (currentTrack?.source === 'preview' || currentTrack?.source === 'radio' || currentTrack?.source === 'podcast-preview') &&
             duration > 0 &&
             !this._previewEndedTriggered &&
             currentTime >= duration - 1.2

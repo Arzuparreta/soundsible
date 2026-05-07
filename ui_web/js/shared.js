@@ -2,6 +2,7 @@
  * Shared frontend helpers used by both mobile and desktop shells.
  */
 import { Resolver } from './resolver.js';
+import { store } from './store.js';
 
 function escHtml(str) {
     if (!str) return '';
@@ -61,11 +62,13 @@ const YOUTUBE_VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
 
 /**
  * True when the track is playing via /api/preview/stream (yt-dlp), not a library file stream.
- * @param {{ source?: string, id?: string, _libraryTrackId?: string } | null | undefined} track
+ * @param {{ source?: string, id?: string, video_id?: string, _libraryTrackId?: string } | null | undefined} track
  */
 export function isYtdlpPreviewStreamTrack(track) {
-    if (!track || track.source !== 'preview' || track._libraryTrackId) return false;
-    const id = track.id;
+    if (!track || (track.source !== 'preview' && track.source !== 'radio')) return false;
+    const id = track.video_id || track.id;
+    const libraryTrackId = track._libraryTrackId || ((store.state.youtubeToTrackId || {})[id]);
+    if (libraryTrackId) return false;
     if (typeof id !== 'string' || id.startsWith('raw-')) return false;
     return id.length === YOUTUBE_VIDEO_ID_LEN && YOUTUBE_VIDEO_ID_RE.test(id);
 }

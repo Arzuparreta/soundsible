@@ -482,17 +482,12 @@ export class UI {
         }
         if (title) {
             const radioOn = !!store.state.radioMode;
-            const existingBadge = title.querySelector('.radio-badge');
-            if (radioOn && !existingBadge) {
+            title.textContent = track.title;
+            if (radioOn) {
                 const badge = document.createElement('span');
                 badge.className = 'radio-badge inline-flex items-center gap-1 ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-green-500/15 text-green-400 border border-green-500/20';
                 badge.innerHTML = '<i class="fas fa-tower-broadcast text-[7px]"></i>Radio';
-                title.textContent = track.title;
                 title.appendChild(badge);
-            } else if (!radioOn && existingBadge) {
-                title.textContent = track.title;
-            } else {
-                title.textContent = track.title;
             }
         }
         if (artistEl) artistEl.textContent = track.artist;

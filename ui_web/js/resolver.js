@@ -27,7 +27,7 @@ export class Resolver {
     static getCoverUrl(track) {
         if (
             track &&
-            (track.source === 'preview' || track.source === 'podcast-preview') &&
+            (track.source === 'preview' || track.source === 'radio' || track.source === 'podcast-preview') &&
             track.thumbnail
         ) {
             return track.thumbnail;
