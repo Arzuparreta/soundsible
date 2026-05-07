@@ -48,6 +48,7 @@ function rowToPreviewItem(row) {
     return {
         id: row.id,
         video_id: row.id,
+        source: 'preview',
         title: row.title || 'Unknown',
         artist,
         channel: artist,
@@ -106,6 +107,59 @@ async function resolveSeedVideoId(track) {
     return null;
 }
 
+function collectTrackIdentity(track) {
+    const ids = new Set();
+    for (const key of ['id', 'youtube_id', 'video_id', '_libraryTrackId', 'library_track_id', 'deezerId']) {
+        const value = track?.[key];
+        if (value !== undefined && value !== null && String(value).trim()) ids.add(String(value));
+    }
+    return ids;
+}
+
+function isSeedCurrentPlayingTrack(seedTrack, currentTrack, seedVideoId) {
+    if (!seedTrack || !currentTrack) return false;
+    const currentIds = collectTrackIdentity(currentTrack);
+    if (seedVideoId && currentIds.has(String(seedVideoId))) return true;
+
+    const seedIds = collectTrackIdentity(seedTrack);
+    for (const id of seedIds) {
+        if (currentIds.has(id)) return true;
+    }
+    return false;
+}
+
+function makeSeedPlaybackTrack(seedTrack, seed) {
+    const localTrackId = seedTrack?._libraryTrackId || seedTrack?.library_track_id;
+    if (localTrackId) {
+        const localTrack = store.state.library?.find((t) => t.id === localTrackId);
+        if (localTrack) return localTrack;
+    }
+
+    if (
+        seedTrack &&
+        seedTrack.media_kind !== 'podcast_episode' &&
+        seedTrack.source !== 'podcast-preview' &&
+        seedTrack?.source !== 'deezer_surface' &&
+        seedTrack?.source !== 'preview-pending' &&
+        typeof seedTrack?.id === 'string' &&
+        !seedTrack.id.startsWith('deezer_') &&
+        !seedTrack.id.startsWith('deezer_resolving_')
+    ) {
+        return seedTrack;
+    }
+
+    return {
+        id: seed.videoId,
+        video_id: seed.videoId,
+        source: 'preview',
+        title: seed.title || seedTrack?.title || 'Unknown',
+        artist: seed.artist || seedTrack?.artist || seedTrack?.album_artist || seedTrack?.channel || '',
+        channel: seed.artist || seedTrack?.artist || seedTrack?.channel || '',
+        duration: Number(seedTrack?.duration || seedTrack?.duration_sec || 0) || 0,
+        thumbnail: seedTrack?.thumbnail || seedTrack?.cover || ''
+    };
+}
+
 class RadioService {
     constructor() {
         this._refilling = false;
@@ -157,7 +211,25 @@ class RadioService {
                 return false;
             }
 
+            const currentTrack = store.state.currentTrack;
+            const keepCurrentSeedPlaying =
+                store.state.isPlaying &&
+                isSeedCurrentPlayingTrack(track, currentTrack, seed.videoId);
+            const seedPlaybackTrack = keepCurrentSeedPlaying
+                ? currentTrack
+                : makeSeedPlaybackTrack(track, seed);
+            const radioTrackList = [seedPlaybackTrack, ...previewItems];
+
             await store.clearQueue();
+
+            for (const item of previewItems) {
+                await store.addPreviewToQueue(item);
+            }
+
+            if (!keepCurrentSeedPlaying) {
+                audioEngine.setContext(radioTrackList);
+                await audioEngine.playTrack(seedPlaybackTrack);
+            }
 
             store.update({
                 radioMode: {
@@ -165,20 +237,11 @@ class RadioService {
                     seedTitle: seed.title,
                     seedArtist: seed.artist,
                     activeVideoId: seed.videoId,
-                    trackList: previewItems
+                    trackList: radioTrackList
                 }
             });
 
-            for (const item of previewItems) {
-                await store.addPreviewToQueue(item);
-            }
-
-            audioEngine.setContext(previewItems);
-
-            const firstTrack = await store.popNextFromQueue();
-            if (firstTrack) {
-                audioEngine.playTrack(firstTrack);
-            }
+            audioEngine.setContext(store.state.radioMode.trackList);
 
             loading.dismiss();
             window.showToast?.(`Radio: ${seed.title}`);
