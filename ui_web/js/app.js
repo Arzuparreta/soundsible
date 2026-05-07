@@ -1441,7 +1441,7 @@ function fillViewBody(viewId) {
         case 'home':
             syncLibraryPanels();
             renderLibraryTabBar();
-            renderHomeContent();
+            renderLibraryContent();
             break;
         case 'favourites':
             renderFavourites(state);

@@ -764,9 +764,6 @@ export class UI {
         }
 
         const previousView = this.viewStack.pop();
-        if (this.currentView === 'artist-detail' && previousView === 'home') {
-            store.update({ libraryTab: 'artists' });
-        }
         this.showView(previousView, false);
     }
 
