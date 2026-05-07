@@ -17,6 +17,7 @@ import {
 import * as renderers from './renderers.js';
 import { createCoverOverlayController } from './cover_overlay.js';
 import { attachSeekBar, bindSeekSliderKeys } from './seek_bar.js';
+import { radioService } from './radio.js';
 function el(id) {
     return document.getElementById(id);
 }
@@ -129,7 +130,21 @@ export const DesktopUI = {
         const track = state.currentTrack;
 
         if (cover) cover.style.backgroundImage = track ? `url("${String(Resolver.getCoverUrl(track)).replace(/"/g, '%22')}")` : '';
-        if (title) title.textContent = track?.title ?? '';
+        if (title) {
+            const radioOn = !!store.state.radioMode;
+            const existingBadge = title.querySelector('.radio-badge');
+            if (radioOn && !existingBadge) {
+                const badge = document.createElement('span');
+                badge.className = 'radio-badge inline-flex items-center gap-1 ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-green-500/15 text-green-400 border border-green-500/20';
+                badge.innerHTML = '<i class="fas fa-tower-broadcast text-[7px]"></i>Radio';
+                title.textContent = track?.title ?? '';
+                title.appendChild(badge);
+            } else if (!radioOn && existingBadge) {
+                title.textContent = track?.title ?? '';
+            } else {
+                title.textContent = track?.title ?? '';
+            }
+        }
         if (artist) artist.textContent = track?.artist ?? '';
         const dlBtn = el('desktop-np-download-btn');
         if (dlBtn) dlBtn.classList.toggle('hidden', !isYtdlpPreviewStreamTrack(track));
@@ -330,6 +345,8 @@ export const DesktopUI = {
         if (ctxRemoveFromPlaylist) ctxRemoveFromPlaylist.classList.remove('hidden');
         if (ctxDelete) ctxDelete.classList.remove('hidden');
         if (ctxShare) ctxShare.classList.toggle('hidden', !getYouTubeWatchUrlForTrack(track));
+        const ctxRadio = el('desktop-context-start-radio');
+        if (ctxRadio) ctxRadio.classList.remove('hidden');
 
         const inPlaylistDetail = row ? !!row.closest('#desktop-playlist-detail-tracks') : this.currentView === 'playlist-detail';
         const ctxPlayPlaylist = el('desktop-context-play-playlist');
@@ -380,6 +397,8 @@ export const DesktopUI = {
         if (ctxEdit) ctxEdit.classList.add('hidden');
         if (ctxRemoveFromPlaylist) ctxRemoveFromPlaylist.classList.add('hidden');
         if (ctxDeleteTrack) ctxDeleteTrack.classList.add('hidden');
+        const ctxRadioPl = el('desktop-context-start-radio');
+        if (ctxRadioPl) ctxRadioPl.classList.add('hidden');
 
         // Note: Show playlist-specific actions
         if (ctxPlayPlaylist) ctxPlayPlaylist.classList.remove('hidden');
@@ -459,6 +478,14 @@ export const DesktopUI = {
         const editBtn = el('desktop-context-edit-metadata');
         const favBtn = el('desktop-context-fav');
         const deleteBtn = el('desktop-context-delete');
+        const startRadioBtn = el('desktop-context-start-radio');
+        if (startRadioBtn) {
+            startRadioBtn.addEventListener('click', async () => {
+                const track = this.currentActionTrack;
+                this.hideContextMenu();
+                if (track) await radioService.startRadio(track);
+            });
+        }
         if (queueBtn) {
             queueBtn.addEventListener('click', async () => {
                 const track = this.currentActionTrack;

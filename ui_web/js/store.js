@@ -55,6 +55,7 @@ class Store {
             queue: [],
             repeatMode: 'off', // Note: Off = no repeat, one = infinite repeat of current song, once = repeat current song one time then continue
             shuffleEnabled: false,
+            radioMode: null,
             currentTrack: null,
             isPlaying: false,
             theme: (() => {
@@ -899,6 +900,7 @@ class Store {
             });
             if (res.ok) {
                 await this.syncQueue();
+                if (this.state.radioMode) this.update({ radioMode: null });
                 return true;
             }
             return false;

@@ -875,7 +875,8 @@ function init() {
             addToPlaylistBtn: 'desktop-action-add-to-playlist',
             deleteBtn: 'desktop-action-delete',
             removeFromPlaylistBtn: 'desktop-action-remove-from-playlist',
-            closeBtn: 'desktop-action-close'
+            closeBtn: 'desktop-action-close',
+            startRadioBtn: 'desktop-action-start-radio'
         }, {
             store,
             showToast: (m) => DesktopUI.showToast(m),

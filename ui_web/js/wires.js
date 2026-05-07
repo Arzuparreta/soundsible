@@ -3,7 +3,7 @@
  * Both mobile (app.js / ui.js) and desktop (app_desktop.js) call these with their own selectors.
  */
 
-import { getYouTubeWatchUrlForTrack, shareYouTubeTrack } from './shared.js';
+import { getYouTubeWatchUrlForTrack, shareYouTubeTrack, showLoadingToast } from './shared.js';
 import {
     isDeezerSurfaceActionTrack,
     hydrateDeezerVirtualTrack,
@@ -11,6 +11,7 @@ import {
     actionMenuShareDeezer,
     actionMenuAddToPlaylistDeezer
 } from './deezer_actions.js';
+import { radioService } from './radio.js';
 
 function getElement(root, selector) {
     if (!selector) return null;
@@ -146,7 +147,7 @@ export function wireSettings(selectors, deps) {
 
 /**
  * Wire action menu buttons. UI still owns opening/closing and setting current track; this binds the action buttons once.
- * @param {Object} selectors - { overlay, sheet?, queueBtn, shareBtn?, editBtn, favBtn, addToPlaylistBtn?, deleteBtn?, removeFromPlaylistBtn?, closeBtn?, trackArt?, trackTitle?, trackArtist? }
+ * @param {Object} selectors - { overlay, sheet?, queueBtn, shareBtn?, editBtn, favBtn, addToPlaylistBtn?, deleteBtn?, removeFromPlaylistBtn?, closeBtn?, startRadioBtn?, trackArt?, trackTitle?, trackArtist? }
  * @param {Object} deps - { store, getCurrentActionTrack, onClose, onShowMetadataEditor, onFavClick?, onAddToPlaylist?, onRemoveFromPlaylist?, showToast? }
  */
 export function wireActionMenu(selectors, deps) {
@@ -162,9 +163,19 @@ export function wireActionMenu(selectors, deps) {
     const removeFromPlaylistBtn = selectors.removeFromPlaylistBtn ? getElement(root, selectors.removeFromPlaylistBtn) : null;
     const closeBtn = getElement(root, selectors.closeBtn);
     const shareBtn = selectors.shareBtn ? getElement(root, selectors.shareBtn) : null;
+    const startRadioBtn = selectors.startRadioBtn ? getElement(root, selectors.startRadioBtn) : null;
 
     if (overlay) overlay.addEventListener('click', () => onClose?.());
     if (closeBtn) closeBtn.addEventListener('click', () => onClose?.());
+
+    if (startRadioBtn) {
+        startRadioBtn.addEventListener('click', async () => {
+            const track = getCurrentActionTrack?.();
+            onClose?.();
+            if (!track) return;
+            await radioService.startRadio(track);
+        });
+    }
 
     if (queueBtn) {
         queueBtn.addEventListener('click', async () => {

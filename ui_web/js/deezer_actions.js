@@ -3,7 +3,7 @@
  * using YouTube resolution (same path as preview playback).
  */
 import { store } from './store.js';
-import { getYouTubeWatchUrlForTrack, shareYouTubeTrack } from './shared.js';
+import { getYouTubeWatchUrlForTrack, shareYouTubeTrack, showLoadingToast } from './shared.js';
 import { searchService } from './search_service.js';
 
 export function isDeezerSurfaceActionTrack(track) {
@@ -81,7 +81,8 @@ const DEEZER_MENU_LAYOUT = {
         add: 'action-add-to-playlist',
         edit: 'action-edit-metadata',
         delete: 'action-delete',
-        remove: 'action-remove-from-playlist'
+        remove: 'action-remove-from-playlist',
+        radio: 'action-start-radio'
     },
     'desktop-action': {
         favText: 'desktop-action-fav-text',
@@ -90,7 +91,8 @@ const DEEZER_MENU_LAYOUT = {
         add: 'desktop-action-add-to-playlist',
         edit: 'desktop-action-edit-metadata',
         delete: 'desktop-action-delete',
-        remove: 'desktop-action-remove-from-playlist'
+        remove: 'desktop-action-remove-from-playlist',
+        radio: 'desktop-action-start-radio'
     },
     'desktop-context': {
         favText: 'desktop-context-fav-text',
@@ -99,7 +101,8 @@ const DEEZER_MENU_LAYOUT = {
         add: 'desktop-context-add-to-playlist',
         edit: 'desktop-context-edit-metadata',
         delete: 'desktop-context-delete',
-        remove: 'desktop-context-remove-from-playlist'
+        remove: 'desktop-context-remove-from-playlist',
+        radio: 'desktop-context-start-radio'
     }
 };
 
@@ -121,6 +124,7 @@ export function applyDeezerActionMenuChrome(track, surface, ctx = {}) {
     const editEl = document.getElementById(ids.edit);
     const deleteEl = document.getElementById(ids.delete);
     const removeEl = document.getElementById(ids.remove);
+    const radioEl = ids.radio ? document.getElementById(ids.radio) : null;
 
     const libId = track._libraryTrackId;
     const isFav = libId && (store.state.favorites || []).includes(libId);
@@ -147,22 +151,34 @@ export function applyDeezerActionMenuChrome(track, surface, ctx = {}) {
         const showRemove = inPl && !editorial && !!libId;
         removeEl.classList.toggle('hidden', !showRemove);
     }
+
+    // Radio button is always visible for Deezer tracks
+    if (radioEl) radioEl.classList.remove('hidden');
 }
 
 export async function actionMenuToggleQueueDeezer(track, storeRef, showToast) {
-    await hydrateDeezerVirtualTrack(track);
-    if (!track.youtube_id || !track._resolvedOdst) {
-        showToast?.('No YouTube match');
-        return;
-    }
-    const vid = track.youtube_id;
-    const inQ = (storeRef.state.queue || []).some((t) => t.id === vid);
-    if (inQ) {
-        await storeRef.removeFromQueueById(vid);
-        showToast?.('Removed from Queue');
-    } else {
-        const ok = await storeRef.addPreviewToQueue(track._resolvedOdst);
-        showToast?.(ok ? 'Added to Queue' : 'Could not add to queue');
+    const loading = showLoadingToast('Resolving track...', { showToast });
+    try {
+        await hydrateDeezerVirtualTrack(track);
+        if (!track.youtube_id || !track._resolvedOdst) {
+            loading.dismiss();
+            showToast?.('No YouTube match');
+            return;
+        }
+        const vid = track.youtube_id;
+        const inQ = (storeRef.state.queue || []).some((t) => t.id === vid);
+        if (inQ) {
+            await storeRef.removeFromQueueById(vid);
+            loading.dismiss();
+            showToast?.('Removed from Queue');
+        } else {
+            const ok = await storeRef.addPreviewToQueue(track._resolvedOdst);
+            loading.dismiss();
+            showToast?.(ok ? 'Added to Queue' : 'Could not add to queue');
+        }
+    } catch {
+        loading.dismiss();
+        showToast?.('Could not resolve track');
     }
 }
 
@@ -177,22 +193,36 @@ export async function actionMenuToggleFavDeezer(track, storeRef, showToast) {
 }
 
 export async function actionMenuShareDeezer(track, showToast) {
-    await hydrateDeezerVirtualTrack(track);
-    if (getYouTubeWatchUrlForTrack({ youtube_id: track.youtube_id })) {
-        await shareYouTubeTrack({ youtube_id: track.youtube_id, title: track.title, artist: track.artist }, showToast);
-    } else {
-        showToast?.('No YouTube match');
+    const loading = showLoadingToast('Resolving track...', { showToast });
+    try {
+        await hydrateDeezerVirtualTrack(track);
+        loading.dismiss();
+        if (getYouTubeWatchUrlForTrack({ youtube_id: track.youtube_id })) {
+            await shareYouTubeTrack({ youtube_id: track.youtube_id, title: track.title, artist: track.artist }, showToast);
+        } else {
+            showToast?.('No YouTube match');
+        }
+    } catch {
+        loading.dismiss();
+        showToast?.('Could not resolve track');
     }
 }
 
 export async function actionMenuAddToPlaylistDeezer(track, showToast, onAddToPlaylistLibId) {
-    await hydrateDeezerVirtualTrack(track);
-    const libId = track._libraryTrackId;
-    if (!libId) {
-        showToast?.('Download to library to use playlists');
-        return;
+    const loading = showLoadingToast('Resolving track...', { showToast });
+    try {
+        await hydrateDeezerVirtualTrack(track);
+        loading.dismiss();
+        const libId = track._libraryTrackId;
+        if (!libId) {
+            showToast?.('Download to library to use playlists');
+            return;
+        }
+        onAddToPlaylistLibId?.(libId);
+    } catch {
+        loading.dismiss();
+        showToast?.('Could not resolve track');
     }
-    onAddToPlaylistLibId?.(libId);
 }
 
 /**
@@ -206,9 +236,13 @@ export function bindDiscoverSurfaceQuickActionButtons(containerEl) {
         if (!raw) return;
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
+            const icon = btn.querySelector('i');
+            if (icon) { icon.classList.remove('fa-list-ul'); icon.classList.add('fa-spinner', 'animate-spin'); }
             void import('./discovery.js').then((m) => {
                 if (typeof m.addDeezerTrackToQueueByNumericId === 'function') {
-                    void m.addDeezerTrackToQueueByNumericId(raw);
+                    void m.addDeezerTrackToQueueByNumericId(raw).finally(() => {
+                        if (icon) { icon.classList.remove('fa-spinner', 'animate-spin'); icon.classList.add('fa-list-ul'); }
+                    });
                 }
             });
         });

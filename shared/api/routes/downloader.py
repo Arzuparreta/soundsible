@@ -97,6 +97,33 @@ def youtube_peek():
         return jsonify({"peek": None, "error": sanitize_cli_message(str(e))}), 500
 
 
+_RELATED_CACHE_TTL_SEC = 300
+_related_cache: dict[str, tuple[float, list]] = {}
+
+
+@downloader_bp.route("/api/downloader/youtube/related", methods=["GET"])
+@rate_limit("youtube_related", limit=30, window_sec=60)
+def youtube_related():
+    """Fetch related/mix videos for a seed video ID (YouTube Music Mix playlist)."""
+    video_id = (request.args.get("id") or "").strip()
+    if not video_id or len(video_id) != 11:
+        return jsonify({"results": [], "error": "missing or invalid id"}), 400
+    limit = min(50, max(1, request.args.get("limit", 25, type=int)))
+    now = time.time()
+    cache_key = f"{video_id}:{limit}"
+    cached = _related_cache.get(cache_key)
+    if cached and now - cached[0] < _RELATED_CACHE_TTL_SEC:
+        return jsonify({"results": cached[1]})
+    try:
+        dl = _get_api()["get_downloader"](open_browser=False)
+        results = dl.downloader.get_related_videos(video_id, max_results=limit)
+        _related_cache[cache_key] = (now, results)
+        return jsonify({"results": results})
+    except Exception as e:
+        logger.warning("API: YouTube related error: %s", e)
+        return jsonify({"results": [], "error": sanitize_cli_message(str(e))}), 500
+
+
 @downloader_bp.route("/api/downloader/youtube/suggest", methods=["GET"])
 def youtube_suggest():
     import requests
