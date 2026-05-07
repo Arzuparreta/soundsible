@@ -1,5 +1,5 @@
 /**
- * Shared wiring: attach behaviour to DOM (settings, action menu).
+ * Shared wiring: attach behaviour to DOM (settings, action menu, remote control).
  * Both mobile (app.js / ui.js) and desktop (app_desktop.js) call these with their own selectors.
  */
 
@@ -12,6 +12,7 @@ import {
     actionMenuAddToPlaylistDeezer
 } from './deezer_actions.js';
 import { radioService } from './radio.js';
+import { remoteControl } from './remote_control.js';
 
 function getElement(root, selector) {
     if (!selector) return null;
@@ -164,6 +165,7 @@ export function wireActionMenu(selectors, deps) {
     const closeBtn = getElement(root, selectors.closeBtn);
     const shareBtn = selectors.shareBtn ? getElement(root, selectors.shareBtn) : null;
     const startRadioBtn = selectors.startRadioBtn ? getElement(root, selectors.startRadioBtn) : null;
+    const playOnDeviceBtn = selectors.playOnDeviceBtn ? getElement(root, selectors.playOnDeviceBtn) : null;
 
     if (overlay) overlay.addEventListener('click', () => onClose?.());
     if (closeBtn) closeBtn.addEventListener('click', () => onClose?.());
@@ -177,115 +179,87 @@ export function wireActionMenu(selectors, deps) {
         });
     }
 
-    if (queueBtn) {
-        queueBtn.addEventListener('click', async () => {
+    if (playOnDeviceBtn) {
+        playOnDeviceBtn.addEventListener('click', async () => {
             const track = getCurrentActionTrack?.();
             if (!track) {
                 onClose?.();
                 return;
             }
             if (isDeezerSurfaceActionTrack(track)) {
-                await actionMenuToggleQueueDeezer(track, store, showToast);
+                showToast?.('Download to library to use remote play');
                 onClose?.();
                 return;
             }
-            store.toggleQueue(track.id);
             onClose?.();
+            const devices = await remoteControl.fetchDevices();
+            const currentDeviceId = store.getDeviceId();
+            const others = devices.filter(d => d.device_id !== currentDeviceId);
+
+            if (others.length === 0) {
+                showToast?.('No other devices connected');
+                return;
+            }
+
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 z-[280] flex items-center justify-center p-4 touch-none';
+            modal.style.backgroundColor = 'var(--overlay-bg)';
+            modal.innerHTML = `
+                <div class="absolute inset-0" style="backdrop-filter: blur(4px);"></div>
+                <div class="glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl w-full max-w-xs overflow-hidden relative">
+                    <div class="p-4 border-b border-[var(--glass-border)]">
+                        <h3 class="text-sm font-black uppercase tracking-widest text-[var(--text-dim)]">Play on device</h3>
+                    </div>
+                    <div id="play-on-device-list" class="max-h-64 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                        ${others.map(d => `
+                            <button type="button" class="play-on-device-item w-full flex items-center gap-3 p-3 rounded-[var(--radius-omni-xs)] hover:bg-[var(--surface-overlay)] active:bg-[var(--bg-card)] transition-colors text-left" data-device-id="${d.device_id.replace(/"/g, '&quot;')}">
+                                <div class="w-8 h-8 rounded-full bg-[var(--surface-overlay)] border border-[var(--glass-border)] flex items-center justify-center flex-shrink-0">
+                                    <i class="fas ${d.device_type === 'mobile' ? 'fa-mobile-screen-button' : 'fa-desktop'} text-[var(--secondary)] text-xs"></i>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-sm font-semibold text-[var(--text-main)] truncate">${remoteControl._escapeHtml(d.device_name || 'Device')}</div>
+                                    <div class="text-xs text-[var(--text-dim)]">${d.socket_connected || d.active_sid ? 'Online' : 'Offline'}</div>
+                                </div>
+                            </button>
+                        `).join('')}
+                    </div>
+                    <button type="button" id="play-on-device-cancel" class="w-full p-3 text-sm font-bold text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] transition-colors border-t border-[var(--glass-border)]">Cancel</button>
+                </div>`;
+            document.body.appendChild(modal);
+
+            modal.querySelector('.absolute.inset-0').addEventListener('click', () => modal.remove());
+            modal.querySelector('#play-on-device-cancel').addEventListener('click', () => modal.remove());
+
+            modal.querySelectorAll('.play-on-device-item').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const deviceId = btn.getAttribute('data-device-id');
+                    modal.remove();
+                    if (deviceId && track.id) {
+                        fetch(`${store.apiBase}/api/playback/remote-command`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ device_id: deviceId, command: 'play', track_id: track.id })
+                        }).catch(() => {});
+                        showToast?.('Sent to device');
+                    }
+                });
+            });
         });
     }
 
-    if (shareBtn) {
-        shareBtn.addEventListener('click', async () => {
-            const track = getCurrentActionTrack?.();
-            if (!track) {
-                onClose?.();
-                return;
-            }
-            if (isDeezerSurfaceActionTrack(track)) {
-                await actionMenuShareDeezer(track, showToast);
-                onClose?.();
-                return;
-            }
-            if (getYouTubeWatchUrlForTrack(track)) shareYouTubeTrack(track, showToast);
-            onClose?.();
-        });
-    }
-
-    if (favBtn) {
-        favBtn.addEventListener('click', async () => {
+    if (playOnDeviceBtn) {
+        playOnDeviceBtn.addEventListener('click', async () => {
             const track = getCurrentActionTrack?.();
             if (!track) return;
-            if (isDeezerSurfaceActionTrack(track)) {
-                await hydrateDeezerVirtualTrack(track);
-                const libId = track._libraryTrackId;
-                if (!libId) {
-                    showToast?.('Download to library to use favourites');
-                    onClose?.();
-                    return;
-                }
-                const libTrack = store.state.library.find((t) => t.id === libId);
-                if (onFavClick && libTrack) {
-                    onFavClick(libTrack);
-                } else {
-                    store.toggleFavourite(libId);
-                    onClose?.();
-                }
-                return;
-            }
-            if (onFavClick) {
-                onFavClick(track);
-            } else {
-                store.toggleFavourite(track.id);
-                onClose?.();
-            }
+            await showPlayOnDevicePicker(track);
         });
     }
 
-    if (deleteBtn) {
-        deleteBtn.addEventListener('click', () => {
+    if (contextPlayOnDeviceBtn) {
+        contextPlayOnDeviceBtn.addEventListener('click', async () => {
             const track = getCurrentActionTrack?.();
-            if (isDeezerSurfaceActionTrack(track)) {
-                onClose?.();
-                return;
-            }
-            if (track && confirm('Delete?')) store.deleteTrack(track.id);
-            onClose?.();
-        });
-    }
-
-    if (editBtn) {
-        editBtn.addEventListener('click', () => {
-            const track = getCurrentActionTrack?.();
-            onClose?.();
-            if (isDeezerSurfaceActionTrack(track)) return;
-            if (track) onShowMetadataEditor?.(track.id);
-        });
-    }
-
-    if (addToPlaylistBtn && onAddToPlaylist) {
-        addToPlaylistBtn.addEventListener('click', async () => {
-            const track = getCurrentActionTrack?.();
-            onClose?.();
             if (!track) return;
-            if (isDeezerSurfaceActionTrack(track)) {
-                await actionMenuAddToPlaylistDeezer(track, showToast, onAddToPlaylist);
-                return;
-            }
-            onAddToPlaylist(track.id);
-        });
-    }
-
-    if (removeFromPlaylistBtn && onRemoveFromPlaylist) {
-        removeFromPlaylistBtn.addEventListener('click', async () => {
-            const track = getCurrentActionTrack?.();
-            onClose?.();
-            if (!track) return;
-            if (isDeezerSurfaceActionTrack(track)) {
-                await hydrateDeezerVirtualTrack(track);
-                if (track._libraryTrackId) onRemoveFromPlaylist({ id: track._libraryTrackId });
-                return;
-            }
-            onRemoveFromPlaylist(track);
+            await showPlayOnDevicePicker(track);
         });
     }
 }
@@ -301,5 +275,119 @@ export function wireDownloader(selectors, deps) {
     const { Downloader } = deps;
     if (Downloader && typeof Downloader.init === 'function') {
         Downloader.init();
+    }
+}
+
+/**
+ * Wire remote control: device list refresh, agent token generation, "Play on device" action.
+ * @param {Object} selectors - { refreshBtn, deviceListContainer, generateTokenBtn, tokenDisplay, playOnDeviceBtn, contextPlayOnDeviceBtn }
+ * @param {Object} deps - { store, showToast, getCurrentActionTrack }
+ */
+export function wireRemoteControl(selectors, deps) {
+    const { store, showToast, getCurrentActionTrack } = deps;
+
+    const refreshBtn = selectors.refreshBtn;
+    const deviceListContainer = selectors.deviceListContainer;
+    const generateTokenBtn = selectors.generateTokenBtn;
+    const tokenDisplay = selectors.tokenDisplay;
+    const playOnDeviceBtn = selectors.playOnDeviceBtn;
+    const contextPlayOnDeviceBtn = selectors.contextPlayOnDeviceBtn;
+
+    if (refreshBtn && deviceListContainer) {
+        const loadDevices = () => {
+            remoteControl.renderDeviceList(deviceListContainer);
+        };
+        refreshBtn.addEventListener('click', loadDevices);
+        loadDevices();
+    }
+
+    if (generateTokenBtn && tokenDisplay) {
+        generateTokenBtn.addEventListener('click', async () => {
+            generateTokenBtn.disabled = true;
+            generateTokenBtn.textContent = 'Generating...';
+            const result = await remoteControl.generateAgentToken();
+            generateTokenBtn.disabled = false;
+            generateTokenBtn.textContent = 'Generate Token';
+            if (result.error) {
+                showToast?.(result.error);
+                return;
+            }
+            tokenDisplay.classList.remove('hidden');
+            tokenDisplay.value = result.token;
+            showToast?.('Token generated');
+        });
+    }
+
+    async function showPlayOnDevicePicker(track) {
+        if (!track?.id) return;
+        const devices = await remoteControl.fetchDevices();
+        const currentDeviceId = store.getDeviceId();
+        const others = devices.filter(d => d.device_id !== currentDeviceId);
+
+        if (others.length === 0) {
+            showToast?.('No other devices connected');
+            return;
+        }
+
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 z-[280] flex items-center justify-center p-4 touch-none';
+        modal.style.backgroundColor = 'var(--overlay-bg)';
+        modal.innerHTML = `
+            <div class="absolute inset-0" style="backdrop-filter: blur(4px);"></div>
+            <div class="glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl w-full max-w-xs overflow-hidden relative">
+                <div class="p-4 border-b border-[var(--glass-border)]">
+                    <h3 class="text-sm font-black uppercase tracking-widest text-[var(--text-dim)]">Play on device</h3>
+                </div>
+                <div id="play-on-device-list" class="max-h-64 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                    ${others.map(d => `
+                        <button type="button" class="play-on-device-item w-full flex items-center gap-3 p-3 rounded-[var(--radius-omni-xs)] hover:bg-[var(--surface-overlay)] active:bg-[var(--bg-card)] transition-colors text-left" data-device-id="${d.device_id.replace(/"/g, '&quot;')}">
+                            <div class="w-8 h-8 rounded-full bg-[var(--surface-overlay)] border border-[var(--glass-border)] flex items-center justify-center flex-shrink-0">
+                                <i class="fas ${d.device_type === 'mobile' ? 'fa-mobile-screen-button' : 'fa-desktop'} text-[var(--secondary)] text-xs"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-semibold text-[var(--text-main)] truncate">${remoteControl._escapeHtml(d.device_name || 'Device')}</div>
+                                <div class="text-xs text-[var(--text-dim)]">${d.socket_connected || d.active_sid ? 'Online' : 'Offline'}</div>
+                            </div>
+                        </button>
+                    `).join('')}
+                </div>
+                <button type="button" id="play-on-device-cancel" class="w-full p-3 text-sm font-bold text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] transition-colors border-t border-[var(--glass-border)]">Cancel</button>
+            </div>`;
+        document.body.appendChild(modal);
+
+        modal.querySelector('.absolute.inset-0').addEventListener('click', () => modal.remove());
+        modal.querySelector('#play-on-device-cancel').addEventListener('click', () => modal.remove());
+
+        modal.querySelectorAll('.play-on-device-item').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const deviceId = btn.getAttribute('data-device-id');
+                modal.remove();
+                const trackId = track.id;
+                if (deviceId && trackId) {
+                    fetch(`${store.apiBase}/api/playback/remote-command`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ device_id: deviceId, command: 'play', track_id: trackId })
+                    }).catch(() => {});
+                    showToast?.('Sent to device');
+                }
+            });
+        });
+    }
+
+    if (playOnDeviceBtn) {
+        playOnDeviceBtn.addEventListener('click', async () => {
+            const track = getCurrentActionTrack?.();
+            if (!track) return;
+            await showPlayOnDevicePicker(track);
+        });
+    }
+
+    if (contextPlayOnDeviceBtn) {
+        contextPlayOnDeviceBtn.addEventListener('click', async () => {
+            const track = getCurrentActionTrack?.();
+            if (!track) return;
+            await showPlayOnDevicePicker(track);
+        });
     }
 }

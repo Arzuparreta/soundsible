@@ -18,6 +18,7 @@ import * as renderers from './renderers.js';
 import { createCoverOverlayController } from './cover_overlay.js';
 import { attachSeekBar, bindSeekSliderKeys } from './seek_bar.js';
 import { radioService } from './radio.js';
+import { remoteControl } from './remote_control.js';
 function el(id) {
     return document.getElementById(id);
 }
@@ -238,6 +239,7 @@ export const DesktopUI = {
                 ? !!sourceEl.closest('#desktop-playlist-detail-tracks')
                 : this.currentView === 'playlist-detail';
             applyDeezerActionMenuChrome(v, 'desktop-action', { inPlaylistDetail });
+            el('desktop-action-play-on-device')?.classList.add('hidden');
             void hydrateDeezerVirtualTrack(v).then(() => {
                 if (this.currentActionTrack !== v) return;
                 applyDeezerActionMenuChrome(v, 'desktop-action', { inPlaylistDetail });
@@ -250,10 +252,11 @@ export const DesktopUI = {
         if (!track) return;
         this.currentActionTrack = track;
 
-        el('desktop-action-edit-metadata')?.classList.remove('hidden');
-        el('desktop-action-delete')?.classList.remove('hidden');
+            el('desktop-action-edit-metadata')?.classList.remove('hidden');
+            el('desktop-action-delete')?.classList.remove('hidden');
+            el('desktop-action-play-on-device')?.classList.remove('hidden');
 
-        const favText = el('desktop-action-fav-text');
+            const favText = el('desktop-action-fav-text');
         const queueText = el('desktop-action-queue-text');
 
         if (titleEl) titleEl.textContent = track.title;
@@ -301,7 +304,8 @@ export const DesktopUI = {
             applyDeezerActionMenuChrome(v, 'desktop-context', { inPlaylistDetail });
             void hydrateDeezerVirtualTrack(v).then(() => {
                 if (this.currentActionTrack !== v) return;
-                applyDeezerActionMenuChrome(v, 'desktop-context', { inPlaylistDetail });
+            applyDeezerActionMenuChrome(v, 'desktop-context', { inPlaylistDetail });
+            el('desktop-context-play-on-device')?.classList.add('hidden');
             });
             if (!menu) return;
             menu.style.left = `${clientX + 4}px`;
@@ -347,6 +351,8 @@ export const DesktopUI = {
         if (ctxShare) ctxShare.classList.toggle('hidden', !getYouTubeWatchUrlForTrack(track));
         const ctxRadio = el('desktop-context-start-radio');
         if (ctxRadio) ctxRadio.classList.remove('hidden');
+        const ctxPlayOnDevice = el('desktop-context-play-on-device');
+        if (ctxPlayOnDevice) ctxPlayOnDevice.classList.remove('hidden');
 
         const inPlaylistDetail = row ? !!row.closest('#desktop-playlist-detail-tracks') : this.currentView === 'playlist-detail';
         const ctxPlayPlaylist = el('desktop-context-play-playlist');
@@ -399,6 +405,8 @@ export const DesktopUI = {
         if (ctxDeleteTrack) ctxDeleteTrack.classList.add('hidden');
         const ctxRadioPl = el('desktop-context-start-radio');
         if (ctxRadioPl) ctxRadioPl.classList.add('hidden');
+        const ctxPlayOnDevicePl = el('desktop-context-play-on-device');
+        if (ctxPlayOnDevicePl) ctxPlayOnDevicePl.classList.add('hidden');
 
         // Note: Show playlist-specific actions
         if (ctxPlayPlaylist) ctxPlayPlaylist.classList.remove('hidden');
@@ -484,6 +492,63 @@ export const DesktopUI = {
                 const track = this.currentActionTrack;
                 this.hideContextMenu();
                 if (track) await radioService.startRadio(track);
+            });
+        }
+        const playOnDeviceCtxBtn = el('desktop-context-play-on-device');
+        if (playOnDeviceCtxBtn) {
+            playOnDeviceCtxBtn.addEventListener('click', async () => {
+                const track = this.currentActionTrack;
+                this.hideContextMenu();
+                if (!track) return;
+                if (isDeezerSurfaceActionTrack(track)) return;
+                const devices = await remoteControl.fetchDevices();
+                const currentDeviceId = store.getDeviceId();
+                const others = devices.filter(d => d.device_id !== currentDeviceId);
+                if (others.length === 0) {
+                    this.showToast('No other devices connected');
+                    return;
+                }
+                const modal = document.createElement('div');
+                modal.className = 'fixed inset-0 z-[280] flex items-center justify-center p-4 touch-none';
+                modal.style.backgroundColor = 'var(--overlay-bg)';
+                modal.innerHTML = `
+                    <div class="absolute inset-0" style="backdrop-filter: blur(4px);"></div>
+                    <div class="glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl w-full max-w-xs overflow-hidden relative">
+                        <div class="p-4 border-b border-[var(--glass-border)]">
+                            <h3 class="text-sm font-black uppercase tracking-widest text-[var(--text-dim)]">Play on device</h3>
+                        </div>
+                        <div id="play-on-device-list" class="max-h-64 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                            ${others.map(d => `
+                                <button type="button" class="play-on-device-item w-full flex items-center gap-3 p-3 rounded-[var(--radius-omni-xs)] hover:bg-[var(--surface-overlay)] active:bg-[var(--bg-card)] transition-colors text-left" data-device-id="${d.device_id.replace(/"/g, '&quot;')}">
+                                    <div class="w-8 h-8 rounded-full bg-[var(--surface-overlay)] border border-[var(--glass-border)] flex items-center justify-center flex-shrink-0">
+                                        <i class="fas ${d.device_type === 'mobile' ? 'fa-mobile-screen-button' : 'fa-desktop'} text-[var(--secondary)] text-xs"></i>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-sm font-semibold text-[var(--text-main)] truncate">${remoteControl._escapeHtml(d.device_name || 'Device')}</div>
+                                        <div class="text-xs text-[var(--text-dim)]">${d.socket_connected || d.active_sid ? 'Online' : 'Offline'}</div>
+                                    </div>
+                                </button>
+                            `).join('')}
+                        </div>
+                        <button type="button" id="play-on-device-cancel" class="w-full p-3 text-sm font-bold text-[var(--text-dim)] hover:bg-[var(--surface-overlay)] transition-colors border-t border-[var(--glass-border)]">Cancel</button>
+                    </div>`;
+                document.body.appendChild(modal);
+                modal.querySelector('.absolute.inset-0').addEventListener('click', () => modal.remove());
+                modal.querySelector('#play-on-device-cancel').addEventListener('click', () => modal.remove());
+                modal.querySelectorAll('.play-on-device-item').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const deviceId = btn.getAttribute('data-device-id');
+                        modal.remove();
+                        if (deviceId && track.id) {
+                            fetch(`${store.apiBase}/api/playback/remote-command`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ device_id: deviceId, command: 'play', track_id: track.id })
+                            }).catch(() => {});
+                            this.showToast('Sent to device');
+                        }
+                    });
+                });
             });
         }
         if (queueBtn) {

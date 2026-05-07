@@ -11,6 +11,8 @@ import { connectionManager } from './connection.js';
 import * as renderers from './renderers.js';
 import { scoreLibrary, scoreArtist, mergeAndSortByScore } from './search_scoring.js';
 import { wireSettings } from './wires.js';
+import { wireRemoteControl } from './wires.js';
+import { remoteControl } from './remote_control.js';
 import { LIBRARY_TABS } from './library_tabs.js';
 import { checkResumeFromOtherDevice } from './playback_resume.js';
 import { isVisible, onChange as onVisibilityChange } from './visibility.js';
@@ -696,6 +698,13 @@ function init() {
 
         wireSettings(MOBILE_SETTINGS_IDS, { store, showToast: (msg) => UI.showToast(msg), onLibraryOrderChange: () => renderLibraryContent(), subscribeIndicators: false });
         initLibraryMaintenance();
+
+        wireRemoteControl({
+            refreshBtn: 'refresh-devices-btn',
+            deviceListContainer: 'device-list-container',
+            generateTokenBtn: 'generate-token-btn',
+            tokenDisplay: 'agent-token-display'
+        }, { store, showToast: (msg) => UI.showToast(msg) });
 
         // Note: 2. Subscribe to state changes for re-rendering (optimized)
         let lastLibraryRef = null; // Note: Force first render in subscription
