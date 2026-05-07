@@ -48,15 +48,7 @@ If downloads fail with yt‑dlp “Requested format is not available” when usi
 - The engine must be able to reach **`https://api.deezer.com`** outbound. If that fails, Discover lists and search will be empty or error.
 - Playback still depends on **YouTube / YouTube Music search** (ODST) and your existing downloader configuration; Discover does not add a separate audio backend.
 
-### 5. Radio mode
-
-Radio mode uses the same YouTube / YouTube Music recommendation and preview plumbing as Search and Discover. There is no separate radio account, API key, or subscription layer.
-
-- The Station needs outbound access for the related-video lookup and preview stream resolution.
-- Downloaded matches still win at playback start: when a radio item maps to a local library track, the Station streams the local/server copy.
-- Radio does not own the normal queue. User-queued songs play first, and radio resumes after the queue is empty.
-
-### 6. Storage configuration overview
+### 5. Storage configuration overview
 
 At a high level, storage can be configured in three ways:
 
