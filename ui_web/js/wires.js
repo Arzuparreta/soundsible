@@ -381,13 +381,14 @@ export function wireDownloader(selectors, deps) {
  */
 export function wireRemoteControl(selectors, deps) {
     const { store, showToast, getCurrentActionTrack } = deps;
+    const root = selectors.root || document;
 
-    const refreshBtn = selectors.refreshBtn;
-    const deviceListContainer = selectors.deviceListContainer;
-    const generateTokenBtn = selectors.generateTokenBtn;
-    const tokenDisplay = selectors.tokenDisplay;
-    const playOnDeviceBtn = selectors.playOnDeviceBtn;
-    const contextPlayOnDeviceBtn = selectors.contextPlayOnDeviceBtn;
+    const refreshBtn = getElement(root, selectors.refreshBtn);
+    const deviceListContainer = getElement(root, selectors.deviceListContainer);
+    const generateTokenBtn = getElement(root, selectors.generateTokenBtn);
+    const tokenDisplay = getElement(root, selectors.tokenDisplay);
+    const playOnDeviceBtn = getElement(root, selectors.playOnDeviceBtn);
+    const contextPlayOnDeviceBtn = getElement(root, selectors.contextPlayOnDeviceBtn);
 
     if (refreshBtn && deviceListContainer) {
         const loadDevices = () => {
