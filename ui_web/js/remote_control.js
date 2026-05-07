@@ -57,6 +57,119 @@ class RemoteControl {
         }
     }
 
+    /**
+     * Create a "Play on device" device-picker modal.
+     * @param {Array} others - Array of device objects (excluding self)
+     * @param {{ id: string, title: string }} track - Track to send
+     * @param {object} store - Store instance
+     * @param {Function} showToast - Toast function
+     * @returns {HTMLElement}
+     */
+    createDevicePickerModal(others, track, store, showToast) {
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;inset:0;z-index:1280;display:flex;align-items:center;justify-content:center;padding:16px;background-color:rgba(0,0,0,0.65);';
+        modal.setAttribute('aria-label', 'Play on device picker');
+
+        const sheet = document.createElement('div');
+        sheet.style.cssText = [
+            'background:var(--bg-card, #1a1a1f)',
+            'border:1px solid var(--glass-border, rgba(255,255,255,0.08))',
+            'border-radius:var(--radius-omni, 24px)',
+            'box-shadow:0 20px 60px rgba(0,0,0,0.5)',
+            'width:100%',
+            'max-width:320px',
+            'overflow:hidden',
+            'position:relative'
+        ].join(';');
+
+        const header = document.createElement('div');
+        header.style.cssText = 'padding:16px;border-bottom:1px solid var(--glass-border, rgba(255,255,255,0.08));';
+        header.innerHTML = '<h3 style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim, #999);margin:0">Play on device</h3>';
+        sheet.appendChild(header);
+
+        const list = document.createElement('div');
+        list.style.cssText = 'max-height:256px;overflow-y:auto;padding:8px';
+        for (const d of others) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.style.cssText = [
+                'width:100%',
+                'display:flex',
+                'align-items:center',
+                'gap:12px',
+                'padding:12px',
+                'border-radius:12px',
+                'border:none',
+                'background:transparent',
+                'color:var(--text-main, #eee)',
+                'font:inherit',
+                'text-align:left',
+                'cursor:pointer',
+                'transition:background 0.15s'
+            ].join(';');
+            btn.addEventListener('mouseenter', () => { btn.style.background = 'var(--surface-overlay, rgba(255,255,255,0.06))'; });
+            btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
+
+            const icon = d.device_type === 'mobile' ? 'fa-mobile-screen-button' : 'fa-desktop';
+            const label = d.device_type === 'mobile' ? 'Phone' : 'Desktop';
+            const isOnline = d.socket_connected || d.active_sid;
+            const name = this._escapeHtml(d.device_name || label);
+
+            btn.innerHTML = [
+                `<span style="width:32px;height:32px;border-radius:50%;background:var(--surface-overlay, rgba(255,255,255,0.06));border:1px solid var(--glass-border, rgba(255,255,255,0.08));display:flex;align-items:center;justify-content:center;flex-shrink:0">`,
+                `<i class="fas ${icon}" style="color:var(--secondary, #aaa);font-size:12px"></i>`,
+                `</span>`,
+                `<span style="flex:1;min-width:0">`,
+                `<span style="display:block;font-size:13px;font-weight:600;color:var(--text-main, #eee);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</span>`,
+                `<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-dim, #999);margin-top:2px">`,
+                `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${isOnline ? '#22c55e' : 'rgba(239,68,68,0.6)'};flex-shrink:0;box-shadow:${isOnline ? '0 0 6px rgba(34,197,94,0.7)' : 'none'}"></span>`,
+                `${isOnline ? 'Online' : 'Offline'}`,
+                ` · ${label}`,
+                `</span></span>`,
+                `<i class="fas fa-chevron-right" style="color:var(--text-dim, #999);font-size:11px;flex-shrink:0"></i>`
+            ].join('');
+
+            btn.addEventListener('click', () => {
+                modal.remove();
+                if (track && track.id) {
+                    fetch(`${this._apiBase}/api/playback/remote-command`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ device_id: d.device_id, command: 'play', track_id: track.id })
+                    }).catch(() => {});
+                    showToast?.('Sent to device');
+                }
+            });
+            list.appendChild(btn);
+        }
+        sheet.appendChild(list);
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.cssText = [
+            'width:100%',
+            'padding:12px',
+            'border:none',
+            'border-top:1px solid var(--glass-border, rgba(255,255,255,0.08))',
+            'background:transparent',
+            'color:var(--text-dim, #999)',
+            'font-size:13px',
+            'font-weight:600',
+            'cursor:pointer',
+            'transition:background 0.15s'
+        ].join(';');
+        cancelBtn.addEventListener('mouseenter', () => { cancelBtn.style.background = 'var(--surface-overlay, rgba(255,255,255,0.06))'; });
+        cancelBtn.addEventListener('mouseleave', () => { cancelBtn.style.background = 'transparent'; });
+        cancelBtn.addEventListener('click', () => modal.remove());
+        sheet.appendChild(cancelBtn);
+
+        modal.appendChild(sheet);
+        modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+        return modal;
+    }
+
     async generateAgentToken() {
         try {
             const res = await fetch(`${this._apiBase}/api/agent/token`, {
