@@ -707,7 +707,11 @@ class AudioEngine {
 
         const currentTrack = store.state.currentTrack;
         if (
-            (currentTrack?.source === 'preview' || currentTrack?.source === 'radio' || currentTrack?.source === 'podcast-preview') &&
+            (
+                currentTrack?.source === 'preview' ||
+                (currentTrack?.source === 'radio' && !currentTrack?._libraryTrackId) ||
+                currentTrack?.source === 'podcast-preview'
+            ) &&
             duration > 0 &&
             !this._previewEndedTriggered &&
             currentTime >= duration - 1.2

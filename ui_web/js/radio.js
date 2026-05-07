@@ -61,6 +61,63 @@ function rowToRadioTrack(row) {
     };
 }
 
+function getTrackVideoId(track) {
+    if (!track) return null;
+    if (isYoutubeVideoId(track.video_id)) return track.video_id;
+    if ((track.source === 'preview' || track.source === 'radio') && isYoutubeVideoId(track.id)) return track.id;
+    if (isYoutubeVideoId(track.youtube_id)) return track.youtube_id;
+    return null;
+}
+
+function getLibraryTrackId(track, seedVideoId) {
+    if (!track) return null;
+    if (track._libraryTrackId || track.library_track_id) return track._libraryTrackId || track.library_track_id;
+    if (track.youtube_id === seedVideoId && typeof track.id === 'string' && !track.id.startsWith('deezer_') && !track.id.startsWith('pcast_')) {
+        return track.id;
+    }
+    if (
+        (track.source === 'library' || track.file_hash || track.local_path || track.original_filename) &&
+        typeof track.id === 'string' &&
+        !track.id.startsWith('deezer_') &&
+        !track.id.startsWith('pcast_')
+    ) {
+        return track.id;
+    }
+    return null;
+}
+
+function localCoverUrl(trackId) {
+    if (!trackId) return '';
+    const host = store?.state?.activeHost || window.location.hostname || 'localhost';
+    return `${getApiBase(host)}/api/static/cover/${encodeURIComponent(trackId)}`;
+}
+
+function makeSeedRadioTrack(track, seed) {
+    const libraryTrackId = getLibraryTrackId(track, seed.videoId);
+    const thumbnail = track.thumbnail || track.cover || track.cover_url || track.album_art_url || localCoverUrl(libraryTrackId);
+    return {
+        id: seed.videoId,
+        video_id: seed.videoId,
+        title: seed.title || track.title || 'Unknown',
+        artist: seed.artist || track.artist || track.album_artist || track.channel || '',
+        album: track.album,
+        duration: Math.max(0, Number(track.duration || track.duration_sec || 0) || 0),
+        thumbnail,
+        source: 'radio',
+        ...(libraryTrackId ? { _libraryTrackId: libraryTrackId } : {})
+    };
+}
+
+function isSamePlaybackTarget(track, currentTrack, seedVideoId) {
+    if (!track || !currentTrack) return false;
+    if (track.id && currentTrack.id && track.id === currentTrack.id) return true;
+    const currentVideoId = getTrackVideoId(currentTrack);
+    if (currentVideoId && currentVideoId === seedVideoId) return true;
+    const libraryTrackId = getLibraryTrackId(track, seedVideoId);
+    if (libraryTrackId && (currentTrack.id === libraryTrackId || currentTrack._libraryTrackId === libraryTrackId)) return true;
+    return false;
+}
+
 /**
  * Resolve a track to its YouTube video_id.
  * Handles: library tracks (with youtube_id), Deezer tracks, preview tracks.
@@ -175,9 +232,7 @@ class RadioService {
     async startRadio(track) {
         if (store.state.radioMode) this.exitRadio();
 
-        const title = (track.title || 'Unknown').trim();
-        const artist = (track.artist || track.album_artist || track.channel || '').trim();
-        const loading = showLoadingToast(`Starting radio for "${title}"...`);
+        const loading = showLoadingToast('Starting radio...');
 
         try {
             const seed = await resolveSeedVideoId(track);
@@ -213,11 +268,16 @@ class RadioService {
                 return false;
             }
 
-            const firstTrack = await this.nextTrack();
-            if (firstTrack) await audioEngine.playTrack(firstTrack);
+            const seedTrack = makeSeedRadioTrack(track, seed);
+            const alreadyPlayingSeed = store.state.isPlaying && isSamePlaybackTarget(track, store.state.currentTrack, seed.videoId);
+            this._statePatch({ currentVideoId: seed.videoId });
+            if (alreadyPlayingSeed) {
+                store.update({ currentTrack: seedTrack });
+            } else {
+                await audioEngine.playTrack(seedTrack);
+            }
 
             loading.dismiss();
-            window.showToast?.(`Radio: ${seed.title}`);
             return true;
         } catch (err) {
             loading.dismiss();
