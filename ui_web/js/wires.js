@@ -247,19 +247,115 @@ export function wireActionMenu(selectors, deps) {
         });
     }
 
-    if (playOnDeviceBtn) {
-        playOnDeviceBtn.addEventListener('click', async () => {
+    if (queueBtn) {
+        queueBtn.addEventListener('click', async () => {
             const track = getCurrentActionTrack?.();
-            if (!track) return;
-            await showPlayOnDevicePicker(track);
+            if (!track) {
+                onClose?.();
+                return;
+            }
+            if (isDeezerSurfaceActionTrack(track)) {
+                await actionMenuToggleQueueDeezer(track, store, showToast);
+                onClose?.();
+                return;
+            }
+            store.toggleQueue(track.id);
+            onClose?.();
         });
     }
 
-    if (contextPlayOnDeviceBtn) {
-        contextPlayOnDeviceBtn.addEventListener('click', async () => {
+    if (shareBtn) {
+        shareBtn.addEventListener('click', async () => {
+            const track = getCurrentActionTrack?.();
+            if (!track) {
+                onClose?.();
+                return;
+            }
+            if (isDeezerSurfaceActionTrack(track)) {
+                await actionMenuShareDeezer(track, showToast);
+                onClose?.();
+                return;
+            }
+            if (getYouTubeWatchUrlForTrack(track)) shareYouTubeTrack(track, showToast);
+            onClose?.();
+        });
+    }
+
+    if (favBtn) {
+        favBtn.addEventListener('click', async () => {
             const track = getCurrentActionTrack?.();
             if (!track) return;
-            await showPlayOnDevicePicker(track);
+            if (isDeezerSurfaceActionTrack(track)) {
+                await hydrateDeezerVirtualTrack(track);
+                const libId = track._libraryTrackId;
+                if (!libId) {
+                    showToast?.('Download to library to use favourites');
+                    onClose?.();
+                    return;
+                }
+                const libTrack = store.state.library.find((t) => t.id === libId);
+                if (onFavClick && libTrack) {
+                    onFavClick(libTrack);
+                } else {
+                    store.toggleFavourite(libId);
+                    onClose?.();
+                }
+                return;
+            }
+            if (onFavClick) {
+                onFavClick(track);
+            } else {
+                store.toggleFavourite(track.id);
+                onClose?.();
+            }
+        });
+    }
+
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', () => {
+            const track = getCurrentActionTrack?.();
+            if (isDeezerSurfaceActionTrack(track)) {
+                onClose?.();
+                return;
+            }
+            if (track && confirm('Delete?')) store.deleteTrack(track.id);
+            onClose?.();
+        });
+    }
+
+    if (editBtn) {
+        editBtn.addEventListener('click', () => {
+            const track = getCurrentActionTrack?.();
+            onClose?.();
+            if (isDeezerSurfaceActionTrack(track)) return;
+            if (track) onShowMetadataEditor?.(track.id);
+        });
+    }
+
+    if (addToPlaylistBtn && onAddToPlaylist) {
+        addToPlaylistBtn.addEventListener('click', async () => {
+            const track = getCurrentActionTrack?.();
+            onClose?.();
+            if (!track) return;
+            if (isDeezerSurfaceActionTrack(track)) {
+                await actionMenuAddToPlaylistDeezer(track, showToast, onAddToPlaylist);
+                return;
+            }
+            onAddToPlaylist(track.id);
+        });
+    }
+
+    if (removeFromPlaylistBtn && onRemoveFromPlaylist) {
+        removeFromPlaylistBtn.addEventListener('click', async () => {
+            const track = getCurrentActionTrack?.();
+            onClose?.();
+            if (!track) return;
+            if (isDeezerSurfaceActionTrack(track)) {
+                await hydrateDeezerVirtualTrack(track);
+                if (track._libraryTrackId) onRemoveFromPlaylist({ id: track._libraryTrackId });
+                return;
+            }
+            onRemoveFromPlaylist(track);
         });
     }
 }
