@@ -20,7 +20,7 @@ The **Station** UI is static assets under `ui_web/`, served by the engine at **`
 | `run.py` | Universal entry: venv bootstrap, optional **TUI** menu, or **`--daemon`** to run the Station Engine only. |
 | `shared/` | Cross-cutting code: Flask API app (`shared/api/`), models, config paths, security helpers, SQLite access, job orchestration. |
 | `player/` | Library manager, queue, favourites, cache — **core playback and library** logic used by the API. |
-| `ui_web/` | Station front-end (HTML, JS, Tailwind/Vite build); includes **Discover** (Deezer metadata + YouTube resolution). |
+| `ui_web/` | Station front-end (HTML, JS, Tailwind/Vite build); includes **Discover** (Deezer metadata + YouTube resolution) and **Radio** playback mode. |
 | `launcher_web/` | Small Flask app for the launcher pages and “launch/stop ecosystem” API. |
 | `odst_tool/` | Download pipeline (yt-dlp, FFmpeg), ODST library format, cloud sync helpers; embedded in the API for downloads. |
 | `setup_tool/` | Storage providers (local, S3-compatible), scanning, uploads, audio/cover helpers used by library and sync paths. |
@@ -92,6 +92,13 @@ The Flask application lives in `shared/api/__init__.py`. It:
   - **In-app preview** streams via **`GET /api/preview/stream/<video_id>`** (playback blueprint).
   - **Download queue** uses the resolved item like any other ODST search result.
 - Resolution can take a few seconds; the download-queue popover may show a short **“Finding YouTube match…”** state while that search runs.
+
+**Radio mode** (`ui_web/js/radio.js`):
+
+- Radio is a client-side playback session, not normal queue content. It asks the Station for related YouTube Music results through **`GET /api/downloader/youtube/related`**, keeps a hidden buffer, and hands the next generated track directly to the web audio engine.
+- The normal playback queue remains user-owned. If the user queues songs while radio is active, those songs play first; radio continues after the queue is empty.
+- Radio tracks keep a stable `source: "radio"` identity in the UI. At playback start, `audio.js` checks the library YouTube-id map. If the video already exists locally, playback uses **`GET /api/static/stream/<library_track_id>`**; otherwise it uses **`GET /api/preview/stream/<video_id>`**.
+- Download completion does not hot-swap the current audio element. A song downloaded mid-listen keeps playing uninterrupted; the local/server stream is used the next time that radio item is played.
 
 ### 5. Data and configuration (conceptual)
 

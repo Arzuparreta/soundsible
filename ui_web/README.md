@@ -1,6 +1,8 @@
 # Soundsible web UI
 
-The Station UI includes **Library**, **Search** (ODST / YouTube Music–style results), **Discover** (Deezer metadata for charts and editorial playlists; playback resolves to YouTube via the same search API as the downloader), and **Downloads**. Discover-related logic lives mainly in `js/discovery.js`, `js/deezer_actions.js`, and shared list code in `js/renderers.js` (with `playback_context.js` routing `deezer_*` ids to preview playback).
+The Station UI includes **Library**, **Search** (ODST / YouTube Music–style results), **Discover** (Deezer metadata for charts and editorial playlists; playback resolves to YouTube via the same search API as the downloader), **Radio**, and **Downloads**. Discover-related logic lives mainly in `js/discovery.js`, `js/deezer_actions.js`, and shared list code in `js/renderers.js` (with `playback_context.js` routing `deezer_*` ids to preview playback).
+
+Radio mode lives in `js/radio.js`. It behaves like a hidden playback session, not a normal queue filler: generated recommendations stay out of the user queue, manual queue songs play first, and playback resolves downloaded matches through the local Station stream when available.
 
 ## Development (Flask serves source)
 

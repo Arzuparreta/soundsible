@@ -22,6 +22,34 @@ Unlike commercial services, Soundsible gives you:
 - ✅ **Zero ads, zero tracking, zero revenue models** — just your music
 - ✅ **Complete control** over your data (it's YOUR server after all)
 
+## ✨ What Can It Do?
+
+Soundsible is not just a folder player with a pretty face. The point is to keep the **core self-hosted and private**, while still giving you the modern discovery tools that made people depend on commercial platforms in the first place.
+
+- **Your own library, streamed from your own server**  
+  Downloaded songs play through the Station Engine, not through some third-party player path. Your library is still the center of the app.
+
+- **Search YouTube and YouTube Music from the Station**  
+  Find songs quickly, preview them, and decide what is actually worth saving.
+
+- **Discover music without surrendering the library**  
+  Discover uses Deezer metadata for charts, playlists, and search surfaces, then resolves playback through the same YouTube / YouTube Music path as the downloader. Deezer is a discovery layer here, not your audio backend.
+
+- **Radio mode, but sensible**  
+  Start a radio from a song and Soundsible keeps feeding related music like a Spotify-style radio, without dumping a caveman pile of generated songs into your normal queue. Your manual queue still wins, and radio resumes when your queued songs are done.
+
+- **Downloaded music takes priority automatically**  
+  If a radio or preview song already exists in your library, Soundsible plays the local/server copy. If you download a song while listening, the current stream is not interrupted; the local copy is used the next time that song is played.
+
+- **Podcasts live next to music**  
+  Search and manage podcast content without needing a separate app for the basic flow.
+
+- **Mobile and desktop Station UI**  
+  Use it from the browser, install it as a PWA, or run it on a server and reach it over LAN/Tailscale.
+
+- **Download queue and library management**  
+  Queue tracks for download, keep metadata and covers under control, manage favourites and playlists, and build a library that is actually yours.
+
 ## 🛡️ Why Soundsible?
 
 As a **musician**, I've seen how streaming platforms exploit artists and listeners alike. As a **Linux SysAdmin**, I know that self-hosting is the only true path to digital freedom.
@@ -125,7 +153,7 @@ python3 run.py
 ## 📚 Documentation
 
 - [Install & Deployment](docs/INSTALL.md) — headless server, Tailscale, reverse proxy, storage
-- [Architecture](docs/ARCHITECTURE.md) — architecture and data flow (includes **Discover / Deezer proxy**)
+- [Architecture](docs/ARCHITECTURE.md) — architecture and data flow (includes **Discover / Deezer proxy** and **Radio mode**)
 - [Agent Integration](docs/AGENT_INTEGRATION.md) — API guide for OpenClaw, Hermes agents, and local assistants
 - [Configuration](docs/CONFIGURATION.md) — configuration, environment variables, storage backends
 - [Legal & Acceptable Use](docs/LEGAL.md) — legal details
