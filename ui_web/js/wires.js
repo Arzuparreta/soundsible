@@ -1,5 +1,5 @@
 /**
- * Shared wiring: attach behaviour to DOM (settings, action menu).
+ * Shared wiring: attach behaviour to DOM (settings, action menu, remote control).
  * Both mobile (app.js / ui.js) and desktop (app_desktop.js) call these with their own selectors.
  */
 
@@ -12,6 +12,7 @@ import {
     actionMenuAddToPlaylistDeezer
 } from './deezer_actions.js';
 import { radioService } from './radio.js';
+import { remoteControl } from './remote_control.js';
 
 function getElement(root, selector) {
     if (!selector) return null;
@@ -164,6 +165,7 @@ export function wireActionMenu(selectors, deps) {
     const closeBtn = getElement(root, selectors.closeBtn);
     const shareBtn = selectors.shareBtn ? getElement(root, selectors.shareBtn) : null;
     const startRadioBtn = selectors.startRadioBtn ? getElement(root, selectors.startRadioBtn) : null;
+    const playOnDeviceBtn = selectors.playOnDeviceBtn ? getElement(root, selectors.playOnDeviceBtn) : null;
 
     if (overlay) overlay.addEventListener('click', () => onClose?.());
     if (closeBtn) closeBtn.addEventListener('click', () => onClose?.());
@@ -174,6 +176,33 @@ export function wireActionMenu(selectors, deps) {
             onClose?.();
             if (!track) return;
             await radioService.startRadio(track);
+        });
+    }
+
+    if (playOnDeviceBtn) {
+        playOnDeviceBtn.addEventListener('click', async () => {
+            const track = getCurrentActionTrack?.();
+            if (!track) {
+                onClose?.();
+                return;
+            }
+            if (isDeezerSurfaceActionTrack(track)) {
+                showToast?.('Download to library to use remote play');
+                onClose?.();
+                return;
+            }
+            onClose?.();
+            const devices = await remoteControl.fetchDevices();
+            const currentDeviceId = store.getDeviceId();
+            const others = devices.filter(d => d.device_id !== currentDeviceId);
+
+            if (others.length === 0) {
+                showToast?.('No other devices connected');
+                return;
+            }
+
+            const modal = remoteControl.createDevicePickerModal(others, track, store, showToast);
+            document.body.appendChild(modal);
         });
     }
 
@@ -301,5 +330,78 @@ export function wireDownloader(selectors, deps) {
     const { Downloader } = deps;
     if (Downloader && typeof Downloader.init === 'function') {
         Downloader.init();
+    }
+}
+
+/**
+ * Wire remote control: device list refresh, agent token generation, "Play on device" action.
+ * @param {Object} selectors - { refreshBtn, deviceListContainer, generateTokenBtn, tokenDisplay, playOnDeviceBtn, contextPlayOnDeviceBtn }
+ * @param {Object} deps - { store, showToast, getCurrentActionTrack }
+ */
+export function wireRemoteControl(selectors, deps) {
+    const { store, showToast, getCurrentActionTrack } = deps;
+    const root = selectors.root || document;
+
+    const refreshBtn = getElement(root, selectors.refreshBtn);
+    const deviceListContainer = getElement(root, selectors.deviceListContainer);
+    const generateTokenBtn = getElement(root, selectors.generateTokenBtn);
+    const tokenDisplay = getElement(root, selectors.tokenDisplay);
+    const playOnDeviceBtn = getElement(root, selectors.playOnDeviceBtn);
+    const contextPlayOnDeviceBtn = getElement(root, selectors.contextPlayOnDeviceBtn);
+
+    if (refreshBtn && deviceListContainer) {
+        const loadDevices = () => {
+            remoteControl.renderDeviceList(deviceListContainer);
+        };
+        refreshBtn.addEventListener('click', loadDevices);
+        loadDevices();
+    }
+
+    if (generateTokenBtn && tokenDisplay) {
+        generateTokenBtn.addEventListener('click', async () => {
+            generateTokenBtn.disabled = true;
+            generateTokenBtn.textContent = 'Generating...';
+            const result = await remoteControl.generateAgentToken();
+            generateTokenBtn.disabled = false;
+            generateTokenBtn.textContent = 'Generate Token';
+            if (result.error) {
+                showToast?.(result.error);
+                return;
+            }
+            tokenDisplay.classList.remove('hidden');
+            tokenDisplay.value = result.token;
+            showToast?.('Token generated');
+        });
+    }
+
+    async function showPlayOnDevicePicker(track) {
+        if (!track?.id) return;
+        const devices = await remoteControl.fetchDevices();
+        const currentDeviceId = store.getDeviceId();
+        const others = devices.filter(d => d.device_id !== currentDeviceId);
+
+        if (others.length === 0) {
+            showToast?.('No other devices connected');
+            return;
+        }
+
+        const modal = remoteControl.createDevicePickerModal(others, track, store, showToast);
+        document.body.appendChild(modal);
+    }
+
+    if (playOnDeviceBtn) {
+        playOnDeviceBtn.addEventListener('click', async () => {
+            const track = getCurrentActionTrack?.();
+            if (!track) return;
+            await showPlayOnDevicePicker(track);
+        });
+    }
+
+    if (contextPlayOnDeviceBtn) {
+        contextPlayOnDeviceBtn.addEventListener('click', async () => {
+            const track = getCurrentActionTrack?.();
+            if (!track) return;
+            await showPlayOnDevicePicker(track);
+        });
     }
 }

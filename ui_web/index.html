@@ -426,6 +426,35 @@
                         </div>
                     </div>
 
+                    <!-- Connected Devices -->
+                    <div class="glass-view rounded-[var(--radius-omni)] p-5 sm:p-6 border border-[var(--glass-border)] shadow-[var(--shadow-omni)] transition-all duration-200">
+                        <div class="flex items-start gap-3 mb-4">
+                            <div class="w-10 h-10 rounded-[var(--radius-omni-xs)] bg-[var(--surface-overlay)] border border-[var(--glass-border)] flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                                <i class="fas fa-network-wired text-[var(--accent)] text-sm"></i>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--accent)]">Network</p>
+                                <h2 class="text-base font-bold text-[var(--text-main)] tracking-tight mt-1">Connected Devices</h2>
+                                <p class="text-xs text-[var(--text-dim)] mt-1 leading-relaxed">Control playback on other devices.</p>
+                            </div>
+                        </div>
+                        <div class="border-t border-[var(--glass-border)] pt-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Other devices</span>
+                                <button type="button" id="refresh-devices-btn" class="text-xs font-bold text-[var(--accent)] hover:underline">Refresh</button>
+                            </div>
+                            <div id="device-list-container" class="space-y-1">
+                                <div class="text-xs text-[var(--text-dim)] text-center py-3">Loading...</div>
+                            </div>
+                        </div>
+                        <div class="mt-5 pt-4 border-t border-[var(--glass-border)]">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)] block mb-2">Agent Token</span>
+                            <p class="text-xs text-[var(--text-dim)] mb-3 leading-relaxed">Generate a token for external API access to control playback on any device.</p>
+                            <button type="button" id="generate-token-btn" class="w-full bg-[var(--surface-overlay)] hover:bg-[var(--bg-card)] text-[var(--text-main)] font-bold py-3 rounded-[var(--radius-omni-xs)] transition-colors text-sm border border-[var(--glass-border)]">Generate Token</button>
+                            <textarea id="agent-token-display" rows="3" class="input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-3 text-[var(--secondary)] font-mono text-xs focus:outline-none transition-colors mt-3 hidden" readonly aria-label="Agent token"></textarea>
+                        </div>
+                    </div>
+
                     <!-- Storage -->
                     <div class="glass-view rounded-[var(--radius-omni)] p-5 sm:p-6 border border-[var(--glass-border)] shadow-[var(--shadow-omni)] transition-all duration-200">
                         <div class="flex items-start gap-3 mb-4">
@@ -615,6 +644,7 @@
                 <button id="action-fav" class="w-full flex items-center space-x-4 p-4 active:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none text-[var(--text-main)]"><i class="fas fa-heart text-[var(--accent)]"></i><span id="action-fav-text">Favourite</span></button>
                 <button id="action-queue" class="w-full flex items-center space-x-4 p-4 active:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none text-[var(--text-main)]"><i class="fas fa-list-ul text-[var(--secondary)]"></i><span id="action-queue-text">Add to Queue</span></button>
                 <button id="action-start-radio" class="w-full flex items-center space-x-4 p-4 active:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none text-[var(--text-main)]"><i class="fas fa-tower-broadcast text-green-400"></i><span>Start Radio</span></button>
+                <button id="action-play-on-device" class="w-full flex items-center space-x-4 p-4 active:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none text-[var(--text-main)] hidden"><i class="fas fa-network-wired text-[var(--secondary)]"></i><span>Play on device</span></button>
                 <button id="action-add-to-playlist" class="w-full flex items-center space-x-4 p-4 active:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none text-[var(--text-main)]"><i class="fas fa-layer-group text-[var(--secondary)]"></i><span>Add to playlist</span></button>
                 <button id="action-edit-metadata" class="w-full flex items-center space-x-4 p-4 active:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none text-[var(--text-main)]"><i class="fas fa-pen-to-square text-purple-400"></i><span>Edit Metadata</span></button>
                 <button id="action-share" type="button" class="hidden w-full flex items-center space-x-4 p-4 active:bg-[var(--surface-overlay)] rounded-[var(--radius-omni-sm)] transition-colors font-bold focus:outline-none text-[var(--text-main)]"><i class="fas fa-share-nodes text-[var(--secondary)]"></i><span>Share YouTube link</span></button>

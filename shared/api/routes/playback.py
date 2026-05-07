@@ -513,3 +513,103 @@ def playback_notify_stop():
         return jsonify({"error": "device_id required"}), 400
     _emit_playback_stop(api, scope, device_id)
     return jsonify({"status": "sent"})
+
+
+@playback_bp.route("/api/playback/remote-command", methods=["POST"])
+def playback_remote_command():
+    api = _get_api()
+    scope = api["get_scope_from_request"]()
+    data = request.json or {}
+    device_id = (data.get("device_id") or "").strip()
+    command = (data.get("command") or "").strip().lower()
+
+    if not device_id or command not in {"pause", "play", "next", "seek"}:
+        return jsonify({"error": "device_id and command (pause, play, next, seek) required"}), 400
+
+    target = api["get_registered_device"](scope, device_id)
+    if not target:
+        return jsonify({"error": "Target device not found", "device_id": device_id}), 404
+
+    room = _playback_room(scope, device_id)
+
+    if command == "pause":
+        _emit_playback_stop(api, scope, device_id)
+        api["put_playback_state"](scope, {
+            "is_playing": False,
+            "device_id": device_id,
+            "device_name": target.get("device_name"),
+        })
+    elif command == "play":
+        track_id = (data.get("track_id") or "").strip()
+        state = api["get_playback_state"](scope, device_id=device_id) or api["get_playback_state"](scope)
+        if track_id:
+            lib, engine, queue = api["get_core"]()
+            track = api["get_track_by_id"](lib, track_id)
+            if track:
+                queue.consume_head_if_id(track_id)
+                target_state = {
+                    "track_id": track_id,
+                    "track": track.to_dict(),
+                    "position_sec": float(data.get("position_sec") or 0),
+                    "is_playing": True,
+                    "device_id": device_id,
+                    "device_name": target.get("device_name"),
+                }
+            elif state and state.get("track_id") == track_id:
+                target_state = {
+                    **state,
+                    "device_id": device_id,
+                    "device_name": target.get("device_name") or state.get("device_name"),
+                    "is_playing": True,
+                }
+            else:
+                return jsonify({"error": "Track not found for target device"}), 404
+        elif not state or not state.get("track_id"):
+            return jsonify({"error": "No playback state available for target device"}), 404
+        else:
+            target_state = {
+                **state,
+                "device_id": device_id,
+                "device_name": target.get("device_name") or state.get("device_name"),
+                "is_playing": True,
+            }
+        api["put_playback_state"](scope, target_state)
+        track_payload = target_state.get("track") if isinstance(target_state.get("track"), dict) else None
+        _emit_playback_start(api, scope, device_id, target_state, track=track_payload)
+    elif command == "next":
+        api["socketio"].emit("playback_next_requested", {}, room=room)
+    else:
+        raw = data.get("position_sec")
+        if raw is None:
+            return jsonify({"error": "position_sec required for seek"}), 400
+        try:
+            position_sec = float(raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "position_sec must be a number"}), 400
+        if position_sec < 0:
+            return jsonify({"error": "position_sec must be >= 0"}), 400
+        state = api["get_playback_state"](scope, device_id=device_id) or api["get_playback_state"](scope)
+        if not state or not state.get("track_id"):
+            return jsonify({"error": "No playback state available for target device"}), 404
+        target_state = {
+            **state,
+            "device_id": device_id,
+            "device_name": target.get("device_name") or state.get("device_name"),
+            "position_sec": position_sec,
+        }
+        api["put_playback_state"](scope, target_state)
+        api["socketio"].emit("playback_seek_requested", {"position_sec": position_sec}, room=room)
+
+    warning = None
+    if not target.get("active_sid"):
+        warning = "Device appears offline (no active socket)"
+    response = {
+        "status": "sent",
+        "command": command,
+        "device_id": device_id,
+    }
+    if command == "seek":
+        response["position_sec"] = position_sec
+    if warning:
+        response["warning"] = warning
+    return jsonify(response)

@@ -176,7 +176,8 @@ export class UI {
             addToPlaylistBtn: 'action-add-to-playlist',
             deleteBtn: 'action-delete',
             removeFromPlaylistBtn: 'action-remove-from-playlist',
-            startRadioBtn: 'action-start-radio'
+            startRadioBtn: 'action-start-radio',
+            playOnDeviceBtn: 'action-play-on-device'
         }, {
             store,
             showToast: (message) => this.showToast(message),
@@ -1562,6 +1563,8 @@ export class UI {
             const inPlaylistDetail = this.currentView === 'playlist-detail'
                 || !!(sourceEl && sourceEl.closest && sourceEl.closest('#playlist-detail-tracks'));
             applyDeezerActionMenuChrome(v, 'mobile-action', { inPlaylistDetail });
+            const actionPlayOnDevice = document.getElementById('action-play-on-device');
+            if (actionPlayOnDevice) actionPlayOnDevice.classList.add('hidden');
             void hydrateDeezerVirtualTrack(v).then(() => {
                 if (this.currentActionTrack !== v) return;
                 applyDeezerActionMenuChrome(v, 'mobile-action', { inPlaylistDetail });
@@ -1619,6 +1622,12 @@ export class UI {
         if (actionDelete) actionDelete.classList.toggle('hidden', inPlaylistDetail);
         if (actionAddToPlaylist) actionAddToPlaylist.classList.toggle('hidden', inPlaylistDetail);
         if (actionRemoveFromPlaylist) actionRemoveFromPlaylist.classList.toggle('hidden', !inPlaylistDetail);
+
+        const actionPlayOnDevice = document.getElementById('action-play-on-device');
+        if (actionPlayOnDevice) {
+            const isDeezer = trackId && String(trackId).startsWith('deezer_');
+            actionPlayOnDevice.classList.toggle('hidden', isDeezer);
+        }
 
         const menu = this.dom.actionMenu;
         const sheet = this.dom.actionMenuSheet;

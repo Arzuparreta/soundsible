@@ -8,6 +8,7 @@ import { audioEngine } from './audio.js';
 import * as renderers from './renderers.js';
 import { scoreLibrary, scoreArtist, mergeAndSortByScore } from './search_scoring.js';
 import { wireSettings, wireActionMenu } from './wires.js';
+import { wireRemoteControl } from './wires.js';
 import { DesktopUI } from './ui_desktop.js';
 import { checkResumeFromOtherDevice } from './playback_resume.js';
 import { playPreview } from './preview_playback.js';
@@ -855,6 +856,13 @@ function init() {
         }, { store, showToast: (m) => DesktopUI.showToast(m), onLibraryOrderChange: () => renderHomeSongs() });
         initLibraryMaintenanceDesktop();
 
+        wireRemoteControl({
+            refreshBtn: 'desktop-refresh-devices-btn',
+            deviceListContainer: 'desktop-device-list-container',
+            generateTokenBtn: 'desktop-generate-token-btn',
+            tokenDisplay: 'desktop-agent-token-display'
+        }, { store, showToast: (m) => DesktopUI.showToast(m) });
+
         const themeSelect = document.getElementById('desktop-settings-theme-select');
         if (themeSelect) {
             themeSelect.value = store.state.theme;
@@ -875,8 +883,9 @@ function init() {
             addToPlaylistBtn: 'desktop-action-add-to-playlist',
             deleteBtn: 'desktop-action-delete',
             removeFromPlaylistBtn: 'desktop-action-remove-from-playlist',
-            closeBtn: 'desktop-action-close',
-            startRadioBtn: 'desktop-action-start-radio'
+            startRadioBtn: 'desktop-action-start-radio',
+            playOnDeviceBtn: 'desktop-action-play-on-device',
+            closeBtn: 'desktop-action-close'
         }, {
             store,
             showToast: (m) => DesktopUI.showToast(m),

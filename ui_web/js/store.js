@@ -930,6 +930,42 @@ class Store {
         }
     }
 
+    async fetchDevices() {
+        try {
+            const res = await fetch(`${this.apiBase}/api/devices`);
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data.devices || [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    async fetchDevicePlaybackState(deviceId) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/playback/state?device_id=${encodeURIComponent(deviceId)}`);
+            if (res.status === 204 || !res.ok) return null;
+            return await res.json();
+        } catch (e) {
+            return null;
+        }
+    }
+
+    async sendRemoteCommand(deviceId, command, positionSec) {
+        try {
+            const body = { device_id: deviceId, command };
+            if (positionSec !== undefined) body.position_sec = positionSec;
+            const res = await fetch(`${this.apiBase}/api/playback/remote-command`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            return await res.json();
+        } catch (e) {
+            return { error: String(e) };
+        }
+    }
+
     importToken(token) {
         try {
             // Note: Decode token (Base64 -> zlib decompress -> JSON)
