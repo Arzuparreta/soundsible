@@ -35,13 +35,20 @@ let discoverSearchDebounceTimer = null;
 let podcastSearchDebounceTimer = null;
 
 function viewStateFromContext() {
+    const discoverSearchActive =
+        typeof UI !== 'undefined' &&
+        UI.currentView === 'discover' &&
+        typeof UI.isDiscoverSearchActive === 'function' &&
+        UI.isDiscoverSearchActive();
     return {
         homeTracks: viewContext.homeTracks,
         favTracks: viewContext.favTracks,
         artistTracks: viewContext.artistTracks,
         playlistTracks: window._currentPlaylistTracks,
         searchTracks: viewContext.searchTracks,
-        discoverSurfaceTracks: window._discoverSurfaceTracks ?? null
+        discoverSurfaceTracks: window._discoverSurfaceTracks ?? null,
+        discoverSearchActive,
+        discoverSearchOdstItems: window._discoverSearchOdstItems ?? null
     };
 }
 

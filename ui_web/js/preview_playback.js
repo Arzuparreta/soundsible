@@ -38,6 +38,33 @@ function isYoutubeId(id) {
 }
 
 /**
+ * ODST / YouTube search row → same synthetic shape as {@link playPreview} (for context lists + Deezer resolve).
+ * @param {{ id?: string, video_id?: string, title?: string, artist?: string, channel?: string, duration?: number, duration_sec?: number, thumbnail?: string }} item
+ */
+export function odstItemToPreviewTrack(item) {
+    const effectiveId = item?.video_id ?? item?.id;
+    if (!item || !effectiveId) return null;
+    const durationSec = item.duration_sec ?? item.duration ?? 0;
+    const duration = Math.max(0, Number(durationSec) || 0);
+    const syntheticTrack = {
+        id: effectiveId,
+        title: item.title || 'Unknown',
+        artist: item.artist || item.channel || '',
+        duration,
+        thumbnail: item.thumbnail || '',
+        source: 'preview',
+    };
+    if (isYoutubeId(effectiveId)) {
+        const ids = store.state.libraryYoutubeIds || [];
+        const map = store.state.youtubeToTrackId || {};
+        if (ids.includes(effectiveId) && map[effectiveId]) {
+            syntheticTrack._libraryTrackId = map[effectiveId];
+        }
+    }
+    return syntheticTrack;
+}
+
+/**
  * Stream podcast enclosure via Station signed URL (same-origin).
  * @param {{ enclosure_url: string, title?: string, artist?: string, duration?: number, thumbnail?: string }} item
  */
@@ -63,7 +90,7 @@ export async function playPodcastPreview(item) {
         return;
     }
     const syntheticTrack = {
-        id: item.episode_id || `pcast_${String(streamToken).slice(0, 28)}`,
+        id: (item.episode_id && String(item.episode_id).trim()) || `pcast_${String(streamToken).slice(0, 28)}`,
         title: item.title || 'Episode',
         artist: item.artist || '',
         album: item.album || '',
@@ -90,26 +117,18 @@ export async function playPodcastPreview(item) {
     audioEngine.playTrack(syntheticTrack);
 }
 
-export function playPreview(item) {
-    const effectiveId = item?.video_id ?? item?.id;
-    if (!item || !effectiveId) return;
-    const durationSec = item.duration_sec ?? item.duration ?? 0;
-    const duration = Math.max(0, Number(durationSec) || 0);
-    const syntheticTrack = {
-        id: effectiveId,
-        title: item.title || 'Unknown',
-        artist: item.artist || item.channel || '',
-        duration,
-        thumbnail: item.thumbnail || '',
-        source: 'preview',
-    };
-    if (isYoutubeId(effectiveId)) {
-        const ids = store.state.libraryYoutubeIds || [];
-        const map = store.state.youtubeToTrackId || {};
-        if (ids.includes(effectiveId) && map[effectiveId]) {
-            syntheticTrack._libraryTrackId = map[effectiveId];
-        }
+/**
+ * @param {{ id?: string, video_id?: string, title?: string, artist?: string, channel?: string, duration?: number, duration_sec?: number, thumbnail?: string }} item
+ * @param {{ contextItems?: Array<{ id?: string, video_id?: string, title?: string, artist?: string, channel?: string, duration?: number, duration_sec?: number, thumbnail?: string }> }} [opts]
+ */
+export function playPreview(item, opts = {}) {
+    const { contextItems } = opts;
+    if (Array.isArray(contextItems) && contextItems.length > 0) {
+        const mapped = contextItems.map((row) => odstItemToPreviewTrack(row)).filter(Boolean);
+        if (mapped.length) audioEngine.setContext(mapped);
     }
+    const syntheticTrack = odstItemToPreviewTrack(item);
+    if (!syntheticTrack) return;
     store.update({ currentTrack: syntheticTrack });
     audioEngine.playTrack(syntheticTrack);
 }

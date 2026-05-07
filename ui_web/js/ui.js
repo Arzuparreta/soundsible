@@ -482,7 +482,7 @@ export class UI {
             art.style.backgroundImage = url ? `url("${String(url).replace(/"/g, '%22')}")` : `url("${fallback}")`;
         }
         if (title) {
-            const radioOn = !!store.state.radioMode;
+            const radioOn = track?.source === 'radio';
             title.textContent = track.title;
             if (radioOn) {
                 const badge = document.createElement('span');

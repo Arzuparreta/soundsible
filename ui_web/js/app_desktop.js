@@ -24,18 +24,28 @@ import {
     getPointerCoords
 } from './shared.js';
 import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
+import { tryPlayUnifiedMusicSearch } from './search.js';
 
 let discoverSearchDebounceTimer = null;
 let podcastSearchDebounceTimer = null;
 
 function getDesktopViewState() {
+    const discoverSearchActive =
+        typeof DesktopUI !== 'undefined' &&
+        DesktopUI.currentView === 'discover' &&
+        (() => {
+            const inp = document.getElementById('desktop-global-search-input');
+            return !!(inp && (inp.value || '').trim());
+        })();
     return {
         homeTracks: window._currentHomeTracks,
         favTracks: window._currentFavTracks,
         artistTracks: window._currentArtistTracks,
         playlistTracks: window._currentPlaylistTracks,
         searchTracks: window._currentSearchTracks,
-        discoverSurfaceTracks: window._discoverSurfaceTracks ?? null
+        discoverSurfaceTracks: window._discoverSurfaceTracks ?? null,
+        discoverSearchActive,
+        discoverSearchOdstItems: window._discoverSearchOdstItems ?? null
     };
 }
 
@@ -1266,7 +1276,10 @@ function init() {
                 const row = e.target.closest(PLAY_SELECTORS);
                 if (!row || e.target.closest('button')) return;
                 const id = row.getAttribute('data-id');
-                if (id) playTrack(id);
+                if (id) {
+                    if (tryPlayUnifiedMusicSearch(row)) return;
+                    playTrack(id);
+                }
             });
 
             app.addEventListener('click', (e) => {
@@ -1274,6 +1287,11 @@ function init() {
                     const row = e.target.closest(PLAY_SELECTORS);
                     const id = row?.getAttribute('data-id');
                     if (id) {
+                        if (tryPlayUnifiedMusicSearch(row)) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            return;
+                        }
                         playTrack(id);
                         e.preventDefault();
                         e.stopPropagation();

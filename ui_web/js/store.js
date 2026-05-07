@@ -900,7 +900,6 @@ class Store {
             });
             if (res.ok) {
                 await this.syncQueue();
-                if (this.state.radioMode) this.update({ radioMode: null });
                 return true;
             }
             return false;

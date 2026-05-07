@@ -57,4 +57,3 @@ At a high level, storage can be configured in three ways:
 - Object storage – supported providers such as Cloudflare R2, Backblaze B2/R2, or S2.
 
 The setup wizard and settings UI handle the common cases. If you need a custom backend, look for the storage abstraction layer in the code and implement the same interface that existing backends use.
-

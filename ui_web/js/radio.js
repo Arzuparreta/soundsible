@@ -8,7 +8,7 @@ import { audioEngine } from './audio.js';
 import { searchService } from './search_service.js';
 import { showLoadingToast } from './shared.js';
 
-const REFILL_THRESHOLD = 2;
+const REFILL_THRESHOLD = 3;
 const MAX_QUEUE_BATCH = 25;
 const RELATED_CACHE_TTL = 5 * 60 * 1000;
 
@@ -40,7 +40,11 @@ async function fetchRelatedVideos(videoId, limit = MAX_QUEUE_BATCH) {
     }
 }
 
-function rowToPreviewItem(row) {
+function makeSessionId() {
+    return `radio_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function rowToRadioTrack(row) {
     if (!row || !isYoutubeVideoId(row.id)) return null;
     const ch = typeof row.channel === 'string' ? row.channel.trim() : '';
     const art = typeof row.artist === 'string' ? row.artist.trim() : '';
@@ -48,13 +52,89 @@ function rowToPreviewItem(row) {
     return {
         id: row.id,
         video_id: row.id,
-        source: 'preview',
         title: row.title || 'Unknown',
         artist,
         channel: artist,
         duration: row.duration || 0,
-        thumbnail: row.thumbnail || ''
+        thumbnail: row.thumbnail || '',
+        source: 'radio'
     };
+}
+
+function getTrackVideoId(track) {
+    if (!track) return null;
+    if (isYoutubeVideoId(track.video_id)) return track.video_id;
+    if ((track.source === 'preview' || track.source === 'radio') && isYoutubeVideoId(track.id)) return track.id;
+    if (isYoutubeVideoId(track.youtube_id)) return track.youtube_id;
+    return null;
+}
+
+function getLibraryTrackId(track, seedVideoId) {
+    if (!track) return null;
+    if (track._libraryTrackId || track.library_track_id) return track._libraryTrackId || track.library_track_id;
+    if (track.youtube_id === seedVideoId && typeof track.id === 'string' && !track.id.startsWith('deezer_') && !track.id.startsWith('pcast_')) {
+        return track.id;
+    }
+    if (
+        (track.source === 'library' || track.file_hash || track.local_path || track.original_filename) &&
+        typeof track.id === 'string' &&
+        !track.id.startsWith('deezer_') &&
+        !track.id.startsWith('pcast_')
+    ) {
+        return track.id;
+    }
+    return null;
+}
+
+function localCoverUrl(trackId) {
+    if (!trackId) return '';
+    const host = store?.state?.activeHost || window.location.hostname || 'localhost';
+    return `${getApiBase(host)}/api/static/cover/${encodeURIComponent(trackId)}`;
+}
+
+function makeSeedRadioTrack(track, seed) {
+    const libraryTrackId = getLibraryTrackId(track, seed.videoId);
+    const thumbnail = track.thumbnail || track.cover || track.cover_url || track.album_art_url || localCoverUrl(libraryTrackId);
+    return {
+        id: seed.videoId,
+        video_id: seed.videoId,
+        title: seed.title || track.title || 'Unknown',
+        artist: seed.artist || track.artist || track.album_artist || track.channel || '',
+        album: track.album,
+        duration: Math.max(0, Number(track.duration || track.duration_sec || 0) || 0),
+        thumbnail,
+        source: 'radio',
+        ...(libraryTrackId ? { _libraryTrackId: libraryTrackId } : {})
+    };
+}
+
+function isSamePlaybackTarget(track, currentTrack, seedVideoId) {
+    if (!track || !currentTrack) return false;
+    if (track.id && currentTrack.id && track.id === currentTrack.id) return true;
+    const currentVideoId = getTrackVideoId(currentTrack);
+    if (currentVideoId && currentVideoId === seedVideoId) return true;
+    const libraryTrackId = getLibraryTrackId(track, seedVideoId);
+    if (libraryTrackId && (currentTrack.id === libraryTrackId || currentTrack._libraryTrackId === libraryTrackId)) return true;
+    return false;
+}
+
+function getRadioRequestKey(track) {
+    const parts = [];
+    const videoId = getTrackVideoId(track);
+    const libraryTrackId = getLibraryTrackId(track, videoId);
+    if (videoId) parts.push(`yt:${videoId}`);
+    if (libraryTrackId) parts.push(`lib:${libraryTrackId}`);
+    if (track?.deezerId != null) parts.push(`dz:${track.deezerId}`);
+    if (track?.id) parts.push(`id:${track.id}`);
+    if (parts.length) return parts.sort().join('|');
+    const title = (track?.title || '').trim().toLowerCase();
+    const artist = (track?.artist || track?.album_artist || track?.channel || '').trim().toLowerCase();
+    return `${title}|${artist}`;
+}
+
+function isCurrentTrackAudiblyPlaying() {
+    const audio = audioEngine.audio;
+    return store.state.isPlaying || !!(audio && !audio.paused && !audio.ended);
 }
 
 /**
@@ -65,6 +145,13 @@ function rowToPreviewItem(row) {
  */
 async function resolveSeedVideoId(track) {
     if (!track) return null;
+    if (
+        track.media_kind === 'podcast_episode' ||
+        track.source === 'podcast-preview' ||
+        (typeof track.id === 'string' && track.id.startsWith('pcast_'))
+    ) {
+        return null;
+    }
     const title = (track.title || '').trim();
     const artist = (track.artist || track.album_artist || track.channel || '').trim();
 
@@ -107,77 +194,58 @@ async function resolveSeedVideoId(track) {
     return null;
 }
 
-function collectTrackIdentity(track) {
-    const ids = new Set();
-    for (const key of ['id', 'youtube_id', 'video_id', '_libraryTrackId', 'library_track_id', 'deezerId']) {
-        const value = track?.[key];
-        if (value !== undefined && value !== null && String(value).trim()) ids.add(String(value));
-    }
-    return ids;
-}
-
-function getRadioRequestKey(track) {
-    const ids = [...collectTrackIdentity(track)];
-    if (ids.length) return ids.sort().join('|');
-    const title = (track?.title || '').trim().toLowerCase();
-    const artist = (track?.artist || track?.album_artist || track?.channel || '').trim().toLowerCase();
-    return `${title}|${artist}`;
-}
-
-function isSeedCurrentPlayingTrack(seedTrack, currentTrack, seedVideoId) {
-    if (!seedTrack || !currentTrack) return false;
-    const currentIds = collectTrackIdentity(currentTrack);
-    if (seedVideoId && currentIds.has(String(seedVideoId))) return true;
-
-    const seedIds = collectTrackIdentity(seedTrack);
-    for (const id of seedIds) {
-        if (currentIds.has(id)) return true;
-    }
-    return false;
-}
-
-function isCurrentTrackAudiblyPlaying() {
-    const audio = audioEngine.audio;
-    return store.state.isPlaying || !!(audio && !audio.paused && !audio.ended);
-}
-
-function makeSeedPlaybackTrack(seedTrack, seed) {
-    const localTrackId = seedTrack?._libraryTrackId || seedTrack?.library_track_id;
-    if (localTrackId) {
-        const localTrack = store.state.library?.find((t) => t.id === localTrackId);
-        if (localTrack) return localTrack;
-    }
-
-    if (
-        seedTrack &&
-        seedTrack.media_kind !== 'podcast_episode' &&
-        seedTrack.source !== 'podcast-preview' &&
-        seedTrack?.source !== 'deezer_surface' &&
-        seedTrack?.source !== 'preview-pending' &&
-        typeof seedTrack?.id === 'string' &&
-        !seedTrack.id.startsWith('deezer_') &&
-        !seedTrack.id.startsWith('deezer_resolving_')
-    ) {
-        return seedTrack;
-    }
-
-    return {
-        id: seed.videoId,
-        video_id: seed.videoId,
-        source: 'preview',
-        title: seed.title || seedTrack?.title || 'Unknown',
-        artist: seed.artist || seedTrack?.artist || seedTrack?.album_artist || seedTrack?.channel || '',
-        channel: seed.artist || seedTrack?.artist || seedTrack?.channel || '',
-        duration: Number(seedTrack?.duration || seedTrack?.duration_sec || 0) || 0,
-        thumbnail: seedTrack?.thumbnail || seedTrack?.cover || ''
-    };
-}
-
 class RadioService {
     constructor() {
         this._refilling = false;
+        this._refillPromise = null;
+        this._buffer = [];
         this._startSeq = 0;
         this._activeStart = null;
+    }
+
+    _statePatch(patch, sessionId = null) {
+        const current = store.state.radioMode;
+        if (!current) return;
+        if (sessionId && current.sessionId !== sessionId) return;
+        store.update({ radioMode: { ...current, ...patch } });
+    }
+
+    _rememberPlayed(videoId) {
+        if (isYoutubeVideoId(videoId)) playedIds.add(videoId);
+    }
+
+    async _appendRelated(seedVideoId, sessionId = null) {
+        if (!isYoutubeVideoId(seedVideoId)) return 0;
+        const related = await fetchRelatedVideos(seedVideoId);
+        if (!related.length) return 0;
+        if (sessionId && store.state.radioMode?.sessionId !== sessionId) return 0;
+
+        const newItems = [];
+        for (const row of related) {
+            if (playedIds.has(row.id)) continue;
+            const item = rowToRadioTrack(row);
+            if (item) {
+                newItems.push(item);
+                playedIds.add(item.video_id);
+            }
+        }
+
+        if (!newItems.length) return 0;
+        if (sessionId && store.state.radioMode?.sessionId !== sessionId) return 0;
+        this._buffer.push(...newItems);
+        const current = store.state.radioMode;
+        if (current && (!sessionId || current.sessionId === sessionId)) {
+            store.update({
+                radioMode: {
+                    ...current,
+                    activeVideoId: seedVideoId,
+                    bufferCount: this._buffer.length,
+                    generatedCount: (current.generatedCount || 0) + newItems.length,
+                    isFetching: false
+                }
+            });
+        }
+        return newItems.length;
     }
 
     /**
@@ -197,7 +265,6 @@ class RadioService {
         const token = ++this._startSeq;
         if (this._activeStart) this._activeStart.loading?.dismiss();
         const loading = showLoadingToast(`Loading radio for "${title}"...`);
-
         const promise = this._startRadioSession(track, token, loading);
         this._activeStart = { key: requestKey, token, loading, promise };
         return promise;
@@ -220,81 +287,60 @@ class RadioService {
             }
             loading.update(`Loading radio for "${seed.title || track.title || 'Unknown'}"...`);
 
-            const related = await fetchRelatedVideos(seed.videoId);
-            if (!this._isCurrentStart(token)) return false;
-            if (!related.length) {
-                loading.dismiss();
-                window.showToast?.('No related tracks found');
-                return false;
-            }
-
+            this._buffer = [];
             playedIds.clear();
             playedIds.add(seed.videoId);
+            const sessionId = makeSessionId();
 
-            const previewItems = [];
-            for (const row of related) {
-                if (playedIds.has(row.id)) continue;
-                const item = rowToPreviewItem(row);
-                if (item) {
-                    previewItems.push(item);
-                    playedIds.add(item.id);
+            store.update({
+                radioMode: {
+                    sessionId,
+                    enabled: true,
+                    seedVideoId: seed.videoId,
+                    seedTitle: seed.title,
+                    seedArtist: seed.artist,
+                    activeVideoId: seed.videoId,
+                    bufferCount: 0,
+                    generatedCount: 0,
+                    isFetching: true
                 }
-            }
+            });
 
-            if (!previewItems.length) {
+            const added = await this._appendRelated(seed.videoId, sessionId);
+            if (!this._isCurrentStart(token)) return false;
+            if (!added) {
+                if (store.state.radioMode?.sessionId === sessionId) this.exitRadio();
                 loading.dismiss();
                 window.showToast?.('No related tracks found');
                 return false;
             }
 
-            const currentTrack = store.state.currentTrack;
-            const keepCurrentSeedPlaying =
+            const seedTrack = makeSeedRadioTrack(track, seed);
+            const alreadyPlayingSeed =
                 isCurrentTrackAudiblyPlaying() &&
-                isSeedCurrentPlayingTrack(track, currentTrack, seed.videoId);
-            const seedPlaybackTrack = keepCurrentSeedPlaying
-                ? currentTrack
-                : makeSeedPlaybackTrack(track, seed);
-            const radioTrackList = [seedPlaybackTrack, ...previewItems];
-
+                isSamePlaybackTarget(track, store.state.currentTrack, seed.videoId);
             console.debug('[radio] start commit', {
                 token,
+                sessionId,
                 seedVideoId: seed.videoId,
                 seedTitle: seed.title,
-                currentTrackId: currentTrack?.id,
-                keepCurrentSeedPlaying,
-                generatedCount: previewItems.length
+                currentTrackId: store.state.currentTrack?.id,
+                alreadyPlayingSeed,
+                bufferCount: this._buffer.length
             });
-
-            await store.clearQueue();
-            if (!this._isCurrentStart(token)) return false;
-
-            for (const item of previewItems) {
-                await store.addPreviewToQueue(item);
-                if (!this._isCurrentStart(token)) return false;
-            }
-
-            if (!keepCurrentSeedPlaying) {
-                audioEngine.setContext(radioTrackList);
-                const result = await audioEngine.playTrack(seedPlaybackTrack);
+            this._statePatch({ currentVideoId: seed.videoId }, sessionId);
+            if (alreadyPlayingSeed) {
+                store.update({ currentTrack: seedTrack });
+            } else {
+                const result = await audioEngine.playTrack(seedTrack);
                 if (!this._isCurrentStart(token)) return false;
                 if (!result?.ok) {
+                    if (store.state.radioMode?.sessionId === sessionId) this.exitRadio();
                     loading.dismiss();
                     window.showToast?.('Could not play radio seed');
                     return false;
                 }
             }
-
-            store.update({
-                radioMode: {
-                    seedVideoId: seed.videoId,
-                    seedTitle: seed.title,
-                    seedArtist: seed.artist,
-                    activeVideoId: seed.videoId,
-                    trackList: radioTrackList
-                }
-            });
-
-            audioEngine.setContext(store.state.radioMode.trackList);
 
             loading.dismiss();
             window.showToast?.(`Radio: ${seed.title}`);
@@ -310,65 +356,56 @@ class RadioService {
     }
 
     /**
-     * Refill the queue if running low. Uses the currently playing track as a new seed for variety.
+     * Refill the hidden radio buffer if running low. Uses the currently playing track as a new seed for variety.
      * @returns {Promise<boolean>} true if refilled successfully
      */
     async refillIfNeeded() {
         if (!store.state.radioMode) return false;
-        if (this._refilling) return false;
-
-        const queueLen = store.state.queue?.length || 0;
-        if (queueLen > REFILL_THRESHOLD) return false;
+        if (this._refilling) return this._refillPromise || false;
+        if (this._buffer.length > REFILL_THRESHOLD) return false;
 
         const currentTrack = store.state.currentTrack;
         if (!currentTrack) return false;
 
-        const currentVideoId = currentTrack.id;
+        const currentVideoId = currentTrack.video_id || currentTrack.id;
         if (!isYoutubeVideoId(currentVideoId)) return false;
-        if (currentVideoId === store.state.radioMode.activeVideoId) {
-            // Same seed — still try, but only if queue is empty
-            if (queueLen > 0) return false;
-        }
 
+        const sessionId = store.state.radioMode.sessionId;
         this._refilling = true;
+        this._statePatch({ isFetching: true }, sessionId);
+        this._refillPromise = (async () => {
+            const added = await this._appendRelated(currentVideoId, sessionId);
+            if (added > 0) return true;
+            this._statePatch({ isFetching: false }, sessionId);
+            return false;
+        })();
         try {
-            const related = await fetchRelatedVideos(currentVideoId);
-            if (!related.length) return false;
-
-            const newItems = [];
-            for (const row of related) {
-                if (playedIds.has(row.id)) continue;
-                const item = rowToPreviewItem(row);
-                if (item) {
-                    newItems.push(item);
-                    playedIds.add(item.id);
-                }
-            }
-
-            if (!newItems.length) return false;
-
-            for (const item of newItems) {
-                await store.addPreviewToQueue(item);
-            }
-
-            store.update({
-                radioMode: {
-                    ...store.state.radioMode,
-                    activeVideoId: currentVideoId,
-                    trackList: [...(store.state.radioMode.trackList || []), ...newItems]
-                }
-            });
-
-            // Update context so sequential fallback also has the new tracks
-            audioEngine.setContext(store.state.radioMode.trackList);
-
-            return true;
+            return await this._refillPromise;
         } catch (err) {
             console.error('Radio refill error:', err);
+            this._statePatch({ isFetching: false }, sessionId);
             return false;
         } finally {
             this._refilling = false;
+            this._refillPromise = null;
         }
+    }
+
+    async nextTrack() {
+        if (!store.state.radioMode) return null;
+        if (this._buffer.length === 0) {
+            await this.refillIfNeeded();
+        } else if (this._buffer.length <= REFILL_THRESHOLD) {
+            void this.refillIfNeeded();
+        }
+        let next = this._buffer.shift();
+        if (!next) return null;
+        this._rememberPlayed(next.video_id || next.id);
+        this._statePatch({
+            currentVideoId: next.video_id || next.id,
+            bufferCount: this._buffer.length
+        });
+        return next;
     }
 
     /**
@@ -376,6 +413,8 @@ class RadioService {
      */
     exitRadio() {
         if (!store.state.radioMode) return;
+        this._buffer = [];
+        playedIds.clear();
         store.update({ radioMode: null });
     }
 

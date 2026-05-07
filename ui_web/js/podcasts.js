@@ -3,6 +3,7 @@
  * Two-level navigation: Podcast Home -> Show Detail.
  */
 import { store } from './store.js';
+import { audioEngine } from './audio.js';
 import { getApiBase } from './config.js';
 import { Resolver } from './resolver.js';
 import { esc } from './renderers.js';
@@ -154,9 +155,22 @@ function playEpisodeById(episodeId) {
         if (typeof window.showToast === 'function') window.showToast('Episode not available');
         return;
     }
+    const playbackList = eps.map((x) => resolveEpisodeForPlayback(x));
+    audioEngine.setContext(playbackList);
     const track = resolveEpisodeForPlayback(ep);
     if (track.source === 'library') {
-        if (typeof window.playTrack === 'function') window.playTrack(track.id);
+        store.update({ currentTrack: track });
+        if (track.media_kind === 'podcast_episode') {
+            store.recordPodcastPlay({
+                episodeId: track.id,
+                showTitle: (track.artist || track.album || '').trim(),
+                author: (track.author || '').trim(),
+                rssUrl: track.podcast_rss_url || ''
+            });
+        } else {
+            store.recordSongPlay(track);
+        }
+        audioEngine.playTrack(track);
     } else if (!track.enclosure_url) {
         if (typeof window.showToast === 'function') window.showToast('No audio URL for this episode');
     } else {
@@ -166,9 +180,11 @@ function playEpisodeById(episodeId) {
             artist: track.artist,
             duration: track.duration,
             thumbnail: track.thumbnail,
+            episode_id: track.id,
             podcast_feed_id: track.podcast_feed_id,
             podcast_episode_guid: track.podcast_episode_guid,
             podcast_rss_url: track.podcast_rss_url,
+            album: track.album,
         });
     }
 }
