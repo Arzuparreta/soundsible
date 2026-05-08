@@ -552,7 +552,6 @@ class DiscoveryUI {
     if (!this.container) return;
 
     this.renderHome();
-    this.bindEvents();
   }
 
   async renderHome() {
