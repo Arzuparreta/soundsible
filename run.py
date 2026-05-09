@@ -7,7 +7,6 @@ The single entry point for all Soundsible components (Player, Downloader, Setup)
 import sys
 import subprocess
 import hashlib
-import importlib
 from pathlib import Path
 import platform
 import shutil
@@ -51,13 +50,8 @@ def _venv_can_import(py: Path, modules: list[str]) -> tuple[bool, str]:
     return False, (result.stderr or result.stdout or "module import check failed").strip()
 
 
-def _install_python_packages(py: Path, packages: list[str]) -> tuple[bool, str]:
-    result = subprocess.run(
-        [str(py), "-m", "pip", "install", "--upgrade", *packages],
-    )
-    if result.returncode == 0:
-        return True, ""
-    return False, "pip install failed"
+def _running_in_project_venv(venv_dir: Path) -> bool:
+    return Path(sys.prefix).resolve() == venv_dir.resolve()
 
 
 def _recreate_venv(venv_dir: Path) -> None:
@@ -171,37 +165,25 @@ def _ensure_bootstrap_before_gevent():
                     sys.exit(1)
             marker.write_text(current_hash)
 
-    # Ensure the current interpreter can import packages installed in ./venv.
-    import site
-    venv_site = _venv_site_packages_path(venv_dir)
-    if venv_site.exists():
-        site.addsitedir(str(venv_site))
-
     # Re-exec under the project virtualenv so imports happen in the exact
-    # interpreter that installed the dependencies. This avoids namespace/package
-    # mismatches on minimal system Pythons when using site.addsitedir alone.
-    current_exe = Path(sys.executable).resolve()
-    target_exe = py.resolve()
-    if current_exe != target_exe and os.environ.get("SOUNDSIBLE_BOOTSTRAPPED") != "1":
+    # interpreter environment that installed the dependencies. Do not compare
+    # resolved executable paths here: Ubuntu venv/bin/python is commonly a
+    # symlink to /usr/bin/python3.12, so path resolution would falsely say the
+    # system interpreter is already the venv interpreter.
+    target_exe = py.absolute()
+    if not _running_in_project_venv(venv_dir):
         env = os.environ.copy()
         env["SOUNDSIBLE_BOOTSTRAPPED"] = "1"
         os.execve(str(target_exe), [str(target_exe), str(root_dir / "run.py"), *sys.argv[1:]], env)
 
-    # Namespace packages such as zope.* have proven fragile on some minimal VPS
-    # images when gevent imports them lazily during monkey patching. Preload them
-    # here and explicitly repair them if pip resolution left them out.
-    for module_name, package_name in (("zope.event", "zope.event"), ("zope.interface", "zope.interface")):
-        try:
-            importlib.import_module(module_name)
-        except ModuleNotFoundError:
-            ok, details = _install_python_packages(py, [package_name])
-            if not ok:
-                print(f"Failed to install required package {package_name}:", details)
-                sys.exit(1)
-            env = os.environ.copy()
-            env["SOUNDSIBLE_BOOTSTRAPPED"] = "1"
-            env["SOUNDSIBLE_REPAIRED_PACKAGE"] = package_name
-            os.execve(str(target_exe), [str(target_exe), str(root_dir / "run.py"), *sys.argv[1:]], env)
+    # If the process was re-execed but still did not enter the venv, fail with
+    # explicit state instead of falling back to mixed system/venv imports.
+    if os.environ.get("SOUNDSIBLE_BOOTSTRAPPED") == "1" and not _running_in_project_venv(venv_dir):
+        print("Virtual environment activation failed after re-exec.")
+        print("sys.executable:", sys.executable)
+        print("sys.prefix:", sys.prefix)
+        print("expected venv:", venv_dir)
+        sys.exit(1)
 
 
 _ensure_bootstrap_before_gevent()
