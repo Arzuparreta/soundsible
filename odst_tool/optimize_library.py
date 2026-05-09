@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import argparse
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from .config import DEFAULT_OUTPUT_DIR, LIBRARY_FILENAME, TRACKS_DIR, DEFAULT_BITRATE
 from .models import LibraryMetadata, Track
 from .audio_utils import AudioProcessor
