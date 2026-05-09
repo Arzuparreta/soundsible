@@ -1012,7 +1012,17 @@ class YouTubeDownloader:
             "-f", YDL_FORMAT_AUDIO, "--no-warnings", "--quiet",
         ]
 
-        # Attempt 1: cookies via IPv6 (matches web cookie origin)
+        # Attempt 1: HTTP proxy (SOUNDSIBLE_YT_PROXY env var)
+        # Routes yt-dlp through a residential IP (e.g. Tailscale desktop).
+        yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "")
+        if yt_proxy:
+            result = _try(common + ["--proxy", yt_proxy, yt_url], timeout=60)
+            if result == "__ERROR__":
+                return None
+            if result:
+                return result
+
+        # Attempt 2: cookies via IPv6
         if self.cookie_file and os.path.exists(self.cookie_file):
             result = _try(common + ["-6", "--cookies", self.cookie_file, yt_url])
             if result == "__ERROR__":
@@ -1020,14 +1030,14 @@ class YouTubeDownloader:
             if result:
                 return result
 
-        # Attempt 2: Android client via IPv4 (residential IPs)
+        # Attempt 3: Android client via IPv4 (residential IPs, direct)
         result = _try(common + ["--force-ipv4", "--extractor-args", "youtube:player_client=android,ios", yt_url])
         if result == "__ERROR__":
             return None
         if result:
             return result
 
-        # Attempt 3: cookies via IPv4
+        # Attempt 4: cookies via IPv4
         if self.cookie_file and os.path.exists(self.cookie_file):
             result = _try(common + ["--force-ipv4", "--cookies", self.cookie_file, yt_url])
             if result == "__ERROR__":
@@ -1035,16 +1045,7 @@ class YouTubeDownloader:
             if result:
                 return result
 
-        # Attempt 4: Tor SOCKS5 proxy (requires: apt install tor && systemctl start tor@default)
-        # Tor circuits take time to establish; use longer timeout.
-        result = _try(common + ["--proxy", "socks5://127.0.0.1:9050", yt_url], timeout=60)
-        if result == "__ERROR__":
-            return None
-        if result:
-            return result
-
-        print(f"[Preview] All attempts failed for {video_id}. "
-              f"On VPS, install Tor: apt install tor && systemctl start tor")
+        print(f"[Preview] All attempts failed for {video_id}.")
         return None
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
 
