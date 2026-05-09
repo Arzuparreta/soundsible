@@ -30,6 +30,24 @@ from shared.venv_utils import get_subprocess_python
 
 logger = logging.getLogger(__name__)
 
+_FALSE_ENV_VALUES = {"0", "false", "no", "off"}
+
+
+def _yt_dlp_force_ipv4() -> bool:
+    return (os.getenv("SOUNDSIBLE_YTDLP_FORCE_IPV4", "true") or "").strip().lower() not in _FALSE_ENV_VALUES
+
+
+def _add_ytdlp_cli_network_args(args: List[str]) -> None:
+    if _yt_dlp_force_ipv4():
+        args.append("--force-ipv4")
+
+
+def _apply_ytdlp_network_options(opts: Dict[str, Any]) -> Dict[str, Any]:
+    if _yt_dlp_force_ipv4():
+        opts["source_address"] = "0.0.0.0"
+    return opts
+
+
 def _yt_thumbnail_url(video_id: Optional[str]) -> Optional[str]:
     """YouTube thumbnail URL (mqdefault). Returns None if video_id is falsy."""
     if not video_id:
@@ -534,6 +552,7 @@ class YouTubeDownloader:
                 }
             }
         }
+        _apply_ytdlp_network_options(ydl_opts)
         
         if self.cookie_file and os.path.exists(self.cookie_file):
             ydl_opts['cookiefile'] = self.cookie_file
@@ -631,6 +650,7 @@ class YouTubeDownloader:
             "-x",
             "--audio-format", codec,
         ]
+        _add_ytdlp_cli_network_args(args)
         if profile.get('bitrate', 0) > 0 and codec == 'mp3':
             args.extend(["--audio-quality", str(profile['bitrate'])])
         args.extend([
@@ -725,6 +745,7 @@ class YouTubeDownloader:
             "skip_download": True,
             "extractor_args": {"youtube": {"player_client": ["android", "ios", "web"]}},
         }
+        _apply_ytdlp_network_options(base)
         attempts: List[Dict[str, Any]] = [dict(base)]
         if self.cookie_file and os.path.exists(self.cookie_file):
             attempts.append({**base, "cookiefile": self.cookie_file})
@@ -812,6 +833,7 @@ class YouTubeDownloader:
                 'youtube': {'player_client': ['android', 'ios', 'web']}
             }
         }
+        _apply_ytdlp_network_options(ydl_opts)
         if use_ytmusic:
             ydl_opts['extract_flat'] = True
             ydl_opts['playlistend'] = max_results
@@ -911,6 +933,7 @@ class YouTubeDownloader:
                 'youtube': {'player_client': ['android', 'ios', 'web']}
             }
         }
+        _apply_ytdlp_network_options(ydl_opts)
         if self.cookie_file and os.path.exists(self.cookie_file):
             ydl_opts['cookiefile'] = self.cookie_file
         elif self.cookie_browser:
@@ -978,6 +1001,7 @@ class YouTubeDownloader:
             "--quiet",
             yt_url,
         ]
+        _add_ytdlp_cli_network_args(args)
         if self.cookie_file and os.path.exists(self.cookie_file):
             args.extend(["--cookies", self.cookie_file])
         elif self.cookie_browser:
