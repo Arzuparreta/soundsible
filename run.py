@@ -205,6 +205,8 @@ from pathlib import Path
 from shared.constants import STATION_PORT
 
 PLAYER_URL = f"http://localhost:{STATION_PORT}/player/"
+LAUNCHER_PORT = int(os.environ.get("LAUNCHER_PORT", "5099"))
+SETUP_URL = f"http://localhost:{LAUNCHER_PORT}/setup"
 
 # Note: VENV bootstrap
 ROOT_DIR = Path(__file__).parent.absolute()
@@ -217,6 +219,7 @@ from shared.daemon_launcher import (
     stop_daemon_process,
     MSG_KEEP_TERMINAL_OPEN,
     MSG_CONFIG_MISSING,
+    MSG_SETUP_REQUIRED,
 )
 
 
@@ -381,11 +384,12 @@ class SoundsibleLauncher:
         table.add_row("3", "Open Station (Station Engine must be running)")
         table.add_row("4", "Stop Station Engine")
         table.add_row("5", "Quick Discover / Terminal Playback")
+        table.add_row("6", "Setup storage / configuration")
         table.add_row("q", "Exit")
 
         console.print(Panel(table, title="Main Menu", border_style="dim"))
 
-        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "5", "q"], default="1")
+        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "5", "6", "q"], default="1")
         
         if choice == "1":
             self.launch_ecosystem()
@@ -397,16 +401,38 @@ class SoundsibleLauncher:
             self.stop_station()
         elif choice == "5":
             self.search_ui()
+        elif choice == "6":
+            self.launch_setup()
         elif choice == "q":
             console.print("[italic]Happy listening![/italic]")
             sys.exit(0)
+
+    def _print_setup_access(self):
+        console.print(Panel.fit(
+            "[bold yellow]Configuration is required before the Station Engine can start.[/bold yellow]\n\n"
+            f"Setup UI: [cyan]{SETUP_URL}[/cyan]\n\n"
+            "On a remote VPS, either use an SSH tunnel:\n"
+            f"[yellow]ssh -L {LAUNCHER_PORT}:localhost:{LAUNCHER_PORT} root@YOUR_SERVER[/yellow]\n"
+            f"then open [cyan]{SETUP_URL}[/cyan]\n\n"
+            "or intentionally bind the launcher to the network:\n"
+            "[yellow]SOUNDSIBLE_LAUNCHER_BIND_ALL=true python3 run.py --setup[/yellow]",
+            border_style="yellow"
+        ))
+
+    def launch_setup(self):
+        """Run the setup web UI that writes ~/.config/soundsible/config.json."""
+        self._print_setup_access()
+        from launcher_web.server import start_server
+        start_server(port=LAUNCHER_PORT)
 
     def launch_ecosystem(self):
         """Start the Station Engine and open the Station (web player) in the browser."""
         console.print("[bold green]Starting Station Engine...[/bold green]")
         ok, msg = start_daemon_process(self.root_dir)
         if not ok:
-            if "already running" in msg.lower():
+            if msg == MSG_SETUP_REQUIRED:
+                self._print_setup_access()
+            elif "already running" in msg.lower():
                 console.print(f"[green]{msg}[/green]")
                 webbrowser.open(PLAYER_URL)
             else:
@@ -425,7 +451,9 @@ class SoundsibleLauncher:
         console.print("[bold green]Starting Station Engine...[/bold green]")
         ok, msg = start_daemon_process(self.root_dir)
         if not ok:
-            if "already running" in msg.lower():
+            if msg == MSG_SETUP_REQUIRED:
+                self._print_setup_access()
+            elif "already running" in msg.lower():
                 console.print(f"[green]{msg}[/green]")
             else:
                 console.print(f"[red]{msg}[/red]")
@@ -480,13 +508,22 @@ class SoundsibleLauncher:
 
     def run(self):
         self._install_requirements_if_needed()
+
+        if "--setup" in sys.argv:
+            self.launch_setup()
+            return
         
         if not self.is_configured():
             if "--daemon" in sys.argv:
                 print(f"Daemon: {MSG_CONFIG_MISSING}")
-                print("Run without --daemon once to complete setup: python run.py")
+                print("Start setup first: python3 run.py --setup")
                 return
-            console.print(Panel("[bold yellow]First Run Detected![/bold yellow]\nWelcome! Please complete setup using the web interface.", border_style="yellow"))
+            console.print(Panel(
+                "[bold yellow]First Run Detected![/bold yellow]\n"
+                "Configuration is required before the Station Engine can start.\n"
+                "Choose option 6 to open setup.",
+                border_style="yellow"
+            ))
         
         self.start_background_sync()
         self._start_watcher()
