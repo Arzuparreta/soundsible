@@ -10,6 +10,7 @@ import hashlib
 from pathlib import Path
 import platform
 import shutil
+import os
 # Note: Gevent monkey-patching must happen early, but only after deps are ensured.
 
 
@@ -174,6 +175,16 @@ def _ensure_bootstrap_before_gevent():
     if venv_site.exists():
         site.addsitedir(str(venv_site))
 
+    # Re-exec under the project virtualenv so imports happen in the exact
+    # interpreter that installed the dependencies. This avoids namespace/package
+    # mismatches on minimal system Pythons when using site.addsitedir alone.
+    current_exe = Path(sys.executable).resolve()
+    target_exe = py.resolve()
+    if current_exe != target_exe and os.environ.get("SOUNDSIBLE_BOOTSTRAPPED") != "1":
+        env = os.environ.copy()
+        env["SOUNDSIBLE_BOOTSTRAPPED"] = "1"
+        os.execve(str(target_exe), [str(target_exe), str(root_dir / "run.py"), *sys.argv[1:]], env)
+
 
 _ensure_bootstrap_before_gevent()
 
@@ -181,7 +192,6 @@ _ensure_bootstrap_before_gevent()
 from gevent import monkey
 monkey.patch_all()
 
-import os
 import socket
 import threading
 import time
