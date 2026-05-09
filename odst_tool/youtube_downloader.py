@@ -982,6 +982,42 @@ class YouTubeDownloader:
             return []
         return out
 
+    def _try_invidious_fallback(self, video_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Fallback: resolve audio stream URL via public Invidious API.
+        Used when yt-dlp fails due to bot detection on datacenter IPs.
+        """
+        import requests as req
+        invidious_instances = [
+            "https://iv.melmac.space",
+            "https://inv.nadeko.net",
+            "https://invidious.lunar.icu",
+            "https://invidious.einfachzocken.eu",
+        ]
+        for instance in invidious_instances:
+            try:
+                resp = req.get(
+                    f"{instance}/api/v1/videos/{video_id}",
+                    timeout=(5, 15),
+                    headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"},
+                )
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                adaptive_formats = data.get("adaptiveFormats") or []
+                audio_formats = [f for f in adaptive_formats if "audio" in (f.get("type") or "").lower() and f.get("url")]
+                if not audio_formats:
+                    audio_formats = [f for f in adaptive_formats if f.get("url")]
+                if not audio_formats:
+                    format_streams = data.get("formatStreams") or []
+                    audio_formats = [f for f in format_streams if f.get("url")]
+                if audio_formats:
+                    best = max(audio_formats, key=lambda f: int(f.get("bitrate", 0) or 0))
+                    return {"url": best["url"], "headers": {}}
+            except Exception:
+                continue
+        return None
+
     def get_stream_source(self, video_id: str) -> Optional[Dict[str, Any]]:
         """
         Resolve a direct audio stream URL and the request headers yt-dlp expects
@@ -999,8 +1035,13 @@ class YouTubeDownloader:
             YDL_FORMAT_AUDIO,
             "--no-warnings",
             "--quiet",
+            "--extractor-args",
+            "youtube:player_client=android,ios,web",
             yt_url,
         ]
+        # Note: On some VPS hosts, forcing IPv4 is needed to avoid
+        # hanging on broken IPv6 routes. If resolution fails or times
+        # out the Invidious fallback below will take over.
         _add_ytdlp_cli_network_args(args)
         if self.cookie_file and os.path.exists(self.cookie_file):
             args.extend(["--cookies", self.cookie_file])
@@ -1039,7 +1080,17 @@ class YouTubeDownloader:
                     combined = (stderr or "") + (stdout or "")
             if returncode != 0:
                 details = (combined or "").strip() or f"yt-dlp exited {returncode}"
-                print(f"[Preview] yt-dlp -g failed for {video_id}: {details[:500]}")
+                if "Sign in to confirm" in details:
+                    print(f"[Preview] YouTube requires authentication for {video_id}. "
+                          f"Trying Invidious fallback...")
+                else:
+                    print(f"[Preview] yt-dlp -g failed for {video_id}: {details[:500]}")
+                # Try Invidious fallback for any yt-dlp failure
+                invidious_result = self._try_invidious_fallback(video_id)
+                if invidious_result:
+                    print(f"[Preview] Invidious fallback succeeded for {video_id}")
+                    return invidious_result
+                print(f"[Preview] All resolution methods failed for {video_id}")
                 return None
             stream_url = (stdout or "").strip().splitlines()[0] if (stdout or "").strip() else ""
             if not stream_url:
@@ -1047,7 +1098,12 @@ class YouTubeDownloader:
                 return None
             return {"url": stream_url, "headers": {}}
         except subprocess.TimeoutExpired:
-            print(f"[Preview] yt-dlp -g timed out for {video_id}")
+            print(f"[Preview] yt-dlp -g timed out for {video_id}, trying Invidious fallback...")
+            invidious_result = self._try_invidious_fallback(video_id)
+            if invidious_result:
+                print(f"[Preview] Invidious fallback succeeded for {video_id}")
+                return invidious_result
+            print(f"[Preview] All resolution methods failed for {video_id}")
             return None
         except FileNotFoundError:
             print(f"[Preview] yt-dlp not found (python -m yt_dlp) for {video_id}")
