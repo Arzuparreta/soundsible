@@ -208,11 +208,10 @@ def _ensure_bootstrap_before_gevent():
             if not ok:
                 print(f"Failed to install required package {package_name}:", details)
                 sys.exit(1)
-            try:
-                importlib.import_module(module_name)
-            except ModuleNotFoundError as exc:
-                print(f"Required package still unavailable after repair: {module_name}: {exc}")
-                sys.exit(1)
+            env = os.environ.copy()
+            env["SOUNDSIBLE_BOOTSTRAPPED"] = "1"
+            env["SOUNDSIBLE_REPAIRED_PACKAGE"] = package_name
+            os.execve(str(target_exe), [str(target_exe), str(root_dir / "run.py"), *sys.argv[1:]], env)
 
 
 _ensure_bootstrap_before_gevent()
