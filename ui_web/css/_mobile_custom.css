@@ -941,13 +941,6 @@
             transform: none !important;
             filter: none !important;
         }
-        .list-scroll-active .song-row,
-        .list-scroll-active .playlist-track-row,
-        .list-scroll-active .podcast-search-row,
-        .list-scroll-active .discover-surface-row,
-        .list-scroll-active .discover-odst-row {
-            background: var(--bg-card) !important;
-        }
         .list-scroll-active .playlist-card-name,
         .list-scroll-active .artist-card-name {
             color: var(--text-main) !important;
