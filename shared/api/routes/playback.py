@@ -8,8 +8,7 @@ import threading
 import time
 
 import requests
-from requests import HTTPError
-from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context
+from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context, redirect
 
 from shared.constants import DEFAULT_CACHE_DIR
 from shared.path_resolver import resolve_local_track_path
@@ -180,69 +179,12 @@ def preview_stream_proxy(video_id):
         if not stream_url:
             logger.warning("API: [Preview stream] No stream URL resolved for %s", video_id)
             return jsonify({"error": "Preview unavailable"}), 502
-        range_header = request.headers.get("Range")
-        req_headers = dict((source or {}).get("headers") or {})
-        req_headers.setdefault(
-            "User-Agent",
-            (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) "
-                "Gecko/20100101 Firefox/128.0"
-            ),
-        )
-        req_headers.setdefault("Accept", "audio/*,*/*")
-        req_headers["Accept-Encoding"] = "identity"
-        if range_header:
-            req_headers["Range"] = range_header
-        # Use a conservative connect/read timeout to avoid tying up worker
-        # threads on very slow upstreams.
-        resp = requests.get(
-            stream_url,
-            stream=True,
-            headers=req_headers,
-            timeout=(5, 90),
-            allow_redirects=True,
-        )
-        resp.raise_for_status()
-        content_length = resp.headers.get("Content-Length")
-        content_range = resp.headers.get("Content-Range")
-        content_type = resp.headers.get("Content-Type") or "audio/mpeg"
-        response_headers = {"Content-Type": content_type}
-        if content_range:
-            response_headers["Content-Range"] = content_range
-        if content_length:
-            response_headers["Content-Length"] = content_length
-        accept_ranges = resp.headers.get("Accept-Ranges")
-        if accept_ranges:
-            response_headers["Accept-Ranges"] = accept_ranges
-
-        def iter_chunks():
-            for chunk in resp.iter_content(chunk_size=65536):
-                if chunk:
-                    yield chunk
-
-        return Response(
-            stream_with_context(iter_chunks()),
-            status=resp.status_code,
-            headers=response_headers,
-            mimetype=content_type,
-            direct_passthrough=True,
-        )
-    except HTTPError as e:
-        status = getattr(getattr(e, "response", None), "status_code", None)
-        body = ""
-        try:
-            if getattr(e, "response", None) is not None:
-                body = (e.response.text or "")[:400]
-        except Exception:
-            body = ""
-        logger.warning(
-            "API: [Preview stream] Upstream HTTP error for %s: status=%s url=%s body=%r",
-            video_id,
-            status,
-            stream_url if 'stream_url' in locals() else None,
-            body,
-        )
-        return jsonify({"error": "Preview unavailable"}), 502
+        # Browsers can follow the redirect directly to the resolved media URL.
+        # This avoids the daemon becoming the streaming proxy and removes a whole
+        # class of upstream failures on VPS/datacenter egress.
+        response = redirect(stream_url, code=307)
+        response.headers["Cache-Control"] = "no-store"
+        return response
     except Exception as e:
         logger.warning("API: [Preview stream] Error for %s: %s", video_id, e)
         return jsonify({"error": "Preview unavailable"}), 502
