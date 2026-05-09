@@ -36,6 +36,19 @@ def _venv_has_pip(py: Path) -> bool:
     return result.returncode == 0
 
 
+def _venv_can_import(py: Path, modules: list[str]) -> tuple[bool, str]:
+    if not py.exists():
+        return False, "venv python executable is missing"
+    result = subprocess.run(
+        [str(py), "-c", "import importlib, sys; [importlib.import_module(m) for m in sys.argv[1:]]", *modules],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return True, ""
+    return False, (result.stderr or result.stdout or "module import check failed").strip()
+
+
 def _recreate_venv(venv_dir: Path) -> None:
     if venv_dir.exists():
         shutil.rmtree(venv_dir, ignore_errors=True)
@@ -94,6 +107,7 @@ def _ensure_bootstrap_before_gevent():
     venv_dir = root_dir / "venv"
     req_file = root_dir / "requirements.txt"
     marker = venv_dir / ".installed_requirements_hash"
+    bootstrap_modules = ["pip", "gevent", "zope.event", "zope.interface", "rich"]
 
     try:
         py = _ensure_venv_with_pip(venv_dir)
@@ -103,12 +117,55 @@ def _ensure_bootstrap_before_gevent():
 
     if req_file.exists() and py.exists():
         current_hash = hashlib.md5(req_file.read_bytes()).hexdigest()
-        if not marker.exists() or marker.read_text() != current_hash:
+        env_ok, env_error = _venv_can_import(py, bootstrap_modules)
+        if not marker.exists() or marker.read_text() != current_hash or not env_ok:
             print("Installing/Updating requirements...")
-            result = subprocess.run([str(py), "-m", "pip", "install", "-r", str(req_file)], capture_output=True, text=True)
+            result = subprocess.run(
+                [str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                print("Bootstrap tool upgrade failed:", result.stderr or result.stdout)
+                sys.exit(1)
+            result = subprocess.run(
+                [str(py), "-m", "pip", "install", "--upgrade", "-r", str(req_file)],
+                capture_output=True,
+                text=True,
+            )
             if result.returncode != 0:
                 print("Requirement installation failed:", result.stderr or result.stdout)
                 sys.exit(1)
+            env_ok, env_error = _venv_can_import(py, bootstrap_modules)
+            if not env_ok:
+                print("Virtual environment verification failed:", env_error)
+                print("Recreating virtual environment and retrying once...")
+                try:
+                    _recreate_venv(venv_dir)
+                    py = _ensure_venv_with_pip(venv_dir)
+                except Exception as exc:
+                    print("Virtual environment recreation failed:", exc)
+                    sys.exit(1)
+                result = subprocess.run(
+                    [str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"],
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode != 0:
+                    print("Bootstrap tool upgrade failed:", result.stderr or result.stdout)
+                    sys.exit(1)
+                result = subprocess.run(
+                    [str(py), "-m", "pip", "install", "--upgrade", "-r", str(req_file)],
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode != 0:
+                    print("Requirement installation failed:", result.stderr or result.stdout)
+                    sys.exit(1)
+                env_ok, env_error = _venv_can_import(py, bootstrap_modules)
+                if not env_ok:
+                    print("Virtual environment verification failed after rebuild:", env_error)
+                    sys.exit(1)
             marker.write_text(current_hash)
 
     # Ensure the current interpreter can import packages installed in ./venv.

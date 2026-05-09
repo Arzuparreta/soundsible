@@ -37,3 +37,5 @@ yt-dlp==2026.2.21         # YouTube Downloader (update manually when needed)
 python-dotenv>=1.0.0       # Environment variables
 gevent>=24.2.0            # Async networking for SocketIO (concurrent requests)
 gevent-websocket>=0.10.1   # WebSocket support for Flask-SocketIO
+zope.event>=5.0            # gevent runtime dependency; explicit for minimal-server bootstrap reliability
+zope.interface>=6.0        # gevent runtime dependency; explicit for minimal-server bootstrap reliability
