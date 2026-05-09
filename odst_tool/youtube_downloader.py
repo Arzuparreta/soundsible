@@ -1016,7 +1016,7 @@ class YouTubeDownloader:
         # Routes yt-dlp through a residential IP (e.g. Tailscale desktop).
         yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "")
         if yt_proxy:
-            result = _try(common + ["--proxy", yt_proxy, yt_url], timeout=60)
+            result = _try(common + ["--proxy", yt_proxy, yt_url], timeout=90)
             if result == "__ERROR__":
                 return None
             if result:
