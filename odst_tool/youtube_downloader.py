@@ -982,8 +982,42 @@ class YouTubeDownloader:
             return []
         return out
 
+    def _try_invidious_api(self, video_id: str) -> Optional[str]:
+        """Resolve audio stream URL via public Invidious API instances.
+        Returns URL that can be proxied from our server (not IP-bound)."""
+        import requests as req
+        instances = [
+            "https://inv.nadeko.net",
+            "https://invidious.einfachzocken.eu",
+        ]
+        for instance in instances:
+            try:
+                resp = req.get(
+                    f"{instance}/api/v1/videos/{video_id}",
+                    timeout=(5, 15),
+                    headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"},
+                )
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                # Invidious format URLs are proxied through the instance
+                # and are NOT IP-bound — safe to proxy through our server.
+                adaptive_formats = data.get("adaptiveFormats") or []
+                audio = [f for f in adaptive_formats if "audio" in (f.get("type") or "").lower() and f.get("url")]
+                if not audio:
+                    audio = [f for f in adaptive_formats if f.get("url")]
+                if not audio:
+                    format_streams = data.get("formatStreams") or []
+                    audio = [f for f in format_streams if f.get("url")]
+                if audio:
+                    best = max(audio, key=lambda f: int(f.get("bitrate", 0) or 0))
+                    return best["url"]
+            except Exception:
+                continue
+        return None
+
     def get_stream_url(self, video_id: str) -> Optional[str]:
-        """Return direct audio stream URL via yt-dlp CLI (-g). Same format and cookie-retry as downloads."""
+        """Return direct audio stream URL via yt-dlp CLI (-g), falling back to Invidious API."""
         if not video_id or not str(video_id).strip():
             return None
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
@@ -992,7 +1026,7 @@ class YouTubeDownloader:
             result = subprocess.run(args_list, capture_output=True, text=True, timeout=30)
             return result.returncode, result.stdout or "", result.stderr or ""
 
-        def _try(args_list: List[str], label: str) -> Optional[str]:
+        def _try_ytdlp(args_list: List[str]) -> Optional[str]:
             try:
                 rc, out, err = _run(args_list)
                 combined = (err or "") + (out or "")
@@ -1001,56 +1035,51 @@ class YouTubeDownloader:
                     url = line[0] if line else None
                     if url:
                         return url
+                # Recoverable: try next strategy
                 if "Requested format is not available" in combined:
-                    return None  # signal to try next
+                    return None
                 if "Sign in to confirm" in combined:
-                    return None  # signal to try next
-                # Real error
-                print(f"[Preview] yt-dlp -g failed for {video_id} ({label}): rc={rc} stderr={(combined.strip() or 'no stderr')[:300]}")
+                    return None
+                print(f"[Preview] yt-dlp -g failed for {video_id}: rc={rc} stderr={(combined.strip() or 'no stderr')[:300]}")
                 return "__ERROR__"
             except subprocess.TimeoutExpired:
-                return None  # signal to try next
+                return None
 
         common = [
             get_subprocess_python(), "-m", "yt_dlp", "-g",
             "-f", YDL_FORMAT_AUDIO, "--no-warnings", "--quiet",
         ]
 
-        # Attempt 1: cookies + web client + IPv6
-        # Web cookies are from a browser session; the web client + IPv6
-        # is the combination that matches the cookie origin.
+        # Attempt 1: cookies via IPv6 (matches cookie origin — VPS)
         if self.cookie_file and os.path.exists(self.cookie_file):
-            result = _try(
-                common + ["-6", "--cookies", self.cookie_file, yt_url],
-                "cookies+web+ipv6",
-            )
+            result = _try_ytdlp(common + ["-6", "--cookies", self.cookie_file, yt_url])
             if result == "__ERROR__":
                 return None
             if result:
                 return result
 
-        # Attempt 2: Android client (works on residential IPs, sometimes VPS)
-        result = _try(
-            common + ["--force-ipv4", "--extractor-args", "youtube:player_client=android,ios", yt_url],
-            "android+ipv4",
-        )
+        # Attempt 2: Android client via IPv4 (residential IPs, sometimes VPS)
+        result = _try_ytdlp(common + ["--force-ipv4", "--extractor-args", "youtube:player_client=android,ios", yt_url])
         if result == "__ERROR__":
             return None
         if result:
             return result
 
-        # Attempt 3: cookies + web + IPv4 (fallback if IPv6 route broken)
+        # Attempt 3: cookies via IPv4 (fallback)
         if self.cookie_file and os.path.exists(self.cookie_file):
-            result = _try(
-                common + ["--force-ipv4", "--cookies", self.cookie_file, yt_url],
-                "cookies+web+ipv4",
-            )
+            result = _try_ytdlp(common + ["--force-ipv4", "--cookies", self.cookie_file, yt_url])
             if result == "__ERROR__":
                 return None
             if result:
                 return result
 
-        print(f"[Preview] yt-dlp -g failed for {video_id}: all attempts exhausted")
+        # Attempt 4: Invidious API fallback
+        fallback_url = self._try_invidious_api(video_id)
+        if fallback_url:
+            print(f"[Preview] Invidious fallback succeeded for {video_id}")
+            return fallback_url
+
+        print(f"[Preview] All resolution methods failed for {video_id}")
         return None
 
     def get_cover_for_query(self, artist: str, title: str) -> Optional[str]:
