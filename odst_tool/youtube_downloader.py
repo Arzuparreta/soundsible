@@ -987,71 +987,58 @@ class YouTubeDownloader:
         if not video_id or not str(video_id).strip():
             return None
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
-        args = [
+        base_args = [
             get_subprocess_python(), "-m", "yt_dlp",
             "-g",
-            "-f", YDL_FORMAT_AUDIO,
             "--no-warnings",
             "--quiet",
-            "--extractor-args", "youtube:player_client=android,ios,web",
-            yt_url,
+            "--force-ipv4",
+            "--extractor-args", "youtube:player_client=android,ios",
         ]
+        # Note: Do NOT add "web" to player_client — on datacenter/VPS IPs it
+        # hangs on IPv6 routes when cookies are present. android/ios are fine.
+        base_args.extend(["-f", YDL_FORMAT_AUDIO])
+        base_args.append(yt_url)
+
+        def _run(args_list: List[str]) -> tuple[int, str, str]:
+            result = subprocess.run(args_list, capture_output=True, text=True, timeout=30)
+            return result.returncode, result.stdout or "", result.stderr or ""
+
+        # Build argument lists to try in order
+        attempts: List[List[str]] = []
+        # 1) With cookies (if available) — bypasses bot detection on VPS
         if self.cookie_file and os.path.exists(self.cookie_file):
-            args.extend(["--cookies", self.cookie_file])
+            attempts.append(base_args + ["--cookies", self.cookie_file])
         elif self.cookie_browser:
-            args.extend(["--cookies-from-browser", self.cookie_browser])
-        try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            # Note: Same as download: if yt-dlp reports format mismatch or "page needs to be reloaded",
-            # retry once without cookies to avoid transient YouTube/STS issues.
-            combined_output = (result.stderr or "") + (result.stdout or "")
-            if result.returncode != 0 and (
-                "Requested format is not available" in combined_output
-                or "The page needs to be reloaded" in combined_output
-            ):
-                if self.cookie_file or self.cookie_browser:
-                    no_cookies = []
-                    i = 0
-                    while i < len(args):
-                        if args[i] in ("--cookies", "--cookies-from-browser") and i + 1 < len(args):
-                            i += 2
-                            continue
-                        no_cookies.append(args[i])
-                        i += 1
-                    result = subprocess.run(
-                        no_cookies,
-                        capture_output=True,
-                        text=True,
-                        timeout=30,
-                    )
-                    combined_output = (result.stderr or "") + (result.stdout or "")
-            if result.returncode != 0:
-                stderr = (combined_output or "").strip() or "(no stderr)"
-                if "Sign in to confirm" in stderr:
-                    print(
-                        f"[Preview] YouTube requires authentication for {video_id}. "
-                        f"Place cookies at ~/.config/soundsible/cookies.txt "
-                        f"or set SOUNDSIBLE_YTDLP_COOKIE_FILE env var."
-                    )
-                else:
+            attempts.append(base_args + ["--cookies-from-browser", self.cookie_browser])
+        # 2) Without cookies — works on residential IPs
+        attempts.append(list(base_args))
+
+        for args in attempts:
+            try:
+                result = subprocess.run(args, capture_output=True, text=True, timeout=30)
+                combined = (result.stderr or "") + (result.stdout or "")
+                if result.returncode == 0:
+                    line = (result.stdout or "").strip().splitlines()
+                    stream_url = line[0] if line else None
+                    if stream_url:
+                        return stream_url
+                # Format not available with cookies → cookies give different
+                # format lists; fall through to try without cookies.
+                if "Requested format is not available" in combined:
+                    continue
+                if "Sign in to confirm" in combined:
+                    continue
+                if result.returncode != 0:
+                    stderr = combined.strip() or "(no stderr)"
                     print(f"[Preview] yt-dlp -g failed for {video_id}: returncode={result.returncode}, stderr={stderr[:500]}")
-                return None
-            line = (result.stdout or "").strip().splitlines()
-            stream_url = line[0] if line else None
-            if not stream_url:
-                print(f"[Preview] yt-dlp -g returned no URL for {video_id}")
-            return stream_url
-        except subprocess.TimeoutExpired:
-            print(f"[Preview] yt-dlp -g timed out for {video_id}")
-            return None
-        except FileNotFoundError:
-            print(f"[Preview] yt-dlp not found (python -m yt_dlp) for {video_id}")
-            return None
+                    return None
+            except subprocess.TimeoutExpired:
+                # Hanging on web client; fall through to next attempt
+                continue
+
+        print(f"[Preview] yt-dlp -g failed for {video_id}: all attempts exhausted")
+        return None
 
     def get_cover_for_query(self, artist: str, title: str) -> Optional[str]:
         """Fetch only cover (thumbnail) for a track via yt-dlp search. No audio download.
