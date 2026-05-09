@@ -594,7 +594,7 @@ export class UI {
      * Slide direction from omnibar ribbon: items left of the centre blank vs right.
      * Stack views map to their root tab for side consistency.
      */
-    static getSlideClassForView(viewId) {
+    static getSlideClassForView(viewId, isBack = false) {
         const ribbon = document.getElementById('omni-nav-ribbon');
         if (!ribbon) return 'view-from-right';
         const leftViews = [];
@@ -613,7 +613,11 @@ export class UI {
         }
         const stackToRoot = { 'artist-detail': 'home', 'playlist-detail': 'playlists' };
         const resolved = stackToRoot[viewId] || viewId;
-        return leftViews.includes(resolved) ? 'view-from-left' : 'view-from-right';
+        let slideClass = leftViews.includes(resolved) ? 'view-from-left' : 'view-from-right';
+        if (isBack) {
+            slideClass = slideClass === 'view-from-left' ? 'view-from-right' : 'view-from-left';
+        }
+        return slideClass;
     }
 
     /** True when the user has typed a discover query (mobile). Back clears search first. */
@@ -656,7 +660,7 @@ export class UI {
 
         const transitionToken = ++this._viewTransitionToken;
 
-        const slideClass = UI.getSlideClassForView(viewId);
+        const slideClass = UI.getSlideClassForView(viewId, !saveToHistory);
         targetView.classList.remove('hidden');
         targetView.classList.add(slideClass, 'view-incoming');
         if (oldView) oldView.classList.add('view-outgoing');
