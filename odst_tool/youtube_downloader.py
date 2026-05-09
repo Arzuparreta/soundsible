@@ -38,12 +38,18 @@ def _yt_dlp_force_ipv4() -> bool:
 
 
 def _add_ytdlp_cli_network_args(args: List[str]) -> None:
-    if _yt_dlp_force_ipv4():
+    yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
+    if yt_proxy:
+        args.extend(["--proxy", yt_proxy])
+    elif _yt_dlp_force_ipv4():
         args.append("--force-ipv4")
 
 
 def _apply_ytdlp_network_options(opts: Dict[str, Any]) -> Dict[str, Any]:
-    if _yt_dlp_force_ipv4():
+    yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
+    if yt_proxy:
+        opts["proxy"] = yt_proxy
+    elif _yt_dlp_force_ipv4():
         opts["source_address"] = "0.0.0.0"
     return opts
 
