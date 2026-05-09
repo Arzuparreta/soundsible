@@ -982,42 +982,8 @@ class YouTubeDownloader:
             return []
         return out
 
-    def _try_invidious_api(self, video_id: str) -> Optional[str]:
-        """Resolve audio stream URL via public Invidious API instances.
-        Returns URL that can be proxied from our server (not IP-bound)."""
-        import requests as req
-        instances = [
-            "https://inv.nadeko.net",
-            "https://invidious.einfachzocken.eu",
-        ]
-        for instance in instances:
-            try:
-                resp = req.get(
-                    f"{instance}/api/v1/videos/{video_id}",
-                    timeout=(5, 15),
-                    headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"},
-                )
-                if resp.status_code != 200:
-                    continue
-                data = resp.json()
-                # Invidious format URLs are proxied through the instance
-                # and are NOT IP-bound — safe to proxy through our server.
-                adaptive_formats = data.get("adaptiveFormats") or []
-                audio = [f for f in adaptive_formats if "audio" in (f.get("type") or "").lower() and f.get("url")]
-                if not audio:
-                    audio = [f for f in adaptive_formats if f.get("url")]
-                if not audio:
-                    format_streams = data.get("formatStreams") or []
-                    audio = [f for f in format_streams if f.get("url")]
-                if audio:
-                    best = max(audio, key=lambda f: int(f.get("bitrate", 0) or 0))
-                    return best["url"]
-            except Exception:
-                continue
-        return None
-
     def get_stream_url(self, video_id: str) -> Optional[str]:
-        """Return direct audio stream URL via yt-dlp CLI (-g), falling back to Invidious API."""
+        """Return direct audio stream URL via yt-dlp CLI (-g), with Tor fallback."""
         if not video_id or not str(video_id).strip():
             return None
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
@@ -1073,11 +1039,12 @@ class YouTubeDownloader:
             if result:
                 return result
 
-        # Attempt 4: Invidious API fallback
-        fallback_url = self._try_invidious_api(video_id)
-        if fallback_url:
-            print(f"[Preview] Invidious fallback succeeded for {video_id}")
-            return fallback_url
+        # Attempt 4: Tor SOCKS5 proxy (bypasses datacenter IP blocks)
+        result = _try_ytdlp(common + ["--proxy", "socks5://127.0.0.1:9050", yt_url])
+        if result == "__ERROR__":
+            return None
+        if result:
+            return result
 
         print(f"[Preview] All resolution methods failed for {video_id}")
         return None
