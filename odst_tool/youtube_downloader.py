@@ -988,13 +988,10 @@ class YouTubeDownloader:
             return None
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
 
-        def _run(args_list: List[str]) -> tuple[int, str, str]:
-            result = subprocess.run(args_list, capture_output=True, text=True, timeout=30)
-            return result.returncode, result.stdout or "", result.stderr or ""
-
-        def _try(args_list: List[str]) -> Optional[str]:
+        def _try(args_list: List[str], timeout: int = 30) -> Optional[str]:
             try:
-                rc, out, err = _run(args_list)
+                result = subprocess.run(args_list, capture_output=True, text=True, timeout=timeout)
+                rc, out, err = result.returncode, result.stdout or "", result.stderr or ""
                 combined = (err or "") + (out or "")
                 if rc == 0:
                     line = (out or "").strip().splitlines()
@@ -1038,8 +1035,9 @@ class YouTubeDownloader:
             if result:
                 return result
 
-        # Attempt 4: Tor SOCKS5 proxy (requires: apt install tor && systemctl start tor)
-        result = _try(common + ["--proxy", "socks5://127.0.0.1:9050", yt_url])
+        # Attempt 4: Tor SOCKS5 proxy (requires: apt install tor && systemctl start tor@default)
+        # Tor circuits take time to establish; use longer timeout.
+        result = _try(common + ["--proxy", "socks5://127.0.0.1:9050", yt_url], timeout=60)
         if result == "__ERROR__":
             return None
         if result:
