@@ -43,27 +43,27 @@ def _preview_stream_rate_limit(ip: str) -> bool:
     return True
 
 
-def _get_preview_stream_source_cached(api, video_id: str) -> dict:
+def _get_preview_stream_url_cached(api, video_id: str) -> str:
     """
-    Resolve preview stream metadata with a small TTL cache to avoid repeated
+    Resolve a preview stream URL with a small TTL cache to avoid repeated
     calls into the downloader for the same video_id under bursty access.
     """
     now = time.time()
     with _preview_stream_cache_lock:
         entry = _preview_stream_cache.get(video_id)
-        if entry and entry["expires_at"] > now and entry.get("source", {}).get("url"):
-            return entry["source"]
+        if entry and entry["expires_at"] > now and entry.get("url"):
+            return entry["url"]
 
     dl = api["get_downloader"](open_browser=False)
-    source = dl.downloader.get_stream_source(video_id)
-    if not source or not source.get("url"):
-        return {}
+    url = dl.downloader.get_stream_url(video_id)
+    if not url:
+        return ""
 
     expires_at = now + PREVIEW_STREAM_CACHE_TTL_SEC
     with _preview_stream_cache_lock:
-        _preview_stream_cache[video_id] = {"source": source, "expires_at": expires_at}
+        _preview_stream_cache[video_id] = {"url": url, "expires_at": expires_at}
 
-    return source
+    return url
 
 
 def _get_api():
@@ -174,17 +174,40 @@ def preview_stream_proxy(video_id):
     if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
         return jsonify({"error": "Too many requests"}), 429
     try:
-        source = _get_preview_stream_source_cached(api, video_id)
-        stream_url = (source or {}).get("url")
+        stream_url = _get_preview_stream_url_cached(api, video_id)
         if not stream_url:
-            logger.warning("API: [Preview stream] No stream URL resolved for %s", video_id)
             return jsonify({"error": "Preview unavailable"}), 502
-        # Browsers can follow the redirect directly to the resolved media URL.
-        # This avoids the daemon becoming the streaming proxy and removes a whole
-        # class of upstream failures on VPS/datacenter egress.
-        response = redirect(stream_url, code=307)
-        response.headers["Cache-Control"] = "no-store"
-        return response
+        range_header = request.headers.get("Range")
+        req_headers = {"Range": range_header} if range_header else {}
+        # Use a conservative connect/read timeout to avoid tying up worker
+        # threads on very slow upstreams.
+        resp = requests.get(
+            stream_url,
+            stream=True,
+            headers=req_headers,
+            timeout=(5, 90),
+        )
+        resp.raise_for_status()
+        content_length = resp.headers.get("Content-Length")
+        content_range = resp.headers.get("Content-Range")
+        response_headers = {"Content-Type": "audio/mpeg"}
+        if content_range:
+            response_headers["Content-Range"] = content_range
+        if content_length:
+            response_headers["Content-Length"] = content_length
+
+        def iter_chunks():
+            for chunk in resp.iter_content(chunk_size=65536):
+                if chunk:
+                    yield chunk
+
+        return Response(
+            stream_with_context(iter_chunks()),
+            status=resp.status_code,
+            headers=response_headers,
+            mimetype="audio/mpeg",
+            direct_passthrough=True,
+        )
     except Exception as e:
         logger.warning("API: [Preview stream] Error for %s: %s", video_id, e)
         return jsonify({"error": "Preview unavailable"}), 502
@@ -198,8 +221,7 @@ def get_preview_stream_url(video_id):
     if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
         return jsonify({"error": "Too many requests"}), 429
     try:
-        source = _get_preview_stream_source_cached(api, video_id)
-        url = (source or {}).get("url")
+        url = _get_preview_stream_url_cached(api, video_id)
         if not url:
             return jsonify({"error": "Stream URL unavailable"}), 404
         return jsonify({"url": url})
