@@ -8,6 +8,7 @@ import threading
 import time
 
 import requests
+from requests import HTTPError
 from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context
 
 from shared.constants import DEFAULT_CACHE_DIR
@@ -177,6 +178,7 @@ def preview_stream_proxy(video_id):
         source = _get_preview_stream_source_cached(api, video_id)
         stream_url = (source or {}).get("url")
         if not stream_url:
+            logger.warning("API: [Preview stream] No stream URL resolved for %s", video_id)
             return jsonify({"error": "Preview unavailable"}), 502
         range_header = request.headers.get("Range")
         req_headers = dict((source or {}).get("headers") or {})
@@ -225,6 +227,22 @@ def preview_stream_proxy(video_id):
             mimetype=content_type,
             direct_passthrough=True,
         )
+    except HTTPError as e:
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        body = ""
+        try:
+            if getattr(e, "response", None) is not None:
+                body = (e.response.text or "")[:400]
+        except Exception:
+            body = ""
+        logger.warning(
+            "API: [Preview stream] Upstream HTTP error for %s: status=%s url=%s body=%r",
+            video_id,
+            status,
+            stream_url if 'stream_url' in locals() else None,
+            body,
+        )
+        return jsonify({"error": "Preview unavailable"}), 502
     except Exception as e:
         logger.warning("API: [Preview stream] Error for %s: %s", video_id, e)
         return jsonify({"error": "Preview unavailable"}), 502
