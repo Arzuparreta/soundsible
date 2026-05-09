@@ -983,9 +983,71 @@ class YouTubeDownloader:
         return out
 
     def get_stream_url(self, video_id: str) -> Optional[str]:
-        """Return direct audio stream URL via yt-dlp CLI (-g), with Tor fallback."""
+        """Return direct audio stream URL via yt-dlp CLI (-g)."""
         if not video_id or not str(video_id).strip():
             return None
+        yt_url = f"https://www.youtube.com/watch?v={video_id}"
+
+        def _run(args_list: List[str]) -> tuple[int, str, str]:
+            result = subprocess.run(args_list, capture_output=True, text=True, timeout=30)
+            return result.returncode, result.stdout or "", result.stderr or ""
+
+        def _try(args_list: List[str]) -> Optional[str]:
+            try:
+                rc, out, err = _run(args_list)
+                combined = (err or "") + (out or "")
+                if rc == 0:
+                    line = (out or "").strip().splitlines()
+                    url = line[0] if line else None
+                    if url:
+                        return url
+                if "Requested format is not available" in combined:
+                    return None
+                if "Sign in to confirm" in combined:
+                    return None
+                print(f"[Preview] yt-dlp failed for {video_id}: rc={rc} stderr={(combined.strip() or 'no stderr')[:300]}")
+                return "__ERROR__"
+            except subprocess.TimeoutExpired:
+                return None
+
+        common = [
+            get_subprocess_python(), "-m", "yt_dlp", "-g",
+            "-f", YDL_FORMAT_AUDIO, "--no-warnings", "--quiet",
+        ]
+
+        # Attempt 1: cookies via IPv6 (matches web cookie origin)
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            result = _try(common + ["-6", "--cookies", self.cookie_file, yt_url])
+            if result == "__ERROR__":
+                return None
+            if result:
+                return result
+
+        # Attempt 2: Android client via IPv4 (residential IPs)
+        result = _try(common + ["--force-ipv4", "--extractor-args", "youtube:player_client=android,ios", yt_url])
+        if result == "__ERROR__":
+            return None
+        if result:
+            return result
+
+        # Attempt 3: cookies via IPv4
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            result = _try(common + ["--force-ipv4", "--cookies", self.cookie_file, yt_url])
+            if result == "__ERROR__":
+                return None
+            if result:
+                return result
+
+        # Attempt 4: Tor SOCKS5 proxy (requires: apt install tor && systemctl start tor)
+        result = _try(common + ["--proxy", "socks5://127.0.0.1:9050", yt_url])
+        if result == "__ERROR__":
+            return None
+        if result:
+            return result
+
+        print(f"[Preview] All attempts failed for {video_id}. "
+              f"On VPS, install Tor: apt install tor && systemctl start tor")
+        return None
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
 
         def _run(args_list: List[str]) -> tuple[int, str, str]:
