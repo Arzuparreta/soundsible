@@ -49,8 +49,8 @@ export class UI {
             omniLabelContainer: d('omni-label-container'),
             nowPlayingView: d('now-playing-view'),
             npSeekContainer: d('np-seek-container'),
-            queueFab: d('queue-fab'),
-            queueBadge: d('queue-badge'),
+            queuesFab: d('queues-fab'),
+            queuesBadge: d('queues-badge'),
             omniAnchorIcon: d('omni-anchor-icon'),
             omniAnchorLogoWrap: d('omni-anchor-logo-wrap'),
             omniMetadataContainer: d('omni-metadata-container'),
@@ -70,9 +70,8 @@ export class UI {
             statusLedPulse: d('status-led-pulse'),
             serverStatus: d('server-status'),
             activeHostDisplay: d('active-host-display'),
-            queuePopover: d('queue-popover'),
-            queueContainer: d('queue-container'),
-            dlQueueContainer: d('dl-queue-container'),
+            queuesPopover: d('queues-popover'),
+            queuesContainer: d('queues-fab-container'),
             omniTimeCurrent: d('omni-time-current'),
             omniTimeDuration: d('omni-time-duration'),
             npTimeCurrent: d('np-time-current'),
@@ -277,21 +276,9 @@ export class UI {
             this.updateTransportControls(state.isPlaying);
         }
 
-        // ## Section: Floating queue
-        const fab = this.dom.queueFab;
-        const badge = this.dom.queueBadge;
-        const qCount = state.queue ? state.queue.length : 0;
-
-        if (fab && badge) {
-            if (qCount > 0) {
-                fab.classList.replace('scale-0', 'scale-100');
-                fab.classList.replace('opacity-0', 'opacity-100');
-                badge.textContent = qCount;
-            } else {
-                fab.classList.replace('scale-100', 'scale-0');
-                fab.classList.replace('opacity-100', 'opacity-0');
-                this.hideQueue();
-            }
+        // ## Section: Floating queue FAB — delegate to Downloader for combined visibility
+        if (window.Downloader && window.Downloader.updateFabAndPopover) {
+            window.Downloader.updateFabAndPopover();
         }
 
         this.updateStatus(state);
@@ -582,30 +569,49 @@ export class UI {
         }, closeDurationMs);
     }
 
-    static toggleQueue() {
-        const popover = this.dom.queuePopover;
+    static toggleQueues(tab = 'playback') {
+        const popover = this.dom.queuesPopover;
         if (!popover) return;
 
         if (popover.classList.contains('hidden')) {
-            popover.classList.remove('hidden');
-            setTimeout(() => {
-                popover.classList.remove('pointer-events-none');
-                popover.classList.replace('scale-95', 'scale-100');
-                popover.classList.replace('opacity-0', 'opacity-100');
-            }, 10);
-            if (window.renderQueue) window.renderQueue(store.state);
+            this.showQueues(tab);
         } else {
-            this.hideQueue();
+            this.hideQueues();
         }
     }
 
-    static hideQueue() {
-        const popover = this.dom.queuePopover;
+    static showQueues(tab = 'playback') {
+        const popover = this.dom.queuesPopover;
+        if (!popover) return;
+
+        popover.setAttribute('data-active-tab', tab);
+        const btns = popover.querySelectorAll('.queues-tab-btn');
+        btns.forEach(b => b.setAttribute('aria-pressed', b.getAttribute('data-queues-tab') === tab ? 'true' : 'false'));
+
+        popover.classList.remove('hidden');
+        setTimeout(() => {
+            popover.classList.remove('pointer-events-none');
+            popover.style.pointerEvents = 'auto';
+            popover.classList.replace('scale-95', 'scale-100');
+            popover.classList.replace('opacity-0', 'opacity-100');
+        }, 10);
+
+        if (tab === 'playback' && window.renderQueue) {
+            window.renderQueue(store.state);
+        }
+        if (tab === 'downloads' && window.Downloader) {
+            window.Downloader.renderDownloadQueueList();
+        }
+    }
+
+    static hideQueues() {
+        const popover = this.dom.queuesPopover;
         if (!popover || popover.classList.contains('hidden')) return;
-        
+
         popover.classList.replace('scale-100', 'scale-95');
         popover.classList.replace('opacity-100', 'opacity-0');
         popover.classList.add('pointer-events-none');
+        popover.style.pointerEvents = 'none';
         setTimeout(() => popover.classList.add('hidden'), 300);
     }
 
@@ -772,8 +778,8 @@ export class UI {
             });
         });
 
-        const queueContainer = this.dom.queueContainer;
-        if (queueContainer) queueContainer.classList.remove('hidden');
+        const queuesContainer = this.dom.queuesContainer;
+        if (queuesContainer) queuesContainer.classList.remove('hidden');
     }
 
     /** Single entry point for "go back": sub-states close first (overlays, search); then stack pop. */
@@ -803,16 +809,39 @@ export class UI {
         // Note: Global prevent context menu everywhere for a native app feel
         window.addEventListener('contextmenu', (e) => e.preventDefault());
 
-        // ## Section: Global clicks
+        // ## Section: Global clicks — hide queues popover on outside click
         window.addEventListener('click', (e) => {
-            if (this.currentView === 'discover') {
-                const dlq = this.dom.dlQueueContainer;
-                if (dlq && !dlq.contains(e.target)) window.Downloader?.hideDownloadQueue?.();
-            } else {
-                const q = this.dom.queueContainer;
-                if (q && !q.contains(e.target)) this.hideQueue();
-            }
+            const qc = this.dom.queuesContainer;
+            if (qc && !qc.contains(e.target)) this.hideQueues();
         });
+
+        // ## Section: Queues popover tab switching + clear button
+        const popover = this.dom.queuesPopover;
+        if (popover) {
+            popover.addEventListener('click', (e) => {
+                const tabBtn = e.target.closest('.queues-tab-btn');
+                if (tabBtn) {
+                    e.stopPropagation();
+                    const tab = tabBtn.getAttribute('data-queues-tab');
+                    if (tab) this.showQueues(tab);
+                    return;
+                }
+                const clearBtn = e.target.closest('#queues-clear-btn');
+                if (clearBtn) {
+                    e.stopPropagation();
+                    const activeTab = popover.getAttribute('data-active-tab') || 'playback';
+                    if (activeTab === 'playback') {
+                        store.clearQueue();
+                    } else if (window.Downloader) {
+                        window.Downloader.downloadQueue = [];
+                        window.Downloader.renderDownloadQueueList();
+                        window.Downloader.updateFabAndPopover();
+                        window.Downloader.hideDownloadQueue();
+                        Haptics.tick();
+                    }
+                }
+            });
+        }
 
         // ## Section: Transport handlers
         const bindTransport = (id, fn) => {
@@ -998,6 +1027,7 @@ export class UI {
 
             if (gesture.startX < 40) {
                 gesture.isEdgeSwipe = true;
+                if (e.cancelable) e.preventDefault();
                 this.content.style.transition = 'none';
                 if (shouldAttachBlockingTouchMove()) attachGestureTouchMove();
                 return;
@@ -1006,12 +1036,13 @@ export class UI {
             if (e.target.closest('.queue-item')) return;
 
             if (row) {
+                if (e.cancelable) e.preventDefault();
                 gesture.activeRow = row;
                 row.style.transition = 'none';
             }
 
             if (shouldAttachBlockingTouchMove()) attachGestureTouchMove();
-        }, { passive: true, capture: true });
+        }, { passive: false, capture: true });
 
         function cleanupGestureEnd() {
             detachGestureTouchMove();

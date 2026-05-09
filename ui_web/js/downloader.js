@@ -158,20 +158,12 @@ export class Downloader {
 
         if (this.searchBtn) this.searchBtn.addEventListener('click', () => this.handlePrimaryInput());
         if (this.searchInput) this.searchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.handlePrimaryInput(); });
-        if (this.clearQueueBtn) this.clearQueueBtn.addEventListener('click', () => {
-            this.downloadQueue = [];
-            this.renderDownloadQueueList();
-            this.updateFabAndPopover();
-            this.hideDownloadQueue();
-            Haptics.tick();
-        });
         if (this.submitDownloadBtn) this.submitDownloadBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             this.suppressResultClicksUntil = Date.now() + 700;
             this.submitDownloadQueue();
         });
-        if (this.dlQueueFab) this.dlQueueFab.addEventListener('click', () => this.toggleDownloadQueue());
         if (this.previewClose) this.previewClose.addEventListener('click', () => this.hidePreview());
         if (this.previewAddToQueue) {
             this.previewAddToQueue.addEventListener('click', (e) => {
@@ -437,6 +429,14 @@ export class Downloader {
 
     /** Opens the download queue popover without toggling (so it stays open when adding from preview). */
     static openDownloadQueue() {
+        if (UI.dom?.queuesPopover) {
+            const popover = UI.dom.queuesPopover;
+            if (popover.classList.contains('hidden')) {
+                this._downloadQueueOpenedAt = Date.now();
+                UI.showQueues('downloads');
+            }
+            return;
+        }
         const popover = this.downloadQueuePopover;
         if (!popover || !popover.classList.contains('hidden')) return;
         this._downloadQueueOpenedAt = Date.now();
@@ -649,6 +649,14 @@ export class Downloader {
 
     /** Open the download queue popover only if it is hidden (does not toggle closed). */
     static openDownloadQueuePopoverIfNeeded() {
+        if (UI.dom?.queuesPopover) {
+            const popover = UI.dom.queuesPopover;
+            if (popover.classList.contains('hidden')) {
+                this._downloadQueueOpenedAt = Date.now();
+                UI.showQueues('downloads');
+            }
+            return;
+        }
         const popover = this.downloadQueuePopover;
         if (!popover || !popover.classList.contains('hidden')) return;
         this._downloadQueueOpenedAt = Date.now();
@@ -662,6 +670,35 @@ export class Downloader {
         this.renderDownloadQueueList();
     }
 
+    static toggleDownloadQueue() {
+        if (UI.dom?.queuesPopover) {
+            UI.toggleQueues('downloads');
+            return;
+        }
+        const popover = this.downloadQueuePopover;
+        if (!popover) return;
+        if (popover.classList.contains('hidden')) {
+            this.openDownloadQueuePopoverIfNeeded();
+        } else {
+            this.hideDownloadQueue();
+        }
+    }
+
+    static hideDownloadQueue() {
+        if (UI.dom?.queuesPopover) {
+            UI.hideQueues();
+            return;
+        }
+        if (Date.now() - this._downloadQueueOpenedAt < 300) return;
+        const popover = this.downloadQueuePopover;
+        if (!popover || popover.classList.contains('hidden')) return;
+        popover.classList.replace('scale-100', 'scale-95');
+        popover.classList.replace('opacity-100', 'opacity-0');
+        popover.classList.add('pointer-events-none');
+        popover.style.pointerEvents = 'none';
+        setTimeout(() => popover.classList.add('hidden'), 300);
+    }
+
     static updateFabAndPopover() {
         const n = this.downloadQueue.length;
         const st = this.lastDownloaderStatus;
@@ -669,14 +706,24 @@ export class Downloader {
         const backendActive = !!(st?.is_processing
             || q.some((i) => i.status === 'pending' || i.status === 'downloading'));
         const backendCount = q.filter((i) => i.status === 'pending' || i.status === 'downloading').length;
-        const showFab = n > 0 || backendActive || this._downloadUiPrimeDepth > 0;
-        const fab = this.dlQueueFab;
-        const badge = this.dlQueueBadge;
-        if (fab && badge) {
+        const showForDownloads = n > 0 || backendActive || this._downloadUiPrimeDepth > 0;
+        const playbackCount = (store.state.queue || []).length;
+        const showFab = showForDownloads || playbackCount > 0;
+
+        // Mobile: combined queues FAB
+        const mobileFab = document.getElementById('queues-fab');
+        const mobileBadge = document.getElementById('queues-badge');
+        if (mobileFab && mobileBadge) {
             if (showFab) {
-                fab.classList.replace('scale-0', 'scale-100');
-                fab.classList.replace('opacity-0', 'opacity-100');
-                badge.textContent = String(n > 0 ? n : Math.max(0, backendCount));
+                mobileFab.classList.replace('scale-0', 'scale-100');
+                mobileFab.classList.replace('opacity-0', 'opacity-100');
+                if (playbackCount > 0) {
+                    mobileBadge.textContent = String(playbackCount);
+                } else if (showForDownloads) {
+                    mobileBadge.textContent = String(n > 0 ? n : Math.max(0, backendCount));
+                } else {
+                    mobileBadge.textContent = '0';
+                }
                 const avg = this.averageProgressPercent(q);
                 this.updateFabProgress({
                     isProcessing: !!st?.is_processing,
@@ -685,13 +732,38 @@ export class Downloader {
                     localQueueCount: n
                 });
             } else {
-                fab.classList.replace('scale-100', 'scale-0');
-                fab.classList.replace('opacity-100', 'opacity-0');
-                badge.textContent = '0';
+                mobileFab.classList.replace('scale-100', 'scale-0');
+                mobileFab.classList.replace('opacity-100', 'opacity-0');
+                mobileBadge.textContent = '0';
+                this.updateFabProgress({ isProcessing: false, activeCount: 0, avgPercent: null, localQueueCount: 0 });
+                UI.hideQueues();
+            }
+        }
+
+        // Desktop: separate download queue FAB
+        const deskFab = this.dlQueueFab;
+        const deskBadge = this.dlQueueBadge;
+        if (deskFab && deskBadge) {
+            if (showForDownloads) {
+                deskFab.classList.replace('scale-0', 'scale-100');
+                deskFab.classList.replace('opacity-0', 'opacity-100');
+                deskBadge.textContent = String(n > 0 ? n : Math.max(0, backendCount));
+                const avg = this.averageProgressPercent(q);
+                this.updateFabProgress({
+                    isProcessing: !!st?.is_processing,
+                    activeCount: backendCount,
+                    avgPercent: avg,
+                    localQueueCount: n
+                });
+            } else {
+                deskFab.classList.replace('scale-100', 'scale-0');
+                deskFab.classList.replace('opacity-100', 'opacity-0');
+                deskBadge.textContent = '0';
                 this.updateFabProgress({ isProcessing: false, activeCount: 0, avgPercent: null, localQueueCount: 0 });
                 this.hideDownloadQueue();
             }
         }
+
         if (this.queueContainer) {
             this.queueContainer.classList.toggle('hidden', !showFab);
         }
@@ -710,7 +782,7 @@ export class Downloader {
             localQueueCount = 0
         } = opts;
         const ring = this.dlQueueProgressRing;
-        const badge = this.dlQueueBadge;
+        const badge = document.getElementById('queues-badge') || this.dlQueueBadge;
         if (ring) {
             const radius = (ring.r && ring.r.baseVal && ring.r.baseVal.value) || 22;
             const circumference = 2 * Math.PI * radius;
@@ -734,27 +806,6 @@ export class Downloader {
         if (badge && isProcessing && activeCount > 0 && localQueueCount === 0) {
             badge.textContent = String(Math.max(0, activeCount));
         }
-    }
-
-    static toggleDownloadQueue() {
-        const popover = this.downloadQueuePopover;
-        if (!popover) return;
-        if (popover.classList.contains('hidden')) {
-            this.openDownloadQueuePopoverIfNeeded();
-        } else {
-            this.hideDownloadQueue();
-        }
-    }
-
-    static hideDownloadQueue() {
-        if (Date.now() - this._downloadQueueOpenedAt < 300) return;
-        const popover = this.downloadQueuePopover;
-        if (!popover || popover.classList.contains('hidden')) return;
-        popover.classList.replace('scale-100', 'scale-95');
-        popover.classList.replace('opacity-100', 'opacity-0');
-        popover.classList.add('pointer-events-none');
-        popover.style.pointerEvents = 'none';
-        setTimeout(() => popover.classList.add('hidden'), 300);
     }
 
     static async submitDownloadQueue() {

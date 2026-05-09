@@ -523,6 +523,11 @@
             -webkit-backdrop-filter: blur(8px);
         }
 
+        /* Combined queues popover panel visibility */
+        .queues-panel { display: none; }
+        #queues-popover[data-active-tab="playback"] #queues-panel-playback { display: block; }
+        #queues-popover[data-active-tab="downloads"] #queues-panel-downloads { display: block; }
+
         .status-pulse { animation: pulse 2s infinite; }
         @keyframes pulse {
             0% { transform: scale(1); opacity: 0.8; }
@@ -866,15 +871,6 @@
         #global-search-container.show-library-tabs .library-tabs-inline { display: flex; }
         #global-search-container .discover-odst-inline { display: none; }
         #global-search-container.show-discover-odst .discover-odst-inline { display: flex; }
-        body[data-current-view="discover"] #queue-container,
-        body[data-current-view="discover"] #dl-queue-container {
-            top: auto;
-            bottom: calc(var(--view-scroll-bottom) + 0.75rem);
-            right: 1rem;
-        }
-        body[data-current-view="discover"] #dl-queue-container {
-            bottom: calc(var(--view-scroll-bottom) + 4.25rem);
-        }
         .library-tab-bar-mobile {
             --library-tab-gap: 6px;
             --library-tab-pad: 4px;
