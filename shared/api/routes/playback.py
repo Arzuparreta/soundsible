@@ -179,13 +179,19 @@ def preview_stream_proxy(video_id):
             return jsonify({"error": "Preview unavailable"}), 502
         range_header = request.headers.get("Range")
         req_headers = {"Range": range_header} if range_header else {}
-        # Use a conservative connect/read timeout to avoid tying up worker
-        # threads on very slow upstreams.
+        # Route through the same proxy used for yt-dlp resolution if set.
+        # YouTube CDN URLs are IP-bound to the resolver's IP; the VPS
+        # cannot fetch them directly when resolution went through a proxy.
+        proxies = None
+        yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "")
+        if yt_proxy:
+            proxies = {"http": yt_proxy, "https": yt_proxy}
         resp = requests.get(
             stream_url,
             stream=True,
             headers=req_headers,
             timeout=(5, 90),
+            proxies=proxies,
         )
         resp.raise_for_status()
         content_length = resp.headers.get("Content-Length")
