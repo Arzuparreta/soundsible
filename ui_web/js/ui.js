@@ -1027,7 +1027,6 @@ export class UI {
 
             if (gesture.startX < 40) {
                 gesture.isEdgeSwipe = true;
-                if (e.cancelable) e.preventDefault();
                 this.content.style.transition = 'none';
                 if (shouldAttachBlockingTouchMove()) attachGestureTouchMove();
                 return;
@@ -1036,13 +1035,12 @@ export class UI {
             if (e.target.closest('.queue-item')) return;
 
             if (row) {
-                if (e.cancelable) e.preventDefault();
                 gesture.activeRow = row;
                 row.style.transition = 'none';
             }
 
             if (shouldAttachBlockingTouchMove()) attachGestureTouchMove();
-        }, { passive: false, capture: true });
+        }, { passive: true, capture: true });
 
         function cleanupGestureEnd() {
             detachGestureTouchMove();

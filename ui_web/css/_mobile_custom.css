@@ -153,6 +153,7 @@
             user-select: none;
             -webkit-user-select: none;
             -webkit-touch-callout: none;
+            -webkit-user-modify: read-only;
         }
 
         .safe-top { padding-top: max(1.5rem, env(safe-area-inset-top)); }
@@ -163,17 +164,31 @@
         
         * { -webkit-tap-highlight-color: transparent; }
 
+        /* Prevent iOS text selection on all interactive content */
         .song-row,
+        .song-row *,
         .playlist-track-row,
+        .playlist-track-row *,
         .home-mixed-artist-row,
+        .home-mixed-artist-row *,
         .artist-album-header,
+        .artist-album-header *,
         .podcast-search-row,
+        .podcast-search-row *,
         .add-to-playlist-picker-item,
+        .add-to-playlist-picker-item *,
         .playlist-cover-picker-tile,
+        .playlist-cover-picker-tile *,
         .discover-card,
+        .discover-card *,
         .discover-surface-row,
-        .discover-odst-row {
+        .discover-surface-row *,
+        .discover-odst-row,
+        .discover-odst-row * {
             touch-action: pan-y;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
         }
 
         button,
