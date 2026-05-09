@@ -43,27 +43,27 @@ def _preview_stream_rate_limit(ip: str) -> bool:
     return True
 
 
-def _get_preview_stream_url_cached(api, video_id: str) -> str:
+def _get_preview_stream_source_cached(api, video_id: str) -> dict:
     """
-    Resolve a preview stream URL with a small TTL cache to avoid repeated
+    Resolve preview stream metadata with a small TTL cache to avoid repeated
     calls into the downloader for the same video_id under bursty access.
     """
     now = time.time()
     with _preview_stream_cache_lock:
         entry = _preview_stream_cache.get(video_id)
-        if entry and entry["expires_at"] > now and entry.get("url"):
-            return entry["url"]
+        if entry and entry["expires_at"] > now and entry.get("source", {}).get("url"):
+            return entry["source"]
 
     dl = api["get_downloader"](open_browser=False)
-    url = dl.downloader.get_stream_url(video_id)
-    if not url:
-        return ""
+    source = dl.downloader.get_stream_source(video_id)
+    if not source or not source.get("url"):
+        return {}
 
     expires_at = now + PREVIEW_STREAM_CACHE_TTL_SEC
     with _preview_stream_cache_lock:
-        _preview_stream_cache[video_id] = {"url": url, "expires_at": expires_at}
+        _preview_stream_cache[video_id] = {"source": source, "expires_at": expires_at}
 
-    return url
+    return source
 
 
 def _get_api():
@@ -174,11 +174,23 @@ def preview_stream_proxy(video_id):
     if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
         return jsonify({"error": "Too many requests"}), 429
     try:
-        stream_url = _get_preview_stream_url_cached(api, video_id)
+        source = _get_preview_stream_source_cached(api, video_id)
+        stream_url = (source or {}).get("url")
         if not stream_url:
             return jsonify({"error": "Preview unavailable"}), 502
         range_header = request.headers.get("Range")
-        req_headers = {"Range": range_header} if range_header else {}
+        req_headers = dict((source or {}).get("headers") or {})
+        req_headers.setdefault(
+            "User-Agent",
+            (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) "
+                "Gecko/20100101 Firefox/128.0"
+            ),
+        )
+        req_headers.setdefault("Accept", "audio/*,*/*")
+        req_headers["Accept-Encoding"] = "identity"
+        if range_header:
+            req_headers["Range"] = range_header
         # Use a conservative connect/read timeout to avoid tying up worker
         # threads on very slow upstreams.
         resp = requests.get(
@@ -186,15 +198,20 @@ def preview_stream_proxy(video_id):
             stream=True,
             headers=req_headers,
             timeout=(5, 90),
+            allow_redirects=True,
         )
         resp.raise_for_status()
         content_length = resp.headers.get("Content-Length")
         content_range = resp.headers.get("Content-Range")
-        response_headers = {"Content-Type": "audio/mpeg"}
+        content_type = resp.headers.get("Content-Type") or "audio/mpeg"
+        response_headers = {"Content-Type": content_type}
         if content_range:
             response_headers["Content-Range"] = content_range
         if content_length:
             response_headers["Content-Length"] = content_length
+        accept_ranges = resp.headers.get("Accept-Ranges")
+        if accept_ranges:
+            response_headers["Accept-Ranges"] = accept_ranges
 
         def iter_chunks():
             for chunk in resp.iter_content(chunk_size=65536):
@@ -205,7 +222,7 @@ def preview_stream_proxy(video_id):
             stream_with_context(iter_chunks()),
             status=resp.status_code,
             headers=response_headers,
-            mimetype="audio/mpeg",
+            mimetype=content_type,
             direct_passthrough=True,
         )
     except Exception as e:
@@ -221,7 +238,8 @@ def get_preview_stream_url(video_id):
     if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
         return jsonify({"error": "Too many requests"}), 429
     try:
-        url = _get_preview_stream_url_cached(api, video_id)
+        source = _get_preview_stream_source_cached(api, video_id)
+        url = (source or {}).get("url")
         if not url:
             return jsonify({"error": "Stream URL unavailable"}), 404
         return jsonify({"url": url})

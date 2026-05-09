@@ -959,68 +959,64 @@ class YouTubeDownloader:
             return []
         return out
 
-    def get_stream_url(self, video_id: str) -> Optional[str]:
-        """Return direct audio stream URL via yt-dlp CLI (-g). Same format and cookie-retry as downloads."""
+    def get_stream_source(self, video_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Resolve a direct audio stream URL and the request headers yt-dlp expects
+        the caller to use when fetching it.
+        """
         if not video_id or not str(video_id).strip():
             return None
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
-        args = [
-            get_subprocess_python(), "-m", "yt_dlp",
-            "-g",
-            "-f", YDL_FORMAT_AUDIO,
-            "--no-warnings",
-            "--quiet",
-            yt_url,
-        ]
+        base_opts: Dict[str, Any] = {
+            "quiet": True,
+            "no_warnings": True,
+            "noplaylist": True,
+            "format": YDL_FORMAT_AUDIO,
+            "extractor_args": {"youtube": {"player_client": ["android", "ios", "web"]}},
+        }
+        attempts: List[Dict[str, Any]] = [dict(base_opts)]
         if self.cookie_file and os.path.exists(self.cookie_file):
-            args.extend(["--cookies", self.cookie_file])
-        elif self.cookie_browser:
-            args.extend(["--cookies-from-browser", self.cookie_browser])
-        try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            # Note: Same as download: if yt-dlp reports format mismatch or "page needs to be reloaded",
-            # retry once without cookies to avoid transient YouTube/STS issues.
-            combined_output = (result.stderr or "") + (result.stdout or "")
-            if result.returncode != 0 and (
-                "Requested format is not available" in combined_output
-                or "The page needs to be reloaded" in combined_output
-            ):
-                if self.cookie_file or self.cookie_browser:
-                    no_cookies = []
-                    i = 0
-                    while i < len(args):
-                        if args[i] in ("--cookies", "--cookies-from-browser") and i + 1 < len(args):
-                            i += 2
-                            continue
-                        no_cookies.append(args[i])
-                        i += 1
-                    result = subprocess.run(
-                        no_cookies,
-                        capture_output=True,
-                        text=True,
-                        timeout=30,
-                    )
-                    combined_output = (result.stderr or "") + (result.stdout or "")
-            if result.returncode != 0:
-                stderr = (combined_output or "").strip() or "(no stderr)"
-                print(f"[Preview] yt-dlp -g failed for {video_id}: returncode={result.returncode}, stderr={stderr[:500]}")
-                return None
-            line = (result.stdout or "").strip().splitlines()
-            stream_url = line[0] if line else None
-            if not stream_url:
-                print(f"[Preview] yt-dlp -g returned no URL for {video_id}")
-            return stream_url
-        except subprocess.TimeoutExpired:
-            print(f"[Preview] yt-dlp -g timed out for {video_id}")
+            attempts.append({**base_opts, "cookiefile": self.cookie_file})
+        if self.cookie_browser:
+            attempts.append({**base_opts, "cookiesfrombrowser": (self.cookie_browser, None, None, None)})
+
+        last_err: Optional[Exception] = None
+        for opts in attempts:
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(yt_url, download=False)
+                if not isinstance(info, dict):
+                    continue
+                stream_url = (info.get("url") or "").strip()
+                if not stream_url:
+                    requested_formats = info.get("requested_formats") or []
+                    if requested_formats and isinstance(requested_formats[0], dict):
+                        stream_url = str(requested_formats[0].get("url") or "").strip()
+                if not stream_url:
+                    continue
+                raw_headers = info.get("http_headers") or {}
+                headers = {
+                    str(k): str(v)
+                    for k, v in raw_headers.items()
+                    if k and v is not None
+                } if isinstance(raw_headers, dict) else {}
+                return {"url": stream_url, "headers": headers}
+            except Exception as e:
+                last_err = e
+                logger.debug("get_stream_source attempt failed for %s: %s", video_id, e)
+
+        if last_err:
+            print(f"[Preview] stream resolution failed for {video_id}: {last_err}")
+        else:
+            print(f"[Preview] stream resolution returned no URL for {video_id}")
+        return None
+
+    def get_stream_url(self, video_id: str) -> Optional[str]:
+        """Backward-compatible wrapper returning only the stream URL."""
+        source = self.get_stream_source(video_id)
+        if not source:
             return None
-        except FileNotFoundError:
-            print(f"[Preview] yt-dlp not found (python -m yt_dlp) for {video_id}")
-            return None
+        return source.get("url")
 
     def get_cover_for_query(self, artist: str, title: str) -> Optional[str]:
         """Fetch only cover (thumbnail) for a track via yt-dlp search. No audio download.
