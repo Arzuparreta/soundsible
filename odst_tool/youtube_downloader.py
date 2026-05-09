@@ -987,55 +987,68 @@ class YouTubeDownloader:
         if not video_id or not str(video_id).strip():
             return None
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
-        base_args = [
-            get_subprocess_python(), "-m", "yt_dlp",
-            "-g",
-            "--no-warnings",
-            "--quiet",
-            "--force-ipv4",
-            "--extractor-args", "youtube:player_client=android,ios",
-        ]
-        # Note: Do NOT add "web" to player_client — on datacenter/VPS IPs it
-        # hangs on IPv6 routes when cookies are present. android/ios are fine.
-        base_args.extend(["-f", YDL_FORMAT_AUDIO])
-        base_args.append(yt_url)
 
         def _run(args_list: List[str]) -> tuple[int, str, str]:
             result = subprocess.run(args_list, capture_output=True, text=True, timeout=30)
             return result.returncode, result.stdout or "", result.stderr or ""
 
-        # Build argument lists to try in order
-        attempts: List[List[str]] = []
-        # 1) With cookies (if available) — bypasses bot detection on VPS
-        if self.cookie_file and os.path.exists(self.cookie_file):
-            attempts.append(base_args + ["--cookies", self.cookie_file])
-        elif self.cookie_browser:
-            attempts.append(base_args + ["--cookies-from-browser", self.cookie_browser])
-        # 2) Without cookies — works on residential IPs
-        attempts.append(list(base_args))
-
-        for args in attempts:
+        def _try(args_list: List[str], label: str) -> Optional[str]:
             try:
-                result = subprocess.run(args, capture_output=True, text=True, timeout=30)
-                combined = (result.stderr or "") + (result.stdout or "")
-                if result.returncode == 0:
-                    line = (result.stdout or "").strip().splitlines()
-                    stream_url = line[0] if line else None
-                    if stream_url:
-                        return stream_url
-                # Format not available with cookies → cookies give different
-                # format lists; fall through to try without cookies.
+                rc, out, err = _run(args_list)
+                combined = (err or "") + (out or "")
+                if rc == 0:
+                    line = (out or "").strip().splitlines()
+                    url = line[0] if line else None
+                    if url:
+                        return url
                 if "Requested format is not available" in combined:
-                    continue
+                    return None  # signal to try next
                 if "Sign in to confirm" in combined:
-                    continue
-                if result.returncode != 0:
-                    stderr = combined.strip() or "(no stderr)"
-                    print(f"[Preview] yt-dlp -g failed for {video_id}: returncode={result.returncode}, stderr={stderr[:500]}")
-                    return None
+                    return None  # signal to try next
+                # Real error
+                print(f"[Preview] yt-dlp -g failed for {video_id} ({label}): rc={rc} stderr={(combined.strip() or 'no stderr')[:300]}")
+                return "__ERROR__"
             except subprocess.TimeoutExpired:
-                # Hanging on web client; fall through to next attempt
-                continue
+                return None  # signal to try next
+
+        common = [
+            get_subprocess_python(), "-m", "yt_dlp", "-g",
+            "-f", YDL_FORMAT_AUDIO, "--no-warnings", "--quiet",
+        ]
+
+        # Attempt 1: cookies + web client + IPv6
+        # Web cookies are from a browser session; the web client + IPv6
+        # is the combination that matches the cookie origin.
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            result = _try(
+                common + ["-6", "--cookies", self.cookie_file, yt_url],
+                "cookies+web+ipv6",
+            )
+            if result == "__ERROR__":
+                return None
+            if result:
+                return result
+
+        # Attempt 2: Android client (works on residential IPs, sometimes VPS)
+        result = _try(
+            common + ["--force-ipv4", "--extractor-args", "youtube:player_client=android,ios", yt_url],
+            "android+ipv4",
+        )
+        if result == "__ERROR__":
+            return None
+        if result:
+            return result
+
+        # Attempt 3: cookies + web + IPv4 (fallback if IPv6 route broken)
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            result = _try(
+                common + ["--force-ipv4", "--cookies", self.cookie_file, yt_url],
+                "cookies+web+ipv4",
+            )
+            if result == "__ERROR__":
+                return None
+            if result:
+                return result
 
         print(f"[Preview] yt-dlp -g failed for {video_id}: all attempts exhausted")
         return None
