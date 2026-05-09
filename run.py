@@ -431,12 +431,13 @@ class SoundsibleLauncher:
         ok, msg = start_daemon_process(self.root_dir)
         if not ok:
             if msg == MSG_SETUP_REQUIRED:
-                self._print_setup_access()
+                self.launch_setup()
             elif "already running" in msg.lower():
                 console.print(f"[green]{msg}[/green]")
                 webbrowser.open(PLAYER_URL)
             else:
                 console.print(f"[red]{msg}[/red]")
+                Prompt.ask("Press Enter to return")
             return
         console.print(Panel.fit(
             "[bold green]Station Engine started. Station opened in browser.[/bold green]\n\n"
@@ -452,11 +453,12 @@ class SoundsibleLauncher:
         ok, msg = start_daemon_process(self.root_dir)
         if not ok:
             if msg == MSG_SETUP_REQUIRED:
-                self._print_setup_access()
+                self.launch_setup()
             elif "already running" in msg.lower():
                 console.print(f"[green]{msg}[/green]")
             else:
                 console.print(f"[red]{msg}[/red]")
+                Prompt.ask("Press Enter to return")
             return
         console.print(Panel.fit(
             "[bold green]Station Engine started.[/bold green]\n\n"
@@ -518,12 +520,8 @@ class SoundsibleLauncher:
                 print(f"Daemon: {MSG_CONFIG_MISSING}")
                 print("Start setup first: python3 run.py --setup")
                 return
-            console.print(Panel(
-                "[bold yellow]First Run Detected![/bold yellow]\n"
-                "Configuration is required before the Station Engine can start.\n"
-                "Choose option 6 to open setup.",
-                border_style="yellow"
-            ))
+            self.launch_setup()
+            return
         
         self.start_background_sync()
         self._start_watcher()

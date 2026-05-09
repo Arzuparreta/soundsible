@@ -16,13 +16,13 @@ MSG_STATION_STOPPED = "Station Engine stopped."
 MSG_STATION_NOT_RUNNING = "Station Engine was not running."
 MSG_KEEP_TERMINAL_OPEN = "Keep this terminal open while the Station Engine is running. Closing it will stop the Station Engine."
 MSG_CAN_CLOSE_TERMINAL = "You can close this terminal; the Station Engine keeps running in the background."
-MSG_CONFIG_MISSING = "Configuration missing. Run the launcher once without --daemon to set up."
+MSG_CONFIG_MISSING = "Configuration missing. Start setup first: python3 run.py --setup."
 MSG_VENV_NOT_FOUND = "Virtual environment not found."
 MSG_VENV_HINT = "Create it with: python3 -m venv venv"
 MSG_RUNPY_NOT_FOUND = "run.py not found."
 MSG_RUNPY_HINT = "Make sure you run this from the project root."
 MSG_ALREADY_RUNNING = "Station Engine is already running."
-MSG_SETUP_REQUIRED = "Configuration missing. Start setup with: python3 run.py --setup"
+MSG_SETUP_REQUIRED = MSG_CONFIG_MISSING
 
 
 def _project_root(root_dir: Path = None) -> Path:
