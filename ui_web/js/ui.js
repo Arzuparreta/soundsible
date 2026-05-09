@@ -30,6 +30,16 @@ export class UI {
         'discover': 'DISCOVER'
     };
 
+    /** Root tab views (top-level sections in the omnibar ribbon). */
+    static ROOTS = new Set(['home', 'favourites', 'playlists', 'podcast', 'settings', 'discover']);
+
+    /** Sub-view → parent root tab mapping for stack resolution. */
+    static SUB_VIEW_PARENT = {
+        'artist-detail': 'home',
+        'playlist-detail': 'playlists',
+        'podcast-show-detail': 'podcast'
+    };
+
     static init() {
         const d = document.getElementById.bind(document);
         this.dom = {
@@ -109,8 +119,17 @@ export class UI {
         if (this.detectPlatform() === 'ios') document.body.classList.add('is-ios');
 
         // ## Section: Navigation state
-        this.viewStack = [];
-        this.currentView = store.hasLocalLibrarySignal() ? 'home' : 'discover';
+        const initialView = store.hasLocalLibrarySignal() ? 'home' : 'discover';
+        this.viewStacks = {
+            home: ['home'],
+            discover: ['discover'],
+            favourites: ['favourites'],
+            playlists: ['playlists'],
+            podcast: ['podcast'],
+            settings: ['settings']
+        };
+        this.activeTab = initialView;
+        this.currentView = initialView;
         document.body.dataset.currentView = this.currentView;
         this._npGesturesBound = false;
         this._npViewOpen = false; // Note: True when now playing view is visible (omni label fades out)
@@ -611,8 +630,7 @@ export class UI {
                 else leftViews.push(v);
             }
         }
-        const stackToRoot = { 'artist-detail': 'home', 'playlist-detail': 'playlists' };
-        const resolved = stackToRoot[viewId] || viewId;
+        const resolved = UI.SUB_VIEW_PARENT[viewId] || viewId;
         let slideClass = leftViews.includes(resolved) ? 'view-from-left' : 'view-from-right';
         if (isBack) {
             slideClass = slideClass === 'view-from-left' ? 'view-from-right' : 'view-from-left';
@@ -633,8 +651,26 @@ export class UI {
 
         if (viewId === this.currentView) return;
 
-        // Note: Special tab logic for library return
+        // Note: Special tab logic for library return (before any view-id resolution)
         if (viewId === 'home' && this.currentView === 'artist-detail') store.update({ libraryTab: 'artists' });
+
+        // Per-tab navigation stacks: resolve root views to the top of their tab stack
+        if (saveToHistory) {
+            if (UI.ROOTS.has(viewId)) {
+                if (viewId !== this.activeTab) {
+                    this.activeTab = viewId;
+                    viewId = this.viewStacks[viewId][this.viewStacks[viewId].length - 1];
+                } else if (this.viewStacks[this.activeTab].length > 1) {
+                    // Same tab, currently on a sub-view — push root to navigate to it
+                    this.viewStacks[this.activeTab].push(viewId);
+                }
+            } else {
+                this.viewStacks[this.activeTab].push(viewId);
+            }
+        }
+
+        // Re-check after resolution (selecting the active tab while on its sub-view is a no-op)
+        if (viewId === this.currentView) return;
 
         this.updateLabel(viewId);
 
@@ -650,12 +686,6 @@ export class UI {
         if (this._showViewCleanupTimer) {
             clearTimeout(this._showViewCleanupTimer);
             this._showViewCleanupTimer = null;
-        }
-
-        if (saveToHistory) {
-            const roots = ['home', 'favourites', 'playlists', 'podcast', 'settings', 'discover'];
-            if (roots.includes(this.currentView) && roots.includes(viewId)) this.viewStack = [];
-            else this.viewStack.push(this.currentView);
         }
 
         const transitionToken = ++this._viewTransitionToken;
@@ -746,17 +776,15 @@ export class UI {
         if (queueContainer) queueContainer.classList.remove('hidden');
     }
 
-    /** Single entry point for "go back": sub-views (e.g. discover-search) close first; then stack pop. */
+    /** Single entry point for "go back": sub-states close first (overlays, search); then stack pop. */
     static goToPreviousView() {
+        if (this._npViewOpen || this.dom.nowPlayingView?.classList.contains('active')) {
+            this.hideNowPlaying();
+            return;
+        }
         if (this.currentView === 'discover' && this.isDiscoverSearchActive()) {
             if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) {
                 window.unifiedSearch.clear();
-            }
-            return;
-        }
-        if (this.currentView === 'discover') {
-            if (this._npViewOpen || this.dom.nowPlayingView?.classList.contains('active')) {
-                this.hideNowPlaying();
             }
             return;
         }
@@ -764,12 +792,10 @@ export class UI {
     }
 
     static navigateBack() {
-        if (this.viewStack.length === 0) {
-            this.showView('discover', false);
-            return;
-        }
-
-        const previousView = this.viewStack.pop();
+        const stack = this.viewStacks[this.activeTab];
+        if (stack.length <= 1) return;
+        stack.pop();
+        const previousView = stack[stack.length - 1];
         this.showView(previousView, false);
     }
 
@@ -938,7 +964,6 @@ export class UI {
             }
 
             if (gesture.isEdgeSwipe) {
-                if (UI.currentView === 'discover') return;
                 if (e.cancelable) e.preventDefault();
                 if (UI.content) UI.content.style.transform = `translateX(${Math.max(0, diffX)}px)`;
                 return;
@@ -973,9 +998,7 @@ export class UI {
 
             if (gesture.startX < 40) {
                 gesture.isEdgeSwipe = true;
-                if (this.currentView !== 'discover') {
-                    this.content.style.transition = 'none';
-                }
+                this.content.style.transition = 'none';
                 if (shouldAttachBlockingTouchMove()) attachGestureTouchMove();
                 return;
             }
@@ -1010,11 +1033,9 @@ export class UI {
                 const diffX = e.changedTouches[0].clientX - gesture.startX;
                 const threshold = window.innerWidth * 0.12;
 
-                if (this.currentView !== 'discover') {
-                    if (this.dom.content) this.dom.content.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
-                    if (this.dom.content) this.dom.content.style.transform = 'translateX(0)';
-                }
-                if (diffX > threshold && this.currentView !== 'discover') {
+                if (this.dom.content) this.dom.content.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
+                if (this.dom.content) this.dom.content.style.transform = 'translateX(0)';
+                if (diffX > threshold) {
                     Haptics.trigger(20);
                     this.goToPreviousView();
                 }
@@ -1255,7 +1276,7 @@ export class UI {
                 }
                 // Note: Swipe down same as edge swipe from left — go to previous view (stack or close sub-view)
                 if (deltaY > deadzone) {
-                    if (this.currentView !== 'discover' || this.isDiscoverSearchActive()) Haptics.trigger(20);
+                    Haptics.trigger(20);
                     this.goToPreviousView();
                     this.resetOmniIsland();
                     return;
