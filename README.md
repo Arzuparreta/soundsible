@@ -90,8 +90,15 @@ python3 run.py
 
 This command bootstraps automatically on fresh clones:
 - Creates `./venv` if missing
+- Repairs/rebuilds a broken `./venv` if a previous bootstrap failed
 - Installs/updates `requirements.txt`
 - Starts the launcher/CLI flow
+
+On minimal Ubuntu/Debian images, install the system Python packaging bits once before first run:
+
+```bash
+sudo apt install python3.12-venv python3-pip ffmpeg
+```
 
 ### 3. Run Soundsible
 

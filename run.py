@@ -9,7 +9,81 @@ import subprocess
 import hashlib
 from pathlib import Path
 import platform
+import shutil
 # Note: Gevent monkey-patching must happen early, but only after deps are ensured.
+
+
+def _venv_python_path(venv_dir: Path) -> Path:
+    return venv_dir / ("Scripts/python.exe" if platform.system() == "Windows" else "bin/python")
+
+
+def _venv_site_packages_path(venv_dir: Path) -> Path:
+    return venv_dir / (
+        "Lib/site-packages"
+        if platform.system() == "Windows"
+        else f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
+    )
+
+
+def _venv_has_pip(py: Path) -> bool:
+    if not py.exists():
+        return False
+    result = subprocess.run(
+        [str(py), "-m", "pip", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def _recreate_venv(venv_dir: Path) -> None:
+    if venv_dir.exists():
+        shutil.rmtree(venv_dir, ignore_errors=True)
+    print("Creating virtual environment...")
+    subprocess.check_call([sys.executable, "-m", "venv", str(venv_dir)])
+
+
+def _ensure_venv_with_pip(venv_dir: Path) -> Path:
+    py = _venv_python_path(venv_dir)
+    needs_recreate = not venv_dir.exists() or not py.exists()
+
+    if needs_recreate:
+        _recreate_venv(venv_dir)
+        py = _venv_python_path(venv_dir)
+
+    if _venv_has_pip(py):
+        return py
+
+    print("Repairing virtual environment pip bootstrap...")
+    ensurepip = subprocess.run(
+        [str(py), "-m", "ensurepip", "--upgrade"],
+        capture_output=True,
+        text=True,
+    )
+    if _venv_has_pip(py):
+        return py
+
+    print("Virtual environment pip bootstrap failed; recreating environment...")
+    _recreate_venv(venv_dir)
+    py = _venv_python_path(venv_dir)
+
+    ensurepip_retry = subprocess.run(
+        [str(py), "-m", "ensurepip", "--upgrade"],
+        capture_output=True,
+        text=True,
+    )
+    if _venv_has_pip(py):
+        return py
+
+    details = (ensurepip_retry.stderr or ensurepip_retry.stdout or ensurepip.stderr or ensurepip.stdout).strip()
+    if platform.system() != "Windows":
+        details += (
+            "\nInstall the OS packages that provide venv + pip wheels, then rerun:\n"
+            f"  sudo apt install python{sys.version_info.major}.{sys.version_info.minor}-venv python3-pip"
+        )
+    raise RuntimeError(details or "Failed to create a usable virtual environment with pip.")
+
+
 def _ensure_bootstrap_before_gevent():
     """Create venv and install requirements before importing gevent.
 
@@ -18,13 +92,14 @@ def _ensure_bootstrap_before_gevent():
     """
     root_dir = Path(__file__).resolve().parent
     venv_dir = root_dir / "venv"
-    py = venv_dir / ("Scripts/python.exe" if platform.system() == "Windows" else "bin/python")
     req_file = root_dir / "requirements.txt"
     marker = venv_dir / ".installed_requirements_hash"
 
-    if not venv_dir.exists():
-        print("Creating virtual environment...")
-        subprocess.check_call([sys.executable, "-m", "venv", str(venv_dir)])
+    try:
+        py = _ensure_venv_with_pip(venv_dir)
+    except Exception as exc:
+        print("Virtual environment setup failed:", exc)
+        sys.exit(1)
 
     if req_file.exists() and py.exists():
         current_hash = hashlib.md5(req_file.read_bytes()).hexdigest()
@@ -38,11 +113,7 @@ def _ensure_bootstrap_before_gevent():
 
     # Ensure the current interpreter can import packages installed in ./venv.
     import site
-    venv_site = venv_dir / (
-        "Lib/site-packages"
-        if platform.system() == "Windows"
-        else f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
-    )
+    venv_site = _venv_site_packages_path(venv_dir)
     if venv_site.exists():
         site.addsitedir(str(venv_site))
 
@@ -54,7 +125,6 @@ from gevent import monkey
 monkey.patch_all()
 
 import os
-import shutil
 import socket
 import threading
 import time
