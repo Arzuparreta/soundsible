@@ -967,49 +967,67 @@ class YouTubeDownloader:
         if not video_id or not str(video_id).strip():
             return None
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
-        base_opts: Dict[str, Any] = {
-            "quiet": True,
-            "no_warnings": True,
-            "noplaylist": True,
-            "format": YDL_FORMAT_AUDIO,
-            "extractor_args": {"youtube": {"player_client": ["android", "ios", "web"]}},
-        }
-        attempts: List[Dict[str, Any]] = [dict(base_opts)]
+        args = [
+            get_subprocess_python(),
+            "-m",
+            "yt_dlp",
+            "-g",
+            "-f",
+            YDL_FORMAT_AUDIO,
+            "--no-warnings",
+            "--quiet",
+            yt_url,
+        ]
         if self.cookie_file and os.path.exists(self.cookie_file):
-            attempts.append({**base_opts, "cookiefile": self.cookie_file})
-        if self.cookie_browser:
-            attempts.append({**base_opts, "cookiesfrombrowser": (self.cookie_browser, None, None, None)})
+            args.extend(["--cookies", self.cookie_file])
+        elif self.cookie_browser:
+            args.extend(["--cookies-from-browser", self.cookie_browser])
 
-        last_err: Optional[Exception] = None
-        for opts in attempts:
-            try:
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    info = ydl.extract_info(yt_url, download=False)
-                if not isinstance(info, dict):
+        def _strip_cookie_args(args_list: List[str]) -> List[str]:
+            out: List[str] = []
+            i = 0
+            while i < len(args_list):
+                if args_list[i] in ("--cookies", "--cookies-from-browser") and i + 1 < len(args_list):
+                    i += 2
                     continue
-                stream_url = (info.get("url") or "").strip()
-                if not stream_url:
-                    requested_formats = info.get("requested_formats") or []
-                    if requested_formats and isinstance(requested_formats[0], dict):
-                        stream_url = str(requested_formats[0].get("url") or "").strip()
-                if not stream_url:
-                    continue
-                raw_headers = info.get("http_headers") or {}
-                headers = {
-                    str(k): str(v)
-                    for k, v in raw_headers.items()
-                    if k and v is not None
-                } if isinstance(raw_headers, dict) else {}
-                return {"url": stream_url, "headers": headers}
-            except Exception as e:
-                last_err = e
-                logger.debug("get_stream_source attempt failed for %s: %s", video_id, e)
+                out.append(args_list[i])
+                i += 1
+            return out
 
-        if last_err:
-            print(f"[Preview] stream resolution failed for {video_id}: {last_err}")
-        else:
-            print(f"[Preview] stream resolution returned no URL for {video_id}")
-        return None
+        def _run(args_list: List[str]) -> tuple[int, str, str]:
+            result = subprocess.run(
+                args_list,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            return result.returncode, result.stdout or "", result.stderr or ""
+
+        try:
+            returncode, stdout, stderr = _run(args)
+            combined = (stderr or "") + (stdout or "")
+            if returncode != 0 and (
+                "Requested format is not available" in combined
+                or "The page needs to be reloaded" in combined
+            ):
+                if self.cookie_file or self.cookie_browser:
+                    returncode, stdout, stderr = _run(_strip_cookie_args(args))
+                    combined = (stderr or "") + (stdout or "")
+            if returncode != 0:
+                details = (combined or "").strip() or f"yt-dlp exited {returncode}"
+                print(f"[Preview] yt-dlp -g failed for {video_id}: {details[:500]}")
+                return None
+            stream_url = (stdout or "").strip().splitlines()[0] if (stdout or "").strip() else ""
+            if not stream_url:
+                print(f"[Preview] yt-dlp -g returned no URL for {video_id}")
+                return None
+            return {"url": stream_url, "headers": {}}
+        except subprocess.TimeoutExpired:
+            print(f"[Preview] yt-dlp -g timed out for {video_id}")
+            return None
+        except FileNotFoundError:
+            print(f"[Preview] yt-dlp not found (python -m yt_dlp) for {video_id}")
+            return None
 
     def get_stream_url(self, video_id: str) -> Optional[str]:
         """Backward-compatible wrapper returning only the stream URL."""
