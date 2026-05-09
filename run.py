@@ -7,6 +7,7 @@ The single entry point for all Soundsible components (Player, Downloader, Setup)
 import sys
 import subprocess
 import hashlib
+import importlib
 from pathlib import Path
 import platform
 import shutil
@@ -48,6 +49,17 @@ def _venv_can_import(py: Path, modules: list[str]) -> tuple[bool, str]:
     if result.returncode == 0:
         return True, ""
     return False, (result.stderr or result.stdout or "module import check failed").strip()
+
+
+def _install_python_packages(py: Path, packages: list[str]) -> tuple[bool, str]:
+    result = subprocess.run(
+        [str(py), "-m", "pip", "install", "--upgrade", *packages],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return True, ""
+    return False, (result.stderr or result.stdout or "pip install failed").strip()
 
 
 def _recreate_venv(venv_dir: Path) -> None:
@@ -184,6 +196,23 @@ def _ensure_bootstrap_before_gevent():
         env = os.environ.copy()
         env["SOUNDSIBLE_BOOTSTRAPPED"] = "1"
         os.execve(str(target_exe), [str(target_exe), str(root_dir / "run.py"), *sys.argv[1:]], env)
+
+    # Namespace packages such as zope.* have proven fragile on some minimal VPS
+    # images when gevent imports them lazily during monkey patching. Preload them
+    # here and explicitly repair them if pip resolution left them out.
+    for module_name, package_name in (("zope.event", "zope.event"), ("zope.interface", "zope.interface")):
+        try:
+            importlib.import_module(module_name)
+        except ModuleNotFoundError:
+            ok, details = _install_python_packages(py, [package_name])
+            if not ok:
+                print(f"Failed to install required package {package_name}:", details)
+                sys.exit(1)
+            try:
+                importlib.import_module(module_name)
+            except ModuleNotFoundError as exc:
+                print(f"Required package still unavailable after repair: {module_name}: {exc}")
+                sys.exit(1)
 
 
 _ensure_bootstrap_before_gevent()
