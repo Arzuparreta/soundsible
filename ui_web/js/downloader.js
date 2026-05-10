@@ -39,6 +39,7 @@ const DEFAULT_DL_SELECTORS = {
     optimizeBtn: 'dl-optimize-btn',
     syncBtn: 'dl-sync-btn',
     dlQueueProgressRing: 'dl-queue-progress-ring',
+    downloadQueueSection: 'desktop-download-queue-section',
     downloadsSection: 'desktop-downloads-section',
     downloadsPanel: 'desktop-downloads-panel',
     downloadsList: 'desktop-downloads-list',
@@ -85,6 +86,7 @@ export class Downloader {
         this.mobileDownloadsSection = document.getElementById(sel.mobileDownloadsSection);
         this.mobileDownloadsList = document.getElementById(sel.mobileDownloadsList);
         this.downloadQueueList = document.getElementById(sel.downloadQueueList);
+        this.downloadQueueSection = document.getElementById(sel.downloadQueueSection);
         this.clearQueueBtn = document.getElementById(sel.clearQueueBtn);
         this.submitDownloadBtn = document.getElementById(sel.submitDownloadBtn);
         this.previewModal = document.getElementById(sel.previewModal);
@@ -757,8 +759,8 @@ export class Downloader {
             }
         }
 
-        if (this.queueContainer) {
-            this.queueContainer.classList.toggle('hidden', !showFab);
+        if (this.downloadQueueSection) {
+            this.downloadQueueSection.classList.toggle('hidden', !showForDownloads);
         }
         this.renderDownloadQueueList();
     }

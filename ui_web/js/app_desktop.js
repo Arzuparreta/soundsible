@@ -819,26 +819,15 @@ function init() {
                 searchInput: 'desktop-dl-search-input',
                 searchBtn: 'desktop-dl-search-btn',
                 searchResults: 'desktop-dl-search-results',
-                queueContainer: 'desktop-dl-queue-container',
-                dlQueueFab: 'desktop-dl-queue-fab',
-                dlQueueBadge: 'desktop-dl-queue-badge',
-                dlQueueProgressRing: 'desktop-dl-queue-progress-ring',
-                downloadQueuePopover: 'desktop-dl-download-queue-popover',
-                downloadsSection: 'desktop-downloads-section',
-                downloadsPanel: 'desktop-downloads-panel',
-                downloadsList: 'desktop-downloads-list',
                 downloadQueueList: 'desktop-dl-download-queue-list',
                 clearQueueBtn: 'desktop-dl-clear-queue-btn',
                 submitDownloadBtn: 'desktop-dl-submit-download-btn',
+                downloadsSection: 'desktop-downloads-section',
+                downloadsPanel: 'desktop-downloads-panel',
+                downloadsList: 'desktop-downloads-list',
                 searchSourceMusicBtn: 'desktop-dl-search-source-music',
                 searchSourceYoutubeBtn: 'desktop-dl-search-source-youtube',
             });
-        });
-
-        window.addEventListener('click', (e) => {
-            if (DesktopUI.currentView !== 'discover') return;
-            const dlq = document.getElementById('desktop-dl-queue-container');
-            if (dlq && !dlq.contains(e.target)) window.Downloader?.hideDownloadQueue?.();
         });
 
         wireSettings({
