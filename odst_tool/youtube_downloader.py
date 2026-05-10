@@ -660,6 +660,7 @@ class YouTubeDownloader:
         if profile.get('bitrate', 0) > 0 and codec == 'mp3':
             args.extend(["--audio-quality", str(profile['bitrate'])])
         args.extend([
+            "--extractor-args", "youtube:player_client=android,ios,web",
             "--add-metadata",
             "--embed-thumbnail",
             "--parse-metadata", "playlist_index:%(track_number)s",
@@ -723,6 +724,7 @@ class YouTubeDownloader:
         if returncode != 0 and (
             "Requested format is not available" in combined_output
             or "The page needs to be reloaded" in combined_output
+            or "Sign in to confirm" in combined_output
         ):
             if self.cookie_file or self.cookie_browser:
                 returncode, combined_output = _run_stream(_strip_cookie_args(args))
