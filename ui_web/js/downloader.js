@@ -166,6 +166,14 @@ export class Downloader {
             this.suppressResultClicksUntil = Date.now() + 700;
             this.submitDownloadQueue();
         });
+        if (this.clearQueueBtn) this.clearQueueBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.downloadQueue = [];
+            this.renderDownloadQueueList();
+            this.updateFabAndPopover();
+            Haptics.tick();
+        });
         if (this.previewClose) this.previewClose.addEventListener('click', () => this.hidePreview());
         if (this.previewAddToQueue) {
             this.previewAddToQueue.addEventListener('click', (e) => {

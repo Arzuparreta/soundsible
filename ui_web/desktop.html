@@ -106,15 +106,15 @@
                 <div id="desktop-queue-panel" class="hidden overflow-y-auto min-h-0" style="max-height: 40vh;">
                     <div id="desktop-queue-tracks" class="space-y-0 py-1"></div>
                 </div>
-                <div id="desktop-download-queue-section" class="hidden flex-shrink-0 mt-2">
-                    <div class="flex items-center justify-between w-full mb-1.5 px-1">
+                <div id="desktop-download-queue-section" class="hidden flex flex-col min-h-0 mt-2" style="max-height: 35vh;">
+                    <div class="flex items-center justify-between w-full mb-1.5 px-1 flex-shrink-0">
                         <span class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Download Queue</span>
-                        <button type="button" id="desktop-dl-clear-queue-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-2 rounded-full hover:bg-red-500/20 transition-colors min-h-[28px]">Clear</button>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" id="desktop-dl-clear-queue-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-2 rounded-full hover:bg-red-500/20 transition-colors min-h-[28px]">Clear</button>
+                            <button type="button" id="desktop-dl-submit-download-btn" class="w-8 h-8 rounded-full bg-[var(--accent)] text-[var(--text-on-accent)] flex items-center justify-center hover:opacity-90 active:scale-90 pointer-events-auto transition-all duration-200" aria-label="Start download"><i class="fas fa-download text-[10px]"></i></button>
+                        </div>
                     </div>
-                    <div id="desktop-dl-download-queue-list" class="overflow-y-auto min-h-0 space-y-1 py-1" style="max-height: 30vh;"></div>
-                    <button type="button" id="desktop-dl-submit-download-btn" class="mt-2 w-full py-2.5 rounded-xl bg-[var(--accent)] text-[var(--text-on-accent)] font-semibold text-xs flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all duration-200">
-                        <i class="fas fa-download text-[10px]"></i> Start Download
-                    </button>
+                    <div id="desktop-dl-download-queue-list" class="flex-1 min-h-0 overflow-y-auto space-y-1 py-1"></div>
                 </div>
                 <div id="desktop-downloads-section" class="hidden flex-shrink-0 mt-2">
                     <div class="flex items-center justify-between w-full mb-1 px-1">
