@@ -510,7 +510,7 @@
     </div>
 
     <!-- Download queue FAB + popover: fixed to viewport, above all app content -->
-    <div id="desktop-dl-queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[5000] flex flex-col items-end pointer-events-none hidden">
+    <div id="desktop-dl-queue-container" class="fixed bottom-6 right-6 z-[5000] flex flex-col-reverse items-end pointer-events-none hidden">
         <button id="desktop-dl-queue-fab" type="button" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)] relative">
             <svg class="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 48 48" aria-hidden="true">
                 <circle cx="24" cy="24" r="22" fill="none" stroke="currentColor" stroke-width="2" class="text-[var(--bg-deep)]/30" />
@@ -519,7 +519,7 @@
             <i class="fas fa-list-ul relative z-[1]"></i>
             <div id="desktop-dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)] z-[2]">0</div>
         </button>
-        <div id="desktop-dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
+        <div id="desktop-dl-download-queue-popover" class="mb-4 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-bottom-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
             <div class="p-5">
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Download queue</h3>

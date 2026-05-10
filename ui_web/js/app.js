@@ -93,54 +93,13 @@ function renderFavourites(state) {
     }
 }
 
-function updateQueueScrollCuePosition() {
-    if (!dom || !dom.floatingQueue) return;
-    const floatingQueue = dom.floatingQueue;
-    const cue = floatingQueue.querySelector('.queue-scroll-cue');
-    const thumb = cue ? cue.querySelector('.queue-scroll-cue-thumb') : null;
-    if (!cue || !thumb) return;
-
-    const cueHeight = cue.getBoundingClientRect().height;
-    const thumbHeight = 10;
-    const maxY = Math.max(0, cueHeight - thumbHeight);
-    const scrollRange = floatingQueue.scrollHeight - floatingQueue.clientHeight;
-    const ratio = scrollRange > 0 ? (floatingQueue.scrollTop / scrollRange) : 0;
-    // Note: Keep motion subtle informative cue, not a full-range scrollbar.
-    const travelFactor = 0.28;
-    const centeredOffset = (maxY * (1 - travelFactor)) / 2;
-    thumb.style.top = `${Math.round(centeredOffset + (maxY * ratio * travelFactor))}px`;
-}
-
 function renderQueue(state) {
-    if (!dom || !dom.floatingQueue) return;
-    const floatingQueue = dom.floatingQueue;
-    renderers.renderQueue(state, floatingQueue);
-    if (!state.queue || state.queue.length === 0) {
-        floatingQueue.classList.remove('has-scroll-cue');
-        const cue = floatingQueue.querySelector('.queue-scroll-cue');
-        if (cue && cue.parentNode) cue.parentNode.removeChild(cue);
-        return;
-    }
-    const shouldShowCue = state.queue.length >= 6;
-    floatingQueue.classList.toggle('has-scroll-cue', shouldShowCue);
-    let cue = floatingQueue.querySelector('.queue-scroll-cue');
-    if (shouldShowCue) {
-        if (!cue) {
-            cue = document.createElement('div');
-            cue.className = 'queue-scroll-cue';
-            const thumb = document.createElement('div');
-            thumb.className = 'queue-scroll-cue-thumb';
-            cue.appendChild(thumb);
-            floatingQueue.appendChild(cue);
-        }
-        requestAnimationFrame(updateQueueScrollCuePosition);
-    } else if (cue && cue.parentNode) {
-        cue.parentNode.removeChild(cue);
-    }
-    if (!floatingQueue.dataset.scrollCueBound) {
-        floatingQueue.dataset.scrollCueBound = '1';
-        floatingQueue.addEventListener('scroll', () => requestAnimationFrame(updateQueueScrollCuePosition), { passive: true });
-        window.addEventListener('resize', () => requestAnimationFrame(updateQueueScrollCuePosition));
+    if (!dom || !dom.npQueueTracks) return;
+    const container = dom.npQueueTracks;
+    renderers.renderQueue(state, container);
+    const section = document.getElementById('np-queue-section');
+    if (section) {
+        section.classList.toggle('np-queue-empty', !state.queue || state.queue.length === 0);
     }
 }
 
@@ -167,9 +126,19 @@ function initLibraryMaintenance() {
     });
 }
 
+function initNpQueueClearBtn() {
+    const btn = document.getElementById('np-queue-clear-btn');
+    if (btn) {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            store.clearQueue();
+        });
+    }
+}
+
 function initQueueDrag() {
-    if (!dom || !dom.floatingQueue) return;
-    const container = dom.floatingQueue;
+    if (!dom || !dom.npQueueTracks) return;
+    const container = dom.npQueueTracks;
 
     let holdTimer = null;
     let fromIndex = null;
@@ -653,7 +622,7 @@ window.addEventListener('error', (e) => {
 
 function init() {
     dom = {
-        floatingQueue: document.getElementById('floating-queue-tracks'),
+        npQueueTracks: document.getElementById('np-queue-tracks'),
         allSongs: document.getElementById('all-songs'),
         globalSearchContainer: document.getElementById('global-search-container'),
         globalSearchInput: document.getElementById('global-search-input'),
@@ -699,6 +668,7 @@ function init() {
         initMobileScrollSuppress();
         initArtistDetailBack();
         initQueueDrag();
+        initNpQueueClearBtn();
         initScrollTracking();
 
         wireSettings(MOBILE_SETTINGS_IDS, { store, showToast: (msg) => UI.showToast(msg), onLibraryOrderChange: () => renderLibraryContent(), subscribeIndicators: false });
@@ -1636,7 +1606,7 @@ function initMobileScrollSuppress() {
         document.getElementById('view-settings'),
         document.querySelector('#view-podcast > .view-scroll-inner'),
         document.querySelector('#view-podcast-show-detail > .view-scroll-inner'),
-        document.getElementById('floating-queue-tracks'),
+        document.getElementById('np-queue-tracks'),
         document.getElementById('dl-download-queue-list'),
         document.getElementById('mobile-downloads-list'),
         document.getElementById('add-to-playlist-picker-list'),

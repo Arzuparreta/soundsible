@@ -433,7 +433,7 @@ export class Downloader {
             const popover = UI.dom.queuesPopover;
             if (popover.classList.contains('hidden')) {
                 this._downloadQueueOpenedAt = Date.now();
-                UI.showQueues('downloads');
+                UI.showQueues();
             }
             return;
         }
@@ -653,7 +653,7 @@ export class Downloader {
             const popover = UI.dom.queuesPopover;
             if (popover.classList.contains('hidden')) {
                 this._downloadQueueOpenedAt = Date.now();
-                UI.showQueues('downloads');
+                UI.showQueues();
             }
             return;
         }
@@ -672,7 +672,7 @@ export class Downloader {
 
     static toggleDownloadQueue() {
         if (UI.dom?.queuesPopover) {
-            UI.toggleQueues('downloads');
+            UI.toggleQueues();
             return;
         }
         const popover = this.downloadQueuePopover;
@@ -707,23 +707,16 @@ export class Downloader {
             || q.some((i) => i.status === 'pending' || i.status === 'downloading'));
         const backendCount = q.filter((i) => i.status === 'pending' || i.status === 'downloading').length;
         const showForDownloads = n > 0 || backendActive || this._downloadUiPrimeDepth > 0;
-        const playbackCount = (store.state.queue || []).length;
-        const showFab = showForDownloads || playbackCount > 0;
+        const showFab = showForDownloads;
 
-        // Mobile: combined queues FAB
+        // Mobile: download queue FAB
         const mobileFab = document.getElementById('queues-fab');
         const mobileBadge = document.getElementById('queues-badge');
         if (mobileFab && mobileBadge) {
             if (showFab) {
                 mobileFab.classList.replace('scale-0', 'scale-100');
                 mobileFab.classList.replace('opacity-0', 'opacity-100');
-                if (playbackCount > 0) {
-                    mobileBadge.textContent = String(playbackCount);
-                } else if (showForDownloads) {
-                    mobileBadge.textContent = String(n > 0 ? n : Math.max(0, backendCount));
-                } else {
-                    mobileBadge.textContent = '0';
-                }
+                mobileBadge.textContent = String(n > 0 ? n : Math.max(0, backendCount));
                 const avg = this.averageProgressPercent(q);
                 this.updateFabProgress({
                     isProcessing: !!st?.is_processing,

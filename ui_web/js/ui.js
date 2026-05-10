@@ -569,24 +569,20 @@ export class UI {
         }, closeDurationMs);
     }
 
-    static toggleQueues(tab = 'playback') {
+    static toggleQueues() {
         const popover = this.dom.queuesPopover;
         if (!popover) return;
 
         if (popover.classList.contains('hidden')) {
-            this.showQueues(tab);
+            this.showQueues();
         } else {
             this.hideQueues();
         }
     }
 
-    static showQueues(tab = 'playback') {
+    static showQueues() {
         const popover = this.dom.queuesPopover;
         if (!popover) return;
-
-        popover.setAttribute('data-active-tab', tab);
-        const btns = popover.querySelectorAll('.queues-tab-btn');
-        btns.forEach(b => b.setAttribute('aria-pressed', b.getAttribute('data-queues-tab') === tab ? 'true' : 'false'));
 
         popover.classList.remove('hidden');
         setTimeout(() => {
@@ -596,10 +592,7 @@ export class UI {
             popover.classList.replace('opacity-0', 'opacity-100');
         }, 10);
 
-        if (tab === 'playback' && window.renderQueue) {
-            window.renderQueue(store.state);
-        }
-        if (tab === 'downloads' && window.Downloader) {
+        if (window.Downloader) {
             window.Downloader.renderDownloadQueueList();
         }
     }
@@ -815,24 +808,14 @@ export class UI {
             if (qc && !qc.contains(e.target)) this.hideQueues();
         });
 
-        // ## Section: Queues popover tab switching + clear button
+        // ## Section: Queues popover download queue — clear button
         const popover = this.dom.queuesPopover;
         if (popover) {
             popover.addEventListener('click', (e) => {
-                const tabBtn = e.target.closest('.queues-tab-btn');
-                if (tabBtn) {
-                    e.stopPropagation();
-                    const tab = tabBtn.getAttribute('data-queues-tab');
-                    if (tab) this.showQueues(tab);
-                    return;
-                }
                 const clearBtn = e.target.closest('#queues-clear-btn');
                 if (clearBtn) {
                     e.stopPropagation();
-                    const activeTab = popover.getAttribute('data-active-tab') || 'playback';
-                    if (activeTab === 'playback') {
-                        store.clearQueue();
-                    } else if (window.Downloader) {
+                    if (window.Downloader) {
                         window.Downloader.downloadQueue = [];
                         window.Downloader.renderDownloadQueueList();
                         window.Downloader.updateFabAndPopover();
@@ -1158,6 +1141,7 @@ export class UI {
                 return;
             }
             touchStartedOnSeekBar = false;
+            if (e.target.closest('.custom-scrollbar')) return;
             startY = e.touches[0].clientY;
             isDragging = false;
         }, { passive: true });
