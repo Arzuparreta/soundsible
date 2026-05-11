@@ -22,6 +22,18 @@ function isMobile() {
     return typeof window !== 'undefined' && !window.location.pathname.includes('/desktop/');
 }
 
+function isPodcastEpisodeId(id) {
+    return typeof id === 'string' && id.startsWith('pcast_');
+}
+
+function isPodcastTrack(track) {
+    return (
+        track?.source === 'podcast-preview' ||
+        track?.media_kind === 'podcast_episode' ||
+        isPodcastEpisodeId(track?.id)
+    );
+}
+
 function buildPanel(root) {
     const panel = document.createElement('div');
     panel.className = 'resume-playback-panel';
@@ -152,21 +164,20 @@ function onResumeYes(state, opts = {}) {
     const positionSec = Number(state.position_sec) || 0;
     const otherDeviceId = state.device_id;
     if (!trackId) return;
-    const track = store.state.library.find(t => t.id === trackId);
+    let track = store.state.library.find(t => t.id === trackId);
+    if (!track && state.track) {
+        track = state.track;
+    }
     if (!track) return;
-    // Note: Set resumeSyncActive before pause() so the pause listener does not flip isPlaying (same microtask ordering as fetch vs click).
+    const isPodcast = isPodcastTrack(track);
+
     store.update({ resumeSyncActive: true });
     audioEngine.pause();
     const audio = audioEngine.audio;
     const savedVolumeAtStart = audio.volume;
     audio.volume = 0;
     store.update({ currentTrack: track, isPlaying: false, resumeSyncActive: true });
-    const url = Resolver.getTrackUrl(track);
-    audio.src = url;
-    audio.load();
 
-    // Note: Canplay → applyseek → seeked → sync-play (play to position, then pause) → complete.
-    // Note: Mobile browsers often don't move decode on seek alone; playing does. same flow on all devices.
     let done = false;
     let fallbackTimeoutId = null;
     let maxWaitTimeoutId = null;
@@ -233,6 +244,7 @@ function onResumeYes(state, opts = {}) {
     };
 
     const onSeeked = () => {
+        if (done) return;
         const duration = audio.duration;
         if (!Number.isFinite(duration) || duration <= 0) {
             complete();
@@ -263,9 +275,28 @@ function onResumeYes(state, opts = {}) {
 
     maxWaitTimeoutId = setTimeout(complete, RESUME_MAX_WAIT_MS);
 
-    audio.addEventListener('canplay', onCanplay, { once: true });
-    audio.addEventListener('seeked', onSeeked, { once: true });
-    audio.addEventListener('error', onError, { once: true });
+    if (isPodcast) {
+        audioEngine.playTrack(track).catch(finishSyncPlay);
+        if (Number.isFinite(audio.duration) && audio.duration > 0) {
+            audio.currentTime = Math.min(positionSec, audio.duration);
+            startSeekedFallback();
+        } else {
+            audio.addEventListener('loadedmetadata', () => {
+                if (done) return;
+                audio.currentTime = Math.min(positionSec, audio.duration);
+                startSeekedFallback();
+            }, { once: true });
+        }
+        audio.addEventListener('seeked', onSeeked, { once: true });
+        audio.addEventListener('error', onError, { once: true });
+    } else {
+        const url = Resolver.getTrackUrl(track);
+        audio.src = url;
+        audio.load();
+        audio.addEventListener('canplay', onCanplay, { once: true });
+        audio.addEventListener('seeked', onSeeked, { once: true });
+        audio.addEventListener('error', onError, { once: true });
+    }
 }
 
 /**
