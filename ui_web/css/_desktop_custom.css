@@ -236,6 +236,7 @@
             outline: 2px solid var(--accent);
             outline-offset: 2px;
         }
+        #desktop-now-playing #desktop-np-fav-btn.desktop-np-mode-on,
         #desktop-now-playing #desktop-shuffle-btn.desktop-np-mode-on,
         #desktop-now-playing #desktop-repeat-btn.desktop-np-mode-on {
             color: var(--accent);

@@ -144,6 +144,19 @@ export const DesktopUI = {
         if (artist) artist.textContent = track?.artist ?? '';
         const dlBtn = el('desktop-np-download-btn');
         if (dlBtn) dlBtn.classList.toggle('hidden', !isYtdlpPreviewStreamTrack(track));
+
+        const favBtn = el('desktop-np-fav-btn');
+        const favIcon = el('desktop-np-fav-icon');
+        if (favBtn && favIcon) {
+            const isLibraryTrack = track?.id && !String(track.id).startsWith('deezer_') && store.state.library.some(t => t.id === track.id);
+            favBtn.classList.toggle('hidden', !isLibraryTrack);
+            if (isLibraryTrack) {
+                const isFav = store.state.favorites.includes(track.id);
+                favBtn.classList.toggle('desktop-np-mode-on', isFav);
+                favIcon.className = isFav ? 'fas fa-heart text-xs' : 'far fa-heart text-xs';
+                favBtn.setAttribute('aria-label', isFav ? 'Remove from Favourites' : 'Add to Favourites');
+            }
+        }
         if (playBtn && playIcon) {
             playIcon.className = state.isPlaying ? 'fas fa-pause' : 'fas fa-play';
         }
@@ -727,6 +740,17 @@ export const DesktopUI = {
                 if (Dl && typeof Dl.addPreviewStreamToDownloadQueue === 'function') {
                     Dl.addPreviewStreamToDownloadQueue(store.state.currentTrack);
                 }
+            });
+        }
+
+        const favBtn = el('desktop-np-fav-btn');
+        if (favBtn) {
+            favBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const track = store.state.currentTrack;
+                if (!track?.id) return;
+                const ok = await store.toggleFavourite(track.id);
+                if (ok) this.showToast(store.state.favorites.includes(track.id) ? 'Added to Favourites' : 'Removed from Favourites');
             });
         }
 

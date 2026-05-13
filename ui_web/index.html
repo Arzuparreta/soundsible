@@ -577,6 +577,10 @@
                         <!-- The Hitbox: Now placed after island to allow CSS sibling targeting -->
                         <div id="omni-touch-area" class="absolute inset-x-[-12px] inset-y-[-20px] z-[210] pointer-events-auto cursor-pointer"></div>
                     </div>
+                    <!-- Favourites bubble: right of island, next to repeat -->
+                    <div id="omni-fav-bubble" class="omni-side-bubble glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden transition-all ease-[cubic-bezier(0.19,1,0.22,1)]" style="transition-duration: 600ms; display: none;">
+                        <button type="button" id="omni-fav-btn" class="w-full h-full flex items-center justify-center rounded-full text-[var(--text-dim)] transition-colors active:scale-90 touch-manipulation" aria-label="Add to Favourites"><i id="omni-fav-icon" class="far fa-heart text-sm" aria-hidden="true"></i></button>
+                    </div>
                     <!-- Repeat bubble: right of nav bar, glassmorph circle -->
                     <div class="omni-side-bubble glass-view flex items-center justify-center pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden transition-all ease-[cubic-bezier(0.19,1,0.22,1)]" style="transition-duration: 600ms;">
                         <button type="button" id="omni-repeat-btn" class="w-full h-full flex items-center justify-center rounded-full text-[var(--text-dim)] transition-colors active:scale-90 relative touch-manipulation" aria-label="Repeat"><i class="fas fa-repeat text-sm"></i><span id="omni-repeat-one-indicator" class="absolute bottom-0 right-0 text-[7px] font-black text-[var(--accent)] hidden">1</span></button>
