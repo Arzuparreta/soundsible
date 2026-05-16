@@ -545,6 +545,7 @@ class DiscoveryUI {
   constructor() {
     this.container = null;
     this.currentView = 'home';
+    this._renderGen = 0;
   }
 
   init(containerId) {
@@ -554,7 +555,19 @@ class DiscoveryUI {
     this.renderHome();
   }
 
+  /** Called by unifiedSearch (desktop) when it takes ownership of the discover container. */
+  notifySearchActive() {
+    this._renderGen++;
+    this.currentView = 'search';
+  }
+
+  /** Called by unifiedSearch when search is cleared or the discover view is left. */
+  notifySearchCleared() {
+    this.currentView = 'home';
+  }
+
   async renderHome() {
+    const gen = ++this._renderGen;
     this.currentView = 'home';
     if (!this.container) return;
     this.container.innerHTML = '<div class="discovery-loading text-center py-10 text-[var(--text-dim)]">Loading discoveries...</div>';
@@ -563,6 +576,9 @@ class DiscoveryUI {
       getPersonalizedRailTracks(18),
       discoveryService.fetchDiscoverHome(50, 12)
     ]);
+
+    if (gen !== this._renderGen) return;
+
     discoveryService.currentTracks = topTracks;
 
     const list = topTracks.slice(0, 12);
@@ -621,11 +637,15 @@ class DiscoveryUI {
   }
 
   async renderSearchResults(query) {
+    const gen = ++this._renderGen;
     this.currentView = 'search';
     if (!this.container) return;
     this.container.innerHTML = '<div class="discovery-loading text-center py-10 text-[var(--text-dim)]">Searching...</div>';
 
     const tracks = await discoveryService.search(query);
+
+    if (gen !== this._renderGen) return;
+
     discoveryService.currentTracks = tracks;
 
     if (tracks.length === 0) {

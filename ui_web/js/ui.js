@@ -110,6 +110,9 @@ export class UI {
             omniRepeatOneIndicator: d('omni-repeat-one-indicator'),
             miniRepeatOneIndicator: d('mini-repeat-one-indicator'),
             miniShuffleBtn: d('mini-shuffle-btn'),
+            omniFavBubble: d('omni-fav-bubble'),
+            omniFavBtn: d('omni-fav-btn'),
+            omniFavIcon: d('omni-fav-icon'),
             omniShuffleBtn: d('omni-shuffle-btn'),
             miniNextBtn: d('mini-next-btn'),
             miniPrevBtn: d('mini-prev-btn')
@@ -308,10 +311,12 @@ export class UI {
             anchorIcon.classList.add('fas', state.isPlaying ? 'fa-pause' : 'fa-play', 'text-lg', 'text-[var(--text-main)]');
             if (!state.isPlaying) anchorIcon.classList.add('ml-1');
             this.updateMetadataScroller(state.currentTrack);
+            this._syncFavBubble(state);
         } else {
             anchorIcon.classList.add('hidden');
             logoWrap.classList.remove('hidden');
             logoWrap.classList.add('omni-grid-hint-pulse');
+            this._syncFavBubble(state);
         }
     }
 
@@ -405,6 +410,32 @@ export class UI {
         if (!container) return;
         const hidden = this._npViewOpen && !this.isBlooming;
         container.classList.toggle('omni-label-hidden', hidden);
+    }
+
+    /** Favourites bubble: visible when island is active, NP view is closed, and track exists in library. */
+    static _syncFavBubble(state) {
+        const favBubble = this.dom.omniFavBubble;
+        const favBtn = this.dom.omniFavBtn;
+        const favIcon = this.dom.omniFavIcon;
+        if (!favBubble || !favBtn || !favIcon) return;
+        const track = state.currentTrack;
+        const isLibraryTrack = track?.id && !String(track.id).startsWith('deezer_') && store.state.library.some(t => t.id === track.id);
+        const isVisible = isLibraryTrack && this.isIslandActive && !this._npViewOpen;
+        if (isVisible) {
+            favBubble.style.display = '';
+            favBubble.style.opacity = '1';
+            favBubble.style.pointerEvents = 'auto';
+            favBubble.style.position = 'relative';
+            favBubble.style.zIndex = '220';
+            const isFav = track && store.state.favorites.includes(track.id);
+            favBtn.classList.toggle('omni-fav-active', isFav);
+            favIcon.className = isFav ? 'fas fa-heart text-sm' : 'far fa-heart text-sm';
+            favBtn.setAttribute('aria-label', isFav ? 'Remove from Favourites' : 'Add to Favourites');
+        } else {
+            favBubble.style.display = 'none';
+            favBubble.style.opacity = '0';
+            favBubble.style.pointerEvents = 'none';
+        }
     }
 
     static collapseToSeed() {
@@ -522,6 +553,7 @@ export class UI {
         this._npViewOpen = true;
         this.updateOmniMetadataVisibility();
         this.updateOmniLabelVisibility();
+        this._syncFavBubble(store.state);
         document.body.classList.add('now-playing-open');
         this.updateNowPlaying(track, store.state.isPlaying);
 
@@ -545,6 +577,7 @@ export class UI {
         this._npViewOpen = false;
         this.updateOmniMetadataVisibility();
         this.updateOmniLabelVisibility();
+        this._syncFavBubble(store.state);
         const npView = this.dom.nowPlayingView;
         if (!npView) return;
 
@@ -844,6 +877,22 @@ export class UI {
         bindTransport('mini-repeat-btn', () => store.toggleRepeat());
         bindTransport('omni-shuffle-btn', () => store.toggleShuffle());
         bindTransport('omni-repeat-btn', () => store.toggleRepeat());
+
+        // Favourites bubble: toggle favourite for currently playing track
+        const omniFavBtn = this.dom.omniFavBtn;
+        if (omniFavBtn) {
+            omniFavBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const track = store.state.currentTrack;
+                if (!track?.id) return;
+                const ok = await store.toggleFavourite(track.id);
+                if (ok) {
+                    const isFav = store.state.favorites.includes(track.id);
+                    this.showToast(isFav ? 'Added to Favourites' : 'Removed from Favourites');
+                    Haptics.light();
+                }
+            });
+        }
 
         const npDlBtn = document.getElementById('np-download-btn');
         if (npDlBtn) {
