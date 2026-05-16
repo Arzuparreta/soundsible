@@ -18,6 +18,7 @@ class ODSTDownloader:
         output_dir: Path,
         workers: int = DEFAULT_WORKERS,
         cookie_browser: Optional[str] = None,
+        cookie_file: Optional[str] = None,
         quality: str = DEFAULT_QUALITY,
     ):
         self.output_dir = Path(output_dir)
@@ -29,7 +30,7 @@ class ODSTDownloader:
         self.library_path = self.output_dir / LIBRARY_FILENAME
         self.library = self._load_library()
         self.downloader = YouTubeDownloader(
-            self.output_dir, cookie_browser=cookie_browser, quality=quality
+            self.output_dir, cookie_browser=cookie_browser, cookie_file=cookie_file, quality=quality
         )
 
     def _load_library(self) -> LibraryMetadata:
@@ -63,4 +64,3 @@ class ODSTDownloader:
     def add_track(self, track) -> None:
         with self._lock:
             self.library.add_track(track)
-

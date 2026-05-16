@@ -30,6 +30,16 @@ export class UI {
         'discover': 'DISCOVER'
     };
 
+    /** Root tab views (top-level sections in the omnibar ribbon). */
+    static ROOTS = new Set(['home', 'favourites', 'playlists', 'podcast', 'settings', 'discover']);
+
+    /** Sub-view → parent root tab mapping for stack resolution. */
+    static SUB_VIEW_PARENT = {
+        'artist-detail': 'home',
+        'playlist-detail': 'playlists',
+        'podcast-show-detail': 'podcast'
+    };
+
     static init() {
         const d = document.getElementById.bind(document);
         this.dom = {
@@ -39,8 +49,8 @@ export class UI {
             omniLabelContainer: d('omni-label-container'),
             nowPlayingView: d('now-playing-view'),
             npSeekContainer: d('np-seek-container'),
-            queueFab: d('queue-fab'),
-            queueBadge: d('queue-badge'),
+            queuesFab: d('queues-fab'),
+            queuesBadge: d('queues-badge'),
             omniAnchorIcon: d('omni-anchor-icon'),
             omniAnchorLogoWrap: d('omni-anchor-logo-wrap'),
             omniMetadataContainer: d('omni-metadata-container'),
@@ -60,9 +70,8 @@ export class UI {
             statusLedPulse: d('status-led-pulse'),
             serverStatus: d('server-status'),
             activeHostDisplay: d('active-host-display'),
-            queuePopover: d('queue-popover'),
-            queueContainer: d('queue-container'),
-            dlQueueContainer: d('dl-queue-container'),
+            queuesPopover: d('queues-popover'),
+            queuesContainer: d('queues-fab-container'),
             omniTimeCurrent: d('omni-time-current'),
             omniTimeDuration: d('omni-time-duration'),
             npTimeCurrent: d('np-time-current'),
@@ -112,8 +121,18 @@ export class UI {
         if (this.detectPlatform() === 'ios') document.body.classList.add('is-ios');
 
         // ## Section: Navigation state
-        this.viewStack = [];
-        this.currentView = store.hasLocalLibrarySignal() ? 'home' : 'discover';
+        const initialView = store.hasLocalLibrarySignal() ? 'home' : 'discover';
+        this.viewStacks = {
+            home: ['home'],
+            discover: ['discover'],
+            favourites: ['favourites'],
+            playlists: ['playlists'],
+            podcast: ['podcast'],
+            settings: ['settings']
+        };
+        this.activeTab = initialView;
+        this.currentView = initialView;
+        document.body.dataset.currentView = this.currentView;
         this._npGesturesBound = false;
         this._npViewOpen = false; // Note: True when now playing view is visible (omni label fades out)
         this.isIslandActive = false;
@@ -260,21 +279,9 @@ export class UI {
             this.updateTransportControls(state.isPlaying);
         }
 
-        // ## Section: Floating queue
-        const fab = this.dom.queueFab;
-        const badge = this.dom.queueBadge;
-        const qCount = state.queue ? state.queue.length : 0;
-
-        if (fab && badge) {
-            if (qCount > 0) {
-                fab.classList.replace('scale-0', 'scale-100');
-                fab.classList.replace('opacity-0', 'opacity-100');
-                badge.textContent = qCount;
-            } else {
-                fab.classList.replace('scale-100', 'scale-0');
-                fab.classList.replace('opacity-100', 'opacity-0');
-                this.hideQueue();
-            }
+        // ## Section: Floating queue FAB — delegate to Downloader for combined visibility
+        if (window.Downloader && window.Downloader.updateFabAndPopover) {
+            window.Downloader.updateFabAndPopover();
         }
 
         this.updateStatus(state);
@@ -595,30 +602,42 @@ export class UI {
         }, closeDurationMs);
     }
 
-    static toggleQueue() {
-        const popover = this.dom.queuePopover;
+    static toggleQueues() {
+        const popover = this.dom.queuesPopover;
         if (!popover) return;
 
         if (popover.classList.contains('hidden')) {
-            popover.classList.remove('hidden');
-            setTimeout(() => {
-                popover.classList.remove('pointer-events-none');
-                popover.classList.replace('scale-95', 'scale-100');
-                popover.classList.replace('opacity-0', 'opacity-100');
-            }, 10);
-            if (window.renderQueue) window.renderQueue(store.state);
+            this.showQueues();
         } else {
-            this.hideQueue();
+            this.hideQueues();
         }
     }
 
-    static hideQueue() {
-        const popover = this.dom.queuePopover;
+    static showQueues() {
+        const popover = this.dom.queuesPopover;
+        if (!popover) return;
+
+        popover.classList.remove('hidden');
+        setTimeout(() => {
+            popover.classList.remove('pointer-events-none');
+            popover.style.pointerEvents = 'auto';
+            popover.classList.replace('scale-95', 'scale-100');
+            popover.classList.replace('opacity-0', 'opacity-100');
+        }, 10);
+
+        if (window.Downloader) {
+            window.Downloader.renderDownloadQueueList();
+        }
+    }
+
+    static hideQueues() {
+        const popover = this.dom.queuesPopover;
         if (!popover || popover.classList.contains('hidden')) return;
-        
+
         popover.classList.replace('scale-100', 'scale-95');
         popover.classList.replace('opacity-100', 'opacity-0');
         popover.classList.add('pointer-events-none');
+        popover.style.pointerEvents = 'none';
         setTimeout(() => popover.classList.add('hidden'), 300);
     }
 
@@ -626,7 +645,7 @@ export class UI {
      * Slide direction from omnibar ribbon: items left of the centre blank vs right.
      * Stack views map to their root tab for side consistency.
      */
-    static getSlideClassForView(viewId) {
+    static getSlideClassForView(viewId, isBack = false) {
         const ribbon = document.getElementById('omni-nav-ribbon');
         if (!ribbon) return 'view-from-right';
         const leftViews = [];
@@ -643,9 +662,12 @@ export class UI {
                 else leftViews.push(v);
             }
         }
-        const stackToRoot = { 'artist-detail': 'home', 'playlist-detail': 'playlists' };
-        const resolved = stackToRoot[viewId] || viewId;
-        return leftViews.includes(resolved) ? 'view-from-left' : 'view-from-right';
+        const resolved = UI.SUB_VIEW_PARENT[viewId] || viewId;
+        let slideClass = leftViews.includes(resolved) ? 'view-from-left' : 'view-from-right';
+        if (isBack) {
+            slideClass = slideClass === 'view-from-left' ? 'view-from-right' : 'view-from-left';
+        }
+        return slideClass;
     }
 
     /** True when the user has typed a discover query (mobile). Back clears search first. */
@@ -661,8 +683,26 @@ export class UI {
 
         if (viewId === this.currentView) return;
 
-        // Note: Special tab logic for library return
+        // Note: Special tab logic for library return (before any view-id resolution)
         if (viewId === 'home' && this.currentView === 'artist-detail') store.update({ libraryTab: 'artists' });
+
+        // Per-tab navigation stacks: resolve root views to the top of their tab stack
+        if (saveToHistory) {
+            if (UI.ROOTS.has(viewId)) {
+                if (viewId !== this.activeTab) {
+                    this.activeTab = viewId;
+                    viewId = this.viewStacks[viewId][this.viewStacks[viewId].length - 1];
+                } else if (this.viewStacks[this.activeTab].length > 1) {
+                    // Same tab, currently on a sub-view — push root to navigate to it
+                    this.viewStacks[this.activeTab].push(viewId);
+                }
+            } else {
+                this.viewStacks[this.activeTab].push(viewId);
+            }
+        }
+
+        // Re-check after resolution (selecting the active tab while on its sub-view is a no-op)
+        if (viewId === this.currentView) return;
 
         this.updateLabel(viewId);
 
@@ -680,20 +720,15 @@ export class UI {
             this._showViewCleanupTimer = null;
         }
 
-        if (saveToHistory) {
-            const roots = ['home', 'favourites', 'playlists', 'podcast', 'settings', 'discover'];
-            if (roots.includes(this.currentView) && roots.includes(viewId)) this.viewStack = [];
-            else this.viewStack.push(this.currentView);
-        }
-
         const transitionToken = ++this._viewTransitionToken;
 
-        const slideClass = UI.getSlideClassForView(viewId);
+        const slideClass = UI.getSlideClassForView(viewId, !saveToHistory);
         targetView.classList.remove('hidden');
         targetView.classList.add(slideClass, 'view-incoming');
         if (oldView) oldView.classList.add('view-outgoing');
 
         this.currentView = viewId;
+        document.body.dataset.currentView = viewId;
 
         const applySlideEnd = () => {
             const oldViewId = oldView && oldView.id ? oldView.id.replace(/^view-/, '') : null;
@@ -769,21 +804,19 @@ export class UI {
             });
         });
 
-        const queueContainer = this.dom.queueContainer;
-        if (queueContainer) queueContainer.classList.remove('hidden');
+        const queuesContainer = this.dom.queuesContainer;
+        if (queuesContainer) queuesContainer.classList.remove('hidden');
     }
 
-    /** Single entry point for "go back": sub-views (e.g. discover-search) close first; then stack pop. */
+    /** Single entry point for "go back": sub-states close first (overlays, search); then stack pop. */
     static goToPreviousView() {
+        if (this._npViewOpen || this.dom.nowPlayingView?.classList.contains('active')) {
+            this.hideNowPlaying();
+            return;
+        }
         if (this.currentView === 'discover' && this.isDiscoverSearchActive()) {
             if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) {
                 window.unifiedSearch.clear();
-            }
-            return;
-        }
-        if (this.currentView === 'discover') {
-            if (this._npViewOpen || this.dom.nowPlayingView?.classList.contains('active')) {
-                this.hideNowPlaying();
             }
             return;
         }
@@ -791,15 +824,10 @@ export class UI {
     }
 
     static navigateBack() {
-        if (this.viewStack.length === 0) {
-            this.showView('discover', false);
-            return;
-        }
-
-        const previousView = this.viewStack.pop();
-        if (this.currentView === 'artist-detail' && previousView === 'home') {
-            store.update({ libraryTab: 'artists' });
-        }
+        const stack = this.viewStacks[this.activeTab];
+        if (stack.length <= 1) return;
+        stack.pop();
+        const previousView = stack[stack.length - 1];
         this.showView(previousView, false);
     }
 
@@ -807,16 +835,29 @@ export class UI {
         // Note: Global prevent context menu everywhere for a native app feel
         window.addEventListener('contextmenu', (e) => e.preventDefault());
 
-        // ## Section: Global clicks
+        // ## Section: Global clicks — hide queues popover on outside click
         window.addEventListener('click', (e) => {
-            if (this.currentView === 'discover') {
-                const dlq = this.dom.dlQueueContainer;
-                if (dlq && !dlq.contains(e.target)) window.Downloader?.hideDownloadQueue?.();
-            } else {
-                const q = this.dom.queueContainer;
-                if (q && !q.contains(e.target)) this.hideQueue();
-            }
+            const qc = this.dom.queuesContainer;
+            if (qc && !qc.contains(e.target)) this.hideQueues();
         });
+
+        // ## Section: Queues popover download queue — clear button
+        const popover = this.dom.queuesPopover;
+        if (popover) {
+            popover.addEventListener('click', (e) => {
+                const clearBtn = e.target.closest('#queues-clear-btn');
+                if (clearBtn) {
+                    e.stopPropagation();
+                    if (window.Downloader) {
+                        window.Downloader.downloadQueue = [];
+                        window.Downloader.renderDownloadQueueList();
+                        window.Downloader.updateFabAndPopover();
+                        window.Downloader.hideDownloadQueue();
+                        Haptics.tick();
+                    }
+                }
+            });
+        }
 
         // ## Section: Transport handlers
         const bindTransport = (id, fn) => {
@@ -984,7 +1025,6 @@ export class UI {
             }
 
             if (gesture.isEdgeSwipe) {
-                if (UI.currentView === 'discover') return;
                 if (e.cancelable) e.preventDefault();
                 if (UI.content) UI.content.style.transform = `translateX(${Math.max(0, diffX)}px)`;
                 return;
@@ -1019,9 +1059,7 @@ export class UI {
 
             if (gesture.startX < 40) {
                 gesture.isEdgeSwipe = true;
-                if (this.currentView !== 'discover') {
-                    this.content.style.transition = 'none';
-                }
+                this.content.style.transition = 'none';
                 if (shouldAttachBlockingTouchMove()) attachGestureTouchMove();
                 return;
             }
@@ -1056,11 +1094,9 @@ export class UI {
                 const diffX = e.changedTouches[0].clientX - gesture.startX;
                 const threshold = window.innerWidth * 0.12;
 
-                if (this.currentView !== 'discover') {
-                    if (this.dom.content) this.dom.content.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
-                    if (this.dom.content) this.dom.content.style.transform = 'translateX(0)';
-                }
-                if (diffX > threshold && this.currentView !== 'discover') {
+                if (this.dom.content) this.dom.content.style.transition = 'transform 0.3s cubic-bezier(0.19, 1, 0.22, 1)';
+                if (this.dom.content) this.dom.content.style.transform = 'translateX(0)';
+                if (diffX > threshold) {
                     Haptics.trigger(20);
                     this.goToPreviousView();
                 }
@@ -1154,6 +1190,7 @@ export class UI {
                 return;
             }
             touchStartedOnSeekBar = false;
+            if (e.target.closest('.custom-scrollbar')) return;
             startY = e.touches[0].clientY;
             isDragging = false;
         }, { passive: true });
@@ -1301,7 +1338,7 @@ export class UI {
                 }
                 // Note: Swipe down same as edge swipe from left — go to previous view (stack or close sub-view)
                 if (deltaY > deadzone) {
-                    if (this.currentView !== 'discover' || this.isDiscoverSearchActive()) Haptics.trigger(20);
+                    Haptics.trigger(20);
                     this.goToPreviousView();
                     this.resetOmniIsland();
                     return;

@@ -29,16 +29,19 @@ The steps are the same as for local installation, but executed over SSH.
 1. SSH into your server and install Soundsible:
 
    ```bash
+   sudo apt update
+   sudo apt install -y python3.12-venv python3-pip ffmpeg git
    git clone https://github.com/Arzuparreta/soundsible.git
    cd soundsible
-   python3 -m venv venv
-   ./venv/bin/pip install -r requirements.txt
+   python3 run.py
    ```
+
+   `run.py` is the supported bootstrap path. It creates the project venv, repairs a partial/broken one, installs Python requirements, and then starts the launcher.
 
 2. Start the Station Engine using the CLI:
 
    ```bash
-   ./venv/bin/python run.py
+   python3 run.py
    ```
 
    Choose **Start Station Engine & Open Station**.
@@ -125,4 +128,3 @@ Soundsible is designed for trusted LAN/Tailscale deployments. Use this baseline:
    export SOUNDSIBLE_ALLOWED_ORIGINS='http://localhost:5005,http://192.168.1.10:5005'
    export SOUNDSIBLE_SOCKET_CORS_ORIGINS='http://localhost:5005,http://192.168.1.10:5005'
    ```
-

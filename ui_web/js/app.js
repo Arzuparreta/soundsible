@@ -30,8 +30,6 @@ import {
 } from './shared.js';
 import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
 const LIBRARY_SYNC_INTERVAL_MS = 300000;
-const DISCOVER_SEARCH_DEBOUNCE_MS = 200;
-let discoverSearchDebounceTimer = null;
 let podcastSearchDebounceTimer = null;
 
 function viewStateFromContext() {
@@ -95,54 +93,13 @@ function renderFavourites(state) {
     }
 }
 
-function updateQueueScrollCuePosition() {
-    if (!dom || !dom.floatingQueue) return;
-    const floatingQueue = dom.floatingQueue;
-    const cue = floatingQueue.querySelector('.queue-scroll-cue');
-    const thumb = cue ? cue.querySelector('.queue-scroll-cue-thumb') : null;
-    if (!cue || !thumb) return;
-
-    const cueHeight = cue.getBoundingClientRect().height;
-    const thumbHeight = 10;
-    const maxY = Math.max(0, cueHeight - thumbHeight);
-    const scrollRange = floatingQueue.scrollHeight - floatingQueue.clientHeight;
-    const ratio = scrollRange > 0 ? (floatingQueue.scrollTop / scrollRange) : 0;
-    // Note: Keep motion subtle informative cue, not a full-range scrollbar.
-    const travelFactor = 0.28;
-    const centeredOffset = (maxY * (1 - travelFactor)) / 2;
-    thumb.style.top = `${Math.round(centeredOffset + (maxY * ratio * travelFactor))}px`;
-}
-
 function renderQueue(state) {
-    if (!dom || !dom.floatingQueue) return;
-    const floatingQueue = dom.floatingQueue;
-    renderers.renderQueue(state, floatingQueue);
-    if (!state.queue || state.queue.length === 0) {
-        floatingQueue.classList.remove('has-scroll-cue');
-        const cue = floatingQueue.querySelector('.queue-scroll-cue');
-        if (cue && cue.parentNode) cue.parentNode.removeChild(cue);
-        return;
-    }
-    const shouldShowCue = state.queue.length >= 6;
-    floatingQueue.classList.toggle('has-scroll-cue', shouldShowCue);
-    let cue = floatingQueue.querySelector('.queue-scroll-cue');
-    if (shouldShowCue) {
-        if (!cue) {
-            cue = document.createElement('div');
-            cue.className = 'queue-scroll-cue';
-            const thumb = document.createElement('div');
-            thumb.className = 'queue-scroll-cue-thumb';
-            cue.appendChild(thumb);
-            floatingQueue.appendChild(cue);
-        }
-        requestAnimationFrame(updateQueueScrollCuePosition);
-    } else if (cue && cue.parentNode) {
-        cue.parentNode.removeChild(cue);
-    }
-    if (!floatingQueue.dataset.scrollCueBound) {
-        floatingQueue.dataset.scrollCueBound = '1';
-        floatingQueue.addEventListener('scroll', () => requestAnimationFrame(updateQueueScrollCuePosition), { passive: true });
-        window.addEventListener('resize', () => requestAnimationFrame(updateQueueScrollCuePosition));
+    if (!dom || !dom.npQueueTracks) return;
+    const container = dom.npQueueTracks;
+    renderers.renderQueue(state, container);
+    const section = document.getElementById('np-queue-section');
+    if (section) {
+        section.classList.toggle('np-queue-empty', !state.queue || state.queue.length === 0);
     }
 }
 
@@ -169,9 +126,19 @@ function initLibraryMaintenance() {
     });
 }
 
+function initNpQueueClearBtn() {
+    const btn = document.getElementById('np-queue-clear-btn');
+    if (btn) {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            store.clearQueue();
+        });
+    }
+}
+
 function initQueueDrag() {
-    if (!dom || !dom.floatingQueue) return;
-    const container = dom.floatingQueue;
+    if (!dom || !dom.npQueueTracks) return;
+    const container = dom.npQueueTracks;
 
     let holdTimer = null;
     let fromIndex = null;
@@ -655,7 +622,7 @@ window.addEventListener('error', (e) => {
 
 function init() {
     dom = {
-        floatingQueue: document.getElementById('floating-queue-tracks'),
+        npQueueTracks: document.getElementById('np-queue-tracks'),
         allSongs: document.getElementById('all-songs'),
         globalSearchContainer: document.getElementById('global-search-container'),
         globalSearchInput: document.getElementById('global-search-input'),
@@ -698,9 +665,10 @@ function init() {
             if (vHome) vHome.classList.remove('hidden');
         }
         if (typeof window.renderContentForView === 'function') window.renderContentForView(initialView, { immediate: true });
-        initArtistScrollSuppress();
+        initMobileScrollSuppress();
         initArtistDetailBack();
         initQueueDrag();
+        initNpQueueClearBtn();
         initScrollTracking();
 
         wireSettings(MOBILE_SETTINGS_IDS, { store, showToast: (msg) => UI.showToast(msg), onLibraryOrderChange: () => renderLibraryContent(), subscribeIndicators: false });
@@ -1112,25 +1080,13 @@ function initGlobalSearch() {
         } else if (view === 'artist-detail' && viewContext.artistName) {
             renderArtistDetail(viewContext.artistName);
         } else if (view === 'discover') {
-            if (discoverSearchDebounceTimer) {
-                clearTimeout(discoverSearchDebounceTimer);
-                discoverSearchDebounceTimer = null;
-            }
-            if (!query) {
-                void import('./discovery.js').then((m) => {
-                    if (m.initDiscovery) m.initDiscovery('discover-search-results');
+            if (typeof window.unifiedSearch === 'undefined') {
+                void import('./search.js').then((m) => {
+                    window.unifiedSearch = m.unifiedSearch;
+                    m.unifiedSearch.init({ mobile: true, resultsContainerId: 'discover-search-results' });
+                    if (query) dom.globalSearchInput?.dispatchEvent(new Event('input'));
                 });
-                return;
             }
-            discoverSearchDebounceTimer = setTimeout(() => {
-                discoverSearchDebounceTimer = null;
-                void import('./discovery.js').then((m) => {
-                    const el = document.getElementById('discover-search-results');
-                    if (!el || !m.discoveryUI) return;
-                    m.discoveryUI.container = el;
-                    void m.discoveryUI.renderSearchResults(query);
-                });
-            }, DISCOVER_SEARCH_DEBOUNCE_MS);
         } else if (view === 'podcast') {
             if (podcastSearchDebounceTimer) {
                 clearTimeout(podcastSearchDebounceTimer);
@@ -1262,15 +1218,12 @@ function clearContentForView(viewId) {
             clearContainerContent(dom.playlistDetailTracks);
             break;
         case 'discover':
-            if (discoverSearchDebounceTimer) {
-                clearTimeout(discoverSearchDebounceTimer);
-                discoverSearchDebounceTimer = null;
-            }
             if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.destroy) {
                 window.unifiedSearch.destroy();
             } else if (typeof window.unifiedSearch !== 'undefined' && window.unifiedSearch.clear) {
                 window.unifiedSearch.clear();
             }
+            window.unifiedSearch = undefined;
             window._discoverSurfaceTracks = null;
             break;
         case 'podcast':
@@ -1441,7 +1394,7 @@ function fillViewBody(viewId) {
         case 'home':
             syncLibraryPanels();
             renderLibraryTabBar();
-            renderHomeContent();
+            renderLibraryContent();
             break;
         case 'favourites':
             renderFavourites(state);
@@ -1477,14 +1430,13 @@ function fillViewBody(viewId) {
             import('./downloader.js').then((dm) => {
                 dm.Downloader.init();
             });
-            import('./discovery.js')
-                .then((discoveryMod) => {
-                    if (discoveryMod.initDiscovery) {
-                        discoveryMod.initDiscovery('discover-search-results');
-                    }
+            import('./search.js')
+                .then((searchMod) => {
+                    window.unifiedSearch = searchMod.unifiedSearch;
+                    searchMod.unifiedSearch.init({ mobile: true, resultsContainerId: 'discover-search-results' });
                 })
                 .catch((err) => {
-                    console.error('[app.js] Failed to load discovery.js:', err);
+                    console.error('[app.js] Failed to load search.js:', err);
                 });
             break;
         case 'settings':
@@ -1574,35 +1526,92 @@ window.toggleArtistAlbum = (ev) => {
     card.classList.toggle('artist-album-expanded', !wasExpanded);
 };
 
+const SCROLL_TOUCH_TARGET_SELECTOR = [
+    '.song-row',
+    '.playlist-track-row',
+    '.home-mixed-artist-row',
+    '.artist-card',
+    '.artist-album-header',
+    '.playlist-card',
+    '.podcast-search-row',
+    '.discover-card',
+    '.discover-surface-row',
+    '.discover-odst-row',
+    '.queue-item',
+    '.add-to-playlist-picker-item',
+    '.playlist-cover-picker-tile',
+    'button',
+    '[role="button"]',
+    'a'
+].join(',');
+
 /**
- * Same scroll/touch safety as library artists: touchstart/touchmove/touchend + class flag
- * so list items don't show ghost :active during scroll. Call for every view that has a scrollable list.
+ * Shared mobile scroll/touch safety. It only enters suppress mode for vertical scroll gestures,
+ * so horizontal song-row swipes and dedicated drag interactions keep their own transforms.
  */
 function initListScrollSuppress(containerEl, activeClass) {
     if (!containerEl) return;
+    if (containerEl.__listScrollSuppressBound) return;
+    containerEl.__listScrollSuppressBound = true;
     let scrollActive = false;
-    containerEl.addEventListener('touchstart', () => {
+    let startX = 0;
+    let startY = 0;
+    const finishScroll = () => {
+        if (!scrollActive) return;
+        containerEl.__listScrollSuppressUntil = Date.now() + 220;
+        setTimeout(() => { containerEl.classList.remove(activeClass); scrollActive = false; }, 180);
+    };
+    containerEl.addEventListener('touchstart', (event) => {
+        const touch = event.touches?.[0];
+        startX = touch ? touch.clientX : 0;
+        startY = touch ? touch.clientY : 0;
         scrollActive = false;
+        containerEl.classList.remove(activeClass);
     }, { passive: true });
-    containerEl.addEventListener('touchmove', () => {
-        if (!scrollActive) {
-            scrollActive = true;
-            containerEl.classList.add(activeClass);
-        }
+    containerEl.addEventListener('touchmove', (event) => {
+        if (UI.isDraggingQueue) return;
+        if (scrollActive) return;
+        const touch = event.touches?.[0];
+        if (!touch) return;
+        const dx = Math.abs(touch.clientX - startX);
+        const dy = Math.abs(touch.clientY - startY);
+        if (dy <= 8 || dy <= dx) return;
+        scrollActive = true;
+        containerEl.classList.add(activeClass);
     }, { passive: true });
-    containerEl.addEventListener('touchend', () => {
-        if (scrollActive) setTimeout(() => { containerEl.classList.remove(activeClass); scrollActive = false; }, 180);
-    }, { passive: true });
+    containerEl.addEventListener('touchend', finishScroll, { passive: true });
+    containerEl.addEventListener('touchcancel', finishScroll, { passive: true });
+    containerEl.addEventListener('click', (event) => {
+        const suppressUntil = Number(containerEl.__listScrollSuppressUntil || 0);
+        const shouldSuppress = containerEl.classList.contains(activeClass) || Date.now() < suppressUntil;
+        if (!shouldSuppress) return;
+
+        const target = event.target?.closest?.(SCROLL_TOUCH_TARGET_SELECTOR);
+        if (!target || !containerEl.contains(target)) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+    }, { capture: true });
 }
 
-function initArtistScrollSuppress() {
-    initListScrollSuppress(dom?.libraryArtists || document.getElementById('library-artists'), 'artist-scroll-active');
-    initListScrollSuppress(document.getElementById('view-home'), 'list-scroll-active');
-    initListScrollSuppress(document.getElementById('view-favourites'), 'list-scroll-active');
-    initListScrollSuppress(document.getElementById('view-discover'), 'list-scroll-active');
-    initListScrollSuppress(document.getElementById('view-playlists'), 'list-scroll-active');
-    initListScrollSuppress(document.getElementById('view-playlist-detail'), 'list-scroll-active');
-    initListScrollSuppress(document.getElementById('view-artist-detail'), 'list-scroll-active');
+function initMobileScrollSuppress() {
+    [
+        dom?.libraryArtists || document.getElementById('library-artists'),
+        document.getElementById('view-home'),
+        document.getElementById('view-favourites'),
+        document.getElementById('view-discover'),
+        document.getElementById('view-playlists'),
+        document.getElementById('view-playlist-detail'),
+        document.getElementById('view-artist-detail'),
+        document.getElementById('view-settings'),
+        document.querySelector('#view-podcast > .view-scroll-inner'),
+        document.querySelector('#view-podcast-show-detail > .view-scroll-inner'),
+        document.getElementById('np-queue-tracks'),
+        document.getElementById('dl-download-queue-list'),
+        document.getElementById('mobile-downloads-list'),
+        document.getElementById('add-to-playlist-picker-list'),
+        document.getElementById('playlist-cover-picker-grid')
+    ].forEach((container) => initListScrollSuppress(container, 'list-scroll-active'));
 }
 
 function initArtistDetailBack() {

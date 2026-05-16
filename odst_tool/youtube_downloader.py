@@ -30,6 +30,30 @@ from shared.venv_utils import get_subprocess_python
 
 logger = logging.getLogger(__name__)
 
+_FALSE_ENV_VALUES = {"0", "false", "no", "off"}
+
+
+def _yt_dlp_force_ipv4() -> bool:
+    return (os.getenv("SOUNDSIBLE_YTDLP_FORCE_IPV4", "true") or "").strip().lower() not in _FALSE_ENV_VALUES
+
+
+def _add_ytdlp_cli_network_args(args: List[str]) -> None:
+    yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
+    if yt_proxy:
+        args.extend(["--proxy", yt_proxy])
+    elif _yt_dlp_force_ipv4():
+        args.append("--force-ipv4")
+
+
+def _apply_ytdlp_network_options(opts: Dict[str, Any]) -> Dict[str, Any]:
+    yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
+    if yt_proxy:
+        opts["proxy"] = yt_proxy
+    elif _yt_dlp_force_ipv4():
+        opts["source_address"] = "0.0.0.0"
+    return opts
+
+
 def _yt_thumbnail_url(video_id: Optional[str]) -> Optional[str]:
     """YouTube thumbnail URL (mqdefault). Returns None if video_id is falsy."""
     if not video_id:
@@ -534,6 +558,7 @@ class YouTubeDownloader:
                 }
             }
         }
+        _apply_ytdlp_network_options(ydl_opts)
         
         if self.cookie_file and os.path.exists(self.cookie_file):
             ydl_opts['cookiefile'] = self.cookie_file
@@ -631,9 +656,11 @@ class YouTubeDownloader:
             "-x",
             "--audio-format", codec,
         ]
+        _add_ytdlp_cli_network_args(args)
         if profile.get('bitrate', 0) > 0 and codec == 'mp3':
             args.extend(["--audio-quality", str(profile['bitrate'])])
         args.extend([
+            "--extractor-args", "youtube:player_client=android,ios,web",
             "--add-metadata",
             "--embed-thumbnail",
             "--parse-metadata", "playlist_index:%(track_number)s",
@@ -697,6 +724,7 @@ class YouTubeDownloader:
         if returncode != 0 and (
             "Requested format is not available" in combined_output
             or "The page needs to be reloaded" in combined_output
+            or "Sign in to confirm" in combined_output
         ):
             if self.cookie_file or self.cookie_browser:
                 returncode, combined_output = _run_stream(_strip_cookie_args(args))
@@ -725,6 +753,7 @@ class YouTubeDownloader:
             "skip_download": True,
             "extractor_args": {"youtube": {"player_client": ["android", "ios", "web"]}},
         }
+        _apply_ytdlp_network_options(base)
         attempts: List[Dict[str, Any]] = [dict(base)]
         if self.cookie_file and os.path.exists(self.cookie_file):
             attempts.append({**base, "cookiefile": self.cookie_file})
@@ -812,6 +841,7 @@ class YouTubeDownloader:
                 'youtube': {'player_client': ['android', 'ios', 'web']}
             }
         }
+        _apply_ytdlp_network_options(ydl_opts)
         if use_ytmusic:
             ydl_opts['extract_flat'] = True
             ydl_opts['playlistend'] = max_results
@@ -911,6 +941,7 @@ class YouTubeDownloader:
                 'youtube': {'player_client': ['android', 'ios', 'web']}
             }
         }
+        _apply_ytdlp_network_options(ydl_opts)
         if self.cookie_file and os.path.exists(self.cookie_file):
             ydl_opts['cookiefile'] = self.cookie_file
         elif self.cookie_browser:
@@ -960,67 +991,132 @@ class YouTubeDownloader:
         return out
 
     def get_stream_url(self, video_id: str) -> Optional[str]:
-        """Return direct audio stream URL via yt-dlp CLI (-g). Same format and cookie-retry as downloads."""
+        """Return direct audio stream URL via yt-dlp CLI (-g)."""
         if not video_id or not str(video_id).strip():
             return None
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
-        args = [
-            get_subprocess_python(), "-m", "yt_dlp",
-            "-g",
-            "-f", YDL_FORMAT_AUDIO,
-            "--no-warnings",
-            "--quiet",
-            yt_url,
-        ]
-        if self.cookie_file and os.path.exists(self.cookie_file):
-            args.extend(["--cookies", self.cookie_file])
-        elif self.cookie_browser:
-            args.extend(["--cookies-from-browser", self.cookie_browser])
-        try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            # Note: Same as download: if yt-dlp reports format mismatch or "page needs to be reloaded",
-            # retry once without cookies to avoid transient YouTube/STS issues.
-            combined_output = (result.stderr or "") + (result.stdout or "")
-            if result.returncode != 0 and (
-                "Requested format is not available" in combined_output
-                or "The page needs to be reloaded" in combined_output
-            ):
-                if self.cookie_file or self.cookie_browser:
-                    no_cookies = []
-                    i = 0
-                    while i < len(args):
-                        if args[i] in ("--cookies", "--cookies-from-browser") and i + 1 < len(args):
-                            i += 2
-                            continue
-                        no_cookies.append(args[i])
-                        i += 1
-                    result = subprocess.run(
-                        no_cookies,
-                        capture_output=True,
-                        text=True,
-                        timeout=30,
-                    )
-                    combined_output = (result.stderr or "") + (result.stdout or "")
-            if result.returncode != 0:
-                stderr = (combined_output or "").strip() or "(no stderr)"
-                print(f"[Preview] yt-dlp -g failed for {video_id}: returncode={result.returncode}, stderr={stderr[:500]}")
+
+        def _try(args_list: List[str], timeout: int = 30) -> Optional[str]:
+            try:
+                result = subprocess.run(args_list, capture_output=True, text=True, timeout=timeout)
+                rc, out, err = result.returncode, result.stdout or "", result.stderr or ""
+                combined = (err or "") + (out or "")
+                if rc == 0:
+                    line = (out or "").strip().splitlines()
+                    url = line[0] if line else None
+                    if url:
+                        return url
+                if "Requested format is not available" in combined:
+                    return None
+                if "Sign in to confirm" in combined:
+                    return None
+                print(f"[Preview] yt-dlp failed for {video_id}: rc={rc} stderr={(combined.strip() or 'no stderr')[:300]}")
+                return "__ERROR__"
+            except subprocess.TimeoutExpired:
                 return None
-            line = (result.stdout or "").strip().splitlines()
-            stream_url = line[0] if line else None
-            if not stream_url:
-                print(f"[Preview] yt-dlp -g returned no URL for {video_id}")
-            return stream_url
-        except subprocess.TimeoutExpired:
-            print(f"[Preview] yt-dlp -g timed out for {video_id}")
+
+        common = [
+            get_subprocess_python(), "-m", "yt_dlp", "-g",
+            "-f", YDL_FORMAT_AUDIO, "--no-warnings", "--quiet",
+        ]
+
+        # Attempt 1: HTTP proxy (SOUNDSIBLE_YT_PROXY env var)
+        # Routes yt-dlp through a residential IP (e.g. Tailscale desktop).
+        yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "")
+        if yt_proxy:
+            result = _try(common + ["--proxy", yt_proxy, yt_url], timeout=90)
+            if result == "__ERROR__":
+                return None
+            if result:
+                return result
+
+        # Attempt 2: cookies via IPv6
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            result = _try(common + ["-6", "--cookies", self.cookie_file, yt_url])
+            if result == "__ERROR__":
+                return None
+            if result:
+                return result
+
+        # Attempt 3: Android client via IPv4 (residential IPs, direct)
+        result = _try(common + ["--force-ipv4", "--extractor-args", "youtube:player_client=android,ios", yt_url])
+        if result == "__ERROR__":
             return None
-        except FileNotFoundError:
-            print(f"[Preview] yt-dlp not found (python -m yt_dlp) for {video_id}")
+        if result:
+            return result
+
+        # Attempt 4: cookies via IPv4
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            result = _try(common + ["--force-ipv4", "--cookies", self.cookie_file, yt_url])
+            if result == "__ERROR__":
+                return None
+            if result:
+                return result
+
+        print(f"[Preview] All attempts failed for {video_id}.")
+        return None
+        yt_url = f"https://www.youtube.com/watch?v={video_id}"
+
+        def _run(args_list: List[str]) -> tuple[int, str, str]:
+            result = subprocess.run(args_list, capture_output=True, text=True, timeout=30)
+            return result.returncode, result.stdout or "", result.stderr or ""
+
+        def _try_ytdlp(args_list: List[str]) -> Optional[str]:
+            try:
+                rc, out, err = _run(args_list)
+                combined = (err or "") + (out or "")
+                if rc == 0:
+                    line = (out or "").strip().splitlines()
+                    url = line[0] if line else None
+                    if url:
+                        return url
+                # Recoverable: try next strategy
+                if "Requested format is not available" in combined:
+                    return None
+                if "Sign in to confirm" in combined:
+                    return None
+                print(f"[Preview] yt-dlp -g failed for {video_id}: rc={rc} stderr={(combined.strip() or 'no stderr')[:300]}")
+                return "__ERROR__"
+            except subprocess.TimeoutExpired:
+                return None
+
+        common = [
+            get_subprocess_python(), "-m", "yt_dlp", "-g",
+            "-f", YDL_FORMAT_AUDIO, "--no-warnings", "--quiet",
+        ]
+
+        # Attempt 1: cookies via IPv6 (matches cookie origin — VPS)
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            result = _try_ytdlp(common + ["-6", "--cookies", self.cookie_file, yt_url])
+            if result == "__ERROR__":
+                return None
+            if result:
+                return result
+
+        # Attempt 2: Android client via IPv4 (residential IPs, sometimes VPS)
+        result = _try_ytdlp(common + ["--force-ipv4", "--extractor-args", "youtube:player_client=android,ios", yt_url])
+        if result == "__ERROR__":
             return None
+        if result:
+            return result
+
+        # Attempt 3: cookies via IPv4 (fallback)
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            result = _try_ytdlp(common + ["--force-ipv4", "--cookies", self.cookie_file, yt_url])
+            if result == "__ERROR__":
+                return None
+            if result:
+                return result
+
+        # Attempt 4: Tor SOCKS5 proxy (bypasses datacenter IP blocks)
+        result = _try_ytdlp(common + ["--proxy", "socks5://127.0.0.1:9050", yt_url])
+        if result == "__ERROR__":
+            return None
+        if result:
+            return result
+
+        print(f"[Preview] All resolution methods failed for {video_id}")
+        return None
 
     def get_cover_for_query(self, artist: str, title: str) -> Optional[str]:
         """Fetch only cover (thumbnail) for a track via yt-dlp search. No audio download.

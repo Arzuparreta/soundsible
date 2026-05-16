@@ -153,6 +153,7 @@
             user-select: none;
             -webkit-user-select: none;
             -webkit-touch-callout: none;
+            -webkit-user-modify: read-only;
         }
 
         .safe-top { padding-top: max(1.5rem, env(safe-area-inset-top)); }
@@ -162,10 +163,44 @@
         .is-ios .safe-top { padding-top: max(3.5rem, env(safe-area-inset-top)); }
         
         * { -webkit-tap-highlight-color: transparent; }
-        
-        .song-row {
+
+        /* Prevent iOS text selection on all interactive content */
+        .song-row,
+        .song-row *,
+        .playlist-track-row,
+        .playlist-track-row *,
+        .home-mixed-artist-row,
+        .home-mixed-artist-row *,
+        .artist-album-header,
+        .artist-album-header *,
+        .podcast-search-row,
+        .podcast-search-row *,
+        .add-to-playlist-picker-item,
+        .add-to-playlist-picker-item *,
+        .playlist-cover-picker-tile,
+        .playlist-cover-picker-tile *,
+        .discover-card,
+        .discover-card *,
+        .discover-surface-row,
+        .discover-surface-row *,
+        .discover-odst-row,
+        .discover-odst-row * {
+            touch-action: pan-y;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        button,
+        [role="button"],
+        a {
+            touch-action: manipulation;
+        }
+
+        .song-row,
+        .playlist-track-row {
             transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1), background-color 0.3s ease;
-            background-color: var(--bg-card); /* Ensure solid background */
+            background-color: var(--bg-card);
         }
         .is-swiping .song-row {
             will-change: transform;
@@ -254,9 +289,9 @@
             padding-top: max(3.5rem, env(safe-area-inset-top));
         }
 
-        /* Discover results panel: scroll inset matches main views */
+        /* Discover uses the same single-scroll view model as Library. */
         #discover-search-results {
-            padding-bottom: var(--view-scroll-bottom) !important;
+            padding-bottom: 0 !important;
         }
 
         /* Cross-device resume: top notification banner (non-blocking) */
@@ -470,37 +505,20 @@
         .custom-scrollbar::-webkit-scrollbar { width: 0; }
         .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; overscroll-behavior: contain; }
         
-        /* Queue: modern Apple-like scroll cue (informative only) */
-        #floating-queue-tracks {
+        /* Now-Playing playback queue (Up Next) */
+        #np-queue-tracks {
             position: relative;
         }
-        #floating-queue-tracks .queue-item {
-            padding-right: 14px;
+        #np-queue-tracks .queue-item {
+            padding-right: 8px;
         }
-        .queue-scroll-cue {
-            position: absolute;
-            top: 10px;
-            bottom: 10px;
-            right: 1px;
-            width: 4px;
-            opacity: 0;
+
+        #np-queue-section {
+            transition: opacity 0.3s ease;
+        }
+        #np-queue-section.np-queue-empty {
+            opacity: 0.4;
             pointer-events: none;
-            transition: opacity 0.2s cubic-bezier(0.19, 1, 0.22, 1);
-            z-index: 5;
-        }
-        #floating-queue-tracks.has-scroll-cue .queue-scroll-cue {
-            opacity: 1;
-        }
-        .queue-scroll-cue-thumb {
-            position: absolute;
-            left: 0;
-            width: 4px;
-            height: 10px;
-            border-radius: 999px;
-            background: var(--scroll-cue-thumb);
-            box-shadow: 0 1px 8px rgba(0, 0, 0, 0.28);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
         }
 
         .status-pulse { animation: pulse 2s infinite; }
@@ -588,7 +606,52 @@
             transition: opacity 0.18s ease-out;
         }
 
-        /* Discover: grid layout, no horizontal scroll */
+        /* Discover: Library-aligned browsing surface. */
+        .discover-results-shell {
+            overflow: visible;
+            -webkit-overflow-scrolling: auto;
+        }
+        .discovery-home {
+            padding-bottom: 0;
+        }
+        .discovery-home section,
+        .discovery-search-results section {
+            min-width: 0;
+        }
+        .discovery-home h2,
+        .discovery-search-results h2,
+        .search-section-header {
+            padding-left: 0.25rem;
+            padding-right: 0.25rem;
+            color: var(--text-dim);
+        }
+        .discovery-home h2,
+        .discovery-search-results h2 {
+            font-size: 0.6875rem;
+            font-weight: 650;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin-bottom: 0.65rem;
+        }
+        #view-discover .discover-surface-row,
+        #view-discover .discover-odst-row,
+        #desktop-view-discover .discover-surface-row,
+        #desktop-view-discover .discover-odst-row {
+            background-color: var(--bg-card);
+            border-color: var(--glass-border);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+        }
+        .discover-primary-action,
+        .discover-secondary-action {
+            border: 1px solid var(--glass-border);
+            background: var(--surface-overlay);
+        }
+        .discover-primary-action {
+            color: var(--accent);
+        }
+        .discover-secondary-action {
+            color: var(--text-dim);
+        }
         .discover-section { margin-bottom: 1.125rem; flex-shrink: 0; }
         .discover-section h2 { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; }
         .discover-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 0.625rem; }
@@ -835,25 +898,105 @@
         #library-artists .artist-card.artist-card-tapped .artist-card-overlay { opacity: 1 !important; }
         #library-artists .artist-card.artist-card-tapped .artist-card-name { color: var(--accent) !important; }
         /* During/after scroll or just after return: keep suppress so no stray :active shows (backup) */
+        #library-artists.list-scroll-active .artist-card-cover,
         #library-artists.artist-scroll-active .artist-card-cover { transform: none !important; }
+        #library-artists.list-scroll-active .artist-card-overlay,
         #library-artists.artist-scroll-active .artist-card-overlay { opacity: 0 !important; }
+        #library-artists.list-scroll-active .artist-card-name,
         #library-artists.artist-scroll-active .artist-card-name { color: var(--text-main) !important; }
         #view-home.artist-just-returned .artist-card-cover { transform: none !important; }
         #view-home.artist-just-returned .artist-card-overlay { opacity: 0 !important; }
         #view-home.artist-just-returned .artist-card-name { color: var(--text-main) !important; }
 
-        /* List scroll safety (same pattern as library artists): keep, but do not disable song-row transforms so swipe animations still work */
-        #view-artist-detail.list-scroll-active .artist-album-header { transform: none !important; }
-        #view-playlists.list-scroll-active .playlist-card { transform: none !important; }
-        /* Discover: same scroll/touch as library — .view is the scroll container (no overrides). */
-        #view-discover.list-scroll-active .discover-card { background: var(--surface-overlay) !important; }
-        #view-discover.list-scroll-active .discover-card-play { background: transparent !important; }
-        /* Discover: same view structure as library/favourites (uses .view padding); inner panel scrolls. */
-        #view-discover {
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
+        /* Shared list scroll safety: all vertical-scroll containers suppress late :active/hover feedback. */
+        .list-scroll-active .song-row,
+        .list-scroll-active .playlist-track-row,
+        .list-scroll-active .home-mixed-artist-row,
+        .list-scroll-active .artist-album-header,
+        .list-scroll-active .playlist-card,
+        .list-scroll-active .podcast-search-row,
+        .list-scroll-active .discover-card,
+        .list-scroll-active .discover-surface-row,
+        .list-scroll-active .discover-odst-row,
+        .list-scroll-active .queue-item,
+        .list-scroll-active .add-to-playlist-picker-item,
+        .list-scroll-active .playlist-cover-picker-tile {
+            transform: none !important;
+            filter: none !important;
         }
+        .list-scroll-active .playlist-card-name,
+        .list-scroll-active .artist-card-name {
+            color: var(--text-main) !important;
+        }
+        .list-scroll-active .artist-card-cover {
+            transform: none !important;
+        }
+        .list-scroll-active .artist-card-overlay {
+            opacity: 0 !important;
+        }
+        .list-scroll-active button,
+        .list-scroll-active [role="button"] {
+            transform: none !important;
+        }
+        .list-scroll-active .discover-primary-action,
+        .list-scroll-active .discover-secondary-action,
+        .list-scroll-active .podcast-ep-queue,
+        .list-scroll-active .podcast-ep-download,
+        .list-scroll-active .queue-remove-btn,
+        .list-scroll-active .dl-add-one,
+        .list-scroll-active .dl-playback-queue {
+            background: var(--surface-overlay) !important;
+        }
+
+        /* Mobile surface normalization: cards/rows share the same quiet Library-like chrome. */
+        #view-playlists .playlist-card,
+        #view-discover .playlist-card,
+        #view-podcast .playlist-card,
+        #view-podcast-show-detail .playlist-card,
+        #view-playlist-detail .playlist-card,
+        .podcast-search-row,
+        .discover-card,
+        .playlist-cover-picker-tile {
+            border-color: var(--glass-border);
+            background-color: var(--bg-card);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+        }
+        #view-home .home-mixed-artist-row,
+        #view-artist-detail .artist-album-header,
+        #view-playlist-detail .playlist-track-row,
+        #view-podcast .podcast-search-row,
+        #view-podcast-show-detail .podcast-search-row {
+            border-color: var(--glass-border);
+            background-color: var(--bg-card);
+        }
+        @media (hover: none) {
+            .playlist-card,
+            .artist-card,
+            .podcast-search-row,
+            .discover-card,
+            .home-mixed-artist-row,
+            .artist-album-header,
+            .song-row,
+            .playlist-track-row {
+                -webkit-tap-highlight-color: transparent;
+            }
+            .playlist-card:hover,
+            .podcast-search-row:hover,
+            .discover-card:hover,
+            .home-mixed-artist-row:hover,
+            .artist-album-header:hover {
+                border-color: var(--glass-border) !important;
+                background-color: var(--bg-card) !important;
+            }
+            .playlist-card:hover .playlist-card-name,
+            .artist-card:hover .artist-card-name,
+            .home-mixed-artist-row:hover .song-title,
+            .artist-album-header:hover [class*="text-[var(--text-main)]"] {
+                color: var(--text-main) !important;
+            }
+        }
+        /* Discover: same view structure as library/favourites (uses .view padding); inner panel scrolls. */
+        #view-discover { min-height: 0; }
         /* Artist detail: expandable album tracks */
         .artist-album-expanded .artist-album-tracks { display: block !important; }
         .artist-album-expanded .artist-album-chevron { transform: rotate(180deg); }

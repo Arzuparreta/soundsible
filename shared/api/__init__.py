@@ -324,11 +324,23 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
 
             _log("Step 3/3: Starting Engine...")
             quality = env_vars.get("DEFAULT_QUALITY", lib_core.config.quality_preference if lib_core.config else "high")
-            from odst_tool.config import DEFAULT_WORKERS, DEFAULT_COOKIE_BROWSER
-            cookie_browser = env_vars.get("COOKIE_BROWSER") or os.getenv("COOKIE_BROWSER") or DEFAULT_COOKIE_BROWSER
+            from odst_tool.config import DEFAULT_WORKERS
+            cookie_browser = env_vars.get("COOKIE_BROWSER") or os.getenv("COOKIE_BROWSER")
+            cookie_file = (
+                env_vars.get("SOUNDSIBLE_YTDLP_COOKIE_FILE")
+                or env_vars.get("YTDLP_COOKIE_FILE")
+                or env_vars.get("COOKIE_FILE")
+                or os.getenv("SOUNDSIBLE_YTDLP_COOKIE_FILE")
+                or os.getenv("YTDLP_COOKIE_FILE")
+                or os.getenv("COOKIE_FILE")
+            )
             _log(f"Initializing Downloader (Quality: {quality})...")
             downloader_service = ODSTDownloader(
-                target_path, DEFAULT_WORKERS, cookie_browser=cookie_browser, quality=quality
+                target_path,
+                DEFAULT_WORKERS,
+                cookie_browser=cookie_browser,
+                cookie_file=cookie_file,
+                quality=quality,
             )
             _log("✅ Downloader Engine Ready.")
 

@@ -42,6 +42,24 @@ Refer to `odst_tool/README.md` for more details on standalone ODST usage.
 
 If downloads fail with yt‑dlp “Requested format is not available” when using cookies, see [troubleshooting-yt-dlp-formats.md](troubleshooting-yt-dlp-formats.md).
 
+For VPS or datacenter deployments, YouTube may require authenticated cookies. Place an exported YouTube cookies file at:
+
+```bash
+~/.config/soundsible/cookies.txt
+```
+
+Or point Soundsible at it explicitly:
+
+```bash
+export SOUNDSIBLE_YTDLP_COOKIE_FILE=/path/to/cookies.txt
+```
+
+Soundsible forces yt-dlp over IPv4 by default because some VPS IPv6 routes hang during YouTube extraction. To disable that:
+
+```bash
+export SOUNDSIBLE_YTDLP_FORCE_IPV4=false
+```
+
 ### 4. Discover (Deezer metadata)
 
 - **No Deezer API key** is required for the built-in Discover experience. The Station proxies **public** Deezer GET endpoints (see [ARCHITECTURE.md](ARCHITECTURE.md)).

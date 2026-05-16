@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Tuple
 
-from shared.constants import STATION_PORT
+from shared.constants import DEFAULT_CONFIG_DIR, STATION_PORT
 
 # Note: Canonical user-facing messages (one place for consistency and i18n)
 MSG_STATION_STARTING = "Station Engine is starting."
@@ -16,12 +16,13 @@ MSG_STATION_STOPPED = "Station Engine stopped."
 MSG_STATION_NOT_RUNNING = "Station Engine was not running."
 MSG_KEEP_TERMINAL_OPEN = "Keep this terminal open while the Station Engine is running. Closing it will stop the Station Engine."
 MSG_CAN_CLOSE_TERMINAL = "You can close this terminal; the Station Engine keeps running in the background."
-MSG_CONFIG_MISSING = "Configuration missing. Run the launcher once without --daemon to set up."
+MSG_CONFIG_MISSING = "Configuration missing. Start setup first: python3 run.py --setup."
 MSG_VENV_NOT_FOUND = "Virtual environment not found."
 MSG_VENV_HINT = "Create it with: python3 -m venv venv"
 MSG_RUNPY_NOT_FOUND = "run.py not found."
 MSG_RUNPY_HINT = "Make sure you run this from the project root."
 MSG_ALREADY_RUNNING = "Station Engine is already running."
+MSG_SETUP_REQUIRED = MSG_CONFIG_MISSING
 
 
 def _project_root(root_dir: Path = None) -> Path:
@@ -62,6 +63,8 @@ def start_daemon_process(root_dir: Path = None, env_extra: dict = None, detach: 
         return False, f"{MSG_VENV_NOT_FOUND} {MSG_VENV_HINT}"
     if not run_py.exists():
         return False, f"{MSG_RUNPY_NOT_FOUND} {MSG_RUNPY_HINT}"
+    if not (Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json").exists():
+        return False, MSG_SETUP_REQUIRED
     if is_port_in_use(STATION_PORT):
         return False, MSG_ALREADY_RUNNING
 

@@ -9,7 +9,99 @@ import subprocess
 import hashlib
 from pathlib import Path
 import platform
+import shutil
+import os
 # Note: Gevent monkey-patching must happen early, but only after deps are ensured.
+
+
+def _venv_python_path(venv_dir: Path) -> Path:
+    return venv_dir / ("Scripts/python.exe" if platform.system() == "Windows" else "bin/python")
+
+
+def _venv_site_packages_path(venv_dir: Path) -> Path:
+    return venv_dir / (
+        "Lib/site-packages"
+        if platform.system() == "Windows"
+        else f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
+    )
+
+
+def _venv_has_pip(py: Path) -> bool:
+    if not py.exists():
+        return False
+    result = subprocess.run(
+        [str(py), "-m", "pip", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def _venv_can_import(py: Path, modules: list[str]) -> tuple[bool, str]:
+    if not py.exists():
+        return False, "venv python executable is missing"
+    result = subprocess.run(
+        [str(py), "-c", "import importlib, sys; [importlib.import_module(m) for m in sys.argv[1:]]", *modules],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return True, ""
+    return False, (result.stderr or result.stdout or "module import check failed").strip()
+
+
+def _running_in_project_venv(venv_dir: Path) -> bool:
+    return Path(sys.prefix).resolve() == venv_dir.resolve()
+
+
+def _recreate_venv(venv_dir: Path) -> None:
+    if venv_dir.exists():
+        shutil.rmtree(venv_dir, ignore_errors=True)
+    print("Creating virtual environment...", flush=True)
+    subprocess.check_call([sys.executable, "-m", "venv", str(venv_dir)])
+
+
+def _ensure_venv_with_pip(venv_dir: Path) -> Path:
+    py = _venv_python_path(venv_dir)
+    needs_recreate = not venv_dir.exists() or not py.exists()
+
+    if needs_recreate:
+        _recreate_venv(venv_dir)
+        py = _venv_python_path(venv_dir)
+
+    if _venv_has_pip(py):
+        return py
+
+    print("Repairing virtual environment pip bootstrap...", flush=True)
+    ensurepip = subprocess.run(
+        [str(py), "-m", "ensurepip", "--upgrade"],
+        capture_output=True,
+        text=True,
+    )
+    if _venv_has_pip(py):
+        return py
+
+    print("Virtual environment pip bootstrap failed; recreating environment...", flush=True)
+    _recreate_venv(venv_dir)
+    py = _venv_python_path(venv_dir)
+
+    ensurepip_retry = subprocess.run(
+        [str(py), "-m", "ensurepip", "--upgrade"],
+        capture_output=True,
+        text=True,
+    )
+    if _venv_has_pip(py):
+        return py
+
+    details = (ensurepip_retry.stderr or ensurepip_retry.stdout or ensurepip.stderr or ensurepip.stdout).strip()
+    if platform.system() != "Windows":
+        details += (
+            "\nInstall the OS packages that provide venv + pip wheels, then rerun:\n"
+            f"  sudo apt install python{sys.version_info.major}.{sys.version_info.minor}-venv python3-pip"
+        )
+    raise RuntimeError(details or "Failed to create a usable virtual environment with pip.")
+
+
 def _ensure_bootstrap_before_gevent():
     """Create venv and install requirements before importing gevent.
 
@@ -18,33 +110,80 @@ def _ensure_bootstrap_before_gevent():
     """
     root_dir = Path(__file__).resolve().parent
     venv_dir = root_dir / "venv"
-    py = venv_dir / ("Scripts/python.exe" if platform.system() == "Windows" else "bin/python")
     req_file = root_dir / "requirements.txt"
     marker = venv_dir / ".installed_requirements_hash"
+    bootstrap_modules = ["pip", "gevent", "zope.event", "zope.interface", "rich"]
 
-    if not venv_dir.exists():
-        print("Creating virtual environment...")
-        subprocess.check_call([sys.executable, "-m", "venv", str(venv_dir)])
+    try:
+        py = _ensure_venv_with_pip(venv_dir)
+    except Exception as exc:
+        print("Virtual environment setup failed:", exc)
+        sys.exit(1)
 
     if req_file.exists() and py.exists():
         current_hash = hashlib.md5(req_file.read_bytes()).hexdigest()
-        if not marker.exists() or marker.read_text() != current_hash:
-            print("Installing/Updating requirements...")
-            result = subprocess.run([str(py), "-m", "pip", "install", "-r", str(req_file)], capture_output=True, text=True)
+        env_ok, env_error = _venv_can_import(py, bootstrap_modules)
+        if not marker.exists() or marker.read_text() != current_hash or not env_ok:
+            print("Installing/Updating requirements...", flush=True)
+            result = subprocess.run(
+                [str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"],
+            )
             if result.returncode != 0:
-                print("Requirement installation failed:", result.stderr or result.stdout)
+                print("Bootstrap tool upgrade failed.")
                 sys.exit(1)
+            result = subprocess.run(
+                [str(py), "-m", "pip", "install", "--upgrade", "-r", str(req_file)],
+            )
+            if result.returncode != 0:
+                print("Requirement installation failed.")
+                sys.exit(1)
+            env_ok, env_error = _venv_can_import(py, bootstrap_modules)
+            if not env_ok:
+                print("Virtual environment verification failed:", env_error)
+                print("Recreating virtual environment and retrying once...", flush=True)
+                try:
+                    _recreate_venv(venv_dir)
+                    py = _ensure_venv_with_pip(venv_dir)
+                except Exception as exc:
+                    print("Virtual environment recreation failed:", exc)
+                    sys.exit(1)
+                result = subprocess.run(
+                    [str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"],
+                )
+                if result.returncode != 0:
+                    print("Bootstrap tool upgrade failed.")
+                    sys.exit(1)
+                result = subprocess.run(
+                    [str(py), "-m", "pip", "install", "--upgrade", "-r", str(req_file)],
+                )
+                if result.returncode != 0:
+                    print("Requirement installation failed.")
+                    sys.exit(1)
+                env_ok, env_error = _venv_can_import(py, bootstrap_modules)
+                if not env_ok:
+                    print("Virtual environment verification failed after rebuild:", env_error)
+                    sys.exit(1)
             marker.write_text(current_hash)
 
-    # Ensure the current interpreter can import packages installed in ./venv.
-    import site
-    venv_site = venv_dir / (
-        "Lib/site-packages"
-        if platform.system() == "Windows"
-        else f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
-    )
-    if venv_site.exists():
-        site.addsitedir(str(venv_site))
+    # Re-exec under the project virtualenv so imports happen in the exact
+    # interpreter environment that installed the dependencies. Do not compare
+    # resolved executable paths here: Ubuntu venv/bin/python is commonly a
+    # symlink to /usr/bin/python3.12, so path resolution would falsely say the
+    # system interpreter is already the venv interpreter.
+    target_exe = py.absolute()
+    if not _running_in_project_venv(venv_dir):
+        env = os.environ.copy()
+        env["SOUNDSIBLE_BOOTSTRAPPED"] = "1"
+        os.execve(str(target_exe), [str(target_exe), str(root_dir / "run.py"), *sys.argv[1:]], env)
+
+    # If the process was re-execed but still did not enter the venv, fail with
+    # explicit state instead of falling back to mixed system/venv imports.
+    if os.environ.get("SOUNDSIBLE_BOOTSTRAPPED") == "1" and not _running_in_project_venv(venv_dir):
+        print("Virtual environment activation failed after re-exec.")
+        print("sys.executable:", sys.executable)
+        print("sys.prefix:", sys.prefix)
+        print("expected venv:", venv_dir)
+        sys.exit(1)
 
 
 _ensure_bootstrap_before_gevent()
@@ -53,8 +192,6 @@ _ensure_bootstrap_before_gevent()
 from gevent import monkey
 monkey.patch_all()
 
-import os
-import shutil
 import socket
 import threading
 import time
@@ -68,6 +205,8 @@ from pathlib import Path
 from shared.constants import STATION_PORT
 
 PLAYER_URL = f"http://localhost:{STATION_PORT}/player/"
+LAUNCHER_PORT = int(os.environ.get("LAUNCHER_PORT", "5099"))
+SETUP_URL = f"http://localhost:{LAUNCHER_PORT}/setup"
 
 # Note: VENV bootstrap
 ROOT_DIR = Path(__file__).parent.absolute()
@@ -80,6 +219,7 @@ from shared.daemon_launcher import (
     stop_daemon_process,
     MSG_KEEP_TERMINAL_OPEN,
     MSG_CONFIG_MISSING,
+    MSG_SETUP_REQUIRED,
 )
 
 
@@ -244,11 +384,12 @@ class SoundsibleLauncher:
         table.add_row("3", "Open Station (Station Engine must be running)")
         table.add_row("4", "Stop Station Engine")
         table.add_row("5", "Quick Discover / Terminal Playback")
+        table.add_row("6", "Setup storage / configuration")
         table.add_row("q", "Exit")
 
         console.print(Panel(table, title="Main Menu", border_style="dim"))
 
-        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "5", "q"], default="1")
+        choice = Prompt.ask("[bold cyan]>[/bold cyan] Select an option", choices=["1", "2", "3", "4", "5", "6", "q"], default="1")
         
         if choice == "1":
             self.launch_ecosystem()
@@ -260,20 +401,43 @@ class SoundsibleLauncher:
             self.stop_station()
         elif choice == "5":
             self.search_ui()
+        elif choice == "6":
+            self.launch_setup()
         elif choice == "q":
             console.print("[italic]Happy listening![/italic]")
             sys.exit(0)
+
+    def _print_setup_access(self):
+        console.print(Panel.fit(
+            "[bold yellow]Configuration is required before the Station Engine can start.[/bold yellow]\n\n"
+            f"Setup UI: [cyan]{SETUP_URL}[/cyan]\n\n"
+            "On a remote VPS, either use an SSH tunnel:\n"
+            f"[yellow]ssh -L {LAUNCHER_PORT}:localhost:{LAUNCHER_PORT} root@YOUR_SERVER[/yellow]\n"
+            f"then open [cyan]{SETUP_URL}[/cyan]\n\n"
+            "or intentionally bind the launcher to the network:\n"
+            "[yellow]SOUNDSIBLE_LAUNCHER_BIND_ALL=true python3 run.py --setup[/yellow]",
+            border_style="yellow"
+        ))
+
+    def launch_setup(self):
+        """Run the setup web UI that writes ~/.config/soundsible/config.json."""
+        self._print_setup_access()
+        from launcher_web.server import start_server
+        start_server(port=LAUNCHER_PORT)
 
     def launch_ecosystem(self):
         """Start the Station Engine and open the Station (web player) in the browser."""
         console.print("[bold green]Starting Station Engine...[/bold green]")
         ok, msg = start_daemon_process(self.root_dir)
         if not ok:
-            if "already running" in msg.lower():
+            if msg == MSG_SETUP_REQUIRED:
+                self.launch_setup()
+            elif "already running" in msg.lower():
                 console.print(f"[green]{msg}[/green]")
                 webbrowser.open(PLAYER_URL)
             else:
                 console.print(f"[red]{msg}[/red]")
+                Prompt.ask("Press Enter to return")
             return
         console.print(Panel.fit(
             "[bold green]Station Engine started. Station opened in browser.[/bold green]\n\n"
@@ -288,10 +452,13 @@ class SoundsibleLauncher:
         console.print("[bold green]Starting Station Engine...[/bold green]")
         ok, msg = start_daemon_process(self.root_dir)
         if not ok:
-            if "already running" in msg.lower():
+            if msg == MSG_SETUP_REQUIRED:
+                self.launch_setup()
+            elif "already running" in msg.lower():
                 console.print(f"[green]{msg}[/green]")
             else:
                 console.print(f"[red]{msg}[/red]")
+                Prompt.ask("Press Enter to return")
             return
         console.print(Panel.fit(
             "[bold green]Station Engine started.[/bold green]\n\n"
@@ -343,13 +510,18 @@ class SoundsibleLauncher:
 
     def run(self):
         self._install_requirements_if_needed()
+
+        if "--setup" in sys.argv:
+            self.launch_setup()
+            return
         
         if not self.is_configured():
             if "--daemon" in sys.argv:
                 print(f"Daemon: {MSG_CONFIG_MISSING}")
-                print("Run without --daemon once to complete setup: python run.py")
+                print("Start setup first: python3 run.py --setup")
                 return
-            console.print(Panel("[bold yellow]First Run Detected![/bold yellow]\nWelcome! Please complete setup using the web interface.", border_style="yellow"))
+            self.launch_setup()
+            return
         
         self.start_background_sync()
         self._start_watcher()

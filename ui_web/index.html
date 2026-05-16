@@ -61,43 +61,29 @@
             <div class="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-[var(--secondary)]/10 blur-[120px] rounded-full"></div>
         </div>
 
-        <!-- Download queue FAB: app-root layer so it shows over every view -->
-        <div id="dl-queue-container" class="fixed top-[calc(max(1.5rem,env(safe-area-inset-top))+3.5rem)] right-6 z-[5000] flex flex-col items-end pointer-events-none hidden">
-            <button id="dl-queue-fab" type="button" onclick="typeof Downloader!=='undefined'&&Downloader.toggleDownloadQueue()" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)] relative">
+        <!-- Download queue FAB: fixed bottom-right above omnibar -->
+        <div id="queues-fab-container" class="fixed bottom-[calc(var(--omni-stack-height)+env(safe-area-inset-bottom,0px)+0.75rem)] right-4 z-[5000] pointer-events-none">
+            <button id="queues-fab" type="button" onclick="UI.toggleQueues()" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)] relative">
                 <svg class="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 48 48" aria-hidden="true">
                     <circle cx="24" cy="24" r="22" fill="none" stroke="currentColor" stroke-width="2" class="text-[var(--bg-deep)]/30" />
                     <circle id="dl-queue-progress-ring" cx="24" cy="24" r="22" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="138.23" stroke-dashoffset="138.23" stroke-linecap="round" style="transition: stroke-dashoffset 0.25s ease;" />
                 </svg>
-                <i class="fas fa-list-ul relative z-[1]"></i>
-                <div id="dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)] z-[2]">0</div>
+                <i class="fas fa-cloud-download-alt relative z-[1]"></i>
+                <div id="queues-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)] z-[2]">0</div>
             </button>
-            <div id="dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
+            <div id="queues-popover" class="absolute bottom-[calc(100%+1rem)] right-0 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-bottom-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
                 <div class="p-5">
                     <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Download queue</h3>
-                        <button type="button" id="dl-clear-queue-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-1 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
-                        <button type="button" id="dl-submit-download-btn" class="w-9 h-9 rounded-full bg-[var(--accent)] text-[var(--text-on-accent)] flex items-center justify-center shadow-lg hover:opacity-90 active:scale-90 pointer-events-auto transition-all duration-300" aria-label="Start download"><i class="fas fa-download text-xs"></i></button>
+                        <span class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Downloads</span>
+                        <button type="button" id="queues-clear-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-2 rounded-full hover:bg-red-500/20 transition-colors min-h-[32px] min-w-[44px]">Clear</button>
                     </div>
                     <div id="dl-download-queue-list" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
+                    <button type="button" id="dl-submit-download-btn" class="mt-3 w-full py-3 rounded-xl bg-[var(--accent)] text-[var(--text-on-accent)] font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all duration-200 pointer-events-auto">
+                        <i class="fas fa-download text-xs"></i> Start Download
+                    </button>
                 </div>
             </div>
         </div>
-        <div id="queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[140] flex flex-col items-end pointer-events-none">
-            <button id="queue-fab" onclick="UI.toggleQueue()" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)]">
-                <i class="fas fa-list-ul"></i>
-                <div id="queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)]">0</div>
-            </button>
-            <div id="queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
-                <div class="p-5">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Next Up</h3>
-                        <button onclick="store.clearQueue()" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-1 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
-                    </div>
-                    <div id="floating-queue-tracks" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
-                </div>
-            </div>
-        </div>
-
         <main id="content" class="flex-1 relative">
             <!-- Global Search -->
             <div id="global-search-container" class="opacity-0 pointer-events-none transition-opacity duration-300">
@@ -182,12 +168,12 @@
             <div id="view-favourites" class="view hidden">
                 <div id="fav-tracks" class="space-y-1"></div>
             </div>
-            <div id="view-discover" class="view flex flex-col min-h-0">
+            <div id="view-discover" class="view">
                 <div id="mobile-downloads-section" class="hidden flex-shrink-0 px-4 pt-2 pb-1 border-b border-[var(--glass-border)]">
                     <div class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)] mb-1">Downloads</div>
                     <div id="mobile-downloads-list" class="space-y-0 max-h-[30vh] overflow-y-auto custom-scrollbar"></div>
                 </div>
-                <div id="discover-search-results" class="flex-1 overflow-y-auto px-4 space-y-1" style="-webkit-overflow-scrolling: touch;"></div>
+                <div id="discover-search-results" class="discover-results-shell min-w-0 w-full space-y-1"></div>
             </div>
             <!-- YouTube preview modal (ODST result click; used from Search) -->
             <div id="dl-preview-modal" class="fixed inset-0 z-[110] hidden flex-col backdrop-blur-sm" style="background-color: var(--overlay-bg);">
@@ -594,10 +580,10 @@
     </div>
 
     <!-- Now Playing Full View -->
-    <div id="now-playing-view" class="fixed inset-0 z-[120] hidden flex flex-col touch-none overflow-hidden min-h-full-safe">
+    <div id="now-playing-view" class="fixed inset-0 z-[120] hidden flex flex-col overflow-hidden min-h-full-safe">
         <div class="relative flex-1 flex flex-col p-8 safe-top safe-bottom">
             <!-- Header (Fixed at top) -->
-            <div class="flex justify-between items-center pt-4 mb-2">
+            <div class="flex justify-between items-center pt-4 mb-2 flex-shrink-0">
                 <button onclick="UI.hideNowPlaying()" class="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-[var(--surface-overlay)] rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-chevron-down"></i></button>
                 <div class="text-center px-4 flex-1 truncate">
                     <div id="np-now-playing-label" class="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--accent)] mb-1 transition-opacity duration-300 ease-out">Now Playing</div>
@@ -606,28 +592,36 @@
                 <button onclick="UI.showActionMenu(store.state.currentTrack?.id)" class="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-[var(--surface-overlay)] rounded-full active:scale-90 text-[var(--text-main)]"><i class="fas fa-ellipsis"></i></button>
             </div>
 
-            <!-- Content Area: Centered but pushed up -->
-            <div class="flex-1 flex flex-col items-center justify-center">
-                <div class="text-center mb-7 w-full px-8">
-                    <div id="np-title" class="text-3xl font-black mb-1 tracking-tight truncate text-[var(--text-main)]">Song Title</div>
-                    <div id="np-artist" class="text-sm text-[var(--accent)] font-bold uppercase tracking-widest truncate">Artist</div>
-                </div>
-                <div id="np-art" class="np-art-bg w-full aspect-square max-w-[340px] rounded-[var(--radius-omni)] shadow-[0_40px_80px_rgba(0,0,0,0.8)] border border-[var(--glass-border)] overflow-hidden bg-cover bg-center" role="img" aria-label="Album art"></div>
-                <!-- Flying timeline: seek bar under cover art -->
-                <div id="np-seek-container" class="w-full max-w-[340px] mt-4 px-1 py-3 cursor-pointer touch-manipulation" role="slider" aria-label="Seek" tabindex="0">
-                    <div class="relative min-h-[14px] mb-1">
-                        <span id="np-time-current" class="absolute bottom-0 text-[11px] font-bold text-[var(--text-dim)] font-mono whitespace-nowrap" style="left: 0%; transform: translateX(-50%);" aria-hidden="true">0:00</span>
-                        <span id="np-time-duration" class="absolute right-0 bottom-0 text-[11px] font-bold text-[var(--text-dim)] truncate font-mono" aria-hidden="true">0:00</span>
+            <!-- Scrollable body: centered content above, queue below -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar" style="overscroll-behavior: contain;">
+                <div class="flex flex-col items-center justify-center min-h-[50vh]">
+                    <div class="text-center mb-7 w-full px-8">
+                        <div id="np-title" class="text-3xl font-black mb-1 tracking-tight truncate text-[var(--text-main)]">Song Title</div>
+                        <div id="np-artist" class="text-sm text-[var(--accent)] font-bold uppercase tracking-widest truncate">Artist</div>
                     </div>
-                    <div class="h-3 rounded-full overflow-hidden touch-manipulation" style="touch-action: none; background-color: var(--seek-track);">
-                        <div id="np-seek-progress" class="h-full bg-[var(--accent)] w-0 transition-[width] duration-100 shadow-[0_0_10px_var(--accent)]" style="width: 0%"></div>
+                    <div id="np-art" class="np-art-bg w-full aspect-square max-w-[340px] rounded-[var(--radius-omni)] shadow-[0_40px_80px_rgba(0,0,0,0.8)] border border-[var(--glass-border)] overflow-hidden bg-cover bg-center" role="img" aria-label="Album art"></div>
+                    <!-- Flying timeline: seek bar under cover art -->
+                    <div id="np-seek-container" class="w-full max-w-[340px] mt-4 px-1 py-3 cursor-pointer touch-manipulation" role="slider" aria-label="Seek" tabindex="0">
+                        <div class="relative min-h-[14px] mb-1">
+                            <span id="np-time-current" class="absolute bottom-0 text-[11px] font-bold text-[var(--text-dim)] font-mono whitespace-nowrap" style="left: 0%; transform: translateX(-50%);" aria-hidden="true">0:00</span>
+                            <span id="np-time-duration" class="absolute right-0 bottom-0 text-[11px] font-bold text-[var(--text-dim)] truncate font-mono" aria-hidden="true">0:00</span>
+                        </div>
+                        <div class="h-3 rounded-full overflow-hidden touch-manipulation" style="touch-action: none; background-color: var(--seek-track);">
+                            <div id="np-seek-progress" class="h-full bg-[var(--accent)] w-0 transition-[width] duration-100 shadow-[0_0_10px_var(--accent)]" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div id="np-download-wrap" class="hidden w-full max-w-[340px] mx-auto mt-1 px-1 flex justify-end">
+                        <button type="button" id="np-download-btn" class="flex items-center justify-center w-10 h-10 min-w-[40px] min-h-[40px] rounded-full bg-[var(--surface-overlay)] text-[var(--text-dim)] active:scale-95 transition-all touch-manipulation hover:text-[var(--accent)] border border-[var(--glass-border)]" aria-label="Add to download queue"><i class="fas fa-cloud-download-alt text-sm" aria-hidden="true"></i></button>
                     </div>
                 </div>
-                <div id="np-download-wrap" class="hidden w-full max-w-[340px] mx-auto mt-1 px-1 flex justify-end">
-                    <button type="button" id="np-download-btn" class="flex items-center justify-center w-10 h-10 min-w-[40px] min-h-[40px] rounded-full bg-[var(--surface-overlay)] text-[var(--text-dim)] active:scale-95 transition-all touch-manipulation hover:text-[var(--accent)] border border-[var(--glass-border)]" aria-label="Add to download queue"><i class="fas fa-cloud-download-alt text-sm" aria-hidden="true"></i></button>
+                <!-- Up Next: playback queue section -->
+                <div id="np-queue-section" class="w-full max-w-[400px] mx-auto mt-6 mb-4">
+                    <div class="flex items-center justify-between mb-2 px-1">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Up Next</span>
+                        <button type="button" id="np-queue-clear-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-2 rounded-full hover:bg-red-500/20 transition-colors min-h-[32px] min-w-[44px]">Clear</button>
+                    </div>
+                    <div id="np-queue-tracks" class="space-y-1"></div>
                 </div>
-                <!-- This spacer pushes everything above it higher -->
-                <div class="flex-1 max-h-[30vh] min-h-[40px]"></div>
             </div>
         </div>
     </div>

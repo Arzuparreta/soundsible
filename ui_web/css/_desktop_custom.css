@@ -485,6 +485,9 @@
         #desktop-downloads-panel { background: transparent; border: none; box-sizing: border-box; }
         #desktop-downloads-panel::-webkit-scrollbar { width: 6px; }
         #desktop-downloads-panel::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 3px; opacity: 0.4; }
+        #desktop-dl-download-queue-list { background: transparent; border: none; box-sizing: border-box; }
+        #desktop-dl-download-queue-list::-webkit-scrollbar { width: 6px; }
+        #desktop-dl-download-queue-list::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 3px; opacity: 0.4; }
         @keyframes dl-progress-indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
         .dl-active-row.desktop-download-item { min-width: 0; }
         .dl-active-row .dl-active-cover { box-shadow: inset 0 0 0 1px var(--glass-border); }

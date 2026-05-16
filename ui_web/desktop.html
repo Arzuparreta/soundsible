@@ -107,6 +107,16 @@
                 <div id="desktop-queue-panel" class="hidden overflow-y-auto min-h-0" style="max-height: 40vh;">
                     <div id="desktop-queue-tracks" class="space-y-0 py-1"></div>
                 </div>
+                <div id="desktop-download-queue-section" class="hidden flex flex-col min-h-0 mt-2" style="max-height: 35vh;">
+                    <div class="flex items-center justify-between w-full mb-1.5 px-1 flex-shrink-0">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Download Queue</span>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" id="desktop-dl-clear-queue-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-2 rounded-full hover:bg-red-500/20 transition-colors min-h-[28px]">Clear</button>
+                            <button type="button" id="desktop-dl-submit-download-btn" class="w-8 h-8 rounded-full bg-[var(--accent)] text-[var(--text-on-accent)] flex items-center justify-center hover:opacity-90 active:scale-90 pointer-events-auto transition-all duration-200" aria-label="Start download"><i class="fas fa-download text-[10px]"></i></button>
+                        </div>
+                    </div>
+                    <div id="desktop-dl-download-queue-list" class="flex-1 min-h-0 overflow-y-auto space-y-1 py-1"></div>
+                </div>
                 <div id="desktop-downloads-section" class="hidden flex-shrink-0 mt-2">
                     <div class="flex items-center justify-between w-full mb-1 px-1">
                         <span class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Downloads</span>
@@ -506,28 +516,6 @@
             <div class="flex gap-3 justify-end">
                 <button type="button" id="wipe-library-cancel" class="px-4 py-2.5 rounded-[var(--radius-omni-xs)] text-sm font-bold text-[var(--text-dim)] hover:text-[var(--text-main)] transition-colors">Cancel</button>
                 <button type="button" id="wipe-library-submit" class="px-4 py-2.5 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>Wipe library</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Download queue FAB + popover: fixed to viewport, above all app content -->
-    <div id="desktop-dl-queue-container" class="fixed top-[max(1.5rem,env(safe-area-inset-top))] right-6 z-[5000] flex flex-col items-end pointer-events-none hidden">
-        <button id="desktop-dl-queue-fab" type="button" class="w-12 h-12 bg-[var(--text-main)] text-[var(--bg-deep)] rounded-full shadow-2xl flex items-center justify-center transform scale-0 opacity-0 transition-all duration-500 hover:scale-105 active:scale-90 pointer-events-auto border-2 border-[var(--glass-border)] relative">
-            <svg class="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 48 48" aria-hidden="true">
-                <circle cx="24" cy="24" r="22" fill="none" stroke="currentColor" stroke-width="2" class="text-[var(--bg-deep)]/30" />
-                <circle id="desktop-dl-queue-progress-ring" cx="24" cy="24" r="22" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="138.23" stroke-dashoffset="138.23" stroke-linecap="round" style="transition: stroke-dashoffset 0.25s ease;" />
-            </svg>
-            <i class="fas fa-list-ul relative z-[1]"></i>
-            <div id="desktop-dl-queue-badge" class="absolute -top-1 -right-1 bg-[var(--accent)] text-[var(--text-on-accent)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-[var(--glass-border)] z-[2]">0</div>
-        </button>
-        <div id="desktop-dl-download-queue-popover" class="mt-4 w-72 glass-view rounded-[var(--radius-omni)] border border-[var(--glass-border)] shadow-2xl transform scale-95 opacity-0 pointer-events-none origin-top-right hidden transition-all duration-300" style="box-shadow: var(--shadow-omni);">
-            <div class="p-5">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Download queue</h3>
-                    <button type="button" id="desktop-dl-clear-queue-btn" class="text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 px-3 py-1 rounded-full hover:bg-red-500/20 transition-colors">Clear</button>
-                    <button type="button" id="desktop-dl-submit-download-btn" class="w-9 h-9 rounded-full bg-[var(--accent)] text-[var(--text-on-accent)] flex items-center justify-center shadow-lg hover:opacity-90 active:scale-90 pointer-events-auto transition-all duration-300" aria-label="Start download"><i class="fas fa-download text-xs"></i></button>
-                </div>
-                <div id="desktop-dl-download-queue-list" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
             </div>
         </div>
     </div>
