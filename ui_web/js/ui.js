@@ -420,7 +420,7 @@ export class UI {
         if (!favBubble || !favBtn || !favIcon) return;
         const track = state.currentTrack;
         const isLibraryTrack = track?.id && !String(track.id).startsWith('deezer_') && store.state.library.some(t => t.id === track.id);
-        const isVisible = isLibraryTrack && this.isIslandActive && !this._npViewOpen;
+        const isVisible = isLibraryTrack && this.isIslandActive && !this._npViewOpen && !this.isBlooming;
         if (isVisible) {
             favBubble.style.display = '';
             favBubble.style.opacity = '1';
@@ -1275,6 +1275,7 @@ export class UI {
                 if (this._startedInside && Math.abs(this._currentY - this._startY) < 30) {
                     Haptics.heavy();
                     this.isBlooming = true;
+                    this._syncFavBubble(store.state);
 
                     island.style.width = '380px';
                     island.classList.remove('omni-seed');
@@ -1622,6 +1623,7 @@ export class UI {
         this._activeNavView = null;
         this._lastActiveNavView = null;
 
+        this._syncFavBubble(store.state);
         this.updateOmniMetadataVisibility();
     }
 
