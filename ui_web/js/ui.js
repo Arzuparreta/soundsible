@@ -1277,7 +1277,7 @@ export class UI {
                     this.isBlooming = true;
                     this._syncFavBubble(store.state);
 
-                    island.style.width = '380px';
+                    island.style.width = Math.min(380, window.innerWidth - 32) + 'px';
                     island.classList.remove('omni-seed');
 
                     const transport = this.dom.omniTransport;
