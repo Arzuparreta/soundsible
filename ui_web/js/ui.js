@@ -412,7 +412,7 @@ export class UI {
         container.classList.toggle('omni-label-hidden', hidden);
     }
 
-    /** Favourites bubble: visible when island is active, NP view is closed, and track exists in library. */
+    /** Favourites bubble: visible when island is active, NP view is closed, track exists in library, and not blooming. */
     static _syncFavBubble(state) {
         const favBubble = this.dom.omniFavBubble;
         const favBtn = this.dom.omniFavBtn;
@@ -421,20 +421,12 @@ export class UI {
         const track = state.currentTrack;
         const isLibraryTrack = track?.id && !String(track.id).startsWith('deezer_') && store.state.library.some(t => t.id === track.id);
         const isVisible = isLibraryTrack && this.isIslandActive && !this._npViewOpen && !this.isBlooming;
+        favBubble.classList.toggle('omni-fav-hidden', !isVisible);
         if (isVisible) {
-            favBubble.style.display = '';
-            favBubble.style.opacity = '1';
-            favBubble.style.pointerEvents = 'auto';
-            favBubble.style.position = 'relative';
-            favBubble.style.zIndex = '220';
             const isFav = track && store.state.favorites.includes(track.id);
             favBtn.classList.toggle('omni-fav-active', isFav);
             favIcon.className = isFav ? 'fas fa-heart text-sm' : 'far fa-heart text-sm';
             favBtn.setAttribute('aria-label', isFav ? 'Remove from Favourites' : 'Add to Favourites');
-        } else {
-            favBubble.style.display = 'none';
-            favBubble.style.opacity = '0';
-            favBubble.style.pointerEvents = 'none';
         }
     }
 

@@ -820,6 +820,18 @@
             overflow: visible;
         }
 
+        /* Favourites bubble: hidden state via class — avoids display:none reflow */
+        #omni-fav-bubble.omni-fav-hidden {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+        /* Favourites bubble: visible state — position/z-index so it sits above touch area */
+        #omni-fav-bubble:not(.omni-fav-hidden) {
+            opacity: 1;
+            pointer-events: auto;
+            position: relative;
+            z-index: 220;
+        }
         /* Favourites bubble active state */
         #omni-fav-btn.omni-fav-active {
             color: var(--accent);
