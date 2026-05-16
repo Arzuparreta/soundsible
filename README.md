@@ -67,11 +67,9 @@ As a **musician**, I've seen how streaming platforms exploit artists and listene
 
 Soundsible aims to be a **sensible self-hosted alternative** to predatory music streaming services — without sacrificing any commodity whatsoever.
 
-- **Privacy by design** — everything stays local on your server
-- **Free forever** — no subscriptions, no premium tiers, no hidden costs
+- **Privacy by design** — everything stays local on your server, it's a service for you to host, I provide anything but servers
 - **Open source** — MIT licensed; inspect, modify, contribute
-- **Musician-approved** — built by someone who actually needs to carry music around
-
+- **Musician-approved** — built by someone who uses it everyday to carry music around
 ---
 
 ## Quick Start
