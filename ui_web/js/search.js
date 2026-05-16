@@ -15,6 +15,7 @@ import { Haptics } from './haptics.js';
 import { searchService } from './search_service.js';
 import { scoreLibrary, scoreArtist, mergeAndSortByScore, scoreOdst } from './search_scoring.js';
 import { getApiBase } from './config.js';
+import { discoveryUI } from './discovery.js';
 
 const ODST_DEBOUNCE_MS = 150;
 
@@ -484,6 +485,12 @@ function onInput() {
     }
     updateDiscoverPanels();
 
+    // On desktop discover, notify discoveryUI that search is taking ownership of the
+    // container. This sets currentView='search' and cancels any in-flight renderHome().
+    if (isDiscoverPage && isDesktop) {
+        discoveryUI.notifySearchActive();
+    }
+
     const parsed = searchService.parseUrlLines(raw);
     if (parsed.mode === 'url') {
         if (!isDiscoverPage) {
@@ -516,6 +523,10 @@ function clear(options = {}) {
     updateDiscoverPanels();
     if (resultsEl) {
         if (isDiscoverPage) {
+            // Tell discoveryUI we're relinquishing control so its subscriber
+            // reflects the correct state before renderHome() fires.
+            if (isDesktop) discoveryUI.notifySearchCleared();
+
             if (skipDiscoverRestore) {
                 resultsEl.innerHTML = '';
             } else {
