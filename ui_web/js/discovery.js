@@ -105,6 +105,12 @@ function ensurePersonalTasteStoreListener() {
       discoveryUI.container &&
       discoveryUI.currentView === 'home'
     ) {
+      // On desktop the discover search is handled by unifiedSearch (search.js), so
+      // discoveryUI.currentView never transitions to 'search'. Guard against clobbering
+      // active ODST search results by checking the search input directly.
+      const inputEl = document.getElementById('desktop-global-search-input')
+        || document.getElementById('global-search-input');
+      if (inputEl?.value.trim()) return;
       void discoveryUI.renderHome();
     }
   });
@@ -115,6 +121,9 @@ function ensurePersonalRailRefreshTimer() {
   _personalRailIntervalId = window.setInterval(() => {
     _personalRailTimerGen += 1;
     if (discoveryUI.container && discoveryUI.currentView === 'home') {
+      const inputEl = document.getElementById('desktop-global-search-input')
+        || document.getElementById('global-search-input');
+      if (inputEl?.value.trim()) return;
       void discoveryUI.renderHome();
     }
   }, PERSONAL_RAIL_REFRESH_MS);
