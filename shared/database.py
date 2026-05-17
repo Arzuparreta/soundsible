@@ -9,14 +9,14 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from shared.models import Track, LibraryMetadata
-from shared.constants import DEFAULT_CONFIG_DIR
+from shared.runtime import get_config_dir
 
 logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     def __init__(self, db_path: Optional[str] = None):
         if db_path is None:
-            db_dir = Path(DEFAULT_CONFIG_DIR).expanduser()
+            db_dir = get_config_dir()
             db_dir.mkdir(parents=True, exist_ok=True)
             self.db_path = db_dir / "library.db"
         else:
@@ -156,6 +156,25 @@ class DatabaseManager:
                         last_used_at TIMESTAMP,
                         revoked_at TIMESTAMP
                     )
+                """)
+
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS auth_tokens (
+                        id TEXT PRIMARY KEY,
+                        name TEXT,
+                        token_hash TEXT NOT NULL UNIQUE,
+                        kind TEXT NOT NULL,
+                        device_type TEXT,
+                        scopes TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_used_at TIMESTAMP,
+                        expires_at TIMESTAMP,
+                        revoked_at TIMESTAMP
+                    )
+                """)
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_auth_tokens_kind
+                    ON auth_tokens (kind)
                 """)
                 
                 # Note: 5. Performance indexes for common access patterns
@@ -397,6 +416,78 @@ class DatabaseManager:
                 logger.warning("Error caching YouTube resolution: %s", e)
 
     # Note: Agent token storage
+
+    def _decode_scopes(self, raw: Any) -> list[str]:
+        if isinstance(raw, list):
+            return [str(item) for item in raw if str(item).strip()]
+        if not raw:
+            return []
+        try:
+            decoded = json.loads(raw)
+        except Exception:
+            return []
+        if not isinstance(decoded, list):
+            return []
+        return [str(item) for item in decoded if str(item).strip()]
+
+    def create_auth_token(
+        self,
+        token_id: str,
+        token_hash: str,
+        *,
+        kind: str,
+        scopes: list[str],
+        name: Optional[str] = None,
+        device_type: Optional[str] = None,
+        expires_at: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        encoded_scopes = json.dumps(sorted({scope for scope in scopes if scope}))
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO auth_tokens (id, name, token_hash, kind, device_type, scopes, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (token_id, name or None, token_hash, kind, device_type or None, encoded_scopes, expires_at))
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("""
+                SELECT id, name, kind, device_type, scopes, created_at, last_used_at, expires_at, revoked_at
+                FROM auth_tokens
+                WHERE id = ?
+            """, (token_id,)).fetchone()
+            record = dict(row)
+            record["scopes"] = self._decode_scopes(record.get("scopes"))
+            return record
+
+    def get_auth_token_by_hash(self, token_hash: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("""
+                SELECT id, name, token_hash, kind, device_type, scopes, created_at, last_used_at, expires_at, revoked_at
+                FROM auth_tokens
+                WHERE token_hash = ?
+                  AND revoked_at IS NULL
+                  AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+            """, (token_hash,)).fetchone()
+            if not row:
+                return None
+            record = dict(row)
+            record["scopes"] = self._decode_scopes(record.get("scopes"))
+            return record
+
+    def touch_auth_token(self, token_id: str) -> None:
+        with self._get_connection() as conn:
+            conn.execute("""
+                UPDATE auth_tokens
+                SET last_used_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND revoked_at IS NULL
+            """, (token_id,))
+
+    def revoke_auth_token(self, token_id: str) -> None:
+        with self._get_connection() as conn:
+            conn.execute("""
+                UPDATE auth_tokens
+                SET revoked_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND revoked_at IS NULL
+            """, (token_id,))
 
     def create_agent_token(self, token_id: str, token_hash: str, name: Optional[str] = None) -> Dict[str, Any]:
         with self._get_connection() as conn:

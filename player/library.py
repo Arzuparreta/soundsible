@@ -9,9 +9,10 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 from shared.models import LibraryMetadata, Track, PlayerConfig, StorageProvider, merge_playlist_maps, merge_podcast_subscriptions
-from shared.constants import LIBRARY_METADATA_FILENAME, DEFAULT_CONFIG_DIR
+from shared.constants import LIBRARY_METADATA_FILENAME
 from shared.path_resolver import resolve_local_track_path
 from shared.app_config import get_output_dir
+from shared.runtime import get_config_dir
 from setup_tool.provider_factory import StorageProviderFactory
 
 def _output_dir_for_library() -> Optional[Path]:
@@ -27,7 +28,7 @@ def _output_dir_for_library() -> Optional[Path]:
         pass
     # Note: Canonical path set from webapp settings same file for all processes regardless of cwd
     try:
-        config_dir = Path(DEFAULT_CONFIG_DIR).expanduser()
+        config_dir = get_config_dir()
         out_file = config_dir / "output_dir"
         if out_file.exists():
             raw = out_file.read_text().strip()
@@ -83,7 +84,7 @@ class LibraryManager:
     def _load_config(self):
         """Load player configuration and ensure it's encrypted on disk."""
         try:
-            config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
+            config_path = get_config_dir() / "config.json"
             if config_path.exists():
                 with open(config_path, 'r') as f:
                     data = json.load(f)
@@ -158,7 +159,7 @@ class LibraryManager:
                 json_str = self.metadata.to_json()
                 
                 # Note: 1. Local cache file
-                cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+                cache_path = get_config_dir() / LIBRARY_METADATA_FILENAME
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 cache_path.write_text(json_str)
                 try:
@@ -200,7 +201,7 @@ class LibraryManager:
         def _log_local(msg):
             if not is_silent: print(msg)
 
-        cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+        cache_path = get_config_dir() / LIBRARY_METADATA_FILENAME
 
         # Note: Always prefer the path set in settings (output_dir) if it has library.JSON, use it first.
         # Note: This makes the webapp/player "music path" the single source of truth when that path has a library.
@@ -391,7 +392,7 @@ class LibraryManager:
 
     def refresh_if_stale(self):
         """Reload metadata from disk if the file has changed."""
-        cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+        cache_path = get_config_dir() / LIBRARY_METADATA_FILENAME
         if cache_path.exists():
             mtime = cache_path.stat().st_mtime
             if mtime > self._manifest_mtime:
@@ -726,7 +727,7 @@ class LibraryManager:
         If wipe_local is True, also clears the local database and cache.
         """
         try:
-            config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
+            config_path = get_config_dir() / "config.json"
             
             # Note: 1. Clear local metadata if requested
             if wipe_local:
@@ -736,7 +737,7 @@ class LibraryManager:
                     self.cache.clear_cache()
                 
                 # Note: Remove local library.JSON
-                metadata_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+                metadata_path = get_config_dir() / LIBRARY_METADATA_FILENAME
                 if metadata_path.exists():
                     os.remove(metadata_path)
 
@@ -802,4 +803,3 @@ class LibraryManager:
             self._save_metadata()
 
         return {"checked": checked, "removed": removed}
-

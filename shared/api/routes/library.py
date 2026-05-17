@@ -9,7 +9,7 @@ import tempfile
 from urllib.parse import unquote
 
 from flask import Blueprint, request, jsonify
-from shared.hardening import require_admin, rate_limit
+from shared.hardening import SCOPE_ADMIN_DANGEROUS, SCOPE_LIBRARY_WRITE, rate_limit, require_scope
 
 from shared.path_resolver import resolve_local_track_path
 from odst_tool.audio_utils import download_image
@@ -82,7 +82,7 @@ def get_library_youtube_ids():
 
 
 @library_bp.route("/api/library/sync", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_sync", limit=20, window_sec=60)
 def sync_library():
     api = _get_api()
@@ -94,7 +94,7 @@ def sync_library():
 
 
 @library_bp.route("/api/library/tracks/<track_id>", methods=["DELETE"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_delete_track", limit=30, window_sec=60)
 def delete_track_from_library(track_id):
     api = _get_api()
@@ -121,7 +121,7 @@ def delete_track_from_library(track_id):
 
 
 @library_bp.route("/api/library/wipe", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_ADMIN_DANGEROUS, allow_trusted_network=True)
 @rate_limit("library_wipe", limit=3, window_sec=300)
 def wipe_library():
     api = _get_api()
@@ -159,7 +159,7 @@ def search_library():
 
 
 @library_bp.route("/api/library/purge-missing", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_purge_missing", limit=10, window_sec=300)
 def purge_missing_library_tracks():
     """
@@ -181,7 +181,7 @@ def purge_missing_library_tracks():
 
 
 @library_bp.route("/api/library/tracks/<track_id>/metadata", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_update_metadata", limit=60, window_sec=60)
 def update_track_metadata(track_id):
     api = _get_api()
@@ -228,7 +228,7 @@ def update_track_metadata(track_id):
 
 
 @library_bp.route("/api/library/tracks/<track_id>/cover", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_upload_cover", limit=30, window_sec=60)
 def upload_track_cover(track_id):
     api = _get_api()
@@ -254,7 +254,7 @@ def upload_track_cover(track_id):
 
 
 @library_bp.route("/api/library/tracks/<track_id>/cover/from-track", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_copy_cover", limit=30, window_sec=60)
 def copy_track_cover(track_id):
     api = _get_api()
@@ -292,7 +292,7 @@ def copy_track_cover(track_id):
 
 
 @library_bp.route("/api/library/tracks/<track_id>/cover/none", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_clear_cover", limit=30, window_sec=60)
 def clear_track_cover(track_id):
     api = _get_api()
@@ -328,7 +328,7 @@ def get_favourites():
 
 
 @library_bp.route("/api/library/favourites/toggle", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_toggle_favourite", limit=120, window_sec=60)
 def toggle_favourite():
     api = _get_api()
@@ -342,7 +342,7 @@ def toggle_favourite():
 
 
 @library_bp.route("/api/library/playlists", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_create", limit=60, window_sec=60)
 def create_playlist():
     api = _get_api()
@@ -362,7 +362,7 @@ def create_playlist():
 
 
 @library_bp.route("/api/library/playlists", methods=["PATCH"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_reorder", limit=60, window_sec=60)
 def reorder_playlists():
     api = _get_api()
@@ -380,7 +380,7 @@ def reorder_playlists():
 
 
 @library_bp.route("/api/library/playlists/<path:name>/tracks", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_add_track", limit=120, window_sec=60)
 def add_track_to_playlist(name):
     name = unquote(name)
@@ -402,7 +402,7 @@ def add_track_to_playlist(name):
 
 
 @library_bp.route("/api/library/playlists/<path:name>/tracks/<track_id>", methods=["DELETE"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_remove_track", limit=120, window_sec=60)
 def remove_track_from_playlist(name, track_id):
     name = unquote(name)
@@ -420,7 +420,7 @@ def remove_track_from_playlist(name, track_id):
 
 
 @library_bp.route("/api/library/playlists/<path:name>", methods=["PATCH"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_update", limit=80, window_sec=60)
 def update_playlist(name):
     name = unquote(name)
@@ -456,7 +456,7 @@ def update_playlist(name):
 
 
 @library_bp.route("/api/library/playlists/<path:name>", methods=["DELETE"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_delete", limit=60, window_sec=60)
 def delete_playlist(name):
     name = unquote(name)

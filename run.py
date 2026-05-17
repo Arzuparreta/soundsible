@@ -4,6 +4,7 @@ Soundsible Universal Launcher
 The single entry point for all Soundsible components (Player, Downloader, Setup).
 """
 # Note: Prepend venv site-packages so "python3 run.py" finds gevent and other deps (same as using ./venv/bin/python).
+import argparse
 import sys
 import subprocess
 import hashlib
@@ -12,6 +13,59 @@ import platform
 import shutil
 import os
 # Note: Gevent monkey-patching must happen early, but only after deps are ensured.
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Soundsible launcher and engine entrypoint.")
+    parser.add_argument("--setup", action="store_true", help="Run the setup web UI.")
+    parser.add_argument("--daemon", action="store_true", help="Run the legacy Station Engine daemon.")
+    parser.add_argument("--desktop-engine", action="store_true", help="Run the desktop engine entrypoint on loopback.")
+    parser.add_argument("--host", help="Bind host override for daemon or desktop engine mode.")
+    parser.add_argument("--port", type=int, help="Bind port override for daemon or desktop engine mode. Use 0 for a random port.")
+    parser.add_argument("--config-dir", help="Runtime config directory override.")
+    parser.add_argument("--data-dir", help="Runtime data directory override.")
+    parser.add_argument("--cache-dir", help="Runtime cache directory override.")
+    parser.add_argument("--log-dir", help="Runtime log directory override.")
+    parser.add_argument("--music-dir", help="Runtime music directory override.")
+    parser.add_argument("--ui-dist", help="UI dist directory override.")
+    parser.add_argument("--owner-token-file", help="Owner token file path override.")
+    parser.add_argument("--lan-enabled", dest="lan_enabled", action="store_true", help="Enable LAN access in runtime config.")
+    parser.add_argument("--no-lan", dest="lan_enabled", action="store_false", help="Disable LAN access in runtime config.")
+    parser.add_argument("--advanced-mode", action="store_true", help="Enable advanced/headless runtime mode.")
+    parser.set_defaults(lan_enabled=None)
+    return parser
+
+
+def _seed_runtime_env_from_args(args: argparse.Namespace) -> None:
+    mappings = {
+        "config_dir": "SOUNDSIBLE_CONFIG_DIR",
+        "data_dir": "SOUNDSIBLE_DATA_DIR",
+        "cache_dir": "SOUNDSIBLE_CACHE_DIR",
+        "log_dir": "SOUNDSIBLE_LOG_DIR",
+        "music_dir": "SOUNDSIBLE_MUSIC_DIR",
+        "ui_dist": "SOUNDSIBLE_UI_DIST",
+        "owner_token_file": "SOUNDSIBLE_OWNER_TOKEN_FILE",
+    }
+    for attr, env_key in mappings.items():
+        value = getattr(args, attr, None)
+        if value:
+            os.environ[env_key] = str(value)
+    if args.host:
+        os.environ["SOUNDSIBLE_HOST"] = args.host
+    if args.port is not None:
+        os.environ["SOUNDSIBLE_PORT"] = str(args.port)
+    if args.lan_enabled is not None:
+        os.environ["SOUNDSIBLE_LAN_ENABLED"] = "true" if args.lan_enabled else "false"
+    if args.advanced_mode:
+        os.environ["SOUNDSIBLE_ADVANCED_MODE"] = "true"
+
+
+if any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
+    build_parser().print_help()
+    raise SystemExit(0)
+
+_BOOTSTRAP_ARGS, _ = build_parser().parse_known_args()
+_seed_runtime_env_from_args(_BOOTSTRAP_ARGS)
 
 
 def _venv_python_path(venv_dir: Path) -> Path:
@@ -203,6 +257,14 @@ from datetime import datetime
 from pathlib import Path
 
 from shared.constants import STATION_PORT
+from shared.runtime import (
+    RuntimeConfig,
+    configure_runtime,
+    ensure_runtime_directories,
+    get_config_dir,
+    migrate_legacy_app_dirs,
+    runtime_with_overrides,
+)
 
 PLAYER_URL = f"http://localhost:{STATION_PORT}/player/"
 LAUNCHER_PORT = int(os.environ.get("LAUNCHER_PORT", "5099"))
@@ -212,7 +274,6 @@ SETUP_URL = f"http://localhost:{LAUNCHER_PORT}/setup"
 ROOT_DIR = Path(__file__).parent.absolute()
 VENV_DIR = ROOT_DIR / "venv"
 PYTHON_EXE = VENV_DIR / ("Scripts\\python.exe" if platform.system() == "Windows" else "bin/python")
-CONFIG_PATH = Path("~/.config/soundsible/config.json").expanduser()
 
 from shared.daemon_launcher import (
     start_daemon_process,
@@ -221,6 +282,46 @@ from shared.daemon_launcher import (
     MSG_CONFIG_MISSING,
     MSG_SETUP_REQUIRED,
 )
+
+
+def _config_path() -> Path:
+    return get_config_dir() / "config.json"
+
+
+def _build_runtime_config(args: argparse.Namespace, *, desktop_defaults: bool) -> RuntimeConfig:
+    base = RuntimeConfig.default()
+    host = args.host
+    port = args.port
+    advanced_mode = args.advanced_mode or base.advanced_mode
+    if desktop_defaults:
+        if host is None:
+            host = "127.0.0.1"
+        if port is None:
+            port = 0
+        advanced_mode = False
+    elif not args.advanced_mode and "SOUNDSIBLE_ADVANCED_MODE" not in os.environ:
+        advanced_mode = True
+    runtime = runtime_with_overrides(
+        base=base,
+        host=host,
+        port=port,
+        config_dir=args.config_dir,
+        data_dir=args.data_dir,
+        cache_dir=args.cache_dir,
+        log_dir=args.log_dir,
+        music_dir=args.music_dir,
+        ui_dist=args.ui_dist,
+        owner_token_file=args.owner_token_file,
+        lan_enabled=args.lan_enabled,
+        advanced_mode=advanced_mode,
+    )
+    if runtime.port == 0:
+        bind_host, bind_port = runtime.resolved_bind()
+        runtime = runtime_with_overrides(base=runtime, host=bind_host, port=bind_port)
+    configure_runtime(runtime)
+    migrate_legacy_app_dirs(runtime)
+    ensure_runtime_directories(runtime)
+    return runtime
 
 
 def _is_port_in_use(port: int) -> bool:
@@ -237,10 +338,6 @@ def _kill_station_process(port: int = STATION_PORT) -> tuple[bool, str]:
 def bootstrap():
     """Unified bootstrap entry point kept for backward compatibility."""
     _ensure_bootstrap_before_gevent()
-
-if __name__ == "__main__":
-    bootstrap()
-    # Note: Now we can safely import rich and start the launcher logic in the same process
 
 # Note: Actual launcher CODE
 try:
@@ -318,7 +415,8 @@ class SoundsibleLauncher:
 
     def _start_watcher(self):
         """Initialize and start the background file watcher."""
-        if not CONFIG_PATH.exists(): return
+        if not _config_path().exists():
+            return
         
         def _run():
             try:
@@ -339,7 +437,7 @@ class SoundsibleLauncher:
         except: pass
 
     def is_configured(self):
-        return CONFIG_PATH.exists()
+        return _config_path().exists()
 
     def start_background_sync(self):
         """Run a silent sync in the background."""
@@ -508,15 +606,15 @@ class SoundsibleLauncher:
             console.print(f"[red]Search failed: {e}[/red]")
         Prompt.ask("Press Enter to return")
 
-    def run(self):
+    def run(self, args: argparse.Namespace):
         self._install_requirements_if_needed()
 
-        if "--setup" in sys.argv:
+        if args.setup:
             self.launch_setup()
             return
         
         if not self.is_configured():
-            if "--daemon" in sys.argv:
+            if args.daemon or args.desktop_engine:
                 print(f"Daemon: {MSG_CONFIG_MISSING}")
                 print("Start setup first: python3 run.py --setup")
                 return
@@ -526,10 +624,18 @@ class SoundsibleLauncher:
         self.start_background_sync()
         self._start_watcher()
         
-        if "--daemon" in sys.argv:
+        if args.daemon:
+            runtime = _build_runtime_config(args, desktop_defaults=False)
             console.print("[bold green]Soundsible Daemon is running.[/bold green]")
             from shared.api import start_api
-            start_api()  # Note: This blocks, but api_observer is set as module-level variable
+            start_api(host=runtime.host, port=runtime.port, runtime_config=runtime)
+            return
+
+        if args.desktop_engine:
+            runtime = _build_runtime_config(args, desktop_defaults=True)
+            console.print(f"[bold green]Soundsible Desktop Engine is running on {runtime.host}:{runtime.port}.[/bold green]")
+            from shared.api import start_api
+            start_api(host=runtime.host, port=runtime.port, runtime_config=runtime)
             return
 
         while True:
@@ -539,5 +645,7 @@ class SoundsibleLauncher:
         _ensure_bootstrap_before_gevent()
 
 if __name__ == "__main__":
+    args = build_parser().parse_args()
+    _build_runtime_config(args, desktop_defaults=args.desktop_engine)
     launcher = SoundsibleLauncher()
-    launcher.run()
+    launcher.run(args)

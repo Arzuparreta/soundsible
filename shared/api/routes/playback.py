@@ -11,6 +11,7 @@ import requests
 from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context, redirect
 
 from shared.constants import DEFAULT_CACHE_DIR
+from shared.hardening import SCOPE_PLAYBACK_CONTROL, require_scope
 from shared.path_resolver import resolve_local_track_path
 from shared.url_utils import validate_youtube_video_id
 
@@ -113,6 +114,7 @@ def _emit_playback_start(api, scope: str, device_id: str, state: dict, track: di
 
 
 @playback_bp.route("/api/devices/register", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def register_playback_device():
     api = _get_api()
     scope = api["get_scope_from_request"]()
@@ -289,6 +291,7 @@ def get_playback_queue():
 
 
 @playback_bp.route("/api/playback/shuffle", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def shuffle_playback_queue():
     api = _get_api()
     _, _, queue = api["get_core"]()
@@ -297,6 +300,7 @@ def shuffle_playback_queue():
 
 
 @playback_bp.route("/api/playback/repeat", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def set_playback_repeat():
     api = _get_api()
     _, _, queue = api["get_core"]()
@@ -307,6 +311,7 @@ def set_playback_repeat():
 
 
 @playback_bp.route("/api/playback/queue", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def add_to_playback_queue():
     api = _get_api()
     lib, _, queue = api["get_core"]()
@@ -364,6 +369,7 @@ def add_to_playback_queue():
 
 
 @playback_bp.route("/api/playback/queue/<int:index>", methods=["DELETE"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def remove_from_playback_queue(index):
     api = _get_api()
     _, _, queue = api["get_core"]()
@@ -373,6 +379,7 @@ def remove_from_playback_queue(index):
 
 
 @playback_bp.route("/api/playback/queue/track/<track_id>", methods=["DELETE"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def remove_track_id_from_playback_queue(track_id):
     api = _get_api()
     _, _, queue = api["get_core"]()
@@ -383,6 +390,7 @@ def remove_track_id_from_playback_queue(track_id):
 
 
 @playback_bp.route("/api/playback/queue/move", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def move_in_playback_queue():
     api = _get_api()
     _, _, queue = api["get_core"]()
@@ -395,6 +403,7 @@ def move_in_playback_queue():
 
 
 @playback_bp.route("/api/playback/queue", methods=["DELETE"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def clear_playback_queue():
     api = _get_api()
     _, _, queue = api["get_core"]()
@@ -413,6 +422,7 @@ def get_next_from_queue():
 
 
 @playback_bp.route("/api/playback/play", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def play_track():
     api = _get_api()
     lib, engine, _ = api["get_core"]()
@@ -429,6 +439,7 @@ def play_track():
 
 
 @playback_bp.route("/api/playback/toggle", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def toggle_playback():
     api = _get_api()
     _, engine, _ = api["get_core"]()
@@ -450,6 +461,7 @@ def playback_get_state():
 
 
 @playback_bp.route("/api/playback/state", methods=["PUT"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def playback_put_state():
     api = _get_api()
     scope = api["get_scope_from_request"]()
@@ -459,6 +471,7 @@ def playback_put_state():
 
 
 @playback_bp.route("/api/playback/handoff", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def playback_handoff():
     api = _get_api()
     scope = api["get_scope_from_request"]()
@@ -510,6 +523,7 @@ def playback_handoff():
 
 
 @playback_bp.route("/api/playback/notify-stop", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def playback_notify_stop():
     api = _get_api()
     scope = api["get_scope_from_request"]()
@@ -522,6 +536,7 @@ def playback_notify_stop():
 
 
 @playback_bp.route("/api/playback/remote-command", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def playback_remote_command():
     api = _get_api()
     scope = api["get_scope_from_request"]()

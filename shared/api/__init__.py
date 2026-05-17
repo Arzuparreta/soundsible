@@ -19,9 +19,20 @@ from flask_cors import CORS
 logger = logging.getLogger(__name__)
 
 from shared.models import PlayerConfig, Track, LibraryMetadata, StorageProvider
-from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, DEFAULT_CACHE_DIR, STATION_PORT, DEFAULT_OUTPUT_DIR_FALLBACK, SourceType
+from shared.constants import LIBRARY_METADATA_FILENAME, STATION_PORT, DEFAULT_OUTPUT_DIR_FALLBACK, SourceType
 from shared.path_resolver import resolve_local_track_path
 from shared.app_config import set_output_dir as set_app_output_dir
+from shared.runtime import (
+    configure_runtime,
+    ensure_runtime_directories,
+    get_cache_dir,
+    get_config_dir,
+    get_music_dir,
+    get_runtime_config,
+    migrate_legacy_app_dirs,
+    runtime_with_overrides,
+    RuntimeConfig,
+)
 from shared.playback_state import (
     get_state as get_playback_state,
     put_state as put_playback_state,
@@ -51,7 +62,7 @@ from typing import Optional, Any
 
 from shared.url_utils import normalize_youtube_url, extract_youtube_video_id, validate_youtube_video_id
 from shared.security import is_trusted_network, is_safe_path
-from shared.hardening import apply_security_headers
+from shared.hardening import SCOPE_PLAYBACK_CONTROL, apply_security_headers, get_request_auth_context
 
 from .download_queue import DownloadQueueManager, LibraryFileWatcher, parse_intake_item
 from .orchestrator import orchestrator
@@ -99,6 +110,12 @@ def _build_cors_origins():
     raw = (os.getenv("SOUNDSIBLE_ALLOWED_ORIGINS") or "").strip()
     if raw:
         return [v.strip() for v in raw.split(",") if v.strip()]
+    runtime = get_runtime_config()
+    if not runtime.lan_enabled or runtime.host in {"127.0.0.1", "localhost"}:
+        return [
+            r"^https?://localhost(:\d+)?$",
+            r"^https?://127\.0\.0\.1(:\d+)?$",
+        ]
     # Default: allow browser clients coming from localhost, private LAN, and Tailscale.
     return [
         r"^https?://localhost(:\d+)?$",
@@ -193,6 +210,21 @@ def on_playback_register(data):
     mark_device_socket_active(scope, device_id, request.sid)
 
 
+@socketio.on("connect")
+def on_socket_connect(auth=None):
+    runtime = get_runtime_config()
+    remote_addr = request.remote_addr or ""
+    if runtime.advanced_mode:
+        return True
+    if remote_addr in {"127.0.0.1", "::1"} and not runtime.lan_enabled:
+        return True
+    context = get_request_auth_context(allow_trusted_network=False)
+    if context and (context.get("kind") == "owner" or SCOPE_PLAYBACK_CONTROL in set(context.get("scopes") or [])):
+        return True
+    logger.warning("Socket.IO connect denied for remote=%s origin=%s", remote_addr, request.headers.get("Origin"))
+    return False
+
+
 @socketio.on("disconnect")
 def on_socket_disconnect():
     unregister_socket(request.sid)
@@ -208,7 +240,10 @@ BRANDING_PATH = os.path.join(REPO_ROOT, 'branding')
 
 
 def _web_ui_root():
-    """Serve Vite production build when SOUNDSIBLE_WEB_UI_DIST is set and dist/ exists."""
+    """Serve configured Vite build path when present, else fall back to source UI."""
+    runtime = get_runtime_config()
+    if runtime.ui_dist and os.path.isfile(os.path.join(str(runtime.ui_dist), "index.html")):
+        return str(runtime.ui_dist)
     if os.environ.get("SOUNDSIBLE_WEB_UI_DIST", "").lower() in ("1", "true", "yes"):
         if os.path.isfile(os.path.join(WEB_UI_DIST_PATH, "index.html")):
             return WEB_UI_DIST_PATH
@@ -263,7 +298,7 @@ def get_core():
         # Note: Ensure we have metadata loaded from local cache at minimum
         if not library_manager.metadata:
             logger.info("API: No metadata in memory, checking cache...")
-            cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+            cache_path = get_config_dir() / LIBRARY_METADATA_FILENAME
             library_manager._load_from_cache(cache_path)
             # Note: If cache looks like it's from a different path (e.g. old install), don't use it
             if library_manager.metadata and library_manager._is_cache_likely_stale():
@@ -592,7 +627,7 @@ def _process_single_queue_item(item):
             shared_track = Track.from_dict(track_dict)
             
             local_track_path = resolve_local_track_path(shared_track)
-            covers_dir = os.path.join(os.path.expanduser(DEFAULT_CACHE_DIR), "covers")
+            covers_dir = os.path.join(str(get_cache_dir()), "covers")
             os.makedirs(covers_dir, exist_ok=True)
             cover_path = os.path.join(covers_dir, f"{shared_track.id}.jpg")
             if not os.path.exists(cover_path):
@@ -755,7 +790,7 @@ def _sync_odst_to_main_core():
     lib, _, _ = get_core()
     
     # Note: Ensure main library is loaded
-    cache_path = Path(DEFAULT_CONFIG_DIR).expanduser() / LIBRARY_METADATA_FILENAME
+    cache_path = get_config_dir() / LIBRARY_METADATA_FILENAME
     if not lib.metadata and cache_path.exists():
         lib._load_from_cache(cache_path)
     if not lib.metadata:
@@ -864,7 +899,20 @@ app.register_blueprint(agent_bp)
 
 @app.route('/api/health')
 def health_check():
-    return jsonify({"status": "healthy"})
+    runtime = get_runtime_config()
+    return jsonify(
+        {
+            "status": "healthy",
+            "host": runtime.host,
+            "port": runtime.port,
+            "config_dir": str(runtime.config_dir),
+            "cache_dir": str(runtime.cache_dir),
+            "data_dir": str(runtime.data_dir),
+            "music_dir": str(runtime.music_dir),
+            "advanced_mode": runtime.advanced_mode,
+            "lan_enabled": runtime.lan_enabled,
+        }
+    )
 
 @app.route('/')
 def home():
@@ -892,26 +940,37 @@ def _resolve_output_dir():
             from odst_tool.config import DEFAULT_OUTPUT_DIR
             target = str(DEFAULT_OUTPUT_DIR)
         except Exception:
-            target = DEFAULT_OUTPUT_DIR_FALLBACK
+            target = str(get_music_dir() or Path(DEFAULT_OUTPUT_DIR_FALLBACK).expanduser().resolve())
     return Path(target).expanduser().resolve() if target else None
 
 
-def start_api(port=STATION_PORT, debug=False):
+def start_api(
+    port=STATION_PORT,
+    *,
+    host: Optional[str] = None,
+    debug: bool = False,
+    runtime_config: Optional[RuntimeConfig] = None,
+):
     global api_observer
+    runtime = runtime_config or get_runtime_config()
+    runtime = runtime_with_overrides(base=runtime, host=host, port=port)
+    configure_runtime(runtime)
+    migrate_legacy_app_dirs(runtime)
+    ensure_runtime_directories(runtime)
     logger.info("--- Soundsible API Boot Sequence ---")
-    logger.info("Target Port: %s", port)
+    logger.info("Target Host: %s", runtime.host)
+    logger.info("Target Port: %s", runtime.port)
     logger.info("CWD: %s", os.getcwd())
     logger.info("For full startup (sync + watcher) use: python run.py --daemon")
 
-        # Note: Set app config so path_resolver and security do not depend on odst_tool layout
+    # Note: Set app config so path_resolver and security do not depend on odst_tool layout
     _out = _resolve_output_dir()
     if _out:
         set_app_output_dir(_out)
         logger.info("API: Output dir set to %s", _out)
-        # Note: So desktop player finds path when it reads ~/.config/soundsible/output_dir
+        # Note: So desktop player finds path when it reads the runtime config dir output_dir file
         try:
-            from shared.constants import DEFAULT_CONFIG_DIR
-            cfg = Path(DEFAULT_CONFIG_DIR).expanduser()
+            cfg = get_config_dir()
             cfg.mkdir(parents=True, exist_ok=True)
             (cfg / "output_dir").write_text(str(_out))
         except Exception:
@@ -980,7 +1039,7 @@ def start_api(port=STATION_PORT, debug=False):
             logger.debug("API: yt-dlp auto-update setup skipped due to error", exc_info=True)
 
         # Note: Start library file watcher
-        config_dir = Path(DEFAULT_CONFIG_DIR).expanduser()
+        config_dir = get_config_dir()
         config_dir.mkdir(parents=True, exist_ok=True)
 
         event_handler = LibraryFileWatcher(lib, socketio)
@@ -998,11 +1057,13 @@ def start_api(port=STATION_PORT, debug=False):
     logger.info("\n" + "="*40)
     logger.info("       SOUNDSIBLE ONLINE")
     logger.info("="*40)
-    logger.info("Local:  http://localhost:%s/player/", port)
-    
-    endpoints = get_active_endpoints()
-    for ip in endpoints:
-        logger.info("Remote: http://%s:%s/player/", ip, port)
+    if runtime.host in {"127.0.0.1", "localhost"}:
+        logger.info("Local:  http://127.0.0.1:%s/player/", runtime.port)
+    else:
+        logger.info("Local:  http://localhost:%s/player/", runtime.port)
+        endpoints = get_active_endpoints()
+        for ip in endpoints:
+            logger.info("Remote: http://%s:%s/player/", ip, runtime.port)
     logger.info("="*40 + "\n")
 
     try:
@@ -1010,7 +1071,7 @@ def start_api(port=STATION_PORT, debug=False):
         logger.info("API: gevent active — concurrent request handling enabled")
     except ImportError:
         logger.info("API: gevent not installed — single-threaded (long requests may block others)")
-    logger.info("API: Starting SocketIO server on 0.0.0.0:%s...", port)
+    logger.info("API: Starting SocketIO server on %s:%s...", runtime.host, runtime.port)
 
     from shared.daemon_launcher import MSG_KEEP_TERMINAL_OPEN
     _terminal_msg = MSG_KEEP_TERMINAL_OPEN
@@ -1019,7 +1080,7 @@ def start_api(port=STATION_PORT, debug=False):
         threading.Thread(target=_run_ytdlp_update, daemon=True).start()
     sys.stdout.flush()
     sys.stderr.flush()
-    socketio.run(app, host='0.0.0.0', port=port, debug=debug)
+    socketio.run(app, host=runtime.host, port=runtime.port, debug=debug)
 
 if __name__ == '__main__':
     start_api()

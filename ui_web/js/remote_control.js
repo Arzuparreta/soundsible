@@ -136,8 +136,19 @@ class RemoteControl {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ device_id: d.device_id, command: 'play', track_id: track.id })
-                    }).catch(() => {});
-                    showToast?.('Sent to device');
+                    })
+                        .then(async (res) => {
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok) {
+                                const message = data?.error || 'Could not send to device';
+                                showToast?.(message);
+                                return;
+                            }
+                            showToast?.(data?.warning || 'Sent to device');
+                        })
+                        .catch(() => {
+                            showToast?.('Could not send to device');
+                        });
                 }
             });
             list.appendChild(btn);

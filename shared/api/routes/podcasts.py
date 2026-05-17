@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 import requests
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 
-from shared.hardening import rate_limit, require_admin
+from shared.hardening import SCOPE_LIBRARY_WRITE, rate_limit, require_scope
 from shared.models import LibraryMetadata, PodcastSubscription
 from shared.podcast_preview_token import decode_enclosure_stream_token, mint_enclosure_stream_token
 from shared.podcast_rss import assert_safe_http_url, fetch_episodes_for_feed
@@ -52,7 +52,7 @@ def list_subscriptions():
 
 
 @podcasts_bp.route("/api/podcasts/subscribe", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("podcasts_subscribe", limit=40, window_sec=60)
 def subscribe():
     api = _get_api()
@@ -125,7 +125,7 @@ def subscribe():
 
 
 @podcasts_bp.route("/api/podcasts/subscriptions/<feed_id>", methods=["DELETE"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("podcasts_unsub", limit=40, window_sec=60)
 def unsubscribe(feed_id: str):
     api = _get_api()

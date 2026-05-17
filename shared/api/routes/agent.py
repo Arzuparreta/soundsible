@@ -12,7 +12,15 @@ from typing import Optional
 from flask import Blueprint, g, jsonify, request
 
 from shared.database import DatabaseManager
-from shared.hardening import require_admin
+from shared.hardening import (
+    LEGACY_AGENT_SCOPES,
+    SCOPE_ADMIN_CONFIG,
+    SCOPE_DOWNLOAD_ADD,
+    SCOPE_LIBRARY_READ,
+    SCOPE_PLAYBACK_CONTROL,
+    get_request_auth_context,
+    require_scope,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,28 +58,22 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def _request_agent_token() -> str:
-    auth = (request.headers.get("Authorization") or "").strip()
-    if auth.lower().startswith("bearer "):
-        return auth[7:].strip()
-    return (request.headers.get("X-Soundsible-Agent-Token") or "").strip()
+def require_agent_scope(*required_scopes: str):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapped(*args, **kwargs):
+            context = get_request_auth_context(allow_trusted_network=False)
+            if not context:
+                return jsonify({"error": "Agent token required"}), 401
+            granted = set(context.get("scopes") or [])
+            if context.get("kind") != "owner" and not set(required_scopes).issubset(granted):
+                return jsonify({"error": "Insufficient token scope", "required_scopes": list(required_scopes)}), 403
+            g.agent_token = context.get("record") or {}
+            return fn(*args, **kwargs)
 
+        return wrapped
 
-def require_agent_token(fn):
-    @wraps(fn)
-    def wrapped(*args, **kwargs):
-        token = _request_agent_token()
-        if not token:
-            return jsonify({"error": "Agent token required"}), 401
-        db = _db()
-        record = db.get_agent_token_by_hash(_hash_token(token))
-        if not record:
-            return jsonify({"error": "Invalid agent token"}), 403
-        db.touch_agent_token(record["id"])
-        g.agent_token = {k: v for k, v in record.items() if k != "token_hash"}
-        return fn(*args, **kwargs)
-
-    return wrapped
+    return decorator
 
 
 def _scope() -> str:
@@ -165,28 +167,42 @@ def _preview_payload(result: dict, query: str) -> Optional[dict]:
 
 
 @agent_bp.route("/api/agent/token", methods=["POST"])
-@require_admin()
+@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 def create_agent_token():
     data = request.json or {}
     token = secrets.token_urlsafe(32)
     token_id = str(uuid.uuid4())
-    record = _db().create_agent_token(token_id, _hash_token(token), data.get("name") or data.get("agent_name"))
+    requested_scopes = data.get("scopes") if isinstance(data.get("scopes"), list) else None
+    scopes = [scope for scope in (requested_scopes or sorted(LEGACY_AGENT_SCOPES)) if scope in {SCOPE_LIBRARY_READ, SCOPE_PLAYBACK_CONTROL, SCOPE_DOWNLOAD_ADD}]
+    if not scopes:
+        return jsonify({"error": "At least one supported scope is required"}), 400
+    record = _db().create_auth_token(
+        token_id,
+        _hash_token(token),
+        kind="agent",
+        scopes=scopes,
+        name=data.get("name") or data.get("agent_name"),
+        device_type=data.get("device_type") or "agent",
+        expires_at=data.get("expires_at"),
+    )
     return jsonify({
         "token": token,
         "token_id": record["id"],
         "name": record.get("name"),
+        "kind": record.get("kind"),
+        "scopes": record.get("scopes"),
         "created_at": record.get("created_at"),
     }), 201
 
 
 @agent_bp.route("/api/agent/verify", methods=["GET"])
-@require_agent_token
+@require_agent_scope(SCOPE_LIBRARY_READ)
 def verify_agent_token():
     return jsonify({"valid": True, "token": g.agent_token})
 
 
 @agent_bp.route("/api/agent/play", methods=["POST"])
-@require_agent_token
+@require_agent_scope(SCOPE_PLAYBACK_CONTROL)
 def agent_play():
     api = _get_api()
     scope = _scope()
@@ -255,7 +271,7 @@ def agent_play():
 
 
 @agent_bp.route("/api/agent/command", methods=["POST"])
-@require_agent_token
+@require_agent_scope(SCOPE_PLAYBACK_CONTROL)
 def agent_command():
     api = _get_api()
     scope = _scope()
@@ -333,7 +349,7 @@ def agent_command():
     return jsonify({"status": "ok", "command": command})
 
 @agent_bp.route('/api/agent/debug/socketio', methods=['GET'])
-@require_agent_token
+@require_agent_scope(SCOPE_LIBRARY_READ)
 def debug_socketio():
     """Debug: Show Socket.IO rooms and registered devices."""
     api = _get_api()

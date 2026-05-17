@@ -12,13 +12,14 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from flask import Flask, render_template, jsonify, request
-from shared.hardening import require_admin, rate_limit, apply_security_headers
+from shared.hardening import SCOPE_ADMIN_CONFIG, apply_security_headers, rate_limit, require_scope
 from shared.daemon_launcher import (
     start_daemon_process,
     stop_daemon_process,
     is_port_in_use,
     STATION_PORT,
 )
+from shared.runtime import get_config_dir
 
 DEFAULT_PORT = 5099
 
@@ -52,7 +53,7 @@ def local_ip():
 
 
 @app.route("/api/stop-ecosystem", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("launcher_stop", limit=10, window_sec=60)
 def stop_ecosystem():
     ok, message = stop_daemon_process(STATION_PORT)
@@ -62,7 +63,7 @@ def stop_ecosystem():
 
 
 @app.route("/api/launch-ecosystem", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("launcher_start", limit=10, window_sec=60)
 def launch_ecosystem():
     ok, message = start_daemon_process(ROOT_DIR, env_extra={"SOUNDSIBLE_LAUNCHED_FROM": "web"}, detach=False)
@@ -77,8 +78,7 @@ def launch_ecosystem():
 # Note: Setup API (config + test connection + buckets)
 
 def _config_path():
-    from shared.constants import DEFAULT_CONFIG_DIR
-    return Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
+    return get_config_dir() / "config.json"
 
 
 def _sanitize_config(config) -> dict:
@@ -99,7 +99,7 @@ def _sanitize_config(config) -> dict:
 
 
 @app.route("/api/setup/config", methods=["GET"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("launcher_setup_config_get", limit=30, window_sec=60)
 def get_setup_config():
     from shared.models import PlayerConfig
@@ -162,7 +162,7 @@ def _validate_config_body(data: dict, for_save: bool) -> tuple[dict | None, str 
 
 
 @app.route("/api/setup/config", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("launcher_setup_config_post", limit=20, window_sec=60)
 def post_setup_config():
     from shared.models import PlayerConfig, StorageProvider
@@ -228,7 +228,7 @@ def _credentials_for_provider(provider_val: str, data: dict) -> dict:
 
 
 @app.route("/api/setup/test-connection", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("launcher_setup_test_connection", limit=20, window_sec=60)
 def setup_test_connection():
     from shared.models import StorageProvider

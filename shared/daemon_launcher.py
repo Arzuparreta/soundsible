@@ -8,7 +8,8 @@ import subprocess
 from pathlib import Path
 from typing import Tuple
 
-from shared.constants import DEFAULT_CONFIG_DIR, STATION_PORT
+from shared.constants import STATION_PORT
+from shared.runtime import get_config_dir
 
 # Note: Canonical user-facing messages (one place for consistency and i18n)
 MSG_STATION_STARTING = "Station Engine is starting."
@@ -63,7 +64,7 @@ def start_daemon_process(root_dir: Path = None, env_extra: dict = None, detach: 
         return False, f"{MSG_VENV_NOT_FOUND} {MSG_VENV_HINT}"
     if not run_py.exists():
         return False, f"{MSG_RUNPY_NOT_FOUND} {MSG_RUNPY_HINT}"
-    if not (Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json").exists():
+    if not (get_config_dir() / "config.json").exists():
         return False, MSG_SETUP_REQUIRED
     if is_port_in_use(STATION_PORT):
         return False, MSG_ALREADY_RUNNING

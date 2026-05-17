@@ -7,9 +7,9 @@ from pathlib import Path
 
 from flask import Blueprint, request, jsonify
 
-from shared.constants import DEFAULT_CONFIG_DIR
 from shared.models import PlayerConfig
-from shared.hardening import require_admin, rate_limit
+from shared.hardening import SCOPE_ADMIN_CONFIG, rate_limit, require_scope
+from shared.runtime import get_config_dir
 
 config_bp = Blueprint("config", __name__, url_prefix="")
 
@@ -20,7 +20,7 @@ def _get_api():
 
 
 @config_bp.route("/api/config", methods=["GET"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("config_get", limit=60, window_sec=60)
 def get_config():
     api = _get_api()
@@ -31,12 +31,12 @@ def get_config():
 
 
 @config_bp.route("/api/config", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("config_update", limit=30, window_sec=60)
 def update_config():
     api = _get_api()
     data = request.json or {}
-    config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
+    config_path = get_config_dir() / "config.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     if config_path.exists():
         try:
