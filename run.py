@@ -7,6 +7,7 @@ The single entry point for all Soundsible components (Player, Downloader, Setup)
 import argparse
 import sys
 import subprocess
+import hashlib
 from pathlib import Path
 import platform
 import shutil
