@@ -176,6 +176,29 @@ class DatabaseManager:
                     CREATE INDEX IF NOT EXISTS idx_auth_tokens_kind
                     ON auth_tokens (kind)
                 """)
+
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS pairing_sessions (
+                        id TEXT PRIMARY KEY,
+                        code TEXT NOT NULL UNIQUE,
+                        status TEXT NOT NULL,
+                        device_name TEXT,
+                        device_type TEXT,
+                        requested_scopes TEXT NOT NULL,
+                        granted_scopes TEXT NOT NULL,
+                        owner_confirmed_at TIMESTAMP,
+                        claimed_at TIMESTAMP,
+                        completed_at TIMESTAMP,
+                        expires_at TIMESTAMP NOT NULL,
+                        auth_token_id TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_pairing_sessions_status
+                    ON pairing_sessions (status)
+                """)
                 
                 # Note: 5. Performance indexes for common access patterns
                 # - get_all_tracks orders by artist, album, track_number
@@ -488,6 +511,185 @@ class DatabaseManager:
                 SET revoked_at = CURRENT_TIMESTAMP
                 WHERE id = ? AND revoked_at IS NULL
             """, (token_id,))
+
+    def revoke_auth_tokens_by_kind(self, kind: str) -> None:
+        with self._get_connection() as conn:
+            conn.execute("""
+                UPDATE auth_tokens
+                SET revoked_at = CURRENT_TIMESTAMP
+                WHERE kind = ? AND revoked_at IS NULL
+            """, (kind,))
+
+    def list_auth_tokens(self, *, kind: Optional[str] = None) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            if kind:
+                rows = conn.execute("""
+                    SELECT id, name, kind, device_type, scopes, created_at, last_used_at, expires_at, revoked_at
+                    FROM auth_tokens
+                    WHERE kind = ?
+                    ORDER BY created_at DESC
+                """, (kind,)).fetchall()
+            else:
+                rows = conn.execute("""
+                    SELECT id, name, kind, device_type, scopes, created_at, last_used_at, expires_at, revoked_at
+                    FROM auth_tokens
+                    ORDER BY created_at DESC
+                """).fetchall()
+            records = [dict(row) for row in rows]
+            for record in records:
+                record["scopes"] = self._decode_scopes(record.get("scopes"))
+            return records
+
+    def get_auth_token(self, token_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("""
+                SELECT id, name, kind, device_type, scopes, created_at, last_used_at, expires_at, revoked_at
+                FROM auth_tokens
+                WHERE id = ?
+            """, (token_id,)).fetchone()
+            if not row:
+                return None
+            record = dict(row)
+            record["scopes"] = self._decode_scopes(record.get("scopes"))
+            return record
+
+    def _decode_pairing_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
+        record["requested_scopes"] = self._decode_scopes(record.get("requested_scopes"))
+        record["granted_scopes"] = self._decode_scopes(record.get("granted_scopes"))
+        return record
+
+    def create_pairing_session(
+        self,
+        session_id: str,
+        *,
+        code: str,
+        requested_scopes: list[str],
+        granted_scopes: list[str],
+        expires_at: str,
+    ) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("""
+                INSERT INTO pairing_sessions (id, code, status, requested_scopes, granted_scopes, expires_at)
+                VALUES (?, ?, 'pending', ?, ?, ?)
+            """, (
+                session_id,
+                code,
+                json.dumps(sorted({scope for scope in requested_scopes if scope})),
+                json.dumps(sorted({scope for scope in granted_scopes if scope})),
+                expires_at,
+            ))
+            row = conn.execute("""
+                SELECT *
+                FROM pairing_sessions
+                WHERE id = ?
+            """, (session_id,)).fetchone()
+            return self._decode_pairing_record(dict(row)) if row else {}
+
+    def get_pairing_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("""
+                SELECT *
+                FROM pairing_sessions
+                WHERE id = ?
+            """, (session_id,)).fetchone()
+            if not row:
+                return None
+            return self._decode_pairing_record(dict(row))
+
+    def get_pairing_session_by_code(self, code: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("""
+                SELECT *
+                FROM pairing_sessions
+                WHERE code = ?
+                  AND expires_at > CURRENT_TIMESTAMP
+            """, (code,)).fetchone()
+            if not row:
+                return None
+            return self._decode_pairing_record(dict(row))
+
+    def list_pairing_sessions(self) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT *
+                FROM pairing_sessions
+                ORDER BY created_at DESC
+            """).fetchall()
+            records = [dict(row) for row in rows]
+            for record in records:
+                self._decode_pairing_record(record)
+            return records
+
+    def claim_pairing_session(self, session_id: str, *, device_name: str, device_type: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("""
+                UPDATE pairing_sessions
+                SET status = 'claimed',
+                    device_name = ?,
+                    device_type = ?,
+                    claimed_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND status = 'pending'
+                  AND expires_at > CURRENT_TIMESTAMP
+            """, (device_name, device_type, session_id))
+            if conn.total_changes == 0:
+                return None
+            row = conn.execute("""
+                SELECT *
+                FROM pairing_sessions
+                WHERE id = ?
+            """, (session_id,)).fetchone()
+            return self._decode_pairing_record(dict(row)) if row else None
+
+    def confirm_pairing_session(self, session_id: str, *, auth_token_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("""
+                UPDATE pairing_sessions
+                SET status = 'completed',
+                    auth_token_id = ?,
+                    owner_confirmed_at = CURRENT_TIMESTAMP,
+                    completed_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND status = 'claimed'
+                  AND expires_at > CURRENT_TIMESTAMP
+            """, (auth_token_id, session_id))
+            if conn.total_changes == 0:
+                return None
+            row = conn.execute("""
+                SELECT *
+                FROM pairing_sessions
+                WHERE id = ?
+            """, (session_id,)).fetchone()
+            return self._decode_pairing_record(dict(row)) if row else None
+
+    def cancel_pairing_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("""
+                UPDATE pairing_sessions
+                SET status = 'cancelled',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND status IN ('pending', 'claimed')
+            """, (session_id,))
+            if conn.total_changes == 0:
+                return None
+            row = conn.execute("""
+                SELECT *
+                FROM pairing_sessions
+                WHERE id = ?
+            """, (session_id,)).fetchone()
+            return self._decode_pairing_record(dict(row)) if row else None
 
     def create_agent_token(self, token_id: str, token_hash: str, name: Optional[str] = None) -> Dict[str, Any]:
         with self._get_connection() as conn:

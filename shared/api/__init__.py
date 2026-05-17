@@ -10,6 +10,7 @@ import threading
 import json
 import uuid
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, send_from_directory, Response, stream_with_context, redirect, make_response
@@ -17,6 +18,7 @@ from flask_socketio import SocketIO, emit, join_room
 from flask_cors import CORS
 
 logger = logging.getLogger(__name__)
+API_STARTED_AT = time.time()
 
 from shared.models import PlayerConfig, Track, LibraryMetadata, StorageProvider
 from shared.constants import LIBRARY_METADATA_FILENAME, STATION_PORT, DEFAULT_OUTPUT_DIR_FALLBACK, SourceType
@@ -55,7 +57,6 @@ from watchdog.events import FileSystemEventHandler
 import random
 import socket
 import requests
-import time
 import hashlib
 import tempfile
 from typing import Optional, Any
@@ -888,6 +889,7 @@ from shared.api.routes.config import config_bp
 from shared.api.routes.discovery import discovery_bp
 from shared.api.routes.podcasts import podcasts_bp
 from shared.api.routes.agent import agent_bp
+from shared.api.routes.pairing import pairing_bp
 app.register_blueprint(library_bp)
 app.register_blueprint(playback_bp)
 app.register_blueprint(downloader_bp)
@@ -895,22 +897,47 @@ app.register_blueprint(config_bp)
 app.register_blueprint(discovery_bp)
 app.register_blueprint(podcasts_bp)
 app.register_blueprint(agent_bp)
+app.register_blueprint(pairing_bp)
 
 
 @app.route('/api/health')
 def health_check():
     runtime = get_runtime_config()
+    stats = {"tracks": 0, "local": 0, "cloud": 0}
+    config_exists = False
+    try:
+        stats = DatabaseManager().get_stats()
+    except Exception:
+        logger.debug("Health: failed to collect library stats", exc_info=True)
+    try:
+        config_exists = (runtime.config_dir / "config.json").exists()
+    except Exception:
+        pass
     return jsonify(
         {
             "status": "healthy",
+            "version": os.getenv("SOUNDSIBLE_VERSION", "0.0.0-dev"),
+            "pid": os.getpid(),
+            "uptime_seconds": round(time.time() - API_STARTED_AT, 3),
+            "base_url": f"http://{runtime.host}:{runtime.port}",
             "host": runtime.host,
             "port": runtime.port,
             "config_dir": str(runtime.config_dir),
             "cache_dir": str(runtime.cache_dir),
             "data_dir": str(runtime.data_dir),
+            "log_dir": str(runtime.log_dir),
             "music_dir": str(runtime.music_dir),
+            "ui_dist": str(runtime.ui_dist) if runtime.ui_dist else None,
+            "owner_token_file": str(runtime.owner_token_file) if runtime.owner_token_file else None,
             "advanced_mode": runtime.advanced_mode,
             "lan_enabled": runtime.lan_enabled,
+            "config_exists": config_exists,
+            "library": stats,
+            "jobs": {
+                "active_count": len(orchestrator.active_jobs),
+                "active_ids": sorted(orchestrator.active_jobs.keys()),
+                "pending_metadata_commit": orchestrator.pending_commits,
+            },
         }
     )
 
@@ -950,6 +977,7 @@ def start_api(
     host: Optional[str] = None,
     debug: bool = False,
     runtime_config: Optional[RuntimeConfig] = None,
+    on_ready: Optional[Any] = None,
 ):
     global api_observer
     runtime = runtime_config or get_runtime_config()
@@ -1065,6 +1093,12 @@ def start_api(
         for ip in endpoints:
             logger.info("Remote: http://%s:%s/player/", ip, runtime.port)
     logger.info("="*40 + "\n")
+
+    if on_ready is not None:
+        try:
+            on_ready(runtime)
+        except Exception:
+            logger.exception("API: readiness callback failed")
 
     try:
         import gevent

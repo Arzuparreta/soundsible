@@ -7,7 +7,6 @@ The single entry point for all Soundsible components (Player, Downloader, Setup)
 import argparse
 import sys
 import subprocess
-import hashlib
 from pathlib import Path
 import platform
 import shutil
@@ -282,6 +281,12 @@ from shared.daemon_launcher import (
     MSG_CONFIG_MISSING,
     MSG_SETUP_REQUIRED,
 )
+from shared.desktop_runtime import (
+    clear_runtime_state,
+    ensure_owner_token,
+    stop_owned_desktop_engine,
+    write_runtime_state,
+)
 
 
 def _config_path() -> Path:
@@ -333,6 +338,69 @@ def _is_port_in_use(port: int) -> bool:
 def _kill_station_process(port: int = STATION_PORT) -> tuple[bool, str]:
     """Kill the process listening on the Station Engine port. Returns (success, message)."""
     return stop_daemon_process(port)
+
+
+def _run_legacy_daemon(args: argparse.Namespace) -> None:
+    runtime = _build_runtime_config(args, desktop_defaults=False)
+    console.print("[bold green]Soundsible Daemon is running.[/bold green]")
+    from shared.api import start_api
+    start_api(host=runtime.host, port=runtime.port, runtime_config=runtime)
+
+
+def _desktop_readiness_payload(runtime: RuntimeConfig) -> dict:
+    return {
+        "event": "ready",
+        "base_url": f"http://{runtime.host}:{runtime.port}",
+        "host": runtime.host,
+        "port": runtime.port,
+        "pid": os.getpid(),
+        "version": os.getenv("SOUNDSIBLE_VERSION", "0.0.0-dev"),
+        "health": "/api/health",
+        "owner_token_file": str(runtime.owner_token_file) if runtime.owner_token_file else None,
+    }
+
+
+def _run_desktop_engine(args: argparse.Namespace) -> None:
+    runtime = _build_runtime_config(args, desktop_defaults=True)
+    runtime, _ = ensure_owner_token(runtime)
+    configure_runtime(runtime)
+
+    def _handle_exit(*_: object) -> None:
+        clear_runtime_state(runtime)
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGINT, _handle_exit)
+    signal.signal(signal.SIGTERM, _handle_exit)
+
+    from shared.api import start_api
+
+    def _on_ready(ready_runtime: RuntimeConfig) -> None:
+        write_runtime_state(ready_runtime, version=os.getenv("SOUNDSIBLE_VERSION", "0.0.0-dev"))
+        print(json.dumps(_desktop_readiness_payload(ready_runtime)), flush=True)
+
+    try:
+        start_api(
+            host=runtime.host,
+            port=runtime.port,
+            runtime_config=runtime,
+            on_ready=_on_ready,
+        )
+    finally:
+        clear_runtime_state(runtime)
+
+
+def run_desktop_engine_cli(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    _seed_runtime_env_from_args(args)
+    if not args.desktop_engine:
+        args.desktop_engine = True
+    if not (get_config_dir() / "config.json").exists():
+        print(f"Daemon: {MSG_CONFIG_MISSING}")
+        print("Start setup first: python3 run.py --setup")
+        return 1
+    _run_desktop_engine(args)
+    return 0
 
 
 def bootstrap():
@@ -647,5 +715,14 @@ class SoundsibleLauncher:
 if __name__ == "__main__":
     args = build_parser().parse_args()
     _build_runtime_config(args, desktop_defaults=args.desktop_engine)
+    if args.desktop_engine:
+        raise SystemExit(run_desktop_engine_cli(sys.argv[1:]))
+    if args.daemon:
+        if not (get_config_dir() / "config.json").exists():
+            print(f"Daemon: {MSG_CONFIG_MISSING}")
+            print("Start setup first: python3 run.py --setup")
+            raise SystemExit(1)
+        _run_legacy_daemon(args)
+        raise SystemExit(0)
     launcher = SoundsibleLauncher()
     launcher.run(args)
