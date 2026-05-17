@@ -5,8 +5,8 @@ Pairing session and paired-device routes.
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
-import string
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -53,6 +53,7 @@ def _sqlite_ts(dt: datetime) -> str:
 
 
 def _session_response(record: dict) -> dict:
+    connect = _pairing_connect_payload(record)
     return {
         "session_id": record["id"],
         "status": record["status"],
@@ -61,6 +62,8 @@ def _session_response(record: dict) -> dict:
         "device_type": record.get("device_type"),
         "requested_scopes": record.get("requested_scopes") or [],
         "granted_scopes": record.get("granted_scopes") or [],
+        "auto_confirm": bool(record.get("auto_confirm")),
+        "display_active": bool(record.get("display_active")),
         "owner_confirmed_at": record.get("owner_confirmed_at"),
         "claimed_at": record.get("claimed_at"),
         "completed_at": record.get("completed_at"),
@@ -68,6 +71,7 @@ def _session_response(record: dict) -> dict:
         "auth_token_id": record.get("auth_token_id"),
         "created_at": record.get("created_at"),
         "updated_at": record.get("updated_at"),
+        "connect": connect,
     }
 
 
@@ -100,6 +104,74 @@ def _requested_scopes_from_body(data: dict) -> list[str]:
 def _generate_pairing_code(length: int = 8) -> str:
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def _base_urls() -> dict:
+    from shared.api import get_active_endpoints
+    from shared.runtime import get_runtime_config
+
+    runtime = get_runtime_config()
+    loopback_base_url = f"http://127.0.0.1:{runtime.port}"
+    lan_base_urls: list[str] = []
+    if runtime.lan_enabled or runtime.host not in {"127.0.0.1", "localhost"}:
+        lan_base_urls = [f"http://{host}:{runtime.port}" for host in get_active_endpoints()]
+    suggested_base_url = lan_base_urls[0] if lan_base_urls else None
+    return {
+        "loopback_base_url": loopback_base_url,
+        "lan_base_urls": lan_base_urls,
+        "suggested_base_url": suggested_base_url,
+        "lan_enabled": runtime.lan_enabled,
+    }
+
+
+def _pairing_connect_payload(record: dict) -> dict:
+    base_urls = _base_urls()
+    suggested_base_url = base_urls["suggested_base_url"]
+    claim_url = f"{suggested_base_url}/api/pairing/sessions/claim" if suggested_base_url else None
+    player_url = f"{suggested_base_url}/player/" if suggested_base_url else None
+    qr_payload = {
+        "type": "soundsible_pairing",
+        "version": 1,
+        "code": record["code"],
+        "claim_url": claim_url,
+        "player_url": player_url,
+    }
+    return {
+        **base_urls,
+        "claim_path": "/api/pairing/sessions/claim",
+        "player_path": "/player/",
+        "claim_url": claim_url,
+        "player_url": player_url,
+        "presentable": bool(suggested_base_url),
+        "qr_payload": qr_payload,
+        "qr_text": json.dumps(qr_payload, separators=(",", ":")),
+    }
+
+
+def _mint_paired_device_token(*, session: dict) -> tuple[str, dict]:
+    token = secrets.token_urlsafe(32)
+    token_id = str(uuid.uuid4())
+    record = _db().create_auth_token(
+        token_id,
+        _hash_token(token),
+        kind="paired_device",
+        scopes=session.get("granted_scopes") or list(PAIRING_DEFAULT_SCOPES),
+        name=session.get("device_name") or "Paired device",
+        device_type=session.get("device_type") or "phone",
+    )
+    return token, record
+
+
+def _confirm_session_with_new_token(session_id: str) -> tuple[str, dict, dict] | None:
+    session = _db().get_pairing_session(session_id)
+    if not session or session["status"] != "claimed":
+        return None
+    token, record = _mint_paired_device_token(session=session)
+    completed = _db().confirm_pairing_session(session_id, auth_token_id=record["id"])
+    if not completed:
+        _db().revoke_auth_token(record["id"])
+        return None
+    return token, record, completed
 
 
 def require_pairing_scope(*required_scopes: str):
@@ -142,6 +214,8 @@ def create_pairing_session():
     except (TypeError, ValueError):
         return jsonify({"error": "expires_in_sec must be an integer"}), 400
     ttl_sec = max(30, min(ttl_sec, 1800))
+    auto_confirm = bool(data.get("auto_confirm"))
+    display_active = bool(data.get("display_active"))
 
     session_id = str(uuid.uuid4())
     code = _generate_pairing_code()
@@ -152,6 +226,8 @@ def create_pairing_session():
         requested_scopes=requested_scopes,
         granted_scopes=requested_scopes,
         expires_at=expires_at,
+        auto_confirm=auto_confirm,
+        display_active=display_active,
     )
     return jsonify(_session_response(record)), 201
 
@@ -181,6 +257,17 @@ def claim_pairing_session():
     )
     if not claimed:
         return jsonify({"error": "Pairing code is no longer available"}), 409
+    if claimed.get("auto_confirm") and claimed.get("display_active"):
+        completed = _confirm_session_with_new_token(claimed["id"])
+        if not completed:
+            return jsonify({"error": "Pairing session could not be auto-confirmed"}), 409
+        token, record, confirmed_session = completed
+        return jsonify({
+            "token": token,
+            "paired_device": _paired_device_response(record),
+            "session": _session_response(confirmed_session),
+            "auto_confirmed": True,
+        }), 201
     return jsonify(_session_response(claimed)), 200
 
 
@@ -194,25 +281,46 @@ def confirm_pairing_session(session_id: str):
     if session["status"] != "claimed":
         return jsonify({"error": "Pairing session is not ready to confirm"}), 409
 
-    token = secrets.token_urlsafe(32)
-    token_id = str(uuid.uuid4())
-    record = _db().create_auth_token(
-        token_id,
-        _hash_token(token),
-        kind="paired_device",
-        scopes=session.get("granted_scopes") or list(PAIRING_DEFAULT_SCOPES),
-        name=session.get("device_name") or "Paired device",
-        device_type=session.get("device_type") or "phone",
-    )
-    completed = _db().confirm_pairing_session(session_id, auth_token_id=token_id)
+    completed = _confirm_session_with_new_token(session_id)
     if not completed:
-        _db().revoke_auth_token(token_id)
         return jsonify({"error": "Pairing session could not be confirmed"}), 409
+    token, record, confirmed_session = completed
     return jsonify({
         "token": token,
         "paired_device": _paired_device_response(record),
-        "session": _session_response(completed),
+        "session": _session_response(confirmed_session),
     }), 201
+
+
+@pairing_bp.route("/api/pairing/sessions/<session_id>/display-open", methods=["POST"])
+@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
+@rate_limit("pairing_sessions_display_open", limit=30, window_sec=60)
+def display_open_pairing_session(session_id: str):
+    data = request.get_json(silent=True) or {}
+    auto_confirm = data.get("auto_confirm")
+    if auto_confirm is not None:
+        auto_confirm = bool(auto_confirm)
+    session = _db().set_pairing_session_display_state(
+        session_id,
+        display_active=True,
+        auto_confirm=auto_confirm,
+    )
+    if not session:
+        return jsonify({"error": "Pairing session not found or already closed"}), 404
+    return jsonify(_session_response(session)), 200
+
+
+@pairing_bp.route("/api/pairing/sessions/<session_id>/display-close", methods=["POST"])
+@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
+@rate_limit("pairing_sessions_display_close", limit=30, window_sec=60)
+def display_close_pairing_session(session_id: str):
+    session = _db().set_pairing_session_display_state(
+        session_id,
+        display_active=False,
+    )
+    if not session:
+        return jsonify({"error": "Pairing session not found or already closed"}), 404
+    return jsonify(_session_response(session)), 200
 
 
 @pairing_bp.route("/api/pairing/sessions/<session_id>/cancel", methods=["POST"])

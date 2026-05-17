@@ -11,6 +11,7 @@ import json
 import uuid
 import logging
 import time
+from html import escape as html_escape
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, send_from_directory, Response, stream_with_context, redirect, make_response
@@ -250,6 +251,46 @@ def _web_ui_root():
             return WEB_UI_DIST_PATH
     return WEB_UI_PATH
 
+
+def _read_owner_token_for_ui() -> Optional[str]:
+    runtime = get_runtime_config()
+    token_file = runtime.owner_token_file
+    if not token_file:
+        return None
+    try:
+        token = token_file.read_text().strip()
+    except Exception:
+        logger.debug("UI token injection: failed to read owner token file", exc_info=True)
+        return None
+    return token or None
+
+
+def _inject_owner_token_bootstrap(html: str, token: Optional[str]) -> str:
+    if not token:
+        return html
+    bootstrap = (
+        '<meta name="soundsible-owner-token" content="{token}">\n'
+        '<script>window.__SOUNDSIBLE_OWNER_TOKEN__={token_json};</script>\n'
+    ).format(
+        token=html_escape(token, quote=True),
+        token_json=json.dumps(token),
+    )
+    if "</head>" in html:
+        return html.replace("</head>", f"{bootstrap}</head>", 1)
+    return bootstrap + html
+
+
+def _render_web_ui_html(filename: str, *, inject_owner_token: bool = False):
+    root = _web_ui_root()
+    path = os.path.join(root, filename)
+    if not inject_owner_token:
+        return send_from_directory(root, filename)
+    with open(path, "r", encoding="utf-8") as handle:
+        html = handle.read()
+    token = _read_owner_token_for_ui()
+    html = _inject_owner_token_bootstrap(html, token)
+    return Response(html, mimetype="text/html")
+
 # Note: Serve web player
 @app.route('/player')
 def serve_web_player_redirect():
@@ -258,7 +299,7 @@ def serve_web_player_redirect():
 
 @app.route('/player/')
 def serve_web_player():
-    resp = make_response(send_from_directory(_web_ui_root(), 'index.html'))
+    resp = make_response(_render_web_ui_html('index.html'))
     resp.headers['Permissions-Policy'] = 'web-share=(self)'
     return resp
 
@@ -269,7 +310,7 @@ def serve_web_player_desktop_redirect():
 
 @app.route('/player/desktop/')
 def serve_web_player_desktop():
-    resp = make_response(send_from_directory(_web_ui_root(), 'desktop.html'))
+    resp = make_response(_render_web_ui_html('desktop.html', inject_owner_token=True))
     resp.headers['Permissions-Policy'] = 'web-share=(self)'
     return resp
 

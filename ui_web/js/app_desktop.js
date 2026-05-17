@@ -25,6 +25,7 @@ import {
 } from './shared.js';
 import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
 import { tryPlayUnifiedMusicSearch } from './search.js';
+import { desktopPairing } from './desktop_pairing.js';
 
 let discoverSearchDebounceTimer = null;
 let podcastSearchDebounceTimer = null;
@@ -852,6 +853,18 @@ function init() {
             generateTokenBtn: 'desktop-generate-token-btn',
             tokenDisplay: 'desktop-agent-token-display'
         }, { store, showToast: (m) => DesktopUI.showToast(m) });
+
+        desktopPairing.bindDesktopSettings({
+            openBtn: 'desktop-open-pairing-btn',
+            refreshPairedBtn: 'desktop-refresh-paired-devices-btn',
+            pairedDevicesContainer: 'desktop-paired-devices-container',
+        }, {
+            showToast: (m) => DesktopUI.showToast(m),
+            onDevicesChanged: () => {
+                const refreshBtn = document.getElementById('desktop-refresh-devices-btn');
+                if (refreshBtn) refreshBtn.click();
+            },
+        });
 
         const themeSelect = document.getElementById('desktop-settings-theme-select');
         if (themeSelect) {

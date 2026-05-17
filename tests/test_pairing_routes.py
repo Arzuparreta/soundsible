@@ -70,6 +70,8 @@ def test_pairing_session_flow_claim_confirm_verify_and_revoke(tmp_path):
     assert created_body["status"] == "pending"
     assert created_body["code"]
     assert created_body["granted_scopes"] == ["download:add", "library:read", "playback:control"]
+    assert created_body["connect"]["presentable"] is False
+    assert created_body["connect"]["claim_url"] is None
 
     claimed = client.post(
         "/api/pairing/sessions/claim",
@@ -161,3 +163,99 @@ def test_pairing_claim_rejects_reuse_and_cancel_closes_session(tmp_path):
         headers={"Authorization": f"Bearer {owner_token}"},
     )
     assert confirm_after_cancel.status_code == 409
+
+
+def test_pairing_connect_payload_and_auto_confirm_while_display_is_open(tmp_path, monkeypatch):
+    reset_runtime()
+    runtime = _make_runtime(tmp_path)
+    runtime = RuntimeConfig(
+        host=runtime.host,
+        port=runtime.port,
+        config_dir=runtime.config_dir,
+        data_dir=runtime.data_dir,
+        cache_dir=runtime.cache_dir,
+        log_dir=runtime.log_dir,
+        music_dir=runtime.music_dir,
+        ui_dist=runtime.ui_dist,
+        owner_token_file=runtime.owner_token_file,
+        lan_enabled=True,
+        advanced_mode=runtime.advanced_mode,
+    )
+    configure_runtime(runtime)
+    app = _make_app()
+    client = app.test_client()
+    db = DatabaseManager()
+    owner_token = _owner_token(db)
+
+    monkeypatch.setattr("shared.api.get_active_endpoints", lambda: ["192.168.1.50"])
+
+    created = client.post(
+        "/api/pairing/sessions",
+        json={"auto_confirm": True, "display_active": True},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert created.status_code == 201
+    created_body = created.get_json()
+    assert created_body["auto_confirm"] is True
+    assert created_body["display_active"] is True
+    assert created_body["connect"]["presentable"] is True
+    assert created_body["connect"]["suggested_base_url"] == "http://192.168.1.50:5005"
+    assert created_body["connect"]["claim_url"] == "http://192.168.1.50:5005/api/pairing/sessions/claim"
+    assert '"type":"soundsible_pairing"' in created_body["connect"]["qr_text"]
+
+    auto_confirmed = client.post(
+        "/api/pairing/sessions/claim",
+        json={"code": created_body["code"], "device_name": "Bob Phone", "device_type": "phone"},
+    )
+    assert auto_confirmed.status_code == 201
+    auto_body = auto_confirmed.get_json()
+    assert auto_body["auto_confirmed"] is True
+    assert auto_body["session"]["status"] == "completed"
+    assert auto_body["paired_device"]["kind"] == "paired_device"
+
+
+def test_display_close_disables_auto_confirm(tmp_path, monkeypatch):
+    reset_runtime()
+    runtime = _make_runtime(tmp_path)
+    runtime = RuntimeConfig(
+        host=runtime.host,
+        port=runtime.port,
+        config_dir=runtime.config_dir,
+        data_dir=runtime.data_dir,
+        cache_dir=runtime.cache_dir,
+        log_dir=runtime.log_dir,
+        music_dir=runtime.music_dir,
+        ui_dist=runtime.ui_dist,
+        owner_token_file=runtime.owner_token_file,
+        lan_enabled=True,
+        advanced_mode=runtime.advanced_mode,
+    )
+    configure_runtime(runtime)
+    app = _make_app()
+    client = app.test_client()
+    db = DatabaseManager()
+    owner_token = _owner_token(db)
+
+    monkeypatch.setattr("shared.api.get_active_endpoints", lambda: ["192.168.1.50"])
+
+    created = client.post(
+        "/api/pairing/sessions",
+        json={"auto_confirm": True, "display_active": True},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    session_id = created.get_json()["session_id"]
+    code = created.get_json()["code"]
+
+    closed = client.post(
+        f"/api/pairing/sessions/{session_id}/display-close",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert closed.status_code == 200
+    assert closed.get_json()["display_active"] is False
+
+    claimed = client.post(
+        "/api/pairing/sessions/claim",
+        json={"code": code, "device_name": "Charlie Phone"},
+    )
+    assert claimed.status_code == 200
+    assert claimed.get_json()["status"] == "claimed"

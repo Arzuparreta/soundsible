@@ -186,6 +186,8 @@ class DatabaseManager:
                         device_type TEXT,
                         requested_scopes TEXT NOT NULL,
                         granted_scopes TEXT NOT NULL,
+                        auto_confirm INTEGER NOT NULL DEFAULT 0,
+                        display_active INTEGER NOT NULL DEFAULT 0,
                         owner_confirmed_at TIMESTAMP,
                         claimed_at TIMESTAMP,
                         completed_at TIMESTAMP,
@@ -199,6 +201,12 @@ class DatabaseManager:
                     CREATE INDEX IF NOT EXISTS idx_pairing_sessions_status
                     ON pairing_sessions (status)
                 """)
+                cursor = conn.execute("PRAGMA table_info(pairing_sessions)")
+                pairing_columns = [row[1] for row in cursor.fetchall()]
+                if "auto_confirm" not in pairing_columns:
+                    conn.execute("ALTER TABLE pairing_sessions ADD COLUMN auto_confirm INTEGER NOT NULL DEFAULT 0")
+                if "display_active" not in pairing_columns:
+                    conn.execute("ALTER TABLE pairing_sessions ADD COLUMN display_active INTEGER NOT NULL DEFAULT 0")
                 
                 # Note: 5. Performance indexes for common access patterns
                 # - get_all_tracks orders by artist, album, track_number
@@ -558,6 +566,8 @@ class DatabaseManager:
     def _decode_pairing_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
         record["requested_scopes"] = self._decode_scopes(record.get("requested_scopes"))
         record["granted_scopes"] = self._decode_scopes(record.get("granted_scopes"))
+        record["auto_confirm"] = bool(record.get("auto_confirm"))
+        record["display_active"] = bool(record.get("display_active"))
         return record
 
     def create_pairing_session(
@@ -568,17 +578,21 @@ class DatabaseManager:
         requested_scopes: list[str],
         granted_scopes: list[str],
         expires_at: str,
+        auto_confirm: bool = False,
+        display_active: bool = False,
     ) -> Dict[str, Any]:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             conn.execute("""
-                INSERT INTO pairing_sessions (id, code, status, requested_scopes, granted_scopes, expires_at)
-                VALUES (?, ?, 'pending', ?, ?, ?)
+                INSERT INTO pairing_sessions (id, code, status, requested_scopes, granted_scopes, auto_confirm, display_active, expires_at)
+                VALUES (?, ?, 'pending', ?, ?, ?, ?, ?)
             """, (
                 session_id,
                 code,
                 json.dumps(sorted({scope for scope in requested_scopes if scope})),
                 json.dumps(sorted({scope for scope in granted_scopes if scope})),
+                1 if auto_confirm else 0,
+                1 if display_active else 0,
                 expires_at,
             ))
             row = conn.execute("""
@@ -678,10 +692,46 @@ class DatabaseManager:
             conn.execute("""
                 UPDATE pairing_sessions
                 SET status = 'cancelled',
+                    display_active = 0,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                   AND status IN ('pending', 'claimed')
             """, (session_id,))
+            if conn.total_changes == 0:
+                return None
+            row = conn.execute("""
+                SELECT *
+                FROM pairing_sessions
+                WHERE id = ?
+            """, (session_id,)).fetchone()
+            return self._decode_pairing_record(dict(row)) if row else None
+
+    def set_pairing_session_display_state(
+        self,
+        session_id: str,
+        *,
+        display_active: bool,
+        auto_confirm: Optional[bool] = None,
+    ) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            if auto_confirm is None:
+                conn.execute("""
+                    UPDATE pairing_sessions
+                    SET display_active = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                      AND status IN ('pending', 'claimed')
+                """, (1 if display_active else 0, session_id))
+            else:
+                conn.execute("""
+                    UPDATE pairing_sessions
+                    SET display_active = ?,
+                        auto_confirm = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                      AND status IN ('pending', 'claimed')
+                """, (1 if display_active else 0, 1 if auto_confirm else 0, session_id))
             if conn.total_changes == 0:
                 return None
             row = conn.execute("""

@@ -75,8 +75,10 @@ The Flask application lives in `shared/api/__init__.py`. It:
 **Pairing primitives**:
 
 - Owners create short-lived pairing sessions with **`POST /api/pairing/sessions`** and can inspect them with **`GET /api/pairing/sessions`**.
+- Session payloads now include QR-ready connection metadata: candidate LAN base URLs, claim/player URLs, and a compact JSON `qr_text` payload suitable for encoding directly into a QR code.
 - Clients claim a visible pairing code through **`POST /api/pairing/sessions/claim`**.
 - Owners complete or cancel the flow through **`POST /api/pairing/sessions/<id>/confirm`** and **`POST /api/pairing/sessions/<id>/cancel`**.
+- The shell can explicitly mark the QR sheet open or closed through **`POST /api/pairing/sessions/<id>/display-open`** and **`POST /api/pairing/sessions/<id>/display-close`**. If `auto_confirm` is enabled while display is open, a claim can complete immediately without a second owner round-trip.
 - Successful confirmation creates a scoped `paired_device` bearer token in `auth_tokens`; owners can list and revoke those tokens with **`GET /api/paired-devices`** and **`POST /api/paired-devices/<token_id>/revoke`**.
 
 **Job orchestration** (`shared/api/orchestrator.py`): a small **JobOrchestrator** serializes metadata writes and runs bounded concurrent work (e.g. downloads) so heavy tasks do not stampede the library.

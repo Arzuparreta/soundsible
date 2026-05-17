@@ -34,12 +34,20 @@ function scheduleLibraryIdbMirror(library) {
     else setTimeout(run, 1);
 }
 
+function getRuntimePort() {
+    if (typeof window !== 'undefined' && window.location?.port) {
+        const parsed = Number(window.location.port);
+        if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+    return STATION_PORT;
+}
+
 class Store {
     constructor() {
         this.state = {
             config: this.load('config', {
                 host: window.location.hostname || 'localhost',
-                port: STATION_PORT,
+                port: getRuntimePort(),
                 syncToken: null
             }),
             priorityList: this.load('priority_list', []),
@@ -321,8 +329,7 @@ class Store {
         this._syncLibraryInFlight = true;
         const syncVersion = ++this._syncLibraryVersion;
         const host = this.state.activeHost;
-        const port = this.state.config.port;
-        const url = `http://${host}:${port}/api/library?t=${Date.now()}`;
+        const url = `${getApiBase(host)}/api/library?t=${Date.now()}`;
         const apiBase = this.apiBase;
 
         try {

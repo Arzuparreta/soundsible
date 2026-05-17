@@ -7,7 +7,7 @@ As of 2026-05-17:
 - Runtime foundation is largely in place: `RuntimeConfig`, platform app dirs, path migration, and `--desktop-engine`.
 - Auth scopes are largely in place: `auth_tokens`, scoped checks, and legacy compatibility.
 - The desktop sidecar contract is now partially landed: desktop mode emits readiness JSON, writes owner-token/runtime-state files, and exposes richer `/api/health`.
-- Pairing backend primitives are now partially landed: pairing sessions, claim/confirm/cancel endpoints, paired-device tokens, and revoke/list endpoints exist; QR UI and desktop/mobile UX are still open.
+- Pairing backend primitives are now partially landed: pairing sessions, claim/confirm/cancel endpoints, paired-device tokens, revoke/list endpoints, QR-ready connection payloads, and display-state auto-confirm controls exist; QR UI and desktop/mobile UX are still open.
 - Desktop shell, Windows packaging, updater/recovery UI, and host-supervisor abstraction are still open.
 
 ## Decision

@@ -5,6 +5,7 @@
 import { store } from './store.js';
 import { getApiBase } from './config.js';
 import { Resolver } from './resolver.js';
+import { adminFetch } from './admin_auth.js';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -183,7 +184,7 @@ class RemoteControl {
 
     async generateAgentToken() {
         try {
-            const res = await fetch(`${this._apiBase}/api/agent/token`, {
+            const res = await adminFetch(`${this._apiBase}/api/agent/token`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
             });

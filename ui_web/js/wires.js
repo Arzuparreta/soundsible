@@ -13,6 +13,7 @@ import {
 } from './deezer_actions.js';
 import { radioService } from './radio.js';
 import { remoteControl } from './remote_control.js';
+import { adminFetch } from './admin_auth.js';
 
 function getElement(root, selector) {
     if (!selector) return null;
@@ -127,14 +128,14 @@ export function wireSettings(selectors, deps) {
     const ytdlpAutoUpdate = getElement(root, selectors.ytdlpAutoUpdate);
     if (ytdlpAutoUpdate) {
         const getApiBase = () => store.apiBase || '';
-        fetch(`${getApiBase()}/api/downloader/config`)
+        adminFetch(`${getApiBase()}/api/downloader/config`)
             .then((r) => r.json())
             .then((c) => {
                 ytdlpAutoUpdate.checked = c.auto_update_ytdlp === true;
             })
             .catch(() => {});
         ytdlpAutoUpdate.addEventListener('change', () => {
-            fetch(`${getApiBase()}/api/downloader/config`, {
+            adminFetch(`${getApiBase()}/api/downloader/config`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ auto_update_ytdlp: ytdlpAutoUpdate.checked }),
