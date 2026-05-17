@@ -13,6 +13,9 @@ ENV/
 # IDEs
 .vscode/
 .idea/
+.opencode/
+.codex/
+.gstack/
 .cursor/
 .cursorrules
 .cursorignore
