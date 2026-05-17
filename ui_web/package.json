@@ -3,11 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "postinstall": "node scripts/sync-vendor-socket.mjs",
+    "postinstall": "node scripts/sync-vendor-socket.mjs && node scripts/sync-vendor-qrcode.mjs",
     "css:build": "tailwindcss -i ./css/app.css -o ./assets/tailwind-compiled.css --minify",
     "css:watch": "tailwindcss -i ./css/app.css -o ./assets/tailwind-compiled.css --watch",
     "dev": "vite",
-    "build": "npm run css:build && vite build && node scripts/copy-static.mjs && node scripts/fix-dist-html.mjs",
+    "build": "node scripts/sync-vendor-socket.mjs && node scripts/sync-vendor-qrcode.mjs && npm run css:build && vite build && node scripts/copy-static.mjs && node scripts/fix-dist-html.mjs",
     "preview": "vite preview"
   },
   "devDependencies": {

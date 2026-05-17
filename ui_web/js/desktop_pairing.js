@@ -1,4 +1,4 @@
-import QRCode from 'qrcode';
+import QRCode from './vendor/qrcode.esm.js';
 
 import { store } from './store.js';
 import { adminFetch, hasOwnerToken } from './admin_auth.js';
