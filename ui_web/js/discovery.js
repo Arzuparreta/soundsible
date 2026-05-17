@@ -94,17 +94,34 @@ function syncPersonalTasteEpochFromStore() {
   }
 }
 
+function hasActiveDiscoverSearchInput() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+  const discoverActive =
+    window.UI?.currentView === 'discover' ||
+    window.DesktopUI?.currentView === 'discover';
+  if (!discoverActive) return false;
+  const inputIds = ['desktop-global-search-input', 'global-search-input'];
+  return inputIds.some((id) => {
+    const input = document.getElementById(id);
+    return !!(input && (input.value || '').trim());
+  });
+}
+
+function shouldRefreshDiscoverHome() {
+  return (
+    discoveryUI.container &&
+    discoveryUI.currentView === 'home' &&
+    !hasActiveDiscoverSearchInput()
+  );
+}
+
 function ensurePersonalTasteStoreListener() {
   if (_tasteListenerBound) return;
   _tasteListenerBound = true;
   store.subscribe(() => {
     const epochBefore = _personalTasteEpoch;
     syncPersonalTasteEpochFromStore();
-    if (
-      _personalTasteEpoch !== epochBefore &&
-      discoveryUI.container &&
-      discoveryUI.currentView === 'home'
-    ) {
+    if (_personalTasteEpoch !== epochBefore && shouldRefreshDiscoverHome()) {
       void discoveryUI.renderHome();
     }
   });
@@ -114,7 +131,7 @@ function ensurePersonalRailRefreshTimer() {
   if (_personalRailIntervalId != null || typeof window === 'undefined') return;
   _personalRailIntervalId = window.setInterval(() => {
     _personalRailTimerGen += 1;
-    if (discoveryUI.container && discoveryUI.currentView === 'home') {
+    if (shouldRefreshDiscoverHome()) {
       void discoveryUI.renderHome();
     }
   }, PERSONAL_RAIL_REFRESH_MS);

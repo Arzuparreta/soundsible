@@ -767,6 +767,7 @@ window.openPlaylistCoverPicker = showPlaylistCoverPicker({
 window.store = store;
 window.audioEngine = audioEngine;
 window.UI = DesktopUI;
+window.DesktopUI = DesktopUI;
 
 window.toggleArtistAlbum = (ev) => {
     const card = ev?.currentTarget?.closest?.('.artist-album-card');

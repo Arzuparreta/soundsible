@@ -24,12 +24,32 @@ class SearchService {
         this.abortController = null;
         this.suggestAbortController = null;
         this.debounceTimer = null;
+        this.debounceResolve = null;
         // Note: Standardize 'ytmusic' is the default and canonical value
         const saved = localStorage.getItem(STORAGE_KEY_SOURCE_MODE);
         this._sourceMode = (saved === 'youtube') ? 'youtube' : 'ytmusic';
         this.suggestionDropdown = null;
         this.activeInput = null;
         this._typeaheadBindings = new WeakMap();
+    }
+
+    _cancelSharedDebounce(value = null) {
+        if (this.debounceTimer) {
+            clearTimeout(this.debounceTimer);
+            this.debounceTimer = null;
+            if (typeof this.debounceResolve === 'function') {
+                this.debounceResolve(value);
+            }
+        }
+        this.debounceResolve = null;
+    }
+
+    cancelActiveQuery() {
+        this._cancelSharedDebounce(null);
+        if (this.abortController) {
+            this.abortController.abort();
+            this.abortController = null;
+        }
     }
 
     get sourceMode() {
@@ -306,13 +326,18 @@ class SearchService {
         const text = (query || '').trim();
         if (!text) return [];
 
-        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+        const isolated = options.isolated === true;
+        if (!isolated) this._cancelSharedDebounce(null);
         
         const debounceMs = options.debounce !== undefined ? options.debounce : DEFAULT_DEBOUNCE_MS;
         
         if (debounceMs > 0) {
             return new Promise((resolve, reject) => {
-                this.debounceTimer = setTimeout(async () => {
+                const timer = setTimeout(async () => {
+                    if (!isolated && this.debounceTimer === timer) {
+                        this.debounceTimer = null;
+                        this.debounceResolve = null;
+                    }
                     try {
                         const results = await this._performFetch(text, options);
                         resolve(results);
@@ -320,6 +345,10 @@ class SearchService {
                         reject(err);
                     }
                 }, debounceMs);
+                if (!isolated) {
+                    this.debounceTimer = timer;
+                    this.debounceResolve = resolve;
+                }
             });
         } else {
             return this._performFetch(text, options);
