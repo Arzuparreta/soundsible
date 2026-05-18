@@ -10,7 +10,13 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
-from shared.hardening import SCOPE_ADMIN_CONFIG, rate_limit, require_scope
+from shared.hardening import (
+    SCOPE_ADMIN_CONFIG,
+    SCOPE_PLAYBACK_CONTROL,
+    rate_limit,
+    require_any_scope,
+    require_scope,
+)
 from shared.runtime import (
     configure_runtime,
     get_config_dir,
@@ -20,8 +26,50 @@ from shared.runtime import (
     save_persisted_music_dir,
 )
 from shared.security import is_safe_path
+from shared.setup_session import ensure_session, normalize_setup_session_id
 
 setup_bp = Blueprint("setup", __name__, url_prefix="")
+
+
+@setup_bp.route("/api/setup/session", methods=["POST"])
+@require_any_scope(SCOPE_ADMIN_CONFIG, SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
+@rate_limit("setup_session_post", limit=30, window_sec=60)
+def post_setup_session():
+    """Start or resume a correlated setup funnel (emits ``setup_session_started`` once per new id)."""
+    from shared.telemetry import emit
+
+    data = request.get_json(silent=True) or {}
+    raw_id = data.get("setup_session_id")
+    sid, started_ts, is_new = ensure_session(raw_id)
+    if is_new:
+        emit(
+            "setup",
+            {
+                "v": 1,
+                "event": "setup_session_started",
+                "ts": int(time.time()),
+                "setup_session_id": sid,
+                "client_supplied": bool(normalize_setup_session_id(raw_id)),
+            },
+        )
+    return jsonify({"setup_session_id": sid, "started_ts": started_ts})
+
+
+@setup_bp.route("/api/setup/first-play", methods=["POST"])
+@require_any_scope(SCOPE_ADMIN_CONFIG, SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
+@rate_limit("setup_first_play_post", limit=60, window_sec=60)
+def post_setup_first_play():
+    """Beacon for first confirmed playback (web/audio path; idempotent per session)."""
+    from shared.setup_session import try_emit_setup_first_play
+
+    data = request.get_json(silent=True) or {}
+    sid = normalize_setup_session_id(data.get("setup_session_id"))
+    if not sid:
+        return jsonify({"error": "setup_session_id is required"}), 400
+    track_id = data.get("track_id")
+    tid = str(track_id).strip()[:128] if track_id is not None and str(track_id).strip() else None
+    emitted = try_emit_setup_first_play(sid, track_id=tid)
+    return jsonify({"status": "ok", "emitted": emitted})
 
 
 def _env_music_dir_active() -> bool:
@@ -74,9 +122,22 @@ def post_music_dir_setting():
 
     data = request.json or {}
     raw = data.get("music_dir") or data.get("path")
+    setup_session_id = normalize_setup_session_id(data.get("setup_session_id"))
     try:
         resolved = _resolve_music_dir(str(raw))
     except ValueError as e:
+        if setup_session_id:
+            emit(
+                "setup",
+                {
+                    "v": 1,
+                    "event": "setup_error",
+                    "ts": int(time.time()),
+                    "setup_session_id": setup_session_id,
+                    "code": "invalid_music_dir",
+                    "message": str(e)[:500],
+                },
+            )
         return jsonify({"error": str(e)}), 400
 
     cfg_dir = get_config_dir()
@@ -95,15 +156,27 @@ def post_music_dir_setting():
     except Exception:
         pass
 
-    emit(
-        "setup",
-        {
-            "v": 1,
-            "event": "setup_music_dir_saved",
-            "ts": int(time.time()),
-            "env_override": _env_music_dir_active(),
-        },
-    )
+    payload_music = {
+        "v": 1,
+        "event": "setup_music_dir_saved",
+        "ts": int(time.time()),
+        "env_override": _env_music_dir_active(),
+    }
+    if setup_session_id:
+        payload_music["setup_session_id"] = setup_session_id
+    emit("setup", payload_music)
+
+    if setup_session_id:
+        emit(
+            "setup",
+            {
+                "v": 1,
+                "event": "setup_step_completed",
+                "ts": int(time.time()),
+                "setup_session_id": setup_session_id,
+                "step": "music_dir",
+            },
+        )
 
     return jsonify(
         {

@@ -184,6 +184,63 @@ def test_migration_import_playlist_writes_metadata(tmp_path):
     sio.emit.assert_called_once()
 
 
+def test_migration_import_playlist_logs_batch_id(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    app = Flask(__name__)
+    app.register_blueprint(migration_bp)
+    client = app.test_client()
+    db = DatabaseManager()
+    write_tok = _agent_write(db)
+
+    a = _sample_track("a")
+    meta = LibraryMetadata(version=1, tracks=[a], playlists={}, settings={})
+    mock_lib = MagicMock()
+    mock_lib.metadata = meta
+    mock_lib.refresh_if_stale = MagicMock()
+    mock_lib._save_metadata = MagicMock()
+
+    bid = "batch-test-uuid"
+
+    with patch("shared.api.routes.migration._get_core_lib", return_value=mock_lib):
+        with patch("shared.api.socketio"):
+            res = client.post(
+                "/api/migration/import-playlist",
+                json={"playlist_name": "Imported", "track_ids": [a.id], "batch_id": bid},
+                headers={"Authorization": f"Bearer {write_tok}"},
+            )
+    assert res.status_code == 200
+
+    log = (runtime.data_dir / "telemetry" / "migration-events.jsonl").read_text(encoding="utf-8").strip()
+    last = json.loads(log.splitlines()[-1])
+    assert last["event"] == "migration_import_apply"
+    assert last["batch_id"] == bid
+
+
+def test_migration_row_decision_logs(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    app = Flask(__name__)
+    app.register_blueprint(migration_bp)
+    client = app.test_client()
+    db = DatabaseManager()
+    write_tok = _agent_write(db)
+
+    res = client.post(
+        "/api/migration/row-decision",
+        json={"batch_id": "b-1", "source_index": 3, "decision": "confirm", "track_id": "tid"},
+        headers={"Authorization": f"Bearer {write_tok}"},
+    )
+    assert res.status_code == 200
+
+    log = (runtime.data_dir / "telemetry" / "migration-events.jsonl").read_text(encoding="utf-8").strip()
+    row = json.loads(log.splitlines()[-1])
+    assert row["event"] == "migration_row_decision"
+    assert row["batch_id"] == "b-1"
+    assert row["source_index"] == 3
+    assert row["track_id"] == "tid"
+
+
 def test_play_timing_endpoint_writes_jsonl(tmp_path, monkeypatch):
     monkeypatch.delenv("SOUNDSIBLE_TELEMETRY_ENABLED", raising=False)
     runtime = _make_runtime(tmp_path)

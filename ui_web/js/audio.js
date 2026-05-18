@@ -10,12 +10,13 @@ import { isVisible } from './visibility.js';
 import { radioService } from './radio.js';
 import {
     playTimingNoteUserIntent,
-    playTimingOnPlaying,
     playTimingMarkSrcSet,
     playTimingMarkBeforePlay,
     playTimingMarkAfterPlayAwait,
+    playTimingOnPlaying,
     isPlayTimingEligibleTrack,
 } from './play_timing.js';
+import { postSetupFirstPlayBeacon, ensureSetupSessionStarted } from './setup_funnel.js';
 
 const PRELOAD_THRESHOLD_SEC = 45;
 const PUSH_DEBOUNCE_VISIBLE_SEC = 5;
@@ -25,6 +26,9 @@ class AudioEngine {
         this.audio = new Audio();
         this.audio.crossOrigin = 'anonymous';
         this.currentPosition = 0;
+        if (typeof window !== 'undefined') {
+            void ensureSetupSessionStarted(store.apiBase);
+        }
         this.currentContext = []; // Note: Sequential fallback
         /** Track ID we already repeated once in repeat(1) mode; cleared when song changes. */
         this._repeatOnceUsedTrackId = null;
@@ -260,6 +264,10 @@ class AudioEngine {
         });
         this.audio.addEventListener('playing', () => {
             playTimingOnPlaying(store.state.currentTrack);
+            const t = store.state.currentTrack;
+            if (t && isPlayTimingEligibleTrack(t)) {
+                postSetupFirstPlayBeacon(store.apiBase, t.id);
+            }
         });
         
         this.audio.addEventListener('error', (e) => {

@@ -191,6 +191,38 @@ def require_scope(*required_scopes: str, allow_trusted_network: bool = False):
     return decorator
 
 
+def require_any_scope(*acceptable_scopes: str, allow_trusted_network: bool = False):
+    """Token must include at least one of the given scopes (owner always allowed)."""
+    acceptable = _normalize_scope_list(acceptable_scopes)
+
+    def decorator(fn):
+        @wraps(fn)
+        def wrapped(*args, **kwargs):
+            context = get_request_auth_context(allow_trusted_network=allow_trusted_network)
+            if context:
+                if context.get("kind") == "owner":
+                    return fn(*args, **kwargs)
+                have = _normalize_scope_list(context.get("scopes"))
+                if have.intersection(acceptable):
+                    return fn(*args, **kwargs)
+                return jsonify(
+                    {
+                        "error": "Insufficient token scope",
+                        "required_any_of": sorted(acceptable),
+                    }
+                ), 403
+            msg = (
+                "Admin token required."
+                if _read_admin_token()
+                else "Authentication required."
+            )
+            return jsonify({"error": msg, "required_any_of": sorted(acceptable)}), 403
+
+        return wrapped
+
+    return decorator
+
+
 def require_admin(*, allow_trusted_network: bool = True):
     return require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=allow_trusted_network)
 

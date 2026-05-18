@@ -14,6 +14,7 @@ import {
 import { radioService } from './radio.js';
 import { remoteControl } from './remote_control.js';
 import { adminFetch } from './admin_auth.js';
+import { getSetupSessionId } from './setup_funnel.js';
 
 function getElement(root, selector) {
     if (!selector) return null;
@@ -175,10 +176,15 @@ export function wireSettings(selectors, deps) {
                 showToast?.('Enter a folder path');
                 return;
             }
+            const payload = { music_dir: v };
+            const sid = getSetupSessionId();
+            if (sid) {
+                payload.setup_session_id = sid;
+            }
             adminFetch(`${getApiBase()}/api/setup/music-dir`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ music_dir: v }),
+                body: JSON.stringify(payload),
             })
                 .then(async (r) => {
                     let j = {};
@@ -477,6 +483,7 @@ export function wireMigration(selectors, deps) {
 
     /** @type {unknown[]|null} */
     let lastMatches = null;
+    let lastBatchId = null;
 
     /**
      * @param {boolean} includeConfirm
@@ -517,11 +524,13 @@ export function wireMigration(selectors, deps) {
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok) {
                     lastMatches = null;
+                    lastBatchId = null;
                     if (hintEl) hintEl.textContent = data.error || `Preview failed (${res.status})`;
                     showToast?.(data.error || 'Preview failed');
                     return;
                 }
                 lastMatches = data.matches || [];
+                lastBatchId = typeof data.batch_id === 'string' && data.batch_id ? data.batch_id : null;
                 const st = data.stats || {};
                 const parts = [
                     `Matched ${st.matched ?? 0} / ${st.total ?? 0}`,
@@ -533,6 +542,7 @@ export function wireMigration(selectors, deps) {
                 showToast?.('Preview ready');
             } catch (_) {
                 lastMatches = null;
+                lastBatchId = null;
                 if (hintEl) hintEl.textContent = 'Request failed';
                 showToast?.('Preview failed');
             } finally {
@@ -556,10 +566,14 @@ export function wireMigration(selectors, deps) {
             }
             importBtn.disabled = true;
             try {
+                const importBody = { playlist_name: name, track_ids };
+                if (lastBatchId) {
+                    importBody.batch_id = lastBatchId;
+                }
                 const res = await adminFetch(`${store.apiBase}/api/migration/import-playlist`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ playlist_name: name, track_ids }),
+                    body: JSON.stringify(importBody),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok) {

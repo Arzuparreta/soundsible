@@ -436,14 +436,22 @@ def get_next_from_queue():
 def play_track():
     api = _get_api()
     lib, engine, _ = api["get_core"]()
-    data = request.json
+    data = request.json or {}
     track_id = data.get("track_id")
+    setup_session_id = (data.get("setup_session_id") or "").strip() or None
     track = api["get_track_by_id"](lib, track_id)
     if track and engine:
         url = lib.get_track_url(track)
         engine.play(url, track)
         resolved = resolve_local_track_path(track)
         source = "local" if (resolved and url == resolved) else "remote"
+        if setup_session_id:
+            from shared.setup_session import try_emit_setup_first_play
+
+            try_emit_setup_first_play(
+                setup_session_id,
+                track_id=str(track_id) if track_id is not None else None,
+            )
         return jsonify({"status": "playing", "track": track.title, "source": source})
     return jsonify({"error": "Track not found or engine not ready"}), 404
 

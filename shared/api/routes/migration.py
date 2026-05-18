@@ -127,10 +127,15 @@ def migration_import_playlist():
 
     socketio.emit("library_updated")
 
-    _emit_migration(
-        "migration_import_apply",
-        {"playlist_name": name, "track_count": len(cleaned)},
-    )
+    batch_id = data.get("batch_id")
+    apply_payload: dict[str, Any] = {
+        "playlist_name": name,
+        "track_count": len(cleaned),
+    }
+    if isinstance(batch_id, str) and batch_id.strip():
+        apply_payload["batch_id"] = batch_id.strip()[:128]
+
+    _emit_migration("migration_import_apply", apply_payload)
 
     return jsonify(
         {
@@ -141,3 +146,34 @@ def migration_import_playlist():
             "settings": lib.metadata.settings,
         }
     )
+
+
+@migration_bp.route("/api/migration/row-decision", methods=["POST"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("migration_row_decision", limit=120, window_sec=120)
+def migration_row_decision():
+    """Telemetry hook for import repair UX: user confirms or rejects a matched/unmatched row."""
+    data = request.get_json(silent=True) or {}
+    batch_id = (data.get("batch_id") or "").strip()
+    if not batch_id:
+        return jsonify({"error": "batch_id is required"}), 400
+    try:
+        source_index = int(data.get("source_index"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "source_index must be an integer"}), 400
+    decision = (data.get("decision") or "").strip().lower()
+    if decision not in {"confirm", "reject", "skip"}:
+        return jsonify({"error": "decision must be confirm, reject, or skip"}), 400
+    track_id = data.get("track_id")
+    tid = str(track_id).strip()[:128] if track_id is not None and str(track_id).strip() else None
+
+    _emit_migration(
+        "migration_row_decision",
+        {
+            "batch_id": batch_id[:128],
+            "source_index": source_index,
+            "decision": decision,
+            **({"track_id": tid} if tid else {}),
+        },
+    )
+    return jsonify({"status": "ok"})

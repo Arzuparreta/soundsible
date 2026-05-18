@@ -59,12 +59,12 @@ All events are append-only JSON lines. Common fields: `v`, `event`, `ts` (Unix s
 | `event` | When emitted | Payload (required / optional) | Status |
 |---------|----------------|------------------------------|--------|
 | `setup_music_dir_saved` | `POST /api/setup/music-dir` succeeds | `env_override` (bool) | **Implemented** |
-| `setup_session_started` | First contact of a guided setup session (future: wizard open) | `setup_session_id` (uuid), optional `client` | **Planned** |
-| `setup_step_completed` | Operator completes a named setup step | `setup_session_id`, `step` (string) | **Planned** |
-| `setup_first_play` | First confirmed playback after session start (gate: time-to-first-play) | `setup_session_id`, optional `track_id`, `elapsed_ms_since_session` | **Planned** |
-| `setup_error` | Recoverable setup failure | `setup_session_id`, `code`, `message` (no secrets) | **Planned** |
+| `setup_session_started` | First contact of a guided setup session (future: wizard open) | `setup_session_id` (uuid), optional `client` | **Implemented** (`POST /api/setup/session`; emits once per new id) |
+| `setup_step_completed` | Operator completes a named setup step | `setup_session_id`, `step` (string) | **Implemented** (`music_dir` on `POST /api/setup/music-dir` when `setup_session_id` present) |
+| `setup_first_play` | First confirmed playback after session start (gate: time-to-first-play) | `setup_session_id`, optional `track_id`, `elapsed_ms_since_session` | **Implemented** (`POST /api/setup/first-play` or `POST /api/playback/play` with `setup_session_id`) |
+| `setup_error` | Recoverable setup failure | `setup_session_id`, `code`, `message` (no secrets) | **Implemented** (invalid music dir path with `setup_session_id`) |
 
-**Gate note:** The Phase 1 setup gate in [PREMIUM_QUALITY_CONTRACT.md](./PREMIUM_QUALITY_CONTRACT.md) needs a correlated `setup_session_id` and `setup_first_play`; until then, rollups use partial proxies (e.g. time between `setup_music_dir_saved` and first `play_timing`) only as an interim **engineering metric**, not as the signed gate.
+**Gate note:** The Phase 1 setup gate in [PREMIUM_QUALITY_CONTRACT.md](./PREMIUM_QUALITY_CONTRACT.md) needs a correlated `setup_session_id` and `setup_first_play`; the web player registers a session (`POST /api/setup/session`) and posts `setup_first_play` (or play-with-session) for eligible library tracks. Rollups: `scripts/setup_gate_rollup.py`.
 
 ### 3.2 `migration-events.jsonl` (Layer 1)
 
@@ -73,7 +73,7 @@ All events are append-only JSON lines. Common fields: `v`, `event`, `ts` (Unix s
 | `migration_import_preview_started` | `POST /api/migration/preview` after parse | `batch_id`, `format`, `source_rows` | **Implemented** |
 | `migration_import_preview_completed` | After matching | `batch_id`, `format`, `total`, `matched`, `auto_accept`, `needs_confirmation`, `unmatched`, `matched_ratio` | **Implemented** |
 | `migration_import_apply` | Playlist import committed | `playlist_name`, `track_count` | **Implemented** |
-| `migration_row_decision` | User confirms/rejects a row (future repair UX) | `batch_id`, `source_index`, `decision`, optional `track_id` | **Planned** |
+| `migration_row_decision` | User confirms/rejects a row (future repair UX) | `batch_id`, `source_index`, `decision`, optional `track_id` | **Implemented** (`POST /api/migration/row-decision`) |
 
 **Confidence policy (implementation):** Matching uses a confirm band **0.90–0.95** and silent **auto** only at **≥0.95** (`shared/migration/match.py`). The Premium Quality Contract states auto-accept at **≥0.90** with explicit confirmation below that; the code is **stricter** on silent auto. Align copy and contract in a future sign-off pass if product wants 0.90 silent auto.
 
@@ -107,9 +107,9 @@ One-page mapping from **user outcomes** to **signals** (product scorecard reques
 
 Ordered for **token-efficient** progress toward signed Phase 1 gates:
 
-1. **Setup funnel model:** introduce `setup_session_id` (client or server issued), emit `setup_session_started`, `setup_step_*`, and **`setup_first_play`** at first confirmed play for that session.
-2. **Gate script stub:** read-only tool (CLI or doc-only recipe) that estimates setup success and time-to-first-play from JSONL for a date window; no network.
-3. **Migration repair UX events:** emit `migration_row_decision` when UI confirms/changes rows; extend import apply payload with `batch_id` when available.
+1. **Setup funnel model:** ~~introduce `setup_session_id` (client or server issued), emit `setup_session_started`, `setup_step_*`, and **`setup_first_play` at first confirmed play for that session.~~ **Done** (see §3.1; UI wires `ui_web/js/setup_funnel.js`).
+2. **Gate script stub:** read-only tool `scripts/setup_gate_rollup.py` — estimates setup success and time-to-first-play from JSONL for a date window; no network.
+3. **Migration repair UX events:** ~~emit `migration_row_decision` when UI confirms/changes rows; extend import apply payload with `batch_id` when available.~~ **Row decision + batch_id on apply shipped** (repair UI still optional).
 4. **Reference import fixtures:** versioned test fixtures + documented expected match rates for the migration gate.
 
 ---
