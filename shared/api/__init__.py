@@ -300,9 +300,7 @@ def serve_web_player_redirect():
 
 @app.route('/player/')
 def serve_web_player():
-    resp = make_response(_render_web_ui_html('index.html'))
-    resp.headers['Permissions-Policy'] = 'web-share=(self)'
-    return resp
+    return make_response(_render_web_ui_html('index.html'))
 
 @app.route('/player/desktop')
 def serve_web_player_desktop_redirect():
@@ -311,9 +309,7 @@ def serve_web_player_desktop_redirect():
 
 @app.route('/player/desktop/')
 def serve_web_player_desktop():
-    resp = make_response(_render_web_ui_html('desktop.html', inject_owner_token=True))
-    resp.headers['Permissions-Policy'] = 'web-share=(self)'
-    return resp
+    return make_response(_render_web_ui_html('desktop.html', inject_owner_token=True))
 
 @app.route('/player/branding/<path:path>')
 def serve_branding(path):
