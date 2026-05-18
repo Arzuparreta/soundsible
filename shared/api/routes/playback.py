@@ -11,7 +11,7 @@ import requests
 from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context, redirect
 
 from shared.constants import DEFAULT_CACHE_DIR
-from shared.hardening import SCOPE_PLAYBACK_CONTROL, require_scope
+from shared.hardening import SCOPE_PLAYBACK_CONTROL, rate_limit, require_scope
 from shared.path_resolver import resolve_local_track_path
 from shared.url_utils import validate_youtube_video_id
 
@@ -458,6 +458,50 @@ def playback_get_state():
     if not state:
         return "", 204
     return jsonify(state)
+
+
+@playback_bp.route("/api/playback/play-timing", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
+@rate_limit("playback_play_timing", limit=120, window_sec=60)
+def playback_play_timing():
+    """Local-only latency segments for Phase 2 baseline (see docs/TELEMETRY_PRIVACY.md)."""
+    from shared.telemetry import emit
+
+    data = request.get_json(silent=True) or {}
+    segments = data.get("segments")
+    if segments is not None and not isinstance(segments, dict):
+        return jsonify({"error": "segments must be an object"}), 400
+
+    track_id = data.get("track_id")
+    device_id = data.get("device_id")
+    phase = data.get("phase")
+
+    payload = {
+        "v": 1,
+        "event": "play_timing",
+        "ts": int(time.time()),
+    }
+    if isinstance(track_id, str) and track_id.strip():
+        payload["track_id"] = track_id.strip()[:128]
+    if isinstance(device_id, str) and device_id.strip():
+        payload["device_id"] = device_id.strip()[:128]
+    if isinstance(phase, str) and phase.strip():
+        payload["phase"] = phase.strip()[:64]
+    if isinstance(segments, dict):
+        clean = {}
+        for k, v in list(segments.items())[:32]:
+            if not isinstance(k, str) or len(k) > 64:
+                continue
+            if isinstance(v, bool):
+                clean[k[:64]] = v
+            elif isinstance(v, int) and -1_000_000_000 <= v <= 1_000_000_000:
+                clean[k[:64]] = v
+            elif isinstance(v, float) and abs(v) <= 1e12:
+                clean[k[:64]] = round(v, 3)
+        payload["segments"] = clean
+
+    emit("play_timing", payload)
+    return jsonify({"status": "ok"})
 
 
 @playback_bp.route("/api/playback/state", methods=["PUT"])

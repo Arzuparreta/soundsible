@@ -321,7 +321,13 @@ def serve_branding(path):
 
 @app.route('/player/<path:path>')
 def serve_web_player_assets(path):
-    return send_from_directory(_web_ui_root(), path)
+    resp = send_from_directory(_web_ui_root(), path)
+    lp = path.lower()
+    if lp.endswith(".html"):
+        resp.headers.setdefault("Cache-Control", "no-store")
+    elif "assets/" in lp and lp.split("?")[0].endswith((".js", ".css", ".woff", ".woff2", ".ttf", ".map")):
+        resp.headers.setdefault("Cache-Control", "public, max-age=31536000, immutable")
+    return resp
 
 # Note: Global instances
 library_manager = None
@@ -933,6 +939,7 @@ from shared.api.routes.podcasts import podcasts_bp
 from shared.api.routes.agent import agent_bp
 from shared.api.routes.pairing import pairing_bp
 from shared.api.routes.setup import setup_bp
+from shared.api.routes.migration import migration_bp
 app.register_blueprint(library_bp)
 app.register_blueprint(playback_bp)
 app.register_blueprint(downloader_bp)
@@ -942,6 +949,7 @@ app.register_blueprint(podcasts_bp)
 app.register_blueprint(agent_bp)
 app.register_blueprint(pairing_bp)
 app.register_blueprint(setup_bp)
+app.register_blueprint(migration_bp)
 
 
 @app.route('/api/health')

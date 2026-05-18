@@ -240,7 +240,8 @@ def apply_security_headers(resp):
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     resp.headers.setdefault(
         "Content-Security-Policy",
-        "default-src 'self'; img-src 'self' data: https:; media-src 'self' https:; "
+        "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; "
+        "img-src 'self' data: https:; media-src 'self' https:; "
         "style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; "
         "script-src 'self' 'unsafe-inline'; "
         "connect-src 'self' http: https: ws: wss:;",
