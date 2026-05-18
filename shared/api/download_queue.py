@@ -182,14 +182,16 @@ class DownloadQueueManager:
         self.storage_path = Path(storage_path)
         self.socketio = socketio
 
-        if self.storage_path.exists():
-            try:
-                self.storage_path.unlink()
-            except OSError:
-                pass
+        self.queue = self._load()
+        for item in self.queue:
+            if isinstance(item, dict) and item.get("status") == "downloading":
+                item["status"] = "interrupted"
 
-        self.queue = []
         self.lock = threading.RLock()
+
+        if self.queue:
+            self.save()
+
         self.is_processing = False
         self.log_buffer = []
         self.max_logs = 50
