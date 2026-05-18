@@ -6,7 +6,8 @@ import { io } from './vendor/socket.io-client.esm.min.js';
 import { store } from './store.js';
 import { getApiBase } from './config.js';
 import { isVisible, onChange as onVisibilityChange } from './visibility.js';
-import { checkResumeFromOtherDevice } from './playback_resume.js';
+// playback_resume.js is dynamically imported below to break a circular
+// import chain (store -> connection -> playback_resume -> audio -> store).
 
 const RECONNECT_INTERVAL_VISIBLE_MS = 5000;
 const RECONNECT_INTERVAL_HIDDEN_MS = 20000;
@@ -132,8 +133,9 @@ export class ConnectionManager {
             const success = await this.findActiveHost(uniqueEndpoints);
             if (success) {
                 console.log("Station Engine recovered");
-                store.syncLibrary().then(() => {
+                store.syncLibrary().then(async () => {
                     if (!store.hasUserPlaybackStarted() && store.state.currentTrack == null) {
+                        const { checkResumeFromOtherDevice } = await import('./playback_resume.js');
                         checkResumeFromOtherDevice();
                     }
                 });
