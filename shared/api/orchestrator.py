@@ -104,6 +104,11 @@ class JobOrchestrator:
         self.commit_debounce_sec = 2.0
         self.commit_timer: Optional[threading.Timer] = None
 
+        # Downloader pump supervisor — owned by orchestrator so shutdown
+        # can join it and double-start is rejected (plan 5A).
+        self._pump_thread: Optional[threading.Thread] = None
+        self._pump_stop: Optional[threading.Event] = None
+
         self.profile = PROFILE_SSD
         self.background_executor: Optional[ThreadPoolExecutor] = None
         self.metadata_executor: Optional[ThreadPoolExecutor] = None
@@ -232,7 +237,58 @@ class JobOrchestrator:
             self.commit_timer.start()
             logger.debug("Orchestrator: Metadata commit scheduled (debounced).")
 
+    # ----- Downloader pump supervision (plan 5A) -----
+
+    def start_downloader_pump(self, pump_func: Callable[[threading.Event], None]) -> bool:
+        """
+        Idempotently start the downloader pump supervisor.
+
+        The pump is a long-running loop that submits download work to the
+        background executor and sleeps between checks. We do NOT submit the
+        pump itself to a pool (would deadlock HDD=1). Instead the
+        orchestrator owns one dedicated supervisor thread so shutdown can
+        signal it and tests can verify single-instance semantics.
+
+        Returns True if a pump was started, False if one was already running.
+        `pump_func` must accept a `threading.Event` and return when it is set.
+        """
+        with self.state_lock:
+            if self._pump_thread is not None and self._pump_thread.is_alive():
+                return False
+            self._pump_stop = threading.Event()
+            stop_event = self._pump_stop
+            t = threading.Thread(
+                target=self._run_pump,
+                args=(pump_func, stop_event),
+                name="JobOrch-pump",
+                daemon=True,
+            )
+            self._pump_thread = t
+            t.start()
+            return True
+
+    def _run_pump(self, pump_func: Callable[[threading.Event], None], stop_event: threading.Event) -> None:
+        try:
+            pump_func(stop_event)
+        except Exception as e:
+            logger.error("Orchestrator: downloader pump crashed: %s", e)
+
+    def stop_downloader_pump(self, wait: bool = True, timeout: float = 5.0) -> None:
+        """Signal the pump to exit and optionally join it."""
+        with self.state_lock:
+            stop = self._pump_stop
+            thread = self._pump_thread
+        if stop is not None:
+            stop.set()
+        if wait and thread is not None and thread.is_alive():
+            thread.join(timeout=timeout)
+
+    def pump_is_running(self) -> bool:
+        with self.state_lock:
+            return self._pump_thread is not None and self._pump_thread.is_alive()
+
     def shutdown(self, wait: bool = True) -> None:
+        self.stop_downloader_pump(wait=wait)
         if self.commit_timer:
             try:
                 self.commit_timer.cancel()

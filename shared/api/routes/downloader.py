@@ -27,7 +27,7 @@ def _get_api():
         get_core,
         get_downloader,
         queue_manager_dl,
-        process_queue_background,
+        start_downloader_pump,
         parse_intake_item,
         is_trusted_network,
         downloader_service,
@@ -36,7 +36,7 @@ def _get_api():
         "get_core": get_core,
         "get_downloader": get_downloader,
         "queue_manager_dl": queue_manager_dl,
-        "process_queue_background": process_queue_background,
+        "start_downloader_pump": start_downloader_pump,
         "parse_intake_item": parse_intake_item,
         "is_trusted_network": is_trusted_network,
         "downloader_service": downloader_service,
@@ -217,11 +217,10 @@ def clear_downloader_queue():
 @require_scope(SCOPE_DOWNLOAD_ADD, allow_trusted_network=True)
 @rate_limit("downloader_start", limit=30, window_sec=60)
 def trigger_downloader():
-    import threading
     api = _get_api()
     if not api["queue_manager_dl"].is_processing:
         logger.info("API: [Queue] Start download requested, starting background processor.")
-        threading.Thread(target=api["process_queue_background"], daemon=True).start()
+        api["start_downloader_pump"]()
         return jsonify({"status": "started"})
     return jsonify({"status": "already_running"})
 
@@ -258,7 +257,7 @@ def start_download_legacy():
     if url:
         api["queue_manager_dl"].add({"song_str": url})
         if not api["queue_manager_dl"].is_processing:
-            threading.Thread(target=api["process_queue_background"], daemon=True).start()
+            api["start_downloader_pump"]()
         return jsonify({"status": "started"})
     return jsonify({"error": "No URL provided"}), 400
 

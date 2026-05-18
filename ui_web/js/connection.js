@@ -12,9 +12,31 @@ import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 const RECONNECT_INTERVAL_VISIBLE_MS = 5000;
 const RECONNECT_INTERVAL_HIDDEN_MS = 20000;
 
+// Reconnect/backoff spec (plan T5, Outside Voice #5):
+//   - Socket.IO built-in reconnect: up to RECONNECT_ATTEMPTS tries with
+//     1s → 5s backoff. On exhaustion the client falls back to the fetch-
+//     probe loop in startReconnectionLoop() which keeps hitting
+//     /api/health on every known endpoint.
+//   - Each fresh initSocket() uses forceNew so Engine.IO assigns a new
+//     sid — old session may be torn down server-side after ping_timeout.
+//   - After RELOAD_AFTER_RECOVERIES successful re-establishments in a
+//     single tab session, hard-reload as a last-resort escape hatch
+//     against accumulated client-side state drift (stale store, leaked
+//     listeners, etc.). Manual-restart-free 30-min Tailscale walk is the
+//     gate this guards.
+//   - Auth replay: the 'connect' handler re-emits playback_register on
+//     every (re)connection, so device identity rides along with the new
+//     sid without a separate auth round trip.
+const SOCKET_RECONNECT_ATTEMPTS = 5;
+const SOCKET_RECONNECT_DELAY_MS = 1000;
+const SOCKET_RECONNECT_DELAY_MAX_MS = 5000;
+const SOCKET_CONNECT_TIMEOUT_MS = 8000;
+const RELOAD_AFTER_RECOVERIES = 3;
+
 export class ConnectionManager {
     constructor() {
         this.timeout = 2500; // Note: 2.5 Seconds timeout per probe
+        this.recoveryCount = 0;
     }
 
     /**
@@ -65,7 +87,18 @@ export class ConnectionManager {
         }
 
         console.log("Initializing SocketIO at:", host);
-        this.socket = io(getApiBase(host));
+        this.socket = io(getApiBase(host), {
+            // Force a new Manager so Engine.IO assigns a fresh sid — stale
+            // sessions from before a Tailscale blip get cleanly discarded
+            // server-side instead of triggering "invalid session" 400s.
+            forceNew: true,
+            reconnection: true,
+            reconnectionAttempts: SOCKET_RECONNECT_ATTEMPTS,
+            reconnectionDelay: SOCKET_RECONNECT_DELAY_MS,
+            reconnectionDelayMax: SOCKET_RECONNECT_DELAY_MAX_MS,
+            timeout: SOCKET_CONNECT_TIMEOUT_MS,
+            transports: ['websocket', 'polling'],
+        });
 
         this.socket.on('connect', () => {
             console.log("Socket connected");
@@ -133,6 +166,7 @@ export class ConnectionManager {
             const success = await this.findActiveHost(uniqueEndpoints);
             if (success) {
                 console.log("Station Engine recovered");
+                this.recoveryCount += 1;
                 store.syncLibrary().then(async () => {
                     if (!store.hasUserPlaybackStarted() && store.state.currentTrack == null) {
                         const { checkResumeFromOtherDevice } = await import('./playback_resume.js');
@@ -140,6 +174,14 @@ export class ConnectionManager {
                     }
                 });
                 this._clearReconnectLoop();
+                // Escape hatch: too many recoveries in one session usually
+                // means accumulated client-state drift. Reload once to
+                // reset, then let the user keep going.
+                if (this.recoveryCount >= RELOAD_AFTER_RECOVERIES &&
+                    typeof window !== 'undefined' && window.location) {
+                    console.warn(`Forcing reload after ${this.recoveryCount} recoveries`);
+                    window.location.reload();
+                }
             }
         };
 

@@ -145,7 +145,36 @@ CORS(
         "Range",
     ],
 )
-socketio = SocketIO(app, cors_allowed_origins=_socket_cors_origins, async_mode="gevent")
+
+
+def _int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("API: %s=%r is not an int; using default %d", name, raw, default)
+        return default
+
+
+# Engine.IO heartbeat tuned for Tailscale / mobile NAT rebinding (plan T5).
+# Server pings every ping_interval seconds and declares a peer dead if no
+# pong arrives within ping_timeout. With the defaults below, the server
+# detects a wedged peer within ~45s — short enough that the client's
+# reconnect loop can heal a city-block walk without a manual refresh, but
+# long enough to ride out the typical LTE → Wi-Fi handoff (~10-30s) and
+# brief screen-lock pauses.
+SOCKET_PING_INTERVAL = _int_env("SOUNDSIBLE_SOCKET_PING_INTERVAL", 20)
+SOCKET_PING_TIMEOUT = _int_env("SOUNDSIBLE_SOCKET_PING_TIMEOUT", 25)
+
+socketio = SocketIO(
+    app,
+    cors_allowed_origins=_socket_cors_origins,
+    async_mode="gevent",
+    ping_interval=SOCKET_PING_INTERVAL,
+    ping_timeout=SOCKET_PING_TIMEOUT,
+)
 
 # Note: Suppress engineio/socketio INFO logs (e.g. "invalid session" when browser reconnects with stale sid)
 logging.getLogger("engineio").setLevel(logging.WARNING)
@@ -703,27 +732,42 @@ def _process_single_queue_item(item):
         queue_manager_dl.add_log(f"❌ Failed: {song_str or item_id} - {e}")
 
 
-def process_queue_background():
+def process_queue_background(stop_event: Optional[threading.Event] = None):
+    """
+    Downloader pump. Submits pending queue items to the orchestrator's
+    background pool and sleeps between checks. Owned by JobOrchestrator
+    (see start_downloader_pump) — do not start via raw threading.Thread.
+
+    Exits early when `stop_event` is set, ensuring shutdown releases the
+    `is_processing` flag.
+    """
     global downloader_service, queue_manager_dl
     if queue_manager_dl.is_processing:
         return
-        
+
     queue_manager_dl.is_processing = True
     queue_manager_dl.add_log("Station Engine: Background orchestrator active.")
-    
+
+    def _stopped() -> bool:
+        return stop_event is not None and stop_event.is_set()
+
     try:
         while True:
+            if _stopped():
+                queue_manager_dl.add_log("Station Engine: Pump stop requested; exiting.")
+                break
+
             # Note: Only count jobs that start with "dl_"
             active_ids = [jid for jid in orchestrator.active_jobs if jid.startswith("dl_")]
-            
+
             pending = queue_manager_dl.get_pending()
             # Note: Filter out those already being processed
             pending = [p for p in pending if f"dl_{p['id']}" not in active_ids]
-            
+
             if not pending and not active_ids:
                 queue_manager_dl.add_log("Station Engine: All tasks complete.")
                 break
-                
+
             # Note: Fill slots if we have capacity (max 3 concurrent downloads by default)
             # The effective concurrency can be tuned via the JobOrchestrator max_workers if needed.
             capacity = max(0, 3 - len(active_ids))
@@ -732,15 +776,25 @@ def process_queue_background():
                     item = pending[i]
                     orchestrator.submit_task(f"dl_{item['id']}", _process_single_queue_item, item)
                 continue # Re-check immediately
-            
-            time.sleep(1) # Wait for slots or more items
-            
+
+            # Interruptible sleep — stop_event short-circuits the wait.
+            if stop_event is not None:
+                if stop_event.wait(timeout=1):
+                    continue
+            else:
+                time.sleep(1)
+
     except Exception as e:
         logger.error("CRITICAL: Downloader background thread crashed: %s", e)
         import traceback
         traceback.print_exc()
     finally:
         queue_manager_dl.is_processing = False
+
+
+def start_downloader_pump() -> bool:
+    """Module-level entrypoint: route the pump through the orchestrator (plan 5A)."""
+    return orchestrator.start_downloader_pump(process_queue_background)
 
 
 # Note: Helpers (used by blueprints)
