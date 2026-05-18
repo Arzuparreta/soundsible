@@ -32,6 +32,17 @@ _preview_stream_cache = {}
 _preview_stream_cache_lock = threading.Lock()
 
 
+def _queue_snapshot(queue):
+    items = [item.to_dict() for item in queue.get_all()]
+    rev = queue.get_revision()
+    return {
+        "items": items,
+        "tracks": items,
+        "repeat_mode": queue.get_repeat_mode(),
+        "queue_revision": rev,
+    }
+
+
 def _preview_stream_rate_limit(ip: str) -> bool:
     now = time.time()
     with _preview_stream_lock:
@@ -286,8 +297,7 @@ def get_track_cover(track_id):
 def get_playback_queue():
     api = _get_api()
     _, _, queue = api["get_core"]()
-    items = [item.to_dict() for item in queue.get_all()]
-    return jsonify({"items": items, "tracks": items, "repeat_mode": queue.get_repeat_mode()})
+    return jsonify(_queue_snapshot(queue))
 
 
 @playback_bp.route("/api/playback/shuffle", methods=["POST"])
@@ -296,7 +306,7 @@ def shuffle_playback_queue():
     api = _get_api()
     _, _, queue = api["get_core"]()
     queue.shuffle()
-    return jsonify({"status": "success"})
+    return jsonify({"status": "success", "queue_revision": queue.get_revision()})
 
 
 @playback_bp.route("/api/playback/repeat", methods=["POST"])
@@ -307,7 +317,7 @@ def set_playback_repeat():
     data = request.json
     mode = data.get("mode", "off")
     queue.set_repeat_mode(mode)
-    return jsonify({"status": "success", "mode": mode})
+    return jsonify({"status": "success", "mode": mode, "queue_revision": queue.get_revision()})
 
 
 @playback_bp.route("/api/playback/queue", methods=["POST"])
@@ -320,7 +330,7 @@ def add_to_playback_queue():
         track = api["get_track_by_id"](lib, data["track_id"])
         if track:
             queue.add_library_track(track)
-            return jsonify({"status": "success", "size": queue.size()})
+            return jsonify({"status": "success", "size": queue.size(), "queue_revision": queue.get_revision()})
         return jsonify({"error": "Track not found"}), 404
     if "preview" in data:
         preview = data["preview"]
@@ -346,7 +356,7 @@ def add_to_playback_queue():
                 podcast_rss_url=preview.get("podcast_rss_url") or None,
                 album=album,
             )
-            return jsonify({"status": "success", "size": queue.size()})
+            return jsonify({"status": "success", "size": queue.size(), "queue_revision": queue.get_revision()})
         if not video_id or not validate_youtube_video_id(str(video_id)):
             return jsonify({"error": "Invalid or missing video_id"}), 400
         title = preview.get("title") or "Unknown"
@@ -364,7 +374,7 @@ def add_to_playback_queue():
             library_track_id=library_track_id,
             album=album,
         )
-        return jsonify({"status": "success", "size": queue.size()})
+        return jsonify({"status": "success", "size": queue.size(), "queue_revision": queue.get_revision()})
     return jsonify({"error": "Missing track_id or preview"}), 400
 
 
@@ -374,7 +384,7 @@ def remove_from_playback_queue(index):
     api = _get_api()
     _, _, queue = api["get_core"]()
     if queue.remove(index):
-        return jsonify({"status": "success"})
+        return jsonify({"status": "success", "queue_revision": queue.get_revision()})
     return jsonify({"error": "Index out of range"}), 400
 
 
@@ -385,7 +395,7 @@ def remove_track_id_from_playback_queue(track_id):
     _, _, queue = api["get_core"]()
     removed_count = queue.remove_by_id(track_id)
     if removed_count:
-        return jsonify({"status": "success", "removed_count": removed_count})
+        return jsonify({"status": "success", "removed_count": removed_count, "queue_revision": queue.get_revision()})
     return jsonify({"error": "Track not in queue"}), 404
 
 
@@ -398,7 +408,7 @@ def move_in_playback_queue():
     from_index = data.get("from_index")
     to_index = data.get("to_index")
     if from_index is not None and to_index is not None and queue.move(from_index, to_index):
-        return jsonify({"status": "success"})
+        return jsonify({"status": "success", "queue_revision": queue.get_revision()})
     return jsonify({"error": "Invalid indices"}), 400
 
 
@@ -408,7 +418,7 @@ def clear_playback_queue():
     api = _get_api()
     _, _, queue = api["get_core"]()
     queue.clear()
-    return jsonify({"status": "success"})
+    return jsonify({"status": "success", "queue_revision": queue.get_revision()})
 
 
 @playback_bp.route("/api/playback/next", methods=["GET"])

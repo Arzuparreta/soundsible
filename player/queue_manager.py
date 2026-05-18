@@ -26,6 +26,7 @@ class QueueManager:
         self._queue: List[QueueItem] = []
         self._history: List[QueueItem] = []
         self._repeat_mode = "off"  # Note: Off, all, one, once (web: one=infinite song, once=one extra play)
+        self._revision = 0
         self._lock = threading.RLock()
         self._on_change_callbacks: List[Callable[[], None]] = []
         self._restore_state()
@@ -58,6 +59,11 @@ class QueueManager:
                 except (TypeError, ValueError, KeyError):
                     continue
             self._queue = restored
+            rev = raw.get("queue_revision")
+            try:
+                self._revision = int(rev) if rev is not None else 0
+            except (TypeError, ValueError):
+                self._revision = 0
 
     def _persist_state(self) -> None:
         path = self._resolved_persist_path()
@@ -66,6 +72,7 @@ class QueueManager:
                 "version": QUEUE_STATE_VERSION,
                 "repeat_mode": self._repeat_mode,
                 "queue": [item.to_dict() for item in self._queue],
+                "queue_revision": self._revision,
             }
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -263,6 +270,11 @@ class QueueManager:
         """Get the number of tracks in the queue."""
         with self._lock:
             return len(self._queue)
+
+    def get_revision(self) -> int:
+        """Monotonic counter bumped on queue/repeat persistence changes (continuity / sync debugging)."""
+        with self._lock:
+            return self._revision
     
     def add_change_callback(self, callback: Callable[[], None]) -> None:
         """Register a callback to be called when the queue changes."""
@@ -276,6 +288,8 @@ class QueueManager:
     
     def _notify_change(self) -> None:
         """Notify all registered callbacks that the queue has changed."""
+        with self._lock:
+            self._revision += 1
         for callback in self._on_change_callbacks:
             try:
                 callback()

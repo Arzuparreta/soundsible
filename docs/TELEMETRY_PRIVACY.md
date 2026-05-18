@@ -51,6 +51,21 @@ Track-related fields (e.g. `track_id`, `source`, timing) are allowed **only** as
 - Operators can **inspect, export, backup, or delete** `data_dir/telemetry/` like any other local data.
 - This document is the **published contract**; changes require an explicit doc update and changelog note.
 
+## Play timing segments (`play-timing.jsonl`)
+
+`play_timing` events include a `segments` object (milliseconds, rounded integers). Phase 1 recorded **`intent_to_playing_ms`** only. Phase 2 adds optional sub-segments for **library/static** playback when the web client records them:
+
+| Segment | Meaning |
+|---------|---------|
+| `intent_to_playing_ms` | User intent → first `playing` event (primary latency gate). |
+| `intent_to_src_set_ms` | Intent → after `audio.src` is set and `load()` runs. |
+| `src_set_to_play_call_ms` | After load → immediately before `audio.play()`. |
+| `intent_to_play_call_ms` | Intent → immediately before `audio.play()`. |
+| `play_call_to_await_ms` | Before `play()` → after the returned promise settles. |
+| `await_to_playing_ms` | After play promise → `playing` event. |
+
+Segments besides `intent_to_playing_ms` may be absent on older clients, ineligible tracks (previews/radio/etc.), or if playback failed before a mark.
+
 ## Relation to product privacy claims
 
 Soundsible remains **no third-party ad tracking**. This contract adds **transparent, local-only** technical telemetry so phase quality gates (setup success, migration accuracy) are measurable **without** contradicting the privacy posture.

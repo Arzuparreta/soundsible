@@ -8,7 +8,14 @@ import { connectionManager } from './connection.js';
 import { Haptics } from './haptics.js';
 import { isVisible } from './visibility.js';
 import { radioService } from './radio.js';
-import { playTimingNoteUserIntent, playTimingOnPlaying, isPlayTimingEligibleTrack } from './play_timing.js';
+import {
+    playTimingNoteUserIntent,
+    playTimingOnPlaying,
+    playTimingMarkSrcSet,
+    playTimingMarkBeforePlay,
+    playTimingMarkAfterPlayAwait,
+    isPlayTimingEligibleTrack,
+} from './play_timing.js';
 
 const PRELOAD_THRESHOLD_SEC = 45;
 const PUSH_DEBOUNCE_VISIBLE_SEC = 5;
@@ -502,10 +509,16 @@ class AudioEngine {
         const url = Resolver.getTrackUrl(track);
         console.log("Playing URL:", url);
 
+        const playTimingLib =
+            options.playTimingIntent && !options.remoteRequest && isPlayTimingEligibleTrack(track);
+
         try {
             this.audio.src = url;
             this.audio.load();
+            if (playTimingLib) playTimingMarkSrcSet(track.id);
+            if (playTimingLib) playTimingMarkBeforePlay(track.id);
             await this.audio.play();
+            if (playTimingLib) playTimingMarkAfterPlayAwait(track.id);
             this._clearPendingRemotePlayback();
             store.update({ currentTrack: track, isPlaying: true });
             store.pushPlaybackState(track.id, 0, true);

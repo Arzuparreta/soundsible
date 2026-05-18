@@ -61,6 +61,7 @@ class Store {
             librarySettings: this.load('library_settings', {}),
             podcastSubscriptions: [],
             queue: [],
+            queueRevision: 0,
             repeatMode: 'off', // Note: Off = no repeat, one = infinite repeat of current song, once = repeat current song one time then continue
             shuffleEnabled: false,
             radioMode: null,
@@ -453,9 +454,14 @@ class Store {
                     if (out.library_track_id != null) out._libraryTrackId = out.library_track_id;
                     return out;
                 });
+                const rev =
+                    typeof data.queue_revision === 'number' && Number.isFinite(data.queue_revision)
+                        ? data.queue_revision
+                        : this.state.queueRevision;
                 this.update({
                     queue,
-                    repeatMode: data.repeat_mode
+                    repeatMode: data.repeat_mode,
+                    queueRevision: rev,
                 });
             }
         } catch (err) {

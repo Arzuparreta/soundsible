@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 from player.queue_manager import QueueManager
 from shared.models import QueueItem, Track
@@ -50,10 +51,15 @@ def test_queue_manager_persist_restore_roundtrip(tmp_path):
     for i in range(5):
         q1.add(_sample_track(i))
     q1.set_repeat_mode("all")
+    assert q1.get_revision() == 6
+
+    raw = json.loads(state_path.read_text(encoding="utf-8"))
+    assert raw.get("queue_revision") == 6
 
     q2 = QueueManager(persist_path=state_path)
     assert q2.size() == 5
     assert q2.get_repeat_mode() == "all"
+    assert q2.get_revision() == 6
     assert [item.id for item in q2.get_all()] == [f"t{i}" for i in range(5)]
 
 
