@@ -189,6 +189,18 @@ class QueueItem:
         return out
 
     @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "QueueItem":
+        """Restore from API / queue_state JSON (stable fields only)."""
+        import dataclasses
+
+        field_names = {f.name for f in dataclasses.fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in field_names}
+        source = filtered.get("source")
+        if source not in ("library", "preview", "podcast_preview"):
+            raise ValueError(f"Invalid queue item source: {source!r}")
+        return cls(**filtered)
+
+    @classmethod
     def from_library_track(cls, track: 'Track') -> 'QueueItem':
         """Build a library QueueItem from a Track."""
         return cls(

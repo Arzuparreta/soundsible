@@ -3,23 +3,75 @@ Queue Manager for Music Player.
 Provides simple in-memory queue management for playback.
 """
 
-from typing import List, Optional, Callable
-from shared.models import Track, QueueItem
+from __future__ import annotations
+
+import json
 import threading
+from pathlib import Path
+from typing import Callable, List, Optional
+
+from shared.models import QueueItem, Track
+from shared.runtime import get_data_dir
+
+QUEUE_STATE_VERSION = 1
 
 
 class QueueManager:
     """
-    Simple in-memory queue manager for music playback.
-    Holds QueueItems (library or preview). Session-based - queue clears when application exits.
+    Queue manager for music playback with optional persistence to data_dir/queue_state.json.
     """
-    
-    def __init__(self):
+
+    def __init__(self, persist_path: Optional[Path] = None) -> None:
+        self._persist_path = persist_path
         self._queue: List[QueueItem] = []
         self._history: List[QueueItem] = []
         self._repeat_mode = "off"  # Note: Off, all, one, once (web: one=infinite song, once=one extra play)
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._on_change_callbacks: List[Callable[[], None]] = []
+        self._restore_state()
+
+    def _resolved_persist_path(self) -> Path:
+        if self._persist_path is not None:
+            return Path(self._persist_path)
+        return Path(get_data_dir()) / "queue_state.json"
+
+    def _restore_state(self) -> None:
+        path = self._resolved_persist_path()
+        if not path.is_file():
+            return
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(raw, dict) or raw.get("version") != QUEUE_STATE_VERSION:
+            return
+        rm = raw.get("repeat_mode") or "off"
+        with self._lock:
+            if rm in ("off", "all", "one", "once"):
+                self._repeat_mode = rm
+            restored: List[QueueItem] = []
+            for row in raw.get("queue") or []:
+                if not isinstance(row, dict):
+                    continue
+                try:
+                    restored.append(QueueItem.from_dict(row))
+                except (TypeError, ValueError, KeyError):
+                    continue
+            self._queue = restored
+
+    def _persist_state(self) -> None:
+        path = self._resolved_persist_path()
+        with self._lock:
+            payload = {
+                "version": QUEUE_STATE_VERSION,
+                "repeat_mode": self._repeat_mode,
+                "queue": [item.to_dict() for item in self._queue],
+            }
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        except OSError as e:
+            print(f"Error persisting queue state: {e}")
     
     def set_repeat_mode(self, mode: str) -> None:
         with self._lock:
@@ -27,7 +79,8 @@ class QueueManager:
             self._notify_change()
 
     def get_repeat_mode(self) -> str:
-        return self._repeat_mode
+        with self._lock:
+            return self._repeat_mode
 
     def shuffle(self) -> None:
         """Shuffle the current queue."""
@@ -228,3 +281,4 @@ class QueueManager:
                 callback()
             except Exception as e:
                 print(f"Error in queue change callback: {e}")
+        self._persist_state()
