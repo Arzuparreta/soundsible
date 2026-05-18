@@ -7,7 +7,7 @@ import { connectionManager } from './connection.js';
 import { audioEngine } from './audio.js';
 import * as renderers from './renderers.js';
 import { scoreLibrary, scoreArtist, mergeAndSortByScore } from './search_scoring.js';
-import { wireSettings, wireActionMenu } from './wires.js';
+import { wireSettings, wireActionMenu, wireMigration } from './wires.js';
 import { wireRemoteControl } from './wires.js';
 import { DesktopUI } from './ui_desktop.js';
 import { checkResumeFromOtherDevice } from './playback_resume.js';
@@ -848,6 +848,25 @@ function init() {
             musicDirSaveBtn: 'desktop-settings-music-dir-save-btn',
             musicDirHint: 'desktop-settings-music-dir-hint',
         }, { store, showToast: (m) => DesktopUI.showToast(m), onLibraryOrderChange: () => renderHomeSongs() });
+        wireMigration(
+            {
+                formatSelect: 'desktop-settings-migration-format',
+                payloadTextarea: 'desktop-settings-migration-payload',
+                previewBtn: 'desktop-settings-migration-preview-btn',
+                hintEl: 'desktop-settings-migration-hint',
+                includeConfirmCheckbox: 'desktop-settings-migration-include-confirm',
+                playlistNameInput: 'desktop-settings-migration-playlist-name',
+                importBtn: 'desktop-settings-migration-import-btn',
+            },
+            {
+                store,
+                showToast: (m) => DesktopUI.showToast(m),
+                onAfterImport: () => {
+                    renderHomeSongs();
+                    if (DesktopUI.currentView === 'playlists') renderPlaylists();
+                },
+            }
+        );
         initLibraryMaintenanceDesktop();
 
         wireRemoteControl({

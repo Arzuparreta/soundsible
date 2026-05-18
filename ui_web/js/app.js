@@ -10,8 +10,7 @@ import { audioEngine } from './audio.js';
 import { connectionManager } from './connection.js';
 import * as renderers from './renderers.js';
 import { scoreLibrary, scoreArtist, mergeAndSortByScore } from './search_scoring.js';
-import { wireSettings } from './wires.js';
-import { wireRemoteControl } from './wires.js';
+import { wireSettings, wireRemoteControl, wireMigration } from './wires.js';
 import { remoteControl } from './remote_control.js';
 import { LIBRARY_TABS } from './library_tabs.js';
 import { checkResumeFromOtherDevice } from './playback_resume.js';
@@ -675,6 +674,25 @@ function init() {
         initScrollTracking();
 
         wireSettings(MOBILE_SETTINGS_IDS, { store, showToast: (msg) => UI.showToast(msg), onLibraryOrderChange: () => renderLibraryContent(), subscribeIndicators: false });
+        wireMigration(
+            {
+                formatSelect: 'settings-migration-format',
+                payloadTextarea: 'settings-migration-payload',
+                previewBtn: 'settings-migration-preview-btn',
+                hintEl: 'settings-migration-hint',
+                includeConfirmCheckbox: 'settings-migration-include-confirm',
+                playlistNameInput: 'settings-migration-playlist-name',
+                importBtn: 'settings-migration-import-btn',
+            },
+            {
+                store,
+                showToast: (msg) => UI.showToast(msg),
+                onAfterImport: () => {
+                    renderLibraryContent();
+                    if (UI.currentView === 'playlists') renderPlaylistList(store.state);
+                },
+            }
+        );
         initLibraryMaintenance();
 
         wireRemoteControl({

@@ -16,6 +16,7 @@ import { searchService } from './search_service.js';
 import { scoreLibrary, scoreArtist, mergeAndSortByScore, scoreOdst } from './search_scoring.js';
 import { getApiBase } from './config.js';
 import { discoveryUI } from './discovery.js';
+import { isPlayTimingEligibleTrack } from './play_timing.js';
 
 const ODST_DEBOUNCE_MS = 150;
 
@@ -46,7 +47,8 @@ export function playMusicSearchAtIndex(mergedList, index) {
     } else if (track.source !== 'preview' && track.source !== 'podcast-preview') {
         store.recordSongPlay(track);
     }
-    audioEngine.playTrack(track);
+    const playOpts = isPlayTimingEligibleTrack(track) ? { playTimingIntent: true } : {};
+    audioEngine.playTrack(track, playOpts);
 }
 
 /**

@@ -8,6 +8,7 @@ import { connectionManager } from './connection.js';
 import { Haptics } from './haptics.js';
 import { isVisible } from './visibility.js';
 import { radioService } from './radio.js';
+import { playTimingNoteUserIntent, playTimingOnPlaying, isPlayTimingEligibleTrack } from './play_timing.js';
 
 const PRELOAD_THRESHOLD_SEC = 45;
 const PUSH_DEBOUNCE_VISIBLE_SEC = 5;
@@ -250,6 +251,9 @@ class AudioEngine {
             store.pushPlaybackState(store.state.currentTrack?.id, this.audio.currentTime, false);
             Haptics.lock();
         });
+        this.audio.addEventListener('playing', () => {
+            playTimingOnPlaying(store.state.currentTrack);
+        });
         
         this.audio.addEventListener('error', (e) => {
             console.error("Playback error:", this.audio.error);
@@ -358,6 +362,10 @@ class AudioEngine {
         if (this.audio.src.includes(track.id) && !this.audio.paused) {
             console.log("Track already playing, ignoring redundant request.");
             return { ok: true, alreadyPlaying: true };
+        }
+
+        if (options.playTimingIntent && !options.remoteRequest && isPlayTimingEligibleTrack(track)) {
+            playTimingNoteUserIntent(track.id);
         }
 
         this._invalidatePreload();
