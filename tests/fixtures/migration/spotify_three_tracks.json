@@ -1,0 +1,27 @@
+{
+  "tracks": {
+    "items": [
+      {
+        "track": {
+          "name": "Neon Skyline",
+          "artists": [{ "name": "Urban Echo" }],
+          "album": { "name": "City Lights LP" }
+        }
+      },
+      {
+        "track": {
+          "name": "Harbor Drift",
+          "artists": [{ "name": "Coastal Duo" }],
+          "album": { "name": "Waves EP" }
+        }
+      },
+      {
+        "track": {
+          "name": "Paper Moons",
+          "artists": [{ "name": "Quiet Room" }],
+          "album": { "name": "Studio One" }
+        }
+      }
+    ]
+  }
+}

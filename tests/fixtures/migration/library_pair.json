@@ -1,0 +1,30 @@
+{
+  "tracks": [
+    {
+      "id": "lib-t001",
+      "title": "Gate Track 001",
+      "artist": "Gate Artist",
+      "album": "Gate Album",
+      "duration": 180,
+      "file_hash": "h1",
+      "original_filename": "001.mp3",
+      "compressed": false,
+      "file_size": 1000,
+      "bitrate": 320,
+      "format": "mp3"
+    },
+    {
+      "id": "lib-t002",
+      "title": "Gate Track 002",
+      "artist": "Gate Artist",
+      "album": "Gate Album",
+      "duration": 180,
+      "file_hash": "h2",
+      "original_filename": "002.mp3",
+      "compressed": false,
+      "file_size": 1000,
+      "bitrate": 320,
+      "format": "mp3"
+    }
+  ]
+}
