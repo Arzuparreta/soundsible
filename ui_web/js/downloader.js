@@ -517,19 +517,11 @@ export class Downloader {
                     }
                 }
             } else if (choice === 'library') {
-                // Note: Show library cover picker - for now, just show a message
-                // Note: TODO implement library cover picker UI
-                alert('Library cover picker coming soon. For now, use Edit Metadata → Upload Cover.');
+                // Fallback until dedicated library cover picker exists.
+                this.openMetadataEditorUpload(track.id);
+                this.addLog(`ℹ Library cover picker is not available yet. Opened metadata editor for ${track.title}.`);
             } else if (choice === 'upload') {
-                // Note: Open metadata editor with upload focus
-                if (window.UI && window.UI.showMetadataEditor) {
-                    window.UI.showMetadataEditor(track.id);
-                    // Note: Focus upload button after a delay
-                    setTimeout(() => {
-                        const uploadBtn = document.getElementById('edit-upload-btn');
-                        if (uploadBtn) uploadBtn.click();
-                    }, 300);
-                }
+                this.openMetadataEditorUpload(track.id);
             } else if (choice === 'none') {
                 // ## Section: Clear cover
                 const res = await fetch(`${searchService.getApiBase()}/api/library/tracks/${track.id}/cover/none`, {
@@ -544,6 +536,16 @@ export class Downloader {
             console.error('Cover choice error:', err);
             this.addLog(`✗ Failed to apply cover choice: ${err.message}`);
         }
+    }
+
+    static openMetadataEditorUpload(trackId) {
+        if (!window.UI || !window.UI.showMetadataEditor) return;
+        window.UI.showMetadataEditor(trackId);
+        // Focus upload action after dialog render.
+        setTimeout(() => {
+            const uploadBtn = document.getElementById('edit-upload-btn');
+            if (uploadBtn) uploadBtn.click();
+        }, 300);
     }
 
     /** Queue the current Discover preview stream for ODST download (same path as search “+”). */

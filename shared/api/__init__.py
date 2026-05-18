@@ -905,21 +905,14 @@ def run_sync_task():
             if 'error' in result:
                 queue_manager_dl.add_log(f"❌ Sync Error: {result['error']}")
             else:
-                # Note: ODST cloud sync might have merged remote tracks into dl.library (indirectly via shared obj?)
-                # Actually dl.cloud.sync_library creates A NEW lib object for pushing to cloud,
-                # but we should update dl.library with the results.
-                # Let's check sync_library return again. It returns stats.
-                
-                # We should reload dl.library if it was changed by sync (wait, sync_library in cloud_sync.py 
-                # doesn't seem to modify the passed local_library object, it creates A new one).
-                # This is A bug in the original code too.
-                
+                synced_library = result.get("synced_library")
+                if isinstance(synced_library, LibraryMetadata):
+                    dl.library = synced_library
+                    dl.save_library()
+
                 queue_manager_dl.add_log("✅ Sync Complete!")
                 queue_manager_dl.add_log(f"   Uploaded: {result.get('uploaded', 0)}, Merged: {result.get('merged', 0)}")
                 queue_manager_dl.add_log(f"   Total Remote: {result.get('total_remote', 0)}")
-                
-                # TODO: Update dl.library with the validated_tracks from result if we want full 2-way sync
-                # For now, let's at least sync what we have to main core
                 _sync_odst_to_main_core()
         except Exception as e:
             queue_manager_dl.add_log(f"❌ Critical Sync Error: {e}")

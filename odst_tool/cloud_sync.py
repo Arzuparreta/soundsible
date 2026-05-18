@@ -227,4 +227,5 @@ class CloudSync:
              return {"error": f"Failed to push library.json: {e}"}
              
         stats['total_remote'] = len(validated_tracks)
+        stats['synced_library'] = new_lib
         return stats
