@@ -69,6 +69,42 @@ function shuffleInPlace(arr) {
   return a;
 }
 
+function truncateDisplay(str, max = 44) {
+  const s = (str || '').trim();
+  if (s.length <= max) return s;
+  return `${s.slice(0, Math.max(0, max - 1))}…`;
+}
+
+/**
+ * Human-readable reason for a personalized rail row (local listening graph → Deezer expansion).
+ * @param {{ kind: string, seedTitle: string, seedArtist: string }} seed
+ * @returns {{ recoExplanation: string, recoReasonCode: string }}
+ */
+function recoMetaForSeed(seed) {
+  const title = truncateDisplay(seed.seedTitle, 42);
+  const artist = truncateDisplay(seed.seedArtist, 32);
+  if (seed.kind === 'recent_play') {
+    return {
+      recoExplanation: artist
+        ? `From your recent listening — expanded from “${title}” · ${artist}.`
+        : `From your recent listening — expanded from “${title}”.`,
+      recoReasonCode: 'listening_graph_recent'
+    };
+  }
+  if (seed.kind === 'favourite') {
+    return {
+      recoExplanation: artist
+        ? `From your library — anchored on favourite “${title}” · ${artist}.`
+        : `From your library — anchored on favourite “${title}”.`,
+      recoReasonCode: 'listening_graph_favourite'
+    };
+  }
+  return {
+    recoExplanation: '',
+    recoReasonCode: 'listening_graph_unknown'
+  };
+}
+
 /** Coherent wall-clock refresh for the personalized rail (independent of taste). */
 const PERSONAL_RAIL_REFRESH_MS = 5 * 60 * 1000;
 
@@ -280,6 +316,8 @@ class DiscoveryService {
 
   /**
    * Personalized picks from local play history + favorites (Deezer search → artist top).
+   * Explainable prototype: each row carries `recoExplanation` + `recoReasonCode` from the local
+   * listening graph (recent plays + favourites), aligned with premium Phase-3 explainability.
    * @param {number} desired max tracks
    */
   async buildPersonalizedTracks(desired = 18) {
@@ -295,53 +333,94 @@ class DiscoveryService {
     shuffleInPlace(shH);
     shuffleInPlace(shF);
 
-    const queries = [];
+    /** @type {Array<{ kind: 'recent_play' | 'favourite', seedTitle: string, seedArtist: string, q: string }>} */
+    const seeds = [];
     const seenQ = new Set();
-    const pushQ = (q) => {
+    /**
+     * @param {'recent_play'|'favourite'} kind
+     * @param {string} seedTitle
+     * @param {string} seedArtist
+     * @param {string} q
+     */
+    const pushSeed = (kind, seedTitle, seedArtist, q) => {
       const s = (q || '').trim();
       if (s.length < 2) return;
       const k = s.toLowerCase();
       if (seenQ.has(k)) return;
       seenQ.add(k);
-      queries.push(s);
+      seeds.push({
+        kind,
+        seedTitle: (seedTitle || '').trim() || 'Unknown',
+        seedArtist: (seedArtist || '').trim(),
+        q: s
+      });
     };
 
     if (shH.length && shF.length) {
       for (let i = 0; i < 3 && i < shH.length; i++) {
-        pushQ(`${shH[i].title} ${(shH[i].artist || '').trim()}`.trim());
+        const h = shH[i];
+        pushSeed(
+          'recent_play',
+          h.title,
+          (h.artist || '').trim(),
+          `${h.title} ${(h.artist || '').trim()}`.trim()
+        );
       }
       for (let i = 0; i < 3 && i < shF.length; i++) {
         const t = shF[i];
-        pushQ(`${(t.title || '').trim()} ${(t.album_artist || t.artist || '').trim()}`.trim());
+        pushSeed(
+          'favourite',
+          (t.title || '').trim(),
+          (t.album_artist || t.artist || '').trim(),
+          `${(t.title || '').trim()} ${(t.album_artist || t.artist || '').trim()}`.trim()
+        );
       }
     } else if (shH.length) {
       for (let i = 0; i < 6 && i < shH.length; i++) {
-        pushQ(`${shH[i].title} ${(shH[i].artist || '').trim()}`.trim());
+        const h = shH[i];
+        pushSeed(
+          'recent_play',
+          h.title,
+          (h.artist || '').trim(),
+          `${h.title} ${(h.artist || '').trim()}`.trim()
+        );
       }
     } else if (shF.length) {
       for (let i = 0; i < 6 && i < shF.length; i++) {
         const t = shF[i];
-        pushQ(`${(t.title || '').trim()} ${(t.album_artist || t.artist || '').trim()}`.trim());
+        pushSeed(
+          'favourite',
+          (t.title || '').trim(),
+          (t.album_artist || t.artist || '').trim(),
+          `${(t.title || '').trim()} ${(t.album_artist || t.artist || '').trim()}`.trim()
+        );
       }
     }
 
-    if (!queries.length) return [];
+    if (!seeds.length) return [];
 
     const merged = [];
     const seenDeezer = new Set();
-    for (const q of queries.slice(0, 8)) {
-      const data = await this.fetchDeezer(`/search?q=${encodeURIComponent(q)}&limit=5`);
+    for (const seed of seeds.slice(0, 8)) {
+      const data = await this.fetchDeezer(`/search?q=${encodeURIComponent(seed.q)}&limit=5`);
       if (!data || !Array.isArray(data.data) || !data.data.length) continue;
       const first = data.data[0];
       const aid = first?.artist?.id;
       if (aid == null) continue;
       const top = await this.fetchDeezer(`/artist/${aid}/top?limit=15`);
       if (!top || !Array.isArray(top.data)) continue;
+
+      const { recoExplanation, recoReasonCode } = recoMetaForSeed(seed);
+
       for (const tr of top.data) {
         const n = this.normalizeTrack(tr);
         if (seenDeezer.has(n.deezerId)) continue;
         seenDeezer.add(n.deezerId);
-        merged.push(n);
+        merged.push({
+          ...n,
+          recoExplanation,
+          recoReasonCode
+        });
         if (merged.length >= desired) break;
       }
       if (merged.length >= desired) break;
@@ -626,7 +705,8 @@ class DiscoveryUI {
       } else {
         renderers.renderSongList(personalShow, personalEl, {
           getCoverUrl: (t) => (typeof t.cover === 'string' && t.cover) ? t.cover : '',
-          discoverDeezerSurface: true
+          discoverDeezerSurface: true,
+          showRecoExplanation: true
         });
       }
     }

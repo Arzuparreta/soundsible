@@ -204,12 +204,13 @@ export function buildHomeArtistRowHtml(artistName, track, options = {}) {
 /**
  * Build HTML for song rows. Uses div + background-image for covers (no img) per project rule.
  * @param {Array} tracks
- * @param {Object} options - { activeTrackId, favIds, getCoverUrl, addDataIndex, desktopClickBehavior, suppressActionMenu, discoverDeezerSurface }
+ * @param {Object} options - { activeTrackId, favIds, getCoverUrl, addDataIndex, desktopClickBehavior, suppressActionMenu, discoverDeezerSurface, showRecoExplanation }
  */
 export function buildSongRowsHtml(tracks, options = {}) {
     const desktop = options.desktopClickBehavior === true;
     const playOverlay = desktop ? desktopPlayOverlaySmallHtml() : '';
     const discoverSurface = options.discoverDeezerSurface === true;
+    const showRecoExplanation = options.showRecoExplanation === true;
     const suppressSwipeHints = discoverSurface;
     const deezerSurfaceAttr = options.discoverDeezerSurface === true ? ' data-deezer-surface="1"' : '';
     const suppressActionMenu = options.suppressActionMenu === true;
@@ -237,10 +238,20 @@ export function buildSongRowsHtml(tracks, options = {}) {
             ? ''
             : `<div class="no-row-action text-[10px] font-medium text-[var(--text-dim)] opacity-55 tabular-nums">${formatTime(t.duration)}</div>`;
         const rowExtraClass = discoverSurface ? ' discover-surface-row' : '';
+        const hasRecoText =
+            showRecoExplanation && typeof t.recoExplanation === 'string' && t.recoExplanation.trim();
+        const recoReasonAttr =
+            hasRecoText && typeof t.recoReasonCode === 'string' && t.recoReasonCode
+                ? ` data-reco-reason="${esc(t.recoReasonCode)}"`
+                : '';
+        const recoLine = hasRecoText
+            ? `<div class="reco-explanation text-[10px] text-[var(--text-dim)]/90 mt-0.5 leading-snug truncate" title="${esc(t.recoExplanation.trim())}">${esc(t.recoExplanation.trim())}</div>`
+            : '';
+        const textColClass = hasRecoText ? 'ml-3 flex-1 min-w-0' : 'ml-3 flex-1 min-w-0 truncate';
         return `
             <div class="relative overflow-hidden rounded-[var(--radius-omni-xs)] mb-1 group${wrapperClass}"${dataIndexAttr}>
                 ${swipeHints}
-                <div class="song-row${rowExtraClass} relative z-10 flex items-center py-2 pl-2 pr-1 ${rowBg} rounded-[var(--radius-omni-xs)] border border-transparent transition-colors duration-200 cursor-pointer" data-id="${t.id}"${deezerSurfaceAttr}${rowOnclick}>
+                <div class="song-row${rowExtraClass} relative z-10 flex items-center py-2 pl-2 pr-1 ${rowBg} rounded-[var(--radius-omni-xs)] border border-transparent transition-colors duration-200 cursor-pointer" data-id="${t.id}"${deezerSurfaceAttr}${recoReasonAttr}${rowOnclick}>
                     <div class="song-row-cover-wrapper relative w-11 h-11 flex-shrink-0${desktop ? ' group' : ''}">
                         <div class="song-row-cover absolute inset-0 rounded-[var(--radius-list-cover)] overflow-hidden bg-cover bg-center" style="${coverStyle}" role="img" aria-label="${esc(t.title || 'Cover')}">
                             <div class="active-indicator-container absolute inset-0 flex items-center justify-center bg-[var(--accent)]/12 rounded-[var(--radius-list-cover)] pointer-events-none ${showPlayingIndicator ? 'opacity-100' + (desktop ? '' : ' is-playing') : 'opacity-0'}">
@@ -250,9 +261,10 @@ export function buildSongRowsHtml(tracks, options = {}) {
                         ${playOverlay}
                         <div class="fav-indicator absolute -top-0.5 -right-0.5 w-3 h-3 bg-[var(--accent)] rounded-full border-2 border-[var(--bg-deep)] z-10 ${isFav ? '' : 'hidden'}"></div>
                     </div>
-                    <div class="ml-3 flex-1 min-w-0 truncate">
+                    <div class="${textColClass}">
                         <div class="song-title font-semibold text-[15px] leading-tight truncate ${isActive ? 'text-[var(--text-on-selection)]' : 'text-[var(--text-main)]'}">${esc(t.title)}</div>
                         <div class="text-xs text-[var(--text-dim)] font-normal truncate mt-0.5">${esc(t.artist)}</div>
+                        ${recoLine}
                     </div>
                     <div class="flex items-center gap-1 sm:gap-2 ml-2 flex-shrink-0">
                         ${trackTrustBadgeHtml(t)}
