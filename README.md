@@ -74,6 +74,13 @@ Soundsible aims to be a **sensible self-hosted alternative** to predatory music 
 
 ## Quick Start
 
+Soundsible currently has two practical runtime paths:
+
+- `python3 run.py --daemon` for the legacy fixed-port Station on `:5005`
+- `python3 run.py --desktop-engine` for the desktop-sidecar runtime on loopback with a random free port
+
+The desktop-sidecar path is the base for the appliance rework. The launcher/headless path remains supported for server and SSH workflows.
+
 ### Prerequisites
 
 - **Python 3.10+**
@@ -142,6 +149,19 @@ python3 run.py
 
 **Remote access** via [Tailscale](https://tailscale.com/): browse to `http://<your-tailscale-ip>:5005/player/` from any device on your tailnet.
 
+**Desktop engine / appliance runtime** — current sidecar path:
+
+```bash
+python3 run.py --desktop-engine
+```
+
+- Binds to `127.0.0.1` on a random free port by default
+- Emits one JSON readiness line on stdout with `base_url`, `port`, `pid`, `health`, and `owner_token_file`
+- Serves `/player/desktop/` with the owner token injected automatically for the embedded desktop UI
+- Writes runtime state to `desktop-engine-state.json` in the Soundsible config directory
+
+This path is useful when you are building or testing the desktop appliance runtime, even though the full Tauri shell is not shipped yet.
+
 ### 4. Install as a PWA
 
 - **iOS / Safari** — Share → **Add to Home Screen**
@@ -167,6 +187,10 @@ python3 run.py
 | [Architecture](docs/ARCHITECTURE.md)                                    | Architecture & data flow (includes Discover / Deezer proxy)   |
 | [Agent Integration](docs/AGENT_INTEGRATION.md)                          | API guide for OpenClaw, Hermes agents, and local assistants   |
 | [Configuration](docs/CONFIGURATION.md)                                  | Configuration, environment variables, storage backends        |
+| [Appliance Rework Plan](docs/appliance-rework-plan.md)                  | Current appliance/runtime roadmap and landed status           |
+| [Premium Quality Contract](docs/PREMIUM_QUALITY_CONTRACT.md)            | Draft: five outcome gates for phased premium milestones       |
+| [Layer 1 & 2 contracts](docs/LAYER_CONTRACTS.md)                        | Boundaries, telemetry event catalog, scorecard roll-up        |
+| [Telemetry & Privacy](docs/TELEMETRY_PRIVACY.md)                        | Phase 1 local telemetry contract                             |
 | [Legal & Acceptable Use](docs/LEGAL.md)                                 | Legal details                                                 |
 | [yt-dlp formats troubleshooting](docs/troubleshooting-yt-dlp-formats.md) | Fixing format / extractor issues                              |
 

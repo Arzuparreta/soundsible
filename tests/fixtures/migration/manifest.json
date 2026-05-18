@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "match_engine": {
+    "module": "shared.migration.match",
+    "AUTO_ACCEPT_THRESHOLD": 0.95,
+    "CONFIRM_THRESHOLD": 0.9,
+    "note": "Bump manifest version if track_match_score weights or thresholds change."
+  },
+  "scenarios": [
+    {
+      "id": "apple_csv_two_rows_perfect",
+      "description": "Apple Music CSV with two rows; library contains exact title/artist/album pairs (100% auto-accept).",
+      "export": {
+        "format": "apple_music_csv",
+        "file": "apple_two_rows.csv"
+      },
+      "library": {
+        "file": "library_pair.json"
+      },
+      "expected_stats": {
+        "total": 2,
+        "matched": 2,
+        "auto_accept": 2,
+        "needs_confirmation": 0,
+        "unmatched": 0,
+        "matched_ratio": 1.0
+      }
+    },
+    {
+      "id": "spotify_json_three_tracks",
+      "description": "Minimal Spotify playlist JSON; library mirrors export metadata (100% auto-accept).",
+      "export": {
+        "format": "spotify_json",
+        "file": "spotify_three_tracks.json"
+      },
+      "library": {
+        "file": "library_three.json"
+      },
+      "expected_stats": {
+        "total": 3,
+        "matched": 3,
+        "auto_accept": 3,
+        "needs_confirmation": 0,
+        "unmatched": 0,
+        "matched_ratio": 1.0
+      }
+    },
+    {
+      "id": "phase1_gate_50_row_mix",
+      "description": "50 source rows vs 50-library subset: 49 exact matches plus one deliberate orphan; gate matched_ratio >= 0.98.",
+      "sources": {
+        "file": "gate50_sources.json",
+        "key": "sources"
+      },
+      "library": {
+        "file": "gate50_library.json"
+      },
+      "expected_stats": {
+        "total": 50,
+        "matched": 49,
+        "auto_accept": 49,
+        "needs_confirmation": 0,
+        "unmatched": 1,
+        "matched_ratio": 0.98
+      }
+    }
+  ]
+}

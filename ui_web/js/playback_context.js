@@ -7,6 +7,7 @@ import { store } from './store.js';
 import { audioEngine } from './audio.js';
 import * as renderers from './renderers.js';
 import { radioService } from './radio.js';
+import { isPlayTimingEligibleTrack } from './play_timing.js';
 
 function isDeezerRowId(id) {
     return typeof id === 'string' && id.startsWith('deezer_');
@@ -107,6 +108,7 @@ export function playTrackFromContext(trackId, currentView, viewState) {
         } else {
             store.recordSongPlay(track);
         }
-        audioEngine.playTrack(track);
+        const playOpts = isPlayTimingEligibleTrack(track) ? { playTimingIntent: true } : {};
+        audioEngine.playTrack(track, playOpts);
     }
 }

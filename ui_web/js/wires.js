@@ -13,6 +13,8 @@ import {
 } from './deezer_actions.js';
 import { radioService } from './radio.js';
 import { remoteControl } from './remote_control.js';
+import { adminFetch } from './admin_auth.js';
+import { getSetupSessionId } from './setup_funnel.js';
 
 function getElement(root, selector) {
     if (!selector) return null;
@@ -27,7 +29,7 @@ function getElement(root, selector) {
 
 /**
  * Wire settings panel: token import, library order, theme, haptics, status display.
- * @param {Object} selectors - { root?, tokenInput, importBtn, libraryOrderSelect?, themeSelect?, appIconSelect?, hapticsToggle?, themeIndicator?, hapticsIndicator?, statusLed?, statusPulse?, serverStatus?, hostDisplay? }
+ * @param {Object} selectors - { root?, tokenInput, importBtn, libraryOrderSelect?, themeSelect?, appIconSelect?, hapticsToggle?, themeIndicator?, hapticsIndicator?, statusLed?, statusPulse?, serverStatus?, hostDisplay?, musicDirInput?, musicDirSaveBtn?, musicDirHint? }
  * @param {Object} deps - { store, showToast, onLibraryOrderChange?, subscribeIndicators? }
  *   subscribeIndicators: if false, do not subscribe to store for theme/status (caller e.g. UI owns updates).
  */
@@ -127,20 +129,76 @@ export function wireSettings(selectors, deps) {
     const ytdlpAutoUpdate = getElement(root, selectors.ytdlpAutoUpdate);
     if (ytdlpAutoUpdate) {
         const getApiBase = () => store.apiBase || '';
-        fetch(`${getApiBase()}/api/downloader/config`)
+        adminFetch(`${getApiBase()}/api/downloader/config`)
             .then((r) => r.json())
             .then((c) => {
                 ytdlpAutoUpdate.checked = c.auto_update_ytdlp === true;
             })
             .catch(() => {});
         ytdlpAutoUpdate.addEventListener('change', () => {
-            fetch(`${getApiBase()}/api/downloader/config`, {
+            adminFetch(`${getApiBase()}/api/downloader/config`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ auto_update_ytdlp: ytdlpAutoUpdate.checked }),
             })
                 .then((r) => (r.ok ? showToast?.('Setting saved') : null))
                 .catch(() => {});
+        });
+    }
+
+    const musicDirInput = getElement(root, selectors.musicDirInput);
+    const musicDirSaveBtn = getElement(root, selectors.musicDirSaveBtn);
+    const musicDirHint = getElement(root, selectors.musicDirHint);
+    if (musicDirInput && musicDirSaveBtn) {
+        const getApiBase = () => store.apiBase || '';
+        const refreshMusicDir = () => {
+            adminFetch(`${getApiBase()}/api/setup/music-dir`)
+                .then((r) => (r.ok ? r.json() : Promise.reject()))
+                .then((j) => {
+                    musicDirInput.value = j.music_dir || '';
+                    if (musicDirHint) {
+                        if (j.env_override) {
+                            musicDirHint.textContent =
+                                'Using SOUNDSIBLE_MUSIC_DIR; saving still updates the stored path for when that env is unset.';
+                        } else if (j.effective_source === 'persisted') {
+                            musicDirHint.textContent = 'Using your saved music library folder.';
+                        } else {
+                            musicDirHint.textContent = 'Using the default folder until you save a path.';
+                        }
+                    }
+                })
+                .catch(() => {});
+        };
+        refreshMusicDir();
+        musicDirSaveBtn.addEventListener('click', () => {
+            const v = musicDirInput.value.trim();
+            if (!v) {
+                showToast?.('Enter a folder path');
+                return;
+            }
+            const payload = { music_dir: v };
+            const sid = getSetupSessionId();
+            if (sid) {
+                payload.setup_session_id = sid;
+            }
+            adminFetch(`${getApiBase()}/api/setup/music-dir`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+                .then(async (r) => {
+                    let j = {};
+                    try {
+                        j = await r.json();
+                    } catch (_) {}
+                    if (!r.ok) {
+                        showToast?.(j.error || 'Could not save music folder');
+                        return;
+                    }
+                    showToast?.('Music folder saved');
+                    refreshMusicDir();
+                })
+                .catch(() => showToast?.('Could not save music folder'));
         });
     }
 
@@ -402,6 +460,135 @@ export function wireRemoteControl(selectors, deps) {
             const track = getCurrentActionTrack?.();
             if (!track) return;
             await showPlayOnDevicePicker(track);
+        });
+    }
+}
+
+/**
+ * Playlist migration: match Spotify / Apple export against library, create playlist.
+ * @param {Object} selectors - { root?, formatSelect, payloadTextarea, previewBtn, hintEl, includeConfirmCheckbox, playlistNameInput, importBtn }
+ * @param {Object} deps - { store, showToast, onAfterImport? }
+ */
+export function wireMigration(selectors, deps) {
+    const { store, showToast, onAfterImport } = deps;
+    const root = selectors.root || document;
+
+    const fmtEl = getElement(root, selectors.formatSelect);
+    const textEl = getElement(root, selectors.payloadTextarea);
+    const previewBtn = getElement(root, selectors.previewBtn);
+    const hintEl = getElement(root, selectors.hintEl);
+    const includeConfirmEl = getElement(root, selectors.includeConfirmCheckbox);
+    const nameEl = getElement(root, selectors.playlistNameInput);
+    const importBtn = getElement(root, selectors.importBtn);
+
+    /** @type {unknown[]|null} */
+    let lastMatches = null;
+    let lastBatchId = null;
+
+    /**
+     * @param {boolean} includeConfirm
+     * @returns {string[]}
+     */
+    function collectTrackIds(includeConfirm) {
+        if (!lastMatches || !Array.isArray(lastMatches)) return [];
+        const ids = [];
+        for (const m of lastMatches) {
+            if (!m || typeof m !== 'object') continue;
+            const tid = m.matched_track_id;
+            if (!tid || typeof tid !== 'string') continue;
+            if (m.auto_accept) ids.push(tid);
+            else if (includeConfirm && m.needs_confirmation) ids.push(tid);
+        }
+        return ids;
+    }
+
+    if (previewBtn && textEl && fmtEl) {
+        previewBtn.addEventListener('click', async () => {
+            const format = String(fmtEl.value || '').trim();
+            const text = String(textEl.value || '').trim();
+            if (!format) {
+                showToast?.('Choose export format');
+                return;
+            }
+            if (!text) {
+                showToast?.('Paste export text');
+                return;
+            }
+            previewBtn.disabled = true;
+            try {
+                const res = await adminFetch(`${store.apiBase}/api/migration/preview`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ format, text }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    lastMatches = null;
+                    lastBatchId = null;
+                    if (hintEl) hintEl.textContent = data.error || `Preview failed (${res.status})`;
+                    showToast?.(data.error || 'Preview failed');
+                    return;
+                }
+                lastMatches = data.matches || [];
+                lastBatchId = typeof data.batch_id === 'string' && data.batch_id ? data.batch_id : null;
+                const st = data.stats || {};
+                const parts = [
+                    `Matched ${st.matched ?? 0} / ${st.total ?? 0}`,
+                    `auto ${st.auto_accept ?? 0}`,
+                    `confirm ${st.needs_confirmation ?? 0}`,
+                    `unmatched ${st.unmatched ?? 0}`,
+                ];
+                if (hintEl) hintEl.textContent = parts.join(' · ');
+                showToast?.('Preview ready');
+            } catch (_) {
+                lastMatches = null;
+                lastBatchId = null;
+                if (hintEl) hintEl.textContent = 'Request failed';
+                showToast?.('Preview failed');
+            } finally {
+                previewBtn.disabled = false;
+            }
+        });
+    }
+
+    if (importBtn && nameEl) {
+        importBtn.addEventListener('click', async () => {
+            const name = String(nameEl.value || '').trim();
+            if (!name) {
+                showToast?.('Playlist name required');
+                return;
+            }
+            const includeConfirm = !!(includeConfirmEl && includeConfirmEl.checked);
+            const track_ids = collectTrackIds(includeConfirm);
+            if (!track_ids.length) {
+                showToast?.('Run preview first — no tracks to import');
+                return;
+            }
+            importBtn.disabled = true;
+            try {
+                const importBody = { playlist_name: name, track_ids };
+                if (lastBatchId) {
+                    importBody.batch_id = lastBatchId;
+                }
+                const res = await adminFetch(`${store.apiBase}/api/migration/import-playlist`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(importBody),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    showToast?.(data.error || `Import failed (${res.status})`);
+                    return;
+                }
+                showToast?.(`Playlist "${name}" (${data.track_count ?? track_ids.length} tracks)`);
+                nameEl.value = '';
+                await store.syncLibrary().catch(() => {});
+                onAfterImport?.();
+            } catch (_) {
+                showToast?.('Import failed');
+            } finally {
+                importBtn.disabled = false;
+            }
         });
     }
 }

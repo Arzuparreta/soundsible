@@ -4,10 +4,21 @@
  */
 export const STATION_PORT = 5005;
 
+function getRuntimeProtocol() {
+    if (typeof window !== 'undefined' && window.location?.protocol) return window.location.protocol;
+    return 'http:';
+}
+
+function getRuntimePort() {
+    if (typeof window !== 'undefined' && window.location?.port) return window.location.port;
+    return String(STATION_PORT);
+}
+
 /**
  * @param {string} host - Hostname (e.g. from store.state.activeHost or location.hostname)
  * @returns {string} Full API base URL, e.g. http://localhost:5005
  */
 export function getApiBase(host) {
-    return `http://${host || 'localhost'}:${STATION_PORT}`;
+    const resolvedHost = host || (typeof window !== 'undefined' && window.location?.hostname) || 'localhost';
+    return `${getRuntimeProtocol()}//${resolvedHost}:${getRuntimePort()}`;
 }

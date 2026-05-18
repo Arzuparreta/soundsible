@@ -11,7 +11,7 @@ from pathlib import Path
 from flask import Blueprint, request, jsonify
 
 from shared.text_utils import sanitize_cli_message
-from shared.hardening import require_admin, rate_limit
+from shared.hardening import SCOPE_ADMIN_CONFIG, SCOPE_DOWNLOAD_ADD, SCOPE_LIBRARY_WRITE, rate_limit, require_scope
 from shared.url_utils import extract_youtube_video_id, normalize_youtube_url
 
 logger = logging.getLogger(__name__)
@@ -156,7 +156,7 @@ def youtube_suggest():
 
 
 @downloader_bp.route("/api/downloader/queue", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_DOWNLOAD_ADD, allow_trusted_network=True)
 @rate_limit("downloader_queue_add", limit=100, window_sec=60)
 def add_to_downloader_queue():
     api = _get_api()
@@ -196,7 +196,7 @@ def get_downloader_status():
 
 
 @downloader_bp.route("/api/downloader/queue/<item_id>", methods=["DELETE"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_DOWNLOAD_ADD, allow_trusted_network=True)
 @rate_limit("downloader_queue_remove", limit=100, window_sec=60)
 def remove_from_downloader_queue(item_id):
     api = _get_api()
@@ -205,7 +205,7 @@ def remove_from_downloader_queue(item_id):
 
 
 @downloader_bp.route("/api/downloader/queue", methods=["DELETE"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_DOWNLOAD_ADD, allow_trusted_network=True)
 @rate_limit("downloader_queue_clear", limit=30, window_sec=60)
 def clear_downloader_queue():
     api = _get_api()
@@ -214,7 +214,7 @@ def clear_downloader_queue():
 
 
 @downloader_bp.route("/api/downloader/start", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_DOWNLOAD_ADD, allow_trusted_network=True)
 @rate_limit("downloader_start", limit=30, window_sec=60)
 def trigger_downloader():
     import threading
@@ -227,7 +227,7 @@ def trigger_downloader():
 
 
 @downloader_bp.route("/api/downloader/optimize", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("downloader_optimize", limit=10, window_sec=300)
 def trigger_downloader_optimize():
     import threading
@@ -238,7 +238,7 @@ def trigger_downloader_optimize():
 
 
 @downloader_bp.route("/api/downloader/sync", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("downloader_sync", limit=10, window_sec=300)
 def trigger_downloader_sync():
     import threading
@@ -248,7 +248,7 @@ def trigger_downloader_sync():
 
 
 @downloader_bp.route("/api/download", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_DOWNLOAD_ADD, allow_trusted_network=True)
 @rate_limit("downloader_legacy_download", limit=60, window_sec=60)
 def start_download_legacy():
     import threading
@@ -300,7 +300,7 @@ def get_downloader_config():
 
 
 @downloader_bp.route("/api/downloader/config", methods=["POST"])
-@require_admin(allow_trusted_network=True)
+@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("downloader_config_update", limit=20, window_sec=60)
 def update_downloader_config():
     import os

@@ -20,6 +20,7 @@ import {
     makeEpisodeId
 } from './podcast_model.js';
 import * as renderers from './renderers.js';
+import { isPlayTimingEligibleTrack } from './play_timing.js';
 
 function apiBase() {
     return getApiBase(store.state.activeHost);
@@ -170,7 +171,8 @@ function playEpisodeById(episodeId) {
         } else {
             store.recordSongPlay(track);
         }
-        audioEngine.playTrack(track);
+        const playOpts = isPlayTimingEligibleTrack(track) ? { playTimingIntent: true } : {};
+        audioEngine.playTrack(track, playOpts);
     } else if (!track.enclosure_url) {
         if (typeof window.showToast === 'function') window.showToast('No audio URL for this episode');
     } else {

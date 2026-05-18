@@ -4,6 +4,8 @@ This document covers scenarios beyond the basic local quick start in `README.md`
 
 Use this when you want to run Soundsible on a server, keep it running in the background, or expose it over your network.
 
+This document is primarily about the legacy/headless deployment path. The desktop appliance runtime uses `python3 run.py --desktop-engine`, binds loopback on a random port, and is documented in `README.md` and `ARCHITECTURE.md`.
+
 ### 1. System dependencies
 
 Core requirements for the Station Engine and ODST downloader:
@@ -58,6 +60,23 @@ The steps are the same as for local installation, but executed over SSH.
 
 Configure these tools according to your usual operational standards.
 
+### 2B. Legacy fixed-port assumptions
+
+Most examples in this document assume the legacy daemon path:
+
+- `python3 run.py --daemon`
+- host/network exposure on port `5005`
+- browser access via `/player/`
+
+That is still the correct path for:
+
+- SSH and server installs
+- systemd/supervisord/tmux usage
+- reverse proxies
+- Tailscale/LAN access from other devices
+
+The desktop-sidecar path should not be treated as a drop-in replacement for those examples yet because it binds loopback on a random port by default.
+
 ### 3. Access over Tailscale
 
 Soundsible works well with Tailscale for secure remote access without VPN configuration or port forwarding.
@@ -72,6 +91,8 @@ Soundsible works well with Tailscale for secure remote access without VPN config
 
 4. Optionally, install the web app on mobile (see `README.md` for PWA instructions).
 
+If you want the newer pairing-based flow instead of typing URLs manually, use the desktop player at `/player/desktop/` on the desktop runtime path. The pairing APIs and desktop pairing modal are present, but the full packaged desktop shell is still in progress.
+
 ### 4. Reverse proxy (optional)
 
 You can serve Soundsible behind a reverse proxy such as Nginx, Caddy, or Traefik.
@@ -79,6 +100,8 @@ You can serve Soundsible behind a reverse proxy such as Nginx, Caddy, or Traefik
 1. Run the Station Engine on its default port (`5005`).
 2. Configure your proxy to forward a public path (for example `https://music.example.com`) to `http://127.0.0.1:5005`.
 3. Ensure WebSocket and other long‑running connections are allowed by your proxy configuration.
+
+Do not reverse-proxy the desktop-sidecar random loopback port directly as a public endpoint. Keep reverse proxy guidance tied to the legacy daemon/server path for now.
 
 Consult your proxy’s documentation for exact configuration snippets and TLS setup.
 
@@ -111,6 +134,8 @@ Soundsible is designed for trusted LAN/Tailscale deployments. Use this baseline:
    Then send that value as:
    - `Authorization: Bearer <token>` or
    - `X-Soundsible-Admin-Token: <token>`
+
+   In desktop-engine mode, Soundsible also creates a short owner token file and injects that token into `/player/desktop/` automatically. That path is meant for the embedded/local desktop UI, not for public browser sessions.
 
 4. **Launcher binding**  
    Launcher now binds to localhost by default for safer control-plane exposure.

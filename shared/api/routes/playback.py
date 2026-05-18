@@ -11,6 +11,7 @@ import requests
 from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context, redirect
 
 from shared.constants import DEFAULT_CACHE_DIR
+from shared.hardening import SCOPE_PLAYBACK_CONTROL, rate_limit, require_scope
 from shared.path_resolver import resolve_local_track_path
 from shared.url_utils import validate_youtube_video_id
 
@@ -29,6 +30,17 @@ _preview_stream_lock = threading.Lock()
 PREVIEW_STREAM_CACHE_TTL_SEC = 300  # 5 minutes
 _preview_stream_cache = {}
 _preview_stream_cache_lock = threading.Lock()
+
+
+def _queue_snapshot(queue):
+    items = [item.to_dict() for item in queue.get_all()]
+    rev = queue.get_revision()
+    return {
+        "items": items,
+        "tracks": items,
+        "repeat_mode": queue.get_repeat_mode(),
+        "queue_revision": rev,
+    }
 
 
 def _preview_stream_rate_limit(ip: str) -> bool:
@@ -113,6 +125,7 @@ def _emit_playback_start(api, scope: str, device_id: str, state: dict, track: di
 
 
 @playback_bp.route("/api/devices/register", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def register_playback_device():
     api = _get_api()
     scope = api["get_scope_from_request"]()
@@ -284,29 +297,31 @@ def get_track_cover(track_id):
 def get_playback_queue():
     api = _get_api()
     _, _, queue = api["get_core"]()
-    items = [item.to_dict() for item in queue.get_all()]
-    return jsonify({"items": items, "tracks": items, "repeat_mode": queue.get_repeat_mode()})
+    return jsonify(_queue_snapshot(queue))
 
 
 @playback_bp.route("/api/playback/shuffle", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def shuffle_playback_queue():
     api = _get_api()
     _, _, queue = api["get_core"]()
     queue.shuffle()
-    return jsonify({"status": "success"})
+    return jsonify({"status": "success", "queue_revision": queue.get_revision()})
 
 
 @playback_bp.route("/api/playback/repeat", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def set_playback_repeat():
     api = _get_api()
     _, _, queue = api["get_core"]()
     data = request.json
     mode = data.get("mode", "off")
     queue.set_repeat_mode(mode)
-    return jsonify({"status": "success", "mode": mode})
+    return jsonify({"status": "success", "mode": mode, "queue_revision": queue.get_revision()})
 
 
 @playback_bp.route("/api/playback/queue", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def add_to_playback_queue():
     api = _get_api()
     lib, _, queue = api["get_core"]()
@@ -315,7 +330,7 @@ def add_to_playback_queue():
         track = api["get_track_by_id"](lib, data["track_id"])
         if track:
             queue.add_library_track(track)
-            return jsonify({"status": "success", "size": queue.size()})
+            return jsonify({"status": "success", "size": queue.size(), "queue_revision": queue.get_revision()})
         return jsonify({"error": "Track not found"}), 404
     if "preview" in data:
         preview = data["preview"]
@@ -341,7 +356,7 @@ def add_to_playback_queue():
                 podcast_rss_url=preview.get("podcast_rss_url") or None,
                 album=album,
             )
-            return jsonify({"status": "success", "size": queue.size()})
+            return jsonify({"status": "success", "size": queue.size(), "queue_revision": queue.get_revision()})
         if not video_id or not validate_youtube_video_id(str(video_id)):
             return jsonify({"error": "Invalid or missing video_id"}), 400
         title = preview.get("title") or "Unknown"
@@ -359,30 +374,33 @@ def add_to_playback_queue():
             library_track_id=library_track_id,
             album=album,
         )
-        return jsonify({"status": "success", "size": queue.size()})
+        return jsonify({"status": "success", "size": queue.size(), "queue_revision": queue.get_revision()})
     return jsonify({"error": "Missing track_id or preview"}), 400
 
 
 @playback_bp.route("/api/playback/queue/<int:index>", methods=["DELETE"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def remove_from_playback_queue(index):
     api = _get_api()
     _, _, queue = api["get_core"]()
     if queue.remove(index):
-        return jsonify({"status": "success"})
+        return jsonify({"status": "success", "queue_revision": queue.get_revision()})
     return jsonify({"error": "Index out of range"}), 400
 
 
 @playback_bp.route("/api/playback/queue/track/<track_id>", methods=["DELETE"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def remove_track_id_from_playback_queue(track_id):
     api = _get_api()
     _, _, queue = api["get_core"]()
     removed_count = queue.remove_by_id(track_id)
     if removed_count:
-        return jsonify({"status": "success", "removed_count": removed_count})
+        return jsonify({"status": "success", "removed_count": removed_count, "queue_revision": queue.get_revision()})
     return jsonify({"error": "Track not in queue"}), 404
 
 
 @playback_bp.route("/api/playback/queue/move", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def move_in_playback_queue():
     api = _get_api()
     _, _, queue = api["get_core"]()
@@ -390,16 +408,17 @@ def move_in_playback_queue():
     from_index = data.get("from_index")
     to_index = data.get("to_index")
     if from_index is not None and to_index is not None and queue.move(from_index, to_index):
-        return jsonify({"status": "success"})
+        return jsonify({"status": "success", "queue_revision": queue.get_revision()})
     return jsonify({"error": "Invalid indices"}), 400
 
 
 @playback_bp.route("/api/playback/queue", methods=["DELETE"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def clear_playback_queue():
     api = _get_api()
     _, _, queue = api["get_core"]()
     queue.clear()
-    return jsonify({"status": "success"})
+    return jsonify({"status": "success", "queue_revision": queue.get_revision()})
 
 
 @playback_bp.route("/api/playback/next", methods=["GET"])
@@ -413,22 +432,32 @@ def get_next_from_queue():
 
 
 @playback_bp.route("/api/playback/play", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def play_track():
     api = _get_api()
     lib, engine, _ = api["get_core"]()
-    data = request.json
+    data = request.json or {}
     track_id = data.get("track_id")
+    setup_session_id = (data.get("setup_session_id") or "").strip() or None
     track = api["get_track_by_id"](lib, track_id)
     if track and engine:
         url = lib.get_track_url(track)
         engine.play(url, track)
         resolved = resolve_local_track_path(track)
         source = "local" if (resolved and url == resolved) else "remote"
+        if setup_session_id:
+            from shared.setup_session import try_emit_setup_first_play
+
+            try_emit_setup_first_play(
+                setup_session_id,
+                track_id=str(track_id) if track_id is not None else None,
+            )
         return jsonify({"status": "playing", "track": track.title, "source": source})
     return jsonify({"error": "Track not found or engine not ready"}), 404
 
 
 @playback_bp.route("/api/playback/toggle", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def toggle_playback():
     api = _get_api()
     _, engine, _ = api["get_core"]()
@@ -449,7 +478,52 @@ def playback_get_state():
     return jsonify(state)
 
 
+@playback_bp.route("/api/playback/play-timing", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
+@rate_limit("playback_play_timing", limit=120, window_sec=60)
+def playback_play_timing():
+    """Local-only latency segments for Phase 2 baseline (see docs/TELEMETRY_PRIVACY.md)."""
+    from shared.telemetry import emit
+
+    data = request.get_json(silent=True) or {}
+    segments = data.get("segments")
+    if segments is not None and not isinstance(segments, dict):
+        return jsonify({"error": "segments must be an object"}), 400
+
+    track_id = data.get("track_id")
+    device_id = data.get("device_id")
+    phase = data.get("phase")
+
+    payload = {
+        "v": 1,
+        "event": "play_timing",
+        "ts": int(time.time()),
+    }
+    if isinstance(track_id, str) and track_id.strip():
+        payload["track_id"] = track_id.strip()[:128]
+    if isinstance(device_id, str) and device_id.strip():
+        payload["device_id"] = device_id.strip()[:128]
+    if isinstance(phase, str) and phase.strip():
+        payload["phase"] = phase.strip()[:64]
+    if isinstance(segments, dict):
+        clean = {}
+        for k, v in list(segments.items())[:32]:
+            if not isinstance(k, str) or len(k) > 64:
+                continue
+            if isinstance(v, bool):
+                clean[k[:64]] = v
+            elif isinstance(v, int) and -1_000_000_000 <= v <= 1_000_000_000:
+                clean[k[:64]] = v
+            elif isinstance(v, float) and abs(v) <= 1e12:
+                clean[k[:64]] = round(v, 3)
+        payload["segments"] = clean
+
+    emit("play_timing", payload)
+    return jsonify({"status": "ok"})
+
+
 @playback_bp.route("/api/playback/state", methods=["PUT"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def playback_put_state():
     api = _get_api()
     scope = api["get_scope_from_request"]()
@@ -459,6 +533,7 @@ def playback_put_state():
 
 
 @playback_bp.route("/api/playback/handoff", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def playback_handoff():
     api = _get_api()
     scope = api["get_scope_from_request"]()
@@ -510,6 +585,7 @@ def playback_handoff():
 
 
 @playback_bp.route("/api/playback/notify-stop", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def playback_notify_stop():
     api = _get_api()
     scope = api["get_scope_from_request"]()
@@ -522,6 +598,7 @@ def playback_notify_stop():
 
 
 @playback_bp.route("/api/playback/remote-command", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def playback_remote_command():
     api = _get_api()
     scope = api["get_scope_from_request"]()

@@ -8,6 +8,15 @@ import { connectionManager } from './connection.js';
 import { Haptics } from './haptics.js';
 import { isVisible } from './visibility.js';
 import { radioService } from './radio.js';
+import {
+    playTimingNoteUserIntent,
+    playTimingMarkSrcSet,
+    playTimingMarkBeforePlay,
+    playTimingMarkAfterPlayAwait,
+    playTimingOnPlaying,
+    isPlayTimingEligibleTrack,
+} from './play_timing.js';
+import { postSetupFirstPlayBeacon, ensureSetupSessionStarted } from './setup_funnel.js';
 
 const PRELOAD_THRESHOLD_SEC = 45;
 const PUSH_DEBOUNCE_VISIBLE_SEC = 5;
@@ -17,6 +26,9 @@ class AudioEngine {
         this.audio = new Audio();
         this.audio.crossOrigin = 'anonymous';
         this.currentPosition = 0;
+        if (typeof window !== 'undefined') {
+            void ensureSetupSessionStarted(store.apiBase);
+        }
         this.currentContext = []; // Note: Sequential fallback
         /** Track ID we already repeated once in repeat(1) mode; cleared when song changes. */
         this._repeatOnceUsedTrackId = null;
@@ -250,6 +262,13 @@ class AudioEngine {
             store.pushPlaybackState(store.state.currentTrack?.id, this.audio.currentTime, false);
             Haptics.lock();
         });
+        this.audio.addEventListener('playing', () => {
+            playTimingOnPlaying(store.state.currentTrack);
+            const t = store.state.currentTrack;
+            if (t && isPlayTimingEligibleTrack(t)) {
+                postSetupFirstPlayBeacon(store.apiBase, t.id);
+            }
+        });
         
         this.audio.addEventListener('error', (e) => {
             console.error("Playback error:", this.audio.error);
@@ -358,6 +377,10 @@ class AudioEngine {
         if (this.audio.src.includes(track.id) && !this.audio.paused) {
             console.log("Track already playing, ignoring redundant request.");
             return { ok: true, alreadyPlaying: true };
+        }
+
+        if (options.playTimingIntent && !options.remoteRequest && isPlayTimingEligibleTrack(track)) {
+            playTimingNoteUserIntent(track.id);
         }
 
         this._invalidatePreload();
@@ -494,10 +517,16 @@ class AudioEngine {
         const url = Resolver.getTrackUrl(track);
         console.log("Playing URL:", url);
 
+        const playTimingLib =
+            options.playTimingIntent && !options.remoteRequest && isPlayTimingEligibleTrack(track);
+
         try {
             this.audio.src = url;
             this.audio.load();
+            if (playTimingLib) playTimingMarkSrcSet(track.id);
+            if (playTimingLib) playTimingMarkBeforePlay(track.id);
             await this.audio.play();
+            if (playTimingLib) playTimingMarkAfterPlayAwait(track.id);
             this._clearPendingRemotePlayback();
             store.update({ currentTrack: track, isPlaying: true });
             store.pushPlaybackState(track.id, 0, true);

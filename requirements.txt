@@ -17,6 +17,7 @@ flask-cors>=4.0.0          # Cross-Origin Resource Sharing
 
 # HTTP Client
 requests>=2.31.0           # Sync HTTP requests
+platformdirs>=4.2.0        # Cross-platform user config/data/cache/log dirs
 
 # Podcasts (RSS)
 feedparser>=6.0.10         # Parse podcast feeds

@@ -10,6 +10,8 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+from shared.time_utils import utc_now_iso_z
+
 from watchdog.events import FileSystemEventHandler
 
 from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, SourceType
@@ -182,14 +184,16 @@ class DownloadQueueManager:
         self.storage_path = Path(storage_path)
         self.socketio = socketio
 
-        if self.storage_path.exists():
-            try:
-                self.storage_path.unlink()
-            except OSError:
-                pass
+        self.queue = self._load()
+        for item in self.queue:
+            if isinstance(item, dict) and item.get("status") == "downloading":
+                item["status"] = "interrupted"
 
-        self.queue = []
         self.lock = threading.RLock()
+
+        if self.queue:
+            self.save()
+
         self.is_processing = False
         self.log_buffer = []
         self.max_logs = 50
@@ -232,7 +236,7 @@ class DownloadQueueManager:
 
             item["id"] = item.get("id", str(uuid.uuid4()))
             item["status"] = "pending"
-            item["added_at"] = datetime.utcnow().isoformat() + "Z"
+            item["added_at"] = utc_now_iso_z()
             self.queue.append(item)
 
         self.save()

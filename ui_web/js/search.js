@@ -16,6 +16,7 @@ import { searchService } from './search_service.js';
 import { scoreLibrary, scoreArtist, mergeAndSortByScore, scoreOdst } from './search_scoring.js';
 import { getApiBase } from './config.js';
 import { discoveryUI } from './discovery.js';
+import { isPlayTimingEligibleTrack } from './play_timing.js';
 
 const ODST_DEBOUNCE_MS = 150;
 
@@ -46,7 +47,8 @@ export function playMusicSearchAtIndex(mergedList, index) {
     } else if (track.source !== 'preview' && track.source !== 'podcast-preview') {
         store.recordSongPlay(track);
     }
-    audioEngine.playTrack(track);
+    const playOpts = isPlayTimingEligibleTrack(track) ? { playTimingIntent: true } : {};
+    audioEngine.playTrack(track, playOpts);
 }
 
 /**
@@ -487,9 +489,9 @@ function onInput() {
     }
     updateDiscoverPanels();
 
-    // On desktop discover, notify discoveryUI that search is taking ownership of the
-    // container. This sets currentView='search' and cancels any in-flight renderHome().
-    if (isDiscoverPage && isDesktop) {
+    // Discover home and unified search share one container; mark search ownership
+    // before async work so home refreshes cannot repaint over active results.
+    if (isDiscoverPage) {
         discoveryUI.notifySearchActive();
     }
 
@@ -513,21 +515,14 @@ function onInput() {
 
 function clear(options = {}) {
     const skipDiscoverRestore = options.skipDiscoverRestore === true;
-    if (searchService.debounceTimer) {
-        clearTimeout(searchService.debounceTimer);
-        searchService.debounceTimer = null;
-    }
-    if (searchService.abortController) {
-        searchService.abortController.abort();
-        searchService.abortController = null;
-    }
+    searchService.cancelActiveQuery();
     searchService.hideSuggestions();
     updateDiscoverPanels();
     if (resultsEl) {
         if (isDiscoverPage) {
-            // Tell discoveryUI we're relinquishing control so its subscriber
-            // reflects the correct state before renderHome() fires.
-            if (isDesktop) discoveryUI.notifySearchCleared();
+            // Tell discoveryUI we're relinquishing control so its subscribers
+            // can resume home rendering only after the search input is cleared.
+            discoveryUI.notifySearchCleared();
 
             if (skipDiscoverRestore) {
                 resultsEl.innerHTML = '';

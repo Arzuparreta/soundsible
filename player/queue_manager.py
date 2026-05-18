@@ -3,23 +3,82 @@ Queue Manager for Music Player.
 Provides simple in-memory queue management for playback.
 """
 
-from typing import List, Optional, Callable
-from shared.models import Track, QueueItem
+from __future__ import annotations
+
+import json
 import threading
+from pathlib import Path
+from typing import Callable, List, Optional
+
+from shared.models import QueueItem, Track
+from shared.runtime import get_data_dir
+
+QUEUE_STATE_VERSION = 1
 
 
 class QueueManager:
     """
-    Simple in-memory queue manager for music playback.
-    Holds QueueItems (library or preview). Session-based - queue clears when application exits.
+    Queue manager for music playback with optional persistence to data_dir/queue_state.json.
     """
-    
-    def __init__(self):
+
+    def __init__(self, persist_path: Optional[Path] = None) -> None:
+        self._persist_path = persist_path
         self._queue: List[QueueItem] = []
         self._history: List[QueueItem] = []
         self._repeat_mode = "off"  # Note: Off, all, one, once (web: one=infinite song, once=one extra play)
-        self._lock = threading.Lock()
+        self._revision = 0
+        self._lock = threading.RLock()
         self._on_change_callbacks: List[Callable[[], None]] = []
+        self._restore_state()
+
+    def _resolved_persist_path(self) -> Path:
+        if self._persist_path is not None:
+            return Path(self._persist_path)
+        return Path(get_data_dir()) / "queue_state.json"
+
+    def _restore_state(self) -> None:
+        path = self._resolved_persist_path()
+        if not path.is_file():
+            return
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(raw, dict) or raw.get("version") != QUEUE_STATE_VERSION:
+            return
+        rm = raw.get("repeat_mode") or "off"
+        with self._lock:
+            if rm in ("off", "all", "one", "once"):
+                self._repeat_mode = rm
+            restored: List[QueueItem] = []
+            for row in raw.get("queue") or []:
+                if not isinstance(row, dict):
+                    continue
+                try:
+                    restored.append(QueueItem.from_dict(row))
+                except (TypeError, ValueError, KeyError):
+                    continue
+            self._queue = restored
+            rev = raw.get("queue_revision")
+            try:
+                self._revision = int(rev) if rev is not None else 0
+            except (TypeError, ValueError):
+                self._revision = 0
+
+    def _persist_state(self) -> None:
+        path = self._resolved_persist_path()
+        with self._lock:
+            payload = {
+                "version": QUEUE_STATE_VERSION,
+                "repeat_mode": self._repeat_mode,
+                "queue": [item.to_dict() for item in self._queue],
+                "queue_revision": self._revision,
+            }
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        except OSError as e:
+            print(f"Error persisting queue state: {e}")
     
     def set_repeat_mode(self, mode: str) -> None:
         with self._lock:
@@ -27,7 +86,8 @@ class QueueManager:
             self._notify_change()
 
     def get_repeat_mode(self) -> str:
-        return self._repeat_mode
+        with self._lock:
+            return self._repeat_mode
 
     def shuffle(self) -> None:
         """Shuffle the current queue."""
@@ -210,6 +270,11 @@ class QueueManager:
         """Get the number of tracks in the queue."""
         with self._lock:
             return len(self._queue)
+
+    def get_revision(self) -> int:
+        """Monotonic counter bumped on queue/repeat persistence changes (continuity / sync debugging)."""
+        with self._lock:
+            return self._revision
     
     def add_change_callback(self, callback: Callable[[], None]) -> None:
         """Register a callback to be called when the queue changes."""
@@ -223,8 +288,11 @@ class QueueManager:
     
     def _notify_change(self) -> None:
         """Notify all registered callbacks that the queue has changed."""
+        with self._lock:
+            self._revision += 1
         for callback in self._on_change_callbacks:
             try:
                 callback()
             except Exception as e:
                 print(f"Error in queue change callback: {e}")
+        self._persist_state()

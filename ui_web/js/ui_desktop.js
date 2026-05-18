@@ -905,3 +905,4 @@ export const DesktopUI = {
 };
 
 window.UI = DesktopUI;
+window.DesktopUI = DesktopUI;

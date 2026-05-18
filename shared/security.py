@@ -8,7 +8,8 @@ import tempfile
 
 logger = logging.getLogger(__name__)
 
-from shared.constants import DEFAULT_CONFIG_DIR, DEFAULT_CACHE_DIR, DEFAULT_OUTPUT_DIR_FALLBACK
+from shared.constants import DEFAULT_OUTPUT_DIR_FALLBACK
+from shared.runtime import get_cache_dir, get_config_dir
 
 
 def _get_output_dir_root():
@@ -52,8 +53,8 @@ def is_safe_path(file_path, is_trusted: bool = False) -> bool:
 
         # Note: Approved roots for public access (no odst_tool dependency)
         allowed_roots = [
-            os.path.normpath(os.path.abspath(os.path.expanduser(DEFAULT_CONFIG_DIR))),
-            os.path.normpath(os.path.abspath(os.path.expanduser(DEFAULT_CACHE_DIR))),
+            os.path.normpath(os.path.abspath(str(get_config_dir()))),
+            os.path.normpath(os.path.abspath(str(get_cache_dir()))),
             _get_output_dir_root(),
             os.path.normpath(os.path.abspath(tempfile.gettempdir())),
             os.path.normpath(os.path.abspath(os.path.expanduser("~")))

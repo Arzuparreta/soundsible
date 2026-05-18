@@ -10,6 +10,8 @@ http://localhost:5005
 
 On LAN or Tailscale, replace `localhost` with the Station host IP or hostname.
 
+In desktop-engine mode, the base URL is not assumed to be `:5005`. Read the readiness JSON emitted by `python3 run.py --desktop-engine` / `soundsible_engine.py`, or query `/api/health` from the known loopback URL and use its reported `base_url`.
+
 ## Agent Rules
 
 1. Use the Agent API for playback control: `/api/agent/*`.
@@ -23,6 +25,8 @@ On LAN or Tailscale, replace `localhost` with the Station host IP or hostname.
 ## Authentication
 
 Agent endpoints require a Soundsible agent token.
+
+Agent tokens are now stored in scoped `auth_tokens` records. Legacy `agent_tokens` compatibility still exists internally, but new integrations should treat the scoped token model as the source of truth.
 
 Create a token:
 
@@ -47,6 +51,15 @@ The response includes the raw token once:
 ```
 
 Store the raw token in the agent secret store. Soundsible stores only a hash.
+
+You can optionally request a narrower scope set when creating a token:
+
+```bash
+curl -X POST http://localhost:5005/api/agent/token \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <SOUNDSIBLE_ADMIN_TOKEN>' \
+  -d '{"name":"openclaw","scopes":["library:read","playback:control"]}'
+```
 
 Use one of these headers on protected agent routes:
 

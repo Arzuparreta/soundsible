@@ -7,7 +7,7 @@ import { connectionManager } from './connection.js';
 import { audioEngine } from './audio.js';
 import * as renderers from './renderers.js';
 import { scoreLibrary, scoreArtist, mergeAndSortByScore } from './search_scoring.js';
-import { wireSettings, wireActionMenu } from './wires.js';
+import { wireSettings, wireActionMenu, wireMigration } from './wires.js';
 import { wireRemoteControl } from './wires.js';
 import { DesktopUI } from './ui_desktop.js';
 import { checkResumeFromOtherDevice } from './playback_resume.js';
@@ -25,6 +25,7 @@ import {
 } from './shared.js';
 import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
 import { tryPlayUnifiedMusicSearch } from './search.js';
+import { desktopPairing } from './desktop_pairing.js';
 
 let discoverSearchDebounceTimer = null;
 let podcastSearchDebounceTimer = null;
@@ -767,6 +768,7 @@ window.openPlaylistCoverPicker = showPlaylistCoverPicker({
 window.store = store;
 window.audioEngine = audioEngine;
 window.UI = DesktopUI;
+window.DesktopUI = DesktopUI;
 
 window.toggleArtistAlbum = (ev) => {
     const card = ev?.currentTarget?.closest?.('.artist-album-card');
@@ -842,7 +844,29 @@ function init() {
             serverStatus: 'desktop-server-status',
             hostDisplay: 'desktop-active-host-display',
             ytdlpAutoUpdate: 'desktop-settings-ytdlp-auto-update',
+            musicDirInput: 'desktop-settings-music-dir-input',
+            musicDirSaveBtn: 'desktop-settings-music-dir-save-btn',
+            musicDirHint: 'desktop-settings-music-dir-hint',
         }, { store, showToast: (m) => DesktopUI.showToast(m), onLibraryOrderChange: () => renderHomeSongs() });
+        wireMigration(
+            {
+                formatSelect: 'desktop-settings-migration-format',
+                payloadTextarea: 'desktop-settings-migration-payload',
+                previewBtn: 'desktop-settings-migration-preview-btn',
+                hintEl: 'desktop-settings-migration-hint',
+                includeConfirmCheckbox: 'desktop-settings-migration-include-confirm',
+                playlistNameInput: 'desktop-settings-migration-playlist-name',
+                importBtn: 'desktop-settings-migration-import-btn',
+            },
+            {
+                store,
+                showToast: (m) => DesktopUI.showToast(m),
+                onAfterImport: () => {
+                    renderHomeSongs();
+                    if (DesktopUI.currentView === 'playlists') renderPlaylists();
+                },
+            }
+        );
         initLibraryMaintenanceDesktop();
 
         wireRemoteControl({
@@ -851,6 +875,18 @@ function init() {
             generateTokenBtn: 'desktop-generate-token-btn',
             tokenDisplay: 'desktop-agent-token-display'
         }, { store, showToast: (m) => DesktopUI.showToast(m) });
+
+        desktopPairing.bindDesktopSettings({
+            openBtn: 'desktop-open-pairing-btn',
+            refreshPairedBtn: 'desktop-refresh-paired-devices-btn',
+            pairedDevicesContainer: 'desktop-paired-devices-container',
+        }, {
+            showToast: (m) => DesktopUI.showToast(m),
+            onDevicesChanged: () => {
+                const refreshBtn = document.getElementById('desktop-refresh-devices-btn');
+                if (refreshBtn) refreshBtn.click();
+            },
+        });
 
         const themeSelect = document.getElementById('desktop-settings-theme-select');
         if (themeSelect) {

@@ -4,7 +4,7 @@ The Station UI includes **Library**, **Search** (ODST / YouTube Music–style re
 
 ## Development (Flask serves source)
 
-1. `npm install` (optional for JS work; `postinstall` refreshes `js/vendor/socket.io-client.esm.min.js` from `socket.io-client`. That vendor file is **committed** so `http://<station>:5005/player/` works on machines that never run npm—without it, the browser gets HTML 404s and the app stays on “Initializing”.)
+1. `npm install` (optional for JS work; `postinstall` refreshes committed browser-vendor files in `js/vendor/`. Right now that includes `socket.io-client.esm.min.js` and `qrcode.esm.js`, so direct Flask source serving works on machines that never run a bundler.)
 2. `npm run css:build` (or `npm run css:watch` in another terminal)
 3. Start the Python API as usual; open `http://localhost:<port>/player/`
 
@@ -13,6 +13,8 @@ Tailwind output is `assets/tailwind-compiled.css` (required for styles when not 
 ## Vite dev server (optional)
 
 `npm run dev` serves the UI on port 5173 with `/api` and `/socket.io` proxied to `http://127.0.0.1:5005` (change `vite.config.js` if your station port differs).
+
+For desktop-engine work, remember that the real Flask-served desktop player may be on a random loopback port. The source UI now resolves API base URLs from `window.location.port`, so it works when the Station is not on `5005`.
 
 ## Production build
 
@@ -28,5 +30,17 @@ Outputs `dist/` with hashed JS/CSS. Serve it by setting **`SOUNDSIBLE_WEB_UI_DIS
 |---------------|----------------------------------------------|
 | `css:build`   | One-shot Tailwind → `assets/tailwind-compiled.css` |
 | `css:watch`   | Rebuild CSS when templates/JS change         |
-| `build`       | CSS + Vite bundle + static copy + HTML fix   |
+| `build`       | Refresh vendor files + CSS + Vite bundle + static copy + HTML fix |
 | `preview`     | Preview the production `dist/` build         |
+
+## Desktop pairing UI
+
+The desktop settings view now includes a first consumer of the pairing APIs:
+
+- open pairing session
+- render backend-provided QR payload as a scannable QR
+- poll pairing status
+- close/cancel the display session
+- list and revoke paired phones
+
+Admin/owner requests from the desktop player are authenticated through `js/admin_auth.js`. In desktop-engine mode, `/player/desktop/` receives the owner token automatically from the Flask response bootstrap.

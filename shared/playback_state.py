@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from shared.constants import DEFAULT_CONFIG_DIR
+from shared.runtime import get_config_dir
 
 DEFAULT_SCOPE = "default"
 ACTIVE_DEVICE_TTL_SEC = 90
@@ -23,7 +23,7 @@ _socket_devices: dict[str, tuple[str, str]] = {}  # Note: Socket.IO sid -> (scop
 
 
 def _config_dir() -> Path:
-    return Path(DEFAULT_CONFIG_DIR).expanduser()
+    return get_config_dir()
 
 
 def _state_path(scope: str) -> Path:

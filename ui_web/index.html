@@ -450,13 +450,26 @@
                             <div class="min-w-0">
                                 <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--accent)]">Files</p>
                                 <h2 class="text-base font-bold text-[var(--text-main)] tracking-tight mt-1">Storage</h2>
-                                <p class="text-xs text-[var(--text-dim)] mt-1 leading-relaxed">Library folder and downloads use this path.</p>
+                                <p class="text-xs text-[var(--text-dim)] mt-1 leading-relaxed">Music library folder and YouTube download output.</p>
                             </div>
                         </div>
                         <div class="border-t border-[var(--glass-border)] pt-4 space-y-3">
-                            <div class="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-stretch">
-                                <input type="text" id="dl-conf-path" class="input-theme flex-1 min-w-0 rounded-[var(--radius-omni-xs)] px-4 py-3 text-sm text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors" placeholder="/path/to/music" aria-label="Storage path">
-                                <button type="button" id="dl-save-conf-btn" class="px-5 py-3 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)] text-[var(--text-on-accent)] hover:opacity-90 transition-opacity shrink-0 min-h-[44px]">Save</button>
+                            <div>
+                                <label for="settings-music-dir-input" class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)] block mb-1">Music library</label>
+                                <p class="text-xs text-[var(--text-dim)] mb-2 leading-relaxed">Folder for your audio files and library scans (saved on the appliance).</p>
+                                <div class="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-stretch">
+                                    <input type="text" id="settings-music-dir-input" class="input-theme flex-1 min-w-0 rounded-[var(--radius-omni-xs)] px-4 py-3 text-sm text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors" placeholder="/path/to/your/music" autocomplete="off">
+                                    <button type="button" id="settings-music-dir-save-btn" class="px-5 py-3 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)] text-[var(--text-on-accent)] hover:opacity-90 transition-opacity shrink-0 min-h-[44px]">Save</button>
+                                </div>
+                                <p id="settings-music-dir-hint" class="text-[10px] text-[var(--text-dim)] mt-2 leading-relaxed"></p>
+                            </div>
+                            <div class="pt-2 border-t border-[var(--glass-border)]">
+                                <label for="dl-conf-path" class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)] block mb-1">YouTube downloads</label>
+                                <p class="text-xs text-[var(--text-dim)] mb-2 leading-relaxed">Where converted tracks from the downloader are stored.</p>
+                                <div class="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-stretch">
+                                    <input type="text" id="dl-conf-path" class="input-theme flex-1 min-w-0 rounded-[var(--radius-omni-xs)] px-4 py-3 text-sm text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors" placeholder="/path/to/downloads" aria-label="Downloader output path">
+                                    <button type="button" id="dl-save-conf-btn" class="px-5 py-3 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)] text-[var(--text-on-accent)] hover:opacity-90 transition-opacity shrink-0 min-h-[44px]">Save</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -507,6 +520,47 @@
                                 <p class="text-sm text-[var(--text-dim)] mt-2 leading-relaxed">Wipe removes all tracks, playlists, and library data. This cannot be undone.</p>
                                 <button type="button" id="settings-wipe-library-btn" class="mt-4 w-full sm:w-auto px-5 py-3 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-red-500/15 text-red-400 border border-red-500/40 hover:bg-red-500/25 transition-colors min-h-[44px]">Wipe library</button>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Playlist migration -->
+                    <div class="glass-view rounded-[var(--radius-omni)] p-5 sm:p-6 border border-[var(--glass-border)] shadow-[var(--shadow-omni)] transition-all duration-200">
+                        <div class="flex items-start gap-3 mb-4">
+                            <div class="w-10 h-10 rounded-[var(--radius-omni-xs)] bg-[var(--surface-overlay)] border border-[var(--glass-border)] flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                                <i class="fas fa-file-import text-[var(--accent)] text-sm"></i>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--accent)]">Import</p>
+                                <h2 class="text-base font-bold text-[var(--text-main)] tracking-tight mt-1">Playlist migration</h2>
+                                <p class="text-xs text-[var(--text-dim)] mt-1 leading-relaxed">Match Spotify JSON or Apple Music CSV against your library, then create a playlist.</p>
+                            </div>
+                        </div>
+                        <div class="border-t border-[var(--glass-border)] pt-4 space-y-3">
+                            <div>
+                                <label for="settings-migration-format" class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)] block mb-1">Format</label>
+                                <select id="settings-migration-format" class="input-theme w-full sm:w-auto sm:min-w-[200px] rounded-[var(--radius-omni-xs)] px-4 py-3 text-sm font-medium text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors" aria-label="Export format">
+                                    <option value="spotify_json">Spotify (playlist JSON)</option>
+                                    <option value="apple_music_csv">Apple Music (CSV)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="settings-migration-payload" class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)] block mb-1">Export body</label>
+                                <textarea id="settings-migration-payload" rows="6" class="input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-3 text-xs font-mono text-[var(--text-main)] focus:outline-none transition-colors" placeholder="Paste the export file contents…" aria-label="Export text"></textarea>
+                            </div>
+                            <button type="button" id="settings-migration-preview-btn" class="w-full sm:w-auto px-5 py-3 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--surface-overlay)] text-[var(--text-main)] border border-[var(--glass-border)] hover:bg-[var(--bg-card)] transition-colors min-h-[44px]">Preview match</button>
+                            <p id="settings-migration-hint" class="text-[10px] text-[var(--text-dim)] leading-relaxed"></p>
+                            <label class="flex items-start gap-3 cursor-pointer group min-h-[44px]">
+                                <input type="checkbox" id="settings-migration-include-confirm" class="mt-1 rounded border-[var(--input-border)] text-[var(--accent)] focus:ring-[var(--accent)] shrink-0">
+                                <span>
+                                    <span class="text-sm font-medium text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors">Include “needs confirmation” rows</span>
+                                    <span class="block text-xs text-[var(--text-dim)] mt-1 leading-relaxed">Imports 90–95% confidence matches in addition to automatic ≥95% matches.</span>
+                                </span>
+                            </label>
+                            <div>
+                                <label for="settings-migration-playlist-name" class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)] block mb-1">New playlist name</label>
+                                <input type="text" id="settings-migration-playlist-name" class="input-theme w-full rounded-[var(--radius-omni-xs)] px-4 py-3 text-sm text-[var(--text-main)] focus:outline-none transition-colors" placeholder="Imported playlist" autocomplete="off">
+                            </div>
+                            <button type="button" id="settings-migration-import-btn" class="w-full sm:w-auto px-5 py-3 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)] text-[var(--text-on-accent)] hover:opacity-90 transition-opacity min-h-[44px]">Create playlist</button>
                         </div>
                     </div>
                 </div>

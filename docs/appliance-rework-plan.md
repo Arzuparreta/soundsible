@@ -1,5 +1,15 @@
 # Soundsible Appliance Rework Plan
 
+## Status Snapshot
+
+As of 2026-05-17:
+
+- Runtime foundation is largely in place: `RuntimeConfig`, platform app dirs, path migration, and `--desktop-engine`.
+- Auth scopes are largely in place: `auth_tokens`, scoped checks, and legacy compatibility.
+- The desktop sidecar contract is now partially landed: desktop mode emits readiness JSON, writes owner-token/runtime-state files, and exposes richer `/api/health`.
+- Pairing work is now partially landed end to end: pairing sessions, claim/confirm/cancel endpoints, paired-device tokens, revoke/list endpoints, QR-ready connection payloads, display-state auto-confirm controls, and a first desktop settings consumer are present; full packaged desktop/mobile UX is still open.
+- Desktop shell, Windows packaging, updater/recovery UI, and host-supervisor abstraction are still open.
+
 ## Decision
 
 Build the consumer product as a desktop appliance: a Tauri shell that owns a bundled Python Station Engine sidecar, a tray/menu-bar lifecycle, local-first onboarding, QR phone pairing, and safe updates.

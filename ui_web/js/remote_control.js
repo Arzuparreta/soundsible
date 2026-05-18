@@ -5,6 +5,7 @@
 import { store } from './store.js';
 import { getApiBase } from './config.js';
 import { Resolver } from './resolver.js';
+import { adminFetch } from './admin_auth.js';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -136,8 +137,19 @@ class RemoteControl {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ device_id: d.device_id, command: 'play', track_id: track.id })
-                    }).catch(() => {});
-                    showToast?.('Sent to device');
+                    })
+                        .then(async (res) => {
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok) {
+                                const message = data?.error || 'Could not send to device';
+                                showToast?.(message);
+                                return;
+                            }
+                            showToast?.(data?.warning || 'Sent to device');
+                        })
+                        .catch(() => {
+                            showToast?.('Could not send to device');
+                        });
                 }
             });
             list.appendChild(btn);
@@ -172,7 +184,7 @@ class RemoteControl {
 
     async generateAgentToken() {
         try {
-            const res = await fetch(`${this._apiBase}/api/agent/token`, {
+            const res = await adminFetch(`${this._apiBase}/api/agent/token`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
             });

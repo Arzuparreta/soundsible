@@ -1,0 +1,43 @@
+{
+  "tracks": [
+    {
+      "id": "s-l1",
+      "title": "Neon Skyline",
+      "artist": "Urban Echo",
+      "album": "City Lights LP",
+      "duration": 200,
+      "file_hash": "sh1",
+      "original_filename": "a.mp3",
+      "compressed": false,
+      "file_size": 2000,
+      "bitrate": 256,
+      "format": "mp3"
+    },
+    {
+      "id": "s-l2",
+      "title": "Harbor Drift",
+      "artist": "Coastal Duo",
+      "album": "Waves EP",
+      "duration": 195,
+      "file_hash": "sh2",
+      "original_filename": "b.mp3",
+      "compressed": false,
+      "file_size": 2100,
+      "bitrate": 256,
+      "format": "mp3"
+    },
+    {
+      "id": "s-l3",
+      "title": "Paper Moons",
+      "artist": "Quiet Room",
+      "album": "Studio One",
+      "duration": 188,
+      "file_hash": "sh3",
+      "original_filename": "c.mp3",
+      "compressed": false,
+      "file_size": 1800,
+      "bitrate": 320,
+      "format": "mp3"
+    }
+  ]
+}
