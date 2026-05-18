@@ -195,13 +195,13 @@ class SearchService {
         this.activeInput = anchorInput;
         if (!this.suggestionDropdown) {
             this.suggestionDropdown = document.createElement('div');
-            this.suggestionDropdown.className = 'search-suggestions-dropdown fixed z-[1000] bg-[var(--bg-card)] border border-[var(--glass-border)] rounded-2xl shadow-2xl overflow-hidden mt-2 min-w-[280px] max-h-[400px] overflow-y-auto animate-in fade-in zoom-in-95 duration-100 backdrop-blur-xl';
+            this.suggestionDropdown.className = 'search-suggestions-dropdown absolute z-[1000] bg-[var(--bg-card)] border border-[var(--glass-border)] rounded-2xl shadow-2xl overflow-hidden mt-2 min-w-[280px] max-h-[400px] overflow-y-auto animate-in fade-in zoom-in-95 duration-100 backdrop-blur-xl';
             document.body.appendChild(this.suggestionDropdown);
         }
 
         const rect = anchorInput.getBoundingClientRect();
-        this.suggestionDropdown.style.top = `${rect.bottom}px`;
-        this.suggestionDropdown.style.left = `${rect.left}px`;
+        this.suggestionDropdown.style.top = `${window.scrollY + rect.bottom}px`;
+        this.suggestionDropdown.style.left = `${window.scrollX + rect.left}px`;
         this.suggestionDropdown.style.width = `${Math.max(rect.width, 320)}px`;
 
         const html = list.map(item => {
