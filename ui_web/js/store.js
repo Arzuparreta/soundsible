@@ -42,6 +42,42 @@ function getRuntimePort() {
     return STATION_PORT;
 }
 
+function decodeBase64Token(raw) {
+    let s = raw.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+    const pad = s.length % 4;
+    if (pad) s += '='.repeat(4 - pad);
+    const bin = atob(s);
+    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+
+async function inflateZlib(bytes) {
+    if (typeof DecompressionStream === 'undefined') {
+        throw new Error('DecompressionStream unavailable');
+    }
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
+    const buf = await new Response(stream).arrayBuffer();
+    return new TextDecoder().decode(buf);
+}
+
+/** Decode sync token: plain JSON, base64 JSON, or base64+zlib JSON. */
+async function parseSyncTokenPayload(token) {
+    const trimmed = (token || '').trim();
+    if (!trimmed) throw new Error('Empty token');
+
+    try {
+        return JSON.parse(trimmed);
+    } catch (_) {}
+
+    const bytes = decodeBase64Token(trimmed);
+
+    try {
+        return JSON.parse(new TextDecoder().decode(bytes));
+    } catch (_) {}
+
+    const text = await inflateZlib(bytes);
+    return JSON.parse(text);
+}
+
 class Store {
     constructor() {
         this.state = {
@@ -979,34 +1015,21 @@ class Store {
         }
     }
 
-    importToken(token) {
+    async importToken(token) {
         try {
-            // Note: Decode token (Base64 -> zlib decompress -> JSON)
-            // Note: In browser we use atob and pako or similar, but for now
-            // Note: We assume the token is simple or handle basic JSON if plain text.
-            
-            // Note: For MVP, we will try to decode if it looks like Base64, else treat as JSON
-            let data;
-            try {
-                const bin = atob(token);
-                // Note: Simple check if it looks like binary, we might need a library.
-                // Note: But if it was plain JSON-base64 we can read it.
-                data = JSON.parse(bin);
-            } catch {
-                data = JSON.parse(token);
-            }
+            const data = await parseSyncTokenPayload(token);
 
             if (data.endpoints) {
                 this.update({ priorityList: data.endpoints });
                 this.save('priority_list', data.endpoints);
             }
-            
-            const nextConfig = { ...this.state.config, syncToken: token };
+
+            const nextConfig = { ...this.state.config, syncToken: token.trim() };
             this.save('config', nextConfig);
             this.update({ config: nextConfig });
             return true;
         } catch (e) {
-            console.error("Token import failed:", e);
+            console.error('Token import failed:', e);
             return false;
         }
     }

@@ -40,14 +40,15 @@ export function wireSettings(selectors, deps) {
     const tokenInput = getElement(root, selectors.tokenInput);
     const importBtn = getElement(root, selectors.importBtn);
     if (importBtn && tokenInput) {
-        importBtn.addEventListener('click', () => {
+        importBtn.addEventListener('click', async () => {
             const token = tokenInput.value.trim();
             if (!token) {
                 showToast?.('Paste a token first');
                 return;
             }
+            importBtn.disabled = true;
             try {
-                if (store.importToken(token)) {
+                if (await store.importToken(token)) {
                     showToast?.('Token imported');
                     tokenInput.value = '';
                 } else {
@@ -55,6 +56,8 @@ export function wireSettings(selectors, deps) {
                 }
             } catch (e) {
                 showToast?.('Import failed');
+            } finally {
+                importBtn.disabled = false;
             }
         });
     }
