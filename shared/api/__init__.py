@@ -65,6 +65,7 @@ from typing import Optional, Any
 from shared.url_utils import normalize_youtube_url, extract_youtube_video_id, validate_youtube_video_id
 from shared.security import is_trusted_network, is_safe_path
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, apply_security_headers, get_request_auth_context
+from shared.telemetry import init_telemetry
 
 from .download_queue import DownloadQueueManager, LibraryFileWatcher, parse_intake_item
 from .orchestrator import orchestrator
@@ -1026,6 +1027,7 @@ def start_api(
     configure_runtime(runtime)
     migrate_legacy_app_dirs(runtime)
     ensure_runtime_directories(runtime)
+    init_telemetry(runtime)
     logger.info("--- Soundsible API Boot Sequence ---")
     logger.info("Target Host: %s", runtime.host)
     logger.info("Target Port: %s", runtime.port)
