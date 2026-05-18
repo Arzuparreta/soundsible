@@ -2,7 +2,8 @@
 
 **Status:** Draft — definition artifact (no implementation requirement).  
 **Aligns with:** Approved “Soundsible Premium Parity and Superiority Plan” (Approach B, phased gates).  
-**Telemetry baseline:** [TELEMETRY_PRIVACY.md](./TELEMETRY_PRIVACY.md) (local-first, Phase 1).
+**Telemetry baseline:** [TELEMETRY_PRIVACY.md](./TELEMETRY_PRIVACY.md) (local-first, Phase 1).  
+**Layer boundaries & event catalog:** [LAYER_CONTRACTS.md](./LAYER_CONTRACTS.md).
 
 This contract states **five non-negotiable user outcomes**. Each has a single **pass/fail gate** used to decide whether a phase milestone may ship. Stricter sub-metrics in the phase gate table apply as written there; this page is the **one-page user-outcome summary** for sign-off.
 

@@ -189,6 +189,7 @@ This path is useful when you are building or testing the desktop appliance runti
 | [Configuration](docs/CONFIGURATION.md)                                  | Configuration, environment variables, storage backends        |
 | [Appliance Rework Plan](docs/appliance-rework-plan.md)                  | Current appliance/runtime roadmap and landed status           |
 | [Premium Quality Contract](docs/PREMIUM_QUALITY_CONTRACT.md)            | Draft: five outcome gates for phased premium milestones       |
+| [Layer 1 & 2 contracts](docs/LAYER_CONTRACTS.md)                        | Boundaries, telemetry event catalog, scorecard roll-up        |
 | [Telemetry & Privacy](docs/TELEMETRY_PRIVACY.md)                        | Phase 1 local telemetry contract                             |
 | [Legal & Acceptable Use](docs/LEGAL.md)                                 | Legal details                                                 |
 | [yt-dlp formats troubleshooting](docs/troubleshooting-yt-dlp-formats.md) | Fixing format / extractor issues                              |
