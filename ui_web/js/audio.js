@@ -27,7 +27,9 @@ class AudioEngine {
         this.audio.crossOrigin = 'anonymous';
         this.currentPosition = 0;
         if (typeof window !== 'undefined') {
-            void ensureSetupSessionStarted(store.apiBase);
+            queueMicrotask(() => {
+                void ensureSetupSessionStarted(store.apiBase);
+            });
         }
         this.currentContext = []; // Note: Sequential fallback
         /** Track ID we already repeated once in repeat(1) mode; cleared when song changes. */
