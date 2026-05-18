@@ -223,6 +223,34 @@ def test_setup_gate_rollup_summarize():
     assert out["sessions_with_setup_session_started"] == 1
     assert out["sessions_first_play_within_10min"] == 1
     assert out["success_rate_vs_started_sessions"] == 1.0
+    assert out["median_elapsed_ms_first_play"] == 60_000
+
+
+def test_setup_gate_rollup_date_window():
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location("setup_gate_rollup", root / "scripts" / "setup_gate_rollup.py")
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    sid_old = str(uuid.uuid4())
+    sid_new = str(uuid.uuid4())
+    events = [
+        {"v": 1, "event": "setup_session_started", "ts": 100, "setup_session_id": sid_old},
+        {"v": 1, "event": "setup_session_started", "ts": 500, "setup_session_id": sid_new},
+        {
+            "v": 1,
+            "event": "setup_first_play",
+            "ts": 600,
+            "setup_session_id": sid_new,
+            "elapsed_ms_since_session": 90_000,
+        },
+    ]
+    filtered = mod.filter_events_by_ts(events, since_ts=400, until_ts=700)
+    out = mod.summarize(filtered)
+    assert out["sessions_with_setup_session_started"] == 1
+    assert out["sessions_first_play_within_10min"] == 1
+    assert out["median_elapsed_ms_first_play"] == 90_000
 
 
 def test_setup_gate_rollup_cli(tmp_path):
