@@ -456,12 +456,27 @@
                                     <div class="min-w-0">
                                         <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--accent)]">Files</p>
                                         <h2 class="text-base font-bold text-[var(--text-main)] tracking-tight mt-1">Storage</h2>
-                                        <p class="text-xs text-[var(--text-dim)] mt-1">Library path and downloads.</p>
+                                        <p class="text-xs text-[var(--text-dim)] mt-1">Music library folder and YouTube download output.</p>
                                     </div>
                                 </div>
-                                <div class="border-t border-[var(--glass-border)] pt-4 flex flex-col sm:flex-row gap-2 sm:gap-3">
-                                    <input type="text" id="dl-conf-path" class="input-theme flex-1 min-w-0 rounded-[var(--radius-omni-xs)] px-4 py-3 text-sm text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors" placeholder="/path/to/music" aria-label="Storage path">
-                                    <button type="button" id="dl-save-conf-btn" class="px-5 py-3 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)] text-[var(--text-on-accent)] hover:opacity-90 transition-opacity shrink-0">Save</button>
+                                <div class="border-t border-[var(--glass-border)] pt-4 flex flex-col gap-4">
+                                    <div>
+                                        <label for="desktop-settings-music-dir-input" class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)] block mb-1">Music library</label>
+                                        <p class="text-xs text-[var(--text-dim)] mb-2">Folder for your audio files and library scans.</p>
+                                        <div class="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                                            <input type="text" id="desktop-settings-music-dir-input" class="input-theme flex-1 min-w-0 rounded-[var(--radius-omni-xs)] px-4 py-3 text-sm text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors" placeholder="/path/to/your/music" autocomplete="off">
+                                            <button type="button" id="desktop-settings-music-dir-save-btn" class="px-5 py-3 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)] text-[var(--text-on-accent)] hover:opacity-90 transition-opacity shrink-0">Save</button>
+                                        </div>
+                                        <p id="desktop-settings-music-dir-hint" class="text-[10px] text-[var(--text-dim)] mt-2"></p>
+                                    </div>
+                                    <div class="pt-3 border-t border-[var(--glass-border)]">
+                                        <label for="dl-conf-path" class="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)] block mb-1">YouTube downloads</label>
+                                        <p class="text-xs text-[var(--text-dim)] mb-2">Where downloader output is stored.</p>
+                                        <div class="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                                            <input type="text" id="dl-conf-path" class="input-theme flex-1 min-w-0 rounded-[var(--radius-omni-xs)] px-4 py-3 text-sm text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] transition-colors" placeholder="/path/to/downloads" aria-label="Downloader output path">
+                                            <button type="button" id="dl-save-conf-btn" class="px-5 py-3 rounded-[var(--radius-omni-xs)] text-sm font-bold bg-[var(--accent)] text-[var(--text-on-accent)] hover:opacity-90 transition-opacity shrink-0">Save</button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 

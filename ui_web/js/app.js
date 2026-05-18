@@ -80,6 +80,9 @@ const MOBILE_SETTINGS_IDS = {
     serverStatus: 'server-status',
     hostDisplay: 'active-host-display',
     ytdlpAutoUpdate: 'settings-ytdlp-auto-update',
+    musicDirInput: 'settings-music-dir-input',
+    musicDirSaveBtn: 'settings-music-dir-save-btn',
+    musicDirHint: 'settings-music-dir-hint',
 };
 
 function renderFavourites(state) {

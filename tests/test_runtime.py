@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 from shared.runtime import RuntimeConfig, migrate_legacy_app_dirs, runtime_with_overrides
 
@@ -90,3 +91,24 @@ def test_migrate_legacy_dirs_copies_existing_data(tmp_path):
     assert (runtime.config_dir / "config.json").read_text() == '{"ok":true}'
     assert (runtime.cache_dir / "cover.txt").read_text() == "cover"
     assert (runtime.data_dir / "db.sqlite").read_text() == "db"
+
+
+def test_runtime_uses_persisted_music_dir_when_env_unset(monkeypatch, tmp_path):
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    persisted = (tmp_path / "from_prefs").resolve()
+    (cfg / "music_dir.json").write_text(
+        json.dumps({"path": str(persisted)}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SOUNDSIBLE_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("SOUNDSIBLE_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("SOUNDSIBLE_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("SOUNDSIBLE_LOG_DIR", str(tmp_path / "logs"))
+    monkeypatch.delenv("SOUNDSIBLE_MUSIC_DIR", raising=False)
+    monkeypatch.setenv("SOUNDSIBLE_HOST", "127.0.0.1")
+    monkeypatch.setenv("SOUNDSIBLE_PORT", "5044")
+    monkeypatch.setenv("SOUNDSIBLE_LAN_ENABLED", "false")
+
+    runtime = RuntimeConfig.default()
+    assert runtime.music_dir == persisted

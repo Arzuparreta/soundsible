@@ -932,6 +932,7 @@ from shared.api.routes.discovery import discovery_bp
 from shared.api.routes.podcasts import podcasts_bp
 from shared.api.routes.agent import agent_bp
 from shared.api.routes.pairing import pairing_bp
+from shared.api.routes.setup import setup_bp
 app.register_blueprint(library_bp)
 app.register_blueprint(playback_bp)
 app.register_blueprint(downloader_bp)
@@ -940,6 +941,7 @@ app.register_blueprint(discovery_bp)
 app.register_blueprint(podcasts_bp)
 app.register_blueprint(agent_bp)
 app.register_blueprint(pairing_bp)
+app.register_blueprint(setup_bp)
 
 
 @app.route('/api/health')

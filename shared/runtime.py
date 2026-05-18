@@ -4,9 +4,11 @@ Runtime configuration and platform-aware app directory helpers.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import socket
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Mapping, Optional
@@ -15,6 +17,7 @@ from platformdirs import PlatformDirs
 
 
 APP_NAME = "soundsible"
+MUSIC_DIR_PREFS_FILENAME = "music_dir.json"
 LEGACY_CONFIG_DIR = Path("~/.config/soundsible").expanduser()
 LEGACY_CACHE_DIR = Path("~/.cache/soundsible").expanduser()
 LEGACY_DATA_DIR = Path("~/.local/share/soundsible").expanduser()
@@ -41,6 +44,32 @@ def _optional_path(value: Optional[str | Path]) -> Optional[Path]:
 
 def _default_music_dir() -> Path:
     return (Path.home() / "Music" / "Soundsible").expanduser().resolve()
+
+
+def load_persisted_music_dir(config_dir: Path) -> Optional[Path]:
+    """Return stored music library folder from ``config_dir/music_dir.json``, if valid."""
+    path = (config_dir.expanduser().resolve() / MUSIC_DIR_PREFS_FILENAME)
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        raw = data.get("path") or data.get("music_dir")
+        if not raw or not isinstance(raw, str):
+            return None
+        return Path(raw).expanduser().resolve()
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def save_persisted_music_dir(config_dir: Path, music_dir: Path) -> None:
+    """Write ``music_dir.json`` under config_dir (Phase 1 setup persistence)."""
+    config_dir = config_dir.expanduser().resolve()
+    config_dir.mkdir(parents=True, exist_ok=True)
+    payload = {"path": str(music_dir.resolve()), "updated_at": int(time.time())}
+    (config_dir / MUSIC_DIR_PREFS_FILENAME).write_text(
+        json.dumps(payload, indent=2),
+        encoding="utf-8",
+    )
 
 
 def _reserve_port(host: str) -> int:
@@ -71,7 +100,10 @@ class RuntimeConfig:
         data_dir = _optional_path(environment.get("SOUNDSIBLE_DATA_DIR")) or Path(dirs.user_data_path).resolve()
         cache_dir = _optional_path(environment.get("SOUNDSIBLE_CACHE_DIR")) or Path(dirs.user_cache_path).resolve()
         log_dir = _optional_path(environment.get("SOUNDSIBLE_LOG_DIR")) or Path(dirs.user_log_path).resolve()
-        music_dir = _optional_path(environment.get("SOUNDSIBLE_MUSIC_DIR")) or _default_music_dir()
+        music_dir = _optional_path(environment.get("SOUNDSIBLE_MUSIC_DIR"))
+        if music_dir is None:
+            persisted = load_persisted_music_dir(config_dir)
+            music_dir = persisted if persisted is not None else _default_music_dir()
         ui_dist = _optional_path(environment.get("SOUNDSIBLE_UI_DIST"))
         owner_token_file = _optional_path(environment.get("SOUNDSIBLE_OWNER_TOKEN_FILE"))
         host = (environment.get("SOUNDSIBLE_HOST") or "0.0.0.0").strip() or "0.0.0.0"

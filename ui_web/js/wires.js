@@ -28,7 +28,7 @@ function getElement(root, selector) {
 
 /**
  * Wire settings panel: token import, library order, theme, haptics, status display.
- * @param {Object} selectors - { root?, tokenInput, importBtn, libraryOrderSelect?, themeSelect?, appIconSelect?, hapticsToggle?, themeIndicator?, hapticsIndicator?, statusLed?, statusPulse?, serverStatus?, hostDisplay? }
+ * @param {Object} selectors - { root?, tokenInput, importBtn, libraryOrderSelect?, themeSelect?, appIconSelect?, hapticsToggle?, themeIndicator?, hapticsIndicator?, statusLed?, statusPulse?, serverStatus?, hostDisplay?, musicDirInput?, musicDirSaveBtn?, musicDirHint? }
  * @param {Object} deps - { store, showToast, onLibraryOrderChange?, subscribeIndicators? }
  *   subscribeIndicators: if false, do not subscribe to store for theme/status (caller e.g. UI owns updates).
  */
@@ -142,6 +142,57 @@ export function wireSettings(selectors, deps) {
             })
                 .then((r) => (r.ok ? showToast?.('Setting saved') : null))
                 .catch(() => {});
+        });
+    }
+
+    const musicDirInput = getElement(root, selectors.musicDirInput);
+    const musicDirSaveBtn = getElement(root, selectors.musicDirSaveBtn);
+    const musicDirHint = getElement(root, selectors.musicDirHint);
+    if (musicDirInput && musicDirSaveBtn) {
+        const getApiBase = () => store.apiBase || '';
+        const refreshMusicDir = () => {
+            adminFetch(`${getApiBase()}/api/setup/music-dir`)
+                .then((r) => (r.ok ? r.json() : Promise.reject()))
+                .then((j) => {
+                    musicDirInput.value = j.music_dir || '';
+                    if (musicDirHint) {
+                        if (j.env_override) {
+                            musicDirHint.textContent =
+                                'Using SOUNDSIBLE_MUSIC_DIR; saving still updates the stored path for when that env is unset.';
+                        } else if (j.effective_source === 'persisted') {
+                            musicDirHint.textContent = 'Using your saved music library folder.';
+                        } else {
+                            musicDirHint.textContent = 'Using the default folder until you save a path.';
+                        }
+                    }
+                })
+                .catch(() => {});
+        };
+        refreshMusicDir();
+        musicDirSaveBtn.addEventListener('click', () => {
+            const v = musicDirInput.value.trim();
+            if (!v) {
+                showToast?.('Enter a folder path');
+                return;
+            }
+            adminFetch(`${getApiBase()}/api/setup/music-dir`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ music_dir: v }),
+            })
+                .then(async (r) => {
+                    let j = {};
+                    try {
+                        j = await r.json();
+                    } catch (_) {}
+                    if (!r.ok) {
+                        showToast?.(j.error || 'Could not save music folder');
+                        return;
+                    }
+                    showToast?.('Music folder saved');
+                    refreshMusicDir();
+                })
+                .catch(() => showToast?.('Could not save music folder'));
         });
     }
 

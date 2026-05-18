@@ -844,6 +844,9 @@ function init() {
             serverStatus: 'desktop-server-status',
             hostDisplay: 'desktop-active-host-display',
             ytdlpAutoUpdate: 'desktop-settings-ytdlp-auto-update',
+            musicDirInput: 'desktop-settings-music-dir-input',
+            musicDirSaveBtn: 'desktop-settings-music-dir-save-btn',
+            musicDirHint: 'desktop-settings-music-dir-hint',
         }, { store, showToast: (m) => DesktopUI.showToast(m), onLibraryOrderChange: () => renderHomeSongs() });
         initLibraryMaintenanceDesktop();
 
