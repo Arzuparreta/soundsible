@@ -95,7 +95,7 @@ One-page mapping from **user outcomes** to **signals** (product scorecard reques
 
 | Outcome | Contract § | Primary signals | Telemetry / tests | Layer |
 |--------|------------|-----------------|---------------------|-------|
-| Setup → first play | §1 | Success %, median time, “shell intervention” tagging | `setup-events` + `play-timing`; future gate script | L1 |
+| Setup → first play | §1 | Success %, median time, “shell intervention” tagging | `setup-events` + `play-timing`; read-only rollup `scripts/setup_gate_rollup.py` | L1 |
 | Migration trust | §2 | Match rate on fixtures; confirmation rate | `migration-events` + audit reports | L1 |
 | Playback responsive & stable | §3 | `intent_to_playing_ms` p95; stall rate; queue tests | `play-timing` + automated queue checks | L1 → L2 |
 | Discovery usefulness | §4 | 30s play rate; offline eval score; uplift | Layer 2 reco + eval job | L2 |

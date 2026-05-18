@@ -7,11 +7,12 @@ import sqlite3
 import os
 import shutil
 import threading
-from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any, List
-from shared.models import Track
+from pathlib import Path
+from typing import Optional
+
 from shared.constants import DEFAULT_CACHE_SIZE_GB
+from shared.time_utils import utc_naive
 
 class CacheManager:
     """Manages local music file cache with LRU eviction."""
@@ -76,7 +77,7 @@ class CacheManager:
                             UPDATE cache_entries 
                             SET last_accessed = ?, access_count = access_count + 1 
                             WHERE track_id = ?
-                        """, (datetime.utcnow(), track_id))
+                        """, (utc_naive(), track_id))
                         self.conn.commit()
                         return file_path
                     else:
@@ -111,7 +112,7 @@ class CacheManager:
                     INSERT OR REPLACE INTO cache_entries 
                     (track_id, file_path, file_size, last_accessed, access_count)
                     VALUES (?, ?, ?, ?, 1)
-                """, (track_id, str(target_path), file_size, datetime.utcnow()))
+                """, (track_id, str(target_path), file_size, utc_naive()))
                 self.conn.commit()
              except Exception:
                  pass

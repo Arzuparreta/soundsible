@@ -10,6 +10,8 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+from shared.time_utils import utc_now_iso_z
+
 from watchdog.events import FileSystemEventHandler
 
 from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, SourceType
@@ -234,7 +236,7 @@ class DownloadQueueManager:
 
             item["id"] = item.get("id", str(uuid.uuid4()))
             item["status"] = "pending"
-            item["added_at"] = datetime.utcnow().isoformat() + "Z"
+            item["added_at"] = utc_now_iso_z()
             self.queue.append(item)
 
         self.save()

@@ -10,7 +10,8 @@ from typing import List, Dict, Optional, Any, Literal
 from enum import Enum
 import json
 import uuid
-from datetime import datetime
+
+from shared.time_utils import utc_now_iso_naive
 
 
 class StorageProvider(Enum):
@@ -279,7 +280,7 @@ class LibraryMetadata:
     tracks: List[Track]
     playlists: Dict[str, List[str]]  # Note: Playlist_name -> [track_ids]
     settings: Dict[str, Any]
-    last_updated: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    last_updated: str = field(default_factory=utc_now_iso_naive)
     podcast_subscriptions: List[Dict[str, Any]] = field(default_factory=list)
     # feed_id -> {"fetched_at": iso, "episodes": [ {...}, ... ]}
     podcast_episode_cache: Dict[str, Any] = field(default_factory=dict)
@@ -335,7 +336,7 @@ class LibraryMetadata:
             tracks=tracks,
             playlists=data.get("playlists", {}),
             settings=data.get("settings", {}),
-            last_updated=data.get("last_updated", datetime.utcnow().isoformat()),
+            last_updated=data.get("last_updated", utc_now_iso_naive()),
             podcast_subscriptions=subs,
             podcast_episode_cache=cache,
         )
@@ -369,7 +370,7 @@ class LibraryMetadata:
     def add_track(self, track: Track) -> None:
         """Add a track to the library."""
         self.tracks.append(track)
-        self.last_updated = datetime.utcnow().isoformat()
+        self.last_updated = utc_now_iso_naive()
     
     def remove_track(self, track_id: str) -> bool:
         """
@@ -381,14 +382,14 @@ class LibraryMetadata:
         for i, track in enumerate(self.tracks):
             if track.id == track_id:
                 self.tracks.pop(i)
-                self.last_updated = datetime.utcnow().isoformat()
+                self.last_updated = utc_now_iso_naive()
                 return True
         return False
     
     def create_playlist(self, name: str, track_ids: Optional[List[str]] = None) -> None:
         """Create a new playlist."""
         self.playlists[name] = track_ids or []
-        self.last_updated = datetime.utcnow().isoformat()
+        self.last_updated = utc_now_iso_naive()
     
     def add_to_playlist(self, playlist_name: str, track_id: str) -> bool:
         """
@@ -401,7 +402,7 @@ class LibraryMetadata:
             return False
         if track_id not in self.playlists[playlist_name]:
             self.playlists[playlist_name].append(track_id)
-            self.last_updated = datetime.utcnow().isoformat()
+            self.last_updated = utc_now_iso_naive()
         return True
 
     def remove_from_playlist(self, playlist_name: str, track_id: str) -> bool:
@@ -421,7 +422,7 @@ class LibraryMetadata:
                 pc = self.settings.get("playlist_covers")
                 if isinstance(pc, dict):
                     pc.pop(playlist_name, None)
-            self.last_updated = datetime.utcnow().isoformat()
+            self.last_updated = utc_now_iso_naive()
         return True
 
     def delete_playlist(self, name: str) -> bool:
@@ -437,7 +438,7 @@ class LibraryMetadata:
         pc = self.settings.get("playlist_covers")
         if isinstance(pc, dict):
             pc.pop(name, None)
-        self.last_updated = datetime.utcnow().isoformat()
+        self.last_updated = utc_now_iso_naive()
         return True
 
     def rename_playlist(self, old_name: str, new_name: str) -> bool:
@@ -453,7 +454,7 @@ class LibraryMetadata:
         pc = self.settings.get("playlist_covers")
         if isinstance(pc, dict) and old_name in pc:
             pc[new_name] = pc.pop(old_name)
-        self.last_updated = datetime.utcnow().isoformat()
+        self.last_updated = utc_now_iso_naive()
         return True
 
     def get_playlist_cover_track_id(self, playlist_name: str) -> Optional[str]:
@@ -477,7 +478,7 @@ class LibraryMetadata:
             pc = self.settings.get("playlist_covers")
             if isinstance(pc, dict):
                 pc.pop(playlist_name, None)
-            self.last_updated = datetime.utcnow().isoformat()
+            self.last_updated = utc_now_iso_naive()
             return True
         if track_id not in self.playlists[playlist_name]:
             return False
@@ -486,7 +487,7 @@ class LibraryMetadata:
             pc_raw = {}
             self.settings["playlist_covers"] = pc_raw
         pc_raw[playlist_name] = track_id
-        self.last_updated = datetime.utcnow().isoformat()
+        self.last_updated = utc_now_iso_naive()
         return True
 
     def set_playlist_tracks(self, name: str, track_ids: List[str]) -> bool:
@@ -504,7 +505,7 @@ class LibraryMetadata:
             pc = self.settings.get("playlist_covers")
             if isinstance(pc, dict):
                 pc.pop(name, None)
-        self.last_updated = datetime.utcnow().isoformat()
+        self.last_updated = utc_now_iso_naive()
         return True
 
     def reorder_playlists(self, ordered_names: List[str]) -> None:
@@ -520,7 +521,7 @@ class LibraryMetadata:
             for k in list(pc.keys()):
                 if k not in valid:
                     del pc[k]
-        self.last_updated = datetime.utcnow().isoformat()
+        self.last_updated = utc_now_iso_naive()
 
 
 def merge_playlist_maps(
