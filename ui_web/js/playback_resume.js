@@ -187,6 +187,10 @@ function onResumeYes(state, opts = {}) {
     const complete = () => {
         if (done) return;
         done = true;
+        if (afterPauseTimeoutId) {
+            clearTimeout(afterPauseTimeoutId);
+            afterPauseTimeoutId = null;
+        }
         store.update({ resumeSyncActive: false });
         if (syncPlayTimeoutId) clearTimeout(syncPlayTimeoutId);
         syncPlayTimeoutId = null;
@@ -197,7 +201,9 @@ function onResumeYes(state, opts = {}) {
         afterPauseTimeoutId = setTimeout(() => {
             afterPauseTimeoutId = null;
             audio.volume = savedVolumeAtStart;
-            store.update({ isPlaying: false });
+            audioEngine.syncPlayingStateToStore();
+            const playing = audioEngine.isAudiblyPlaying();
+            const pos = Number.isFinite(audio.currentTime) ? audio.currentTime : positionSec;
             if (!isSameDevice) {
                 fetch(`${store.apiBase}/api/playback/notify-stop`, {
                     method: 'POST',
@@ -206,7 +212,7 @@ function onResumeYes(state, opts = {}) {
                 }).catch(() => {});
                 setResumeDialogCooldown();
             }
-            store.pushPlaybackState(track.id, positionSec, false);
+            store.pushPlaybackState(track.id, pos, playing);
             store.syncQueue().catch(() => {});
         }, RESUME_AFTER_PAUSE_MS);
     };

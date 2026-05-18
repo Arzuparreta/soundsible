@@ -572,16 +572,41 @@ class AudioEngine {
         }
     }
 
-    toggle() {
-        if (this.audio.paused) {
-            this.audio.play();
-        } else {
-            this.audio.pause();
+    isAudiblyPlaying() {
+        const audio = this.audio;
+        return !!(audio && !audio.paused && !audio.ended);
+    }
+
+    /** Mirror `<audio>` play state into the store (skipped during resume-sync). */
+    syncPlayingStateToStore() {
+        if (store.state.resumeSyncActive) return;
+        const isPlaying = this.isAudiblyPlaying();
+        if (store.state.isPlaying !== isPlaying) {
+            store.update({ isPlaying });
         }
     }
 
-    play() { this.audio.play(); }
-    pause() { this.audio.pause(); }
+    toggle() {
+        if (this.audio.paused) {
+            void this.audio.play()
+                .then(() => this.syncPlayingStateToStore())
+                .catch(() => this.syncPlayingStateToStore());
+        } else {
+            this.audio.pause();
+            this.syncPlayingStateToStore();
+        }
+    }
+
+    play() {
+        void this.audio.play()
+            .then(() => this.syncPlayingStateToStore())
+            .catch(() => this.syncPlayingStateToStore());
+    }
+
+    pause() {
+        this.audio.pause();
+        this.syncPlayingStateToStore();
+    }
 
     async next() {
         const currentTrack = store.state.currentTrack;

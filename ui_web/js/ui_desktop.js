@@ -684,10 +684,10 @@ export const DesktopUI = {
         const desktopSeekDragRef = { current: false };
         const desktopDurationState = { last: 0 };
 
-        if (playBtn) playBtn.addEventListener('click', () => (store.state.isPlaying ? audioEngine.pause() : audioEngine.play()));
+        if (playBtn) playBtn.addEventListener('click', () => audioEngine.toggle());
         if (prevBtn) prevBtn.addEventListener('click', () => audioEngine.prev());
         if (nextBtn) nextBtn.addEventListener('click', () => audioEngine.next());
-        if (omniPlay) omniPlay.addEventListener('click', () => (store.state.isPlaying ? audioEngine.pause() : audioEngine.play()));
+        if (omniPlay) omniPlay.addEventListener('click', () => audioEngine.toggle());
         if (omniPrev) omniPrev.addEventListener('click', () => audioEngine.prev());
         if (omniNext) omniNext.addEventListener('click', () => audioEngine.next());
 
@@ -887,7 +887,7 @@ export const DesktopUI = {
             }
             if (e.code === 'Space') {
                 e.preventDefault();
-                if (store.state.currentTrack) (store.state.isPlaying ? audioEngine.pause() : audioEngine.play());
+                if (store.state.currentTrack) audioEngine.toggle();
             }
             if (e.code === 'ArrowLeft') {
                 e.preventDefault();

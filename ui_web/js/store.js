@@ -103,6 +103,7 @@ class Store {
             radioMode: null,
             currentTrack: null,
             isPlaying: false,
+            resumeSyncActive: false,
             theme: (() => {
                 const t = this.load('theme', 'dark');
                 return ['dark', 'light', 'odst'].includes(t) ? t : 'dark';
