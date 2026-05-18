@@ -108,7 +108,7 @@ One-page mapping from **user outcomes** to **signals** (product scorecard reques
 Ordered for **token-efficient** progress toward signed Phase 1 gates:
 
 1. **Setup funnel model:** ~~introduce `setup_session_id` (client or server issued), emit `setup_session_started`, `setup_step_*`, and **`setup_first_play` at first confirmed play for that session.~~ **Done** (see §3.1; UI wires `ui_web/js/setup_funnel.js`).
-2. **Gate script stub:** read-only tool `scripts/setup_gate_rollup.py` — estimates setup success and time-to-first-play from JSONL for a date window; no network.
+2. **Gate script:** ~~read-only tool `scripts/setup_gate_rollup.py` — estimates setup success and time-to-first-play from JSONL for a date window; no network.~~ **Done** (`--since` / `--until`, median time-to-first-play; see `tests/test_setup_funnel.py`).
 3. **Migration repair UX events:** ~~emit `migration_row_decision` when UI confirms/changes rows; extend import apply payload with `batch_id` when available.~~ **Row decision + batch_id on apply shipped** (repair UI still optional).
 4. **Reference import fixtures:** ~~versioned test fixtures + documented expected match rates for the migration gate.~~ **Done** — see `tests/fixtures/migration/` (`manifest.json`, `README.md`) and `tests/test_migration_reference_fixtures.py`.
 

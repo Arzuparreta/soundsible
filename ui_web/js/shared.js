@@ -370,6 +370,86 @@ export function showAddToPlaylistPicker(options) {
  */
 /** Body class: blurs main shell so fixed UI (search bar, rows) is not left sharp — backdrop-filter often skips those layers. */
 const PLAYLIST_COVER_PICKER_BODY_CLASS = 'playlist-cover-picker-open';
+const TRACK_COVER_PICKER_MAX = 48;
+
+/** Tracks to offer when copying embedded art from another library item. */
+export function libraryCoverPickerCandidates(targetTrack, library, max = TRACK_COVER_PICKER_MAX) {
+    if (!targetTrack?.id || !library?.length) return [];
+    const others = library.filter((t) => t?.id && t.id !== targetTrack.id);
+    const withCover = [];
+    const withoutCover = [];
+    for (const t of others) {
+        if (Resolver.getCoverUrl(t)) withCover.push(t);
+        else withoutCover.push(t);
+    }
+    const score = (t) => {
+        let s = 0;
+        if (targetTrack.album && t.album === targetTrack.album) s += 2;
+        if (targetTrack.artist && t.artist === targetTrack.artist) s += 1;
+        return s;
+    };
+    withCover.sort((a, b) => score(b) - score(a));
+    return withCover.concat(withoutCover).slice(0, max);
+}
+
+function renderCoverPickerGrid(gridEl, tracks) {
+    gridEl.innerHTML = tracks.map((t) => {
+        const coverUrl = Resolver.getCoverUrl(t);
+        const style = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
+        const title = (t.title != null && String(t.title)) || 'Unknown';
+        return `
+<button type="button" class="playlist-cover-picker-tile flex flex-col gap-1.5 text-left rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)] overflow-hidden active:bg-[var(--surface-overlay)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" data-track-id="${escHtml(t.id)}">
+<div class="aspect-square w-full bg-[var(--surface-overlay)] bg-cover bg-center" style="${style}" role="img" aria-label="${escHtml(title)}"></div>
+<p class="px-1.5 pb-2 text-[10px] font-semibold text-[var(--text-main)] leading-tight truncate" title="${escHtml(title)}">${escHtml(title)}</p>
+</button>`.trim();
+    }).join('');
+}
+
+export function showTrackCoverPicker(options) {
+    const { store, toast, onApplied } = options;
+    return (targetTrack, candidateTracks) => {
+        const picker = document.getElementById('playlist-cover-picker');
+        const gridEl = document.getElementById('playlist-cover-picker-grid');
+        const backdrop = document.getElementById('playlist-cover-picker-backdrop');
+        const closeBtn = document.getElementById('playlist-cover-picker-close');
+        const defaultBtn = document.getElementById('playlist-cover-picker-default');
+        const headingEl = document.getElementById('playlist-cover-picker-heading');
+        if (!picker || !gridEl || !targetTrack?.id || !candidateTracks?.length) return;
+
+        const defaultSection = defaultBtn?.closest('.p-3');
+        if (defaultSection) defaultSection.classList.add('hidden');
+        if (headingEl) {
+            const title = (targetTrack.title != null && String(targetTrack.title)) || 'Track';
+            headingEl.textContent = `Library cover — ${title}`;
+        }
+
+        const hide = () => {
+            picker.classList.add('hidden');
+            document.body.classList.remove(PLAYLIST_COVER_PICKER_BODY_CLASS);
+            if (defaultSection) defaultSection.classList.remove('hidden');
+        };
+
+        renderCoverPickerGrid(gridEl, candidateTracks);
+        gridEl.querySelectorAll('.playlist-cover-picker-tile').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const sourceId = btn.getAttribute('data-track-id');
+                hide();
+                if (!sourceId) return;
+                store.copyCoverFromTrack(targetTrack.id, sourceId).then((ok) => {
+                    if (ok) {
+                        toast?.('Cover updated');
+                        onApplied?.();
+                    } else toast?.('Could not copy cover');
+                });
+            });
+        });
+
+        if (closeBtn) closeBtn.onclick = hide;
+        if (backdrop) backdrop.onclick = hide;
+        document.body.classList.add(PLAYLIST_COVER_PICKER_BODY_CLASS);
+        picker.classList.remove('hidden');
+    };
+}
 
 export function showPlaylistCoverPicker(options) {
     const { store, toast, onApplied } = options;
@@ -381,6 +461,8 @@ export function showPlaylistCoverPicker(options) {
         const defaultBtn = document.getElementById('playlist-cover-picker-default');
         const headingEl = document.getElementById('playlist-cover-picker-heading');
         if (!picker || !gridEl || !tracks?.length) return;
+        const defaultSection = defaultBtn?.closest('.p-3');
+        if (defaultSection) defaultSection.classList.remove('hidden');
         if (headingEl) {
             headingEl.textContent = playlistName ? `Playlist cover — ${playlistName}` : 'Playlist cover';
         }
@@ -393,17 +475,7 @@ export function showPlaylistCoverPicker(options) {
 
         window._playlistCoverPickerName = playlistName;
 
-        gridEl.innerHTML = tracks.map((t) => {
-            const coverUrl = Resolver.getCoverUrl(t);
-            const style = coverUrl ? `background-image: url(${escapeCssUrl(coverUrl)})` : '';
-            const title = (t.title != null && String(t.title)) || 'Unknown';
-            return `
-<button type="button" class="playlist-cover-picker-tile flex flex-col gap-1.5 text-left rounded-[var(--radius-omni-xs)] border border-[var(--glass-border)] bg-[var(--bg-card)] overflow-hidden active:bg-[var(--surface-overlay)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" data-track-id="${escHtml(t.id)}">
-<div class="aspect-square w-full bg-[var(--surface-overlay)] bg-cover bg-center" style="${style}" role="img" aria-label="${escHtml(title)}"></div>
-<p class="px-1.5 pb-2 text-[10px] font-semibold text-[var(--text-main)] leading-tight truncate" title="${escHtml(title)}">${escHtml(title)}</p>
-</button>`.trim();
-        }).join('');
-
+        renderCoverPickerGrid(gridEl, tracks);
         gridEl.querySelectorAll('.playlist-cover-picker-tile').forEach((btn) => {
             btn.addEventListener('click', () => {
                 const id = btn.getAttribute('data-track-id');

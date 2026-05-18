@@ -821,6 +821,27 @@ class Store {
         }
     }
 
+    async copyCoverFromTrack(trackId, sourceTrackId) {
+        try {
+            const res = await fetch(
+                `${this.apiBase}/api/library/tracks/${trackId}/cover/from-track`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ source_track_id: sourceTrackId })
+                }
+            );
+            if (res.ok) {
+                await this.syncLibrary();
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error('Copy cover from track error:', err);
+            return false;
+        }
+    }
+
     async toggleQueue(trackId) {
         const isInQueue = this.state.queue.some(t => t.id === trackId);
         if (isInQueue) {

@@ -23,6 +23,7 @@ import {
     bindPlaylistWindowActions,
     showAddToPlaylistPicker,
     showPlaylistCoverPicker,
+    showTrackCoverPicker,
     resolvePlaylistCoverTrack,
     initLibraryMaintenanceControls,
     getPointerCoords
@@ -1187,6 +1188,11 @@ window.openPlaylistCoverPicker = showPlaylistCoverPicker({
         if (viewContext.currentPlaylistName) renderPlaylistDetail(viewContext.currentPlaylistName);
         renderPlaylistList(store.state);
     }
+});
+
+window.showTrackCoverPicker = showTrackCoverPicker({
+    store,
+    toast: (message) => UI.showToast(message)
 });
 
 function clearContainerContent(el) {

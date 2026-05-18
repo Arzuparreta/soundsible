@@ -19,6 +19,7 @@ import {
     bindPlaylistWindowActions,
     showAddToPlaylistPicker,
     showPlaylistCoverPicker,
+    showTrackCoverPicker,
     resolvePlaylistCoverTrack,
     initLibraryMaintenanceControls,
     getPointerCoords
@@ -763,6 +764,11 @@ window.openPlaylistCoverPicker = showPlaylistCoverPicker({
         renderPlaylistDetail();
         renderPlaylists();
     }
+});
+
+window.showTrackCoverPicker = showTrackCoverPicker({
+    store,
+    toast: (message) => DesktopUI.showToast(message)
 });
 
 window.store = store;

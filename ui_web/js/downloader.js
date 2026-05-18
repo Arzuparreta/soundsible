@@ -8,7 +8,7 @@ import { Haptics } from './haptics.js';
 import { formatTime, esc } from './renderers.js';
 import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 import { searchService, SourceType } from './search_service.js';
-import { isYtdlpPreviewStreamTrack } from './shared.js';
+import { isYtdlpPreviewStreamTrack, libraryCoverPickerCandidates } from './shared.js';
 
 /** Default element IDs for mobile (index.html). Desktop passes overrides so the same class works in desktop.html. */
 const DEFAULT_DL_SELECTORS = {
@@ -517,9 +517,17 @@ export class Downloader {
                     }
                 }
             } else if (choice === 'library') {
-                // Fallback until dedicated library cover picker exists.
-                this.openMetadataEditorUpload(track.id);
-                this.addLog(`ℹ Library cover picker is not available yet. Opened metadata editor for ${track.title}.`);
+                const candidates = libraryCoverPickerCandidates(track, store.state.library || []);
+                if (!candidates.length) {
+                    this.addLog('ℹ No other library tracks available to copy cover from.');
+                    return;
+                }
+                if (typeof window.showTrackCoverPicker === 'function') {
+                    window.showTrackCoverPicker(track, candidates);
+                } else {
+                    this.openMetadataEditorUpload(track.id);
+                    this.addLog(`ℹ Opened metadata editor for ${track.title}.`);
+                }
             } else if (choice === 'upload') {
                 this.openMetadataEditorUpload(track.id);
             } else if (choice === 'none') {
