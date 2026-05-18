@@ -1207,7 +1207,9 @@ def start_api(
     _terminal_msg = MSG_KEEP_TERMINAL_OPEN
     logger.info("API: %s", _terminal_msg)
     if _defer_ytdlp_thread and _run_ytdlp_update:
-        threading.Thread(target=_run_ytdlp_update, daemon=True).start()
+        # Route through orchestrator so the update is visible in /api/health
+        # active_jobs and queues behind other disk-heavy work on HDD (plan T3).
+        orchestrator.submit_background("ytdlp_update", _run_ytdlp_update)
     sys.stdout.flush()
     sys.stderr.flush()
     socketio.run(app, host=runtime.host, port=runtime.port, debug=debug)

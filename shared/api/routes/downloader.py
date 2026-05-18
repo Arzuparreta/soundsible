@@ -229,10 +229,11 @@ def trigger_downloader():
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("downloader_optimize", limit=10, window_sec=300)
 def trigger_downloader_optimize():
-    import threading
+    # run_optimization_task submits to the orchestrator and returns; no
+    # outer Thread needed (plan T3).
     from shared.api import run_optimization_task
     dry_run = request.json.get("dry_run", True)
-    threading.Thread(target=run_optimization_task, args=(dry_run,), daemon=True).start()
+    run_optimization_task(dry_run)
     return jsonify({"status": "started"})
 
 
@@ -240,9 +241,8 @@ def trigger_downloader_optimize():
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("downloader_sync", limit=10, window_sec=300)
 def trigger_downloader_sync():
-    import threading
     from shared.api import run_sync_task
-    threading.Thread(target=run_sync_task, daemon=True).start()
+    run_sync_task()
     return jsonify({"status": "started"})
 
 
