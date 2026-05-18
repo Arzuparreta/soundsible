@@ -412,7 +412,7 @@ export class UI {
         container.classList.toggle('omni-label-hidden', hidden);
     }
 
-    /** Favourites bubble: visible when island is active, NP view is closed, and track exists in library. */
+    /** Favourites bubble: visible when island is active, NP view is closed, track exists in library, and not blooming. */
     static _syncFavBubble(state) {
         const favBubble = this.dom.omniFavBubble;
         const favBtn = this.dom.omniFavBtn;
@@ -420,21 +420,13 @@ export class UI {
         if (!favBubble || !favBtn || !favIcon) return;
         const track = state.currentTrack;
         const isLibraryTrack = track?.id && !String(track.id).startsWith('deezer_') && store.state.library.some(t => t.id === track.id);
-        const isVisible = isLibraryTrack && this.isIslandActive && !this._npViewOpen;
+        const isVisible = isLibraryTrack && this.isIslandActive && !this._npViewOpen && !this.isBlooming;
+        favBubble.classList.toggle('omni-fav-hidden', !isVisible);
         if (isVisible) {
-            favBubble.style.display = '';
-            favBubble.style.opacity = '1';
-            favBubble.style.pointerEvents = 'auto';
-            favBubble.style.position = 'relative';
-            favBubble.style.zIndex = '220';
             const isFav = track && store.state.favorites.includes(track.id);
             favBtn.classList.toggle('omni-fav-active', isFav);
             favIcon.className = isFav ? 'fas fa-heart text-sm' : 'far fa-heart text-sm';
             favBtn.setAttribute('aria-label', isFav ? 'Remove from Favourites' : 'Add to Favourites');
-        } else {
-            favBubble.style.display = 'none';
-            favBubble.style.opacity = '0';
-            favBubble.style.pointerEvents = 'none';
         }
     }
 
@@ -1275,8 +1267,9 @@ export class UI {
                 if (this._startedInside && Math.abs(this._currentY - this._startY) < 30) {
                     Haptics.heavy();
                     this.isBlooming = true;
+                    this._syncFavBubble(store.state);
 
-                    island.style.width = '380px';
+                    island.style.width = Math.min(380, window.innerWidth - 32) + 'px';
                     island.classList.remove('omni-seed');
 
                     const transport = this.dom.omniTransport;
@@ -1622,6 +1615,7 @@ export class UI {
         this._activeNavView = null;
         this._lastActiveNavView = null;
 
+        this._syncFavBubble(store.state);
         this.updateOmniMetadataVisibility();
     }
 
