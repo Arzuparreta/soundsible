@@ -23,6 +23,25 @@ struct FolderPreview {
 }
 
 #[tauri::command]
+fn get_startup_profile() -> state::StartupProfile {
+    state::startup_profile()
+}
+
+#[tauri::command]
+fn start_configured_engine(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    if !state::has_consumer_config() {
+        return Err("Soundsible is not configured yet.".into());
+    }
+    let music_dir = state::load_persisted_music_dir().ok_or_else(|| {
+        "Configured music folder is missing. Choose a folder again from first-run.".into()
+    })?;
+    if let Ok(mut slot) = state.selected_folder.lock() {
+        *slot = Some(music_dir.clone());
+    }
+    state.engine.start(app, music_dir)
+}
+
+#[tauri::command]
 fn get_engine_status(state: State<'_, AppState>) -> engine::EngineStatus {
     state.engine.status()
 }
@@ -145,6 +164,8 @@ pub fn run() {
             selected_folder: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
+            get_startup_profile,
+            start_configured_engine,
             get_engine_status,
             get_selected_folder,
             pick_music_folder,

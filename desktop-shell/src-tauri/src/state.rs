@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 pub const STATE_FILENAME: &str = "desktop-engine-state.json";
@@ -47,6 +47,41 @@ pub fn load_runtime_state() -> Option<EngineRuntimeState> {
     let path = state_file_path();
     let raw = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&raw).ok()
+}
+
+pub fn has_consumer_config() -> bool {
+    config_dir().join("config.json").is_file()
+}
+
+#[derive(Debug, Deserialize)]
+struct MusicDirPrefs {
+    path: Option<String>,
+    music_dir: Option<String>,
+}
+
+pub fn load_persisted_music_dir() -> Option<PathBuf> {
+    let prefs_path = config_dir().join("music_dir.json");
+    let raw = std::fs::read_to_string(prefs_path).ok()?;
+    let data: MusicDirPrefs = serde_json::from_str(&raw).ok()?;
+    data.path
+        .or(data.music_dir)
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir())
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StartupProfile {
+    pub returning_user: bool,
+    pub music_dir: Option<String>,
+}
+
+pub fn startup_profile() -> StartupProfile {
+    let music_dir = load_persisted_music_dir().map(|p| p.display().to_string());
+    let returning_user = has_consumer_config() && music_dir.is_some();
+    StartupProfile {
+        returning_user,
+        music_dir,
+    }
 }
 
 pub fn repo_root() -> PathBuf {

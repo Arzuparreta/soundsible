@@ -122,4 +122,36 @@ listen('engine-status', (event) => {
   applyStatus(event.payload);
 });
 
-invoke('get_engine_status').then(applyStatus).catch(() => {});
+async function resumeReturningUser() {
+  const status = await invoke('get_engine_status');
+  if (status.phase === 'ready') {
+    return;
+  }
+
+  let profile;
+  try {
+    profile = await invoke('get_startup_profile');
+  } catch {
+    return;
+  }
+
+  if (!profile.returning_user || !profile.music_dir) {
+    return;
+  }
+
+  selectedPath = profile.music_dir;
+  showView('loading');
+  renderLog(logLoading, [
+    'engine: resuming your library',
+    `engine: music_dir=${profile.music_dir}`,
+  ]);
+
+  try {
+    await invoke('start_configured_engine');
+  } catch (err) {
+    showView('error');
+    renderLog(logError, [`error: ${err}`]);
+  }
+}
+
+invoke('get_engine_status').then(applyStatus).then(resumeReturningUser).catch(() => {});

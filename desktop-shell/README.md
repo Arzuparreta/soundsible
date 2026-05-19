@@ -75,6 +75,20 @@ Sidecar flags used by the shell:
 | `--bootstrap MUSIC_DIR` | Write consumer `config.json` before first start |
 | `--music-dir MUSIC_DIR` | Runtime library path (also auto-bootstraps if config missing) |
 
+**Returning users:** if `config.json` and `music_dir.json` already exist, the shell skips first-run and auto-starts the engine on launch.
+
+### Smoke test
+
+Headless check for engine health + desktop player route:
+
+```bash
+./desktop-shell/scripts/smoke-test.sh              # Python engine
+./desktop-shell/scripts/smoke-test.sh --with-sidecar
+./desktop-shell/scripts/smoke-test.sh --with-sidecar --with-tauri
+```
+
+CI runs the same checks in `.github/workflows/desktop-shell.yml`.
+
 ## Icons (DT3)
 
 Tray and bundle icons are generated from `branding/logo-mark.svg`:
