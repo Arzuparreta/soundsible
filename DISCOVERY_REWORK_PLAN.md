@@ -166,7 +166,7 @@ This makes later design work implementation-safe instead of speculative.
 
 ## Implementation Status
 
-Last updated: 2026-05-19.
+Last updated: 2026-05-19 (Phase 3 partial).
 
 Implemented in the first slice:
 
@@ -184,6 +184,16 @@ Verification run:
 - `PYTHONPATH=. pytest tests/test_telemetry.py tests/test_discovery_intelligence.py`
 - `git diff --check`
 - `node --check` on touched frontend modules
+
+Implemented in Phase 3 (Save and Resolve):
+
+- `youtube_resolution_cache` extended with `confidence`, `confidence_reason`, `candidates_json`, `failure_state`, `verified_at`; migration is additive (ALTER TABLE for existing DBs).
+- `shared/resolution_confidence.py`: deterministic confidence scoring (title + artist + duration delta), `classify_confidence`, `best_candidate` helper.
+- `POST /api/discovery/save`: resolves artist/title via YouTube search, scores candidates, queues high-confidence matches directly, returns `needs_review` + candidate list for medium/low confidence, caches results.
+- Resolution sheet: frontend modal shown for uncertain matches — user picks from alternatives, confirmed selection goes straight to queue.
+- `Save to Library` button (+ icon, `save-to-library-btn` class) replaces "Add to download queue" wording on all Discover surface rows.
+- `saveTrackToLibrary()` exported from `discovery.js`; wired to all `.dl-add-one[data-deezer-id]` buttons via `deezer_actions.js`.
+- Tests: `tests/test_resolution_confidence.py` (13 tests) covering scoring bands, DB migration, upsert, and empty-input guards.
 
 Known limits of the first slice:
 

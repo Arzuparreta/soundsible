@@ -630,6 +630,170 @@ export async function addDeezerTrackToQueueByNumericId(deezerId) {
   window.showToast?.(ok ? 'Added to queue' : 'Could not add to queue');
 }
 
+// ─── Save to Library ─────────────────────────────────────────────────────────
+
+/**
+ * Save a Deezer track-like object to the local library.
+ * Calls POST /api/discovery/save; shows a resolution sheet on uncertain matches.
+ *
+ * @param {object} trackLike  { title, artist, duration?, cover?, deezerId? }
+ * @param {HTMLElement} [anchorEl]  optional element to anchor the resolution sheet near
+ * @returns {Promise<boolean>}  true if queued immediately
+ */
+export async function saveTrackToLibrary(trackLike, anchorEl = null) {
+  Haptics.tick();
+  const title = (trackLike.title || '').trim();
+  const artist = (typeof trackLike.artist === 'string'
+    ? trackLike.artist
+    : (trackLike.artist?.name || '')).trim();
+  if (!title || !artist) {
+    window.showToast?.('Cannot save — missing track info');
+    return false;
+  }
+
+  const loading = showLoadingToast('Saving to Library…');
+  const host = store?.state?.activeHost || window.location.hostname || 'localhost';
+  const base = getApiBase(host);
+
+  let resp, data;
+  try {
+    resp = await fetch(`${base}/api/discovery/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        artist,
+        duration: trackLike.duration || null,
+        deezer_id: trackLike.deezerId != null ? String(trackLike.deezerId) : null,
+        cover: trackLike.cover || null,
+      }),
+    });
+    data = await resp.json().catch(() => ({}));
+  } catch {
+    loading.dismiss();
+    window.showToast?.('Could not reach server');
+    return false;
+  }
+
+  loading.dismiss();
+
+  if (data.status === 'queued') {
+    window.showToast?.('Saving to Library…');
+    return true;
+  }
+
+  if (data.status === 'needs_review') {
+    _showResolutionSheet(trackLike, data, anchorEl);
+    return false;
+  }
+
+  window.showToast?.(data.reason === 'not_found'
+    ? 'No match found — try searching manually'
+    : 'Could not save — try again');
+  return false;
+}
+
+/** Resolution sheet: shown when match confidence is medium/low. */
+function _showResolutionSheet(trackLike, data, _anchorEl) {
+  const existing = document.getElementById('resolution-sheet-overlay');
+  if (existing) existing.remove();
+
+  const candidates = Array.isArray(data.candidates) ? data.candidates : [];
+  const best = data.best || candidates[0] || null;
+
+  function fmt(secs) {
+    if (!secs) return '';
+    const m = Math.floor(secs / 60);
+    const s = String(Math.floor(secs % 60)).padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  function rowHtml(c, idx) {
+    const thumb = c.thumbnail || `https://img.youtube.com/vi/${c.video_id}/mqdefault.jpg`;
+    const dur = fmt(c.duration);
+    const pct = c.confidence != null ? Math.round(c.confidence * 100) : null;
+    const label = pct != null ? `${pct}% match` : '';
+    return `
+      <button type="button" class="resolution-candidate w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[var(--surface-overlay)] rounded-lg text-left transition-colors" data-idx="${idx}" data-video-id="${c.video_id || ''}">
+        <img src="${thumb}" alt="" class="w-10 h-10 rounded object-cover flex-shrink-0" loading="lazy">
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-medium text-[var(--text-main)] truncate">${escHtml(c.title || c.video_id)}</div>
+          <div class="text-xs text-[var(--text-dim)] truncate">${escHtml(c.channel || '')}${dur ? ' · ' + dur : ''}</div>
+        </div>
+        ${label ? `<span class="text-xs text-[var(--text-dim)] flex-shrink-0">${label}</span>` : ''}
+      </button>`;
+  }
+
+  function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  const trackTitle = (trackLike.title || '').trim();
+  const trackArtist = (typeof trackLike.artist === 'string'
+    ? trackLike.artist : (trackLike.artist?.name || '')).trim();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'resolution-sheet-overlay';
+  overlay.className = 'fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm';
+  overlay.innerHTML = `
+    <div id="resolution-sheet" class="w-full max-w-md bg-[var(--surface-base)] border border-[var(--border-subtle)] rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
+      <div class="px-4 pt-4 pb-2 border-b border-[var(--border-subtle)]">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <div class="text-[var(--text-dim)] text-xs font-medium uppercase tracking-wide mb-0.5">Save to Library</div>
+            <div class="font-semibold text-[var(--text-main)] truncate">${escHtml(trackTitle)}</div>
+            <div class="text-sm text-[var(--text-dim)] truncate">${escHtml(trackArtist)}</div>
+          </div>
+          <button type="button" id="resolution-sheet-close" class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--surface-overlay)] text-[var(--text-dim)]">
+            <i class="fas fa-times text-sm"></i>
+          </button>
+        </div>
+        <p class="text-xs text-[var(--text-dim)] mt-2">Uncertain match — pick the best result or cancel.</p>
+      </div>
+      <div class="py-2 max-h-72 overflow-y-auto">
+        ${candidates.length ? candidates.map(rowHtml).join('') : '<p class="px-4 py-3 text-sm text-[var(--text-dim)]">No results found.</p>'}
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#resolution-sheet-close')?.addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelectorAll('.resolution-candidate').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const videoId = btn.getAttribute('data-video-id');
+      if (!videoId) return;
+      overlay.remove();
+
+      const loading2 = showLoadingToast('Saving to Library…');
+      const host2 = store?.state?.activeHost || window.location.hostname || 'localhost';
+      try {
+        const r = await fetch(`${getApiBase(host2)}/api/discovery/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: trackTitle,
+            artist: trackArtist,
+            duration: trackLike.duration || null,
+            deezer_id: trackLike.deezerId != null ? String(trackLike.deezerId) : null,
+            cover: trackLike.cover || null,
+            confirm_video_id: videoId,
+          }),
+        });
+        const d2 = await r.json().catch(() => ({}));
+        loading2.dismiss();
+        window.showToast?.(d2.status === 'queued' ? 'Saving to Library…' : 'Could not save');
+      } catch {
+        loading2.dismiss();
+        window.showToast?.('Could not reach server');
+      }
+    });
+  });
+}
+
 /** Open Deezer playlist in the same shell as native playlists (mobile + desktop). */
 export async function openDeezerPlaylistById(playlistId) {
   const data = await discoveryService.fetchDeezer(`/playlist/${playlistId}`);

@@ -31,7 +31,7 @@ function deezerSurfaceQuickActionsHtml(trackId) {
     if (!/^\d+$/.test(raw)) return '';
     const safe = esc(raw);
     return `
-            <button type="button" class="dl-add-one discover-primary-action w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--input-bg)] hover:bg-[var(--accent)] hover:text-[var(--text-on-accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 transition-colors" data-deezer-id="${safe}" aria-label="Add to download queue" title="Add to download queue" onclick="event.stopPropagation()"><i class="fas fa-cloud-download-alt text-sm"></i></button>`;
+            <button type="button" class="dl-add-one save-to-library-btn discover-primary-action w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--input-bg)] hover:bg-[var(--accent)] hover:text-[var(--text-on-accent)] text-[var(--text-main)] flex items-center justify-center flex-shrink-0 transition-colors" data-deezer-id="${safe}" aria-label="Save to Library" title="Save to Library" onclick="event.stopPropagation()"><i class="fas fa-plus text-sm"></i></button>`;
 }
 
 /** Escape URL for use in CSS background-image url(). */

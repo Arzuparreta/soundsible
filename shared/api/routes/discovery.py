@@ -74,8 +74,14 @@ def _podcast_row_from_itunes_search(r: dict) -> dict | None:
 
 def _get_api():
     import shared.api as api_mod
-
-    return api_mod
+    return {
+        "get_core": api_mod.get_core,
+        "get_downloader": api_mod.get_downloader,
+        "queue_manager_dl": api_mod.queue_manager_dl,
+        "start_downloader_pump": api_mod.start_downloader_pump,
+        "parse_intake_item": api_mod.parse_intake_item,
+        "_mod": api_mod,
+    }
 
 
 @discovery_bp.route("/api/discovery/settings", methods=["GET"])
@@ -106,18 +112,213 @@ def discovery_events_post():
     return jsonify({"status": "recorded" if recorded else "disabled", "recorded": recorded})
 
 
+@discovery_bp.route("/api/discovery/save", methods=["POST"])
+@rate_limit("discovery_save", limit=60, window_sec=60)
+def discovery_save():
+    """
+    Resolve a Deezer track to YouTube and queue it for download.
+
+    Request body:
+      artist       str  required
+      title        str  required
+      duration     int  optional  seconds
+      deezer_id    str  optional  numeric Deezer track id
+      cover        str  optional  cover art URL
+      confirm_video_id  str  optional  user-confirmed YouTube video id (skips search)
+
+    Response:
+      {status: "queued",       confidence, confidence_level, queue_id}
+      {status: "needs_review", confidence, confidence_level, candidates: [...]}
+      {status: "failed",       reason, candidates: [...]}
+    """
+    from shared.resolution_confidence import best_candidate, classify_confidence, CONFIDENCE_HIGH
+    from shared.database import DatabaseManager
+
+    data = request.get_json(silent=True) or {}
+    artist = (data.get("artist") or "").strip()
+    title = (data.get("title") or "").strip()
+    if not artist or not title:
+        return jsonify({"error": "artist and title are required"}), 400
+
+    duration_s = None
+    raw_dur = data.get("duration")
+    if raw_dur is not None:
+        try:
+            duration_s = int(raw_dur)
+        except (TypeError, ValueError):
+            pass
+
+    deezer_id = (data.get("deezer_id") or "").strip() or None
+    cover = (data.get("cover") or "").strip() or None
+    confirm_video_id = (data.get("confirm_video_id") or "").strip() or None
+
+    api = _get_api()
+
+    # — User-confirmed video id bypasses search/scoring —
+    if confirm_video_id:
+        return _queue_confirmed(
+            artist, title, duration_s, deezer_id, cover, confirm_video_id, api
+        )
+
+    # — Check resolution cache —
+    db = DatabaseManager()
+    cached = db.get_cached_resolution(artist, title)
+    if cached and cached.get("confidence") is not None:
+        score = cached["confidence"]
+        level = classify_confidence(score)
+        if level == "high":
+            return _queue_confirmed(
+                artist, title, duration_s, deezer_id, cover, cached["id"], api,
+                confidence=score, confidence_reason=cached.get("confidence_reason"),
+            )
+        # Medium/low: still show review even if cached, candidates may be stale
+        return jsonify({
+            "status": "needs_review",
+            "confidence": score,
+            "confidence_level": level,
+            "best": _candidate_summary(cached),
+            "candidates": cached.get("candidates") or [],
+        })
+
+    # — Search YouTube for candidates —
+    try:
+        dl = api["get_downloader"](open_browser=False)
+        q = f"{title} {artist}".strip()
+        raw_results = dl.downloader.search_youtube(q, max_results=6, use_ytmusic=True)
+    except Exception as exc:
+        logger.warning("discovery/save: YouTube search failed: %s", exc)
+        return jsonify({"status": "failed", "reason": "search_error", "candidates": []}), 502
+
+    if not raw_results:
+        db.set_cached_resolution(artist, title, {
+            "id": "",
+            "failure_state": "not_found",
+            "confidence": 0.0,
+            "confidence_reason": "no_match",
+        })
+        return jsonify({"status": "failed", "reason": "not_found", "candidates": []}), 404
+
+    best, score, reason, ranked = best_candidate(artist, title, duration_s, raw_results)
+
+    # Cache the result
+    db.set_cached_resolution(artist, title, {
+        "id": best.get("id", ""),
+        "duration": best.get("duration"),
+        "thumbnail": best.get("thumbnail") or f"https://img.youtube.com/vi/{best.get('id','')}/mqdefault.jpg",
+        "webpage_url": best.get("webpage_url") or f"https://www.youtube.com/watch?v={best.get('id','')}",
+        "channel": best.get("channel") or best.get("uploader") or "",
+        "confidence": score,
+        "confidence_reason": reason,
+        "candidates": ranked,
+    })
+
+    level = classify_confidence(score)
+
+    if level == "high":
+        return _queue_confirmed(
+            artist, title, duration_s, deezer_id, cover, best["id"], api,
+            confidence=score, confidence_reason=reason,
+        )
+
+    return jsonify({
+        "status": "needs_review",
+        "confidence": score,
+        "confidence_level": level,
+        "best": _candidate_summary({**best, "confidence": score, "confidence_reason": reason}),
+        "candidates": ranked,
+    })
+
+
+def _candidate_summary(c: dict) -> dict:
+    vid = c.get("id") or c.get("youtube_id") or ""
+    return {
+        "video_id": vid,
+        "title": c.get("title") or "",
+        "channel": c.get("channel") or c.get("uploader") or "",
+        "duration": c.get("duration") or 0,
+        "thumbnail": c.get("thumbnail") or (f"https://img.youtube.com/vi/{vid}/mqdefault.jpg" if vid else ""),
+        "confidence": c.get("confidence"),
+        "confidence_level": c.get("confidence_level") or c.get("confidence_reason"),
+    }
+
+
+def _queue_confirmed(
+    artist: str,
+    title: str,
+    duration_s,
+    deezer_id,
+    cover,
+    video_id: str,
+    api: dict,
+    confidence: float = 1.0,
+    confidence_reason: str = "confirmed",
+):
+    """Add a confirmed video id to the download queue and return queued status."""
+    thumb = cover or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else "")
+    item = {
+        "source_type": "ytmusic_search",
+        "video_id": video_id,
+        "display_title": title,
+        "display_artist": artist,
+        "thumbnail_url": thumb,
+        "duration_sec": duration_s,
+        "metadata_evidence": {
+            "title": title,
+            "artist": artist,
+            "deezer_id": deezer_id,
+            "save_flow": "discovery_save",
+        },
+    }
+    parsed, err = api["parse_intake_item"](item)
+    if err:
+        return jsonify({"status": "failed", "reason": err, "candidates": []}), 400
+
+    parsed["intake_source"] = parsed.get("source_type")
+    import hashlib, json as _json
+    parsed["intake_payload_hash"] = hashlib.sha256(
+        _json.dumps(parsed, sort_keys=True, default=str).encode()
+    ).hexdigest()
+
+    new_item = api["queue_manager_dl"].add(parsed)
+    try:
+        if not api["queue_manager_dl"].is_processing:
+            api["start_downloader_pump"]()
+    except Exception:
+        pass
+
+    emit_discovery_event("music_saved_to_library", {
+        "artist": artist,
+        "title": title,
+        "deezer_id": deezer_id,
+        "video_id": video_id,
+        "confidence": confidence,
+    })
+
+    return jsonify({
+        "status": "queued",
+        "queue_id": new_item.get("id"),
+        "video_id": video_id,
+        "confidence": confidence,
+        "confidence_level": "confirmed" if confidence_reason == "confirmed" else (
+            "high" if confidence >= 0.75 else "medium"
+        ),
+        "confidence_reason": confidence_reason,
+    })
+
+
 @discovery_bp.route("/api/discovery/music/recommendations", methods=["GET"])
 @rate_limit("discovery_music_recommendations", limit=120, window_sec=60)
 def discovery_music_recommendations():
     limit = min(50, max(1, request.args.get("limit", type=int) or 24))
     api = _get_api()
-    lib, _, _ = api.get_core()
+    lib, _, _ = api["get_core"]()
     try:
         lib.refresh_if_stale()
     except Exception:
         pass
     metadata = getattr(lib, "metadata", None)
-    fav_manager = getattr(api, "favourites_manager", None)
+    mod = api["_mod"]
+    fav_manager = getattr(mod, "favourites_manager", None)
     fav_ids = fav_manager.get_all() if fav_manager is not None else []
     return jsonify(build_music_recommendations(metadata, fav_ids, limit=limit))
 
@@ -127,7 +328,7 @@ def discovery_music_recommendations():
 def discovery_podcast_recommendations():
     limit = min(50, max(1, request.args.get("limit", type=int) or 24))
     api = _get_api()
-    lib, _, _ = api.get_core()
+    lib, _, _ = api["get_core"]()
     try:
         lib.refresh_if_stale()
     except Exception:

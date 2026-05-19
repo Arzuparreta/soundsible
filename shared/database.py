@@ -142,9 +142,25 @@ class DatabaseManager:
                         webpage_url TEXT,
                         channel TEXT,
                         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        confidence REAL,
+                        confidence_reason TEXT,
+                        candidates_json TEXT,
+                        failure_state TEXT,
+                        verified_at TIMESTAMP,
                         PRIMARY KEY (artist, title)
                     )
                 """)
+                cursor = conn.execute("PRAGMA table_info(youtube_resolution_cache)")
+                yt_cols = [row[1] for row in cursor.fetchall()]
+                for col, defn in [
+                    ("confidence", "REAL"),
+                    ("confidence_reason", "TEXT"),
+                    ("candidates_json", "TEXT"),
+                    ("failure_state", "TEXT"),
+                    ("verified_at", "TIMESTAMP"),
+                ]:
+                    if col not in yt_cols:
+                        conn.execute(f"ALTER TABLE youtube_resolution_cache ADD COLUMN {col} {defn}")
 
                 # Note: Agent API tokens are random bearer tokens; only hashes are stored.
                 conn.execute("""
@@ -408,29 +424,51 @@ class DatabaseManager:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute("""
-                SELECT youtube_id as id, duration, thumbnail, webpage_url, channel, artist, title
+                SELECT youtube_id as id, duration, thumbnail, webpage_url, channel, artist, title,
+                       confidence, confidence_reason, candidates_json, failure_state, verified_at
                 FROM youtube_resolution_cache
                 WHERE artist = ? AND title = ?
             """, (artist, title)).fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+            d = dict(row)
+            if d.get("candidates_json"):
+                try:
+                    import json as _json
+                    d["candidates"] = _json.loads(d["candidates_json"])
+                except Exception:
+                    d["candidates"] = []
+            else:
+                d["candidates"] = []
+            return d
 
     def set_cached_resolution(self, artist: str, title: str, result: Dict[str, Any]):
         """Save a YouTube resolution to the cache."""
         if not artist or not title or not result or not result.get("id"):
             return
+        import json as _json
+        candidates = result.get("candidates") or []
+        candidates_json = _json.dumps(candidates) if candidates else None
         with self._get_connection() as conn:
             conn.execute("BEGIN TRANSACTION")
             try:
                 conn.execute("""
-                    INSERT INTO youtube_resolution_cache 
-                    (artist, title, youtube_id, duration, thumbnail, webpage_url, channel, last_updated)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    INSERT INTO youtube_resolution_cache
+                    (artist, title, youtube_id, duration, thumbnail, webpage_url, channel,
+                     confidence, confidence_reason, candidates_json, failure_state, verified_at,
+                     last_updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                     ON CONFLICT(artist, title) DO UPDATE SET
                     youtube_id=excluded.youtube_id,
                     duration=excluded.duration,
                     thumbnail=excluded.thumbnail,
                     webpage_url=excluded.webpage_url,
                     channel=excluded.channel,
+                    confidence=excluded.confidence,
+                    confidence_reason=excluded.confidence_reason,
+                    candidates_json=excluded.candidates_json,
+                    failure_state=excluded.failure_state,
+                    verified_at=excluded.verified_at,
                     last_updated=CURRENT_TIMESTAMP
                 """, (
                     artist,
@@ -439,7 +477,11 @@ class DatabaseManager:
                     result.get("duration") or 0,
                     result.get("thumbnail") or "",
                     result.get("webpage_url") or "",
-                    result.get("channel") or ""
+                    result.get("channel") or "",
+                    result.get("confidence"),
+                    result.get("confidence_reason"),
+                    candidates_json,
+                    result.get("failure_state"),
                 ))
                 conn.execute("COMMIT")
             except Exception as e:

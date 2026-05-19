@@ -252,43 +252,29 @@ export function bindDiscoverSurfaceQuickActionButtons(containerEl) {
         if (!raw) return;
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();
-            const Dl = typeof window.Downloader !== 'undefined' ? window.Downloader : null;
-            if (Dl?.primeDownloadQueueUi) Dl.primeDownloadQueueUi();
-            try {
-                const rowId = `deezer_${raw}`;
-                let like = null;
-                const st = findDeezerSurfaceTrackByRowId(rowId);
-                if (st) {
-                    like = {
-                        title: st.title,
-                        artist: st.artist,
-                        deezerId: st.deezerId != null ? st.deezerId : Number(raw)
-                    };
-                } else {
-                    const m = await import('./discovery.js');
-                    if (typeof m.fetchDeezerTrackLikeByNumericId === 'function') {
-                        like = await m.fetchDeezerTrackLikeByNumericId(raw);
-                    }
+            const rowId = `deezer_${raw}`;
+            let like = null;
+            const st = findDeezerSurfaceTrackByRowId(rowId);
+            if (st) {
+                like = {
+                    title: st.title,
+                    artist: st.artist,
+                    duration: st.duration,
+                    cover: st.cover,
+                    deezerId: st.deezerId != null ? st.deezerId : Number(raw),
+                };
+            } else {
+                const m = await import('./discovery.js');
+                if (typeof m.fetchDeezerTrackLikeByNumericId === 'function') {
+                    like = await m.fetchDeezerTrackLikeByNumericId(raw);
                 }
-                if (!like) {
-                    window.showToast?.('Could not load track');
-                    return;
-                }
-                const { resolveDeezerTrackToOdstItem } = await import('./discovery.js');
-                const odst = await resolveDeezerTrackToOdstItem(like);
-                if (!odst?.id) {
-                    window.showToast?.('No YouTube match — try search');
-                    return;
-                }
-                if (Dl?.addToDownloadQueue) {
-                    Dl.addToDownloadQueue(odst, { source: searchService.sourceMode });
-                    window.showToast?.('Added to download queue');
-                }
-            } catch (_) {
-                window.showToast?.('Could not add to download queue');
-            } finally {
-                if (Dl?.releaseDownloadQueueUiPrime) Dl.releaseDownloadQueueUiPrime();
             }
+            if (!like) {
+                window.showToast?.('Could not load track');
+                return;
+            }
+            const { saveTrackToLibrary } = await import('./discovery.js');
+            await saveTrackToLibrary(like, btn);
         });
     });
 }
