@@ -2,6 +2,7 @@
  * Phase 1 setup funnel: correlate telemetry via setup_session_id (docs/LAYER_CONTRACTS §3.1).
  */
 import { getAdminHeaders } from './admin_auth.js';
+import { showBetaBannerAfterFirstPlay } from './beta_banner.js';
 
 const STORAGE_KEY = 'soundsible_setup_session_id_v1';
 
@@ -49,6 +50,7 @@ export function postSetupFirstPlayBeacon(apiBase, trackId) {
     const sid = getSetupSessionId();
     if (!base || !sid) return;
     _firstPlayPosted = true;
+    showBetaBannerAfterFirstPlay();
     try {
         const body = { setup_session_id: sid };
         if (trackId) body.track_id = String(trackId);

@@ -27,6 +27,7 @@ import {
 import { bindDiscoverSurfaceQuickActionButtons } from './deezer_actions.js';
 import { tryPlayUnifiedMusicSearch } from './search.js';
 import { desktopPairing } from './desktop_pairing.js';
+import { initBetaBanner } from './beta_banner.js';
 
 let discoverSearchDebounceTimer = null;
 let podcastSearchDebounceTimer = null;
@@ -816,6 +817,7 @@ function init() {
     try {
         registerServiceWorker();
         DesktopUI.init();
+        initBetaBanner();
         initHoverTooltip();
 
         void import('./podcasts.js').then((m) => {
