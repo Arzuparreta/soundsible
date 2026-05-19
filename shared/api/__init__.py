@@ -263,8 +263,9 @@ def on_socket_disconnect():
 
 
 # Note: Path to the new web UI and repo branding
-# Note: File__ is shared/API/__init__.py; go up to project root
-_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+from shared.bundle_paths import repo_root as _bundle_repo_root
+
+_REPO_ROOT = os.path.abspath(str(_bundle_repo_root()))
 WEB_UI_PATH = os.path.join(_REPO_ROOT, "ui_web")
 WEB_UI_DIST_PATH = os.path.join(WEB_UI_PATH, "dist")
 REPO_ROOT = _REPO_ROOT

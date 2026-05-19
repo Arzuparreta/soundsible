@@ -56,6 +56,23 @@ npm run build
 
 PyInstaller sidecar packaging is tracked separately (eng review 4A). Dev mode runs the repo Python engine directly.
 
+### Sidecar build (PyInstaller)
+
+Requires a venv with `requirements.txt` installed plus `librsvg` only for icon generation (not the sidecar).
+
+```bash
+./desktop-shell/scripts/build-sidecar.sh
+```
+
+This writes `desktop-shell/src-tauri/binaries/soundsible-engine-<target-triple>`, which Tauri bundles via `externalBin`. The shell prefers the sidecar over repo Python when present.
+
+Sidecar flags used by the shell:
+
+| Flag | Purpose |
+|------|---------|
+| `--bootstrap MUSIC_DIR` | Write consumer `config.json` before first start |
+| `--music-dir MUSIC_DIR` | Runtime library path (also auto-bootstraps if config missing) |
+
 ## Icons (DT3)
 
 Tray and bundle icons are generated from `branding/logo-mark.svg`:

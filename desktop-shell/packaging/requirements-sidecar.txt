@@ -1,0 +1,2 @@
+# Requires the repo venv with requirements.txt installed.
+pyinstaller>=6.0.0

@@ -283,10 +283,7 @@ from shared.daemon_launcher import (
     MSG_SETUP_REQUIRED,
 )
 from shared.desktop_runtime import (
-    clear_runtime_state,
-    ensure_owner_token,
     stop_owned_desktop_engine,
-    write_runtime_state,
 )
 
 
@@ -358,60 +355,16 @@ def _run_legacy_daemon(args: argparse.Namespace) -> None:
         console.print("[yellow]Shutting down...[/yellow]")
 
 
-def _desktop_readiness_payload(runtime: RuntimeConfig) -> dict:
-    return {
-        "event": "ready",
-        "base_url": f"http://{runtime.host}:{runtime.port}",
-        "host": runtime.host,
-        "port": runtime.port,
-        "pid": os.getpid(),
-        "version": os.getenv("SOUNDSIBLE_VERSION", "0.0.0-dev"),
-        "health": "/api/health",
-        "owner_token_file": str(runtime.owner_token_file) if runtime.owner_token_file else None,
-    }
-
-
 def _run_desktop_engine(args: argparse.Namespace) -> None:
-    runtime = _build_runtime_config(args, desktop_defaults=True)
-    runtime, _ = ensure_owner_token(runtime)
-    configure_runtime(runtime)
+    from shared.desktop_engine_entry import run_desktop_engine
 
-    def _handle_exit(*_: object) -> None:
-        clear_runtime_state(runtime)
-        raise SystemExit(0)
-
-    signal.signal(signal.SIGINT, _handle_exit)
-    signal.signal(signal.SIGTERM, _handle_exit)
-
-    from shared.api import start_api
-
-    def _on_ready(ready_runtime: RuntimeConfig) -> None:
-        write_runtime_state(ready_runtime, version=os.getenv("SOUNDSIBLE_VERSION", "0.0.0-dev"))
-        print(json.dumps(_desktop_readiness_payload(ready_runtime)), flush=True)
-
-    try:
-        start_api(
-            host=runtime.host,
-            port=runtime.port,
-            runtime_config=runtime,
-            on_ready=_on_ready,
-        )
-    finally:
-        clear_runtime_state(runtime)
+    run_desktop_engine(args)
 
 
 def run_desktop_engine_cli(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    _seed_runtime_env_from_args(args)
-    if not args.desktop_engine:
-        args.desktop_engine = True
-    if not (get_config_dir() / "config.json").exists():
-        print(f"Daemon: {MSG_CONFIG_MISSING}")
-        print("Start setup first: python3 run.py --setup")
-        return 1
-    _run_desktop_engine(args)
-    return 0
+    from shared.desktop_engine_entry import run_desktop_engine_cli as _run_cli
+
+    return _run_cli(argv)
 
 
 def bootstrap():

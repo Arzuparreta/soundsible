@@ -85,11 +85,43 @@ pub fn python_executable(repo_root: &Path) -> PathBuf {
 }
 
 pub fn sidecar_binary() -> Option<PathBuf> {
-    std::env::var("SOUNDSIBLE_ENGINE_BIN")
-        .ok()
-        .map(PathBuf::from)
-        .or_else(|| {
-            let candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/soundsible-engine");
-            candidate.exists().then_some(candidate)
-        })
+    if let Ok(bin) = std::env::var("SOUNDSIBLE_ENGINE_BIN") {
+        let path = PathBuf::from(bin);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            #[cfg(windows)]
+            let bundled = dir.join("soundsible-engine.exe");
+            #[cfg(not(windows))]
+            let bundled = dir.join("soundsible-engine");
+            if bundled.is_file() {
+                return Some(bundled);
+            }
+        }
+    }
+
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let binaries_dir = manifest.join("binaries");
+    if binaries_dir.is_dir() {
+        if let Ok(entries) = std::fs::read_dir(binaries_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if name.starts_with("soundsible-engine") {
+                    return Some(path);
+                }
+            }
+        }
+    }
+
+    let legacy = manifest.join("resources/soundsible-engine");
+    legacy.is_file().then_some(legacy)
 }

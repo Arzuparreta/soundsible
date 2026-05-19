@@ -156,6 +156,18 @@ fn push_log(guard: &mut SupervisorInner, line: String) {
 }
 
 fn bootstrap_config(music_dir: &PathBuf) -> Result<(), String> {
+    if let Some(sidecar) = sidecar_binary() {
+        let output = Command::new(&sidecar)
+            .args(["--bootstrap", &music_dir.to_string_lossy()])
+            .output()
+            .map_err(|e| format!("Failed to bootstrap via sidecar: {e}"))?;
+        if output.status.success() {
+            return Ok(());
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Sidecar bootstrap failed: {stderr}"));
+    }
+
     let root = repo_root();
     let python = python_executable(&root);
     if !root.join("shared/desktop_bootstrap.py").exists() && !root.join("shared").join("desktop_bootstrap.py").exists() {

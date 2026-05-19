@@ -189,3 +189,4 @@ Wireframe (superseded for pixels, still valid for IA): `~/.gstack/projects/Arzup
 | 2026-05-19 | Live scan preview on first-run | Trust before Continue commit (wilder risk) |
 | 2026-05-19 | DT5 tray keyboard + 44px targets | Global shortcuts + shell focus-visible; beta banner dismiss already 44px |
 | 2026-05-19 | DT3 tray + bundle icons from logo-mark.svg | Static idle glyph; VU-meter playing state still deferred |
+| 2026-05-19 | PyInstaller sidecar v1 | Lean ``desktop_engine_entry`` + ``externalBin``; bootstrap via ``--bootstrap`` |

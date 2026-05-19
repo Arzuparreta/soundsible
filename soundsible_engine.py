@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import sys
 
-from run import run_desktop_engine_cli
+from shared.desktop_engine_entry import run
 
 
 if __name__ == "__main__":
-    raise SystemExit(run_desktop_engine_cli(sys.argv[1:]))
+    raise SystemExit(run(sys.argv[1:]))
