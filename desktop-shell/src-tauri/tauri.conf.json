@@ -29,7 +29,8 @@
     "active": true,
     "targets": "all",
     "externalBin": [
-      "binaries/soundsible-engine"
+      "binaries/soundsible-engine",
+      "binaries/ffmpeg"
     ],
     "icon": [
       "icons/32x32.png",

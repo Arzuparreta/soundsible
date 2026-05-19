@@ -21,6 +21,20 @@
 
 ---
 
+## Desktop (Beta)
+
+**Consumer install** — Tauri app + bundled engine: pick a folder, play on loopback. No terminal on the happy path.
+
+| Doc | Purpose |
+|-----|---------|
+| [docs/DESKTOP_BETA.md](docs/DESKTOP_BETA.md) | Beta status, VM smoke checklist, setup gate rollup |
+| [desktop-shell/README.md](desktop-shell/README.md) | Build, dev, tray shortcuts |
+| [DESIGN.md](DESIGN.md) | Shell visual system |
+
+Power users and servers: continue with **Quick start** below or [docs/INSTALL.md](docs/INSTALL.md) (Advanced).
+
+---
+
 ## Overview
 
 Soundsible is a **self-hosted music streaming environment** that lets you browse, listen, and save music **privately and for free** from multiple sources, in one cohesive player.

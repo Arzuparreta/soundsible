@@ -24,6 +24,10 @@ fi
 echo "Using Python: $PYTHON"
 echo "Target triple: $TARGET"
 
+if [[ "${BUNDLE_FFMPEG:-0}" == "1" ]]; then
+  "$ROOT/desktop-shell/scripts/fetch-ffmpeg.sh"
+fi
+
 "$PYTHON" -m pip install -q -r "$ROOT/desktop-shell/packaging/requirements-sidecar.txt"
 
 mkdir -p "$BIN_DIR"

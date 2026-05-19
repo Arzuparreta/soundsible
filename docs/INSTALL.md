@@ -1,10 +1,22 @@
 ## INSTALL – Advanced setup and deployment
 
-This document covers scenarios beyond the basic local quick start in `README.md`.
+### Desktop (Beta) — normal users start here
+
+**Install an app, pick a music folder, play.** No Python, git, or terminal on the happy path.
+
+- Status and validation checklist: **[DESKTOP_BETA.md](./DESKTOP_BETA.md)**
+- Maintainer/dev build: [desktop-shell/README.md](../desktop-shell/README.md)
+- Releases: GitHub **Releases** artifacts tagged `desktop-v*` (when published)
+
+The sections below are for **Advanced** self-hosting (server, NAS, Docker, Tailscale, systemd).
+
+---
+
+This document covers scenarios beyond the desktop beta and the basic local quick start in `README.md`.
 
 Use this when you want to run Soundsible on a server, keep it running in the background, or expose it over your network.
 
-This document is primarily about the legacy/headless deployment path. The desktop appliance runtime uses `python3 run.py --desktop-engine`, binds loopback on a random port, and is documented in `README.md` and `ARCHITECTURE.md`.
+This document is primarily about the legacy/headless deployment path. The desktop appliance runtime uses the Tauri shell + engine sidecar (or `python3 run.py --desktop-engine` for contributors), binds loopback on a random port, and is documented in `README.md` and `ARCHITECTURE.md`.
 
 ### 1. System dependencies
 

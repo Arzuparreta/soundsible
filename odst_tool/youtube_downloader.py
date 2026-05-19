@@ -46,11 +46,14 @@ def _add_ytdlp_cli_network_args(args: List[str]) -> None:
 
 
 def _apply_ytdlp_network_options(opts: Dict[str, Any]) -> Dict[str, Any]:
+    from shared.ffmpeg_runtime import apply_ytdlp_ffmpeg_options
+
     yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
     if yt_proxy:
         opts["proxy"] = yt_proxy
     elif _yt_dlp_force_ipv4():
         opts["source_address"] = "0.0.0.0"
+    apply_ytdlp_ffmpeg_options(opts)
     return opts
 
 

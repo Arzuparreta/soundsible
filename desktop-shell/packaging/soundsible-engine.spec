@@ -9,6 +9,11 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 REPO_ROOT = Path(SPEC).resolve().parents[2]
 ENTRY = REPO_ROOT / "soundsible_engine.py"
+VENDOR_FFMPEG = REPO_ROOT / "desktop-shell" / "packaging" / "vendor" / "ffmpeg"
+
+pyinstaller_binaries = []
+if VENDOR_FFMPEG.is_file():
+    pyinstaller_binaries.append((str(VENDOR_FFMPEG), "."))
 
 hiddenimports = []
 for package in ("shared", "player", "odst_tool", "setup_tool"):
@@ -49,7 +54,7 @@ block_cipher = None
 a = Analysis(
     [str(ENTRY)],
     pathex=[str(REPO_ROOT)],
-    binaries=[],
+    binaries=pyinstaller_binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

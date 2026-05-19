@@ -79,7 +79,18 @@ Requires a venv with `requirements.txt` installed plus `librsvg` only for icon g
 ./desktop-shell/scripts/build-sidecar.sh
 ```
 
+Bundle a static **FFmpeg** next to the engine (recommended for release builds):
+
+```bash
+BUNDLE_FFMPEG=1 ./desktop-shell/scripts/build-sidecar.sh
+```
+
+This runs `fetch-ffmpeg.sh`, embeds FFmpeg in the sidecar when possible, and places `binaries/ffmpeg-<target-triple>` for Tauri `externalBin`. `/api/health` reports `ffmpeg.available`.
+
 This writes `desktop-shell/src-tauri/binaries/soundsible-engine-<target-triple>`, which Tauri bundles via `externalBin`. The shell prefers the sidecar over repo Python when present.
+
+**Beta validation:** [docs/DESKTOP_BETA.md](../docs/DESKTOP_BETA.md)  
+**Release CI:** tag `desktop-v*` or run `.github/workflows/desktop-release.yml` manually.
 
 Sidecar flags used by the shell:
 

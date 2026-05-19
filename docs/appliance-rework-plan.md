@@ -2,13 +2,33 @@
 
 ## Status Snapshot
 
-As of 2026-05-17:
+As of **2026-05-19** (see also [DESKTOP_BETA.md](./DESKTOP_BETA.md) for validation gates):
 
-- Runtime foundation is largely in place: `RuntimeConfig`, platform app dirs, path migration, and `--desktop-engine`.
-- Auth scopes are largely in place: `auth_tokens`, scoped checks, and legacy compatibility.
-- The desktop sidecar contract is now partially landed: desktop mode emits readiness JSON, writes owner-token/runtime-state files, and exposes richer `/api/health`.
-- Pairing work is now partially landed end to end: pairing sessions, claim/confirm/cancel endpoints, paired-device tokens, revoke/list endpoints, QR-ready connection payloads, display-state auto-confirm controls, and a first desktop settings consumer are present; full packaged desktop/mobile UX is still open.
-- Desktop shell, Windows packaging, updater/recovery UI, and host-supervisor abstraction are still open.
+### Landed
+
+- **Runtime:** `RuntimeConfig`, platform app dirs, path migration, `run.py --desktop-engine`, `soundsible_engine.py` / PyInstaller sidecar.
+- **Auth:** scoped tokens, pairing sessions, paired-device revoke/list, owner token bootstrap on loopback.
+- **Sidecar contract:** stdout readiness JSON + `desktop-engine-state.json`; `/api/health` with jobs + **ffmpeg** status.
+- **Engine resilience (Workstream 1):** `JobOrchestrator` HDD/SSD profiles, two pools, downloader via orchestrator (T1–T2); disk-route regression tests (T3 partial).
+- **Desktop shell (Workstream 2):** `desktop-shell/` Tauri app — first-run UI per `DESIGN.md`, engine supervisor + health watchdog (T4/T6), tray + global shortcuts, native pairing UI, autostart, returning-user auto-start.
+- **Design:** `DESIGN.md` + shell-ui (DT1–DT5); dismissible webview beta banner (DT4).
+- **CI:** `.github/workflows/desktop-shell.yml` — sidecar + Tauri build on Linux and Windows.
+- **Telemetry:** setup funnel + `scripts/setup_gate_rollup.py` for Premium Contract setup gate.
+- **FFmpeg:** `shared/ffmpeg_runtime.py`; optional bundle via `BUNDLE_FFMPEG=1` + `fetch-ffmpeg.sh`.
+
+### In progress (beta gates, not yet signed off)
+
+- **1a consumer proof:** clean VM install → folder → play in ≤10 min ([DESKTOP_BETA.md](./DESKTOP_BETA.md) Gate A1).
+- **GitHub Release** installers (`.github/workflows/desktop-release.yml`).
+- **Phase 0 HDD soak** — 30 min scan + download + UI (Gate B1).
+
+### Still open (explicitly deferred)
+
+- macOS notarization / consumer installer.
+- Tauri auto-updater + recovery UI (appliance §8).
+- VU-meter tray animation (static glyph shipped).
+- v1.1 remote session heal sign-off (T5 code partial; Tailscale walk test pending).
+- Premium Phase 2+ (migration/discovery/playback contract gates beyond baseline telemetry).
 
 ## Decision
 

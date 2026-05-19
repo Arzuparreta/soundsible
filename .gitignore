@@ -47,6 +47,9 @@ dist/
 node_modules/
 build/
 desktop-shell/src-tauri/binaries/soundsible-engine*
+desktop-shell/src-tauri/binaries/ffmpeg*
+desktop-shell/packaging/vendor/ffmpeg
+desktop-shell/build/ffmpeg-cache/
 
 # Note: ui_web/js/vendor/socket.io-client.esm.min.js is committed so /player/ works without npm install on the Station host.
 *.egg

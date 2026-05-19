@@ -114,6 +114,9 @@ def desktop_readiness_payload(runtime: RuntimeConfig) -> dict:
 
 
 def run_desktop_engine(args: argparse.Namespace) -> None:
+    from shared.ffmpeg_runtime import configure_ffmpeg
+
+    configure_ffmpeg()
     runtime = build_runtime_config(args)
     runtime, _ = ensure_owner_token(runtime)
     configure_runtime(runtime)

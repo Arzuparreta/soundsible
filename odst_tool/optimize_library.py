@@ -82,8 +82,10 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
             temp_file = tracks_dir / f"temp_{track.file_hash}.mp3"
             
             try:
+                from shared.ffmpeg_runtime import ffmpeg_executable
+
                 cmd = [
-                    'ffmpeg', '-y', '-i', str(original_file),
+                    ffmpeg_executable(), '-y', '-i', str(original_file),
                     '-codec:a', 'libmp3lame', '-b:a', '128k',
                     str(temp_file)
                 ]

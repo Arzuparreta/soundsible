@@ -1012,10 +1012,13 @@ def health_check():
         config_exists = (runtime.config_dir / "config.json").exists()
     except Exception:
         pass
+    from shared.ffmpeg_runtime import ffmpeg_status
+
     return jsonify(
         {
             "status": "healthy",
             "version": os.getenv("SOUNDSIBLE_VERSION", "0.0.0-dev"),
+            "ffmpeg": ffmpeg_status(),
             "pid": os.getpid(),
             "uptime_seconds": round(time.time() - API_STARTED_AT, 3),
             "base_url": f"http://{runtime.host}:{runtime.port}",
