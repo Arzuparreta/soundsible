@@ -1,5 +1,10 @@
 use tauri::{AppHandle, Manager};
 
+fn idle_tray_icon() -> tauri::Result<tauri::image::Image<'static>> {
+    tauri::image::Image::from_bytes(include_bytes!("../icons/tray-idle.png"))
+        .map_err(|e| tauri::Error::FailedMessage(format!("tray icon: {e}")))
+}
+
 pub fn focus_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -37,12 +42,9 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let quit_i = MenuItem::with_id(app, "tray_quit", "Quit", true, Some("Ctrl+Alt+Q"))?;
     let menu = Menu::with_items(app, &[&open_i, &restart_i, &quit_i])?;
 
-    let icon = app
-        .default_window_icon()
-        .cloned()
-        .ok_or_else(|| tauri::Error::FailedMessage("missing tray icon".into()))?;
+    let icon = idle_tray_icon()?;
 
-    TrayIconBuilder::new()
+    let builder = TrayIconBuilder::new()
         .icon(icon)
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -62,8 +64,12 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             {
                 focus_main_window(tray.app_handle());
             }
-        })
-        .build(app)?;
+        });
+
+    #[cfg(target_os = "macos")]
+    let builder = builder.icon_as_template(false);
+
+    builder.build(app)?;
     Ok(())
 }
 

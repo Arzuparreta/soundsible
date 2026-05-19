@@ -55,3 +55,24 @@ npm run build
 ```
 
 PyInstaller sidecar packaging is tracked separately (eng review 4A). Dev mode runs the repo Python engine directly.
+
+## Icons (DT3)
+
+Tray and bundle icons are generated from `branding/logo-mark.svg`:
+
+```bash
+./desktop-shell/scripts/generate-icons.sh
+```
+
+Requires `rsvg-convert` (librsvg) and `@tauri-apps/cli`.
+
+| Asset | Usage |
+|-------|--------|
+| `src-tauri/icons/tray-idle.png` | System tray idle glyph (32×32) |
+| `src-tauri/icons/icon.{ico,icns,png}` | App bundle / window icon |
+
+**Platform notes:**
+
+- **Linux:** Colored static glyph in AppIndicator tray (VU-meter animation deferred).
+- **Windows:** Multi-size `.ico` from bundle set.
+- **macOS:** Colored glyph for v1; template (monochrome menu-bar) icon deferred until VU-meter tray work.

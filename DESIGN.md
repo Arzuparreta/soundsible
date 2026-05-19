@@ -127,7 +127,7 @@ Implementation target: `desktop-shell/` (T4, T6, DT2–DT5).
 
 - **Menu items:** Open | Restart engine | Quit (platform-native menu)
 - **Icon — playing:** 2-bar VU meter animated at ≤12fps from audio levels (wilder risk, v1 target)
-- **Icon — paused/idle:** Static Soundsible glyph (from `branding/`)
+- **Icon — paused/idle:** Static Soundsible glyph from `branding/logo-mark.svg` → `desktop-shell/src-tauri/icons/tray-idle.png`
 - **Linux fallback:** Static glyph if tray cannot animate; document in platform notes
 - **Keyboard:** Tray accessible via platform conventions; menu items ≥44px touch height where drawn by app
 - **Global shortcuts (v1):** `Ctrl+Alt+O` open/focus window, `Ctrl+Alt+R` restart engine, `Ctrl+Alt+Q` quit — registered globally and shown as tray menu accelerators
@@ -188,3 +188,4 @@ Wireframe (superseded for pixels, still valid for IA): `~/.gstack/projects/Arzup
 | 2026-05-19 | Gold accent bar + badge only | Brand `#E0BC00` without clashing orange CTAs |
 | 2026-05-19 | Live scan preview on first-run | Trust before Continue commit (wilder risk) |
 | 2026-05-19 | DT5 tray keyboard + 44px targets | Global shortcuts + shell focus-visible; beta banner dismiss already 44px |
+| 2026-05-19 | DT3 tray + bundle icons from logo-mark.svg | Static idle glyph; VU-meter playing state still deferred |
