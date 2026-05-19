@@ -27,7 +27,7 @@ Optional overrides:
 ```
 Tauri (Rust)  →  spawn soundsible_engine.py  →  poll desktop-engine-state.json
               →  health watchdog (3× fail @ 5s)  →  navigate webview to player
-Tray: Open | Restart engine | Quit
+Tray: Open | Restart engine | Stop engine | Quit
 
 **Keyboard (DT5):** Global shortcuts work even when the window is hidden:
 
@@ -35,7 +35,8 @@ Tray: Open | Restart engine | Quit
 |----------|--------|
 | `Ctrl+Alt+O` | Open / focus main window |
 | `Ctrl+Alt+R` | Restart engine |
-| `Ctrl+Alt+Q` | Quit |
+| `Ctrl+Alt+S` | Stop engine (returns to shell UI) |
+| `Ctrl+Alt+Q` | Quit (stops engine and exits) |
 
 Left-click tray icon also focuses the window. Right-click opens the tray menu (platform convention).
 
@@ -77,6 +78,8 @@ Sidecar flags used by the shell:
 
 **Returning users:** if `config.json` and `music_dir.json` already exist, the shell skips first-run and auto-starts the engine on launch.
 
+**Start at login:** optional checkbox on first-run (uses platform autostart APIs via `tauri-plugin-autostart`).
+
 ### Smoke test
 
 Headless check for engine health + desktop player route:
@@ -87,7 +90,9 @@ Headless check for engine health + desktop player route:
 ./desktop-shell/scripts/smoke-test.sh --with-sidecar --with-tauri
 ```
 
-CI runs the same checks in `.github/workflows/desktop-shell.yml`.
+CI runs the same checks in `.github/workflows/desktop-shell.yml` (Linux + Windows sidecar/Tauri jobs).
+
+**Windows sidecar:** run `./desktop-shell/scripts/build-sidecar.sh` on Windows (Git Bash or WSL) to produce `binaries/soundsible-engine-x86_64-pc-windows-msvc.exe`.
 
 ## Icons (DT3)
 

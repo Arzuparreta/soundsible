@@ -7,6 +7,7 @@ const btnChoose = document.getElementById('btn-choose');
 const btnContinue = document.getElementById('btn-continue');
 const btnRetry = document.getElementById('btn-retry');
 const btnLogs = document.getElementById('btn-logs');
+const chkAutostart = document.getElementById('chk-autostart');
 const viewFirstRun = document.getElementById('view-first-run');
 const viewLoading = document.getElementById('view-loading');
 const viewError = document.getElementById('view-error');
@@ -82,6 +83,25 @@ async function applyStatus(status) {
   if (status.phase === 'ready') {
     return;
   }
+  if (status.phase === 'idle') {
+    showView('first-run');
+  }
+}
+
+async function syncAutostartCheckbox() {
+  try {
+    chkAutostart.checked = await invoke('get_autostart');
+  } catch {
+    chkAutostart.checked = false;
+  }
+}
+
+async function applyAutostartPreference() {
+  try {
+    await invoke('set_autostart', { enabled: chkAutostart.checked });
+  } catch {
+    // Non-fatal if autostart is unavailable on this platform build.
+  }
 }
 
 btnChoose.addEventListener('click', async () => {
@@ -99,6 +119,7 @@ btnContinue.addEventListener('click', async () => {
   showView('loading');
   renderLog(logLoading, ['engine: binding loopback', `engine: music_dir=${selectedPath}`]);
   try {
+    await applyAutostartPreference();
     await invoke('start_engine');
   } catch (err) {
     showView('error');
@@ -135,7 +156,13 @@ async function resumeReturningUser() {
     return;
   }
 
-  if (!profile.returning_user || !profile.music_dir) {
+  if (!profile.auto_start || !profile.music_dir) {
+    if (profile.returning_user && profile.music_dir) {
+      selectedPath = profile.music_dir;
+      pathDisplay.textContent = profile.music_dir;
+      pathDisplay.classList.add('filled');
+      setContinueEnabled(true);
+    }
     return;
   }
 
@@ -154,4 +181,8 @@ async function resumeReturningUser() {
   }
 }
 
-invoke('get_engine_status').then(applyStatus).then(resumeReturningUser).catch(() => {});
+invoke('get_engine_status')
+  .then(applyStatus)
+  .then(syncAutostartCheckbox)
+  .then(resumeReturningUser)
+  .catch(() => {});

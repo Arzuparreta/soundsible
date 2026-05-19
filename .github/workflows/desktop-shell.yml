@@ -95,3 +95,44 @@ jobs:
         run: |
           npm ci
           npm run build
+
+  desktop_sidecar_windows:
+    runs-on: windows-latest
+    needs: desktop_engine_smoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: desktop-shell/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build PyInstaller sidecar (Windows)
+        shell: bash
+        run: ./desktop-shell/scripts/build-sidecar.sh
+
+      - name: Desktop engine smoke (PyInstaller sidecar)
+        shell: bash
+        env:
+          PYTHONPATH: .
+          SOUNDSIBLE_ENGINE_BIN: desktop-shell/src-tauri/binaries/soundsible-engine-x86_64-pc-windows-msvc.exe
+        run: pytest tests/test_desktop_engine_smoke.py::test_desktop_engine_smoke_sidecar -q
+
+      - name: Build Tauri desktop shell (Windows)
+        working-directory: desktop-shell
+        env:
+          SOUNDSIBLE_REPO_ROOT: ${{ github.workspace }}
+        run: |
+          npm ci
+          npm run build

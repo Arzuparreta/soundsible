@@ -5,13 +5,14 @@ mod tray;
 use engine::EngineSupervisor;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, RunEvent, State, WindowEvent};
+use tauri::{AppHandle, Manager, RunEvent, State, WebviewUrl, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 pub struct AppState {
     pub engine: EngineSupervisor,
     selected_folder: Mutex<Option<PathBuf>>,
+    skip_autostart_once: Mutex<bool>,
 }
 
 #[derive(serde::Serialize)]
@@ -23,8 +24,45 @@ struct FolderPreview {
 }
 
 #[tauri::command]
-fn get_startup_profile() -> state::StartupProfile {
-    state::startup_profile()
+fn get_startup_profile(state: State<'_, AppState>) -> state::StartupProfile {
+    let skip = state
+        .skip_autostart_once
+        .lock()
+        .ok()
+        .is_some_and(|mut flag| {
+            if *flag {
+                *flag = false;
+                true
+            } else {
+                false
+            }
+        });
+    state::startup_profile(skip)
+}
+
+#[tauri::command]
+fn stop_engine(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    state.engine.stop(Some(&app))?;
+    if let Ok(mut skip) = state.skip_autostart_once.lock() {
+        *skip = true;
+    }
+    return_to_shell(&app)
+}
+
+#[tauri::command]
+fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    if enabled {
+        app.autostart().enable().map_err(|e| e.to_string())
+    } else {
+        app.autostart().disable().map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+fn get_autostart(app: AppHandle) -> Result<bool, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autostart().is_enabled().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -145,6 +183,15 @@ fn open_player(app: AppHandle, state: State<'_, AppState>) -> Result<(), String>
     navigate_main_window(&app, &url)
 }
 
+pub fn return_to_shell(app: &AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window not found".to_string())?;
+    window
+        .navigate(WebviewUrl::App("index.html".into()))
+        .map_err(|e| e.to_string())
+}
+
 fn navigate_main_window(app: &AppHandle, url: &str) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
@@ -159,13 +206,21 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None::<Vec<&str>>,
+        ))
         .manage(AppState {
             engine: EngineSupervisor::new(),
             selected_folder: Mutex::new(None),
+            skip_autostart_once: Mutex::new(false),
         })
         .invoke_handler(tauri::generate_handler![
             get_startup_profile,
             start_configured_engine,
+            stop_engine,
+            set_autostart,
+            get_autostart,
             get_engine_status,
             get_selected_folder,
             pick_music_folder,
@@ -195,7 +250,7 @@ pub fn run() {
         .run(|app, event| {
             if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
                 if let Some(state) = app.try_state::<AppState>() {
-                    let _ = state.engine.stop();
+                    let _ = state.engine.stop(None);
                 }
             }
         });

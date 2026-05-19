@@ -28,11 +28,16 @@ cd "$ROOT"
 
 "$PYTHON" -m PyInstaller "$SPEC" --noconfirm --clean --distpath "$ROOT/dist" --workpath "$ROOT/build/pyinstaller-sidecar"
 
-if [[ ! -f "$ROOT/dist/soundsible-engine" ]]; then
-  echo "PyInstaller did not produce dist/soundsible-engine" >&2
+DIST_EXE="$ROOT/dist/soundsible-engine.exe"
+DIST_BIN="$ROOT/dist/soundsible-engine"
+if [[ -f "$DIST_EXE" ]]; then
+  cp "$DIST_EXE" "$OUTPUT"
+elif [[ -f "$DIST_BIN" ]]; then
+  install -m 755 "$DIST_BIN" "$OUTPUT"
+else
+  echo "PyInstaller did not produce dist/soundsible-engine(.exe)" >&2
   exit 1
 fi
 
-install -m 755 "$ROOT/dist/soundsible-engine" "$OUTPUT"
 echo "Sidecar ready: $OUTPUT"
 echo "Tauri externalBin expects: desktop-shell/src-tauri/binaries/soundsible-engine-${TARGET}"

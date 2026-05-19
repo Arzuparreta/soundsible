@@ -19,13 +19,23 @@ pub fn restart_engine(app: &AppHandle) {
     }
 }
 
+pub fn stop_engine(app: &AppHandle) {
+    if let Some(state) = app.try_state::<super::AppState>() {
+        let _ = state.engine.stop(Some(app));
+        if let Ok(mut skip) = state.skip_autostart_once.lock() {
+            *skip = true;
+        }
+        let _ = super::return_to_shell(app);
+    }
+}
+
 pub fn quit_app(app: &AppHandle) {
     shutdown(app);
 }
 
 pub fn shutdown(app: &AppHandle) {
     if let Some(state) = app.try_state::<super::AppState>() {
-        let _ = state.engine.stop();
+        let _ = state.engine.stop(Some(app));
     }
     app.exit(0);
 }
@@ -43,8 +53,15 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         true,
         Some("Ctrl+Alt+R"),
     )?;
+    let stop_i = MenuItem::with_id(
+        app,
+        "tray_stop",
+        "Stop engine",
+        true,
+        Some("Ctrl+Alt+S"),
+    )?;
     let quit_i = MenuItem::with_id(app, "tray_quit", "Quit", true, Some("Ctrl+Alt+Q"))?;
-    let menu = Menu::with_items(app, &[&open_i, &restart_i, &quit_i])?;
+    let menu = Menu::with_items(app, &[&open_i, &restart_i, &stop_i, &quit_i])?;
 
     let icon = idle_tray_icon()?;
 
@@ -56,6 +73,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "tray_open" => focus_main_window(app),
             "tray_restart" => restart_engine(app),
+            "tray_stop" => stop_engine(app),
             "tray_quit" => quit_app(app),
             _ => {}
         })
@@ -83,7 +101,7 @@ pub fn register_global_shortcuts(app: &AppHandle) -> tauri::Result<()> {
 
     app.plugin(
         tauri_plugin_global_shortcut::Builder::new()
-            .with_shortcuts(["Ctrl+Alt+O", "Ctrl+Alt+R", "Ctrl+Alt+Q"])?
+            .with_shortcuts(["Ctrl+Alt+O", "Ctrl+Alt+R", "Ctrl+Alt+S", "Ctrl+Alt+Q"])?
             .with_handler(move |app, shortcut, event| {
                 if event.state != ShortcutState::Pressed {
                     return;
@@ -92,6 +110,8 @@ pub fn register_global_shortcuts(app: &AppHandle) -> tauri::Result<()> {
                     focus_main_window(app);
                 } else if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyR) {
                     restart_engine(app);
+                } else if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyS) {
+                    stop_engine(app);
                 } else if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyQ) {
                     quit_app(app);
                 }

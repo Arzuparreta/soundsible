@@ -126,9 +126,19 @@ impl EngineSupervisor {
         self.start(app, music_dir)
     }
 
-    pub fn stop(&self) -> Result<(), String> {
+    pub fn stop(&self, app: Option<&AppHandle>) -> Result<(), String> {
         self.stop_flag.store(true, Ordering::SeqCst);
-        self.stop_child()
+        self.stop_child()?;
+        {
+            let mut guard = self.inner.lock().expect("engine lock");
+            guard.phase = EnginePhase::Idle;
+            guard.message = "Stopped".into();
+            push_log(&mut guard, "engine: stopped".into());
+        }
+        if let Some(app) = app {
+            self.emit_status(app);
+        }
+        Ok(())
     }
 
     fn stop_child(&self) -> Result<(), String> {
