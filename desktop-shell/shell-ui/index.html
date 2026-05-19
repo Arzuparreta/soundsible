@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0d0d0f">
+  <title>Soundsible (Beta)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" data-view="first-run">
+    <section id="view-first-run" class="shell-stage">
+      <div class="shell-hero">
+        <div class="beta">Beta</div>
+        <h1>Point me at your music.</h1>
+        <p>Your library stays on this machine. Nothing uploads. Ever.</p>
+      </div>
+      <div class="shell-card">
+        <div id="path-display" class="path-inset">No folder selected</div>
+        <div id="scan-preview" class="scan-preview hidden"></div>
+        <button type="button" id="btn-choose" class="btn btn-primary">Choose folder…</button>
+        <button type="button" id="btn-continue" class="btn btn-secondary" disabled>Continue</button>
+        <p class="fine-print">Soundsible (Beta) — built for people who own their music.</p>
+      </div>
+    </section>
+
+    <section id="view-loading" class="state-panel hidden">
+      <h2><span class="spinner"></span>Starting Soundsible…</h2>
+      <div id="log-loading" class="log-tail"></div>
+    </section>
+
+    <section id="view-error" class="state-panel hidden">
+      <h2 class="error-title">Couldn't start</h2>
+      <div id="log-error" class="log-tail"></div>
+      <div class="actions">
+        <button type="button" id="btn-retry" class="btn btn-primary">Try again</button>
+        <button type="button" id="btn-logs" class="btn btn-secondary">Open logs</button>
+      </div>
+    </section>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
