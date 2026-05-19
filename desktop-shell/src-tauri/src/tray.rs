@@ -116,7 +116,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 }
 
 #[cfg(desktop)]
-pub fn register_global_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub fn register_global_shortcuts(app: &AppHandle) -> tauri::Result<()> {
     use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
 
     app.plugin(
@@ -139,13 +139,12 @@ pub fn register_global_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::err
                 }
             })
             .build(),
-    )?;
+    )
+    .map_err(|e| tauri::Error::Io(std::io::Error::other(e.to_string())))?;
     Ok(())
 }
 
 #[cfg(not(desktop))]
-pub fn register_global_shortcuts(
-    _app: &AppHandle,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub fn register_global_shortcuts(_app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }

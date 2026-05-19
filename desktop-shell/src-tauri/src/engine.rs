@@ -360,11 +360,12 @@ fn health_watchdog(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool
                 guard.health_failures = 0;
             } else {
                 guard.health_failures += 1;
+                let failures = guard.health_failures;
                 push_log(
                     &mut guard,
                     format!(
                         "error: health check failed ({}/{})",
-                        guard.health_failures, MAX_HEALTH_FAILURES
+                        failures, MAX_HEALTH_FAILURES
                     ),
                 );
                 if guard.health_failures >= MAX_HEALTH_FAILURES {

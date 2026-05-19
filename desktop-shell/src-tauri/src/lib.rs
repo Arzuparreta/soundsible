@@ -54,16 +54,16 @@ fn stop_engine(app: AppHandle, state: State<'_, AppState>) -> Result<(), String>
 fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
     use tauri_plugin_autostart::ManagerExt;
     if enabled {
-        app.autostart().enable().map_err(|e| e.to_string())
+        app.autolaunch().enable().map_err(|e| e.to_string())
     } else {
-        app.autostart().disable().map_err(|e| e.to_string())
+        app.autolaunch().disable().map_err(|e| e.to_string())
     }
 }
 
 #[tauri::command]
 fn get_autostart(app: AppHandle) -> Result<bool, String> {
     use tauri_plugin_autostart::ManagerExt;
-    app.autostart().is_enabled().map_err(|e| e.to_string())
+    app.autolaunch().is_enabled().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -72,7 +72,7 @@ fn start_configured_engine(app: AppHandle, state: State<'_, AppState>) -> Result
         return Err("Soundsible is not configured yet.".into());
     }
     let music_dir = state::load_persisted_music_dir().ok_or_else(|| {
-        "Configured music folder is missing. Choose a folder again from first-run.".into()
+        "Configured music folder is missing. Choose a folder again from first-run.".to_string()
     })?;
     if let Ok(mut slot) = state.selected_folder.lock() {
         *slot = Some(music_dir.clone());
