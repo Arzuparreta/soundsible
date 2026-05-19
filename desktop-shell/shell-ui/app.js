@@ -11,6 +11,7 @@ const chkAutostart = document.getElementById('chk-autostart');
 const viewFirstRun = document.getElementById('view-first-run');
 const viewLoading = document.getElementById('view-loading');
 const viewError = document.getElementById('view-error');
+const viewPairing = document.getElementById('view-pairing');
 const logLoading = document.getElementById('log-loading');
 const logError = document.getElementById('log-error');
 
@@ -20,12 +21,14 @@ const focusTargets = {
   'first-run': btnChoose,
   loading: () => viewLoading.querySelector('h2'),
   error: btnRetry,
+  pairing: () => viewPairing?.querySelector('h1'),
 };
 
 function showView(name) {
   viewFirstRun.classList.toggle('hidden', name !== 'first-run');
   viewLoading.classList.toggle('hidden', name !== 'loading');
   viewError.classList.toggle('hidden', name !== 'error');
+  if (viewPairing) viewPairing.classList.toggle('hidden', name !== 'pairing');
   document.getElementById('app').dataset.view = name;
 
   const target = focusTargets[name];
@@ -34,6 +37,8 @@ function showView(name) {
     requestAnimationFrame(() => el.focus({ preventScroll: true }));
   }
 }
+
+window.shellShowView = showView;
 
 function setContinueEnabled(enabled) {
   btnContinue.disabled = !enabled;
@@ -141,6 +146,15 @@ btnLogs.addEventListener('click', () => invoke('open_logs'));
 
 listen('engine-status', (event) => {
   applyStatus(event.payload);
+});
+
+listen('shell-view', (event) => {
+  const view = event.payload;
+  if (view === 'pairing') {
+    window.shellPairing?.open();
+  } else if (view === 'pairing-unavailable') {
+    window.shellPairing?.open({ unavailable: true });
+  }
 });
 
 async function resumeReturningUser() {

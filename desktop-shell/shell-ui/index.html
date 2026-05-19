@@ -28,7 +28,7 @@
           <span>Start Soundsible when I log in</span>
         </label>
         <p class="fine-print">Soundsible (Beta) — built for people who own their music.</p>
-        <p class="shell-keyboard-hint">Keyboard: <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>O</kbd> open · <kbd>R</kbd> restart · <kbd>S</kbd> stop · <kbd>Q</kbd> quit</p>
+        <p class="shell-keyboard-hint">Keyboard: <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>O</kbd> open · <kbd>P</kbd> pair · <kbd>R</kbd> restart · <kbd>S</kbd> stop · <kbd>Q</kbd> quit</p>
       </div>
     </section>
 
@@ -45,7 +45,49 @@
         <button type="button" id="btn-logs" class="btn btn-secondary">Open logs</button>
       </div>
     </section>
+
+    <section id="view-pairing" class="pairing-panel hidden" aria-live="polite">
+      <div class="pairing-header">
+        <div class="beta">Pair phone</div>
+        <h1 tabindex="-1">Scan and connect</h1>
+        <p class="pairing-lead">Open the camera on your phone and scan the code. This session auto-confirms while this screen is open.</p>
+        <p id="pairing-unavailable" class="pairing-warning hidden">Start the engine before pairing a phone.</p>
+        <p id="pairing-lan-warning" class="pairing-warning hidden"></p>
+      </div>
+      <div class="pairing-grid">
+        <div class="qr-box">
+          <img id="pairing-qr" alt="Pairing QR code" width="220" height="220">
+        </div>
+        <div class="pairing-details">
+          <div class="detail-card">
+            <div class="detail-label">Pairing code</div>
+            <div id="pairing-code" class="pairing-code">--------</div>
+            <div id="pairing-status" class="pairing-status">Waiting for phone claim</div>
+          </div>
+          <div class="detail-card">
+            <div class="detail-label">Open on phone</div>
+            <a id="pairing-claim-url" href="#" target="_blank" rel="noopener" class="claim-link">LAN URL unavailable</a>
+            <p class="detail-hint">If scanning fails, open the link and enter the code manually.</p>
+          </div>
+          <div class="pairing-actions-inline">
+            <button type="button" id="btn-copy-code" class="btn btn-secondary">Copy code</button>
+            <button type="button" id="btn-cancel-pairing" class="btn btn-danger">Cancel session</button>
+          </div>
+        </div>
+      </div>
+      <div class="paired-section">
+        <div class="paired-header">
+          <h2>Paired phones</h2>
+          <button type="button" id="btn-refresh-paired" class="btn btn-secondary btn-inline">Refresh</button>
+        </div>
+        <div id="paired-devices" class="paired-devices"></div>
+      </div>
+      <div class="actions pairing-footer">
+        <button type="button" id="btn-back-player" class="btn btn-primary">Back to player</button>
+      </div>
+    </section>
   </div>
+  <script src="pairing.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

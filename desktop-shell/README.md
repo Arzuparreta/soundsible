@@ -27,13 +27,14 @@ Optional overrides:
 ```
 Tauri (Rust)  →  spawn soundsible_engine.py  →  poll desktop-engine-state.json
               →  health watchdog (3× fail @ 5s)  →  navigate webview to player
-Tray: Open | Restart engine | Stop engine | Quit
+Tray: Open | Pair phone… | Restart engine | Stop engine | Quit
 
 **Keyboard (DT5):** Global shortcuts work even when the window is hidden:
 
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+Alt+O` | Open / focus main window |
+| `Ctrl+Alt+P` | Pair phone (QR + paired device list) |
 | `Ctrl+Alt+R` | Restart engine |
 | `Ctrl+Alt+S` | Stop engine (returns to shell UI) |
 | `Ctrl+Alt+Q` | Quit (stops engine and exits) |
@@ -50,6 +51,17 @@ Closing the window (or **Quit** / `Ctrl+Alt+Q`) stops the engine and exits the a
 ```
 
 Shell UI lives in `shell-ui/` (DESIGN.md tokens). Player UI is the existing `ui_web` bundle served by the sidecar.
+
+## Phone pairing (§6)
+
+Native pairing UI in the shell (tray **Pair phone…** or `Ctrl+Alt+P`):
+
+- Creates a pairing session via the engine API (owner token on loopback)
+- Shows QR code + pairing code + claim URL
+- Polls session status until the phone is paired
+- Lists paired phones with revoke
+
+Requires the engine to be running (`Ready`). The web player Settings screen still exposes the same flow for power users.
 
 ## Build
 

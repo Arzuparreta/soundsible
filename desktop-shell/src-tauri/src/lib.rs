@@ -1,8 +1,9 @@
 mod engine;
+mod pairing;
 mod state;
 mod tray;
 
-use engine::EngineSupervisor;
+use engine::{EnginePhase, EngineSupervisor};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, RunEvent, State, WebviewUrl, WindowEvent};
@@ -174,6 +175,18 @@ fn open_logs(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_pairing(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    if state.engine.status().phase != EnginePhase::Ready {
+        return Err("Start the engine before pairing a phone.".into());
+    }
+    return_to_shell(&app)?;
+    app.emit("shell-view", "pairing")
+        .map_err(|e| e.to_string())?;
+    tray::focus_main_window(&app);
+    Ok(())
+}
+
+#[tauri::command]
 fn open_player(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let url = state
         .engine
@@ -228,7 +241,15 @@ pub fn run() {
             start_engine,
             restart_engine,
             open_logs,
-            open_player
+            open_player,
+            open_pairing,
+            pairing::pairing_create_session,
+            pairing::pairing_list_sessions,
+            pairing::pairing_display_close,
+            pairing::pairing_cancel_session,
+            pairing::pairing_list_devices,
+            pairing::pairing_revoke_device,
+            pairing::pairing_qr_data_url,
         ])
         .setup(|app| {
             tray::build_tray(app.handle())?;

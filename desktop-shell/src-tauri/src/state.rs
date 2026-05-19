@@ -49,6 +49,22 @@ pub fn load_runtime_state() -> Option<EngineRuntimeState> {
     serde_json::from_str(&raw).ok()
 }
 
+pub fn read_owner_token() -> Result<String, String> {
+    let runtime = load_runtime_state().ok_or_else(|| "Engine is not running.".to_string())?;
+    let token_path = runtime
+        .owner_token_file
+        .as_ref()
+        .ok_or_else(|| "Owner token file is missing.".to_string())?;
+    let token = std::fs::read_to_string(token_path)
+        .map_err(|e| format!("Could not read owner token: {e}"))?
+        .trim()
+        .to_string();
+    if token.is_empty() {
+        return Err("Owner token is empty.".into());
+    }
+    Ok(token)
+}
+
 pub fn has_consumer_config() -> bool {
     config_dir().join("config.json").is_file()
 }

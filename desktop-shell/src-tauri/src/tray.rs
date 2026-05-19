@@ -40,6 +40,19 @@ pub fn shutdown(app: &AppHandle) {
     app.exit(0);
 }
 
+pub fn open_pairing(app: &AppHandle) {
+    if let Some(state) = app.try_state::<super::AppState>() {
+        if state.engine.status().phase != super::engine::EnginePhase::Ready {
+            focus_main_window(app);
+            let _ = app.emit("shell-view", "pairing-unavailable");
+            return;
+        }
+    }
+    let _ = super::return_to_shell(app);
+    let _ = app.emit("shell-view", "pairing");
+    focus_main_window(app);
+}
+
 pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -60,8 +73,15 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         true,
         Some("Ctrl+Alt+S"),
     )?;
+    let pair_i = MenuItem::with_id(
+        app,
+        "tray_pair",
+        "Pair phone…",
+        true,
+        Some("Ctrl+Alt+P"),
+    )?;
     let quit_i = MenuItem::with_id(app, "tray_quit", "Quit", true, Some("Ctrl+Alt+Q"))?;
-    let menu = Menu::with_items(app, &[&open_i, &restart_i, &stop_i, &quit_i])?;
+    let menu = Menu::with_items(app, &[&open_i, &pair_i, &restart_i, &stop_i, &quit_i])?;
 
     let icon = idle_tray_icon()?;
 
@@ -72,6 +92,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .tooltip("Soundsible (Beta) — Ctrl+Alt+O open")
         .on_menu_event(|app, event| match event.id.as_ref() {
             "tray_open" => focus_main_window(app),
+            "tray_pair" => open_pairing(app),
             "tray_restart" => restart_engine(app),
             "tray_stop" => stop_engine(app),
             "tray_quit" => quit_app(app),
@@ -101,13 +122,15 @@ pub fn register_global_shortcuts(app: &AppHandle) -> tauri::Result<()> {
 
     app.plugin(
         tauri_plugin_global_shortcut::Builder::new()
-            .with_shortcuts(["Ctrl+Alt+O", "Ctrl+Alt+R", "Ctrl+Alt+S", "Ctrl+Alt+Q"])?
+            .with_shortcuts(["Ctrl+Alt+O", "Ctrl+Alt+P", "Ctrl+Alt+R", "Ctrl+Alt+S", "Ctrl+Alt+Q"])?
             .with_handler(move |app, shortcut, event| {
                 if event.state != ShortcutState::Pressed {
                     return;
                 }
                 if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyO) {
                     focus_main_window(app);
+                } else if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyP) {
+                    open_pairing(app);
                 } else if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyR) {
                     restart_engine(app);
                 } else if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyS) {
