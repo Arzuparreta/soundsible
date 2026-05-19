@@ -18,6 +18,7 @@ from shared.discovery_intelligence import (
     build_podcast_recommendations,
     emit_discovery_event,
     load_discovery_settings,
+    load_recently_saved_tracks,
     save_discovery_settings,
 )
 from shared.hardening import SCOPE_ADMIN_CONFIG, require_scope
@@ -321,6 +322,41 @@ def discovery_music_recommendations():
     fav_manager = getattr(mod, "favourites_manager", None)
     fav_ids = fav_manager.get_all() if fav_manager is not None else []
     return jsonify(build_music_recommendations(metadata, fav_ids, limit=limit))
+
+
+@discovery_bp.route("/api/discovery/music/recently-saved", methods=["GET"])
+@rate_limit("discovery_recently_saved", limit=60, window_sec=60)
+def discovery_recently_saved():
+    limit = min(24, max(1, request.args.get("limit", type=int) or 12))
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    try:
+        lib.refresh_if_stale()
+    except Exception:
+        pass
+    metadata = getattr(lib, "metadata", None)
+    library_tracks = list(metadata.tracks if metadata and metadata.tracks else [])
+    track_by_id = {t.id: t for t in library_tracks}
+
+    saved = load_recently_saved_tracks(limit)
+    items = []
+    for ev in saved:
+        track = track_by_id.get(ev["track_id"])
+        item = {
+            "track_id": ev["track_id"],
+            "title": ev["title"] or (track.title if track else ""),
+            "artist": ev["artist"] or (track.artist if track else ""),
+            "saved_at": ev["saved_at"],
+            "in_library": track is not None,
+            "deezer_id": ev["deezer_id"],
+            "youtube_id": ev["youtube_id"],
+        }
+        if track:
+            item["cover"] = getattr(track, "cover_art_key", None) or ""
+            item["album"] = track.album or ""
+            item["duration"] = int(track.duration or 0)
+        items.append(item)
+    return jsonify({"items": items})
 
 
 @discovery_bp.route("/api/discovery/podcasts/recommendations", methods=["GET"])

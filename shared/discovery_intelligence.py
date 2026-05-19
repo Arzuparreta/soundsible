@@ -415,11 +415,96 @@ def build_music_recommendations(
                 "item_ids": rediscover_ids,
             })
 
+    # "From Your Playlists" — per-playlist rails, up to 3 playlists × 8 tracks.
+    # Allows overlap with main rail so each playlist's identity is preserved.
+    if playlists:
+        sorted_playlists = sorted(
+            [(name, ids) for name, ids in playlist_members.items() if ids],
+            key=lambda kv: len(kv[1]),
+            reverse=True,
+        )
+        for pl_name, pl_ids in sorted_playlists[:3]:
+            pl_item_ids: list[str] = []
+            pl_dedup: set[str] = set()
+            for tid in pl_ids[:8]:
+                if tid not in pl_dedup:
+                    pl_dedup.add(tid)
+                    pl_item_ids.append(f"music:{tid}")
+                    # Ensure item exists in main items list
+                    track = by_id.get(tid)
+                    if track and track.id not in seen:
+                        seen.add(track.id)
+                        artist_norm = _norm(track.album_artist or track.artist)
+                        boost = _rollup_score_boost(artist_norm, rollup)
+                        items.append(_music_item(
+                            track,
+                            reason=f'From your playlist "{pl_name}".',
+                            reason_code="playlist_taste",
+                            score=min(1.0, 0.85 + boost),
+                        ))
+            if pl_item_ids:
+                sections.append({
+                    "id": f"from_playlist_{_norm(pl_name)[:40].replace(' ', '_')}",
+                    "title": pl_name,
+                    "reason": f"Tracks from your playlist.",
+                    "item_ids": pl_item_ids,
+                    "playlist_name": pl_name,
+                    "section_type": "from_your_playlists",
+                })
+
     return {
         "items": items[:limit],
         "sections": sections,
         "settings": load_discovery_settings(),
     }
+
+
+def load_recently_saved_tracks(limit: int = 12) -> list[dict[str, Any]]:
+    """
+    Return the last `limit` unique tracks saved to the library, newest first.
+    Reads music_saved_to_library events from listening-events.jsonl.
+    Returns a list of dicts with track_id, title, artist, deezer_id, youtube_id.
+    """
+    if not load_discovery_settings().get("learning_enabled", True):
+        return []
+
+    lines: list[str] = []
+    for path in _listening_events_paths():
+        if not path.exists():
+            continue
+        try:
+            with path.open("r", encoding="utf-8", errors="replace") as fh:
+                lines.extend(fh.readlines())
+        except Exception:
+            continue
+
+    seen_ids: set[str] = set()
+    result: list[dict[str, Any]] = []
+    for raw in reversed(lines):
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            ev = json.loads(raw)
+        except Exception:
+            continue
+        if not isinstance(ev, dict) or ev.get("event") != "music_saved_to_library":
+            continue
+        tid = _clean_str(ev.get("track_id") or "")
+        if not tid or tid in seen_ids:
+            continue
+        seen_ids.add(tid)
+        result.append({
+            "track_id": tid,
+            "title": _clean_str(ev.get("title") or ""),
+            "artist": _clean_str(ev.get("artist") or ""),
+            "deezer_id": _clean_str(ev.get("deezer_id") or ""),
+            "youtube_id": _clean_str(ev.get("youtube_id") or ev.get("video_id") or ""),
+            "saved_at": ev.get("ts") or 0,
+        })
+        if len(result) >= limit:
+            break
+    return result
 
 
 def _podcast_item(row: dict[str, Any], *, reason: str, reason_code: str, score: float) -> dict[str, Any]:

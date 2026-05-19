@@ -561,6 +561,37 @@ function _sectionToLibraryTracks(section, itemById, trackById) {
     .filter(Boolean);
 }
 
+/** Fetch recently saved tracks from the discovery API. */
+async function fetchRecentlySaved(limit = 12) {
+  const host = store?.state?.activeHost || window.location.hostname || 'localhost';
+  try {
+    const resp = await fetch(`${getApiBase(host)}/api/discovery/music/recently-saved?limit=${limit}`);
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return Array.isArray(data.items) ? data.items : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Fetch YouTube-related tracks for "Continue This Vibe" from the current playing track. */
+async function fetchVibeRelated(limit = 12) {
+  const currentTrack = store?.state?.currentTrack;
+  if (!currentTrack) return { tracks: [], seedTitle: '' };
+  const videoId = currentTrack.youtube_id || currentTrack.id?.replace?.(/^yt_/, '') || '';
+  if (!videoId || videoId.length !== 11) return { tracks: [], seedTitle: '' };
+  const host = store?.state?.activeHost || window.location.hostname || 'localhost';
+  try {
+    const resp = await fetch(`${getApiBase(host)}/api/downloader/youtube/related?id=${encodeURIComponent(videoId)}&limit=${limit}`);
+    if (!resp.ok) return { tracks: [], seedTitle: '' };
+    const data = await resp.json();
+    const tracks = Array.isArray(data.results) ? data.results.slice(0, limit) : [];
+    return { tracks, seedTitle: currentTrack.title || '' };
+  } catch {
+    return { tracks: [], seedTitle: '' };
+  }
+}
+
 async function getPersonalizedRailTracks(desired = 18) {
   syncPersonalTasteEpochFromStore();
   const tasteOk = _personalRailCacheEpoch === _personalTasteEpoch;
@@ -896,28 +927,48 @@ class DiscoveryUI {
     if (!this.container) return;
     this.container.innerHTML = '<div class="discovery-loading text-center py-10 text-[var(--text-dim)] text-sm">Loading…</div>';
 
-    const [recoData, personalTracks, chartResult] = await Promise.all([
+    const [recoData, personalTracks, chartResult, recentlySaved, vibeResult] = await Promise.all([
       fetchLocalRecommendationData(50),
       getPersonalizedRailTracks(12),
       discoveryService.fetchDiscoverHome(30, 8),
+      fetchRecentlySaved(12),
+      fetchVibeRelated(12),
     ]);
 
     if (gen !== this._renderGen) return;
 
     const { sections, itemById, trackById } = recoData;
     const { topTracks, gridPlaylists } = chartResult;
+    const { tracks: vibeTracks, seedTitle: vibeSeedTitle } = vibeResult;
     discoveryService.currentTracks = topTracks;
 
     // Resolve API sections to library tracks
     const resolved = {};
+    const playlistSections = [];
     for (const sec of sections) {
       const tracks = _sectionToLibraryTracks(sec, itemById, trackById);
-      if (tracks.length) resolved[sec.id] = { section: sec, tracks };
+      if (tracks.length) {
+        resolved[sec.id] = { section: sec, tracks };
+        if (sec.section_type === 'from_your_playlists') {
+          playlistSections.push({ section: sec, tracks });
+        }
+      }
     }
 
-    // "Trending, But Filtered" — chart tracks whose artist overlaps library
+    // Recently saved → resolve to library tracks where possible
+    const library = store.state.library || [];
+    const libById = new Map(library.map((t) => [t.id, t]));
+    const recentlySavedTracks = recentlySaved
+      .map((ev) => {
+        const track = libById.get(ev.track_id);
+        if (track) return { ...track, recoExplanation: 'Recently saved to your library.', recoReasonCode: 'recently_saved' };
+        return null;
+      })
+      .filter(Boolean);
+
+    // "Trending, But Filtered"
     const libraryArtists = new Set(
-      (store.state.library || []).map((t) => (t.artist || '').toLowerCase().trim()).filter(Boolean)
+      library.map((t) => (t.artist || '').toLowerCase().trim()).filter(Boolean)
     );
     const trendingFiltered = topTracks.filter(
       (t) => libraryArtists.has((t.artist || '').toLowerCase().trim())
@@ -940,6 +991,17 @@ class DiscoveryUI {
     }
     if (resolved['rediscover']) {
       sectionDefs.push({ id: 'disc-rediscover', title: 'Rediscover', type: 'library', data: resolved['rediscover'] });
+    }
+    // From Your Playlists — one section per playlist
+    playlistSections.forEach((ps, i) => {
+      sectionDefs.push({ id: `disc-playlist-${i}`, title: ps.section.playlist_name || ps.section.title, type: 'library', data: ps });
+    });
+    if (recentlySavedTracks.length) {
+      sectionDefs.push({ id: 'disc-recently-saved', title: 'Recently Saved', type: 'library', data: { tracks: recentlySavedTracks } });
+    }
+    if (vibeTracks.length) {
+      const vibeTitle = vibeSeedTitle ? `Continue This Vibe — ${vibeSeedTitle}` : 'Continue This Vibe';
+      sectionDefs.push({ id: 'disc-vibe', title: vibeTitle, type: 'vibe', tracks: vibeTracks });
     }
     if ((personalTracks || []).length) {
       sectionDefs.push({ id: 'disc-new-to-you', title: 'New to You', type: 'deezer', tracks: personalTracks, showReason: true });
@@ -972,6 +1034,8 @@ class DiscoveryUI {
             showRecoExplanation: !!s.showReason,
           });
         }
+      } else if (s.type === 'vibe') {
+        this._renderVibeTracks(s.tracks, el);
       } else if (s.type === 'library-empty') {
         el.innerHTML = '<p class="text-sm text-[var(--text-dim)] py-2">Save tracks, build playlists, or play favourites to unlock local picks.</p>';
       } else {
@@ -983,6 +1047,52 @@ class DiscoveryUI {
     }
 
     this.bindEvents();
+  }
+
+  /** Render YouTube-related tracks for "Continue This Vibe" with play + save actions. */
+  _renderVibeTracks(tracks, containerEl) {
+    if (!containerEl || !tracks.length) return;
+    const esc = (s) => { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; };
+    const fmt = (s) => { if (!s) return ''; const m = Math.floor(s / 60); return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`; };
+    containerEl.innerHTML = tracks.map((t, i) => {
+      const thumb = t.thumbnail || `https://img.youtube.com/vi/${t.id}/mqdefault.jpg`;
+      const dur = fmt(t.duration);
+      return `<div class="vibe-row group flex items-center gap-3 px-1 py-1.5 rounded-lg hover:bg-[var(--surface-overlay)] transition-colors cursor-pointer" data-vibe-idx="${i}">
+        <div class="relative w-10 h-10 flex-shrink-0 rounded overflow-hidden">
+          <img src="${esc(thumb)}" alt="" class="w-full h-full object-cover" loading="lazy">
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-medium text-[var(--text-main)] truncate">${esc(t.title)}</div>
+          <div class="text-xs text-[var(--text-dim)] truncate">${esc(t.channel || '')}${dur ? ' · ' + dur : ''}</div>
+        </div>
+        <button type="button" class="vibe-save-btn flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--accent)] hover:text-[var(--text-on-accent)] text-[var(--text-dim)] transition-colors" data-vibe-idx="${i}" aria-label="Save to Library" title="Save to Library">
+          <i class="fas fa-plus text-sm"></i>
+        </button>
+      </div>`;
+    }).join('');
+
+    containerEl.querySelectorAll('.vibe-row').forEach((row) => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.vibe-save-btn')) return;
+        const idx = Number(row.getAttribute('data-vibe-idx'));
+        const t = tracks[idx];
+        if (!t?.id) return;
+        void import('./store.js').then(({ store: s }) => {
+          void s.addPreviewToQueue({ source: 'ytmusic', id: t.id, title: t.title, artist: t.channel || '', thumbnail: t.thumbnail || '', duration: t.duration || 0 });
+        });
+      });
+    });
+
+    containerEl.querySelectorAll('.vibe-save-btn').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const idx = Number(btn.getAttribute('data-vibe-idx'));
+        const t = tracks[idx];
+        if (!t) return;
+        const { saveTrackToLibrary } = await import('./discovery.js');
+        await saveTrackToLibrary({ title: t.title, artist: t.channel || '', duration: t.duration || 0 }, btn);
+      });
+    });
   }
 
   async renderSearchResults(query) {

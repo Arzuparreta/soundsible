@@ -10,6 +10,7 @@ from shared.discovery_intelligence import (
     emit_discovery_event,
     load_discovery_settings,
     load_listening_event_rollups,
+    load_recently_saved_tracks,
     save_discovery_settings,
 )
 from shared.models import LibraryMetadata, Track
@@ -275,3 +276,62 @@ def test_podcast_recommendations_use_subscriptions(tmp_path):
     assert result["items"][0]["media_type"] == "podcast_show"
     assert result["items"][0]["reason_code"] == "podcast_subscription"
     assert result["items"][0]["action_state"]["subscribed"] is True
+
+
+def test_recently_saved_returns_most_recent_first(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+
+    events = [
+        {"event": "music_saved_to_library", "track_id": "t1", "title": "Old Track", "artist": "A"},
+        {"event": "music_saved_to_library", "track_id": "t2", "title": "New Track", "artist": "B"},
+        {"event": "music_saved_to_library", "track_id": "t3", "title": "Newest Track", "artist": "C"},
+    ]
+    _write_jsonl_events(runtime.data_dir, events)
+
+    result = load_recently_saved_tracks(limit=10)
+    assert [r["track_id"] for r in result] == ["t3", "t2", "t1"]
+
+
+def test_recently_saved_deduplicates_track_ids(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+
+    events = [
+        {"event": "music_saved_to_library", "track_id": "t1", "title": "A", "artist": "X"},
+        {"event": "music_saved_to_library", "track_id": "t1", "title": "A again", "artist": "X"},
+        {"event": "music_saved_to_library", "track_id": "t2", "title": "B", "artist": "Y"},
+    ]
+    _write_jsonl_events(runtime.data_dir, events)
+
+    result = load_recently_saved_tracks(limit=10)
+    ids = [r["track_id"] for r in result]
+    assert ids.count("t1") == 1
+    assert len(ids) == 2
+
+
+def test_recently_saved_respects_opt_out(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    save_discovery_settings({"learning_enabled": False})
+
+    events = [{"event": "music_saved_to_library", "track_id": "t1", "title": "X", "artist": "Y"}]
+    _write_jsonl_events(runtime.data_dir, events)
+
+    result = load_recently_saved_tracks(limit=10)
+    assert result == []
+
+
+def test_from_your_playlists_section_appears(tmp_path):
+    _make_runtime(tmp_path)
+    a = _track("a", "Track A", "Artist One")
+    b = _track("b", "Track B", "Artist Two")
+    metadata = LibraryMetadata(
+        version=1, tracks=[a, b], playlists={"Road Trip": ["a", "b"]}, settings={}
+    )
+
+    result = build_music_recommendations(metadata, favourite_ids=[], limit=20)
+    pl_sections = [s for s in result["sections"] if s.get("section_type") == "from_your_playlists"]
+    assert len(pl_sections) >= 1
+    assert pl_sections[0]["playlist_name"] == "Road Trip"
+    assert "music:a" in pl_sections[0]["item_ids"] or "music:b" in pl_sections[0]["item_ids"]
