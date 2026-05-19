@@ -443,8 +443,11 @@ class DatabaseManager:
             return d
 
     def set_cached_resolution(self, artist: str, title: str, result: Dict[str, Any]):
-        """Save a YouTube resolution to the cache."""
-        if not artist or not title or not result or not result.get("id"):
+        """Save a YouTube resolution to the cache. Allows empty id for failure states."""
+        if not artist or not title or not result:
+            return
+        # Require a video id unless this is explicitly a failure state record
+        if not result.get("id") and not result.get("failure_state"):
             return
         import json as _json
         candidates = result.get("candidates") or []
