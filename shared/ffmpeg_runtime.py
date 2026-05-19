@@ -45,8 +45,8 @@ def _iter_candidates() -> list[tuple[str, Path]]:
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
         base = Path(meipass)
-        for name in ("ffmpeg", "ffmpeg.exe"):
-            out.append(("bundle", base / name))
+        for rel in ("bin/ffmpeg", "bin/ffmpeg.exe", "ffmpeg", "ffmpeg.exe"):
+            out.append(("bundle", base / rel))
 
     vendor = _repo_root() / "desktop-shell" / "packaging" / "vendor"
     if vendor.is_dir():

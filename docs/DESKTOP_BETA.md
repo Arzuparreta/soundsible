@@ -42,10 +42,15 @@ Tagged releases and manual workflow runs produce installers:
 **Maintainer build (local):**
 
 ```bash
-cd desktop-shell
-export SOUNDSIBLE_REPO_ROOT="$(cd .. && pwd)"
-BUNDLE_FFMPEG=1 ../desktop-shell/scripts/build-sidecar.sh
-npm ci && npm run build
+./desktop-shell/scripts/desktop-beta-build.sh
+```
+
+Or step by step:
+
+```bash
+export SOUNDSIBLE_REPO_ROOT="$(cd "$(git rev-parse --show-toplevel)" && pwd)"
+BUNDLE_FFMPEG=1 "$SOUNDSIBLE_REPO_ROOT/desktop-shell/scripts/build-sidecar.sh"
+cd desktop-shell && npm ci && npm run build
 ```
 
 Artifacts land under `desktop-shell/src-tauri/target/release/bundle/` (`.deb`, `.AppImage`, `.msi`, etc., depending on OS).

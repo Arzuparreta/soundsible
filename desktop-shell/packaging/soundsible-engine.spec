@@ -12,8 +12,9 @@ ENTRY = REPO_ROOT / "soundsible_engine.py"
 VENDOR_FFMPEG = REPO_ROOT / "desktop-shell" / "packaging" / "vendor" / "ffmpeg"
 
 pyinstaller_binaries = []
+# Install as bin/ffmpeg — never "." or PyInstaller shadows the ffmpeg-python package.
 if VENDOR_FFMPEG.is_file():
-    pyinstaller_binaries.append((str(VENDOR_FFMPEG), "."))
+    pyinstaller_binaries.append((str(VENDOR_FFMPEG), "bin"))
 
 hiddenimports = []
 for package in ("shared", "player", "odst_tool", "setup_tool"):

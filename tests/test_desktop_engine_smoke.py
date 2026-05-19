@@ -86,6 +86,11 @@ def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
         health_url = _wait_for_health(config_dir)
         payload = requests.get(health_url, timeout=5).json()
         assert isinstance(payload, dict)
+        ff = payload.get("ffmpeg") or {}
+        if engine_bin is not None:
+            assert ff.get("available") is True, (
+                f"sidecar health missing bundled ffmpeg: {ff!r}"
+            )
         state = load_runtime_state(config_dir)
         assert state is not None
         player_base = payload.get("base_url") or state["base_url"]

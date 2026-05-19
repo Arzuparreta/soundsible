@@ -21,9 +21,11 @@ case "$TARGET" in
   x86_64-unknown-linux-gnu|aarch64-unknown-linux-gnu)
     ARCHIVE="$CACHE/ffmpeg-linux64.tar.xz"
     URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
+    ;;
   x86_64-pc-windows-msvc)
     ARCHIVE="$CACHE/ffmpeg-win64.zip"
     URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+    ;;
   *)
     echo "fetch-ffmpeg: unsupported target $TARGET — install ffmpeg via OS package manager" >&2
     exit 0
