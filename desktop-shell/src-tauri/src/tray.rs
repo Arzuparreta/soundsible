@@ -119,10 +119,10 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 pub fn register_global_shortcuts(app: &AppHandle) -> tauri::Result<()> {
     use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
 
-    app.plugin(
-        tauri_plugin_global_shortcut::Builder::new()
-            .with_shortcuts(["Ctrl+Alt+O", "Ctrl+Alt+P", "Ctrl+Alt+R", "Ctrl+Alt+S", "Ctrl+Alt+Q"])?
-            .with_handler(move |app, shortcut, event| {
+    let plugin = tauri_plugin_global_shortcut::Builder::new()
+        .with_shortcuts(["Ctrl+Alt+O", "Ctrl+Alt+P", "Ctrl+Alt+R", "Ctrl+Alt+S", "Ctrl+Alt+Q"])
+        .map_err(|e| tauri::Error::Io(std::io::Error::other(e.to_string())))?
+        .with_handler(move |app, shortcut, event| {
                 if event.state != ShortcutState::Pressed {
                     return;
                 }
@@ -138,9 +138,9 @@ pub fn register_global_shortcuts(app: &AppHandle) -> tauri::Result<()> {
                     quit_app(app);
                 }
             })
-            .build(),
-    )
-    .map_err(|e| tauri::Error::Io(std::io::Error::other(e.to_string())))?;
+        .build();
+    app.plugin(plugin)
+        .map_err(|e| tauri::Error::Io(std::io::Error::other(e.to_string())))?;
     Ok(())
 }
 
