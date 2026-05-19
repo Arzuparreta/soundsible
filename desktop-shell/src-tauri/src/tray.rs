@@ -1,8 +1,7 @@
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 fn idle_tray_icon() -> tauri::Result<tauri::image::Image<'static>> {
     tauri::image::Image::from_bytes(include_bytes!("../icons/tray-idle.png"))
-        .map_err(|e| tauri::Error::FailedMessage(format!("tray icon: {e}")))
 }
 
 pub fn focus_main_window(app: &AppHandle) {
@@ -117,7 +116,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 }
 
 #[cfg(desktop)]
-pub fn register_global_shortcuts(app: &AppHandle) -> tauri::Result<()> {
+pub fn register_global_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
 
     app.plugin(
@@ -145,6 +144,8 @@ pub fn register_global_shortcuts(app: &AppHandle) -> tauri::Result<()> {
 }
 
 #[cfg(not(desktop))]
-pub fn register_global_shortcuts(_app: &AppHandle) -> tauri::Result<()> {
+pub fn register_global_shortcuts(
+    _app: &AppHandle,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Ok(())
 }

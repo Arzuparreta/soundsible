@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "identifier": "org.soundsible.desktop",
+  "identifier": "default",
   "description": "Soundsible consumer desktop shell capabilities",
   "windows": ["main"],
   "permissions": [

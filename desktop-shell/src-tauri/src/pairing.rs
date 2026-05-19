@@ -26,16 +26,19 @@ fn admin_request(method: &str, path: &str, body: Option<Value>) -> Result<Value,
             .call()
             .map_err(|e| format!("Request failed: {e}"))?,
         "POST" => {
-            let mut request = agent
+            let request = agent
                 .post(&url)
                 .set("X-Soundsible-Admin-Token", &token)
                 .set("Content-Type", "application/json");
             if let Some(payload) = body {
-                request = request.send_json(payload);
+                request
+                    .send_json(payload)
+                    .map_err(|e| format!("Request failed: {e}"))?
+            } else {
+                request
+                    .call()
+                    .map_err(|e| format!("Request failed: {e}"))?
             }
-            request
-                .call()
-                .map_err(|e| format!("Request failed: {e}"))?
         }
         _ => return Err("Unsupported HTTP method.".into()),
     };

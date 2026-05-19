@@ -6,7 +6,7 @@ mod tray;
 use engine::{EnginePhase, EngineSupervisor};
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, RunEvent, State, WebviewUrl, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
@@ -200,9 +200,10 @@ pub fn return_to_shell(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "Main window not found".to_string())?;
-    window
-        .navigate(WebviewUrl::App("index.html".into()))
-        .map_err(|e| e.to_string())
+    let url: url::Url = "tauri://localhost/index.html"
+        .parse()
+        .map_err(|e: url::ParseError| e.to_string())?;
+    window.navigate(url).map_err(|e| e.to_string())
 }
 
 fn navigate_main_window(app: &AppHandle, url: &str) -> Result<(), String> {

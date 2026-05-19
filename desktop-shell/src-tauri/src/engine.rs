@@ -387,7 +387,7 @@ fn health_watchdog(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool
                 guard.music_dir.clone()
             };
             if let Some(dir) = music_dir {
-                let _ = supervisor.stop();
+                let _ = supervisor.stop(None);
                 stop_flag.store(false, Ordering::SeqCst);
                 let _ = supervisor.start(app.clone(), dir);
             }
