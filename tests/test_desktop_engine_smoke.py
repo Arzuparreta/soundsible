@@ -113,6 +113,50 @@ def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
         stop_owned_desktop_engine(config_dir)
 
 
+def test_desktop_engine_sigterm_exits_cleanly(tmp_path):
+    """SIGTERM should stop the engine within a few seconds (no hang after 'Shutting down...')."""
+    reset_runtime()
+    env = os.environ.copy()
+    env.update(_runtime_env(tmp_path))
+
+    music = tmp_path / "music"
+    music.mkdir()
+    (music / "sample.flac").write_bytes(b"fake")
+
+    ensure_consumer_config(music)
+    config_dir = Path(env["SOUNDSIBLE_CONFIG_DIR"])
+
+    cmd = _engine_command(None)
+    cmd.extend(["--music-dir", str(music)])
+
+    proc = subprocess.Popen(
+        cmd,
+        cwd=REPO_ROOT,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    )
+
+    try:
+        _wait_for_health(config_dir)
+        if os.name == "nt":
+            proc.terminate()
+        else:
+            os.killpg(proc.pid, signal.SIGTERM)
+        proc.wait(timeout=10)
+        assert proc.returncode is not None
+    finally:
+        if proc.poll() is None:
+            if os.name == "nt":
+                proc.kill()
+            else:
+                os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait(timeout=5)
+        stop_owned_desktop_engine(config_dir)
+
+
 def test_desktop_engine_smoke_python(tmp_path):
     _run_smoke(tmp_path, engine_bin=None)
 

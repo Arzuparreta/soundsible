@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import signal
 import sys
 from pathlib import Path
 
@@ -118,13 +117,6 @@ def run_desktop_engine(args: argparse.Namespace) -> None:
     runtime = build_runtime_config(args)
     runtime, _ = ensure_owner_token(runtime)
     configure_runtime(runtime)
-
-    def _handle_exit(*_: object) -> None:
-        clear_runtime_state(runtime)
-        raise SystemExit(0)
-
-    signal.signal(signal.SIGINT, _handle_exit)
-    signal.signal(signal.SIGTERM, _handle_exit)
 
     from shared.api import start_api
 

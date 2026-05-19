@@ -343,12 +343,6 @@ def _run_legacy_daemon(args: argparse.Namespace) -> None:
     console.print("[bold green]Soundsible Daemon is running.[/bold green]")
     from shared.api import start_api
 
-    def _handle_exit(*_: object) -> None:
-        raise SystemExit(0)
-
-    signal.signal(signal.SIGINT, _handle_exit)
-    signal.signal(signal.SIGTERM, _handle_exit)
-
     try:
         start_api(host=runtime.host, port=runtime.port, runtime_config=runtime)
     except (KeyboardInterrupt, SystemExit):

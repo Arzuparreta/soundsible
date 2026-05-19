@@ -6,6 +6,7 @@ Acts as the bridge between the Python core and various frontends (Tauri, Web, PW
 import os
 import sys
 import errno
+import signal
 import threading
 import json
 import uuid
@@ -364,6 +365,8 @@ downloader_service = None
 _downloader_lock = threading.Lock()  # Note: Prevent concurrent init when many discover/resolve requests hit at once
 queue_manager_dl = DownloadQueueManager(socketio=socketio)
 api_observer = None  # Note: Store observer reference for cleanup in daemon mode
+_api_shutdown_lock = threading.Lock()
+_api_shutdown_done = False
 
 def get_core():
     global library_manager, playback_engine, queue_manager, favourites_manager
@@ -1067,6 +1070,60 @@ def _resolve_output_dir():
     return Path(target).expanduser().resolve() if target else None
 
 
+def stop_api() -> None:
+    """Stop background workers and the gevent SocketIO server."""
+    global api_observer, _api_shutdown_done
+    with _api_shutdown_lock:
+        if _api_shutdown_done:
+            return
+        _api_shutdown_done = True
+
+    logger.info("API: Shutting down...")
+
+    try:
+        wsgi_server = getattr(socketio, "wsgi_server", None)
+        if wsgi_server is not None:
+            wsgi_server.stop()
+    except Exception:
+        logger.exception("API: Error stopping WSGI server")
+
+    observer = api_observer
+    api_observer = None
+    if observer is not None:
+        try:
+            observer.stop()
+            observer.join(timeout=2)
+        except Exception:
+            logger.exception("API: Error stopping library file watcher")
+
+    try:
+        orchestrator.shutdown(wait=False)
+    except Exception:
+        logger.exception("API: Error stopping orchestrator")
+
+
+def _stop_wsgi_from_signal(_signum: int, _frame: object) -> None:
+    """Minimal teardown safe to run inside gevent's signal callback."""
+    try:
+        wsgi_server = getattr(socketio, "wsgi_server", None)
+        if wsgi_server is not None:
+            wsgi_server.stop()
+    except Exception:
+        logger.exception("API: Error handling shutdown signal")
+
+
+def _register_api_shutdown_handlers() -> None:
+    """Register SIGINT/SIGTERM handlers compatible with gevent's event loop."""
+    try:
+        from gevent import signal as gevent_signal
+
+        gevent_signal.signal(signal.SIGINT, _stop_wsgi_from_signal)
+        gevent_signal.signal(signal.SIGTERM, _stop_wsgi_from_signal)
+    except Exception:
+        signal.signal(signal.SIGINT, _stop_wsgi_from_signal)
+        signal.signal(signal.SIGTERM, _stop_wsgi_from_signal)
+
+
 def start_api(
     port=STATION_PORT,
     *,
@@ -1213,7 +1270,11 @@ def start_api(
         orchestrator.submit_background("ytdlp_update", _run_ytdlp_update)
     sys.stdout.flush()
     sys.stderr.flush()
-    socketio.run(app, host=runtime.host, port=runtime.port, debug=debug)
+    _register_api_shutdown_handlers()
+    try:
+        socketio.run(app, host=runtime.host, port=runtime.port, debug=debug)
+    finally:
+        stop_api()
 
 if __name__ == '__main__':
     start_api()
