@@ -8,6 +8,9 @@ SPEC="$ROOT/desktop-shell/packaging/soundsible-engine.spec"
 BIN_DIR="$ROOT/desktop-shell/src-tauri/binaries"
 TARGET="$(rustc --print host-tuple)"
 OUTPUT="$BIN_DIR/soundsible-engine-${TARGET}"
+if [[ "$TARGET" == *windows* ]]; then
+  OUTPUT="${OUTPUT}.exe"
+fi
 
 if [[ ! -x "$PYTHON" ]]; then
   PYTHON=python3

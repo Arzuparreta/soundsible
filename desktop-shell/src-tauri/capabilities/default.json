@@ -8,8 +8,6 @@
     "core:window:allow-show",
     "core:window:allow-hide",
     "core:window:allow-set-focus",
-    "core:window:allow-navigate",
-    "core:webview:allow-webview-navigate",
     "core:tray:default",
     "core:menu:default",
     "core:event:default",
