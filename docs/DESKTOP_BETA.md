@@ -41,7 +41,10 @@ Tagged releases and manual workflow runs produce installers:
 - **First beta build (2026-05-19):** [Actions run #1](https://github.com/Arzuparreta/soundsible/actions/runs/26096184389) — **success** (~31 min). Workflow artifacts:
   - `soundsible-desktop-linux-desktop-v0.1.0-beta.1` (~729 MB)
   - `soundsible-desktop-windows-desktop-v0.1.0-beta.1` (~382 MB)
-- Draft release (if created): https://github.com/Arzuparreta/soundsible/releases — publish from **Drafts** when ready. Installers are also under the run’s **Artifacts** tab if the draft is empty.
+- **Draft release:** `desktop-v0.1.0-beta.1` (publish from https://github.com/Arzuparreta/soundsible/releases — **Drafts**). Bundled assets:
+  - Linux: `Soundsible.Beta._0.1.0_amd64.deb`, `.AppImage`, `.rpm`
+  - Windows: `Soundsible.Beta._0.1.0_x64-setup.exe`, `Soundsible.Beta._0.1.0_x64_en-US.msi`
+- Workflow zip artifacts (same build): `soundsible-desktop-linux-desktop-v0.1.0-beta.1`, `soundsible-desktop-windows-desktop-v0.1.0-beta.1`
 
 **Maintainer build (local):**
 
