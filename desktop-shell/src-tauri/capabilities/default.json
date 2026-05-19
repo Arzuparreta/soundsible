@@ -17,6 +17,7 @@
     "core:event:allow-listen",
     "dialog:default",
     "opener:default",
-    "shell:default"
+    "shell:default",
+    "global-shortcut:default"
   ]
 }

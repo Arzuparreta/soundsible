@@ -21,19 +21,20 @@
       <div class="shell-card">
         <div id="path-display" class="path-inset">No folder selected</div>
         <div id="scan-preview" class="scan-preview hidden"></div>
-        <button type="button" id="btn-choose" class="btn btn-primary">Choose folder…</button>
-        <button type="button" id="btn-continue" class="btn btn-secondary" disabled>Continue</button>
+        <button type="button" id="btn-choose" class="btn btn-primary" autofocus>Choose folder…</button>
+        <button type="button" id="btn-continue" class="btn btn-secondary" disabled aria-disabled="true">Continue</button>
         <p class="fine-print">Soundsible (Beta) — built for people who own their music.</p>
+        <p class="shell-keyboard-hint">Keyboard: <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>O</kbd> open · <kbd>R</kbd> restart · <kbd>Q</kbd> quit</p>
       </div>
     </section>
 
-    <section id="view-loading" class="state-panel hidden">
-      <h2><span class="spinner"></span>Starting Soundsible…</h2>
+    <section id="view-loading" class="state-panel hidden" aria-live="polite">
+      <h2 tabindex="-1"><span class="spinner" aria-hidden="true"></span>Starting Soundsible…</h2>
       <div id="log-loading" class="log-tail"></div>
     </section>
 
-    <section id="view-error" class="state-panel hidden">
-      <h2 class="error-title">Couldn't start</h2>
+    <section id="view-error" class="state-panel hidden" aria-live="assertive">
+      <h2 class="error-title" tabindex="-1">Couldn't start</h2>
       <div id="log-error" class="log-tail"></div>
       <div class="actions">
         <button type="button" id="btn-retry" class="btn btn-primary">Try again</button>

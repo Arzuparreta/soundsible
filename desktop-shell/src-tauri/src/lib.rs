@@ -1,19 +1,16 @@
 mod engine;
 mod state;
+mod tray;
 
 use engine::EngineSupervisor;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::{
-    menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, RunEvent, State,
-};
+use tauri::{AppHandle, Manager, RunEvent, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
-struct AppState {
-    engine: EngineSupervisor,
+pub struct AppState {
+    pub engine: EngineSupervisor,
     selected_folder: Mutex<Option<PathBuf>>,
 }
 
@@ -137,52 +134,6 @@ fn navigate_main_window(app: &AppHandle, url: &str) -> Result<(), String> {
     window.navigate(parsed).map_err(|e| e.to_string())
 }
 
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let open_i = MenuItem::with_id(app, "tray_open", "Open", true, None::<&str>)?;
-    let restart_i = MenuItem::with_id(app, "tray_restart", "Restart engine", true, None::<&str>)?;
-    let quit_i = MenuItem::with_id(app, "tray_quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open_i, &restart_i, &quit_i])?;
-
-    let icon = app.default_window_icon().cloned().unwrap();
-    TrayIconBuilder::new()
-        .icon(icon)
-        .menu(&menu)
-        .tooltip("Soundsible (Beta)")
-        .on_menu_event(|app, event| match event.id.as_ref() {
-            "tray_open" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            }
-            "tray_restart" => {
-                if let Some(state) = app.try_state::<AppState>() {
-                    let _ = state.engine.restart(app.clone());
-                }
-            }
-            "tray_quit" => {
-                app.exit(0);
-            }
-            _ => {}
-        })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                let app = tray.app_handle();
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            }
-        })
-        .build(app)?;
-    Ok(())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -204,7 +155,8 @@ pub fn run() {
             open_player
         ])
         .setup(|app| {
-            build_tray(app.handle())?;
+            tray::build_tray(app.handle())?;
+            tray::register_global_shortcuts(app.handle())?;
             Ok(())
         })
         .build(tauri::generate_context!())

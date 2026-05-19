@@ -28,6 +28,22 @@ Optional overrides:
 Tauri (Rust)  →  spawn soundsible_engine.py  →  poll desktop-engine-state.json
               →  health watchdog (3× fail @ 5s)  →  navigate webview to player
 Tray: Open | Restart engine | Quit
+
+**Keyboard (DT5):** Global shortcuts work even when the window is hidden:
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Alt+O` | Open / focus main window |
+| `Ctrl+Alt+R` | Restart engine |
+| `Ctrl+Alt+Q` | Quit |
+
+Left-click tray icon also focuses the window. Right-click opens the tray menu (platform convention).
+
+## Accessibility
+
+- Shell buttons use 44px minimum touch targets (`DESIGN.md` DT5)
+- `:focus-visible` outline on shell buttons; focus moves to the primary action when switching views (first-run → loading → error)
+- Webview beta banner dismiss button is 44×44px (`ui_web/css/_desktop_custom.css`)
 ```
 
 Shell UI lives in `shell-ui/` (DESIGN.md tokens). Player UI is the existing `ui_web` bundle served by the sidecar.

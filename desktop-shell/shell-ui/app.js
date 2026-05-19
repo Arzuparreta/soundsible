@@ -15,10 +15,28 @@ const logError = document.getElementById('log-error');
 
 let selectedPath = null;
 
+const focusTargets = {
+  'first-run': btnChoose,
+  loading: () => viewLoading.querySelector('h2'),
+  error: btnRetry,
+};
+
 function showView(name) {
   viewFirstRun.classList.toggle('hidden', name !== 'first-run');
   viewLoading.classList.toggle('hidden', name !== 'loading');
   viewError.classList.toggle('hidden', name !== 'error');
+  document.getElementById('app').dataset.view = name;
+
+  const target = focusTargets[name];
+  const el = typeof target === 'function' ? target() : target;
+  if (el && typeof el.focus === 'function') {
+    requestAnimationFrame(() => el.focus({ preventScroll: true }));
+  }
+}
+
+function setContinueEnabled(enabled) {
+  btnContinue.disabled = !enabled;
+  btnContinue.setAttribute('aria-disabled', enabled ? 'false' : 'true');
 }
 
 function renderLog(container, lines) {
@@ -72,7 +90,7 @@ btnChoose.addEventListener('click', async () => {
   selectedPath = path;
   pathDisplay.textContent = path;
   pathDisplay.classList.add('filled');
-  btnContinue.disabled = false;
+  setContinueEnabled(true);
   await refreshPreview(path);
 });
 

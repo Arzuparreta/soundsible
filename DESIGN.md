@@ -130,6 +130,8 @@ Implementation target: `desktop-shell/` (T4, T6, DT2–DT5).
 - **Icon — paused/idle:** Static Soundsible glyph (from `branding/`)
 - **Linux fallback:** Static glyph if tray cannot animate; document in platform notes
 - **Keyboard:** Tray accessible via platform conventions; menu items ≥44px touch height where drawn by app
+- **Global shortcuts (v1):** `Ctrl+Alt+O` open/focus window, `Ctrl+Alt+R` restart engine, `Ctrl+Alt+Q` quit — registered globally and shown as tray menu accelerators
+- **Shell UI:** All buttons `min-height: 44px`; `:focus-visible` rings on interactive elements; focus moves to primary action on view change
 
 #### 5. Beta banner (webview, DT4)
 
@@ -185,3 +187,4 @@ Wireframe (superseded for pixels, still valid for IA): `~/.gstack/projects/Arzup
 | 2026-05-19 | VU-meter tray icon v1 | Alive-on-your-machine differentiation (wilder risk) |
 | 2026-05-19 | Gold accent bar + badge only | Brand `#E0BC00` without clashing orange CTAs |
 | 2026-05-19 | Live scan preview on first-run | Trust before Continue commit (wilder risk) |
+| 2026-05-19 | DT5 tray keyboard + 44px targets | Global shortcuts + shell focus-visible; beta banner dismiss already 44px |
