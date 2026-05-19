@@ -22,7 +22,7 @@ Aligns with [Consumer Democratization plan](https://github.com/Arzuparreta/sound
 
 | Area | Not done yet (beta blockers) |
 |------|------------------------------|
-| Friend-ready **GitHub Release** installers | In progress — see [Release builds](#release-builds) |
+| **Published** GitHub Release (draft → public) | CI built artifacts — owner publishes draft or downloads from Actions |
 | Clean VM proof (≤10 min to first play) | **Gate A1** — run checklist below |
 | Phase 0 HDD soak (30 min) | **Gate B1** — maintainer machine |
 | v1.1 Tailscale 30 min walk | After 1a green |
@@ -38,6 +38,10 @@ Tagged releases and manual workflow runs produce installers:
 
 - Workflow: `.github/workflows/desktop-release.yml`
 - Tag pattern: `desktop-v*` (example: `desktop-v0.1.0-beta.1`)
+- **First beta build (2026-05-19):** [Actions run #1](https://github.com/Arzuparreta/soundsible/actions/runs/26096184389) — **success** (~31 min). Workflow artifacts:
+  - `soundsible-desktop-linux-desktop-v0.1.0-beta.1` (~729 MB)
+  - `soundsible-desktop-windows-desktop-v0.1.0-beta.1` (~382 MB)
+- Draft release (if created): https://github.com/Arzuparreta/soundsible/releases — publish from **Drafts** when ready. Installers are also under the run’s **Artifacts** tab if the draft is empty.
 
 **Maintainer build (local):**
 
@@ -148,14 +152,15 @@ Headless engine smoke:
 
 | Date | Tester | OS | Result | Notes |
 |------|--------|-----|--------|-------|
-| | | | | |
+| 2026-05-19 | GitHub Actions | linux+windows | CI pass | Tag `desktop-v0.1.0-beta.1`, [run 26096184389](https://github.com/Arzuparreta/soundsible/actions/runs/26096184389); artifacts uploaded |
+| | | | | Gate A1 VM pending |
 
 ---
 
 ## What comes next (order)
 
-1. **A1** — Clean VM smoke on Linux + Windows release artifacts  
-2. **A3** — Publish `desktop-v0.1.0-beta.1` (or similar) on GitHub Releases  
+1. **A1** — Clean VM smoke: download Linux/Windows artifacts from [run 26096184389](https://github.com/Arzuparreta/soundsible/actions/runs/26096184389) (or publish draft release)  
+2. **A3** — Publish draft release on GitHub (if not already visible)  
 3. **A4** — Friend installs + `setup_gate_rollup.py`  
 4. **B1** — HDD soak on your machine  
 5. **C1** — Tailscale 30 min walk (v1.1)  
