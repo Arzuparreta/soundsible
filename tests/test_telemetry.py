@@ -92,7 +92,7 @@ def test_unknown_category_raises(tmp_path):
     runtime = _make_runtime(tmp_path)
     configure_runtime(runtime)
     with pytest.raises(ValueError, match="Unknown telemetry category"):
-        emit("listening-events", {"v": 1})
+        emit("unknown-events", {"v": 1})
 
 
 def test_telemetry_enabled_default_true(monkeypatch):

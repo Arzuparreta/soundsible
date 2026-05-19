@@ -17,6 +17,7 @@ import { checkResumeFromOtherDevice } from './playback_resume.js';
 import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 import { playPreview } from './preview_playback.js';
 import { initHoverTooltip } from './tooltip.js';
+import { initDiscoverySettingsToggle } from './discovery_events.js';
 import * as playback_context from './playback_context.js';
 import {
     filterPlaylistsBySearch,
@@ -675,6 +676,7 @@ function init() {
         initScrollTracking();
 
         wireSettings(MOBILE_SETTINGS_IDS, { store, showToast: (msg) => UI.showToast(msg), onLibraryOrderChange: () => renderLibraryContent(), subscribeIndicators: false });
+        initDiscoverySettingsToggle('settings-discovery-learning', 'settings-discovery-learning-status');
         wireMigration(
             {
                 formatSelect: 'settings-migration-format',

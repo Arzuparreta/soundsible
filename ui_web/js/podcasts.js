@@ -21,6 +21,7 @@ import {
 } from './podcast_model.js';
 import * as renderers from './renderers.js';
 import { isPlayTimingEligibleTrack } from './play_timing.js';
+import { recordDiscoveryEvent } from './discovery_events.js';
 
 function apiBase() {
     return getApiBase(store.state.activeHost);
@@ -625,6 +626,11 @@ export class PodcastsUI {
             return;
         }
         box.innerHTML = '<p class="text-sm text-[var(--text-dim)]">Searching…</p>';
+        void recordDiscoveryEvent('podcast_search_opened', {
+            media_type: 'podcast_show',
+            query: q,
+            source: 'podcast_search'
+        });
         try {
             const r = await fetch(`${apiBase()}/api/discovery/podcasts/search?q=${encodeURIComponent(q)}&limit=15`);
             const d = await r.json();
@@ -793,6 +799,14 @@ export class PodcastsUI {
 
             const serverSub = d.subscription;
             if (serverSub && serverSub.id) {
+                void recordDiscoveryEvent('podcast_subscribed', {
+                    media_type: 'podcast_show',
+                    podcast_feed_id: serverSub.id,
+                    podcast_show_title: serverSub.title || meta.title || '',
+                    podcast_author: serverSub.author || meta.author || '',
+                    itunes_collection_id: serverSub.itunes_collection_id || meta.itunes_collection_id || '',
+                    source: 'podcast_subscribe'
+                });
                 const cur = getPodcastSubscriptions().filter(
                     (s) => s.id !== optId && (s.rss_url || '').trim() !== rss
                 );
@@ -1243,6 +1257,14 @@ export class PodcastsUI {
                 const msg = d.rejected?.[0]?.reason || d.error || 'Queue failed';
                 throw new Error(msg);
             }
+            void recordDiscoveryEvent('podcast_episode_saved', {
+                media_type: 'podcast_episode',
+                podcast_feed_id: item.podcast_feed_id || '',
+                podcast_episode_id: item.episode_guid || item.song_str || '',
+                title: item.podcast_title || '',
+                podcast_show_title: item.podcast_show_title || '',
+                source: 'podcast_episode_download'
+            });
             await fetch(`${apiBase()}/api/downloader/start`, { method: 'POST' });
             Haptics.tick();
             if (typeof window.showToast === 'function') window.showToast('Queued for download');

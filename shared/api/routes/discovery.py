@@ -12,6 +12,15 @@ import time
 import requests
 from flask import Blueprint, Response, jsonify, request
 
+from shared.discovery_intelligence import (
+    POSITIVE_LISTENING_EVENTS,
+    build_music_recommendations,
+    build_podcast_recommendations,
+    emit_discovery_event,
+    load_discovery_settings,
+    save_discovery_settings,
+)
+from shared.hardening import SCOPE_ADMIN_CONFIG, require_scope
 from shared.hardening import rate_limit
 
 logger = logging.getLogger(__name__)
@@ -61,6 +70,70 @@ def _podcast_row_from_itunes_search(r: dict) -> dict | None:
         "feed_url": feed,
         "image_url": (r.get("artworkUrl600") or r.get("artworkUrl100") or "").strip(),
     }
+
+
+def _get_api():
+    import shared.api as api_mod
+
+    return api_mod
+
+
+@discovery_bp.route("/api/discovery/settings", methods=["GET"])
+@rate_limit("discovery_settings_get", limit=60, window_sec=60)
+def discovery_settings_get():
+    return jsonify(load_discovery_settings())
+
+
+@discovery_bp.route("/api/discovery/settings", methods=["PATCH"])
+@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
+@rate_limit("discovery_settings_patch", limit=30, window_sec=60)
+def discovery_settings_patch():
+    data = request.get_json(silent=True) or {}
+    if "learning_enabled" in data and not isinstance(data.get("learning_enabled"), bool):
+        return jsonify({"error": "learning_enabled must be boolean"}), 400
+    return jsonify(save_discovery_settings(data))
+
+
+@discovery_bp.route("/api/discovery/events", methods=["POST"])
+@rate_limit("discovery_events", limit=240, window_sec=60)
+def discovery_events_post():
+    data = request.get_json(silent=True) or {}
+    event = (data.get("event") or "").strip()
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    if event not in POSITIVE_LISTENING_EVENTS:
+        return jsonify({"error": "Unsupported discovery event"}), 400
+    recorded = emit_discovery_event(event, payload)
+    return jsonify({"status": "recorded" if recorded else "disabled", "recorded": recorded})
+
+
+@discovery_bp.route("/api/discovery/music/recommendations", methods=["GET"])
+@rate_limit("discovery_music_recommendations", limit=120, window_sec=60)
+def discovery_music_recommendations():
+    limit = min(50, max(1, request.args.get("limit", type=int) or 24))
+    api = _get_api()
+    lib, _, _ = api.get_core()
+    try:
+        lib.refresh_if_stale()
+    except Exception:
+        pass
+    metadata = getattr(lib, "metadata", None)
+    fav_manager = getattr(api, "favourites_manager", None)
+    fav_ids = fav_manager.get_all() if fav_manager is not None else []
+    return jsonify(build_music_recommendations(metadata, fav_ids, limit=limit))
+
+
+@discovery_bp.route("/api/discovery/podcasts/recommendations", methods=["GET"])
+@rate_limit("discovery_podcast_recommendations", limit=120, window_sec=60)
+def discovery_podcast_recommendations():
+    limit = min(50, max(1, request.args.get("limit", type=int) or 24))
+    api = _get_api()
+    lib, _, _ = api.get_core()
+    try:
+        lib.refresh_if_stale()
+    except Exception:
+        pass
+    metadata = getattr(lib, "metadata", None)
+    return jsonify(build_podcast_recommendations(metadata, limit=limit))
 
 
 @discovery_bp.route("/api/discovery/podcasts/search", methods=["GET"])

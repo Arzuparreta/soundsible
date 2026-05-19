@@ -17,6 +17,7 @@ import {
     isPlayTimingEligibleTrack,
 } from './play_timing.js';
 import { postSetupFirstPlayBeacon, ensureSetupSessionStarted } from './setup_funnel.js';
+import { recordDiscoveryEvent } from './discovery_events.js';
 
 const PRELOAD_THRESHOLD_SEC = 45;
 const PUSH_DEBOUNCE_VISIBLE_SEC = 5;
@@ -42,6 +43,7 @@ class AudioEngine {
         this._suppressStaleTimeUpdates = false;
         this._pendingRemotePlayback = null;
         this._remoteUnlockOverlay = null;
+        this._discoveryThirtySecondKeys = new Set();
         this.init();
     }
 
@@ -189,6 +191,36 @@ class AudioEngine {
             '"': '&quot;',
             "'": '&#39;'
         })[ch]);
+    }
+
+    _recordDiscoveryThirtySecondListen(track, currentTime) {
+        if (!track || currentTime < 30) return;
+        const key = `${track.source || 'library'}:${track.id}`;
+        if (this._discoveryThirtySecondKeys.has(key)) return;
+        this._discoveryThirtySecondKeys.add(key);
+        if (track.media_kind === 'podcast_episode' || track.source === 'podcast-preview' || String(track.id || '').startsWith('pcast_')) {
+            recordDiscoveryEvent('podcast_episode_played_30s', {
+                media_type: 'podcast_episode',
+                track_id: track._libraryTrackId || track.id,
+                title: track.title || '',
+                artist: track.artist || '',
+                source: track.source || 'library',
+                podcast_feed_id: track.podcast_feed_id || '',
+                podcast_episode_id: track.podcast_episode_guid || track.id || '',
+                podcast_show_title: track.artist || track.album || '',
+            });
+            return;
+        }
+        recordDiscoveryEvent('music_played_30s', {
+            media_type: 'music_track',
+            track_id: track._libraryTrackId || track.id,
+            title: track.title || '',
+            artist: track.artist || '',
+            album: track.album || '',
+            source: track.source || 'library',
+            youtube_id: track.video_id || track.youtube_id || (String(track.id || '').length === 11 ? track.id : ''),
+            deezer_id: track.deezerId || '',
+        });
     }
 
     async _consumePendingRemotePlayback() {
@@ -783,6 +815,7 @@ class AudioEngine {
                 this._lastPushTime = now;
                 store.pushPlaybackState(currentTrack.id, currentTime, true);
             }
+            this._recordDiscoveryThirtySecondListen(currentTrack, currentTime);
         }
 
         if (!this.audio.paused && Number.isFinite(duration) && duration > 0) {

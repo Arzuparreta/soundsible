@@ -7,6 +7,7 @@ import { getApiBase } from './config.js';
 import { audioEngine } from './audio.js';
 import { searchService } from './search_service.js';
 import { showLoadingToast } from './shared.js';
+import { recordDiscoveryEvent } from './discovery_events.js';
 
 const REFILL_THRESHOLD = 3;
 const MAX_QUEUE_BATCH = 25;
@@ -344,6 +345,14 @@ class RadioService {
 
             loading.dismiss();
             window.showToast?.(`Radio: ${seed.title}`);
+            void recordDiscoveryEvent('music_started_radio', {
+                media_type: 'music_track',
+                track_id: getLibraryTrackId(track, seed.videoId) || '',
+                title: seed.title || track.title || '',
+                artist: seed.artist || track.artist || track.album_artist || '',
+                youtube_id: seed.videoId,
+                source: track.source || 'radio_seed'
+            });
             return true;
         } catch (err) {
             loading.dismiss();

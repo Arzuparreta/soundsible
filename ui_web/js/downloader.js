@@ -9,6 +9,7 @@ import { formatTime, esc } from './renderers.js';
 import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 import { searchService, SourceType } from './search_service.js';
 import { isYtdlpPreviewStreamTrack, libraryCoverPickerCandidates } from './shared.js';
+import { recordDiscoveryEvent } from './discovery_events.js';
 
 /** Default element IDs for mobile (index.html). Desktop passes overrides so the same class works in desktop.html. */
 const DEFAULT_DL_SELECTORS = {
@@ -852,6 +853,26 @@ export class Downloader {
             if (!resp.ok) {
                 const reason = body.rejected?.[0]?.reason || body.message || 'Failed';
                 throw new Error(reason);
+            }
+            for (const item of items) {
+                if (item.source_type === 'podcast_enclosure') {
+                    void recordDiscoveryEvent('podcast_episode_saved', {
+                        media_type: 'podcast_episode',
+                        podcast_feed_id: item.podcast_feed_id || item.feed_id || '',
+                        podcast_episode_id: item.episode_guid || item.song_str || '',
+                        title: item.podcast_title || item.display_title || '',
+                        podcast_show_title: item.podcast_show_title || item.podcast_album || '',
+                        source: 'download_queue'
+                    });
+                } else {
+                    void recordDiscoveryEvent('music_saved_to_library', {
+                        media_type: 'music_track',
+                        title: item.display_title || '',
+                        artist: item.display_artist || '',
+                        youtube_id: item.video_id || '',
+                        source: item.source_type || 'download_queue'
+                    });
+                }
             }
             this.downloadQueue = [];
             this.renderDownloadQueueList();

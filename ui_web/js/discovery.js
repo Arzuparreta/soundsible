@@ -6,6 +6,7 @@
 import { store } from './store.js';
 import { Haptics } from './haptics.js';
 import { getApiBase } from './config.js';
+import { Resolver } from './resolver.js';
 import { searchService } from './search_service.js';
 import { audioEngine } from './audio.js';
 import { playPreview, paintOptimisticDeezerPreview, odstItemToPreviewTrack } from './preview_playback.js';
@@ -497,6 +498,35 @@ class DiscoveryService {
 
 export const discoveryService = new DiscoveryService();
 
+async function fetchLocalRecommendationTracks(limit = 12) {
+  const host =
+    store?.state?.activeHost ||
+    (typeof window !== 'undefined' ? window.location.hostname : '') ||
+    'localhost';
+  try {
+    const response = await fetch(`${getApiBase(host)}/api/discovery/music/recommendations?limit=${limit}`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    const items = Array.isArray(data.items) ? data.items : [];
+    const library = store.state.library || [];
+    const byId = new Map(library.map((track) => [track.id, track]));
+    return items
+      .map((item) => {
+        const track = byId.get(item.track_id);
+        if (!track || track.media_kind === 'podcast_episode') return null;
+        return {
+          ...track,
+          recoExplanation: item.reason || '',
+          recoReasonCode: item.reason_code || ''
+        };
+      })
+      .filter(Boolean)
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
 async function getPersonalizedRailTracks(desired = 18) {
   syncPersonalTasteEpochFromStore();
   const tasteOk = _personalRailCacheEpoch === _personalTasteEpoch;
@@ -668,7 +698,8 @@ class DiscoveryUI {
     if (!this.container) return;
     this.container.innerHTML = '<div class="discovery-loading text-center py-10 text-[var(--text-dim)]">Loading discoveries...</div>';
 
-    const [personalTracks, { topTracks, gridPlaylists }] = await Promise.all([
+    const [localTracks, personalTracks, { topTracks, gridPlaylists }] = await Promise.all([
+      fetchLocalRecommendationTracks(12),
       getPersonalizedRailTracks(18),
       discoveryService.fetchDiscoverHome(50, 12)
     ]);
@@ -678,10 +709,15 @@ class DiscoveryUI {
     discoveryService.currentTracks = topTracks;
 
     const list = topTracks.slice(0, 12);
+    const localShow = localTracks.slice(0, 12);
     const personalShow = personalTracks.slice(0, 12);
     window._discoverSurfaceTracks = [...personalShow, ...list];
     this.container.innerHTML = `
       <div class="discovery-home space-y-8 pb-8">
+        <section>
+          <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">From your library</h2>
+          <div id="discovery-local-tracks" class="space-y-1"></div>
+        </section>
         <section>
           <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">Recommended for you</h2>
           <div id="discovery-personal-tracks" class="space-y-1"></div>
@@ -695,9 +731,21 @@ class DiscoveryUI {
           <div id="discovery-playlist-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start"></div>
         </section>
       </div>`;
+    const localEl = this.container.querySelector('#discovery-local-tracks');
     const personalEl = this.container.querySelector('#discovery-personal-tracks');
     const tracksEl = this.container.querySelector('#discovery-home-top-tracks');
     const grid = this.container.querySelector('#discovery-playlist-grid');
+    if (localEl) {
+      if (!localShow.length) {
+        localEl.innerHTML =
+          '<p class="text-sm text-[var(--text-dim)] py-2">Save tracks, build playlists, or play favourites to unlock local picks.</p>';
+      } else {
+        renderers.renderSongList(localShow, localEl, {
+          getCoverUrl: (t) => Resolver.getCoverUrl(t),
+          showRecoExplanation: true
+        });
+      }
+    }
     if (personalEl) {
       if (!personalShow.length) {
         personalEl.innerHTML =

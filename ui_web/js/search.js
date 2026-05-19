@@ -17,6 +17,7 @@ import { scoreLibrary, scoreArtist, mergeAndSortByScore, scoreOdst } from './sea
 import { getApiBase } from './config.js';
 import { discoveryUI } from './discovery.js';
 import { isPlayTimingEligibleTrack } from './play_timing.js';
+import { recordDiscoveryEvent } from './discovery_events.js';
 
 const ODST_DEBOUNCE_MS = 150;
 
@@ -46,6 +47,16 @@ export function playMusicSearchAtIndex(mergedList, index) {
         });
     } else if (track.source !== 'preview' && track.source !== 'podcast-preview') {
         store.recordSongPlay(track);
+    }
+    if (track.source === 'preview') {
+        recordDiscoveryEvent('music_search_played', {
+            media_type: 'music_track',
+            track_id: track.id || '',
+            title: track.title || '',
+            artist: track.artist || track.channel || '',
+            source: 'search',
+            youtube_id: track.video_id || track.id || '',
+        });
     }
     const playOpts = isPlayTimingEligibleTrack(track) ? { playTimingIntent: true } : {};
     audioEngine.playTrack(track, playOpts);

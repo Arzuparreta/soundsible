@@ -13,6 +13,7 @@ import { DesktopUI } from './ui_desktop.js';
 import { checkResumeFromOtherDevice } from './playback_resume.js';
 import { playPreview } from './preview_playback.js';
 import { initHoverTooltip } from './tooltip.js';
+import { initDiscoverySettingsToggle } from './discovery_events.js';
 import * as playback_context from './playback_context.js';
 import {
     filterPlaylistsBySearch,
@@ -856,6 +857,7 @@ function init() {
             musicDirSaveBtn: 'desktop-settings-music-dir-save-btn',
             musicDirHint: 'desktop-settings-music-dir-hint',
         }, { store, showToast: (m) => DesktopUI.showToast(m), onLibraryOrderChange: () => renderHomeSongs() });
+        initDiscoverySettingsToggle('desktop-settings-discovery-learning', 'desktop-settings-discovery-learning-status');
         wireMigration(
             {
                 formatSelect: 'desktop-settings-migration-format',

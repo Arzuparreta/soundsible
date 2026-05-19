@@ -28,6 +28,7 @@ _CATEGORY_FILENAMES = {
     "setup-events": "setup-events.jsonl",
     "migration-events": "migration-events.jsonl",
     "play-timing": "play-timing.jsonl",
+    "listening-events": "listening-events.jsonl",
 }
 
 
@@ -38,6 +39,8 @@ def _normalize_category(category: str) -> str:
         "migration": "migration-events",
         "play_timing": "play-timing",
         "playtiming": "play-timing",
+        "listening": "listening-events",
+        "listening_events": "listening-events",
     }
     key = aliases.get(key, key)
     if key not in _CATEGORY_FILENAMES:

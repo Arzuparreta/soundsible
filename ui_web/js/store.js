@@ -3,6 +3,7 @@
  */
 import { connectionManager } from './connection.js';
 import { STATION_PORT, getApiBase } from './config.js';
+import { recordDiscoveryEvent } from './discovery_events.js';
 
 const MAX_SONG_PLAY_HISTORY = 300;
 const MAX_PODCAST_PLAY_HISTORY = 300;
@@ -600,6 +601,12 @@ class Store {
                 if (data.settings && typeof data.settings === 'object') patch.librarySettings = data.settings;
                 if (Object.keys(patch).length) this.update(patch);
                 else await this.syncLibrary();
+                recordDiscoveryEvent('music_added_to_playlist', {
+                    media_type: 'music_track',
+                    track_id: trackId,
+                    playlist_name: playlistName,
+                    source: 'library',
+                });
                 return true;
             }
             return false;
@@ -861,6 +868,14 @@ class Store {
             });
             if (res.ok) {
                 await this.syncQueue();
+                const track = this.state.library.find((t) => t.id === trackId);
+                recordDiscoveryEvent('music_added_to_queue', {
+                    media_type: track?.media_kind === 'podcast_episode' ? 'podcast_episode' : 'music_track',
+                    track_id: trackId,
+                    title: track?.title || '',
+                    artist: track?.artist || '',
+                    source: 'library',
+                });
                 return true;
             }
             return false;
@@ -905,6 +920,16 @@ class Store {
             });
             if (res.ok) {
                 await this.syncQueue();
+                if (!enclosureUrl) {
+                    recordDiscoveryEvent('music_added_to_queue', {
+                        media_type: 'music_track',
+                        track_id: videoId || item.id || '',
+                        title: preview.title,
+                        artist: preview.artist,
+                        source: 'preview',
+                        youtube_id: videoId,
+                    });
+                }
                 return true;
             }
             return false;
