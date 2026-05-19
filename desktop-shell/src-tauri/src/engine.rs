@@ -1,5 +1,6 @@
 use crate::state::{
-    load_runtime_state, python_executable, repo_root, sidecar_binary, EngineRuntimeState,
+    load_runtime_state, python_executable, repo_root, sidecar_binary, state_file_path,
+    EngineRuntimeState,
 };
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -133,8 +134,12 @@ impl EngineSupervisor {
     fn stop_child(&self) -> Result<(), String> {
         let mut guard = self.inner.lock().expect("engine lock");
         if let Some(mut child) = guard.child.take() {
-            let _ = child.kill();
-            let _ = child.wait();
+            terminate_child_process(&mut child);
+        } else if let Some(runtime) = guard.runtime.as_ref() {
+            terminate_pid(runtime.pid);
+        } else if let Some(state) = load_runtime_state() {
+            terminate_pid(state.pid);
+            let _ = std::fs::remove_file(state_file_path());
         }
         guard.runtime = None;
         guard.health_failures = 0;
@@ -188,35 +193,87 @@ fn bootstrap_config(music_dir: &PathBuf) -> Result<(), String> {
 
 fn spawn_engine(music_dir: &PathBuf, guard: &mut SupervisorInner) -> Result<Child, String> {
     let root = repo_root();
-    if let Some(sidecar) = sidecar_binary() {
+    let mut command = if let Some(sidecar) = sidecar_binary() {
         push_log(guard, format!("engine: spawning sidecar {}", sidecar.display()));
-        return Command::new(sidecar)
-            .arg("--music-dir")
-            .arg(music_dir)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Failed to spawn sidecar: {e}"));
-    }
+        let mut cmd = Command::new(sidecar);
+        cmd.arg("--music-dir").arg(music_dir);
+        cmd
+    } else {
+        let python = python_executable(&root);
+        let entry = root.join("soundsible_engine.py");
+        if !entry.exists() {
+            return Err(format!("Missing engine entry at {}", entry.display()));
+        }
+        push_log(
+            guard,
+            format!("engine: spawning {} {}", python.display(), entry.display()),
+        );
+        let mut cmd = Command::new(&python);
+        cmd.current_dir(&root).arg(&entry);
+        cmd.arg("--music-dir").arg(music_dir);
+        cmd
+    };
 
-    let python = python_executable(&root);
-    let entry = root.join("soundsible_engine.py");
-    if !entry.exists() {
-        return Err(format!("Missing engine entry at {}", entry.display()));
-    }
-    push_log(
-        guard,
-        format!("engine: spawning {} {}", python.display(), entry.display()),
-    );
-    Command::new(&python)
-        .current_dir(&root)
-        .arg(&entry)
-        .arg("--music-dir")
-        .arg(music_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    attach_unix_process_group(&mut command);
+    command
         .spawn()
         .map_err(|e| format!("Failed to spawn engine: {e}"))
+}
+
+#[cfg(unix)]
+fn attach_unix_process_group(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+
+    unsafe {
+        command.pre_exec(|| {
+            libc::setsid();
+            Ok(())
+        });
+    }
+}
+
+#[cfg(not(unix))]
+fn attach_unix_process_group(_command: &mut Command) {}
+
+fn terminate_child_process(child: &mut Child) {
+    let pid = child.id();
+    terminate_pid(pid);
+    let _ = child.wait();
+}
+
+fn terminate_pid(pid: u32) {
+    if pid == 0 {
+        return;
+    }
+
+    #[cfg(unix)]
+    {
+        let pgid = -(pid as i32);
+        unsafe {
+            libc::kill(pgid, libc::SIGTERM);
+        }
+        for _ in 0..40 {
+            if unsafe { libc::kill(pid as i32, 0) } != 0 {
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        if unsafe { libc::kill(pid as i32, 0) } == 0 {
+            unsafe {
+                libc::kill(pgid, libc::SIGKILL);
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .output();
+    }
+
+    let _ = std::fs::remove_file(state_file_path());
 }
 
 fn wait_for_ready(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>, app: AppHandle) {

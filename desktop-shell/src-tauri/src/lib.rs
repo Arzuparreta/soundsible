@@ -5,7 +5,7 @@ mod tray;
 use engine::EngineSupervisor;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, RunEvent, State};
+use tauri::{AppHandle, Manager, RunEvent, State, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
@@ -157,12 +157,22 @@ pub fn run() {
         .setup(|app| {
             tray::build_tray(app.handle())?;
             tray::register_global_shortcuts(app.handle())?;
+
+            if let Some(window) = app.get_webview_window("main") {
+                let app_handle = app.handle().clone();
+                window.on_window_event(move |event| {
+                    if matches!(event, WindowEvent::CloseRequested { .. }) {
+                        tray::shutdown(&app_handle);
+                    }
+                });
+            }
+
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
-            if let RunEvent::ExitRequested { .. } = event {
+            if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
                 if let Some(state) = app.try_state::<AppState>() {
                     let _ = state.engine.stop();
                 }

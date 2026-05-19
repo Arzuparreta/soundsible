@@ -39,6 +39,8 @@ Tray: Open | Restart engine | Quit
 
 Left-click tray icon also focuses the window. Right-click opens the tray menu (platform convention).
 
+Closing the window (or **Quit** / `Ctrl+Alt+Q`) stops the engine and exits the app.
+
 ## Accessibility
 
 - Shell buttons use 44px minimum touch targets (`DESIGN.md` DT5)

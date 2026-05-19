@@ -20,6 +20,10 @@ pub fn restart_engine(app: &AppHandle) {
 }
 
 pub fn quit_app(app: &AppHandle) {
+    shutdown(app);
+}
+
+pub fn shutdown(app: &AppHandle) {
     if let Some(state) = app.try_state::<super::AppState>() {
         let _ = state.engine.stop();
     }
