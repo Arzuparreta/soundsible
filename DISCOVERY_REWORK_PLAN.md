@@ -203,6 +203,23 @@ Known limits of the first slice:
 - Podcast recommendations are subscription-based only in this slice.
 - No confidence-gated resolution sheet has been added yet.
 
+Implemented in Phase 4 (Discovery UI Redesign):
+
+- `renderHome()` replaced in `DiscoveryUI`: now data-driven from the recommendation API sections instead of hardcoded rails.
+- New helpers `fetchLocalRecommendationData(limit)` and `_sectionToLibraryTracks(section, itemById, trackById)` for mapping API sections to library tracks.
+- Sections rendered in order: **Made for Your Library** → **Because You Saved…** (dynamic title, shown only when rollup has saves) → **Rediscover** (shown only when enough play history exists) → **New to You** (Deezer personalized) → **Trending, But Filtered** (chart filtered to library artists, falls back to full chart) → **Popular Playlists** (Deezer grid).
+- Each section is gracefully hidden/empty-stated when data is absent.
+- `bindEvents()` updated to cover new section IDs (`disc-new-to-you`, `disc-trending`).
+- Preserves all existing search result rendering and playback context.
+
+Implemented in Option A (Listening-Event Rollups):
+
+- `ListeningRollup` dataclass: aggregates `artist_plays`, `artist_saves`, `album_plays`, `podcast_plays`, `played_track_ids` from tail of `listening-events.jsonl` (up to 2 rotations, max 2000 events).
+- `load_listening_event_rollups()`: reads events, returns empty rollup when learning disabled or no file.
+- `build_music_recommendations` now accepts optional `rollup` argument; boosts artist scores from play/save signals; adds "Because You Saved…" section (tracks sharing artist with recent saves); adds "Rediscover" section (library tracks not in played_track_ids when ≥3 distinct played IDs exist).
+- `build_podcast_recommendations` now sorts subscriptions by recent play count; shows "podcast_recently_played" reason for boosted shows.
+- Tests: 7 new rollup tests covering aggregation, opt-out, score boost, section generation, and podcast ranking.
+
 ## Where The Next Agent Should Continue
 
 Recommended next phase: Phase 3, then Phase 4.

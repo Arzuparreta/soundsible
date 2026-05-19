@@ -4,10 +4,12 @@ from pathlib import Path
 import pytest
 
 from shared.discovery_intelligence import (
+    ListeningRollup,
     build_music_recommendations,
     build_podcast_recommendations,
     emit_discovery_event,
     load_discovery_settings,
+    load_listening_event_rollups,
     save_discovery_settings,
 )
 from shared.models import LibraryMetadata, Track
@@ -118,6 +120,136 @@ def test_music_recommendations_prioritize_favourites_and_playlists(tmp_path):
     assert result["items"][0]["reason_code"] == "library_favourite"
     assert result["items"][1]["reason"] == 'From your playlist "Road".'
     assert result["sections"][0]["id"] == "made_for_your_library"
+
+
+def _write_jsonl_events(data_dir: Path, events: list[dict]) -> None:
+    tel_dir = data_dir / "telemetry"
+    tel_dir.mkdir(parents=True, exist_ok=True)
+    path = tel_dir / "listening-events.jsonl"
+    with path.open("w", encoding="utf-8") as fh:
+        for ev in events:
+            fh.write(json.dumps(ev) + "\n")
+
+
+def test_rollup_aggregates_plays_correctly(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+
+    events = [
+        {"event": "music_played_30s", "artist": "Queen", "album": "Innuendo", "track_id": "t1"},
+        {"event": "music_played_30s", "artist": "Queen", "album": "Innuendo", "track_id": "t2"},
+        {"event": "music_search_played", "artist": "Queen", "track_id": "t1"},
+        {"event": "music_saved_to_library", "artist": "Bowie"},
+        {"event": "podcast_episode_played_30s", "itunes_collection_id": "123"},
+        {"event": "podcast_episode_played_30s", "itunes_collection_id": "123"},
+    ]
+    _write_jsonl_events(runtime.data_dir, events)
+
+    rollup = load_listening_event_rollups()
+
+    assert rollup.has_data
+    assert rollup.artist_plays["queen"] == 3
+    assert rollup.played_track_ids == {"t1", "t2"}
+    assert rollup.artist_saves["bowie"] == 1
+    assert rollup.podcast_plays["123"] == 2
+    assert rollup.saved_artists == ["bowie"]
+
+
+def test_rollup_returns_empty_when_learning_disabled(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    save_discovery_settings({"learning_enabled": False})
+
+    events = [{"event": "music_played_30s", "artist": "Queen", "track_id": "t1"}]
+    _write_jsonl_events(runtime.data_dir, events)
+
+    rollup = load_listening_event_rollups()
+    assert not rollup.has_data
+
+
+def test_rollup_returns_empty_when_no_file(tmp_path):
+    _make_runtime(tmp_path)
+    rollup = load_listening_event_rollups()
+    assert not rollup.has_data
+
+
+def test_rollup_boosts_played_artist_scores(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+
+    events = [
+        {"event": "music_played_30s", "artist": "Artist One", "track_id": "a"},
+        {"event": "music_played_30s", "artist": "Artist One", "track_id": "a"},
+    ]
+    _write_jsonl_events(runtime.data_dir, events)
+
+    a = _track("a", "Track A", "Artist One")
+    b = _track("b", "Track B", "Artist Two")
+    metadata = LibraryMetadata(version=1, tracks=[a, b], playlists={}, settings={})
+
+    result = build_music_recommendations(metadata, favourite_ids=[], limit=10)
+    scores = {item["track_id"]: item["score"] for item in result["items"]}
+
+    assert scores["a"] > scores["b"], "Played artist should score higher"
+
+
+def test_rollup_adds_because_you_saved_section(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+
+    events = [{"event": "music_saved_to_library", "artist": "Artist One"}]
+    _write_jsonl_events(runtime.data_dir, events)
+
+    a = _track("a", "Track A", "Artist One")
+    b = _track("b", "Track B", "Artist Two")
+    metadata = LibraryMetadata(version=1, tracks=[a, b], playlists={}, settings={})
+
+    result = build_music_recommendations(metadata, favourite_ids=[], limit=10)
+    section_ids = [s["id"] for s in result["sections"]]
+    assert "because_you_saved" in section_ids
+
+
+def test_rollup_adds_rediscover_section(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+
+    # Only t1/t2/t3 played — t4 should appear in rediscover
+    events = [
+        {"event": "music_played_30s", "artist": "A", "track_id": "t1"},
+        {"event": "music_played_30s", "artist": "A", "track_id": "t2"},
+        {"event": "music_played_30s", "artist": "A", "track_id": "t3"},
+    ]
+    _write_jsonl_events(runtime.data_dir, events)
+
+    tracks = [_track(f"t{i}", f"Track {i}", "A") for i in range(1, 5)]
+    metadata = LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={})
+
+    result = build_music_recommendations(metadata, favourite_ids=[], limit=20)
+    rediscover = next((s for s in result["sections"] if s["id"] == "rediscover"), None)
+    assert rediscover is not None
+    assert "music:t4" in rediscover["item_ids"]
+
+
+def test_podcast_rollup_boosts_recently_played_show(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+
+    events = [
+        {"event": "podcast_episode_played_30s", "itunes_collection_id": "999"},
+        {"event": "podcast_episode_played_30s", "itunes_collection_id": "999"},
+    ]
+    _write_jsonl_events(runtime.data_dir, events)
+
+    metadata = LibraryMetadata(
+        version=1, tracks=[], playlists={}, settings={},
+        podcast_subscriptions=[
+            {"id": "s1", "title": "Popular Show", "rss_url": "http://a.com/feed", "itunes_collection_id": "999"},
+            {"id": "s2", "title": "Other Show", "rss_url": "http://b.com/feed", "itunes_collection_id": "888"},
+        ],
+    )
+    result = build_podcast_recommendations(metadata)
+    assert result["items"][0]["external_ids"]["itunes_collection_id"] == "999"
+    assert result["items"][0]["reason_code"] == "podcast_recently_played"
 
 
 def test_podcast_recommendations_use_subscriptions(tmp_path):

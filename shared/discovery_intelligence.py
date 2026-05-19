@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
 from shared.models import LibraryMetadata, Track
-from shared.runtime import get_config_dir
+from shared.runtime import get_config_dir, get_runtime_config
 from shared.telemetry import emit
 
 SETTINGS_VERSION = 1
@@ -30,6 +30,96 @@ POSITIVE_LISTENING_EVENTS = {
     "podcast_episode_saved",
     "podcast_search_opened",
 }
+
+
+@dataclass
+class ListeningRollup:
+    """Aggregated signals from listening-events.jsonl."""
+    artist_plays: dict[str, int] = field(default_factory=dict)
+    artist_saves: dict[str, int] = field(default_factory=dict)
+    album_plays: dict[str, int] = field(default_factory=dict)
+    podcast_plays: dict[str, int] = field(default_factory=dict)
+    played_track_ids: set[str] = field(default_factory=set)
+
+    @property
+    def has_data(self) -> bool:
+        return bool(self.artist_plays or self.played_track_ids or self.podcast_plays)
+
+    @property
+    def saved_artists(self) -> list[str]:
+        return sorted(self.artist_saves, key=lambda a: self.artist_saves[a], reverse=True)
+
+
+def _listening_events_paths() -> list[Path]:
+    """Return candidate JSONL paths in newest-first order (base + up to 2 rotations)."""
+    try:
+        data_dir = get_runtime_config().data_dir
+    except Exception:
+        return []
+    base = data_dir / "telemetry" / "listening-events.jsonl"
+    paths = [base]
+    for i in (1, 2):
+        rot = base.parent / f"{base.name}.{i}"
+        if rot.exists():
+            paths.append(rot)
+    return paths
+
+
+def load_listening_event_rollups(max_events: int = 2000) -> ListeningRollup:
+    """
+    Read the tail of listening-events.jsonl and aggregate signals.
+    Returns an empty rollup when learning is disabled or no events exist.
+    """
+    if not load_discovery_settings().get("learning_enabled", True):
+        return ListeningRollup()
+
+    lines: list[str] = []
+    for path in _listening_events_paths():
+        if not path.exists():
+            continue
+        try:
+            with path.open("r", encoding="utf-8", errors="replace") as fh:
+                lines.extend(fh.readlines())
+        except Exception:
+            continue
+        if len(lines) >= max_events:
+            break
+
+    rollup = ListeningRollup()
+    for raw in lines[-max_events:]:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            ev = json.loads(raw)
+        except Exception:
+            continue
+        if not isinstance(ev, dict):
+            continue
+        event = ev.get("event") or ""
+        artist = _norm(ev.get("artist"))
+        album = _norm(ev.get("album"))
+        track_id = _clean_str(ev.get("track_id") or "")
+        feed_id = _clean_str(ev.get("podcast_feed_id") or ev.get("itunes_collection_id") or "")
+
+        if event in ("music_played_30s", "music_search_played"):
+            if artist:
+                rollup.artist_plays[artist] = rollup.artist_plays.get(artist, 0) + 1
+            if artist and album:
+                key = f"{artist}\x00{album}"
+                rollup.album_plays[key] = rollup.album_plays.get(key, 0) + 1
+            if track_id:
+                rollup.played_track_ids.add(track_id)
+
+        elif event == "music_saved_to_library":
+            if artist:
+                rollup.artist_saves[artist] = rollup.artist_saves.get(artist, 0) + 1
+
+        elif event in ("podcast_episode_played_30s",):
+            if feed_id:
+                rollup.podcast_plays[feed_id] = rollup.podcast_plays.get(feed_id, 0) + 1
+
+    return rollup
 
 
 def _settings_path() -> Path:
@@ -168,11 +258,22 @@ def _music_item(
     }
 
 
+def _rollup_score_boost(artist_norm: str, rollup: ListeningRollup) -> float:
+    """Extra score from listening history; capped at 0.50."""
+    plays = rollup.artist_plays.get(artist_norm, 0)
+    saves = rollup.artist_saves.get(artist_norm, 0)
+    return min(0.50, plays * 0.15 + saves * 0.20)
+
+
 def build_music_recommendations(
     metadata: LibraryMetadata | None,
     favourite_ids: Iterable[str] | None = None,
     limit: int = 24,
+    rollup: ListeningRollup | None = None,
 ) -> dict[str, Any]:
+    if rollup is None:
+        rollup = load_listening_event_rollups()
+
     tracks = list(metadata.tracks if metadata and metadata.tracks else [])
     fav_ids = [str(x) for x in (favourite_ids or []) if x]
     fav_set = set(fav_ids)
@@ -205,11 +306,13 @@ def build_music_recommendations(
     for idx, tid in enumerate(fav_ids):
         track = by_id.get(tid)
         if track:
+            artist_norm = _norm(track.album_artist or track.artist)
+            boost = _rollup_score_boost(artist_norm, rollup)
             add(
                 track,
                 reason="A favourite in your library.",
                 reason_code="library_favourite",
-                score=1.0 - idx * 0.01,
+                score=min(1.0, 1.0 - idx * 0.01 + boost),
             )
 
     playlist_members: dict[str, list[str]] = {}
@@ -220,11 +323,13 @@ def build_music_recommendations(
         for idx, tid in enumerate(ids[:6]):
             track = by_id.get(tid)
             if track:
+                artist_norm = _norm(track.album_artist or track.artist)
+                boost = _rollup_score_boost(artist_norm, rollup)
                 add(
                     track,
                     reason=f'From your playlist "{name}".',
                     reason_code="playlist_taste",
-                    score=0.9 - idx * 0.01,
+                    score=min(1.0, 0.9 - idx * 0.01 + boost),
                 )
 
     artist_counts: dict[str, int] = {}
@@ -233,33 +338,86 @@ def build_music_recommendations(
         artist_counts[artist] = artist_counts.get(artist, 0) + 1
     strong_artists = {artist for artist, count in artist_counts.items() if artist and count >= 2}
     for track in tracks:
-        if _norm(track.album_artist or track.artist) in strong_artists:
+        artist_norm = _norm(track.album_artist or track.artist)
+        if artist_norm in strong_artists:
+            boost = _rollup_score_boost(artist_norm, rollup)
             add(
                 track,
                 reason=f"You have several tracks by {track.album_artist or track.artist}.",
                 reason_code="artist_affinity",
-                score=0.78,
+                score=min(1.0, 0.78 + boost),
             )
 
     sorted_recent = sorted(tracks, key=lambda t: _clean_str(getattr(t, "id", "")), reverse=True)
     for track in sorted_recent:
+        artist_norm = _norm(track.album_artist or track.artist)
+        boost = _rollup_score_boost(artist_norm, rollup)
         add(
             track,
             reason="Ready from your local library.",
             reason_code="library_owned",
-            score=0.62 if track.id not in fav_set else 0.7,
+            score=min(1.0, (0.62 if track.id not in fav_set else 0.7) + boost),
         )
+
+    sections: list[dict[str, Any]] = [
+        {
+            "id": "made_for_your_library",
+            "title": "Made for Your Library",
+            "reason": "Local-first picks from favourites, playlists, and library structure.",
+            "item_ids": [item["id"] for item in items[:limit]],
+        }
+    ]
+
+    # "Because You Saved…" — tracks sharing artist with recently saved tracks.
+    # Intentionally allows overlap with the main rail (same track, different framing).
+    saved_artists = rollup.saved_artists
+    if saved_artists:
+        saved_artist_set = set(saved_artists)
+        because_saved_ids: list[str] = []
+        because_saved_dedup: set[str] = set()
+        for track in tracks:
+            if len(because_saved_ids) >= 12:
+                break
+            artist_norm = _norm(track.album_artist or track.artist)
+            if artist_norm in saved_artist_set and track.id not in because_saved_dedup:
+                because_saved_dedup.add(track.id)
+                because_saved_ids.append(f"music:{track.id}")
+        if because_saved_ids:
+            trigger_artist = ""
+            for track in tracks:
+                if _norm(track.album_artist or track.artist) == saved_artists[0]:
+                    trigger_artist = track.album_artist or track.artist
+                    break
+            trigger_artist = trigger_artist or saved_artists[0].title()
+            sections.append({
+                "id": "because_you_saved",
+                "title": f"Because you saved {trigger_artist}",
+                "reason": "More from artists you've recently saved.",
+                "item_ids": because_saved_ids,
+            })
+
+    # "Rediscover" — library tracks not played recently.
+    # Allows overlap with the main rail; only requires ≥3 distinct played IDs.
+    if rollup.played_track_ids and len(rollup.played_track_ids) >= 3:
+        rediscover_ids: list[str] = []
+        rediscover_dedup: set[str] = set()
+        for track in tracks:
+            if len(rediscover_ids) >= 12:
+                break
+            if track.id not in rollup.played_track_ids and track.id not in rediscover_dedup:
+                rediscover_dedup.add(track.id)
+                rediscover_ids.append(f"music:{track.id}")
+        if rediscover_ids:
+            sections.append({
+                "id": "rediscover",
+                "title": "Rediscover",
+                "reason": "Tracks in your library you haven't played in a while.",
+                "item_ids": rediscover_ids,
+            })
 
     return {
         "items": items[:limit],
-        "sections": [
-            {
-                "id": "made_for_your_library",
-                "title": "Made for Your Library",
-                "reason": "Local-first picks from favourites, playlists, and library structure.",
-                "item_ids": [item["id"] for item in items[:limit]],
-            }
-        ],
+        "sections": sections,
         "settings": load_discovery_settings(),
     }
 
@@ -295,27 +453,56 @@ def _podcast_item(row: dict[str, Any], *, reason: str, reason_code: str, score: 
 def build_podcast_recommendations(
     metadata: LibraryMetadata | None,
     limit: int = 24,
+    rollup: ListeningRollup | None = None,
 ) -> dict[str, Any]:
+    if rollup is None:
+        rollup = load_listening_event_rollups()
+
     subs = []
     if metadata and isinstance(metadata.podcast_subscriptions, list):
         subs = [s for s in metadata.podcast_subscriptions if isinstance(s, dict)]
+
+    def _podcast_plays_for(sub: dict) -> int:
+        for key in (
+            _clean_str(sub.get("rss_url") or ""),
+            _clean_str(sub.get("feed_url") or ""),
+            _clean_str(sub.get("itunes_collection_id") or ""),
+        ):
+            if key and key in rollup.podcast_plays:
+                return rollup.podcast_plays[key]
+        return 0
+
+    def _podcast_score(sub: dict, base: float) -> float:
+        plays = _podcast_plays_for(sub)
+        return min(1.0, base + plays * 0.15)
+
     items: list[dict[str, Any]] = []
-    for idx, sub in enumerate(subs[:limit]):
+    scored_subs = sorted(
+        enumerate(subs[:limit]),
+        key=lambda iv: _podcast_score(iv[1], 1.0 - iv[0] * 0.02),
+        reverse=True,
+    )
+    for _, sub in scored_subs:
+        idx = subs.index(sub)
+        score = _podcast_score(sub, 1.0 - idx * 0.02)
+        plays = _podcast_plays_for(sub)
+        reason = "A show you've been listening to." if plays > 0 else "A show you subscribe to."
         items.append(
             _podcast_item(
                 sub,
-                reason="A show you subscribe to.",
-                reason_code="podcast_subscription",
-                score=1.0 - idx * 0.02,
+                reason=reason,
+                reason_code="podcast_recently_played" if plays > 0 else "podcast_subscription",
+                score=score,
             )
         )
+
     return {
         "items": items,
         "sections": [
             {
                 "id": "your_shows",
                 "title": "Your Shows",
-                "reason": "Podcast recommendations currently start from your subscriptions and listening history.",
+                "reason": "Subscriptions ranked by recent listening.",
                 "item_ids": [item["id"] for item in items],
             }
         ],

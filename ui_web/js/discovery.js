@@ -527,6 +527,40 @@ async function fetchLocalRecommendationTracks(limit = 12) {
   }
 }
 
+/** Fetch full recommendation response: items + sections + id maps. */
+async function fetchLocalRecommendationData(limit = 50) {
+  const host =
+    store?.state?.activeHost ||
+    (typeof window !== 'undefined' ? window.location.hostname : '') ||
+    'localhost';
+  try {
+    const resp = await fetch(`${getApiBase(host)}/api/discovery/music/recommendations?limit=${limit}`);
+    if (!resp.ok) return { items: [], sections: [], itemById: new Map(), trackById: new Map() };
+    const data = await resp.json();
+    const items = Array.isArray(data.items) ? data.items : [];
+    const sections = Array.isArray(data.sections) ? data.sections : [];
+    const itemById = new Map(items.map((it) => [it.id, it]));
+    const library = store.state.library || [];
+    const trackById = new Map(library.map((t) => [t.id, t]));
+    return { items, sections, itemById, trackById };
+  } catch {
+    return { items: [], sections: [], itemById: new Map(), trackById: new Map() };
+  }
+}
+
+/** Map a recommendation section's item_ids to resolved library tracks. */
+function _sectionToLibraryTracks(section, itemById, trackById) {
+  return (section.item_ids || [])
+    .map((itemId) => {
+      const item = itemById.get(itemId);
+      if (!item) return null;
+      const track = trackById.get(item.track_id);
+      if (!track || track.media_kind === 'podcast_episode') return null;
+      return { ...track, recoExplanation: item.reason || '', recoReasonCode: item.reason_code || '' };
+    })
+    .filter(Boolean);
+}
+
 async function getPersonalizedRailTracks(desired = 18) {
   syncPersonalTasteEpochFromStore();
   const tasteOk = _personalRailCacheEpoch === _personalTasteEpoch;
@@ -860,88 +894,94 @@ class DiscoveryUI {
     const gen = ++this._renderGen;
     this.currentView = 'home';
     if (!this.container) return;
-    this.container.innerHTML = '<div class="discovery-loading text-center py-10 text-[var(--text-dim)]">Loading discoveries...</div>';
+    this.container.innerHTML = '<div class="discovery-loading text-center py-10 text-[var(--text-dim)] text-sm">Loading…</div>';
 
-    const [localTracks, personalTracks, { topTracks, gridPlaylists }] = await Promise.all([
-      fetchLocalRecommendationTracks(12),
-      getPersonalizedRailTracks(18),
-      discoveryService.fetchDiscoverHome(50, 12)
+    const [recoData, personalTracks, chartResult] = await Promise.all([
+      fetchLocalRecommendationData(50),
+      getPersonalizedRailTracks(12),
+      discoveryService.fetchDiscoverHome(30, 8),
     ]);
 
     if (gen !== this._renderGen) return;
 
+    const { sections, itemById, trackById } = recoData;
+    const { topTracks, gridPlaylists } = chartResult;
     discoveryService.currentTracks = topTracks;
 
-    const list = topTracks.slice(0, 12);
-    const localShow = localTracks.slice(0, 12);
-    const personalShow = personalTracks.slice(0, 12);
-    window._discoverSurfaceTracks = [...personalShow, ...list];
-    this.container.innerHTML = `
-      <div class="discovery-home space-y-8 pb-8">
-        <section>
-          <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">From your library</h2>
-          <div id="discovery-local-tracks" class="space-y-1"></div>
-        </section>
-        <section>
-          <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">Recommended for you</h2>
-          <div id="discovery-personal-tracks" class="space-y-1"></div>
-        </section>
-        <section>
-          <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">Today's Top Hits</h2>
-          <div id="discovery-home-top-tracks" class="space-y-1"></div>
-        </section>
-        <section>
-          <h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">Trending playlists</h2>
-          <div id="discovery-playlist-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start"></div>
-        </section>
-      </div>`;
-    const localEl = this.container.querySelector('#discovery-local-tracks');
-    const personalEl = this.container.querySelector('#discovery-personal-tracks');
-    const tracksEl = this.container.querySelector('#discovery-home-top-tracks');
-    const grid = this.container.querySelector('#discovery-playlist-grid');
-    if (localEl) {
-      if (!localShow.length) {
-        localEl.innerHTML =
-          '<p class="text-sm text-[var(--text-dim)] py-2">Save tracks, build playlists, or play favourites to unlock local picks.</p>';
-      } else {
-        renderers.renderSongList(localShow, localEl, {
-          getCoverUrl: (t) => Resolver.getCoverUrl(t),
-          showRecoExplanation: true
-        });
-      }
+    // Resolve API sections to library tracks
+    const resolved = {};
+    for (const sec of sections) {
+      const tracks = _sectionToLibraryTracks(sec, itemById, trackById);
+      if (tracks.length) resolved[sec.id] = { section: sec, tracks };
     }
-    if (personalEl) {
-      if (!personalShow.length) {
-        personalEl.innerHTML =
-          '<p class="text-sm text-[var(--text-dim)] py-2">Play tracks from your library and add favourites to see picks tailored to you.</p>';
-      } else {
-        renderers.renderSongList(personalShow, personalEl, {
-          getCoverUrl: (t) => (typeof t.cover === 'string' && t.cover) ? t.cover : '',
-          discoverDeezerSurface: true,
-          showRecoExplanation: true
-        });
-      }
+
+    // "Trending, But Filtered" — chart tracks whose artist overlaps library
+    const libraryArtists = new Set(
+      (store.state.library || []).map((t) => (t.artist || '').toLowerCase().trim()).filter(Boolean)
+    );
+    const trendingFiltered = topTracks.filter(
+      (t) => libraryArtists.has((t.artist || '').toLowerCase().trim())
+    );
+    const trendingShow = (trendingFiltered.length >= 3 ? trendingFiltered : topTracks).slice(0, 12);
+    const trendingTitle = trendingFiltered.length >= 3 ? 'Trending, But Filtered' : 'Trending';
+
+    window._discoverSurfaceTracks = [...(personalTracks || []), ...trendingShow];
+
+    // Build section definitions in display order
+    const sectionDefs = [];
+
+    if (resolved['made_for_your_library']) {
+      sectionDefs.push({ id: 'disc-made-for', title: 'Made for Your Library', type: 'library', data: resolved['made_for_your_library'] });
+    } else {
+      sectionDefs.push({ id: 'disc-made-for', title: 'Made for Your Library', type: 'library-empty' });
     }
-    if (tracksEl) {
-      renderers.renderSongList(list, tracksEl, {
-        getCoverUrl: (t) => (typeof t.cover === 'string' && t.cover) ? t.cover : '',
-        discoverDeezerSurface: true
-      });
+    if (resolved['because_you_saved']) {
+      sectionDefs.push({ id: 'disc-because-saved', title: resolved['because_you_saved'].section.title, type: 'library', data: resolved['because_you_saved'] });
     }
-    if (grid) {
-      if (!gridPlaylists.length) {
-        grid.innerHTML = '<p class="text-sm text-[var(--text-dim)] col-span-full">No playlists in this chart right now.</p>';
-      } else {
-        grid.innerHTML = renderers.buildDeezerPlaylistCardsHtml(
-          gridPlaylists.map((pl) => ({
-            id: pl.id,
-            title: pl.title,
-            cover: pl.cover,
-            trackCount: pl.trackCount
-          }))
+    if (resolved['rediscover']) {
+      sectionDefs.push({ id: 'disc-rediscover', title: 'Rediscover', type: 'library', data: resolved['rediscover'] });
+    }
+    if ((personalTracks || []).length) {
+      sectionDefs.push({ id: 'disc-new-to-you', title: 'New to You', type: 'deezer', tracks: personalTracks, showReason: true });
+    }
+    sectionDefs.push({ id: 'disc-trending', title: trendingTitle, type: 'deezer', tracks: trendingShow });
+    if (gridPlaylists.length) {
+      sectionDefs.push({ id: 'disc-playlists', title: 'Popular Playlists', type: 'grid', playlists: gridPlaylists });
+    }
+
+    const _h2 = (t) => `<h2 class="text-[11px] font-semibold text-[var(--text-dim)] uppercase tracking-wider mb-3">${this.esc(t)}</h2>`;
+    const _wrap = (s) => `<section class="discover-section">${_h2(s.title)}<div id="${s.id}" class="${s.type === 'grid' ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start' : 'space-y-1'}"></div></section>`;
+
+    this.container.innerHTML = `<div class="discovery-home space-y-8 pb-8">${sectionDefs.map(_wrap).join('')}</div>`;
+
+    for (const s of sectionDefs) {
+      const el = this.container.querySelector(`#${s.id}`);
+      if (!el) continue;
+
+      if (s.type === 'grid') {
+        el.innerHTML = renderers.buildDeezerPlaylistCardsHtml(
+          s.playlists.map((pl) => ({ id: pl.id, title: pl.title, cover: pl.cover, trackCount: pl.trackCount }))
         );
+      } else if (s.type === 'deezer') {
+        if (!s.tracks.length) {
+          el.innerHTML = '<p class="text-sm text-[var(--text-dim)] py-2">Nothing here yet.</p>';
+        } else {
+          renderers.renderSongList(s.tracks, el, {
+            getCoverUrl: (t) => (typeof t.cover === 'string' && t.cover) ? t.cover : '',
+            discoverDeezerSurface: true,
+            showRecoExplanation: !!s.showReason,
+          });
+        }
+      } else if (s.type === 'library-empty') {
+        el.innerHTML = '<p class="text-sm text-[var(--text-dim)] py-2">Save tracks, build playlists, or play favourites to unlock local picks.</p>';
+      } else {
+        renderers.renderSongList(s.data.tracks, el, {
+          getCoverUrl: (t) => Resolver.getCoverUrl(t),
+          showRecoExplanation: true,
+        });
       }
     }
+
     this.bindEvents();
   }
 
@@ -996,12 +1036,14 @@ class DiscoveryUI {
         if (id) void openDeezerPlaylistById(id);
       });
     });
-    const personalTracksEl = this.container.querySelector('#discovery-personal-tracks');
-    if (personalTracksEl) bindDiscoverSurfaceQuickActionButtons(personalTracksEl);
-    const topTracks = this.container.querySelector('#discovery-home-top-tracks');
-    if (topTracks) bindDiscoverSurfaceQuickActionButtons(topTracks);
-    const searchTracks = this.container.querySelector('#discovery-search-track-list');
-    if (searchTracks) bindDiscoverSurfaceQuickActionButtons(searchTracks);
+    // Bind Save to Library / queue buttons on all Deezer surface sections
+    for (const id of [
+      'disc-new-to-you', 'disc-trending',
+      'discovery-personal-tracks', 'discovery-home-top-tracks', 'discovery-search-track-list',
+    ]) {
+      const el = this.container.querySelector(`#${id}`);
+      if (el) bindDiscoverSurfaceQuickActionButtons(el);
+    }
   }
 }
 
