@@ -38,6 +38,9 @@ Tagged releases and manual workflow runs produce installers:
 
 - Workflow: `.github/workflows/desktop-release.yml`
 - Tag pattern: `desktop-v*` (example: `desktop-v0.1.0-beta.1`)
+- **Current release:** [desktop-v0.1.0-beta.1](https://github.com/Arzuparreta/soundsible/releases/tag/desktop-v0.1.0-beta.1) (prerelease)
+
+Linux CI builds **`.deb` only** after workflow tuning (AppImage is slow/hang-prone on runners). Full local builds can still produce AppImage via `npm run build`.
 - **First beta build (2026-05-19):** [Actions run #1](https://github.com/Arzuparreta/soundsible/actions/runs/26096184389) — **success** (~31 min). Workflow artifacts:
   - `soundsible-desktop-linux-desktop-v0.1.0-beta.1` (~729 MB)
   - `soundsible-desktop-windows-desktop-v0.1.0-beta.1` (~382 MB)
