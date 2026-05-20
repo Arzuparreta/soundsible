@@ -95,14 +95,16 @@ fn get_selected_folder(state: State<'_, AppState>) -> Option<String> {
 }
 
 #[tauri::command]
-fn pick_music_folder(app: AppHandle, state: State<'_, AppState>) -> Result<Option<String>, String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "Main window not found".to_string())?;
-    let folder = app
-        .dialog()
-        .file()
-        .set_parent(&window)
+async fn pick_music_folder(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    let mut builder = window.dialog().file();
+    #[cfg(any(windows, target_os = "macos"))]
+    {
+        builder = builder.set_parent(&window);
+    }
+    let folder = builder
         .set_title("Choose your music folder")
         .blocking_pick_folder();
     if let Some(path) = folder {
@@ -161,6 +163,14 @@ fn start_engine(app: AppHandle, state: State<'_, AppState>) -> Result<(), String
         .clone()
         .ok_or_else(|| "Choose a music folder first.".to_string())?;
     state.engine.start(app, music_dir)
+}
+
+#[tauri::command]
+fn start_engine_with_path(app: AppHandle, path: String, state: State<'_, AppState>) -> Result<(), String> {
+    if let Ok(mut slot) = state.selected_folder.lock() {
+        *slot = Some(PathBuf::from(&path));
+    }
+    state.engine.start(app, PathBuf::from(path))
 }
 
 #[tauri::command]
@@ -244,6 +254,7 @@ pub fn run() {
             pick_music_folder,
             preview_music_folder,
             start_engine,
+            start_engine_with_path,
             restart_engine,
             open_logs,
             open_player,

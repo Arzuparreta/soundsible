@@ -111,7 +111,14 @@ async function applyAutostartPreference() {
 
 btnChoose.addEventListener('click', async () => {
   try {
-    const path = await invoke('pick_music_folder');
+    // Use the official tauri-plugin-dialog open command which handles
+    // the Windows message pump correctly (runs on main thread via
+    // run_on_main_thread internally). Returns path string or null.
+    const path = await invoke('plugin:dialog|open', {
+      directory: true,
+      multiple: false,
+      title: 'Choose your music folder'
+    });
     if (!path) return;
     selectedPath = path;
     pathDisplay.textContent = path;
@@ -131,7 +138,7 @@ btnContinue.addEventListener('click', async () => {
   renderLog(logLoading, ['engine: binding loopback', `engine: music_dir=${selectedPath}`]);
   try {
     await applyAutostartPreference();
-    await invoke('start_engine');
+    await invoke('start_engine_with_path', { path: selectedPath });
   } catch (err) {
     showView('error');
     renderLog(logError, [`error: ${err}`]);
