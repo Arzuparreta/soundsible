@@ -96,9 +96,13 @@ fn get_selected_folder(state: State<'_, AppState>) -> Option<String> {
 
 #[tauri::command]
 async fn pick_music_folder(app: AppHandle, state: State<'_, AppState>) -> Result<Option<String>, String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window not found".to_string())?;
     let folder = app
         .dialog()
         .file()
+        .set_parent(&window)
         .set_title("Choose your music folder")
         .blocking_pick_folder();
     if let Some(path) = folder {
