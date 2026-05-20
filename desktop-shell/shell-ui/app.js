@@ -117,13 +117,15 @@ async function applyAutostartPreference() {
 
 btnChoose.addEventListener('click', async () => {
   try {
-    // Use the official tauri-plugin-dialog open command which handles
-    // the Windows message pump correctly (runs on main thread via
-    // run_on_main_thread internally). Returns path string or null.
+    // Use the official tauri-plugin-dialog open command.  Must wrap
+    // options in { options: { ... } } — matches the Rust signature:
+    //   async fn open(options: OpenDialogOptions)
     const path = await invoke('plugin:dialog|open', {
-      directory: true,
-      multiple: false,
-      title: 'Choose your music folder'
+      options: {
+        directory: true,
+        multiple: false,
+        title: 'Choose your music folder'
+      }
     });
     if (!path) return;
     selectedPath = path;
