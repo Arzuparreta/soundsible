@@ -110,17 +110,30 @@ async function applyAutostartPreference() {
 }
 
 btnChoose.addEventListener('click', async () => {
+  // Visible diagnostic — replace pathDisplay text at each step so we see
+  // exactly where the dialog flow gets stuck on Windows.
+  const diagStep = (msg) => {
+    pathDisplay.textContent = msg;
+    pathDisplay.classList.add('filled');
+  };
   try {
+    diagStep('DIAG: invoke pick_music_folder…');
     const path = await invoke('pick_music_folder');
-    if (!path) return;
+    diagStep('DIAG: invoke returned: ' + JSON.stringify(path));
+    if (!path) {
+      diagStep('DIAG: invoke returned null/empty — dialog was cancelled or returned no folder');
+      return;
+    }
     selectedPath = path;
     pathDisplay.textContent = path;
+    pathDisplay.style.color = '';
     pathDisplay.classList.add('filled');
     setContinueEnabled(true);
     await refreshPreview(path);
   } catch (err) {
     console.error('Folder picker failed:', err);
-    pathDisplay.textContent = `Could not open folder picker: ${err}`;
+    pathDisplay.style.color = '#ff453a';
+    pathDisplay.textContent = 'DIAG: invoke threw: ' + (err && err.message ? err.message : String(err));
     pathDisplay.classList.add('filled');
   }
 });
