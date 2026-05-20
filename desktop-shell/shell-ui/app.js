@@ -1,9 +1,3 @@
-// Guard: if Tauri API is not available, stop here.
-// The inline diagnostic in index.html shows a visible error.
-if (typeof window.__TAURI__ === 'undefined' || !window.__TAURI__) {
-  return;
-}
-
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
@@ -117,16 +111,7 @@ async function applyAutostartPreference() {
 
 btnChoose.addEventListener('click', async () => {
   try {
-    // Use the official tauri-plugin-dialog open command.  Must wrap
-    // options in { options: { ... } } — matches the Rust signature:
-    //   async fn open(options: OpenDialogOptions)
-    const path = await invoke('plugin:dialog|open', {
-      options: {
-        directory: true,
-        multiple: false,
-        title: 'Choose your music folder'
-      }
-    });
+    const path = await invoke('pick_music_folder');
     if (!path) return;
     selectedPath = path;
     pathDisplay.textContent = path;

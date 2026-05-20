@@ -96,17 +96,31 @@ fn get_selected_folder(state: State<'_, AppState>) -> Option<String> {
 
 #[tauri::command]
 async fn pick_music_folder(
-    window: tauri::Window,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Option<String>, String> {
-    let mut builder = window.dialog().file();
-    #[cfg(any(windows, target_os = "macos"))]
-    {
-        builder = builder.set_parent(&window);
-    }
-    let folder = builder
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window not found".to_string())?;
+
+    let (tx, rx) = std::sync::mpsc::channel::<Option<tauri_plugin_dialog::FilePath>>();
+
+    // pick_folder(callback) dispatches to the main thread via run_on_main_thread,
+    // which is a COM STA thread on Windows — the only thread that can show the
+    // IFileOpenDialog. blocking_pick_folder does NOT do this and silently fails.
+    app.dialog()
+        .file()
+        .set_parent(&window)
         .set_title("Choose your music folder")
-        .blocking_pick_folder();
+        .pick_folder(move |folder| {
+            let _ = tx.send(folder);
+        });
+
+    let folder = tauri::async_runtime::spawn_blocking(move || rx.recv())
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+
     if let Some(path) = folder {
         let pb = path.into_path().map_err(|e| e.to_string())?;
         if let Ok(mut slot) = state.selected_folder.lock() {
