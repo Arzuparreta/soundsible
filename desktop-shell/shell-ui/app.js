@@ -1,3 +1,9 @@
+// Guard: if Tauri API is not available, stop here.
+// The inline diagnostic in index.html shows a visible error.
+if (typeof window.__TAURI__ === 'undefined' || !window.__TAURI__) {
+  return;
+}
+
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 

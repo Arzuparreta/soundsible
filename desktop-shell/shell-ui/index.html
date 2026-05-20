@@ -87,6 +87,20 @@
       </div>
     </section>
   </div>
+  <script>
+    // Diagnostic: check Tauri API availability
+    (function() {
+      var el = document.getElementById('path-display');
+      if (!el) return;
+      if (typeof window.__TAURI__ === 'undefined') {
+        el.textContent = 'Tauri API not available — app may be corrupted';
+        el.classList.add('filled');
+        el.style.color = '#ff453a';
+      } else {
+        el.textContent = 'No folder selected';
+      }
+    })();
+  </script>
   <script src="pairing.js"></script>
   <script src="app.js"></script>
 </body>
