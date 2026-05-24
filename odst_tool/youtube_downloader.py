@@ -6,6 +6,7 @@ import sys
 import time
 import re
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Iterator, Callable
 from urllib.parse import quote, urlparse, parse_qs
@@ -906,6 +907,40 @@ class YouTubeDownloader:
                 'artist': creator,
             }
 
+        def enrich_missing_creators(items: List[Dict[str, Any]]) -> None:
+            missing = [
+                item
+                for item in items
+                if not (item.get("artist") or item.get("channel") or "").strip()
+                and _is_valid_youtube_video_id(str(item.get("id") or "").strip())
+            ]
+            if not missing:
+                return
+
+            def fetch_brief(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+                try:
+                    return self.peek_brief(str(item.get("id") or ""))
+                except Exception as exc:
+                    logger.debug("YouTube Music search metadata enrichment failed for %s: %s", item.get("id"), exc)
+                    return None
+
+            max_workers = min(4, len(missing))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(fetch_brief, item): item for item in missing}
+                for future in as_completed(futures):
+                    item = futures[future]
+                    brief = future.result()
+                    if not brief:
+                        continue
+                    creator = (brief.get("artist") or brief.get("channel") or "").strip()
+                    if creator:
+                        item["artist"] = creator
+                        item["channel"] = creator
+                    if not item.get("duration"):
+                        item["duration"] = brief.get("duration") or 0
+                    if not item.get("thumbnail"):
+                        item["thumbnail"] = brief.get("thumbnail") or item.get("thumbnail") or ""
+
         out: List[Dict[str, Any]] = []
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -922,6 +957,8 @@ class YouTubeDownloader:
                 item = to_item(entry)
                 if item is not None:
                     out.append(item)
+            if use_ytmusic:
+                enrich_missing_creators(out)
         except Exception as e:
             logger.warning("YouTube search error (use_ytmusic=%s): %s", use_ytmusic, e)
             # Note: No silent fallback -- let the caller decide or propagate the error
