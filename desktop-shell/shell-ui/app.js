@@ -110,13 +110,19 @@ async function applyAutostartPreference() {
 }
 
 btnChoose.addEventListener('click', async () => {
-  const path = await invoke('pick_music_folder');
-  if (!path) return;
-  selectedPath = path;
-  pathDisplay.textContent = path;
-  pathDisplay.classList.add('filled');
-  setContinueEnabled(true);
-  await refreshPreview(path);
+  try {
+    const path = await invoke('pick_music_folder');
+    if (!path) return;
+    selectedPath = path;
+    pathDisplay.textContent = path;
+    pathDisplay.classList.add('filled');
+    setContinueEnabled(true);
+    await refreshPreview(path);
+  } catch (err) {
+    console.error('Folder picker failed:', err);
+    pathDisplay.textContent = `Could not open folder picker: ${err}`;
+    pathDisplay.classList.add('filled');
+  }
 });
 
 btnContinue.addEventListener('click', async () => {
@@ -125,7 +131,7 @@ btnContinue.addEventListener('click', async () => {
   renderLog(logLoading, ['engine: binding loopback', `engine: music_dir=${selectedPath}`]);
   try {
     await applyAutostartPreference();
-    await invoke('start_engine');
+    await invoke('start_engine_with_path', { path: selectedPath });
   } catch (err) {
     showView('error');
     renderLog(logError, [`error: ${err}`]);

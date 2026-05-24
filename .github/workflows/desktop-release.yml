@@ -2,8 +2,11 @@ name: Desktop Release
 
 on:
   push:
+    branches: [main, dev]
     tags:
       - "desktop-v*"
+  pull_request:
+    branches: [main, dev]
   workflow_dispatch:
     inputs:
       version:
