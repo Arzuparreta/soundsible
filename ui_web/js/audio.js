@@ -18,6 +18,7 @@ import {
 } from './play_timing.js';
 import { postSetupFirstPlayBeacon, ensureSetupSessionStarted } from './setup_funnel.js';
 import { recordDiscoveryEvent } from './discovery_events.js';
+import { MediaSessionBridge } from './media_session.js';
 
 const PRELOAD_THRESHOLD_SEC = 45;
 const PUSH_DEBOUNCE_VISIBLE_SEC = 5;
@@ -44,7 +45,37 @@ class AudioEngine {
         this._pendingRemotePlayback = null;
         this._remoteUnlockOverlay = null;
         this._discoveryThirtySecondKeys = new Set();
+        this.mediaSession = new MediaSessionBridge({
+            getAudio: () => this.audio,
+            getTrack: () => store.state.currentTrack,
+            getCoverUrl: (track) => this._getMediaSessionCoverUrl(track),
+            getFallbackArtwork: () => this._getMediaSessionFallbackArtwork(),
+            actions: {
+                play: () => this.play(),
+                pause: () => this.pause(),
+                previous: () => this.prev(),
+                next: () => this.next(),
+                seekRelative: (delta) => this.seekRelative(delta),
+                seekTo: (positionSec) => this.seekToSeconds(positionSec),
+            },
+        });
         this.init();
+    }
+
+    _getMediaSessionCoverUrl(track) {
+        if (track?.thumbnail) return track.thumbnail;
+        return track?.id ? Resolver.getCoverUrl(track) : '';
+    }
+
+    _getMediaSessionFallbackArtwork() {
+        return [
+            { src: store.placeholderCoverUrl192 || 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+            { src: store.placeholderCoverUrl || 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
+        ];
+    }
+
+    updateMediaSession(track = store.state.currentTrack) {
+        this.mediaSession.updateTrack(track);
     }
 
     _getPreloadAudio() {
@@ -278,6 +309,7 @@ class AudioEngine {
         this.audio.addEventListener('ended', () => this.next());
         this.audio.addEventListener('timeupdate', () => {
             this.currentPosition = this.audio.currentTime;
+            this.mediaSession.updatePosition();
             this.onTimeUpdate();
         });
         
@@ -286,16 +318,21 @@ class AudioEngine {
             store.markUserPlaybackStarted();
             store.update({ isPlaying: true });
             store.pushPlaybackState(store.state.currentTrack?.id, this.audio.currentTime, true);
+            this.mediaSession.updatePlaybackState();
+            this.mediaSession.updatePosition(true);
             Haptics.heavy();
         });
         this.audio.addEventListener('pause', () => {
             if (store.state.resumeSyncActive) return;
             store.update({ isPlaying: false });
             store.pushPlaybackState(store.state.currentTrack?.id, this.audio.currentTime, false);
+            this.mediaSession.updatePlaybackState();
+            this.mediaSession.updatePosition(true);
             Haptics.lock();
         });
         this.audio.addEventListener('playing', () => {
             playTimingOnPlaying(store.state.currentTrack);
+            this.updateMediaSession(store.state.currentTrack);
             const t = store.state.currentTrack;
             if (t && isPlayTimingEligibleTrack(t)) {
                 postSetupFirstPlayBeacon(store.apiBase, t.id);
@@ -315,9 +352,7 @@ class AudioEngine {
             }
         });
 
-        if ('mediaSession' in navigator) {
-            this.setMediaSessionHandlers();
-        }
+        this.setMediaSessionHandlers();
 
         setInterval(() => {
             if (store.state.resumeSyncActive) return;
@@ -370,21 +405,9 @@ class AudioEngine {
         }
     }
 
-    /** Set Media Session action handlers (prev/next work on Android; iOS does not show them). */
+    /** Set Media Session action handlers for browser/OS media controls. */
     setMediaSessionHandlers() {
-        if (!('mediaSession' in navigator)) return;
-        navigator.mediaSession.setActionHandler('play', () => this.play());
-        navigator.mediaSession.setActionHandler('pause', () => this.pause());
-        navigator.mediaSession.setActionHandler('previoustrack', () => this.prev());
-        navigator.mediaSession.setActionHandler('nexttrack', () => this.next());
-        const skip = (delta) => {
-            if (!this.audio.duration) return;
-            this.audio.currentTime = Math.max(0, Math.min(this.audio.duration, this.audio.currentTime + delta));
-        };
-        try {
-            navigator.mediaSession.setActionHandler('seekbackward', (e) => skip(-(e?.seekOffset ?? 10)));
-            navigator.mediaSession.setActionHandler('seekforward', (e) => skip(e?.seekOffset ?? 10));
-        } catch (_) { /* seekbackward/seekforward not supported */ }
+        this.mediaSession.installHandlers();
     }
 
     /**
@@ -449,27 +472,12 @@ class AudioEngine {
                 this.audio.load();
                 await this.audio.play();
                 this._clearPendingRemotePlayback();
-                store.update({ currentTrack: { ...track, _streamToken: tok }, isPlaying: true });
+                const playbackTrack = { ...track, _streamToken: tok };
+                store.update({ currentTrack: playbackTrack, isPlaying: true });
                 store.pushPlaybackState(track.id, 0, true);
                 this._suppressStaleTimeUpdates = true;
                 this._dispatchTimeUpdate(0, 0, track?.duration ?? 0);
-                if ('mediaSession' in navigator) {
-                    const coverUrl = track?.thumbnail || null;
-                    const sizes = ['96x96', '128x128', '192x192', '256x256', '384x384', '512x512'];
-                    const artwork = coverUrl
-                        ? [...sizes.map((size) => ({ src: coverUrl, sizes: size, type: 'image/jpeg' }))]
-                        : [
-                              { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-                              { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
-                          ];
-                    navigator.mediaSession.metadata = new MediaMetadata({
-                        title: track.title,
-                        artist: track.artist,
-                        album: track.album,
-                        artwork
-                    });
-                    this.setMediaSessionHandlers();
-                }
+                this.updateMediaSession(playbackTrack);
                 return { ok: true };
             } catch (err) {
                 if (options.remoteRequest && this._isAutoplayBlocked(err)) {
@@ -511,27 +519,7 @@ class AudioEngine {
                 store.pushPlaybackState(playbackTrack.id, 0, true);
                 this._suppressStaleTimeUpdates = true;
                 this._dispatchTimeUpdate(0, 0, playbackTrack?.duration ?? 0);
-                if ('mediaSession' in navigator) {
-                    const coverUrl = playbackTrack?.id ? Resolver.getCoverUrl(playbackTrack) : null;
-                    const sizes = ['96x96', '128x128', '192x192', '256x256', '384x384', '512x512'];
-                    const artwork = coverUrl
-                        ? [
-                            ...sizes.map(size => ({ src: coverUrl, sizes: size, type: 'image/jpeg' })),
-                            { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-                            { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
-                        ]
-                        : [
-                            { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-                            { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
-                        ];
-                    navigator.mediaSession.metadata = new MediaMetadata({
-                        title: playbackTrack.title,
-                        artist: playbackTrack.artist,
-                        album: playbackTrack.album,
-                        artwork
-                    });
-                    this.setMediaSessionHandlers();
-                }
+                this.updateMediaSession(playbackTrack);
                 return { ok: true };
             } catch (err) {
                 if (options.remoteRequest && this._isAutoplayBlocked(err)) {
@@ -564,28 +552,7 @@ class AudioEngine {
             store.pushPlaybackState(track.id, 0, true);
             this._suppressStaleTimeUpdates = true;
             this._dispatchTimeUpdate(0, 0, track?.duration ?? 0);
-
-            if ('mediaSession' in navigator) {
-                const coverUrl = track?.id ? Resolver.getCoverUrl(track) : null;
-                const sizes = ['96x96', '128x128', '192x192', '256x256', '384x384', '512x512'];
-                const artwork = coverUrl
-                    ? [
-                        ...sizes.map(size => ({ src: coverUrl, sizes: size, type: 'image/jpeg' })),
-                        { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-                        { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
-                    ]
-                    : [
-                        { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-                        { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
-                    ];
-                navigator.mediaSession.metadata = new MediaMetadata({
-                    title: track.title,
-                    artist: track.artist,
-                    album: track.album,
-                    artwork
-                });
-                this.setMediaSessionHandlers();
-            }
+            this.updateMediaSession(track);
             return { ok: true };
         } catch (err) {
             // Note: Security & UX aborterror is normal when switching tracks quickly (e.g. double tap)
@@ -730,6 +697,17 @@ class AudioEngine {
         this.seekToSeconds(time);
     }
 
+    seekRelative(deltaSec) {
+        const delta = Number(deltaSec);
+        if (!Number.isFinite(delta)) return false;
+        const duration = Number.isFinite(this.audio.duration) ? this.audio.duration : 0;
+        const current = Number.isFinite(this.audio.currentTime) ? this.audio.currentTime : 0;
+        const target = duration > 0
+            ? Math.max(0, Math.min(duration, current + delta))
+            : Math.max(0, current + delta);
+        return this.seekToSeconds(target);
+    }
+
     seekToSeconds(positionSec) {
         const position = Number(positionSec);
         if (!Number.isFinite(position) || position < 0) return false;
@@ -751,6 +729,7 @@ class AudioEngine {
                 : Number(store.state.currentTrack?.duration) || 0;
             const progress = effectiveDuration > 0 ? (target / effectiveDuration) * 100 : 0;
             this._dispatchTimeUpdate(progress, target, effectiveDuration);
+            this.mediaSession.updatePosition(true);
             return true;
         };
 

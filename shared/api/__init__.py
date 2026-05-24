@@ -987,6 +987,7 @@ from shared.api.routes.agent import agent_bp
 from shared.api.routes.pairing import pairing_bp
 from shared.api.routes.setup import setup_bp
 from shared.api.routes.migration import migration_bp
+from shared.api.routes.car import car_bp
 app.register_blueprint(library_bp)
 app.register_blueprint(playback_bp)
 app.register_blueprint(downloader_bp)
@@ -997,6 +998,7 @@ app.register_blueprint(agent_bp)
 app.register_blueprint(pairing_bp)
 app.register_blueprint(setup_bp)
 app.register_blueprint(migration_bp)
+app.register_blueprint(car_bp)
 
 
 @app.route('/api/health')
