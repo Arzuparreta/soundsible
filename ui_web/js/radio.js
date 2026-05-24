@@ -252,22 +252,27 @@ class RadioService {
     /**
      * Start radio mode from a seed track.
      * @param {object} track - The seed track (library, Deezer, or preview)
+     * @param {{ playSeed?: boolean, showLoading?: boolean, announce?: boolean }} [options]
      * @returns {Promise<boolean>} true if radio started successfully
      */
-    async startRadio(track) {
+    async startRadio(track, options = {}) {
         if (!track) return false;
         const requestKey = getRadioRequestKey(track);
-        if (this._activeStart?.key === requestKey) {
-            console.debug('[radio] duplicate start ignored', { requestKey });
+        const playSeed = options.playSeed !== false;
+        const startKey = `${requestKey}|${playSeed ? 'play-seed' : 'continue'}`;
+        if (this._activeStart?.key === startKey) {
+            console.debug('[radio] duplicate start ignored', { requestKey, playSeed });
             return this._activeStart.promise;
         }
 
         const title = (track.title || 'Unknown').trim() || 'Unknown';
         const token = ++this._startSeq;
         if (this._activeStart) this._activeStart.loading?.dismiss();
-        const loading = showLoadingToast(`Loading radio for "${title}"...`);
-        const promise = this._startRadioSession(track, token, loading);
-        this._activeStart = { key: requestKey, token, loading, promise };
+        const loading = options.showLoading === false
+            ? { update() {}, dismiss() {} }
+            : showLoadingToast(`Loading radio for "${title}"...`);
+        const promise = this._startRadioSession(track, token, loading, { playSeed, announce: options.announce !== false });
+        this._activeStart = { key: startKey, token, loading, promise };
         return promise;
     }
 
@@ -275,8 +280,10 @@ class RadioService {
         return this._activeStart?.token === token;
     }
 
-    async _startRadioSession(track, token, loading) {
+    async _startRadioSession(track, token, loading, options = {}) {
         if (store.state.radioMode) this.exitRadio();
+        const playSeed = options.playSeed !== false;
+        const announce = options.announce !== false;
 
         try {
             const seed = await resolveSeedVideoId(track);
@@ -330,7 +337,9 @@ class RadioService {
                 bufferCount: this._buffer.length
             });
             this._statePatch({ currentVideoId: seed.videoId }, sessionId);
-            if (alreadyPlayingSeed) {
+            if (!playSeed) {
+                store.update({ currentTrack: seedTrack });
+            } else if (alreadyPlayingSeed) {
                 store.update({ currentTrack: seedTrack });
             } else {
                 const result = await audioEngine.playTrack(seedTrack);
@@ -344,7 +353,7 @@ class RadioService {
             }
 
             loading.dismiss();
-            window.showToast?.(`Radio: ${seed.title}`);
+            if (announce) window.showToast?.(`Radio: ${seed.title}`);
             void recordDiscoveryEvent('music_started_radio', {
                 media_type: 'music_track',
                 track_id: getLibraryTrackId(track, seed.videoId) || '',
@@ -362,6 +371,16 @@ class RadioService {
         } finally {
             if (this._isCurrentStart(token)) this._activeStart = null;
         }
+    }
+
+    async startContinuation(track) {
+        const started = await this.startRadio(track, {
+            playSeed: false,
+            showLoading: false,
+            announce: false
+        });
+        if (!started) return null;
+        return this.nextTrack();
     }
 
     /**

@@ -42,6 +42,8 @@ class AudioEngine {
         this._previewEndedTriggered = false;
         /** After starting a new track, ignore timeupdate with high currentTime (stale from previous track). */
         this._suppressStaleTimeUpdates = false;
+        /** Serialize automatic advances; preview near-end and native ended can fire back-to-back. */
+        this._advanceInFlight = null;
         this._pendingRemotePlayback = null;
         this._remoteUnlockOverlay = null;
         this._discoveryThirtySecondKeys = new Set();
@@ -306,7 +308,7 @@ class AudioEngine {
     init() {
         const v = store.state.volume;
         this.audio.volume = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
-        this.audio.addEventListener('ended', () => this.next());
+        this.audio.addEventListener('ended', () => { void this.next(); });
         this.audio.addEventListener('timeupdate', () => {
             this.currentPosition = this.audio.currentTime;
             this.mediaSession.updatePosition();
@@ -607,14 +609,39 @@ class AudioEngine {
         this.syncPlayingStateToStore();
     }
 
+    _shouldAutoContinuePreview(track) {
+        if (!track || store.state.radioMode) return false;
+        if (track.source === 'podcast-preview') return false;
+        if (track.source === 'preview') return true;
+        return track.source === 'radio' && !track._libraryTrackId;
+    }
+
+    async _startPreviewContinuation(track) {
+        if (!this._shouldAutoContinuePreview(track)) return false;
+        const radioTrack = await radioService.startContinuation(track);
+        if (!radioTrack) return false;
+        await this.playTrack(radioTrack);
+        return true;
+    }
+
     async next() {
+        if (this._advanceInFlight) return this._advanceInFlight;
+        this._advanceInFlight = this._advanceToNext();
+        try {
+            return await this._advanceInFlight;
+        } finally {
+            this._advanceInFlight = null;
+        }
+    }
+
+    async _advanceToNext() {
         const currentTrack = store.state.currentTrack;
         const mode = store.state.repeatMode;
 
         // Note: Repeat (infinite) same song forever until user turns off or changes song
         if (mode === 'one' && currentTrack) {
             console.log("Repeat active, restarting track.");
-            this.playTrack(currentTrack);
+            await this.playTrack(currentTrack);
             return;
         }
 
@@ -623,7 +650,7 @@ class AudioEngine {
             if (this._repeatOnceUsedTrackId !== currentTrack.id) {
                 this._repeatOnceUsedTrackId = currentTrack.id;
                 console.log("Repeat once: playing again, then will continue.");
-                this.playTrack(currentTrack);
+                await this.playTrack(currentTrack);
                 return;
             }
             this._repeatOnceUsedTrackId = null; // Note: Consumed; continue to next
@@ -647,6 +674,9 @@ class AudioEngine {
             radioService.exitRadio();
             window.showToast?.('Radio ended');
         }
+
+        // Note: A music preview with no explicit queue should continue as a radio session, but skip the seed already heard.
+        if (await this._startPreviewContinuation(currentTrack)) return;
 
         // Note: 2. Try context fallback (sequential or shuffled)
         if (this.currentContext && this.currentContext.length > 0 && store.state.currentTrack) {
@@ -782,7 +812,7 @@ class AudioEngine {
             currentTime >= duration - 1.2
         ) {
             this._previewEndedTriggered = true;
-            this.next();
+            void this.next();
         }
 
         const visible = isVisible();
