@@ -124,6 +124,10 @@ def _emit_playback_start(api, scope: str, device_id: str, state: dict, track: di
     api["socketio"].emit("playback_start_requested", payload, room=_playback_room(scope, device_id))
 
 
+def _emit_playback_previous(api, scope: str, device_id: str) -> None:
+    api["socketio"].emit("playback_previous_requested", {}, room=_playback_room(scope, device_id))
+
+
 @playback_bp.route("/api/devices/register", methods=["POST"])
 @require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def register_playback_device():
@@ -606,8 +610,8 @@ def playback_remote_command():
     device_id = (data.get("device_id") or "").strip()
     command = (data.get("command") or "").strip().lower()
 
-    if not device_id or command not in {"pause", "play", "next", "seek"}:
-        return jsonify({"error": "device_id and command (pause, play, next, seek) required"}), 400
+    if not device_id or command not in {"pause", "play", "next", "previous", "seek"}:
+        return jsonify({"error": "device_id and command (pause, play, next, previous, seek) required"}), 400
 
     target = api["get_registered_device"](scope, device_id)
     if not target:
@@ -661,6 +665,8 @@ def playback_remote_command():
         _emit_playback_start(api, scope, device_id, target_state, track=track_payload)
     elif command == "next":
         api["socketio"].emit("playback_next_requested", {}, room=room)
+    elif command == "previous":
+        _emit_playback_previous(api, scope, device_id)
     else:
         raw = data.get("position_sec")
         if raw is None:

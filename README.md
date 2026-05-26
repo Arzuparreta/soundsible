@@ -200,6 +200,7 @@ This path is useful when you are building or testing the desktop appliance runti
 | [Install & Deployment](docs/INSTALL.md)                                 | Headless server, Tailscale, reverse proxy, storage            |
 | [Architecture](docs/ARCHITECTURE.md)                                    | Architecture & data flow (includes Discover / Deezer proxy)   |
 | [Agent Integration](docs/AGENT_INTEGRATION.md)                          | API guide for OpenClaw, Hermes agents, and local assistants   |
+| [Car Integration](docs/CAR_INTEGRATION.md)                              | Car media surfaces, native companion contract, CarPlay path   |
 | [Configuration](docs/CONFIGURATION.md)                                  | Configuration, environment variables, storage backends        |
 | [Appliance Rework Plan](docs/appliance-rework-plan.md)                  | Current appliance/runtime roadmap and landed status           |
 | [Premium Quality Contract](docs/PREMIUM_QUALITY_CONTRACT.md)            | Draft: five outcome gates for phased premium milestones       |

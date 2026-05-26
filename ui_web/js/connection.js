@@ -147,6 +147,10 @@ export class ConnectionManager {
             window.dispatchEvent(new CustomEvent('playback_next_requested'));
         });
 
+        this.socket.on('playback_previous_requested', () => {
+            window.dispatchEvent(new CustomEvent('playback_previous_requested'));
+        });
+
         this.socket.on('playback_seek_requested', (data) => {
             window.dispatchEvent(new CustomEvent('playback_seek_requested', { detail: data }));
         });

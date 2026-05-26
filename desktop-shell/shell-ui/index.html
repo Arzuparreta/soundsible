@@ -88,20 +88,69 @@
     </section>
   </div>
   <script>
-    // Diagnostic: check Tauri API availability
+    // Diagnostic: surface every load/error to the path-display element so
+    // the user can see what's failing without DevTools.
+    window.__SS_DIAG = { step: 'inline-start' };
     (function() {
       var el = document.getElementById('path-display');
-      if (!el) return;
-      if (typeof window.__TAURI__ === 'undefined') {
-        el.textContent = 'Tauri API not available — app may be corrupted';
+      function show(msg, color) {
+        if (!el) return;
+        el.textContent = msg;
         el.classList.add('filled');
-        el.style.color = '#ff453a';
-      } else {
-        el.textContent = 'No folder selected';
+        if (color) el.style.color = color;
       }
+      window.__SS_DIAG_SHOW = show;
+      var t = window.__TAURI__;
+      var parts = [];
+      parts.push('TAURI=' + (typeof t));
+      if (t) {
+        parts.push('core=' + (typeof t.core));
+        parts.push('event=' + (typeof t.event));
+        if (t.core) parts.push('invoke=' + (typeof t.core.invoke));
+      }
+      window.__SS_DIAG.tauriShape = parts.join(' ');
+      if (!t || !t.core || typeof t.core.invoke !== 'function') {
+        show('DIAG: ' + parts.join(' '), '#ff453a');
+      }
+      window.addEventListener('error', function(e) {
+        show('JS error: ' + (e.message || e.error) + ' @ ' + (e.filename || '?') + ':' + (e.lineno || '?'), '#ff453a');
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        show('Promise rejected: ' + (e.reason && e.reason.message || e.reason), '#ff453a');
+      });
     })();
   </script>
   <script src="pairing.js"></script>
   <script src="app.js"></script>
+  <script>
+    // After app.js runs, verify the click handler is wired. If app.js threw,
+    // this still runs (separate <script>) and reports the wiring failure.
+    (function() {
+      var btn = document.getElementById('btn-choose');
+      var diag = window.__SS_DIAG || {};
+      diag.appLoaded = !!window.shellShowView;
+      diag.btnFound = !!btn;
+      if (!btn) return;
+      // Wrap click in our own diag listener (capture phase) so we always know
+      // if the click reached the button at all.
+      btn.addEventListener('click', function() {
+        diag.lastClick = Date.now();
+        var pd = document.getElementById('path-display');
+        if (pd && !diag.appLoaded) {
+          pd.textContent = 'CLICK fired but app.js never finished loading (tauriShape=' + diag.tauriShape + ')';
+          pd.classList.add('filled');
+          pd.style.color = '#ff453a';
+        }
+      }, true);
+      if (!diag.appLoaded) {
+        var pd = document.getElementById('path-display');
+        if (pd) {
+          pd.textContent = 'app.js did NOT finish — tauriShape=' + diag.tauriShape;
+          pd.classList.add('filled');
+          pd.style.color = '#ff453a';
+        }
+      }
+    })();
+  </script>
 </body>
 </html>

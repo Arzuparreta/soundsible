@@ -18,6 +18,7 @@ import {
 } from './play_timing.js';
 import { postSetupFirstPlayBeacon, ensureSetupSessionStarted } from './setup_funnel.js';
 import { recordDiscoveryEvent } from './discovery_events.js';
+import { MediaSessionBridge } from './media_session.js';
 
 const PRELOAD_THRESHOLD_SEC = 45;
 const PUSH_DEBOUNCE_VISIBLE_SEC = 5;
@@ -41,10 +42,42 @@ class AudioEngine {
         this._previewEndedTriggered = false;
         /** After starting a new track, ignore timeupdate with high currentTime (stale from previous track). */
         this._suppressStaleTimeUpdates = false;
+        /** Serialize automatic advances; preview near-end and native ended can fire back-to-back. */
+        this._advanceInFlight = null;
         this._pendingRemotePlayback = null;
         this._remoteUnlockOverlay = null;
         this._discoveryThirtySecondKeys = new Set();
+        this.mediaSession = new MediaSessionBridge({
+            getAudio: () => this.audio,
+            getTrack: () => store.state.currentTrack,
+            getCoverUrl: (track) => this._getMediaSessionCoverUrl(track),
+            getFallbackArtwork: () => this._getMediaSessionFallbackArtwork(),
+            actions: {
+                play: () => this.play(),
+                pause: () => this.pause(),
+                previous: () => this.prev(),
+                next: () => this.next(),
+                seekRelative: (delta) => this.seekRelative(delta),
+                seekTo: (positionSec) => this.seekToSeconds(positionSec),
+            },
+        });
         this.init();
+    }
+
+    _getMediaSessionCoverUrl(track) {
+        if (track?.thumbnail) return track.thumbnail;
+        return track?.id ? Resolver.getCoverUrl(track) : '';
+    }
+
+    _getMediaSessionFallbackArtwork() {
+        return [
+            { src: store.placeholderCoverUrl192 || 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+            { src: store.placeholderCoverUrl || 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
+        ];
+    }
+
+    updateMediaSession(track = store.state.currentTrack) {
+        this.mediaSession.updateTrack(track);
     }
 
     _getPreloadAudio() {
@@ -275,9 +308,10 @@ class AudioEngine {
     init() {
         const v = store.state.volume;
         this.audio.volume = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
-        this.audio.addEventListener('ended', () => this.next());
+        this.audio.addEventListener('ended', () => { void this.next(); });
         this.audio.addEventListener('timeupdate', () => {
             this.currentPosition = this.audio.currentTime;
+            this.mediaSession.updatePosition();
             this.onTimeUpdate();
         });
         
@@ -286,16 +320,21 @@ class AudioEngine {
             store.markUserPlaybackStarted();
             store.update({ isPlaying: true });
             store.pushPlaybackState(store.state.currentTrack?.id, this.audio.currentTime, true);
+            this.mediaSession.updatePlaybackState();
+            this.mediaSession.updatePosition(true);
             Haptics.heavy();
         });
         this.audio.addEventListener('pause', () => {
             if (store.state.resumeSyncActive) return;
             store.update({ isPlaying: false });
             store.pushPlaybackState(store.state.currentTrack?.id, this.audio.currentTime, false);
+            this.mediaSession.updatePlaybackState();
+            this.mediaSession.updatePosition(true);
             Haptics.lock();
         });
         this.audio.addEventListener('playing', () => {
             playTimingOnPlaying(store.state.currentTrack);
+            this.updateMediaSession(store.state.currentTrack);
             const t = store.state.currentTrack;
             if (t && isPlayTimingEligibleTrack(t)) {
                 postSetupFirstPlayBeacon(store.apiBase, t.id);
@@ -315,9 +354,7 @@ class AudioEngine {
             }
         });
 
-        if ('mediaSession' in navigator) {
-            this.setMediaSessionHandlers();
-        }
+        this.setMediaSessionHandlers();
 
         setInterval(() => {
             if (store.state.resumeSyncActive) return;
@@ -330,6 +367,7 @@ class AudioEngine {
         if (typeof window !== 'undefined') {
             window.addEventListener('playback_stop_requested', () => this.pause());
             window.addEventListener('playback_next_requested', () => this.next());
+            window.addEventListener('playback_previous_requested', () => this.prev());
             window.addEventListener('playback_seek_requested', (event) => {
                 const positionSec = Number(event.detail?.position_sec);
                 this.seekToSeconds(positionSec);
@@ -370,21 +408,9 @@ class AudioEngine {
         }
     }
 
-    /** Set Media Session action handlers (prev/next work on Android; iOS does not show them). */
+    /** Set Media Session action handlers for browser/OS media controls. */
     setMediaSessionHandlers() {
-        if (!('mediaSession' in navigator)) return;
-        navigator.mediaSession.setActionHandler('play', () => this.play());
-        navigator.mediaSession.setActionHandler('pause', () => this.pause());
-        navigator.mediaSession.setActionHandler('previoustrack', () => this.prev());
-        navigator.mediaSession.setActionHandler('nexttrack', () => this.next());
-        const skip = (delta) => {
-            if (!this.audio.duration) return;
-            this.audio.currentTime = Math.max(0, Math.min(this.audio.duration, this.audio.currentTime + delta));
-        };
-        try {
-            navigator.mediaSession.setActionHandler('seekbackward', (e) => skip(-(e?.seekOffset ?? 10)));
-            navigator.mediaSession.setActionHandler('seekforward', (e) => skip(e?.seekOffset ?? 10));
-        } catch (_) { /* seekbackward/seekforward not supported */ }
+        this.mediaSession.installHandlers();
     }
 
     /**
@@ -449,27 +475,12 @@ class AudioEngine {
                 this.audio.load();
                 await this.audio.play();
                 this._clearPendingRemotePlayback();
-                store.update({ currentTrack: { ...track, _streamToken: tok }, isPlaying: true });
+                const playbackTrack = { ...track, _streamToken: tok };
+                store.update({ currentTrack: playbackTrack, isPlaying: true });
                 store.pushPlaybackState(track.id, 0, true);
                 this._suppressStaleTimeUpdates = true;
                 this._dispatchTimeUpdate(0, 0, track?.duration ?? 0);
-                if ('mediaSession' in navigator) {
-                    const coverUrl = track?.thumbnail || null;
-                    const sizes = ['96x96', '128x128', '192x192', '256x256', '384x384', '512x512'];
-                    const artwork = coverUrl
-                        ? [...sizes.map((size) => ({ src: coverUrl, sizes: size, type: 'image/jpeg' }))]
-                        : [
-                              { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-                              { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
-                          ];
-                    navigator.mediaSession.metadata = new MediaMetadata({
-                        title: track.title,
-                        artist: track.artist,
-                        album: track.album,
-                        artwork
-                    });
-                    this.setMediaSessionHandlers();
-                }
+                this.updateMediaSession(playbackTrack);
                 return { ok: true };
             } catch (err) {
                 if (options.remoteRequest && this._isAutoplayBlocked(err)) {
@@ -511,27 +522,7 @@ class AudioEngine {
                 store.pushPlaybackState(playbackTrack.id, 0, true);
                 this._suppressStaleTimeUpdates = true;
                 this._dispatchTimeUpdate(0, 0, playbackTrack?.duration ?? 0);
-                if ('mediaSession' in navigator) {
-                    const coverUrl = playbackTrack?.id ? Resolver.getCoverUrl(playbackTrack) : null;
-                    const sizes = ['96x96', '128x128', '192x192', '256x256', '384x384', '512x512'];
-                    const artwork = coverUrl
-                        ? [
-                            ...sizes.map(size => ({ src: coverUrl, sizes: size, type: 'image/jpeg' })),
-                            { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-                            { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
-                        ]
-                        : [
-                            { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-                            { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
-                        ];
-                    navigator.mediaSession.metadata = new MediaMetadata({
-                        title: playbackTrack.title,
-                        artist: playbackTrack.artist,
-                        album: playbackTrack.album,
-                        artwork
-                    });
-                    this.setMediaSessionHandlers();
-                }
+                this.updateMediaSession(playbackTrack);
                 return { ok: true };
             } catch (err) {
                 if (options.remoteRequest && this._isAutoplayBlocked(err)) {
@@ -564,28 +555,7 @@ class AudioEngine {
             store.pushPlaybackState(track.id, 0, true);
             this._suppressStaleTimeUpdates = true;
             this._dispatchTimeUpdate(0, 0, track?.duration ?? 0);
-
-            if ('mediaSession' in navigator) {
-                const coverUrl = track?.id ? Resolver.getCoverUrl(track) : null;
-                const sizes = ['96x96', '128x128', '192x192', '256x256', '384x384', '512x512'];
-                const artwork = coverUrl
-                    ? [
-                        ...sizes.map(size => ({ src: coverUrl, sizes: size, type: 'image/jpeg' })),
-                        { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-                        { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
-                    ]
-                    : [
-                        { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-                        { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
-                    ];
-                navigator.mediaSession.metadata = new MediaMetadata({
-                    title: track.title,
-                    artist: track.artist,
-                    album: track.album,
-                    artwork
-                });
-                this.setMediaSessionHandlers();
-            }
+            this.updateMediaSession(track);
             return { ok: true };
         } catch (err) {
             // Note: Security & UX aborterror is normal when switching tracks quickly (e.g. double tap)
@@ -640,14 +610,39 @@ class AudioEngine {
         this.syncPlayingStateToStore();
     }
 
+    _shouldAutoContinuePreview(track) {
+        if (!track || store.state.radioMode) return false;
+        if (track.source === 'podcast-preview') return false;
+        if (track.source === 'preview') return true;
+        return track.source === 'radio' && !track._libraryTrackId;
+    }
+
+    async _startPreviewContinuation(track) {
+        if (!this._shouldAutoContinuePreview(track)) return false;
+        const radioTrack = await radioService.startContinuation(track);
+        if (!radioTrack) return false;
+        await this.playTrack(radioTrack);
+        return true;
+    }
+
     async next() {
+        if (this._advanceInFlight) return this._advanceInFlight;
+        this._advanceInFlight = this._advanceToNext();
+        try {
+            return await this._advanceInFlight;
+        } finally {
+            this._advanceInFlight = null;
+        }
+    }
+
+    async _advanceToNext() {
         const currentTrack = store.state.currentTrack;
         const mode = store.state.repeatMode;
 
         // Note: Repeat (infinite) same song forever until user turns off or changes song
         if (mode === 'one' && currentTrack) {
             console.log("Repeat active, restarting track.");
-            this.playTrack(currentTrack);
+            await this.playTrack(currentTrack);
             return;
         }
 
@@ -656,7 +651,7 @@ class AudioEngine {
             if (this._repeatOnceUsedTrackId !== currentTrack.id) {
                 this._repeatOnceUsedTrackId = currentTrack.id;
                 console.log("Repeat once: playing again, then will continue.");
-                this.playTrack(currentTrack);
+                await this.playTrack(currentTrack);
                 return;
             }
             this._repeatOnceUsedTrackId = null; // Note: Consumed; continue to next
@@ -681,6 +676,9 @@ class AudioEngine {
             window.showToast?.('Radio ended');
         }
 
+        // Note: A music preview with no explicit queue should continue as a radio session, but skip the seed already heard.
+        if (await this._startPreviewContinuation(currentTrack)) return;
+
         // Note: 2. Try context fallback (sequential or shuffled)
         if (this.currentContext && this.currentContext.length > 0 && store.state.currentTrack) {
             const currentIndex = this.currentContext.findIndex(t => t.id === store.state.currentTrack.id);
@@ -704,8 +702,10 @@ class AudioEngine {
             currentTrack?.source === 'preview' || currentTrack?.source === 'radio' || currentTrack?.source === 'podcast-preview';
         if (isPreview) {
             store.update({ isPlaying: false });
+            this.mediaSession.updatePlaybackState();
         } else {
             store.update({ isPlaying: false, currentTrack: null });
+            this.updateMediaSession(null);
         }
     }
 
@@ -730,6 +730,17 @@ class AudioEngine {
         this.seekToSeconds(time);
     }
 
+    seekRelative(deltaSec) {
+        const delta = Number(deltaSec);
+        if (!Number.isFinite(delta)) return false;
+        const duration = Number.isFinite(this.audio.duration) ? this.audio.duration : 0;
+        const current = Number.isFinite(this.audio.currentTime) ? this.audio.currentTime : 0;
+        const target = duration > 0
+            ? Math.max(0, Math.min(duration, current + delta))
+            : Math.max(0, current + delta);
+        return this.seekToSeconds(target);
+    }
+
     seekToSeconds(positionSec) {
         const position = Number(positionSec);
         if (!Number.isFinite(position) || position < 0) return false;
@@ -751,6 +762,7 @@ class AudioEngine {
                 : Number(store.state.currentTrack?.duration) || 0;
             const progress = effectiveDuration > 0 ? (target / effectiveDuration) * 100 : 0;
             this._dispatchTimeUpdate(progress, target, effectiveDuration);
+            this.mediaSession.updatePosition(true);
             return true;
         };
 
@@ -803,7 +815,7 @@ class AudioEngine {
             currentTime >= duration - 1.2
         ) {
             this._previewEndedTriggered = true;
-            this.next();
+            void this.next();
         }
 
         const visible = isVisible();
