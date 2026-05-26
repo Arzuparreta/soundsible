@@ -367,6 +367,7 @@ class AudioEngine {
         if (typeof window !== 'undefined') {
             window.addEventListener('playback_stop_requested', () => this.pause());
             window.addEventListener('playback_next_requested', () => this.next());
+            window.addEventListener('playback_previous_requested', () => this.prev());
             window.addEventListener('playback_seek_requested', (event) => {
                 const positionSec = Number(event.detail?.position_sec);
                 this.seekToSeconds(positionSec);
@@ -701,8 +702,10 @@ class AudioEngine {
             currentTrack?.source === 'preview' || currentTrack?.source === 'radio' || currentTrack?.source === 'podcast-preview';
         if (isPreview) {
             store.update({ isPlaying: false });
+            this.mediaSession.updatePlaybackState();
         } else {
             store.update({ isPlaying: false, currentTrack: null });
+            this.updateMediaSession(null);
         }
     }
 

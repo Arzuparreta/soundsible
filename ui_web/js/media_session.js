@@ -4,6 +4,7 @@
  */
 
 const ARTWORK_SIZES = ['96x96', '128x128', '192x192', '256x256', '384x384', '512x512'];
+const PNG_RE = /\.png(?:$|[?#])/i;
 
 export class MediaSessionBridge {
     constructor({ getAudio, getTrack, getCoverUrl, getFallbackArtwork, actions }) {
@@ -40,7 +41,14 @@ export class MediaSessionBridge {
     }
 
     updateTrack(track = this.getTrack?.()) {
-        if (!this.supported || !track) return;
+        if (!this.supported) return;
+        if (!track) {
+            try {
+                navigator.mediaSession.metadata = null;
+                navigator.mediaSession.playbackState = 'none';
+            } catch (_) {}
+            return;
+        }
         const artwork = this._artworkForTrack(track);
         try {
             navigator.mediaSession.metadata = new MediaMetadata({
@@ -90,11 +98,22 @@ export class MediaSessionBridge {
     _artworkForTrack(track) {
         const coverUrl = this.getCoverUrl?.(track);
         if (coverUrl) {
-            return ARTWORK_SIZES.map((size) => ({ src: coverUrl, sizes: size, type: 'image/jpeg' }));
+            const src = this._absoluteUrl(coverUrl);
+            const type = PNG_RE.test(src) ? 'image/png' : 'image/jpeg';
+            return ARTWORK_SIZES.map((size) => ({ src, sizes: size, type }));
         }
-        return this.getFallbackArtwork?.() || [
+        return (this.getFallbackArtwork?.() || [
             { src: 'assets/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
             { src: 'assets/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
-        ];
+        ]).map((item) => ({ ...item, src: this._absoluteUrl(item.src) }));
+    }
+
+    _absoluteUrl(src) {
+        if (!src || typeof window === 'undefined') return src || '';
+        try {
+            return new URL(src, window.location.href).href;
+        } catch (_) {
+            return src;
+        }
     }
 }

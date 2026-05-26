@@ -8,6 +8,19 @@ Soundsible has three car-facing layers:
 
 The web player now owns the fast path through the browser Media Session API. That improves metadata and controls for phone-native media surfaces, but it does not make the PWA a CarPlay or Android Auto app.
 
+## Current Web / Bluetooth Layer
+
+The web player publishes absolute Media Session artwork URLs, playback state, position state, and handlers for:
+
+- play
+- pause
+- next
+- previous
+- seek backward / forward
+- seek to position
+
+This is the best available path for Safari/Chrome lock screens, Bluetooth controls, USB media surfaces, and car-native "Now Playing" views that mirror the phone. It is still browser-mediated, so individual cars and browser versions may differ.
+
 ## API Contract
 
 Native car clients should start with:
@@ -60,6 +73,8 @@ The iOS app should be a native audio client:
 - Publish `MPNowPlayingInfoCenter` metadata from the selected item.
 - Register `MPRemoteCommandCenter` handlers for play, pause, next, previous, and seek.
 - Keep the server playback state updated through existing `/api/playback/state` once a native device ID exists.
+
+The native client should register itself as `device_type: "ios"` through `POST /api/devices/register`. Remote commands accepted by Soundsible are `play`, `pause`, `next`, `previous`, and `seek`.
 
 ## CarPlay Target
 

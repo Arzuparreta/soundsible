@@ -277,8 +277,8 @@ def agent_command():
     scope = _scope()
     data = request.json or {}
     command = (data.get("command") or "").strip().lower()
-    if command not in {"pause", "play", "next", "seek"}:
-        return jsonify({"error": "command must be pause, play, next, or seek"}), 400
+    if command not in {"pause", "play", "next", "previous", "seek"}:
+        return jsonify({"error": "command must be pause, play, next, previous, or seek"}), 400
 
     requested_device_id = data.get("device_id") or data.get("target_device_id")
     target = _pick_target_device(api, scope, requested_device_id)
@@ -303,6 +303,8 @@ def agent_command():
             _emit_start(api, scope, device_id, target_state, track=track_payload)
         elif command == "next":
             api["socketio"].emit("playback_next_requested", {}, room=_playback_room(scope, device_id))
+        elif command == "previous":
+            api["socketio"].emit("playback_previous_requested", {}, room=_playback_room(scope, device_id))
         else:
             position_sec, error = _parse_seek_position_sec(data)
             if error:
@@ -336,6 +338,8 @@ def agent_command():
         engine.pause()
     elif command == "play":
         engine.pause()
+    elif command == "previous":
+        return jsonify({"error": "No target device registered and local engine does not support agent previous"}), 409
     elif command == "seek":
         return jsonify({"error": "No target device registered and local engine does not support agent seek"}), 409
     else:

@@ -297,6 +297,9 @@ class RemoteControl {
                     Nothing playing on this device
                 </div>
                 <div class="flex items-stretch">
+                    <button type="button" id="rc-prev-btn" class="flex-1 flex items-center justify-center gap-2 py-4 text-sm font-bold text-[var(--text-main)] hover:bg-[var(--surface-overlay)] active:bg-[var(--bg-card)] transition-colors border-r border-[var(--glass-border)]">
+                        <i class="fas fa-backward text-[var(--secondary)]"></i><span>Previous</span>
+                    </button>
                     <button type="button" id="rc-play-btn" class="flex-1 flex items-center justify-center gap-2 py-4 text-sm font-bold text-[var(--text-main)] hover:bg-[var(--surface-overlay)] active:bg-[var(--bg-card)] transition-colors border-r border-[var(--glass-border)]">
                         <i class="fas fa-play text-[var(--accent)]"></i><span id="rc-play-label">Play</span>
                     </button>
@@ -319,6 +322,11 @@ class RemoteControl {
             } else {
                 this.sendRemoteCommand(this._targetDeviceId, 'play');
             }
+        });
+
+        document.getElementById('rc-prev-btn').addEventListener('click', () => {
+            if (!this._targetDeviceId) return;
+            this.sendRemoteCommand(this._targetDeviceId, 'previous');
         });
 
         document.getElementById('rc-next-btn').addEventListener('click', () => {

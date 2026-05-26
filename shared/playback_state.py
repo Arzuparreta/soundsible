@@ -72,7 +72,7 @@ def register_device(
     now = time.time()
     normalized_device_id = str(device_id or "").strip() or str(uuid.uuid4())
     normalized_type = (device_type or "desktop").strip().lower()
-    if normalized_type not in {"mobile", "agent", "desktop"}:
+    if normalized_type not in {"mobile", "agent", "desktop", "ios", "android", "car"}:
         normalized_type = "desktop"
     device = {
         "device_id": normalized_device_id,
