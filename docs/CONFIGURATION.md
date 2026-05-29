@@ -12,7 +12,7 @@ Key options:
 
 - Library path – where your music files live.
 - Storage backend – local disk, NAS, or object storage.
-- Cloud backends – Cloudflare R2, Backblaze B2/R2, S2 (optional).
+- Cloud backends – Cloudflare R2, Backblaze B2, generic S3 (optional).
 - Downloader defaults – quality preferences and search source.
 
 Changes made here are persisted so future sessions pick them up automatically.
@@ -25,6 +25,7 @@ Typical categories:
 
 - Paths – base paths for storage or temporary working directories.
 - Feature flags and tuning – optional flags for concurrency limits or debug behaviour.
+- Web player debug – append `?debug=1` to the player URL, or set `localStorage.soundsible_debug` to `1`, to enable verbose client connection/playback logs (off by default).
 
 Consult the code and any sample `.env` files in the repository for the current list of supported variables.
 
@@ -117,7 +118,7 @@ At a high level, storage can be configured in three ways:
 
 - Local disk – default mode; files stored on the same machine running Soundsible.
 - NAS or shared storage – a mounted network path used as the library location.
-- Object storage – supported providers such as Cloudflare R2, Backblaze B2/R2, or S2.
+- Object storage – supported providers such as Cloudflare R2, Backblaze B2, or generic S3.
 
 The setup wizard and settings UI handle the common cases. If you need a custom backend, look for the storage abstraction layer in the code and implement the same interface that existing backends use.
 

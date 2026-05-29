@@ -19,6 +19,7 @@ import {
 import { postSetupFirstPlayBeacon, ensureSetupSessionStarted } from './setup_funnel.js';
 import { recordDiscoveryEvent } from './discovery_events.js';
 import { MediaSessionBridge } from './media_session.js';
+import { debugLog } from './debug.js';
 
 const PRELOAD_THRESHOLD_SEC = 45;
 const PUSH_DEBOUNCE_VISIBLE_SEC = 5;
@@ -433,7 +434,7 @@ class AudioEngine {
 
         // Note: Prevent redundant loads if tapping the same track rapidly
         if (this.audio.src.includes(track.id) && !this.audio.paused) {
-            console.log("Track already playing, ignoring redundant request.");
+            debugLog("Track already playing, ignoring redundant request.");
             return { ok: true, alreadyPlaying: true };
         }
 
@@ -538,7 +539,7 @@ class AudioEngine {
         }
 
         const url = Resolver.getTrackUrl(track);
-        console.log("Playing URL:", url);
+        debugLog("Playing URL:", url);
 
         const playTimingLib =
             options.playTimingIntent && !options.remoteRequest && isPlayTimingEligibleTrack(track);
@@ -561,7 +562,7 @@ class AudioEngine {
             // Note: Security & UX aborterror is normal when switching tracks quickly (e.g. double tap)
             // Note: We catch it silently. other errors (404, network) still show alerts.
             if (err.name === 'AbortError') {
-                console.log("Playback aborted (interrupted by new request).");
+                debugLog("Playback aborted (interrupted by new request).");
                 return { ok: false, aborted: true };
             } else if (options.remoteRequest && this._isAutoplayBlocked(err)) {
                 if (options.restageOnAutoplayBlock !== false) this._stageRemotePlayback(track, options.positionSec);
@@ -641,7 +642,7 @@ class AudioEngine {
 
         // Note: Repeat (infinite) same song forever until user turns off or changes song
         if (mode === 'one' && currentTrack) {
-            console.log("Repeat active, restarting track.");
+            debugLog("Repeat active, restarting track.");
             await this.playTrack(currentTrack);
             return;
         }
@@ -650,7 +651,7 @@ class AudioEngine {
         if (mode === 'once' && currentTrack) {
             if (this._repeatOnceUsedTrackId !== currentTrack.id) {
                 this._repeatOnceUsedTrackId = currentTrack.id;
-                console.log("Repeat once: playing again, then will continue.");
+                debugLog("Repeat once: playing again, then will continue.");
                 await this.playTrack(currentTrack);
                 return;
             }
@@ -658,7 +659,7 @@ class AudioEngine {
         }
 
         // Note: 1. User-managed queue always takes priority, even while radio is active.
-        console.log("Playing next track from queue...");
+        debugLog("Playing next track from queue...");
         const nextTrack = await store.popNextFromQueue();
         if (nextTrack) {
             await this.playContextTrack(nextTrack);
@@ -689,14 +690,14 @@ class AudioEngine {
                     ? this._pickRandomFromContext(this.currentContext, store.state.currentTrack.id)
                     : this.currentContext[currentIndex + 1];
                 if (nextTrack) {
-                    console.log("Queue empty, falling back to context:", nextTrack.title, shuffleOn ? "(shuffle)" : "");
+                    debugLog("Queue empty, falling back to context:", nextTrack.title, shuffleOn ? "(shuffle)" : "");
                     await this.playContextTrack(nextTrack);
                     return;
                 }
             }
         }
 
-        console.log("Playback sequence finished.");
+        debugLog("Playback sequence finished.");
         this._invalidatePreload();
         const isPreview =
             currentTrack?.source === 'preview' || currentTrack?.source === 'radio' || currentTrack?.source === 'podcast-preview';

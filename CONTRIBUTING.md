@@ -18,7 +18,13 @@ Thanks for your interest in contributing – every bug report, idea, and pull re
    ./venv/bin/pip install -r requirements.txt
    ```
 
-3. **Run the app in development**
+3. **Run tests** (after installing dependencies):
+
+   ```bash
+   PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q
+   ```
+
+4. **Run the app in development**
 
    The easiest way is to use the launcher:
 
@@ -41,7 +47,7 @@ Thanks for your interest in contributing – every bug report, idea, and pull re
 
 1. Create a feature branch from **`dev`** (integration branch for ongoing work). Use **`main`** only if you are explicitly targeting a release/stable line.
 2. Make small, focused changes.
-3. Add or update tests when touching non‑trivial logic.
+3. Add or update tests when touching non‑trivial logic (`PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q`).
 4. Run the app locally to verify core flows (launch, play music, basic navigation).
 5. Open a PR against **`dev`** by default, with a clear description of what you changed and why. Open against **`main`** when that matches maintainer guidance (e.g. hotfixes or release process).
 

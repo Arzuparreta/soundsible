@@ -34,7 +34,7 @@ Recommended or optional:
 
 - A modern browser for the Station UI.
 - Tailscale for secure remote access.
-- NAS or object storage (R2/B2/S2) if you use those backends.
+- NAS or object storage (R2/B2/S3) if you use those backends.
 
 ### 2. Running on a headless server
 
@@ -122,7 +122,7 @@ Consult your proxy’s documentation for exact configuration snippets and TLS se
 By default, Soundsible uses local disk on the host. For larger libraries or shared setups:
 
 - Mount a NAS path (for example NFS or SMB) and point the setup wizard at that location.
-- Or configure an object storage backend (Cloudflare R2, Backblaze B2/R2, S2) via the setup wizard and configuration.
+- Or configure an object storage backend (Cloudflare R2, Backblaze B2, generic S3) via the setup wizard and configuration.
 
 See `CONFIGURATION.md` for more details on storage‑related options.
 

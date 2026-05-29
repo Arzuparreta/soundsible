@@ -6,6 +6,7 @@ import { io } from './vendor/socket.io-client.esm.min.js';
 import { store } from './store.js';
 import { getApiBase } from './config.js';
 import { isVisible, onChange as onVisibilityChange } from './visibility.js';
+import { debugLog } from './debug.js';
 // playback_resume.js is dynamically imported below to break a circular
 // import chain (store -> connection -> playback_resume -> audio -> store).
 
@@ -46,14 +47,14 @@ export class ConnectionManager {
     async findActiveHost(endpoints) {
         if (!endpoints || endpoints.length === 0) return null;
 
-        console.log("Starting connection race for:", endpoints);
+        debugLog("Starting connection race for:", endpoints);
         
         const probes = endpoints.map(host => this.probe(host));
 
         try {
             // Note: Robust promise.any fallback
             const fastestHost = await (Promise.any ? Promise.any(probes) : this._anyFallback(probes));
-            console.log("Fastest path locked:", fastestHost);
+            debugLog("Fastest path locked:", fastestHost);
             
             // ## Section: Update store
             store.update({ activeHost: fastestHost, isOnline: true });
@@ -86,7 +87,7 @@ export class ConnectionManager {
             this.socket.disconnect();
         }
 
-        console.log("Initializing SocketIO at:", host);
+        debugLog("Initializing SocketIO at:", host);
         this.socket = io(getApiBase(host), {
             // Force a new Manager so Engine.IO assigns a fresh sid — stale
             // sessions from before a Tailscale blip get cleanly discarded
@@ -101,7 +102,7 @@ export class ConnectionManager {
         });
 
         this.socket.on('connect', () => {
-            console.log("Socket connected");
+            debugLog("Socket connected");
             store.update({ isOnline: true });
             const registration = {
                 device_id: store.getDeviceId(),
@@ -117,7 +118,7 @@ export class ConnectionManager {
         });
 
         this.socket.on('disconnect', () => {
-            console.log("Socket disconnected");
+            debugLog("Socket disconnected");
             store.update({ isOnline: false });
             this.startReconnectionLoop();
         });
@@ -164,12 +165,12 @@ export class ConnectionManager {
                 this._clearReconnectLoop();
                 return;
             }
-            console.log("Probing for Station Engine recovery...");
+            debugLog("Probing for Station Engine recovery...");
             const endpoints = [...store.state.priorityList, window.location.hostname];
             const uniqueEndpoints = [...new Set(endpoints)].filter(e => e);
             const success = await this.findActiveHost(uniqueEndpoints);
             if (success) {
-                console.log("Station Engine recovered");
+                debugLog("Station Engine recovered");
                 this.recoveryCount += 1;
                 store.syncLibrary().then(async () => {
                     if (!store.hasUserPlaybackStarted() && store.state.currentTrack == null) {
@@ -205,7 +206,7 @@ export class ConnectionManager {
             this.reconnectInterval = setInterval(runProbe, ms);
         };
 
-        console.log("Starting reconnection loop...");
+        debugLog("Starting reconnection loop...");
         startInterval();
 
         this._unsubscribeVisibility = onVisibilityChange((visible) => {

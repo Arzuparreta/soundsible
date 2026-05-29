@@ -8,6 +8,7 @@ import { audioEngine } from './audio.js';
 import { searchService } from './search_service.js';
 import { showLoadingToast } from './shared.js';
 import { recordDiscoveryEvent } from './discovery_events.js';
+import { debugLog } from './debug.js';
 
 const REFILL_THRESHOLD = 3;
 const MAX_QUEUE_BATCH = 25;
@@ -261,7 +262,7 @@ class RadioService {
         const playSeed = options.playSeed !== false;
         const startKey = `${requestKey}|${playSeed ? 'play-seed' : 'continue'}`;
         if (this._activeStart?.key === startKey) {
-            console.debug('[radio] duplicate start ignored', { requestKey, playSeed });
+            debugLog('[radio] duplicate start ignored', { requestKey, playSeed });
             return this._activeStart.promise;
         }
 
@@ -327,7 +328,7 @@ class RadioService {
             const alreadyPlayingSeed =
                 isCurrentTrackAudiblyPlaying() &&
                 isSamePlaybackTarget(track, store.state.currentTrack, seed.videoId);
-            console.debug('[radio] start commit', {
+            debugLog('[radio] start commit', {
                 token,
                 sessionId,
                 seedVideoId: seed.videoId,

@@ -196,7 +196,7 @@ class YouTubeDownloader:
                 potential_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "cookies.txt"
                 if potential_path.exists():
                     self.cookie_file = str(potential_path)
-                    # Note: Print(f"DEBUG auto-detected cookies at {self.cookie_file}")
+                    logger.debug("Auto-detected cookies at %s", self.cookie_file)
             except ImportError:
                 pass
 

@@ -4,6 +4,7 @@
 import { connectionManager } from './connection.js';
 import { STATION_PORT, getApiBase } from './config.js';
 import { recordDiscoveryEvent } from './discovery_events.js';
+import { debugLog } from './debug.js';
 
 const MAX_SONG_PLAY_HISTORY = 300;
 const MAX_PODCAST_PLAY_HISTORY = 300;
@@ -576,7 +577,7 @@ class Store {
                 method: 'DELETE'
             });
             if (res.ok) {
-                console.log("✓ Track deleted from Station Engine");
+                debugLog("✓ Track deleted from Station Engine");
                 await this.syncLibrary();
                 return true;
             }
