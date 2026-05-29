@@ -109,32 +109,51 @@ async function applyAutostartPreference() {
   }
 }
 
+/** Normalize `plugin:dialog|open` folder result (string path or null when cancelled). */
+function folderPathFromDialogResult(result) {
+  if (result == null) return null;
+  if (typeof result === 'string' && result.trim()) return result;
+  return null;
+}
+
+async function pickMusicFolder() {
+  return folderPathFromDialogResult(
+    await invoke('plugin:dialog|open', {
+      options: {
+        directory: true,
+        multiple: false,
+        title: 'Choose your music folder',
+      },
+    }),
+  );
+}
+
 btnChoose.addEventListener('click', async () => {
-  // Visible diagnostic — replace pathDisplay text at each step so we see
-  // exactly where the dialog flow gets stuck on Windows.
-  const diagStep = (msg) => {
-    pathDisplay.textContent = msg;
-    pathDisplay.classList.add('filled');
-  };
   try {
-    diagStep('DIAG: invoke pick_music_folder…');
-    const path = await invoke('pick_music_folder');
-    diagStep('DIAG: invoke returned: ' + JSON.stringify(path));
+    btnChoose.disabled = true;
+    pathDisplay.style.color = '';
+    pathDisplay.textContent = 'Opening folder picker…';
+    pathDisplay.classList.add('filled');
+
+    const path = await pickMusicFolder();
     if (!path) {
-      diagStep('DIAG: invoke returned null/empty — dialog was cancelled or returned no folder');
+      pathDisplay.textContent = 'No folder selected';
+      pathDisplay.classList.remove('filled');
       return;
     }
+
     selectedPath = path;
     pathDisplay.textContent = path;
-    pathDisplay.style.color = '';
     pathDisplay.classList.add('filled');
     setContinueEnabled(true);
     await refreshPreview(path);
   } catch (err) {
     console.error('Folder picker failed:', err);
     pathDisplay.style.color = '#ff453a';
-    pathDisplay.textContent = 'DIAG: invoke threw: ' + (err && err.message ? err.message : String(err));
+    pathDisplay.textContent = err && err.message ? err.message : String(err);
     pathDisplay.classList.add('filled');
+  } finally {
+    btnChoose.disabled = false;
   }
 });
 
