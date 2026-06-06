@@ -1,0 +1,30 @@
+[tool.ruff]
+line-length = 120
+exclude = [
+    ".venv",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".pytest_cache",
+    ".git",
+]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+# Note: Intentionally lenient for legacy codebase — only block on real breakages.
+# E402  = import not at top (common in Flask blueprints and test fixtures)
+# E501  = line too long (legacy code has many long lines)
+# E701  = multiple statements on one line (legacy style)
+# F401  = unused import (common in __init__ re-exports and tests)
+# F541  = f-string without placeholders (cosmetic)
+# F811  = redefinition of unused (common in local function imports)
+# F841  = unused local variable (pre-existing debt, not blocking)
+ignore = ["E402", "E501", "E701", "F401", "F541", "F811", "F841"]
+
+[tool.ruff.lint.per-file-ignores]
+# Note: Tests often do mid-file imports and may have unused imports for clarity.
+"tests/*" = ["E402", "F401", "F841"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25

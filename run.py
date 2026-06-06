@@ -485,7 +485,7 @@ class SoundsibleLauncher:
                     self.sync_status = "Synced"
                 else:
                     self.sync_status = "Sync Failed"
-            except:
+            except Exception:
                 self.sync_status = "Sync Error"
         
         threading.Thread(target=_sync, daemon=True).start()

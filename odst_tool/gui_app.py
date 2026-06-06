@@ -1,6 +1,8 @@
 import sys
 import os
 
+from shared.constants import STATION_PORT
+
 try:
     import tkinter as tk
     from tkinter import ttk, messagebox, scrolledtext

@@ -67,6 +67,7 @@ from shared.url_utils import normalize_youtube_url, extract_youtube_video_id, va
 from shared.security import is_trusted_network, is_safe_path
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, apply_security_headers, get_request_auth_context
 from shared.telemetry import init_telemetry
+from shared.database import DatabaseManager
 
 from .download_queue import DownloadQueueManager, LibraryFileWatcher, parse_intake_item
 from .orchestrator import orchestrator

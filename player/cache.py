@@ -204,4 +204,5 @@ class CacheManager:
                 
                 self.conn.execute("DELETE FROM cache_entries WHERE track_id = ?", (track_id,))
                 self.conn.commit()
-             except: pass
+             except Exception:
+                 pass

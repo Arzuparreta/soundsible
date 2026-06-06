@@ -275,7 +275,8 @@ def _queue_confirmed(
         return jsonify({"status": "failed", "reason": err, "candidates": []}), 400
 
     parsed["intake_source"] = parsed.get("source_type")
-    import hashlib, json as _json
+    import hashlib
+    import json as _json
     parsed["intake_payload_hash"] = hashlib.sha256(
         _json.dumps(parsed, sort_keys=True, default=str).encode()
     ).hexdigest()

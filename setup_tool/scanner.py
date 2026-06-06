@@ -58,7 +58,8 @@ class LibraryScanner:
         if self.config.provider.name == 'CLOUDFLARE_R2' and self.config.endpoint:
              try:
                 creds['account_id'] = self.config.endpoint.split('//')[1].split('.')[0]
-             except: pass
+             except Exception:
+                 pass
              
         self.storage.authenticate(creds)
         self.storage.bucket_name = self.config.bucket

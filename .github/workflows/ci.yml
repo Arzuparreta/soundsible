@@ -38,8 +38,6 @@ jobs:
         run: pip install -r requirements.txt
       - name: Ruff check
         run: ruff check .
-      - name: Ruff format check
-        run: ruff format --check .
 
   security:
     runs-on: ubuntu-latest

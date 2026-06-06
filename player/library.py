@@ -116,7 +116,8 @@ class LibraryManager:
             if self.config.provider == StorageProvider.CLOUDFLARE_R2 and self.config.endpoint:
                 try:
                     creds['account_id'] = self.config.endpoint.split('//')[1].split('.')[0]
-                except: pass
+                except Exception:
+                    pass
             elif self.config.provider == StorageProvider.LOCAL:
                 creds = {'base_path': self.config.endpoint}
             elif self.config.provider == StorageProvider.BACKBLAZE_B2:
@@ -140,9 +141,10 @@ class LibraryManager:
             self.provider.bucket_name = self.config.bucket
             if hasattr(self.provider, 'bucket') and self.provider.bucket is None:
                 # Note: For B2 specific setup if needed
-                 try:
+                try:
                     self.provider.bucket = self.provider.api.get_bucket_by_name(self.config.bucket)
-                 except: pass
+                except Exception:
+                    pass
 
     def _save_metadata(self) -> bool:
         """
