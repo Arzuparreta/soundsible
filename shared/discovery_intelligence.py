@@ -265,6 +265,190 @@ def _rollup_score_boost(artist_norm: str, rollup: ListeningRollup) -> float:
     return min(0.50, plays * 0.15 + saves * 0.20)
 
 
+def _build_main_items(
+    tracks: list[Track],
+    by_id: dict[str, Track],
+    fav_ids: list[str],
+    fav_set: set[str],
+    playlists: dict,
+    rollup: ListeningRollup,
+    limit: int,
+) -> tuple[list[dict[str, Any]], set[str]]:
+    """Build the primary recommendation items and a seen set."""
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add(track: Track, **kwargs: Any) -> None:
+        if not track or track.id in seen or len(items) >= limit:
+            return
+        seen.add(track.id)
+        items.append(_music_item(track, **kwargs))
+
+    # Note: Favourites first
+    for idx, tid in enumerate(fav_ids):
+        track = by_id.get(tid)
+        if track:
+            artist_norm = _norm(track.album_artist or track.artist)
+            boost = _rollup_score_boost(artist_norm, rollup)
+            add(
+                track,
+                reason="A favourite in your library.",
+                reason_code="library_favourite",
+                score=min(1.0, 1.0 - idx * 0.01 + boost),
+            )
+
+    # Note: Playlist members
+    playlist_members: dict[str, list[str]] = {}
+    for name, ids in playlists.items():
+        if isinstance(ids, list):
+            playlist_members[str(name)] = [str(x) for x in ids if str(x) in by_id]
+    for name, ids in sorted(playlist_members.items(), key=lambda kv: len(kv[1]), reverse=True):
+        for idx, tid in enumerate(ids[:6]):
+            track = by_id.get(tid)
+            if track:
+                artist_norm = _norm(track.album_artist or track.artist)
+                boost = _rollup_score_boost(artist_norm, rollup)
+                add(
+                    track,
+                    reason=f'From your playlist "{name}".',
+                    reason_code="playlist_taste",
+                    score=min(1.0, 0.9 - idx * 0.01 + boost),
+                )
+
+    # Note: Strong artists
+    artist_counts: dict[str, int] = {}
+    for track in tracks:
+        artist = _norm(track.album_artist or track.artist)
+        artist_counts[artist] = artist_counts.get(artist, 0) + 1
+    strong_artists = {artist for artist, count in artist_counts.items() if artist and count >= 2}
+    for track in tracks:
+        artist_norm = _norm(track.album_artist or track.artist)
+        if artist_norm in strong_artists:
+            boost = _rollup_score_boost(artist_norm, rollup)
+            add(
+                track,
+                reason=f"You have several tracks by {track.album_artist or track.artist}.",
+                reason_code="artist_affinity",
+                score=min(1.0, 0.78 + boost),
+            )
+
+    # Note: Recent tracks
+    sorted_recent = sorted(tracks, key=lambda t: _clean_str(getattr(t, "id", "")), reverse=True)
+    for track in sorted_recent:
+        artist_norm = _norm(track.album_artist or track.artist)
+        boost = _rollup_score_boost(artist_norm, rollup)
+        add(
+            track,
+            reason="Ready from your local library.",
+            reason_code="library_owned",
+            score=min(1.0, (0.62 if track.id not in fav_set else 0.7) + boost),
+        )
+
+    return items, seen
+
+
+def _build_because_saved_section(tracks: list[Track], rollup: ListeningRollup) -> dict[str, Any] | None:
+    saved_artists = rollup.saved_artists
+    if not saved_artists:
+        return None
+    saved_artist_set = set(saved_artists)
+    because_saved_ids: list[str] = []
+    because_saved_dedup: set[str] = set()
+    for track in tracks:
+        if len(because_saved_ids) >= 12:
+            break
+        artist_norm = _norm(track.album_artist or track.artist)
+        if artist_norm in saved_artist_set and track.id not in because_saved_dedup:
+            because_saved_dedup.add(track.id)
+            because_saved_ids.append(f"music:{track.id}")
+    if not because_saved_ids:
+        return None
+    trigger_artist = ""
+    for track in tracks:
+        if _norm(track.album_artist or track.artist) == saved_artists[0]:
+            trigger_artist = track.album_artist or track.artist
+            break
+    trigger_artist = trigger_artist or saved_artists[0].title()
+    return {
+        "id": "because_you_saved",
+        "title": f"Because you saved {trigger_artist}",
+        "reason": "More from artists you've recently saved.",
+        "item_ids": because_saved_ids,
+    }
+
+
+def _build_rediscover_section(tracks: list[Track], rollup: ListeningRollup) -> dict[str, Any] | None:
+    if not rollup.played_track_ids or len(rollup.played_track_ids) < 3:
+        return None
+    rediscover_ids: list[str] = []
+    rediscover_dedup: set[str] = set()
+    for track in tracks:
+        if len(rediscover_ids) >= 12:
+            break
+        if track.id not in rollup.played_track_ids and track.id not in rediscover_dedup:
+            rediscover_dedup.add(track.id)
+            rediscover_ids.append(f"music:{track.id}")
+    if not rediscover_ids:
+        return None
+    return {
+        "id": "rediscover",
+        "title": "Rediscover",
+        "reason": "Tracks in your library you haven't played in a while.",
+        "item_ids": rediscover_ids,
+    }
+
+
+def _build_playlist_sections(
+    tracks: list[Track],
+    by_id: dict[str, Track],
+    playlists: dict,
+    rollup: ListeningRollup,
+    seen: set[str],
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    playlist_members: dict[str, list[str]] = {}
+    for name, ids in playlists.items():
+        if isinstance(ids, list):
+            playlist_members[str(name)] = [str(x) for x in ids if str(x) in by_id]
+    if not playlist_members:
+        return []
+
+    sorted_playlists = sorted(
+        [(name, ids) for name, ids in playlist_members.items() if ids],
+        key=lambda kv: len(kv[1]),
+        reverse=True,
+    )
+    sections: list[dict[str, Any]] = []
+    for pl_name, pl_ids in sorted_playlists[:3]:
+        pl_item_ids: list[str] = []
+        pl_dedup: set[str] = set()
+        for tid in pl_ids[:8]:
+            if tid not in pl_dedup:
+                pl_dedup.add(tid)
+                pl_item_ids.append(f"music:{tid}")
+                track = by_id.get(tid)
+                if track and track.id not in seen:
+                    seen.add(track.id)
+                    artist_norm = _norm(track.album_artist or track.artist)
+                    boost = _rollup_score_boost(artist_norm, rollup)
+                    items.append(_music_item(
+                        track,
+                        reason=f'From your playlist "{pl_name}".',
+                        reason_code="playlist_taste",
+                        score=min(1.0, 0.85 + boost),
+                    ))
+        if pl_item_ids:
+            sections.append({
+                "id": f"from_playlist_{_norm(pl_name)[:40].replace(' ', '_')}",
+                "title": pl_name,
+                "reason": f"Tracks from your playlist.",
+                "item_ids": pl_item_ids,
+                "playlist_name": pl_name,
+                "section_type": "from_your_playlists",
+            })
+    return sections
+
+
 def build_music_recommendations(
     metadata: LibraryMetadata | None,
     favourite_ids: Iterable[str] | None = None,
@@ -294,70 +478,7 @@ def build_music_recommendations(
         }
 
     by_id = {t.id: t for t in tracks}
-    items: list[dict[str, Any]] = []
-    seen: set[str] = set()
-
-    def add(track: Track, **kwargs: Any) -> None:
-        if not track or track.id in seen or len(items) >= limit:
-            return
-        seen.add(track.id)
-        items.append(_music_item(track, **kwargs))
-
-    for idx, tid in enumerate(fav_ids):
-        track = by_id.get(tid)
-        if track:
-            artist_norm = _norm(track.album_artist or track.artist)
-            boost = _rollup_score_boost(artist_norm, rollup)
-            add(
-                track,
-                reason="A favourite in your library.",
-                reason_code="library_favourite",
-                score=min(1.0, 1.0 - idx * 0.01 + boost),
-            )
-
-    playlist_members: dict[str, list[str]] = {}
-    for name, ids in playlists.items():
-        if isinstance(ids, list):
-            playlist_members[str(name)] = [str(x) for x in ids if str(x) in by_id]
-    for name, ids in sorted(playlist_members.items(), key=lambda kv: len(kv[1]), reverse=True):
-        for idx, tid in enumerate(ids[:6]):
-            track = by_id.get(tid)
-            if track:
-                artist_norm = _norm(track.album_artist or track.artist)
-                boost = _rollup_score_boost(artist_norm, rollup)
-                add(
-                    track,
-                    reason=f'From your playlist "{name}".',
-                    reason_code="playlist_taste",
-                    score=min(1.0, 0.9 - idx * 0.01 + boost),
-                )
-
-    artist_counts: dict[str, int] = {}
-    for track in tracks:
-        artist = _norm(track.album_artist or track.artist)
-        artist_counts[artist] = artist_counts.get(artist, 0) + 1
-    strong_artists = {artist for artist, count in artist_counts.items() if artist and count >= 2}
-    for track in tracks:
-        artist_norm = _norm(track.album_artist or track.artist)
-        if artist_norm in strong_artists:
-            boost = _rollup_score_boost(artist_norm, rollup)
-            add(
-                track,
-                reason=f"You have several tracks by {track.album_artist or track.artist}.",
-                reason_code="artist_affinity",
-                score=min(1.0, 0.78 + boost),
-            )
-
-    sorted_recent = sorted(tracks, key=lambda t: _clean_str(getattr(t, "id", "")), reverse=True)
-    for track in sorted_recent:
-        artist_norm = _norm(track.album_artist or track.artist)
-        boost = _rollup_score_boost(artist_norm, rollup)
-        add(
-            track,
-            reason="Ready from your local library.",
-            reason_code="library_owned",
-            score=min(1.0, (0.62 if track.id not in fav_set else 0.7) + boost),
-        )
+    items, seen = _build_main_items(tracks, by_id, fav_ids, fav_set, playlists, rollup, limit)
 
     sections: list[dict[str, Any]] = [
         {
@@ -368,89 +489,16 @@ def build_music_recommendations(
         }
     ]
 
-    # "Because You Saved…" — tracks sharing artist with recently saved tracks.
-    # Intentionally allows overlap with the main rail (same track, different framing).
-    saved_artists = rollup.saved_artists
-    if saved_artists:
-        saved_artist_set = set(saved_artists)
-        because_saved_ids: list[str] = []
-        because_saved_dedup: set[str] = set()
-        for track in tracks:
-            if len(because_saved_ids) >= 12:
-                break
-            artist_norm = _norm(track.album_artist or track.artist)
-            if artist_norm in saved_artist_set and track.id not in because_saved_dedup:
-                because_saved_dedup.add(track.id)
-                because_saved_ids.append(f"music:{track.id}")
-        if because_saved_ids:
-            trigger_artist = ""
-            for track in tracks:
-                if _norm(track.album_artist or track.artist) == saved_artists[0]:
-                    trigger_artist = track.album_artist or track.artist
-                    break
-            trigger_artist = trigger_artist or saved_artists[0].title()
-            sections.append({
-                "id": "because_you_saved",
-                "title": f"Because you saved {trigger_artist}",
-                "reason": "More from artists you've recently saved.",
-                "item_ids": because_saved_ids,
-            })
+    because_saved = _build_because_saved_section(tracks, rollup)
+    if because_saved:
+        sections.append(because_saved)
 
-    # "Rediscover" — library tracks not played recently.
-    # Allows overlap with the main rail; only requires ≥3 distinct played IDs.
-    if rollup.played_track_ids and len(rollup.played_track_ids) >= 3:
-        rediscover_ids: list[str] = []
-        rediscover_dedup: set[str] = set()
-        for track in tracks:
-            if len(rediscover_ids) >= 12:
-                break
-            if track.id not in rollup.played_track_ids and track.id not in rediscover_dedup:
-                rediscover_dedup.add(track.id)
-                rediscover_ids.append(f"music:{track.id}")
-        if rediscover_ids:
-            sections.append({
-                "id": "rediscover",
-                "title": "Rediscover",
-                "reason": "Tracks in your library you haven't played in a while.",
-                "item_ids": rediscover_ids,
-            })
+    rediscover = _build_rediscover_section(tracks, rollup)
+    if rediscover:
+        sections.append(rediscover)
 
-    # "From Your Playlists" — per-playlist rails, up to 3 playlists × 8 tracks.
-    # Allows overlap with main rail so each playlist's identity is preserved.
-    if playlists:
-        sorted_playlists = sorted(
-            [(name, ids) for name, ids in playlist_members.items() if ids],
-            key=lambda kv: len(kv[1]),
-            reverse=True,
-        )
-        for pl_name, pl_ids in sorted_playlists[:3]:
-            pl_item_ids: list[str] = []
-            pl_dedup: set[str] = set()
-            for tid in pl_ids[:8]:
-                if tid not in pl_dedup:
-                    pl_dedup.add(tid)
-                    pl_item_ids.append(f"music:{tid}")
-                    # Ensure item exists in main items list
-                    track = by_id.get(tid)
-                    if track and track.id not in seen:
-                        seen.add(track.id)
-                        artist_norm = _norm(track.album_artist or track.artist)
-                        boost = _rollup_score_boost(artist_norm, rollup)
-                        items.append(_music_item(
-                            track,
-                            reason=f'From your playlist "{pl_name}".',
-                            reason_code="playlist_taste",
-                            score=min(1.0, 0.85 + boost),
-                        ))
-            if pl_item_ids:
-                sections.append({
-                    "id": f"from_playlist_{_norm(pl_name)[:40].replace(' ', '_')}",
-                    "title": pl_name,
-                    "reason": f"Tracks from your playlist.",
-                    "item_ids": pl_item_ids,
-                    "playlist_name": pl_name,
-                    "section_type": "from_your_playlists",
-                })
+    playlist_sections = _build_playlist_sections(tracks, by_id, playlists, rollup, seen, items)
+    sections.extend(playlist_sections)
 
     return {
         "items": items[:limit],

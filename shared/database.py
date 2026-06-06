@@ -13,6 +13,29 @@ from shared.runtime import get_config_dir
 
 logger = logging.getLogger(__name__)
 
+# Note: Migration definitions for schema evolution
+_TRACKS_COLUMNS = {
+    "musicbrainz_id": "TEXT",
+    "isrc": "TEXT",
+    "album_artist": "TEXT",
+    "cover_source": "TEXT",
+    "metadata_modified_by_user": "BOOLEAN DEFAULT 0",
+}
+
+_YT_CACHE_COLUMNS = {
+    "confidence": "REAL",
+    "confidence_reason": "TEXT",
+    "candidates_json": "TEXT",
+    "failure_state": "TEXT",
+    "verified_at": "TIMESTAMP",
+}
+
+_PAIRING_COLUMNS = {
+    "auto_confirm": "INTEGER NOT NULL DEFAULT 0",
+    "display_active": "INTEGER NOT NULL DEFAULT 0",
+}
+
+
 class DatabaseManager:
     def __init__(self, db_path: Optional[str] = None):
         if db_path is None:
@@ -31,208 +54,206 @@ class DatabaseManager:
         conn.execute("PRAGMA synchronous=NORMAL")
         return conn
 
+    # ------------------------------------------------------------------
+    # Schema setup helpers (static to keep _init_db readable)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _create_tracks_table(conn):
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS tracks (
+                id TEXT PRIMARY KEY,
+                title TEXT,
+                artist TEXT,
+                album TEXT,
+                duration INTEGER,
+                file_hash TEXT,
+                original_filename TEXT,
+                compressed BOOLEAN,
+                file_size INTEGER,
+                bitrate INTEGER,
+                format TEXT,
+                cover_art_key TEXT,
+                year INTEGER,
+                genre TEXT,
+                track_number INTEGER,
+                is_local BOOLEAN,
+                local_path TEXT,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                musicbrainz_id TEXT,
+                isrc TEXT,
+                album_artist TEXT,
+                cover_source TEXT,
+                metadata_modified_by_user BOOLEAN DEFAULT 0
+            )
+        """)
+
+    @staticmethod
+    def _create_library_info_table(conn):
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS library_info (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        """)
+
+    @staticmethod
+    def _create_fts5_triggers(conn):
+        try:
+            conn.execute("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS tracks_fts USING fts5(
+                    id UNINDEXED,
+                    title,
+                    artist,
+                    album,
+                    content='tracks',
+                    content_rowid='rowid'
+                )
+            """)
+            conn.execute("DROP TRIGGER IF EXISTS tracks_ai")
+            conn.execute("""
+                CREATE TRIGGER tracks_ai AFTER INSERT ON tracks BEGIN
+                    INSERT INTO tracks_fts(rowid, id, title, artist, album)
+                    VALUES (new.rowid, new.id, new.title, new.artist, new.album);
+                END
+            """)
+            conn.execute("DROP TRIGGER IF EXISTS tracks_ad")
+            conn.execute("""
+                CREATE TRIGGER tracks_ad AFTER DELETE ON tracks BEGIN
+                    INSERT INTO tracks_fts(tracks_fts, rowid, id, title, artist, album)
+                    VALUES('delete', old.rowid, old.id, old.title, old.artist, old.album);
+                END
+            """)
+            conn.execute("DROP TRIGGER IF EXISTS tracks_au")
+            conn.execute("""
+                CREATE TRIGGER tracks_au AFTER UPDATE ON tracks BEGIN
+                    INSERT INTO tracks_fts(tracks_fts, rowid, id, title, artist, album)
+                    VALUES('delete', old.rowid, old.id, old.title, old.artist, old.album);
+                    INSERT INTO tracks_fts(rowid, id, title, artist, album)
+                    VALUES (new.rowid, new.id, new.title, new.artist, new.album);
+                END
+            """)
+        except sqlite3.OperationalError:
+            pass  # Note: FTS5 not available
+
+    @staticmethod
+    def _migrate_tracks_columns(conn):
+        cursor = conn.execute("PRAGMA table_info(tracks)")
+        columns = [row[1] for row in cursor.fetchall()]
+        for col, defn in _TRACKS_COLUMNS.items():
+            if col not in columns:
+                conn.execute(f"ALTER TABLE tracks ADD COLUMN {col} {defn}")
+        conn.execute("UPDATE tracks SET local_path = NULL WHERE local_path IS NOT NULL")
+
+    @staticmethod
+    def _create_youtube_cache_table(conn):
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS youtube_resolution_cache (
+                artist TEXT NOT NULL,
+                title TEXT NOT NULL,
+                youtube_id TEXT NOT NULL,
+                duration INTEGER,
+                thumbnail TEXT,
+                webpage_url TEXT,
+                channel TEXT,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                confidence REAL,
+                confidence_reason TEXT,
+                candidates_json TEXT,
+                failure_state TEXT,
+                verified_at TIMESTAMP,
+                PRIMARY KEY (artist, title)
+            )
+        """)
+        cursor = conn.execute("PRAGMA table_info(youtube_resolution_cache)")
+        yt_cols = [row[1] for row in cursor.fetchall()]
+        for col, defn in _YT_CACHE_COLUMNS.items():
+            if col not in yt_cols:
+                conn.execute(f"ALTER TABLE youtube_resolution_cache ADD COLUMN {col} {defn}")
+
+    @staticmethod
+    def _create_auth_tables(conn):
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS agent_tokens (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                token_hash TEXT NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used_at TIMESTAMP,
+                revoked_at TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS auth_tokens (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                token_hash TEXT NOT NULL UNIQUE,
+                kind TEXT NOT NULL,
+                device_type TEXT,
+                scopes TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used_at TIMESTAMP,
+                expires_at TIMESTAMP,
+                revoked_at TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_auth_tokens_kind
+            ON auth_tokens (kind)
+        """)
+
+    @staticmethod
+    def _create_pairing_table(conn):
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pairing_sessions (
+                id TEXT PRIMARY KEY,
+                code TEXT NOT NULL UNIQUE,
+                status TEXT NOT NULL,
+                device_name TEXT,
+                device_type TEXT,
+                requested_scopes TEXT NOT NULL,
+                granted_scopes TEXT NOT NULL,
+                auto_confirm INTEGER NOT NULL DEFAULT 0,
+                display_active INTEGER NOT NULL DEFAULT 0,
+                owner_confirmed_at TIMESTAMP,
+                claimed_at TIMESTAMP,
+                completed_at TIMESTAMP,
+                expires_at TIMESTAMP NOT NULL,
+                auth_token_id TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_pairing_sessions_status
+            ON pairing_sessions (status)
+        """)
+        cursor = conn.execute("PRAGMA table_info(pairing_sessions)")
+        pairing_columns = [row[1] for row in cursor.fetchall()]
+        for col, defn in _PAIRING_COLUMNS.items():
+            if col not in pairing_columns:
+                conn.execute(f"ALTER TABLE pairing_sessions ADD COLUMN {col} {defn}")
+
+    @staticmethod
+    def _create_performance_indexes(conn):
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_tracks_album_sort
+            ON tracks (album, album_artist, artist, track_number)
+        """)
+
     def _init_db(self):
         """Initialize the database schema."""
         with self._get_connection() as conn:
             try:
                 conn.execute("BEGIN TRANSACTION")
-                
-                # Note: 1. Base tables
-                # Note: Schema order must match the actual columns on disk to avoid confusion
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS tracks (
-                        id TEXT PRIMARY KEY,
-                        title TEXT,
-                        artist TEXT,
-                        album TEXT,
-                        duration INTEGER,
-                        file_hash TEXT,
-                        original_filename TEXT,
-                        compressed BOOLEAN,
-                        file_size INTEGER,
-                        bitrate INTEGER,
-                        format TEXT,
-                        cover_art_key TEXT,
-                        year INTEGER,
-                        genre TEXT,
-                        track_number INTEGER,
-                        is_local BOOLEAN,
-                        local_path TEXT,
-                        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        musicbrainz_id TEXT,
-                        isrc TEXT,
-                        album_artist TEXT,
-                        cover_source TEXT,
-                        metadata_modified_by_user BOOLEAN DEFAULT 0
-                    )
-                """)
-                
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS library_info (
-                        key TEXT PRIMARY KEY,
-                        value TEXT
-                    )
-                """)
-                
-                # Note: 2. Search index (FTS5)
-                try:
-                    conn.execute("""
-                        CREATE VIRTUAL TABLE IF NOT EXISTS tracks_fts USING fts5(
-                            id UNINDEXED,
-                            title,
-                            artist,
-                            album,
-                            content='tracks',
-                            content_rowid='rowid'
-                        )
-                    """)
-                    
-                    # Note: Update triggers
-                    conn.execute("DROP TRIGGER IF EXISTS tracks_ai")
-                    conn.execute("""
-                        CREATE TRIGGER tracks_ai AFTER INSERT ON tracks BEGIN
-                            INSERT INTO tracks_fts(rowid, id, title, artist, album)
-                            VALUES (new.rowid, new.id, new.title, new.artist, new.album);
-                        END
-                    """)
-                    conn.execute("DROP TRIGGER IF EXISTS tracks_ad")
-                    conn.execute("""
-                        CREATE TRIGGER tracks_ad AFTER DELETE ON tracks BEGIN
-                            INSERT INTO tracks_fts(tracks_fts, rowid, id, title, artist, album)
-                            VALUES('delete', old.rowid, old.id, old.title, old.artist, old.album);
-                        END
-                    """)
-                    conn.execute("DROP TRIGGER IF EXISTS tracks_au")
-                    conn.execute("""
-                        CREATE TRIGGER tracks_au AFTER UPDATE ON tracks BEGIN
-                            INSERT INTO tracks_fts(tracks_fts, rowid, id, title, artist, album)
-                            VALUES('delete', old.rowid, old.id, old.title, old.artist, old.album);
-                            INSERT INTO tracks_fts(rowid, id, title, artist, album)
-                            VALUES (new.rowid, new.id, new.title, new.artist, new.album);
-                        END
-                    """)
-                except sqlite3.OperationalError:
-                    pass # Note: FTS5 not available
-
-                # Note: 3. Schema migrations (ensure columns exist)
-                cursor = conn.execute("PRAGMA table_info(tracks)")
-                columns = [row[1] for row in cursor.fetchall()]
-                if 'musicbrainz_id' not in columns:
-                    conn.execute("ALTER TABLE tracks ADD COLUMN musicbrainz_id TEXT")
-                if 'isrc' not in columns:
-                    conn.execute("ALTER TABLE tracks ADD COLUMN isrc TEXT")
-                if 'album_artist' not in columns:
-                    conn.execute("ALTER TABLE tracks ADD COLUMN album_artist TEXT")
-                if 'cover_source' not in columns:
-                    conn.execute("ALTER TABLE tracks ADD COLUMN cover_source TEXT")
-                if 'metadata_modified_by_user' not in columns:
-                    conn.execute("ALTER TABLE tracks ADD COLUMN metadata_modified_by_user BOOLEAN DEFAULT 0")
-
-                # Note: 3B. clear stored local_path (path is resolved at read from output_dir)
-                conn.execute("UPDATE tracks SET local_path = NULL WHERE local_path IS NOT NULL")
-
-                # Note: 4. Youtube resolution cache
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS youtube_resolution_cache (
-                        artist TEXT NOT NULL,
-                        title TEXT NOT NULL,
-                        youtube_id TEXT NOT NULL,
-                        duration INTEGER,
-                        thumbnail TEXT,
-                        webpage_url TEXT,
-                        channel TEXT,
-                        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        confidence REAL,
-                        confidence_reason TEXT,
-                        candidates_json TEXT,
-                        failure_state TEXT,
-                        verified_at TIMESTAMP,
-                        PRIMARY KEY (artist, title)
-                    )
-                """)
-                cursor = conn.execute("PRAGMA table_info(youtube_resolution_cache)")
-                yt_cols = [row[1] for row in cursor.fetchall()]
-                for col, defn in [
-                    ("confidence", "REAL"),
-                    ("confidence_reason", "TEXT"),
-                    ("candidates_json", "TEXT"),
-                    ("failure_state", "TEXT"),
-                    ("verified_at", "TIMESTAMP"),
-                ]:
-                    if col not in yt_cols:
-                        conn.execute(f"ALTER TABLE youtube_resolution_cache ADD COLUMN {col} {defn}")
-
-                # Note: Agent API tokens are random bearer tokens; only hashes are stored.
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS agent_tokens (
-                        id TEXT PRIMARY KEY,
-                        name TEXT,
-                        token_hash TEXT NOT NULL UNIQUE,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        last_used_at TIMESTAMP,
-                        revoked_at TIMESTAMP
-                    )
-                """)
-
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS auth_tokens (
-                        id TEXT PRIMARY KEY,
-                        name TEXT,
-                        token_hash TEXT NOT NULL UNIQUE,
-                        kind TEXT NOT NULL,
-                        device_type TEXT,
-                        scopes TEXT NOT NULL,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        last_used_at TIMESTAMP,
-                        expires_at TIMESTAMP,
-                        revoked_at TIMESTAMP
-                    )
-                """)
-                conn.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_auth_tokens_kind
-                    ON auth_tokens (kind)
-                """)
-
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS pairing_sessions (
-                        id TEXT PRIMARY KEY,
-                        code TEXT NOT NULL UNIQUE,
-                        status TEXT NOT NULL,
-                        device_name TEXT,
-                        device_type TEXT,
-                        requested_scopes TEXT NOT NULL,
-                        granted_scopes TEXT NOT NULL,
-                        auto_confirm INTEGER NOT NULL DEFAULT 0,
-                        display_active INTEGER NOT NULL DEFAULT 0,
-                        owner_confirmed_at TIMESTAMP,
-                        claimed_at TIMESTAMP,
-                        completed_at TIMESTAMP,
-                        expires_at TIMESTAMP NOT NULL,
-                        auth_token_id TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                conn.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_pairing_sessions_status
-                    ON pairing_sessions (status)
-                """)
-                cursor = conn.execute("PRAGMA table_info(pairing_sessions)")
-                pairing_columns = [row[1] for row in cursor.fetchall()]
-                if "auto_confirm" not in pairing_columns:
-                    conn.execute("ALTER TABLE pairing_sessions ADD COLUMN auto_confirm INTEGER NOT NULL DEFAULT 0")
-                if "display_active" not in pairing_columns:
-                    conn.execute("ALTER TABLE pairing_sessions ADD COLUMN display_active INTEGER NOT NULL DEFAULT 0")
-                
-                # Note: 5. Performance indexes for common access patterns
-                # - get_all_tracks orders by artist, album, track_number
-                # - get_albums groups by album and reports an artist
-                # - get_tracks_by_album filters by album/artist and orders by track_number
-                conn.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_tracks_album_sort 
-                    ON tracks (album, album_artist, artist, track_number)
-                """)
-                
+                self._create_tracks_table(conn)
+                self._create_library_info_table(conn)
+                self._create_fts5_triggers(conn)
+                self._migrate_tracks_columns(conn)
+                self._create_youtube_cache_table(conn)
+                self._create_auth_tables(conn)
+                self._create_pairing_table(conn)
+                self._create_performance_indexes(conn)
                 conn.execute("COMMIT")
             except Exception as e:
                 conn.execute("ROLLBACK")
