@@ -456,7 +456,7 @@ class AudioProcessor:
                     for key in audio.keys():
                         if key.startswith('APIC:'):
                             return audio[key].data
-                except:
+                except Exception:
                     pass
                     
             elif ext == '.flac':

@@ -63,7 +63,7 @@ class SmartDownloader:
         if self.staging_dir.exists():
             try:
                 shutil.rmtree(self.staging_dir)
-            except:
+            except OSError:
                 pass
 
     def process_query(self, query, quality=None):

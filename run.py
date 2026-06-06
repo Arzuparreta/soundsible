@@ -406,7 +406,7 @@ class SoundsibleLauncher:
         try:
             from shared.api import api_observer
             api_observer_ref = api_observer
-        except:
+        except Exception:
             pass
         
         has_work = bool(self.child_processes) or api_observer_ref is not None
@@ -421,16 +421,18 @@ class SoundsibleLauncher:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
                 else:
                     proc.terminate()
-            except:
-                try: proc.kill()
-                except: pass
+            except (OSError, ProcessLookupError):
+                try:
+                    proc.kill()
+                except (OSError, ProcessLookupError):
+                    pass
         
         # Note: Stop API observer if running in daemon mode
         if api_observer_ref is not None:
             try:
                 api_observer_ref.stop()
                 api_observer_ref.join(timeout=2)
-            except:
+            except Exception:
                 pass
         
         # Note: Final safety check kill anything on station engine port
@@ -452,15 +454,17 @@ class SoundsibleLauncher:
                 if lib.config and lib.config.watch_folders:
                     self.watcher = LibraryWatcher(lib.config)
                     self.watcher.start()
-            except: pass
-            
+            except Exception:
+                pass
+
         threading.Thread(target=_run, daemon=True).start()
-        
+
     def _load_stats(self):
         """Load library stats from SQLite database."""
         try:
             self.stats = self.db.get_stats()
-        except: pass
+        except Exception:
+            pass
 
     def is_configured(self):
         return _config_path().exists()
