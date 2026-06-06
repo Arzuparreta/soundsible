@@ -277,7 +277,7 @@ class YouTubeDownloader:
             return track
             
         except Exception as e:
-            print(f"Error processing downloaded file {metadata.get('title', 'unknown')}: {e}")
+            logger.warning("Error processing downloaded file %s: %s", metadata.get("title", "unknown"), e)
             if temp_file.exists():
                 os.remove(temp_file)
             return None
@@ -591,11 +591,11 @@ class YouTubeDownloader:
                                 best_match = entry
                     
                     if best_match:
-                        print(f"Found match: {best_match.get('title')} (Score: {highest_score:.2f})")
+                        logger.debug("Found match: %s (Score: %.2f)", best_match.get("title"), highest_score)
                         return best_match
                         
                 except Exception as e:
-                    print(f"Search error for {query}: {e}")
+                    logger.warning("Search error for %s: %s", query, e)
                     continue
                     
         return None
@@ -1014,11 +1014,11 @@ class YouTubeDownloader:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 result = ydl.extract_info(mix_url, download=False)
             if not result or 'entries' not in result:
-                print(f"[Discover] get_related_videos: no entries in result for seed {seed_video_id} (result keys: {list(result.keys()) if result else 'None'})")
+                logger.debug("[Discover] get_related_videos: no entries in result for seed %s (result keys: %s)", seed_video_id, list(result.keys()) if result else "None")
                 return []
             raw_entries = result['entries']
             if raw_entries is None:
-                print(f"[Discover] get_related_videos: entries is None for seed {seed_video_id}")
+                logger.debug("[Discover] get_related_videos: entries is None for seed %s", seed_video_id)
                 return []
             entries_list = list(raw_entries) if not isinstance(raw_entries, list) else raw_entries
             for entry in entries_list[:max_results]:
@@ -1026,7 +1026,7 @@ class YouTubeDownloader:
                 if item is not None:
                     out.append(item)
         except Exception as e:
-            print(f"[Discover] get_related_videos failed for seed {seed_video_id}: {e}")
+            logger.warning("[Discover] get_related_videos failed for seed %s: %s", seed_video_id, e)
             return []
         return out
 
@@ -1050,7 +1050,7 @@ class YouTubeDownloader:
                     return None
                 if "Sign in to confirm" in combined:
                     return None
-                print(f"[Preview] yt-dlp failed for {video_id}: rc={rc} stderr={(combined.strip() or 'no stderr')[:300]}")
+                logger.warning("[Preview] yt-dlp failed for %s: rc=%s stderr=%s", video_id, rc, (combined.strip() or "no stderr")[:300])
                 return "__ERROR__"
             except subprocess.TimeoutExpired:
                 return None
@@ -1093,7 +1093,7 @@ class YouTubeDownloader:
             if result:
                 return result
 
-        print(f"[Preview] All attempts failed for {video_id}.")
+        logger.warning("[Preview] All attempts failed for %s.", video_id)
         return None
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
 
@@ -1115,7 +1115,7 @@ class YouTubeDownloader:
                     return None
                 if "Sign in to confirm" in combined:
                     return None
-                print(f"[Preview] yt-dlp -g failed for {video_id}: rc={rc} stderr={(combined.strip() or 'no stderr')[:300]}")
+                logger.warning("[Preview] yt-dlp -g failed for %s: rc=%s stderr=%s", video_id, rc, (combined.strip() or "no stderr")[:300])
                 return "__ERROR__"
             except subprocess.TimeoutExpired:
                 return None
@@ -1155,7 +1155,7 @@ class YouTubeDownloader:
         if result:
             return result
 
-        print(f"[Preview] All resolution methods failed for {video_id}")
+        logger.warning("[Preview] All resolution methods failed for %s", video_id)
         return None
 
     def get_cover_for_query(self, artist: str, title: str) -> Optional[str]:
@@ -1183,7 +1183,7 @@ class YouTubeDownloader:
         """
         stream_url = self.get_stream_url(video_id)
         if not stream_url:
-            print(f"[Preview] No stream URL for {video_id}; response will be empty")
+            logger.debug("[Preview] No stream URL for %s; response will be empty", video_id)
             return
         try:
             with requests.get(stream_url, stream=True, timeout=timeout) as resp:
@@ -1192,4 +1192,4 @@ class YouTubeDownloader:
                     if chunk:
                         yield chunk
         except Exception as e:
-            print(f"[Preview] Stream fetch failed for {video_id}: {e}")
+            logger.warning("[Preview] Stream fetch failed for %s: %s", video_id, e)

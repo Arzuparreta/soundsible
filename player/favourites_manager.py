@@ -3,12 +3,16 @@ Favourites Manager for Music Player.
 Manages favourite tracks with JSON persistence.
 """
 
+import json
+import logging
+import threading
+from pathlib import Path
 from typing import Set, List, Callable, Optional
+
 from shared.models import Track
 from shared.runtime import get_config_dir
-from pathlib import Path
-import threading
-import json
+
+logger = logging.getLogger(__name__)
 
 
 class FavouritesManager:
@@ -31,7 +35,7 @@ class FavouritesManager:
         with self._lock:
             if track_id not in self._favourites:
                 self._favourites.add(track_id)
-                print(f"Added to favourites: {track_id}")
+                logger.debug("Added to favourites: %s", track_id)
                 self._save_to_file()
                 self._notify_change()
     
@@ -40,7 +44,7 @@ class FavouritesManager:
         with self._lock:
             if track_id in self._favourites:
                 self._favourites.remove(track_id)
-                print(f"Removed from favourites: {track_id}")
+                logger.debug("Removed from favourites: %s", track_id)
                 self._save_to_file()
                 self._notify_change()
     
@@ -52,13 +56,13 @@ class FavouritesManager:
         with self._lock:
             if track_id in self._favourites:
                 self._favourites.remove(track_id)
-                print(f"Toggled OFF favourite: {track_id}")
+                logger.debug("Toggled OFF favourite: %s", track_id)
                 self._save_to_file()
                 self._notify_change()
                 return False
             else:
                 self._favourites.add(track_id)
-                print(f"Toggled ON favourite: {track_id}")
+                logger.debug("Toggled ON favourite: %s", track_id)
                 self._save_to_file()
                 self._notify_change()
                 return True
@@ -82,7 +86,7 @@ class FavouritesManager:
         """Clear all favourites."""
         with self._lock:
             self._favourites.clear()
-            print("Cleared all favourites")
+            logger.debug("Cleared all favourites")
             self._save_to_file()
             self._notify_change()
     
@@ -102,7 +106,7 @@ class FavouritesManager:
             try:
                 callback()
             except Exception as e:
-                print(f"Error in favourites change callback: {e}")
+                logger.warning("Error in favourites change callback: %s", e)
     
     def _save_to_file(self) -> None:
         """Save favourites to JSON file."""
@@ -118,15 +122,15 @@ class FavouritesManager:
             with open(self._favourites_file, 'w') as f:
                 json.dump(data, f, indent=2)
             
-            print(f"Saved {len(self._favourites)} favourites to {self._favourites_file}")
+            logger.debug("Saved %s favourites to %s", len(self._favourites), self._favourites_file)
         except Exception as e:
-            print(f"Error saving favourites to file: {e}")
+            logger.warning("Error saving favourites to file: %s", e)
     
     def _load_from_file(self) -> None:
         """Load favourites from JSON file."""
         try:
             if not self._favourites_file.exists():
-                print(f"No favourites file found at {self._favourites_file}, starting fresh")
+                logger.debug("No favourites file found at %s, starting fresh", self._favourites_file)
                 return
             
             with open(self._favourites_file, 'r') as f:
@@ -134,18 +138,18 @@ class FavouritesManager:
             
             # Note: Validate data structure
             if not isinstance(data, dict) or 'favourites' not in data:
-                print("Invalid favourites file format, starting fresh")
+                logger.warning("Invalid favourites file format, starting fresh")
                 return
             
             favourites_list = data['favourites']
             if not isinstance(favourites_list, list):
-                print("Invalid favourites list format, starting fresh")
+                logger.warning("Invalid favourites list format, starting fresh")
                 return
             
             self._favourites = set(favourites_list)
-            print(f"Loaded {len(self._favourites)} favourites from {self._favourites_file}")
+            logger.debug("Loaded %s favourites from %s", len(self._favourites), self._favourites_file)
             
         except json.JSONDecodeError as e:
-            print(f"Error decoding favourites JSON file: {e}, starting fresh")
+            logger.warning("Error decoding favourites JSON file: %s, starting fresh", e)
         except Exception as e:
-            print(f"Error loading favourites from file: {e}, starting fresh")
+            logger.warning("Error loading favourites from file: %s, starting fresh", e)

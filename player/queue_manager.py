@@ -6,12 +6,15 @@ Provides simple in-memory queue management for playback.
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from pathlib import Path
 from typing import Callable, List, Optional
 
 from shared.models import QueueItem, Track
 from shared.runtime import get_data_dir
+
+logger = logging.getLogger(__name__)
 
 QUEUE_STATE_VERSION = 1
 
@@ -78,7 +81,7 @@ class QueueManager:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
         except OSError as e:
-            print(f"Error persisting queue state: {e}")
+            logger.warning("Error persisting queue state: %s", e)
     
     def set_repeat_mode(self, mode: str) -> None:
         with self._lock:
@@ -100,7 +103,7 @@ class QueueManager:
         """Add a queue item (library or preview) to the end of the queue."""
         with self._lock:
             self._queue.append(item)
-            print(f"Added to queue: {item.title} by {item.artist}")
+            logger.debug("Added to queue: %s by %s", item.title, item.artist)
             self._notify_change()
 
     def add_library_track(self, track: Track) -> None:
@@ -164,7 +167,7 @@ class QueueManager:
         with self._lock:
             for track in tracks:
                 self._queue.append(QueueItem.from_library_track(track))
-            print(f"Added {len(tracks)} tracks to queue")
+            logger.debug("Added %s tracks to queue", len(tracks))
             self._notify_change()
     
     def get_next(self) -> Optional[QueueItem]:
@@ -176,13 +179,13 @@ class QueueManager:
                 if self._repeat_mode == "all" and self._history:
                     self._queue = self._history.copy()
                     self._history.clear()
-                    print("Queue refilled from history (Repeat All)")
+                    logger.debug("Queue refilled from history (Repeat All)")
                 else:
                     return None
 
             item = self._queue.pop(0)
             self._history.append(item)
-            print(f"Dequeued: {item.title}")
+            logger.debug("Dequeued: %s", item.title)
             self._notify_change()
             return item
 
@@ -201,7 +204,7 @@ class QueueManager:
                 return None
             item = self._queue.pop(0)
             self._history.append(item)
-            print(f"Consumed queued head: {item.title}")
+            logger.debug("Consumed queued head: %s", item.title)
             self._notify_change()
             return item
     
@@ -234,7 +237,7 @@ class QueueManager:
         with self._lock:
             if 0 <= index < len(self._queue):
                 removed = self._queue.pop(index)
-                print(f"Removed from queue: {removed.title}")
+                logger.debug("Removed from queue: %s", removed.title)
                 self._notify_change()
                 return True
             return False
@@ -248,7 +251,7 @@ class QueueManager:
             if 0 <= from_index < len(self._queue) and 0 <= to_index < len(self._queue):
                 item = self._queue.pop(from_index)
                 self._queue.insert(to_index, item)
-                print(f"Moved track from {from_index} to {to_index}")
+                logger.debug("Moved track from %s to %s", from_index, to_index)
                 self._notify_change()
                 return True
             return False
@@ -258,7 +261,7 @@ class QueueManager:
         with self._lock:
             count = len(self._queue)
             self._queue.clear()
-            print(f"Queue cleared ({count} tracks removed)")
+            logger.debug("Queue cleared (%s tracks removed)", count)
             self._notify_change()
     
     def is_empty(self) -> bool:
@@ -294,5 +297,5 @@ class QueueManager:
             try:
                 callback()
             except Exception as e:
-                print(f"Error in queue change callback: {e}")
+                logger.warning("Error in queue change callback: %s", e)
         self._persist_state()
