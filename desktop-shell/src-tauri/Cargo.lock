@@ -3910,6 +3910,7 @@ dependencies = [
  "image",
  "libc",
  "qrcode",
+ "rfd",
  "serde",
  "serde_json",
  "tauri",

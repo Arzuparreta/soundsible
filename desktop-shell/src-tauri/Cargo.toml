@@ -34,3 +34,4 @@ url = "2"
 qrcode = "0.14"
 image = "0.25"
 base64 = "0.22"
+rfd = { version = "0.16", default-features = false }

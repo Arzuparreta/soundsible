@@ -109,7 +109,7 @@ async function applyAutostartPreference() {
   }
 }
 
-/** Normalize `plugin:dialog|open` folder result (string path or null when cancelled). */
+/** Normalize `pick_music_folder` result (string path or null when cancelled). */
 function folderPathFromDialogResult(result) {
   if (result == null) return null;
   if (typeof result === 'string' && result.trim()) return result;
@@ -117,15 +117,7 @@ function folderPathFromDialogResult(result) {
 }
 
 async function pickMusicFolder() {
-  return folderPathFromDialogResult(
-    await invoke('plugin:dialog|open', {
-      options: {
-        directory: true,
-        multiple: false,
-        title: 'Choose your music folder',
-      },
-    }),
-  );
+  return folderPathFromDialogResult(await invoke('pick_music_folder'));
 }
 
 btnChoose.addEventListener('click', async () => {

@@ -94,6 +94,18 @@ fn get_selected_folder(state: State<'_, AppState>) -> Option<String> {
 }
 
 #[tauri::command]
+async fn pick_music_folder() -> Result<Option<String>, String> {
+    let path = tauri::async_runtime::spawn_blocking(move || {
+        rfd::FileDialog::new()
+            .set_title("Choose your music folder")
+            .pick_folder()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(path.map(|p| p.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
 fn preview_music_folder(path: String) -> Result<FolderPreview, String> {
     let started = std::time::Instant::now();
     let root = PathBuf::from(&path);
@@ -226,6 +238,7 @@ pub fn run() {
             get_autostart,
             get_engine_status,
             get_selected_folder,
+            pick_music_folder,
             preview_music_folder,
             start_engine,
             start_engine_with_path,
