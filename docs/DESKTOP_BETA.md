@@ -38,7 +38,8 @@ Tagged releases and manual workflow runs produce installers:
 
 - Workflow: `.github/workflows/desktop-release.yml`
 - Tag pattern: `desktop-v*` (example: `desktop-v0.1.0-beta.1`)
-- **Current release:** [desktop-v0.1.0-beta.1](https://github.com/Arzuparreta/soundsible/releases/tag/desktop-v0.1.0-beta.1) (prerelease)
+- **Current release:** [desktop-v0.1.0-beta.1](https://github.com/Arzuparreta/soundsible/releases/tag/desktop-v0.1.0-beta.1) (prerelease) — **⚠️ outdated** (36 commits behind `main` at time of release; missing beta.2–beta.8 fixes such as Windows folder picker, CI ruff, logging refactor, etc.)
+- **Latest tag:** `desktop-v0.1.0-beta.8` (no release assets yet — needs to be published)
 
 Linux CI builds **`.deb` only** after workflow tuning (AppImage is slow/hang-prone on runners). Full local builds can still produce AppImage via `npm run build`.
 - **First beta build (2026-05-19):** [Actions run #1](https://github.com/Arzuparreta/soundsible/actions/runs/26096184389) — **success** (~31 min). Workflow artifacts:
@@ -97,6 +98,29 @@ Run on a **fresh** VM with **no** Python, git, or FFmpeg on `PATH`. Use only the
 ### Windows (reference)
 
 Same flow with `.msi` / NSIS installer from release. Note OS build and antivirus interactions.
+
+### Gate A1 — Partial results (2026-06-06, dev machine)
+
+> **Note:** This is a partial validation on the current dev machine (Arch Linux, headless). A full VM run is still required for sign-off.
+
+**What was validated (engine sidecar, headless):**
+
+| Step | Pass | Notes |
+|------|------|-------|
+| 5 Engine start | ✅ | Sidecar emits readiness JSON, `/api/health` returns `healthy`, FFmpeg `available: true` (bundle), `/player/desktop/` 200 OK |
+| 8 Clean quit | ✅ | `kill <pid>` stops engine cleanly; no orphan `soundsible-engine` in `ps` |
+
+**What is blocked (Tauri UI):**
+
+| Step | Pass | Notes |
+|------|------|-------|
+| 1–2 Launch | ☐ | AppImage requires display (GTK init); blocked by headless env |
+| 3 Folder picker | ☐ | Needs Tauri window + dialog plugin |
+| 4 Scan preview | ☐ | Needs Tauri first-run UI |
+| 6 First play | ☐ | Needs webview + audio output |
+| 7 Tray persist | ☐ | Needs tray/menu-bar + display |
+
+**Next step:** Run the `.AppImage` on a **clean Linux VM with a display** (GNOME/KDE/XFCE) to complete steps 1–4, 6–7. Record elapsed time for step 6.
 
 ### Health check (optional)
 
@@ -160,13 +184,14 @@ Headless engine smoke:
 |------|--------|-----|--------|-------|
 | 2026-05-19 | GitHub Actions | linux+windows | CI pass | Tag `desktop-v0.1.0-beta.1`, [run 26096184389](https://github.com/Arzuparreta/soundsible/actions/runs/26096184389); artifacts uploaded |
 | | | | | Gate A1 VM pending |
+| 2026-06-06 | Dev machine (Arch) | linux | Partial pass | Engine sidecar smoke OK (readiness + health + FFmpeg). Tauri UI blocked: no display (GTK init fails). Gate A1 VM run still needed. |
 
 ---
 
 ## What comes next (order)
 
-1. **A1** — Clean VM smoke: download Linux/Windows artifacts from [run 26096184389](https://github.com/Arzuparreta/soundsible/actions/runs/26096184389) (or publish draft release)  
-2. **A3** — Publish draft release on GitHub (if not already visible)  
+1. **A1** — Complete VM smoke on a clean Linux VM with display (GNOME/KDE). Steps 5 + 8 validated headless; steps 1–4, 6–7 need GUI.  
+2. **A3** — Publish draft release on GitHub (latest tag should be `desktop-v0.1.0-beta.8` or newer, not `beta.1`).  
 3. **A4** — Friend installs + `setup_gate_rollup.py`  
 4. **B1** — HDD soak on your machine  
 5. **C1** — Tailscale 30 min walk (v1.1)  
