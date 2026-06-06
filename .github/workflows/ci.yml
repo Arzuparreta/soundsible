@@ -21,6 +21,40 @@ jobs:
         env:
           PYTHONPATH: .
         run: pytest -q
+      - name: Coverage report
+        env:
+          PYTHONPATH: .
+        run: pytest --cov=. --cov-report=term-missing --cov-fail-under=30 tests/
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Ruff check
+        run: ruff check .
+      - name: Ruff format check
+        run: ruff format --check .
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Bandit security scan
+        run: bandit -r . -f txt -o bandit-report.txt || true
+      - name: Show bandit report
+        run: cat bandit-report.txt
 
   ui_build:
     runs-on: ubuntu-latest

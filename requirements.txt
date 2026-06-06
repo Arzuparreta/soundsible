@@ -30,8 +30,11 @@ pyacoustid>=1.2.2          # Audio fingerprinting
 # Development
 pytest>=7.4.0              # Testing framework
 pytest-asyncio>=0.21.0     # Async test support
+pytest-cov>=4.1.0          # Coverage reporting
 black>=23.0.0              # Code formatting
 mypy>=1.5.0                # Type checking
+ruff>=0.1.0                # Fast Python linter
+bandit[toml]>=1.7.5        # Security linter
 
 # ODST-Tool Dependencies (YouTube Downloader)
 yt-dlp==2026.2.21         # YouTube Downloader (update manually when needed)
