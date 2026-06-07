@@ -10,6 +10,8 @@ import { isVisible, onChange as onVisibilityChange } from './visibility.js';
 import { searchService, SourceType } from './search_service.js';
 import { isYtdlpPreviewStreamTrack, libraryCoverPickerCandidates } from './shared.js';
 import { recordDiscoveryEvent } from './discovery_events.js';
+import { getDownloadProgressView, mergeDownloaderEvent } from './downloader_state.js';
+import { fetchWithTimeout } from './http.js';
 
 /** Default element IDs for mobile (index.html). Desktop passes overrides so the same class works in desktop.html. */
 const DEFAULT_DL_SELECTORS = {
@@ -51,6 +53,7 @@ const DEFAULT_DL_SELECTORS = {
 /** ODST search source (UI toggle). */
 const ODST_SOURCE_MUSIC = 'ytmusic';
 const ODST_SOURCE_YOUTUBE = 'youtube';
+const STATUS_FETCH_TIMEOUT_MS = 8000;
 
 export class Downloader {
     static downloadQueue = [];
@@ -144,7 +147,11 @@ export class Downloader {
         window.addEventListener('downloader_log', (e) => this.addLog(e.detail.data));
         window.addEventListener('downloader_update', (e) => {
             const d = e?.detail;
+            if (d?.id) {
+                this.lastDownloaderStatus = mergeDownloaderEvent(this.lastDownloaderStatus, d);
+            }
             if (d?.status === 'completed' || d?.status === 'failed') {
+                this.renderStatusSnapshot();
                 this.refreshStatus();
                 if (d?.status === 'completed') {
                     store.syncLibrary();
@@ -244,28 +251,14 @@ export class Downloader {
         const thumbRaw = (item.thumbnail_url || '').trim();
         const thumbEsc = thumbRaw.replace(/"/g, '%22').replace(/'/g, '%27');
         const status = item.status || 'pending';
-        const phase = item.phase || '';
-        let pct = null;
-        if (status === 'failed') pct = 0;
-        else if (status === 'pending') pct = 0;
-        else if (status === 'downloading') {
-            if (item.progress_percent != null && !Number.isNaN(Number(item.progress_percent))) {
-                pct = Number(item.progress_percent);
-            }
-        }
-        const preparing = status === 'downloading' && pct == null && (phase === 'preparing' || !item.progress_percent);
+        const view = getDownloadProgressView(item);
+        const pct = view.percent;
+        const preparing = view.preparing;
         const barWidth = pct != null ? Math.min(100, Math.max(0, pct)) : 0;
+        const barColor = status === 'failed' ? 'background-color:#ef4444;' : '';
         const barInner = preparing
             ? `<div class="dl-bar-indeterminate h-full w-[40%] rounded-full bg-[var(--accent)]" style="animation: dl-progress-indeterminate 1.2s ease-in-out infinite;"></div>`
-            : `<div class="dl-bar-inner h-full rounded-full bg-[var(--accent)] transition-[width] duration-200 ease-out" style="width: ${barWidth}%"></div>`;
-        const pctLabel = pct != null ? `${Math.round(pct)}%` : (preparing ? '…' : status === 'pending' ? '0%' : '');
-        const phaseLabel = phase === 'preparing' ? 'Preparing'
-            : phase === 'processing' ? 'Processing'
-                : phase === 'downloading' || status === 'downloading' ? 'Downloading'
-                    : status === 'pending' ? 'Pending' : status;
-        const speed = item.speed || '';
-        const eta = item.eta || '';
-        const speedEta = [speed, eta].filter(Boolean).join(' · ');
+            : `<div class="dl-bar-inner h-full rounded-full bg-[var(--accent)] transition-[width] duration-200 ease-out" style="width: ${barWidth}%;${barColor}"></div>`;
         return `
             <div class="dl-active-row desktop-download-item flex flex-col gap-1.5 py-2.5 px-2 rounded-[var(--radius-omni-xs)] hover:bg-[var(--surface-overlay)] min-w-0" data-dl-id="${esc(id)}">
                 <div class="flex gap-2.5 items-start min-w-0">
@@ -274,14 +267,14 @@ export class Downloader {
                         <div class="text-xs font-semibold truncate text-[var(--text-main)] dl-active-title">${esc(title)}</div>
                         <div class="text-[10px] text-[var(--text-dim)] truncate dl-active-subtitle">${esc(artist)}</div>
                     </div>
-                    <div class="text-[10px] font-mono text-[var(--text-dim)] flex-shrink-0 dl-pct-text">${esc(pctLabel)}</div>
+                    <div class="text-[10px] font-mono text-[var(--text-dim)] flex-shrink-0 dl-pct-text">${esc(view.percentLabel)}</div>
                 </div>
                 <div class="h-1.5 rounded-full overflow-hidden bg-[var(--input-bg)] relative dl-bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct != null ? Math.round(pct) : ''}">
                     ${barInner}
                 </div>
                 <div class="flex justify-between items-center gap-2 text-[9px] text-[var(--text-dim)] min-w-0">
-                    <span class="dl-phase-label uppercase tracking-wider font-bold truncate">${esc(phaseLabel)}</span>
-                    <span class="dl-speed-eta truncate text-right font-mono">${esc(speedEta)}</span>
+                    <span class="dl-phase-label uppercase tracking-wider font-bold truncate">${esc(view.phaseLabel)}</span>
+                    <span class="dl-speed-eta truncate text-right font-mono">${esc(view.detailLabel)}</span>
                 </div>
             </div>`;
     }
@@ -301,42 +294,38 @@ export class Downloader {
     static applyProgressEvent(detail) {
         const id = detail?.id;
         if (!id) return;
-        let row = null;
-        document.querySelectorAll('[data-dl-id]').forEach((el) => {
-            if (el.getAttribute('data-dl-id') === id) row = el;
-        });
-        if (!row) return;
-        const pctEl = row.querySelector('.dl-pct-text');
-        const barInner = row.querySelector('.dl-bar-inner');
-        const indet = row.querySelector('.dl-bar-indeterminate');
-        const phaseEl = row.querySelector('.dl-phase-label');
-        const metaEl = row.querySelector('.dl-speed-eta');
-        const track = row.querySelector('.dl-bar-track');
+        const rows = [...document.querySelectorAll('[data-dl-id]')]
+            .filter((el) => el.getAttribute('data-dl-id') === id);
         const p = detail.progress_percent;
-        if (pctEl && p != null && !Number.isNaN(Number(p))) {
-            pctEl.textContent = `${Math.round(Number(p))}%`;
-        }
-        if (indet && p != null && barInner == null) {
-            indet.remove();
-            const nu = document.createElement('div');
-            nu.className = 'dl-bar-inner h-full rounded-full bg-[var(--accent)] transition-[width] duration-200 ease-out';
-            nu.style.width = `${Math.min(100, Math.max(0, Number(p)))}%`;
-            const tr = row.querySelector('.dl-bar-track');
-            if (tr) tr.appendChild(nu);
-        } else if (barInner && p != null) {
-            barInner.style.width = `${Math.min(100, Math.max(0, Number(p)))}%`;
-        }
-        if (phaseEl && detail.phase) {
-            const ph = detail.phase;
-            phaseEl.textContent = ph === 'preparing' ? 'PREPARING' : ph === 'processing' ? 'PROCESSING' : ph === 'downloading' ? 'DOWNLOADING' : String(ph).toUpperCase();
-        }
-        if (metaEl) {
-            const speed = detail.speed || '';
-            const eta = detail.eta || '';
-            metaEl.textContent = [speed, eta].filter(Boolean).join(' · ');
-        }
-        if (track && p != null && !Number.isNaN(Number(p))) {
-            track.setAttribute('aria-valuenow', String(Math.round(Number(p))));
+        for (const row of rows) {
+            const pctEl = row.querySelector('.dl-pct-text');
+            const barInner = row.querySelector('.dl-bar-inner');
+            const indet = row.querySelector('.dl-bar-indeterminate');
+            const phaseEl = row.querySelector('.dl-phase-label');
+            const metaEl = row.querySelector('.dl-speed-eta');
+            const track = row.querySelector('.dl-bar-track');
+            if (pctEl && p != null && !Number.isNaN(Number(p))) {
+                pctEl.textContent = `${Math.round(Number(p))}%`;
+            }
+            if (indet && p != null && barInner == null) {
+                indet.remove();
+                const nu = document.createElement('div');
+                nu.className = 'dl-bar-inner h-full rounded-full bg-[var(--accent)] transition-[width] duration-200 ease-out';
+                nu.style.width = `${Math.min(100, Math.max(0, Number(p)))}%`;
+                track?.appendChild(nu);
+            } else if (barInner && p != null) {
+                barInner.style.width = `${Math.min(100, Math.max(0, Number(p)))}%`;
+            }
+            if (phaseEl && detail.phase) {
+                const ph = detail.phase;
+                phaseEl.textContent = ph === 'preparing' ? 'PREPARING' : ph === 'processing' ? 'PROCESSING' : ph === 'downloading' ? 'DOWNLOADING' : String(ph).toUpperCase();
+            }
+            if (metaEl) {
+                metaEl.textContent = [detail.speed, detail.eta].filter(Boolean).join(' · ');
+            }
+            if (track && p != null && !Number.isNaN(Number(p))) {
+                track.setAttribute('aria-valuenow', String(Math.round(Number(p))));
+            }
         }
     }
 
@@ -877,7 +866,11 @@ export class Downloader {
             this.downloadQueue = [];
             this.renderDownloadQueueList();
             this.updateFabAndPopover();
-            await fetch(`${apiBase}/api/downloader/start`, { method: 'POST' });
+            const startResp = await fetch(`${apiBase}/api/downloader/start`, { method: 'POST' });
+            const startBody = await startResp.json().catch(() => ({}));
+            if (!startResp.ok) {
+                throw new Error(startBody.message || startBody.error || `Start failed (${startResp.status})`);
+            }
             this.startLibrarySyncFallback();
             this.refreshStatus();
             this.addLog(`Queued ${items.length} item(s).`);
@@ -895,7 +888,8 @@ export class Downloader {
 
     static async startProcessing() {
         try {
-            await fetch(`${searchService.getApiBase()}/api/downloader/start`, { method: 'POST' });
+            const resp = await fetch(`${searchService.getApiBase()}/api/downloader/start`, { method: 'POST' });
+            if (!resp.ok) throw new Error(`Start failed (${resp.status})`);
             this.refreshStatus();
         } catch (err) {
             console.error("Start failed:", err);
@@ -932,13 +926,15 @@ export class Downloader {
             const apiBase = searchService.getApiBase();
             if (!apiBase) return;
             try {
-                const resp = await fetch(`${apiBase}/api/downloader/queue/status`);
+                const resp = await fetchWithTimeout(
+                    `${apiBase}/api/downloader/queue/status`,
+                    {},
+                    STATUS_FETCH_TIMEOUT_MS,
+                );
+                if (!resp.ok) throw new Error(`Status request failed (${resp.status})`);
                 const data = await resp.json();
                 this.lastDownloaderStatus = data;
-                this.renderQueue(data.queue, data.is_processing);
-                this.renderLogs(data.logs);
-                this.updateFabAndPopover();
-                this.renderDesktopDownloadsPanel(data.queue, data.is_processing);
+                this.renderStatusSnapshot();
                 if (!data.is_processing && this.librarySyncFallbackTimer) {
                     store.syncLibrary();
                     this.stopLibrarySyncFallback();
@@ -950,6 +946,15 @@ export class Downloader {
             }
         })();
         return this._refreshStatusPromise;
+    }
+
+    static renderStatusSnapshot() {
+        const data = this.lastDownloaderStatus;
+        if (!data) return;
+        this.renderQueue(data.queue, data.is_processing);
+        this.renderLogs(data.logs);
+        this.updateFabAndPopover();
+        this.renderDesktopDownloadsPanel(data.queue, data.is_processing);
     }
 
     static startLibrarySyncFallback() {

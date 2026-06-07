@@ -15,9 +15,34 @@ from shared.time_utils import utc_now_iso_z
 from watchdog.events import FileSystemEventHandler
 
 from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, SourceType
+from shared.text_utils import sanitize_cli_message
 from shared.url_utils import normalize_youtube_url, extract_youtube_video_id
 
 logger = logging.getLogger(__name__)
+
+
+def classify_download_error(error) -> tuple[str, str]:
+    """Return a stable UI-facing kind and concise message for downloader failures."""
+    clean = sanitize_cli_message(str(error or ""))
+    lowered = clean.lower()
+    if "bytes read" in lowered and "more expected" in lowered:
+        return "partial_read", "YouTube closed the connection before the file finished downloading."
+    if "timed out" in lowered or "timeout" in lowered:
+        return "timeout", "The connection to YouTube timed out."
+    if "requested format is not available" in lowered:
+        return "format_unavailable", "YouTube did not expose a compatible audio format."
+    if "sign in to confirm" in lowered or "not a bot" in lowered:
+        return "authentication_required", "YouTube requires refreshed authentication cookies."
+    if "no space left on device" in lowered:
+        return "disk_full", "The Station does not have enough free disk space."
+
+    meaningful = []
+    for line in clean.splitlines():
+        line = line.strip()
+        if line and not line.startswith("[download]"):
+            meaningful.append(line)
+    message = meaningful[-1] if meaningful else clean or "The download failed."
+    return "download_failed", message[:300]
 
 
 def _merge_display_fields(base: dict, item: dict, effective_video_id: str | None) -> dict:
@@ -248,16 +273,27 @@ class DownloadQueueManager:
 
     def update_status(self, item_id, status, error=None):
         do_save = False
+        updated_item = None
         with self.lock:
             for item in self.queue:
                 if item["id"] == item_id:
                     item["status"] = status
-                    if error:
-                        item["error"] = error
+                    if error is not None:
+                        clean_error = sanitize_cli_message(str(error))
+                        error_kind, error_message = classify_download_error(clean_error)
+                        item["error"] = clean_error
+                        item["error_kind"] = error_kind
+                        item["error_message"] = error_message
+                    elif status != "failed":
+                        item.pop("error", None)
+                        item.pop("error_kind", None)
+                        item.pop("error_message", None)
+                    updated_item = dict(item)
                     do_save = True
                     break
         if do_save:
             self.save()
+        return updated_item
 
     def update_progress(
         self,

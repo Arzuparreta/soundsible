@@ -57,3 +57,57 @@ def test_ytmusic_search_enriches_flat_entries_with_artist(monkeypatch, tmp_path)
             "artist": "Queen",
         }
     ]
+
+
+def test_download_profile_uses_bounded_network_resilience(monkeypatch):
+    monkeypatch.delenv("SOUNDSIBLE_YTDLP_SOCKET_TIMEOUT", raising=False)
+    monkeypatch.delenv("SOUNDSIBLE_YTDLP_HTTP_CHUNK_SIZE", raising=False)
+    monkeypatch.delenv("SOUNDSIBLE_YTDLP_RETRY_SLEEP", raising=False)
+
+    args = yd._ytdlp_download_resilience_args()
+
+    assert args == [
+        "--socket-timeout",
+        "30",
+        "--http-chunk-size",
+        "10M",
+        "--retry-sleep",
+        "http:exp=1:20",
+        "--retry-sleep",
+        "fragment:exp=1:20",
+    ]
+
+
+def test_download_profile_honors_environment_overrides(monkeypatch):
+    monkeypatch.setenv("SOUNDSIBLE_YTDLP_SOCKET_TIMEOUT", "45")
+    monkeypatch.setenv("SOUNDSIBLE_YTDLP_HTTP_CHUNK_SIZE", "4M")
+    monkeypatch.setenv("SOUNDSIBLE_YTDLP_RETRY_SLEEP", "linear=2:10")
+
+    args = yd._ytdlp_download_resilience_args()
+
+    assert args == [
+        "--socket-timeout",
+        "45",
+        "--http-chunk-size",
+        "4M",
+        "--retry-sleep",
+        "http:linear=2:10",
+        "--retry-sleep",
+        "fragment:linear=2:10",
+    ]
+
+
+def test_audio_selector_never_falls_back_to_unrestricted_best_video():
+    assert yd.YDL_FORMAT_AUDIO == (
+        "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/worst[acodec!=none]"
+    )
+    assert "/best/" not in yd.YDL_FORMAT_AUDIO
+
+
+def test_cookie_fallback_only_handles_authentication_and_format_failures():
+    assert yd._should_retry_download_with_cookies("ERROR: Sign in to confirm your age")
+    assert yd._should_retry_download_with_cookies("ERROR: HTTP Error 403: Forbidden")
+    assert yd._should_retry_download_with_cookies("Requested format is not available")
+    assert not yd._should_retry_download_with_cookies(
+        "Got error: 137 bytes read, 10400093 more expected"
+    )
