@@ -32,6 +32,9 @@ from shared.venv_utils import get_subprocess_python
 logger = logging.getLogger(__name__)
 
 _FALSE_ENV_VALUES = {"0", "false", "no", "off"}
+_YTDLP_SOCKET_TIMEOUT_DEFAULT = "30"
+_YTDLP_HTTP_CHUNK_SIZE_DEFAULT = "10M"
+_YTDLP_RETRY_SLEEP_DEFAULT = "exp=1:20"
 
 
 def _yt_dlp_force_ipv4() -> bool:
@@ -44,6 +47,48 @@ def _add_ytdlp_cli_network_args(args: List[str]) -> None:
         args.extend(["--proxy", yt_proxy])
     elif _yt_dlp_force_ipv4():
         args.append("--force-ipv4")
+
+
+def _ytdlp_download_resilience_args() -> List[str]:
+    """Return bounded network settings for long-running yt-dlp downloads."""
+    socket_timeout = (
+        os.getenv("SOUNDSIBLE_YTDLP_SOCKET_TIMEOUT", _YTDLP_SOCKET_TIMEOUT_DEFAULT).strip()
+        or _YTDLP_SOCKET_TIMEOUT_DEFAULT
+    )
+    http_chunk_size = (
+        os.getenv("SOUNDSIBLE_YTDLP_HTTP_CHUNK_SIZE", _YTDLP_HTTP_CHUNK_SIZE_DEFAULT).strip()
+        or _YTDLP_HTTP_CHUNK_SIZE_DEFAULT
+    )
+    retry_sleep = (
+        os.getenv("SOUNDSIBLE_YTDLP_RETRY_SLEEP", _YTDLP_RETRY_SLEEP_DEFAULT).strip()
+        or _YTDLP_RETRY_SLEEP_DEFAULT
+    )
+    return [
+        "--socket-timeout",
+        socket_timeout,
+        "--http-chunk-size",
+        http_chunk_size,
+        "--retry-sleep",
+        f"http:{retry_sleep}",
+        "--retry-sleep",
+        f"fragment:{retry_sleep}",
+    ]
+
+
+def _should_retry_download_with_cookies(output: str) -> bool:
+    lowered = (output or "").lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "requested format is not available",
+            "the page needs to be reloaded",
+            "sign in to confirm",
+            "confirm your age",
+            "age-restricted",
+            "this video is private",
+            "http error 403",
+        )
+    )
 
 
 def _apply_ytdlp_network_options(opts: Dict[str, Any]) -> Dict[str, Any]:
@@ -114,8 +159,9 @@ def _extract_video_id_from_url(url: str) -> Optional[str]:
         return str(vid) if vid and _is_valid_youtube_video_id(str(vid)) else None
     return None
 
-# Note: Same as A normal CLI download. no extractor_args (see docs/troubleshooting-yt-dlp-formats.md).
-YDL_FORMAT_AUDIO = "bestaudio/bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best/worstaudio"
+# Prefer audio-only streams. If YouTube exposes only a progressive stream, choose
+# the smallest audio-bearing fallback instead of an unnecessarily large video.
+YDL_FORMAT_AUDIO = "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/worst[acodec!=none]"
 
 _YTDLP_PROGRESS_LINE = re.compile(
     r"\[download\]\s+(?P<pct>\d+\.?\d*)%\s+of\s+(?:~\s*)?(?P<total>[\d.]+)(?P<tunit>[KMGT]?i?B)"
@@ -661,6 +707,7 @@ class YouTubeDownloader:
             "--audio-format", codec,
         ]
         _add_ytdlp_cli_network_args(args)
+        args.extend(_ytdlp_download_resilience_args())
         if profile.get('bitrate', 0) > 0 and codec == 'mp3':
             args.extend(["--audio-quality", str(profile['bitrate'])])
         args.extend([
@@ -674,22 +721,17 @@ class YouTubeDownloader:
             "--newline",
             "--progress",
         ])
+        cookie_args = []
         if self.cookie_file and os.path.exists(self.cookie_file):
-            args.extend(["--cookies", self.cookie_file])
+            cookie_args = ["--cookies", self.cookie_file]
         elif self.cookie_browser:
-            args.extend(["--cookies-from-browser", self.cookie_browser])
+            cookie_args = ["--cookies-from-browser", self.cookie_browser]
         args.append(url)
 
-        def _strip_cookie_args(args_list):
-            out = []
-            i = 0
-            while i < len(args_list):
-                if args_list[i] in ("--cookies", "--cookies-from-browser") and i + 1 < len(args_list):
-                    i += 2
-                    continue
-                out.append(args_list[i])
-                i += 1
-            return out
+        def _with_cookie_args(args_list):
+            if not cookie_args:
+                return list(args_list)
+            return [*args_list[:-1], *cookie_args, args_list[-1]]
 
         def _run_stream(args_list):
             combined_chunks = []
@@ -723,15 +765,10 @@ class YouTubeDownloader:
             return proc.returncode, "".join(combined_chunks)
 
         returncode, combined_output = _run_stream(args)
-        # Note: With cookies, youtube can return a format list that doesn't match or a "page needs to be reloaded" error.
-        # In both cases, retry once without cookies (same as a normal terminal fallback).
-        if returncode != 0 and (
-            "Requested format is not available" in combined_output
-            or "The page needs to be reloaded" in combined_output
-            or "Sign in to confirm" in combined_output
-        ):
-            if self.cookie_file or self.cookie_browser:
-                returncode, combined_output = _run_stream(_strip_cookie_args(args))
+        # Public extraction usually exposes the cleanest audio-only formats.
+        # Retry with configured cookies only when YouTube explicitly requires them.
+        if returncode != 0 and cookie_args and _should_retry_download_with_cookies(combined_output):
+            returncode, combined_output = _run_stream(_with_cookie_args(args))
 
         if returncode != 0:
             raise Exception(combined_output or f"yt-dlp exited {returncode}")

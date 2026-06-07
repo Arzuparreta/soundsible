@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import requests
@@ -57,6 +58,14 @@ def _engine_command(engine_bin: Path | None) -> list[str]:
     return [str(python), str(ENGINE_ENTRY)]
 
 
+def _ensure_isolated_consumer_config(music: Path, env: dict[str, str]) -> None:
+    """Bootstrap only inside the test runtime directories, never the user's config."""
+    with patch.dict(os.environ, env, clear=True):
+        reset_runtime()
+        ensure_consumer_config(music)
+    reset_runtime()
+
+
 def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
     reset_runtime()
     env = os.environ.copy()
@@ -66,7 +75,7 @@ def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
     music.mkdir()
     (music / "sample.flac").write_bytes(b"fake")
 
-    ensure_consumer_config(music)
+    _ensure_isolated_consumer_config(music, env)
     config_dir = Path(env["SOUNDSIBLE_CONFIG_DIR"])
 
     cmd = _engine_command(engine_bin)
@@ -128,7 +137,7 @@ def test_desktop_engine_sigterm_exits_cleanly(tmp_path):
     music.mkdir()
     (music / "sample.flac").write_bytes(b"fake")
 
-    ensure_consumer_config(music)
+    _ensure_isolated_consumer_config(music, env)
     config_dir = Path(env["SOUNDSIBLE_CONFIG_DIR"])
 
     cmd = _engine_command(None)

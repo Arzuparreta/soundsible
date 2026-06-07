@@ -731,9 +731,19 @@ def _process_single_queue_item(item):
 
     except Exception as e:
         logger.warning("API Downloader Error: %s", e)
-        queue_manager_dl.update_status(item_id, 'failed', error=str(e))
+        failed_item = queue_manager_dl.update_status(item_id, 'failed', error=str(e)) or {}
         with app.app_context():
-            socketio.emit('downloader_update', {'id': item_id, 'status': 'failed', 'error': str(e)})
+            socketio.emit(
+                'downloader_update',
+                {
+                    'id': item_id,
+                    'status': 'failed',
+                    'error': failed_item.get('error', str(e)),
+                    'error_kind': failed_item.get('error_kind', 'download_failed'),
+                    'error_message': failed_item.get('error_message', 'The download failed.'),
+                    'progress_percent': failed_item.get('progress_percent'),
+                },
+            )
         queue_manager_dl.add_log(f"❌ Failed: {song_str or item_id} - {e}")
 
 

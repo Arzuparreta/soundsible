@@ -92,6 +92,27 @@ Soundsible forces yt-dlp over IPv4 by default because some VPS IPv6 routes hang 
 export SOUNDSIBLE_YTDLP_FORCE_IPV4=false
 ```
 
+Long-running YouTube downloads use a robust network profile by default:
+
+- socket timeout: `30` seconds
+- HTTP chunk size: `10M`
+- retry sleep: exponential backoff from 1 to 20 seconds
+
+Override these values when required by a specific network:
+
+```bash
+export SOUNDSIBLE_YTDLP_SOCKET_TIMEOUT=45
+export SOUNDSIBLE_YTDLP_HTTP_CHUNK_SIZE=4M
+export SOUNDSIBLE_YTDLP_RETRY_SLEEP=linear=2:10
+```
+
+The retry expression uses yt-dlp's `--retry-sleep` syntax. These settings affect
+the Station Engine's outbound YouTube transfer; the browser's LAN, Tailscale,
+Funnel, or reverse-proxy connection only carries queue control and progress.
+Public extraction is attempted first because it normally exposes cleaner
+audio-only formats. Configured cookies are retried automatically when YouTube
+requires authentication, age confirmation, or a cookie-only format.
+
 ### 3A. Web UI source-vs-build note
 
 When Flask serves the source UI directly from `ui_web/`, browser-safe vendor files must exist in `ui_web/js/vendor/`.
