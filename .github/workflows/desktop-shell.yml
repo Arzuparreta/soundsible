@@ -80,6 +80,8 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Build PyInstaller sidecar
+        env:
+          BUNDLE_FFMPEG: "1"
         run: ./desktop-shell/scripts/build-sidecar.sh
 
       - name: Desktop engine smoke (PyInstaller sidecar)
@@ -120,6 +122,8 @@ jobs:
 
       - name: Build PyInstaller sidecar (Windows)
         shell: bash
+        env:
+          BUNDLE_FFMPEG: "1"
         run: ./desktop-shell/scripts/build-sidecar.sh
 
       - name: Desktop engine smoke (PyInstaller sidecar)
