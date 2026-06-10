@@ -836,6 +836,7 @@ function init() {
                 downloadsSection: 'desktop-downloads-section',
                 downloadsPanel: 'desktop-downloads-panel',
                 downloadsList: 'desktop-downloads-list',
+                clearFailedBtn: 'desktop-clear-failed-btn',
                 searchSourceMusicBtn: 'desktop-dl-search-source-music',
                 searchSourceYoutubeBtn: 'desktop-dl-search-source-youtube',
             });

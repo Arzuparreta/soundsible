@@ -52,6 +52,7 @@ Soundsible is a **self-hosted music streaming environment** that lets you browse
 - 🧠 **Local, private recommendations** based on *your* listening history
 - 📻 **Radio mode** for discovering similar music without leaving your Station
 - 🗂️ **Discover, search, podcasts, favourites, playlists, and downloads** in one place
+- 🧹 **Resilient downloads** — failed items are visible with retry/remove actions, and the queue is wiped clean on engine restart
 - 🚫 **Zero ads, zero tracking, zero revenue models** — just your music
 - 🔐 **Complete control** over your data — it's your server, after all
 

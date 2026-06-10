@@ -213,6 +213,31 @@ def clear_downloader_queue():
     return jsonify({"status": "cleared"})
 
 
+@downloader_bp.route("/api/downloader/queue/<item_id>/retry", methods=["POST"])
+@require_scope(SCOPE_DOWNLOAD_ADD, allow_trusted_network=True)
+@rate_limit("downloader_queue_retry", limit=30, window_sec=60)
+def retry_downloader_queue_item(item_id):
+    api = _get_api()
+    item = api["queue_manager_dl"].retry_failed(item_id)
+    if item is None:
+        return jsonify({"status": "not_found", "message": "Item is not in a failed state."}), 404
+    if not api["queue_manager_dl"].is_processing:
+        try:
+            api["start_downloader_pump"]()
+        except Exception as e:
+            logger.warning("API: Could not start downloader pump on retry: %s", e)
+    return jsonify({"status": "retried", "item": item})
+
+
+@downloader_bp.route("/api/downloader/queue/failed", methods=["DELETE"])
+@require_scope(SCOPE_DOWNLOAD_ADD, allow_trusted_network=True)
+@rate_limit("downloader_queue_clear_failed", limit=30, window_sec=60)
+def clear_downloader_queue_failed():
+    api = _get_api()
+    removed = api["queue_manager_dl"].clear_failed()
+    return jsonify({"status": "cleared", "removed": removed})
+
+
 @downloader_bp.route("/api/downloader/start", methods=["POST"])
 @require_scope(SCOPE_DOWNLOAD_ADD, allow_trusted_network=True)
 @rate_limit("downloader_start", limit=30, window_sec=60)

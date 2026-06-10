@@ -216,6 +216,13 @@ class DownloadQueueManager:
 
         self.lock = threading.RLock()
 
+        evicted = self._evict_failed_and_interlocked()
+        if evicted:
+            logger.info(
+                "API: [Queue] Evicted %d failed/interrupted item(s) on startup.",
+                evicted,
+            )
+
         if self.queue:
             self.save()
 
@@ -386,3 +393,69 @@ class DownloadQueueManager:
         with self.lock:
             self.queue = [i for i in self.queue if i["status"] == "downloading"]
         self.save()
+
+    def _evict_failed_and_interlocked(self) -> int:
+        """Remove failed/interrupted items from the in-memory queue.
+
+        Called at startup so a server restart clears the residue of the
+        previous run. The persisted JSON is rewritten afterwards by
+        ``__init__``'s trailing ``self.save()``.
+        """
+        with self.lock:
+            kept = [i for i in self.queue if i.get("status") not in ("failed", "interrupted")]
+            evicted = len(self.queue) - len(kept)
+            self.queue = kept
+        return evicted
+
+    def retry_failed(self, item_id):
+        """Reset a failed item back to pending so the pump re-processes it.
+
+        Returns the updated item dict, or ``None`` if the id is unknown
+        or the item is not currently in ``failed`` state.
+        """
+        updated_item = None
+        with self.lock:
+            for item in self.queue:
+                if item.get("id") != item_id:
+                    continue
+                if item.get("status") != "failed":
+                    return None
+                item["status"] = "pending"
+                for stale_key in (
+                    "error",
+                    "error_kind",
+                    "error_message",
+                    "progress_percent",
+                    "speed",
+                    "eta",
+                    "phase",
+                    "total_bytes",
+                ):
+                    item.pop(stale_key, None)
+                updated_item = dict(item)
+                break
+        if updated_item:
+            self.save()
+            if self.socketio:
+                try:
+                    self.socketio.emit(
+                        "downloader_update",
+                        {
+                            "id": updated_item["id"],
+                            "status": "pending",
+                            "progress_percent": None,
+                        },
+                    )
+                except Exception as e:
+                    logger.warning("API: downloader_update emit failed: %s", e)
+        return updated_item
+
+    def clear_failed(self) -> int:
+        """Remove all failed/interrupted items from the queue. Returns count."""
+        with self.lock:
+            kept = [i for i in self.queue if i.get("status") not in ("failed", "interrupted")]
+            removed = len(self.queue) - len(kept)
+            self.queue = kept
+        if removed:
+            self.save()
+        return removed

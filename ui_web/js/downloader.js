@@ -47,7 +47,9 @@ const DEFAULT_DL_SELECTORS = {
     downloadsPanel: 'desktop-downloads-panel',
     downloadsList: 'desktop-downloads-list',
     mobileDownloadsSection: 'mobile-downloads-section',
-    mobileDownloadsList: 'mobile-downloads-list'
+    mobileDownloadsList: 'mobile-downloads-list',
+    clearFailedBtn: 'desktop-clear-failed-btn',
+    mobileClearFailedBtn: 'mobile-clear-failed-btn'
 };
 
 /** ODST search source (UI toggle). */
@@ -89,6 +91,8 @@ export class Downloader {
         this.downloadsList = document.getElementById(sel.downloadsList);
         this.mobileDownloadsSection = document.getElementById(sel.mobileDownloadsSection);
         this.mobileDownloadsList = document.getElementById(sel.mobileDownloadsList);
+        this.clearFailedBtn = document.getElementById(sel.clearFailedBtn);
+        this.mobileClearFailedBtn = document.getElementById(sel.mobileClearFailedBtn);
         this.downloadQueueList = document.getElementById(sel.downloadQueueList);
         this.downloadQueueSection = document.getElementById(sel.downloadQueueSection);
         this.clearQueueBtn = document.getElementById(sel.clearQueueBtn);
@@ -120,6 +124,8 @@ export class Downloader {
 
         if (this.queueContainer) this.queueContainer.style.transform = '';
         this.bindEvents();
+        this._bindFailedRowActions(this.downloadsList);
+        this._bindFailedRowActions(this.mobileDownloadsList);
         this.updateFabAndPopover();
         this.refreshStatus();
         
@@ -182,6 +188,20 @@ export class Downloader {
             this.updateFabAndPopover();
             Haptics.tick();
         });
+        if (this.clearFailedBtn) {
+            this.clearFailedBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.clearFailed();
+            });
+        }
+        if (this.mobileClearFailedBtn) {
+            this.mobileClearFailedBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.clearFailed();
+            });
+        }
         if (this.previewClose) this.previewClose.addEventListener('click', () => this.hidePreview());
         if (this.previewAddToQueue) {
             this.previewAddToQueue.addEventListener('click', (e) => {
@@ -259,6 +279,12 @@ export class Downloader {
         const barInner = preparing
             ? `<div class="dl-bar-indeterminate h-full w-[40%] rounded-full bg-[var(--accent)]" style="animation: dl-progress-indeterminate 1.2s ease-in-out infinite;"></div>`
             : `<div class="dl-bar-inner h-full rounded-full bg-[var(--accent)] transition-[width] duration-200 ease-out" style="width: ${barWidth}%;${barColor}"></div>`;
+        const failedActions = status === 'failed'
+            ? `<div class="dl-failed-actions flex items-center gap-1 flex-shrink-0">
+                    <button type="button" class="dl-failed-retry w-6 h-6 rounded-full flex items-center justify-center bg-[var(--accent)]/15 text-[var(--accent)] hover:bg-[var(--accent)]/25 active:scale-90 transition-all" title="Retry" aria-label="Retry download" data-dl-retry="${esc(id)}"><i class="fas fa-rotate-right" style="font-size:9px;"></i></button>
+                    <button type="button" class="dl-failed-remove w-6 h-6 rounded-full flex items-center justify-center bg-red-500/15 text-red-400 hover:bg-red-500/25 active:scale-90 transition-all" title="Remove" aria-label="Remove from queue" data-dl-remove="${esc(id)}"><i class="fas fa-xmark" style="font-size:10px;"></i></button>
+                </div>`
+            : '';
         return `
             <div class="dl-active-row desktop-download-item flex flex-col gap-1.5 py-2.5 px-2 rounded-[var(--radius-omni-xs)] hover:bg-[var(--surface-overlay)] min-w-0" data-dl-id="${esc(id)}">
                 <div class="flex gap-2.5 items-start min-w-0">
@@ -267,6 +293,7 @@ export class Downloader {
                         <div class="text-xs font-semibold truncate text-[var(--text-main)] dl-active-title">${esc(title)}</div>
                         <div class="text-[10px] text-[var(--text-dim)] truncate dl-active-subtitle">${esc(artist)}</div>
                     </div>
+                    ${failedActions}
                     <div class="text-[10px] font-mono text-[var(--text-dim)] flex-shrink-0 dl-pct-text">${esc(view.percentLabel)}</div>
                 </div>
                 <div class="h-1.5 rounded-full overflow-hidden bg-[var(--input-bg)] relative dl-bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct != null ? Math.round(pct) : ''}">
@@ -288,6 +315,35 @@ export class Downloader {
         if (this.mobileDownloadsList) {
             this.mobileDownloadsList.innerHTML = html || '<div class="text-center text-[var(--text-dim)] py-3 italic text-xs">No active downloads</div>';
         }
+        this._updateClearFailedVisibility(q);
+    }
+
+    static _updateClearFailedVisibility(queue) {
+        const hasFailed = Array.isArray(queue) && queue.some((i) => i && i.status === 'failed');
+        if (this.clearFailedBtn) this.clearFailedBtn.classList.toggle('hidden', !hasFailed);
+        if (this.mobileClearFailedBtn) this.mobileClearFailedBtn.classList.toggle('hidden', !hasFailed);
+    }
+
+    static _bindFailedRowActions(container) {
+        if (!container || container.__dlFailedActionsBound) return;
+        container.__dlFailedActionsBound = true;
+        container.addEventListener('click', (e) => {
+            const retryBtn = e.target.closest('[data-dl-retry]');
+            if (retryBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const id = retryBtn.getAttribute('data-dl-retry');
+                if (id) this.retryItem(id);
+                return;
+            }
+            const removeBtn = e.target.closest('[data-dl-remove]');
+            if (removeBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const id = removeBtn.getAttribute('data-dl-remove');
+                if (id) this.removeItem(id);
+            }
+        });
     }
 
     /** Patch live progress from socket without full re-render. */
@@ -994,6 +1050,58 @@ export class Downloader {
         }
     }
 
+    static async retryItem(id) {
+        const apiBase = searchService.getApiBase();
+        if (!apiBase || !id) return;
+        try {
+            const resp = await fetchWithTimeout(
+                `${apiBase}/api/downloader/queue/${encodeURIComponent(id)}/retry`,
+                { method: 'POST' },
+                STATUS_FETCH_TIMEOUT_MS,
+            );
+            if (!resp.ok) {
+                let msg = `Retry failed (${resp.status})`;
+                try {
+                    const body = await resp.json();
+                    if (body && body.message) msg = body.message;
+                } catch (_) { /* ignore */ }
+                if (typeof window.showToast === 'function') window.showToast(msg);
+                return;
+            }
+            if (typeof window.showToast === 'function') window.showToast('Re-queued for download');
+            this.refreshStatus();
+        } catch (err) {
+            console.error("Retry failed:", err);
+            if (typeof window.showToast === 'function') window.showToast('Could not retry download');
+        }
+    }
+
+    static async clearFailed() {
+        if (!confirm("Clear all failed downloads?")) return;
+        const apiBase = searchService.getApiBase();
+        if (!apiBase) return;
+        try {
+            const resp = await fetchWithTimeout(
+                `${apiBase}/api/downloader/queue/failed`,
+                { method: 'DELETE' },
+                STATUS_FETCH_TIMEOUT_MS,
+            );
+            if (!resp.ok) throw new Error(`Clear failed (${resp.status})`);
+            let removed = 0;
+            try {
+                const body = await resp.json();
+                if (body && typeof body.removed === 'number') removed = body.removed;
+            } catch (_) { /* ignore */ }
+            if (typeof window.showToast === 'function') {
+                window.showToast(removed > 0 ? `Cleared ${removed} failed download${removed === 1 ? '' : 's'}` : 'No failed downloads to clear');
+            }
+            this.refreshStatus();
+        } catch (err) {
+            console.error("Clear failed:", err);
+            if (typeof window.showToast === 'function') window.showToast('Could not clear failed downloads');
+        }
+    }
+
     static async clearQueue() {
         if (!confirm("Clear all items from the queue?")) return;
         try {
@@ -1041,13 +1149,17 @@ export class Downloader {
         const hasItems = queue?.length > 0 || isProcessing;
         if (section) section.classList.toggle('hidden', !hasItems);
         if (mobileSec) mobileSec.classList.toggle('hidden', !hasItems);
-        if (!hasItems) return;
+        if (!hasItems) {
+            this._updateClearFailedVisibility([]);
+            return;
+        }
         if (!list && !this.mobileDownloadsList) return;
         if (!queue || queue.length === 0) {
             const empty = '<div class="text-center text-[var(--text-dim)] py-4 italic text-xs">No active downloads</div>';
             const emptyM = '<div class="text-center text-[var(--text-dim)] py-3 italic text-xs">No active downloads</div>';
             if (list) list.innerHTML = empty;
             if (this.mobileDownloadsList) this.mobileDownloadsList.innerHTML = emptyM;
+            this._updateClearFailedVisibility([]);
             return;
         }
         this.renderActiveDownloadsLists(queue);
