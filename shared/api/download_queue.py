@@ -22,7 +22,14 @@ logger = logging.getLogger(__name__)
 
 
 def classify_download_error(error) -> tuple[str, str]:
-    """Return a stable UI-facing kind and concise message for downloader failures."""
+    """Return a stable UI-facing kind and concise message for downloader failures.
+
+    Checks run in priority order. A few branches are deliberately ordered to win
+    over more generic ones whose substrings they also contain: age restriction
+    before authentication ("Sign in to confirm your age" matches both), and geo
+    restriction before the generic "unavailable" branch ("not available in your
+    country" also contains "not available").
+    """
     clean = sanitize_cli_message(str(error or ""))
     lowered = clean.lower()
     if "bytes read" in lowered and "more expected" in lowered:
@@ -31,10 +38,58 @@ def classify_download_error(error) -> tuple[str, str]:
         return "timeout", "The connection to YouTube timed out."
     if "requested format is not available" in lowered:
         return "format_unavailable", "YouTube did not expose a compatible audio format."
+    if (
+        "confirm your age" in lowered
+        or "age-restricted" in lowered
+        or "age restricted" in lowered
+        or "inappropriate for some users" in lowered
+    ):
+        return "age_restricted", "This video is age-restricted. Add YouTube cookies in Settings to download it."
     if "sign in to confirm" in lowered or "not a bot" in lowered:
         return "authentication_required", "YouTube requires refreshed authentication cookies."
+    if "this video is private" in lowered or "private video" in lowered:
+        return "private_video", "This video is private and can't be downloaded."
+    if (
+        "in your country" in lowered
+        or "in your location" in lowered
+        or "from your location" in lowered
+        or "geo restriction" in lowered
+        or "geo-restrict" in lowered
+    ):
+        return "geo_restricted", "This video isn't available in your region."
+    if "members-only" in lowered or "members only" in lowered or "join this channel" in lowered:
+        return "members_only", "This video is members-only and can't be downloaded."
+    # Checked before the generic "unavailable" branch: copyright takedowns
+    # usually also report "no longer available", but the specific reason helps.
+    if "copyright" in lowered:
+        return "copyright", "This video was blocked on copyright grounds and can't be downloaded."
+    if (
+        "video unavailable" in lowered
+        or "video is unavailable" in lowered
+        or "video is not available" in lowered
+        or "video isn't available" in lowered
+        or "no longer available" in lowered
+        or "has been removed" in lowered
+        or "removed by the user" in lowered
+        or "account associated with this video has been terminated" in lowered
+    ):
+        return "video_unavailable", "This video is unavailable or has been removed from YouTube."
+    if "http error 429" in lowered or "too many requests" in lowered or "rate-limit" in lowered or "rate limit" in lowered:
+        return "rate_limited", "YouTube is rate-limiting downloads right now. Wait a few minutes and try again."
     if "no space left on device" in lowered:
         return "disk_full", "The Station does not have enough free disk space."
+    if (
+        "unable to connect" in lowered
+        or "connection reset" in lowered
+        or "connection refused" in lowered
+        or "network is unreachable" in lowered
+        or "no route to host" in lowered
+        or "temporary failure in name resolution" in lowered
+        or "name or service not known" in lowered
+        or "failed to resolve" in lowered
+        or "getaddrinfo" in lowered
+    ):
+        return "network_error", "The Station could not reach YouTube. Check its internet connection."
 
     meaningful = []
     for line in clean.splitlines():
@@ -216,7 +271,7 @@ class DownloadQueueManager:
 
         self.lock = threading.RLock()
 
-        evicted = self._evict_failed_and_interlocked()
+        evicted = self._evict_failed_and_interrupted()
         if evicted:
             logger.info(
                 "API: [Queue] Evicted %d failed/interrupted item(s) on startup.",
@@ -394,7 +449,7 @@ class DownloadQueueManager:
             self.queue = [i for i in self.queue if i["status"] == "downloading"]
         self.save()
 
-    def _evict_failed_and_interlocked(self) -> int:
+    def _evict_failed_and_interrupted(self) -> int:
         """Remove failed/interrupted items from the in-memory queue.
 
         Called at startup so a server restart clears the residue of the
