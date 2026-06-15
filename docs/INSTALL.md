@@ -1,167 +1,114 @@
-## INSTALL – Advanced setup and deployment
+# Install & Deployment
 
-### Desktop (Beta) — normal users start here
+This guide covers running Soundsible **beyond the basic local setup** in the [README](../README.md) — on a server, kept running in the background, or exposed across your network.
 
-**Install an app, pick a music folder, play.** No Python, git, or terminal on the happy path.
+> **Just want to run it on your own machine?** Follow [Install in the README](../README.md#install). This page is for self-hosting (server, NAS, Tailscale, reverse proxy, systemd).
 
-- Status and validation checklist: **[DESKTOP_BETA.md](./DESKTOP_BETA.md)**
-- Maintainer/dev build: [desktop-shell/README.md](../desktop-shell/README.md)
-- Releases: GitHub **Releases** artifacts tagged `desktop-v*` (when published)
-
-The sections below are for **Advanced** self-hosting (server, NAS, Docker, Tailscale, systemd).
+The supported entry point everywhere is `python3 run.py`. It creates the project virtualenv, repairs a broken one, installs requirements, and then starts the launcher / engine. Server and SSH workflows use the legacy daemon on a fixed port (`:5005`); the desktop appliance runtime (`--desktop-engine`) binds loopback on a random port and is covered in the [README](../README.md) and [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ---
 
-This document covers scenarios beyond the desktop beta and the basic local quick start in `README.md`.
+## 1. Requirements
 
-Use this when you want to run Soundsible on a server, keep it running in the background, or expose it over your network.
-
-This document is primarily about the legacy/headless deployment path. The desktop appliance runtime uses the Tauri shell + engine sidecar (or `python3 run.py --desktop-engine` for contributors), binds loopback on a random port, and is documented in `README.md` and `ARCHITECTURE.md`.
-
-### 1. System dependencies
-
-Core requirements for the Station Engine and ODST downloader:
-
-- Python 3.10+ and `git` (see `README.md` for virtual environment steps).
-- FFmpeg – not bundled. Install via your OS package manager. Examples:
+- **Python 3.10+** and **git**
+- **FFmpeg** — not bundled; install via your OS package manager:
   - Debian/Ubuntu: `sudo apt install ffmpeg`
   - Arch: `sudo pacman -S ffmpeg`
   - Fedora: `sudo dnf install ffmpeg`
   - macOS: `brew install ffmpeg`
-  - Windows: see the FFmpeg download page or use `winget install ffmpeg`.
+  - Windows: `winget install Gyan.FFmpeg` or the [FFmpeg download page](https://ffmpeg.org/download.html)
 
-Recommended or optional:
+Optional: a modern browser for the Station UI, Tailscale for remote access, and a NAS or object-storage backend (R2/B2/S3) for large libraries.
 
-- A modern browser for the Station UI.
-- Tailscale for secure remote access.
-- NAS or object storage (R2/B2/S3) if you use those backends.
+---
 
-### 2. Running on a headless server
+## 2. Headless server (SSH)
 
-The steps are the same as for local installation, but executed over SSH.
+Same as a local install, run over SSH:
 
-1. SSH into your server and install Soundsible:
+```bash
+sudo apt update
+sudo apt install -y python3-venv python3-pip ffmpeg git
+git clone https://github.com/Arzuparreta/soundsible.git
+cd soundsible
+python3 run.py          # first run opens setup; then choose "Start Station Engine"
+```
 
-   ```bash
-   sudo apt update
-   sudo apt install -y python3.12-venv python3-pip ffmpeg git
-   git clone https://github.com/Arzuparreta/soundsible.git
-   cd soundsible
-   python3 run.py
-   ```
+Access the player from another machine on the network:
 
-   `run.py` is the supported bootstrap path. It creates the project venv, repairs a partial/broken one, installs Python requirements, and then starts the launcher.
+```text
+http://SERVER_LAN_IP:5005/player/
+```
 
-2. Start the Station Engine using the CLI:
+To keep it running after you disconnect, use a process manager — `systemd`, `supervisord`, or a multiplexer like `tmux` / `screen` — configured to your usual standards. The server path assumes the legacy daemon:
 
-   ```bash
-   python3 run.py
-   ```
+```bash
+python3 run.py --daemon   # fixed port 5005, reachable on the LAN
+```
 
-   Choose **Start Station Engine & Open Station**.
+---
 
-3. Access the Station UI from a browser on the same network:
+## 3. Remote access over Tailscale
 
-   - `http://SERVER_LAN_IP:5005/player/`
+[Tailscale](https://tailscale.com/) gives you secure remote access without port forwarding or VPN config.
 
-4. To keep it running after you disconnect, use a process manager such as:
+1. Install and log into Tailscale on the machine running Soundsible.
+2. Start the Station Engine.
+3. From any device on your tailnet, open `http://YOUR_TAILSCALE_IP:5005/player/`.
+4. Optionally install the web player as a PWA (see the [README](../README.md#listen-everywhere)).
 
-   - `systemd`
-   - `supervisord`
-   - A terminal multiplexer like `tmux` or `screen`
+---
 
-Configure these tools according to your usual operational standards.
+## 4. Reverse proxy (optional)
 
-### 2B. Legacy fixed-port assumptions
-
-Most examples in this document assume the legacy daemon path:
-
-- `python3 run.py --daemon`
-- host/network exposure on port `5005`
-- browser access via `/player/`
-
-That is still the correct path for:
-
-- SSH and server installs
-- systemd/supervisord/tmux usage
-- reverse proxies
-- Tailscale/LAN access from other devices
-
-The desktop-sidecar path should not be treated as a drop-in replacement for those examples yet because it binds loopback on a random port by default.
-
-### 3. Access over Tailscale
-
-Soundsible works well with Tailscale for secure remote access without VPN configuration or port forwarding.
-
-1. Install and log into Tailscale on the machine where Soundsible runs.
-2. Start the Station Engine (via launcher or CLI).
-3. From another device in your tailnet, open:
-
-   ```text
-   http://YOUR_TAILSCALE_IP:5005/player/
-   ```
-
-4. Optionally, install the web app on mobile (see `README.md` for PWA instructions).
-
-If you want the newer pairing-based flow instead of typing URLs manually, use the desktop player at `/player/desktop/` on the desktop runtime path. The pairing APIs and desktop pairing modal are present, but the full packaged desktop shell is still in progress.
-
-### 4. Reverse proxy (optional)
-
-You can serve Soundsible behind a reverse proxy such as Nginx, Caddy, or Traefik.
+Serve Soundsible behind Nginx, Caddy, or Traefik:
 
 1. Run the Station Engine on its default port (`5005`).
-2. Configure your proxy to forward a public path (for example `https://music.example.com`) to `http://127.0.0.1:5005`.
-3. Ensure WebSocket and other long‑running connections are allowed by your proxy configuration.
+2. Forward a public path (e.g. `https://music.example.com`) to `http://127.0.0.1:5005`.
+3. Allow WebSocket / long-running connections in your proxy config.
 
-Do not reverse-proxy the desktop-sidecar random loopback port directly as a public endpoint. Keep reverse proxy guidance tied to the legacy daemon/server path for now.
+Reverse-proxy the **legacy daemon** port, not the desktop-sidecar's random loopback port. See your proxy's docs for TLS and exact snippets.
 
-Consult your proxy’s documentation for exact configuration snippets and TLS setup.
+---
 
-### 5. Storage considerations
+## 5. Storage
 
-By default, Soundsible uses local disk on the host. For larger libraries or shared setups:
+By default Soundsible uses local disk on the host. For larger or shared libraries:
 
-- Mount a NAS path (for example NFS or SMB) and point the setup wizard at that location.
-- Or configure an object storage backend (Cloudflare R2, Backblaze B2, generic S3) via the setup wizard and configuration.
+- **NAS / shared storage** — mount an NFS or SMB path and point the setup wizard at it.
+- **Object storage** — configure Cloudflare R2, Backblaze B2, or generic S3 in the setup wizard.
 
-See `CONFIGURATION.md` for more details on storage‑related options.
+See [CONFIGURATION.md](./CONFIGURATION.md) for storage options.
 
-### 6. Security baseline (LAN + Tailscale)
+---
 
-Soundsible is designed for trusted LAN/Tailscale deployments. Use this baseline:
+## 6. Security baseline
 
-1. **No public exposure**  
-   Do not port-forward Station (`5005`) or Launcher (`5099`) to the public internet.
+Soundsible is designed for trusted **LAN / Tailscale** use. For anything beyond a single machine:
 
-2. **Use Tailscale for remote access**  
-   For outside-home access, prefer Tailscale instead of opening inbound router ports.
+1. **Don't expose it publicly.** Never port-forward Station (`5005`) or Launcher (`5099`) to the internet — use Tailscale for remote access.
 
-3. **Protect admin routes with a token**  
-   Set:
+2. **Protect admin routes with a token:**
 
    ```bash
    export SOUNDSIBLE_ADMIN_TOKEN='your-long-random-token'
    ```
 
-   Then send that value as:
-   - `Authorization: Bearer <token>` or
-   - `X-Soundsible-Admin-Token: <token>`
+   Send it as `Authorization: Bearer <token>` or `X-Soundsible-Admin-Token: <token>`. In desktop-engine mode, Soundsible also creates a short-lived owner token and injects it into `/player/desktop/` automatically.
 
-   In desktop-engine mode, Soundsible also creates a short owner token file and injects that token into `/player/desktop/` automatically. That path is meant for the embedded/local desktop UI, not for public browser sessions.
-
-4. **Launcher binding**  
-   Launcher now binds to localhost by default for safer control-plane exposure.
-   To intentionally allow LAN access to launcher UI, set:
+3. **Launcher binding.** The launcher binds to localhost by default. To allow LAN access intentionally:
 
    ```bash
    export SOUNDSIBLE_LAUNCHER_BIND_ALL=true
    ```
 
-5. **CORS origin control**  
-   By default, API CORS accepts localhost + private LAN + Tailscale browser origins.
-   For tighter policy, explicitly set:
+4. **CORS origins.** By default the API accepts localhost, private-LAN, and Tailscale browser origins. To tighten:
 
    ```bash
    export SOUNDSIBLE_ALLOWED_ORIGINS='http://localhost:5005,http://192.168.1.10:5005'
    export SOUNDSIBLE_SOCKET_CORS_ORIGINS='http://localhost:5005,http://192.168.1.10:5005'
    ```
+
+---
+
+For environment variables, downloader tuning, and YouTube cookies, see [CONFIGURATION.md](./CONFIGURATION.md).
