@@ -1,0 +1,91 @@
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--gutter) var(--space-2xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-tertiary);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--ink-secondary);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-primary);
+}
+
+.ok {
+  color: var(--success);
+  font-weight: var(--fw-semibold);
+}
+
+.bad {
+  color: var(--ink-tertiary);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.input {
+  width: 100%;
+  height: var(--control-h);
+  padding: 0 var(--space-md);
+  font: inherit;
+  font-size: var(--text-body);
+  color: var(--ink-primary);
+  background: var(--bg-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--accent);
+}
+
+.link {
+  align-self: flex-start;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: var(--text-label);
+  font-weight: var(--fw-medium);
+}
+
+.link:hover {
+  text-decoration: underline;
+}
