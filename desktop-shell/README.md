@@ -28,6 +28,7 @@ Optional overrides:
 Tauri (Rust)  →  spawn soundsible_engine.py  →  poll desktop-engine-state.json
               →  health watchdog (3× fail @ 5s)  →  navigate webview to player
 Tray: Open | Pair phone… | Restart engine | Stop engine | Quit
+```
 
 **Keyboard (DT5):** Global shortcuts work even when the window is hidden:
 
