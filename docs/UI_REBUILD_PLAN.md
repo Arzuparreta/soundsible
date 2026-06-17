@@ -1,6 +1,6 @@
 # Player UI Rebuild — Master Plan (SolidJS)
 
-> Status: **Phase 1 complete → starting Phase 3 (views)** — created 2026-06-16. Living document.
+> Status: **Phase 3 done — all views + full playback subsystem landed; next: Phase 4 (desktop), then tests** — created 2026-06-16. Living document.
 >
 > Done: Solid+TS+Vite toolchain alongside legacy (builds clean, served at `/player/app.html`);
 > design direction locked (dark · dense · pro · adaptive · orange); tokens + seed primitives
@@ -40,13 +40,32 @@
 > `routes/PodcastShow.tsx` (`/podcasts/:id`, episodes via `createResource`, play via peek→token→stream,
 > unsubscribe). Store gained `podcastSubscriptions`; `actions.playEpisode`. `types/podcast.ts`.
 >
-> **🎉 ALL VIEWS DONE:** Inicio · Buscar · Discover · Favoritos · Listas (+detalle) · Podcasts (+show)
-> · Ajustes, on the single store + overlay manager, dark/dense/pro, virtualized, fine-grained.
+> **Playback subsystem DONE** — single shared audio element + store-owned `playback` slice:
+> queue with next/prev/auto-advance, shuffle, repeat (off/all/one), seek bar, expand-to-Now-Playing
+> sheet (with queue list + jump-to), and Media Session API (lock-screen metadata + transport handlers).
+> (`stores/index.ts`, `OmniBar.tsx`, `NowPlaying.tsx`, `lib/audio.ts`.)
 >
-> Remaining before tests: (1) **full playback subsystem** — the OmniBar is currently play/pause only;
-> needs a seek bar, queue + next/prev/auto-advance, expand-to-now-playing, shuffle/repeat, Media Session
-> API, and cross-device resume; (2) the **desktop surface** (responsive + sidebar nav vs bottom tabs);
-> (3) then the **full Vitest + @solidjs/testing-library coverage pass** (user decision: tests LAST).
+> **Downloads DONE** — `routes/Downloads.tsx`: the live mirror of the engine queue. New `downloads`
+> store slice seeded from `GET /api/downloader/queue/status` and driven by `downloader_update` socket
+> events (`applyDownloadEvent` mirrors the legacy `mergeDownloaderEvent` — completed items leave the
+> queue, unknown ids append). Per-row progress bar (determinate %/indeterminate), phase + speed·ETA,
+> optimistic retry/remove + clear-failed/clear-all, and a transient "recently added" strip. New
+> `api.ts` methods: getDownloadQueue / retryDownload / removeDownload / clearDownloads /
+> clearFailedDownloads. Reachable via a **Home "Descargas" chip with a live active-count badge**.
+>
+> **Artist DONE** — `routes/Artist.tsx` (`/artist/:name`): every library track by one artist (matches
+> `artist`/`album_artist`), artist hero (gradient avatar + initial), play-all + shuffle. Reachable by
+> tapping an artist name in any `SongRow`/`TrackList` row, or on the Now Playing screen (library tracks
+> only — preview/podcast sources are not library artists). Store gained `actions.playShuffled`.
+>
+> **🎉 ALL VIEWS DONE:** Inicio · Buscar · Discover · Favoritos · Listas (+detalle) · Podcasts (+show)
+> · **Descargas** · **Artista** · Ajustes, on the single store + overlay manager, dark/dense/pro,
+> virtualized, fine-grained.
+>
+> Remaining before tests: (1) **cross-device playback resume/remote** (the legacy `playback_resume.js`
+> / `remote_control.js` sync — socket events are already typed in `lib/socket.ts`, not yet wired);
+> (2) the **desktop surface** (responsive + sidebar nav vs bottom tabs); (3) then the **full Vitest +
+> @solidjs/testing-library coverage pass** (user decision: tests LAST).
 
 ## Context
 

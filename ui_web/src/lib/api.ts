@@ -1,6 +1,7 @@
 import { apiOrigin, ownerToken } from './config';
 import type { Track, PlaylistMap, LibrarySettings, SearchResult } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode, PodcastSearchResult } from '../types/podcast';
+import type { DownloadQueueItem } from '../types/download';
 
 export interface DownloadItem {
   source_type: string;
@@ -191,5 +192,31 @@ export const api = {
       method: 'POST',
       body: { enclosure_url: enclosureUrl },
       timeoutMs: 20000,
+    }),
+
+  // ── Download queue ──
+  /** Current download queue + processing flag (seed for the live store slice). */
+  getDownloadQueue: () =>
+    request<{ is_processing?: boolean; queue?: DownloadQueueItem[]; logs?: string[] }>(
+      '/api/downloader/queue/status',
+    ),
+  /** Reset a failed item back to pending so the pump re-processes it. */
+  retryDownload: (id: string) =>
+    request<{ status?: string; item?: DownloadQueueItem }>(
+      `/api/downloader/queue/${encodeURIComponent(id)}/retry`,
+      { method: 'POST' },
+    ),
+  /** Remove a single item from the queue. */
+  removeDownload: (id: string) =>
+    request<{ status?: string }>(`/api/downloader/queue/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+  /** Clear every non-downloading item from the queue. */
+  clearDownloads: () =>
+    request<{ status?: string }>('/api/downloader/queue', { method: 'DELETE' }),
+  /** Clear only failed/interrupted items. */
+  clearFailedDownloads: () =>
+    request<{ status?: string; removed?: number }>('/api/downloader/queue/failed', {
+      method: 'DELETE',
     }),
 };

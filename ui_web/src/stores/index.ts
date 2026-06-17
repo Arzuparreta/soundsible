@@ -6,9 +6,19 @@ import { audioEl, audioService } from '../lib/audio';
 import { streamUrl, previewUrl, podcastStreamUrl, coverUrl } from '../lib/media';
 import type { Track, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
+import type { DownloadQueueItem, DownloadEvent, CompletedDownload } from '../types/download';
 
 export type Theme = 'dark' | 'light';
 export type RepeatMode = 'off' | 'all' | 'one';
+
+export interface DownloadsState {
+  /** Live queue (pending/downloading/failed). Completed items leave the queue. */
+  queue: DownloadQueueItem[];
+  /** Whether the engine pump is actively working. */
+  isProcessing: boolean;
+  /** Ephemeral "just finished" entries, auto-expired ~5s after completion. */
+  recent: CompletedDownload[];
+}
 
 export interface PlaybackState {
   currentTrack: Track | null;
@@ -32,6 +42,7 @@ export interface AppState {
   librarySettings: LibrarySettings;
   podcastSubscriptions: PodcastSubscription[];
   playback: PlaybackState;
+  downloads: DownloadsState;
 }
 
 function loadDevice(): DeviceRegistration {
@@ -66,6 +77,11 @@ const [state, setState] = createStore<AppState>({
     index: -1,
     shuffle: false,
     repeat: 'off',
+  },
+  downloads: {
+    queue: [],
+    isProcessing: false,
+    recent: [],
   },
 });
 
@@ -112,6 +128,51 @@ function onEnded(): void {
   else setState('playback', 'isPlaying', false);
 }
 
+/** Push a "just finished" entry to the recent strip and auto-expire it. */
+function addRecentCompleted(entry: CompletedDownload): void {
+  if (state.downloads.recent.some((r) => r.id === entry.id)) return;
+  setState('downloads', 'recent', (r) => [entry, ...r].slice(0, 5));
+  setTimeout(() => {
+    setState('downloads', 'recent', (r) => r.filter((x) => x.id !== entry.id));
+  }, 5000);
+}
+
+/** Merge one `downloader_update` socket payload into the live queue. Mirrors the
+ * legacy `mergeDownloaderEvent`: completed items leave the queue; unknown ids are
+ * appended (covers events that arrive before the initial seed). */
+function applyDownloadEvent(detail: DownloadEvent): void {
+  const { id, status, track, ...rest } = detail;
+  if (!id) return;
+  if (status === 'completed') {
+    const finished = state.downloads.queue.find((i) => i.id === id);
+    setState('downloads', 'queue', (q) => q.filter((i) => i.id !== id));
+    addRecentCompleted({
+      id,
+      title: track?.title ?? finished?.display_title ?? finished?.podcast_title ?? 'Pista',
+      artist: track?.artist ?? finished?.display_artist ?? finished?.podcast_show_title ?? '',
+    });
+    return;
+  }
+  setState('downloads', 'queue', (q) => {
+    const idx = q.findIndex((i) => i.id === id);
+    if (idx === -1) return [...q, { id, status: status ?? 'pending', ...rest } as DownloadQueueItem];
+    const next = q.slice();
+    next[idx] = { ...next[idx], ...rest, status: status ?? next[idx].status };
+    return next;
+  });
+}
+
+/** Reactive download tallies — call inside a tracking scope (createMemo). */
+export function downloadCounts(): { active: number; failed: number } {
+  let active = 0;
+  let failed = 0;
+  for (const i of state.downloads.queue) {
+    if (i.status === 'failed' || i.status === 'interrupted') failed++;
+    else active++;
+  }
+  return { active, failed };
+}
+
 export const actions = {
   async syncLibrary(): Promise<void> {
     setState('loading', true);
@@ -150,6 +211,13 @@ export const actions = {
   /** Play a single track (queue = just this track). */
   playTrack(track: Track): void {
     actions.playFrom([track], 0);
+  },
+
+  /** Play a list with shuffle on, starting from a random entry. */
+  playShuffled(tracks: Track[]): void {
+    if (tracks.length === 0) return;
+    setState('playback', 'shuffle', true);
+    actions.playFrom(tracks, Math.floor(Math.random() * tracks.length));
   },
 
   /** Play a podcast episode: queue = just this episode; stream via a minted token. */
@@ -228,6 +296,48 @@ export const actions = {
     setState('playback', 'repeat', next);
   },
 
+  // ── Downloads ──
+  /** Seed the live queue from the engine (called on connect + when opening the view). */
+  async loadDownloads(): Promise<void> {
+    try {
+      const d = await api.getDownloadQueue();
+      setState('downloads', { queue: d.queue ?? [], isProcessing: !!d.is_processing });
+    } catch {
+      // Engine down or unauthorized — leave whatever we have.
+    }
+  },
+
+  retryDownload(id: string): void {
+    setState('downloads', 'queue', (q) =>
+      q.map((i) =>
+        i.id === id
+          ? { ...i, status: 'pending', progress_percent: null, error: undefined, error_message: undefined }
+          : i,
+      ),
+    );
+    api.retryDownload(id).catch(() => void actions.loadDownloads()); // resync on failure
+  },
+
+  removeDownload(id: string): void {
+    const prev = state.downloads.queue;
+    setState('downloads', 'queue', (q) => q.filter((i) => i.id !== id)); // optimistic
+    api.removeDownload(id).catch(() => setState('downloads', 'queue', prev)); // revert
+  },
+
+  clearFailedDownloads(): void {
+    const prev = state.downloads.queue;
+    setState('downloads', 'queue', (q) =>
+      q.filter((i) => i.status !== 'failed' && i.status !== 'interrupted'),
+    );
+    api.clearFailedDownloads().catch(() => setState('downloads', 'queue', prev));
+  },
+
+  clearDownloads(): void {
+    const prev = state.downloads.queue;
+    setState('downloads', 'queue', (q) => q.filter((i) => i.status === 'downloading'));
+    api.clearDownloads().catch(() => setState('downloads', 'queue', prev));
+  },
+
   async rescanLibrary(): Promise<void> {
     try {
       await api.rescanLibrary();
@@ -286,9 +396,12 @@ export function initStore(): void {
     setState('online', true);
     socket!.emit('playback_register', state.device);
     void api.registerDevice(state.device).catch(() => {});
+    void actions.loadDownloads(); // re-seed the queue after a (re)connect
   });
   socket.on('disconnect', () => setState('online', false));
   socket.on('library_updated', () => void actions.syncLibrary());
+  socket.on('downloader_update', (data) => applyDownloadEvent((data ?? {}) as DownloadEvent));
 
   void actions.syncLibrary();
+  void actions.loadDownloads();
 }

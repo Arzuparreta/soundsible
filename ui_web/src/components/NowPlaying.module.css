@@ -93,6 +93,22 @@
   color: var(--ink-secondary);
 }
 
+.artistLink {
+  margin: var(--space-xs) 0 0;
+  padding: 0;
+  font: inherit;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out);
+}
+
+.artistLink:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 .seekWrap {
   display: flex;
   flex-direction: column;

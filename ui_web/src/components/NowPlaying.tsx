@@ -1,4 +1,5 @@
 import { createMemo, For, Show, type JSX } from 'solid-js';
+import { useNavigate } from '@solidjs/router';
 import { state, actions, nowPlayingOpen, setNowPlayingOpen } from '../stores';
 import { coverUrl } from '../lib/media';
 import styles from './NowPlaying.module.css';
@@ -12,7 +13,19 @@ function fmt(s: number): string {
 
 /** Full-screen Now Playing sheet. Slides up; controlled by the nowPlayingOpen signal. */
 export function NowPlaying() {
+  const navigate = useNavigate();
   const t = createMemo(() => state.playback.currentTrack);
+  /** Library tracks link to their artist; preview/podcast sources do not. */
+  const artistLinkable = createMemo(() => {
+    const c = t();
+    return !!c && c.source !== 'preview' && !!c.artist;
+  });
+  const goArtist = () => {
+    const c = t();
+    if (!c?.artist) return;
+    setNowPlayingOpen(false);
+    navigate(`/artist/${encodeURIComponent(c.artist)}`);
+  };
 
   const artBg = (): JSX.CSSProperties => {
     const c = t();
@@ -40,7 +53,11 @@ export function NowPlaying() {
 
           <div class={styles.info}>
             <h1 class={styles.title}>{t()!.title}</h1>
-            <p class={styles.artist}>{t()!.artist}</p>
+            <Show when={artistLinkable()} fallback={<p class={styles.artist}>{t()!.artist}</p>}>
+              <button class={styles.artistLink} type="button" onClick={goArtist}>
+                {t()!.artist}
+              </button>
+            </Show>
           </div>
 
           <div class={styles.seekWrap}>

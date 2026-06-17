@@ -1,4 +1,5 @@
 import { createMemo, createSignal, For, Show, onMount, type JSX } from 'solid-js';
+import { useNavigate } from '@solidjs/router';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import { state, actions } from '../stores';
 import SongRow from './SongRow';
@@ -13,7 +14,9 @@ import styles from './TrackList.module.css';
  */
 export default function TrackList(props: { tracks: Track[]; loading?: boolean; empty?: JSX.Element }) {
   let scrollRef: HTMLDivElement | undefined;
+  const navigate = useNavigate();
   const favSet = createMemo(() => new Set(state.favorites));
+  const goArtist = (artist: string) => artist && navigate(`/artist/${encodeURIComponent(artist)}`);
 
   // Row height follows the adaptive --row-h token (56 mobile / 44 desktop).
   const [rowH, setRowH] = createSignal(56);
@@ -65,6 +68,7 @@ export default function TrackList(props: { tracks: Track[]; loading?: boolean; e
                         favorite={favSet().has(track!.id)}
                         onPlay={() => actions.playFrom(props.tracks, vi.index)}
                         onToggleFavorite={actions.toggleFavourite}
+                        onArtist={goArtist}
                       />
                     </div>
                   </Show>

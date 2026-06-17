@@ -12,6 +12,8 @@ export interface SongRowProps {
   favorite?: boolean;
   onPlay?: (track: Track) => void;
   onToggleFavorite?: (id: string) => void;
+  /** When set, the artist name becomes a tappable link (navigates to the artist). */
+  onArtist?: (artist: string) => void;
 }
 
 function formatDuration(seconds?: number): string {
@@ -53,7 +55,21 @@ export default function SongRow(props: SongRowProps) {
       <div class={styles.cover} style={coverStyle(props)} />
       <div class={styles.meta}>
         <span class={styles.title}>{props.track.title}</span>
-        <span class={styles.artist}>{props.track.artist}</span>
+        <Show
+          when={props.onArtist && props.track.artist}
+          fallback={<span class={styles.artist}>{props.track.artist}</span>}
+        >
+          <button
+            class={styles.artistLink}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onArtist!(props.track.artist);
+            }}
+          >
+            {props.track.artist}
+          </button>
+        </Show>
       </div>
       <button
         class={styles.iconBtn}

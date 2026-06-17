@@ -66,6 +66,28 @@
   text-overflow: ellipsis;
 }
 
+/* Tappable artist name: looks like the plain subtitle, gains an accent on hover. */
+.artistLink {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-label);
+  color: var(--ink-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--dur-micro) var(--ease-out);
+}
+
+.artistLink:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 .iconBtn {
   display: inline-flex;
   align-items: center;

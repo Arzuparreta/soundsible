@@ -1,11 +1,13 @@
+import { createMemo, Show } from 'solid-js';
 import { A } from '@solidjs/router';
-import { state } from '../stores';
+import { state, downloadCounts } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import styles from './Home.module.css';
 
 /** Library view: real engine data, virtualized list, play + favourite wired. */
 export default function Home() {
+  const active = createMemo(() => downloadCounts().active);
   return (
     <div class="view">
       <ViewHeader title="Tu biblioteca" meta={`${state.library.length} pistas`} />
@@ -18,6 +20,12 @@ export default function Home() {
         </A>
         <A href="/podcasts" class={styles.chip}>
           Podcasts
+        </A>
+        <A href="/downloads" class={styles.chip}>
+          Descargas
+          <Show when={active() > 0}>
+            <span class={styles.badge}>{active()}</span>
+          </Show>
         </A>
       </nav>
       <TrackList

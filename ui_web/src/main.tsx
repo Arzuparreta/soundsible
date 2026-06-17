@@ -11,6 +11,8 @@ import PlaylistDetail from './routes/PlaylistDetail';
 import Discover from './routes/Discover';
 import Podcasts from './routes/Podcasts';
 import PodcastShow from './routes/PodcastShow';
+import Downloads from './routes/Downloads';
+import Artist from './routes/Artist';
 import { Placeholder } from './routes/Placeholder';
 import DesignPreview from './pages/DesignPreview';
 import { initStore } from './stores';
@@ -34,6 +36,8 @@ render(
       <Route path="/playlists/:name" component={PlaylistDetail} />
       <Route path="/podcasts" component={Podcasts} />
       <Route path="/podcasts/:id" component={PodcastShow} />
+      <Route path="/downloads" component={Downloads} />
+      <Route path="/artist/:name" component={Artist} />
       <Route path="/preview" component={DesignPreview} />
       <Route path="*" component={() => <Placeholder title="No encontrado" blurb="Esta ruta no existe." />} />
     </HashRouter>
