@@ -1,0 +1,124 @@
+/*
+ * Design tokens — single source of truth for the new player UI.
+ * Direction (locked 2026-06-16): DARK · DENSE · PRO, adaptive density
+ * (comfortable on mobile, denser on desktop), orange (#f97a12) as the signature accent.
+ * Continuity preserved with the existing player/Tauri shell (DESIGN.md).
+ */
+:root {
+  /* ── Surfaces (layered near-black for depth, subtle elevation — no heavy shadows) ── */
+  --bg-base: #0c0c0e; /* app background */
+  --bg-raised: #141417; /* cards, list-row hover */
+  --bg-elevated: #1b1b1f; /* popovers, sheets, modals */
+  --bg-inset: #08080a; /* inputs, wells, log panes */
+  --hairline: #26262b; /* default borders */
+  --hairline-strong: #34343a; /* emphasized dividers */
+
+  /* ── Ink ── */
+  --ink-primary: #f2f2f5;
+  --ink-secondary: #a0a0a8;
+  --ink-tertiary: #6a6a72;
+  --ink-on-accent: #1a0e02; /* text on orange fills */
+
+  /* ── Accent + brand ── */
+  --accent: #f97a12;
+  --accent-hover: #ff8d2e;
+  --accent-press: #d8630a;
+  --accent-soft: rgba(249, 122, 18, 0.14); /* tints, active row wash */
+  --brand-gold: #e0bc00; /* badge/mark only — never a primary fill */
+
+  /* ── Status ── */
+  --info: #3178c6;
+  --success: #34c759;
+  --warning: #e0a72b;
+  --danger: #ff453a;
+
+  /* ── Typography ── */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --text-display: 32px;
+  --text-h1: 24px;
+  --text-h2: 20px;
+  --text-title: 16px;
+  --text-body: 15px;
+  --text-label: 13px;
+  --text-caption: 12px;
+  --text-mono: 12.5px;
+
+  --lh-tight: 1.15;
+  --lh-snug: 1.3;
+  --lh-normal: 1.5;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* ── Spacing (8px base) ── */
+  --space-2xs: 2px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 48px;
+
+  /* ── Radius ── */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-full: 999px;
+
+  /* ── Elevation (subtle — "pro" restraint) ── */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.6);
+
+  /* ── Z-index scale (replaces legacy hard-coded chaos: 9999/1280/220…) ── */
+  --z-base: 1;
+  --z-sticky: 100;
+  --z-header: 200;
+  --z-omni: 300; /* the persistent player bar */
+  --z-overlay: 1000; /* scrims */
+  --z-modal: 1100;
+  --z-popover: 1200;
+  --z-toast: 1300;
+  --z-max: 9999;
+
+  /* ── Motion ── */
+  --dur-micro: 100ms;
+  --dur-short: 200ms;
+  --dur-medium: 300ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ── Density (ADAPTIVE) — mobile defaults: comfortable, touch-friendly ── */
+  --row-h: 56px; /* list row height */
+  --control-h: 44px; /* min touch target */
+  --cover-sm: 44px; /* row thumbnail */
+  --gutter: 16px; /* page horizontal padding */
+  --list-gap: 2px; /* gap between rows */
+}
+
+/* Desktop: tighten to a denser, pro layout. */
+@media (min-width: 1024px) {
+  :root {
+    --row-h: 44px;
+    --control-h: 36px;
+    --cover-sm: 36px;
+    --gutter: 24px;
+    --list-gap: 1px;
+    --text-body: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-micro: 0ms;
+    --dur-short: 0ms;
+    --dur-medium: 0ms;
+  }
+}

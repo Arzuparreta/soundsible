@@ -1,0 +1,17 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.dock {
+  flex-shrink: 0;
+  background: var(--bg-base);
+  border-top: 1px solid var(--hairline);
+}

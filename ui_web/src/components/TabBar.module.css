@@ -1,0 +1,36 @@
+.bar {
+  display: flex;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: var(--control-h);
+  padding: var(--space-sm) 0;
+  color: var(--ink-tertiary);
+  text-decoration: none;
+  font-size: var(--text-caption);
+  transition: color var(--dur-short) var(--ease-out);
+}
+
+.tab:hover {
+  color: var(--ink-secondary);
+}
+
+.active {
+  color: var(--accent);
+}
+
+.label {
+  font-weight: var(--fw-medium);
+}
+
+.tab svg {
+  width: 22px;
+  height: 22px;
+}
