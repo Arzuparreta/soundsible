@@ -15,8 +15,7 @@
 > in the store; virtualized `SongRow` list (`@tanstack/solid-virtual`); favourite toggle (optimistic
 > + `/api/library/favourites/toggle`, revert on failure); real audio playback via a shared element
 > (`lib/audio.ts`, streams `/api/static/stream/<id>`) reflected in `OmniBar` with play/pause. Builds +
-> typechecks clean. (Note: 2026-06-16 the flaky `/mnt/storage` disk intermittently dropped node_modules
-> files mid-build — reinstall + retry clears it; reseat SATA + fsck pending.)
+> typechecks clean.
 >
 > **Views done so far:** Home, **Favourites**, **Search** (client-side library filter), **Settings**
 > (connection, library reload/rescan, device name). Reusable `TrackList` (virtualized) + `ViewHeader`
