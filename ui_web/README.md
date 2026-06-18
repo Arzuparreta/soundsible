@@ -22,7 +22,9 @@ For desktop-engine work, remember that the real Flask-served desktop player may 
 npm run build
 ```
 
-Outputs `dist/` with hashed JS/CSS. Serve it by setting **`SOUNDSIBLE_WEB_UI_DIST=1`** when starting the API so Flask uses `ui_web/dist` instead of `ui_web/`.
+Outputs `dist/` with hashed JS/CSS. Once built, the API serves `ui_web/dist` automatically under `/player/` — no env var needed. To force the raw source tree instead (e.g. while editing the legacy player), start the API with **`SOUNDSIBLE_WEB_UI_DIST=0`**.
+
+> The new SolidJS player (`/player/app.html`) only works from a build — its source entry points at the Vite dev server. Run `npm run build` (or `npm run dev` on the Vite server) to see your changes.
 
 ## Scripts
 

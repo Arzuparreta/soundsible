@@ -62,7 +62,7 @@ flowchart LR
 The Flask application lives in `shared/api/__init__.py`. It:
 
 - Registers blueprints for **library**, **playback**, **downloader**, **config**, **discovery**, **podcasts**, and **agent** (`shared/api/routes/`).
-- Serves `ui_web` (or `ui_web/dist` when `SOUNDSIBLE_WEB_UI_DIST` is enabled) under `/player/`.
+- Serves the web player under `/player/`: prefers the `ui_web/dist` build when present, falling back to the `ui_web` source tree (override with `SOUNDSIBLE_WEB_UI_DIST=0/1`).
 - Holds singletons for **LibraryManager**, **QueueManager**, **FavouritesManager**, and the download subsystem.
 - Uses **Socket.IO** for live updates (e.g. library changes, downloader progress, playback coordination).
 
