@@ -46,3 +46,10 @@
   text-align: center;
   color: var(--ink-secondary);
 }
+
+/* Desktop: the sidebar already lists Favoritos/Listas/Podcasts/Descargas. */
+@media (min-width: 1024px) {
+  .chips {
+    display: none;
+  }
+}

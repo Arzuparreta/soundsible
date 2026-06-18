@@ -1,7 +1,11 @@
 .app {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* Definite, viewport-bound height so .content can scroll internally and the
+     dock pins to the bottom. dvh tracks mobile browser chrome; vh is the fallback. */
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 .content {
@@ -14,4 +18,30 @@
   flex-shrink: 0;
   background: var(--bg-base);
   border-top: 1px solid var(--hairline);
+}
+
+/* Desktop: two-pane layout — left rail + content, player spanning the bottom.
+   The Sidebar component reveals itself at this breakpoint (Sidebar.module.css). */
+@media (min-width: 1024px) {
+  .app {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'sidebar content'
+      'dock dock';
+  }
+
+  .content {
+    grid-area: content;
+  }
+
+  .dock {
+    grid-area: dock;
+  }
+
+  /* The sidebar owns navigation on desktop; the bottom tab bar is redundant. */
+  .tabbar {
+    display: none;
+  }
 }
