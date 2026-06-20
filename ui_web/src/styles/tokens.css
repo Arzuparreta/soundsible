@@ -5,6 +5,7 @@
  * Continuity preserved with the existing player/Tauri shell (DESIGN.md).
  */
 :root {
+  color-scheme: dark;
   /* ── Surfaces (layered near-black for depth, subtle elevation — no heavy shadows) ── */
   --bg-base: #0c0c0e; /* app background */
   --bg-raised: #141417; /* cards, list-row hover */
@@ -105,6 +106,7 @@
 
 /* Light theme: token overrides only (every surface reads these vars). */
 :root[data-theme='light'] {
+  color-scheme: light;
   --bg-base: #f6f6f7;
   --bg-raised: #ffffff;
   --bg-elevated: #ffffff;

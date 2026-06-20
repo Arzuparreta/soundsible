@@ -204,3 +204,25 @@
     background-position: -200% 0;
   }
 }
+
+@media (max-width: 520px) {
+  .header {
+    align-items: flex-start;
+    gap: var(--space-sm);
+  }
+
+  .cover {
+    width: 44px;
+    height: 44px;
+  }
+
+  .unsub {
+    max-width: 92px;
+    white-space: normal;
+  }
+
+  .ep {
+    gap: var(--space-sm);
+    padding-inline: var(--space-sm);
+  }
+}

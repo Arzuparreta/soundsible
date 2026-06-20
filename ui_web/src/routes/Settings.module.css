@@ -188,3 +188,27 @@
   background: var(--danger);
   color: #fff;
 }
+
+@media (max-width: 420px) {
+  .card {
+    padding: var(--space-md);
+  }
+
+  .row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .segment {
+    width: 100%;
+  }
+
+  .seg {
+    flex: 1;
+  }
+
+  .actions > * {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+}

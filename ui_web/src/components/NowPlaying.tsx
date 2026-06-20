@@ -61,16 +61,17 @@ export function NowPlaying() {
         <div class={styles.body}>
           <div class={styles.art} style={artBg()} />
 
-          <div class={styles.info}>
-            <h1 class={styles.title}>{t()!.title}</h1>
-            <Show when={artistLinkable()} fallback={<p class={styles.artist}>{t()!.artist}</p>}>
-              <button class={styles.artistLink} type="button" onClick={goArtist}>
-                {t()!.artist}
-              </button>
-            </Show>
-          </div>
+          <div class={styles.details}>
+            <div class={styles.info}>
+              <h1 class={styles.title}>{t()!.title}</h1>
+              <Show when={artistLinkable()} fallback={<p class={styles.artist}>{t()!.artist}</p>}>
+                <button class={styles.artistLink} type="button" onClick={goArtist}>
+                  {t()!.artist}
+                </button>
+              </Show>
+            </div>
 
-          <div class={styles.seekWrap}>
+            <div class={styles.seekWrap}>
             <input
               class={styles.seek}
               type="range"
@@ -85,9 +86,9 @@ export function NowPlaying() {
               <span>{fmt(state.playback.currentTime)}</span>
               <span>{fmt(state.playback.duration)}</span>
             </div>
-          </div>
+            </div>
 
-          <div class={styles.controls}>
+            <div class={styles.controls}>
             <button
               classList={{ [styles.toggle]: true, [styles.on]: state.playback.shuffle }}
               type="button"
@@ -140,9 +141,9 @@ export function NowPlaying() {
                 <span class={styles.repeatOne}>1</span>
               </Show>
             </button>
-          </div>
+            </div>
 
-          <div class={styles.actionsBar}>
+            <div class={styles.actionsBar}>
             <button
               class={styles.actBtn}
               classList={{ [styles.actOn]: isFav() }}
@@ -212,10 +213,10 @@ export function NowPlaying() {
                 <circle cx="19" cy="12" r="2" />
               </svg>
             </button>
-          </div>
+            </div>
 
-          <Show when={state.playback.queue.length > 1}>
-            <div class={styles.queue}>
+            <Show when={state.playback.queue.length > 1}>
+              <div class={styles.queue}>
               <div class={styles.queueHead}>
                 <h2 class={styles.queueTitle}>En cola</h2>
                 <button class={styles.queueClear} type="button" onClick={() => actions.clearQueue()}>
@@ -265,8 +266,9 @@ export function NowPlaying() {
                   </div>
                 )}
               </For>
-            </div>
-          </Show>
+              </div>
+            </Show>
+          </div>
         </div>
       </Show>
     </div>

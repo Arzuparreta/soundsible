@@ -3,6 +3,17 @@
   display: flex;
   gap: var(--space-sm);
   padding: 0 var(--gutter) var(--space-md);
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.chips::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex: none;
 }
 
 .chip {
@@ -48,6 +59,23 @@
   justify-content: space-between;
   gap: var(--space-md);
   padding: 0 var(--gutter) var(--space-sm);
+}
+
+@media (max-width: 380px) {
+  .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+
+  .tabs,
+  .select {
+    width: 100%;
+  }
+
+  .tab {
+    flex: 1;
+  }
 }
 
 .tabs {

@@ -8,10 +8,14 @@
 }
 
 .title {
+  min-width: 0;
   margin: 0;
   font-size: var(--text-h1);
   font-weight: var(--fw-bold);
   letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .meta {
