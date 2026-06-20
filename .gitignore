@@ -86,6 +86,3 @@ temp/
 # Project-specific
 gha-creds-*.json
 .gstack/
-
-# service
-soundsible.service

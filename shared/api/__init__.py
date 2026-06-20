@@ -275,29 +275,14 @@ BRANDING_PATH = os.path.join(REPO_ROOT, 'branding')
 
 
 def _web_ui_root():
-    """Resolve the directory that ``/player`` is served from.
-
-    Precedence:
-      1. An explicit ``ui_dist`` runtime override (set by the desktop engine).
-      2. ``SOUNDSIBLE_WEB_UI_DIST`` env override — a truthy value forces the
-         bundled ``ui_web/dist`` build, a falsey value (``0``/``false``/``no``)
-         forces the raw source tree.
-      3. Auto-detect: serve ``ui_web/dist`` whenever it has been built,
-         otherwise fall back to the ``ui_web`` source tree.
-
-    The new SolidJS player (``app.html``) only works from a build: its source
-    entry is a Vite dev shell pointing at ``/src/main.tsx``, which Flask cannot
-    serve. So a present build is preferred automatically — no env var needed.
-    """
+    """Serve configured Vite build path when present, else fall back to source UI."""
     runtime = get_runtime_config()
     if runtime.ui_dist and os.path.isfile(os.path.join(str(runtime.ui_dist), "index.html")):
         return str(runtime.ui_dist)
-
-    dist_built = os.path.isfile(os.path.join(WEB_UI_DIST_PATH, "index.html"))
-    env_override = os.environ.get("SOUNDSIBLE_WEB_UI_DIST", "").strip().lower()
-    if env_override in ("0", "false", "no"):
-        return WEB_UI_PATH
-    return WEB_UI_DIST_PATH if dist_built else WEB_UI_PATH
+    if os.environ.get("SOUNDSIBLE_WEB_UI_DIST", "").lower() in ("1", "true", "yes"):
+        if os.path.isfile(os.path.join(WEB_UI_DIST_PATH, "index.html")):
+            return WEB_UI_DIST_PATH
+    return WEB_UI_PATH
 
 
 def _read_owner_token_for_ui() -> Optional[str]:
@@ -357,11 +342,6 @@ def serve_web_player_desktop_redirect():
 @app.route('/player/desktop/')
 def serve_web_player_desktop():
     return make_response(_render_web_ui_html('desktop.html', inject_owner_token=True))
-
-@app.route('/favicon.ico')
-def serve_favicon():
-    # Browsers request /favicon.ico at the root regardless of <link> tags.
-    return send_from_directory(BRANDING_PATH, 'logo-mark.svg', mimetype='image/svg+xml')
 
 @app.route('/player/branding/<path:path>')
 def serve_branding(path):

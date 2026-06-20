@@ -190,34 +190,3 @@ Wireframe (superseded for pixels, still valid for IA): `~/.gstack/projects/Arzup
 | 2026-05-19 | DT5 tray keyboard + 44px targets | Global shortcuts + shell focus-visible; beta banner dismiss already 44px |
 | 2026-05-19 | DT3 tray + bundle icons from logo-mark.svg | Static idle glyph; VU-meter playing state still deferred |
 | 2026-05-19 | PyInstaller sidecar v1 | Lean ``desktop_engine_entry`` + ``externalBin``; bootstrap via ``--bootstrap`` |
-
-## Player Design System (Rebuild — 2026-06)
-
-The earlier chapters scope the **consumer shell**. As of 2026-06-16 the **player UI**
-(`ui_web/`) is being rebuilt on SolidJS, which brings the player into design-system scope
-(superseding the original "full player reskin is out of scope" note). See
-`docs/UI_REBUILD_PLAN.md` for architecture/strategy.
-
-**Direction (locked):** **Dark · Dense · Pro** — content-forward, cover-rich, efficient
-(Spotify-shaped), with **adaptive density** (comfortable touch targets on mobile, tighter
-rows/controls on desktop ≥1024px) and **orange `#f97a12`** kept as the signature accent for
-continuity with the shell. Brand gold stays badge/mark-only; never a primary fill.
-
-**Source of truth:** `ui_web/src/styles/tokens.css` (CSS custom properties). It defines
-layered near-black surfaces, the ink ramp, accent + status colors, an 8px spacing scale,
-a type scale, radii, **subtle** elevation, motion (durations + easings), an explicit
-**z-index scale** (replaces the legacy hard-coded `9999/1280/220` chaos), and
-**adaptive density tokens** (`--row-h`, `--control-h`, `--cover-sm`, `--gutter`, `--list-gap`)
-that tighten at the desktop breakpoint.
-
-**Component styling:** CSS Modules co-located per Solid component (auto-scoped → no bleed).
-Seed primitives: `Button` (primary/secondary/ghost), `SongRow` (dense, fine-grained
-reactive). A live preview of tokens + primitives renders at `/player/app.html`
-(`src/pages/DesignPreview.tsx`).
-
-| Date | Decision | Rationale |
-|------|----------|-----------|
-| 2026-06-16 | SolidJS + TS rebuild of the player | Fine-grained reactivity, scoped styles, lifecycle → kills leak/perf/desync root causes |
-| 2026-06-16 | Dark · dense · pro, adaptive density | User direction; efficient content-forward feel that scales mobile↔desktop |
-| 2026-06-16 | Keep `#f97a12` accent | Continuity with shell + existing player |
-| 2026-06-16 | Explicit z-index + density token scales | Eliminate the legacy hard-coded stacking/spacing chaos at the source |
