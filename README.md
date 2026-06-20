@@ -140,6 +140,15 @@ python3 run.py          # choose "Start Station Engine & Open Station"
 
 Then open **<http://localhost:5005/player/>** and start listening. Keep the terminal open while you play; closing it stops the engine.
 
+> **`new-ui` branch:** the player is one responsive SolidJS app. Its canonical
+> URL is **<http://localhost:5005/player/>** on both desktop and mobile;
+> **<http://localhost:5005/player/desktop/>** serves the same UI with the owner
+> bootstrap used by the desktop shell. There is no separate `app.html` or mobile
+> frontend. Build the branch once with `cd ui_web && npm ci && npm run build`
+> before starting the engine. For frontend development, run `npm run dev` in
+> `ui_web/` and open **<http://localhost:5173/player/>** while the engine runs on
+> port 5005.
+
 > 💡 Prefer a web control panel? Run `./venv/bin/python start_launcher.py`, open **<http://localhost:5099>**, and click **Launch Ecosystem**.
 
 ### Listen everywhere
