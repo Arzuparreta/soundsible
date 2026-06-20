@@ -10,7 +10,10 @@ import styles from './PlaylistDetail.module.css';
 export default function PlaylistDetail() {
   const params = useParams();
   const navigate = useNavigate();
-  const name = createMemo(() => params.name ?? '');
+  // Solid Router exposes dynamic path segments in their URL-encoded form.
+  // Playlist keys use the original display name, so decode the segment before
+  // looking it up (e.g. "Road%20Trip" -> "Road Trip").
+  const name = createMemo(() => decodeURIComponent(params.name ?? ''));
   const trackIds = createMemo<string[]>(() => state.playlists[name()] ?? []);
   const tracks = createMemo<Track[]>(() => {
     const byId = new Map(state.library.map((t) => [t.id, t] as const));
