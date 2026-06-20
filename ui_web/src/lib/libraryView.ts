@@ -26,7 +26,8 @@ export function sortTracks(tracks: Track[], mode: string, favSet: Set<string>): 
   if (mode === 'fav') {
     return [...tracks].sort((a, b) => (favSet.has(b.id) ? 1 : 0) - (favSet.has(a.id) ? 1 : 0));
   }
-  return tracks;
+  // 'recent' — newest first (backend sends oldest → newest)
+  return [...tracks].reverse();
 }
 
 export interface ArtistEntry {
