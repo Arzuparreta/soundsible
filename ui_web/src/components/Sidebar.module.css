@@ -26,18 +26,10 @@
 }
 
 .mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-weight: var(--fw-bold);
-  font-size: 15px;
-  color: var(--ink-on-accent);
-  background: var(--accent);
-  border-radius: var(--radius-sm);
+  color: var(--accent);
 }
 
 .wordmark {

@@ -81,11 +81,17 @@ export default function SongRow(props: SongRowProps) {
           props.onToggleFavorite?.(props.track.id);
         }}
       >
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-          <path
-            fill="currentColor"
-            d="M12 21s-7.5-4.6-10-9.3C.6 8.9 2 5.6 5.1 5.1c1.9-.3 3.6.6 4.9 2 1.3-1.4 3-2.3 4.9-2 3.1.5 4.5 3.8 3.1 6.6C19.5 16.4 12 21 12 21z"
-          />
+        <svg
+          viewBox="0 0 24 24"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 21s-7-4.35-9.5-8.5C.9 9.6 2.2 6 5.5 6 7.6 6 9 7.5 12 10c3-2.5 4.4-4 6.5-4 3.3 0 4.6 3.6 3 6.5C19 16.65 12 21 12 21z" />
         </svg>
       </button>
       <span class={styles.duration}>{formatDuration(props.track.duration)}</span>

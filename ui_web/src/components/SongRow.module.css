@@ -92,8 +92,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
   padding: 0;
   color: var(--ink-tertiary);
@@ -101,23 +101,36 @@
   border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
-  opacity: 0;
+  /* Visible and tappable by default (touch). Desktop hides it until row hover. */
+  opacity: 1;
   transition:
     color var(--dur-short) var(--ease-out),
     opacity var(--dur-short) var(--ease-out);
 }
 
-.row:hover .iconBtn,
+/* Reveal-on-hover is a pointer-only nicety; touch devices always show the heart
+ * so it stays tappable (no hover state to trigger). */
+@media (hover: hover) and (pointer: fine) {
+  .iconBtn {
+    opacity: 0;
+  }
+  .row:hover .iconBtn {
+    opacity: 1;
+  }
+  .iconBtn:hover {
+    color: var(--ink-primary);
+    background: var(--bg-elevated);
+  }
+}
+
 .faved {
   opacity: 1;
-}
-
-.iconBtn:hover {
-  color: var(--ink-primary);
-}
-
-.faved {
   color: var(--accent);
+}
+
+/* Solid heart once favourited (CSS fill overrides the SVG's fill="none"). */
+.faved svg {
+  fill: currentColor;
 }
 
 .duration {
