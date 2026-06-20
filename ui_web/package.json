@@ -3,23 +3,22 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "postinstall": "node scripts/sync-vendor-socket.mjs && node scripts/sync-vendor-qrcode.mjs",
-    "test": "node --test tests/*.test.mjs",
-    "css:build": "tailwindcss -i ./css/app.css -o ./assets/tailwind-compiled.css --minify",
-    "css:watch": "tailwindcss -i ./css/app.css -o ./assets/tailwind-compiled.css --watch",
     "dev": "vite",
-    "build": "node scripts/sync-vendor-socket.mjs && node scripts/sync-vendor-qrcode.mjs && npm run css:build && vite build && node scripts/copy-static.mjs && node scripts/fix-dist-html.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck",
+    "build": "npm run typecheck && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
-    "autoprefixer": "^10.4.27",
-    "postcss": "^8.5.8",
-    "postcss-import": "^16.1.1",
+    "@types/node": "^25.9.3",
     "socket.io-client": "^4.7.2",
-    "tailwindcss": "^3.4.19",
-    "vite": "^6.2.0"
+    "typescript": "^6.0.3",
+    "vite": "^6.2.0",
+    "vite-plugin-solid": "^2.11.12"
   },
   "dependencies": {
-    "qrcode": "^1.5.4"
+    "@solidjs/router": "^0.16.1",
+    "@tanstack/solid-virtual": "^3.13.29",
+    "solid-js": "^1.9.13"
   }
 }

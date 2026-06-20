@@ -1,0 +1,33 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg-base);
+  color: var(--ink-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* The app shell owns all scrolling; the page itself never scrolls. */
+  overflow: hidden;
+}
+
+#app {
+  height: 100%;
+}
+
+/* Layout primitive: a full-height column view (header + internally-scrolling body). */
+.view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}

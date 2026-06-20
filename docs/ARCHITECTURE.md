@@ -12,7 +12,7 @@ At runtime you typically have one of these engine modes:
 - **Desktop engine** — one process started with `run.py --desktop-engine` or `soundsible_engine.py`. It binds to **`127.0.0.1` on a random free port by default**, writes runtime state under the app config dir, and emits a single JSON readiness line on stdout before normal startup logs.
 - **Web launcher** — optional Flask app on **port 5099** (`start_launcher.py` / `launcher_web/`). It does **not** serve the player; it only helps start or stop the engine and run first-time setup UI.
 
-The **Station** UI is static assets under `ui_web/`, served by the engine at **`/player/`** (and **`/player/desktop/`** for the desktop-oriented layout). The UI talks to the engine over REST and WebSocket (Socket.IO).
+The **Station** UI is a responsive SolidJS application under `ui_web/`, served by the engine at **`/player/`** and **`/player/desktop/`**. Both routes use the same frontend; the desktop route additionally receives the owner-token bootstrap required by the desktop shell. The UI talks to the engine over REST and WebSocket (Socket.IO).
 
 ### 2. Repository layout (high level)
 
@@ -22,7 +22,7 @@ The **Station** UI is static assets under `ui_web/`, served by the engine at **`
 | `soundsible_engine.py` | Standalone desktop engine entrypoint that wraps `run.py --desktop-engine`. |
 | `shared/` | Cross-cutting code: Flask API app (`shared/api/`), models, config paths, security helpers, SQLite access, job orchestration. |
 | `player/` | Library manager, queue, favourites, cache — **core playback and library** logic used by the API. |
-| `ui_web/` | Station front-end (HTML, JS, Tailwind/Vite build); includes **Discover** (Deezer metadata + YouTube resolution). |
+| `ui_web/` | SolidJS + TypeScript Station frontend and Vite build; includes **Discover** (Deezer metadata + YouTube resolution). |
 | `launcher_web/` | Small Flask app for the launcher pages and “launch/stop ecosystem” API. |
 | `odst_tool/` | Download pipeline (yt-dlp, FFmpeg), ODST library format, cloud sync helpers; embedded in the API for downloads. |
 | `setup_tool/` | Storage providers (local, S3-compatible), scanning, uploads, audio/cover helpers used by library and sync paths. |
@@ -62,7 +62,7 @@ flowchart LR
 The Flask application lives in `shared/api/__init__.py`. It:
 
 - Registers blueprints for **library**, **playback**, **downloader**, **config**, **discovery**, **podcasts**, and **agent** (`shared/api/routes/`).
-- Serves `ui_web` (or `ui_web/dist` when `SOUNDSIBLE_WEB_UI_DIST` is enabled) under `/player/`.
+- Serves the web player under `/player/`: prefers the `ui_web/dist` build when present, falling back to the `ui_web` source tree (override with `SOUNDSIBLE_WEB_UI_DIST=0/1`).
 - Holds singletons for **LibraryManager**, **QueueManager**, **FavouritesManager**, and the download subsystem.
 - Uses **Socket.IO** for live updates (e.g. library changes, downloader progress, playback coordination).
 
@@ -81,7 +81,8 @@ The Flask application lives in `shared/api/__init__.py`. It:
 - Owners complete or cancel the flow through **`POST /api/pairing/sessions/<id>/confirm`** and **`POST /api/pairing/sessions/<id>/cancel`**.
 - The shell can explicitly mark the QR sheet open or closed through **`POST /api/pairing/sessions/<id>/display-open`** and **`POST /api/pairing/sessions/<id>/display-close`**. If `auto_confirm` is enabled while display is open, a claim can complete immediately without a second owner round-trip.
 - Successful confirmation creates a scoped `paired_device` bearer token in `auth_tokens`; owners can list and revoke those tokens with **`GET /api/paired-devices`** and **`POST /api/paired-devices/<token_id>/revoke`**.
-- The current desktop player already consumes this flow in Settings: it can open a pairing session, render a QR, poll status, and revoke paired phones.
+- The engine exposes this flow, but wiring it into the SolidJS Settings view remains a
+  `new-ui` parity task before cutover.
 
 **Job orchestration** (`shared/api/orchestrator.py`): a small **JobOrchestrator** serializes metadata writes and runs bounded concurrent work (e.g. downloads) so heavy tasks do not stampede the library.
 

@@ -1,27 +1,32 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
+import solid from 'vite-plugin-solid';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 const root = __dirname;
 
 /**
- * Production: multi-page build for /player/ and /player/desktop/
- * Dev: `npm run dev` — proxies /api and Socket.IO to the Flask server (see server.proxy).
+ * Single SolidJS player for every surface. In production Flask serves the
+ * generated dist/index.html from /player/ and /player/desktop/.
+ * Dev: `npm run dev` proxies /api and Socket.IO to the Flask server.
  */
 export default defineConfig(({ command }) => ({
   root,
   base: '/player/',
   publicDir: false,
+  plugins: [solid()],
+  resolve: {
+    alias: {
+      '@': resolve(root, 'src'),
+    },
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
-      input: {
-        main: resolve(root, 'index.html'),
-        desktop: resolve(root, 'desktop.html'),
-      },
+      input: resolve(root, 'index.html'),
       output: {
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',

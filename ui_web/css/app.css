@@ -1,7 +1,0 @@
-/* Imports must run first (postcss-import) so theme + layout rules are not dropped. */
-@import "./_mobile_custom.css";
-@import "./_desktop_custom.css";
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;

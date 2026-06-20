@@ -48,7 +48,7 @@ Closing the window (or **Quit** / `Ctrl+Alt+Q`) stops the engine and exits the a
 
 - Shell buttons use 44px minimum touch targets (`DESIGN.md` DT5)
 - `:focus-visible` outline on shell buttons; focus moves to the primary action when switching views (first-run → loading → error)
-- Webview beta banner dismiss button is 44×44px (`ui_web/css/_desktop_custom.css`)
+- The webview loads the shared responsive SolidJS player from `/player/desktop/`.
 ```
 
 Shell UI lives in `shell-ui/` (DESIGN.md tokens). Player UI is the existing `ui_web` bundle served by the sidecar.

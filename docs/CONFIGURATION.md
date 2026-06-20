@@ -115,7 +115,9 @@ requires authentication, age confirmation, or a cookie-only format.
 
 ### 3A. Web UI source-vs-build note
 
-When Flask serves the source UI directly from `ui_web/`, browser-safe vendor files must exist in `ui_web/js/vendor/`.
+The SolidJS player must be built before Flask serves it (`cd ui_web && npm run build`).
+For interactive development, use the Vite dev server (`npm run dev`), which proxies
+the engine API and Socket.IO connection.
 
 That currently includes:
 
