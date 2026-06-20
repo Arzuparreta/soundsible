@@ -1,8 +1,18 @@
+import { createSignal } from 'solid-js';
 import { apiOrigin } from './config';
 
-/** Cover art for a library track (same-origin engine endpoint). */
-export const coverUrl = (id: string): string =>
-  `${apiOrigin()}/api/static/cover/${encodeURIComponent(id)}`;
+/** Bumped after a cover edit so `coverUrl` busts the browser image cache. */
+const [coverVersion, setCoverVersion] = createSignal(0);
+export const bustCovers = (): void => {
+  setCoverVersion((n) => n + 1);
+};
+
+/** Cover art for a library track (same-origin engine endpoint). Reads the
+ * cover-version signal so thumbnails refresh reactively after a cover change. */
+export const coverUrl = (id: string): string => {
+  const v = coverVersion();
+  return `${apiOrigin()}/api/static/cover/${encodeURIComponent(id)}${v ? `?v=${v}` : ''}`;
+};
 
 /** Audio stream for a library track. */
 export const streamUrl = (id: string): string =>

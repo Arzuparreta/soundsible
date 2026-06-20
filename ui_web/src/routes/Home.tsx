@@ -3,11 +3,17 @@ import { A } from '@solidjs/router';
 import { state, downloadCounts } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
+import ArtistGrid from '../components/ArtistGrid';
+import { librarySort, setLibrarySort, libraryTab, setLibraryTab, sortTracks, buildArtists } from '../lib/libraryView';
 import styles from './Home.module.css';
 
-/** Library view: real engine data, virtualized list, play + favourite wired. */
+/** Library view: songs (sortable, virtualized) or artists browser. */
 export default function Home() {
   const active = createMemo(() => downloadCounts().active);
+  const favSet = createMemo(() => new Set(state.favorites));
+  const sorted = createMemo(() => sortTracks(state.library, librarySort(), favSet()));
+  const artists = createMemo(() => buildArtists(state.library));
+
   return (
     <div class="view">
       <ViewHeader title="Tu biblioteca" meta={`${state.library.length} pistas`} />
@@ -28,11 +34,54 @@ export default function Home() {
           </Show>
         </A>
       </nav>
-      <TrackList
-        tracks={state.library}
-        loading={state.loading}
-        empty={<p class={styles.empty}>Tu biblioteca está vacía. Descarga algo desde Discover.</p>}
-      />
+
+      <div class={styles.toolbar}>
+        <div class={styles.tabs}>
+          <button
+            class={styles.tab}
+            classList={{ [styles.tabActive]: libraryTab() === 'songs' }}
+            type="button"
+            onClick={() => setLibraryTab('songs')}
+          >
+            Canciones
+          </button>
+          <button
+            class={styles.tab}
+            classList={{ [styles.tabActive]: libraryTab() === 'artists' }}
+            type="button"
+            onClick={() => setLibraryTab('artists')}
+          >
+            Artistas
+          </button>
+        </div>
+        <Show when={libraryTab() === 'songs'}>
+          <select class={styles.select} value={librarySort()} onChange={(e) => setLibrarySort(e.currentTarget.value)}>
+            <option value="recent">Recientes</option>
+            <option value="az">A–Z</option>
+            <option value="fav">Favoritos primero</option>
+          </select>
+        </Show>
+      </div>
+
+      <Show
+        when={libraryTab() === 'songs'}
+        fallback={
+          <Show
+            when={artists().length > 0}
+            fallback={<p class={styles.empty}>No hay artistas todavía.</p>}
+          >
+            <div class={styles.artistsScroll}>
+              <ArtistGrid artists={artists()} />
+            </div>
+          </Show>
+        }
+      >
+        <TrackList
+          tracks={sorted()}
+          loading={state.loading}
+          empty={<p class={styles.empty}>Tu biblioteca está vacía. Descarga algo desde Discover.</p>}
+        />
+      </Show>
     </div>
   );
 }

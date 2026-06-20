@@ -196,14 +196,61 @@
   background: var(--accent-hover);
 }
 
+/* Action bar: favourite · volume · share · more */
+.actionsBar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-lg);
+}
+
+.actBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out);
+}
+.actBtn:hover {
+  color: var(--ink-primary);
+}
+.actOn {
+  color: var(--accent);
+}
+
+.volume {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.volRange {
+  width: 96px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 .queue {
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
 }
 
+.queueHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-xs);
+}
+
 .queueTitle {
-  margin: 0 0 var(--space-xs);
+  margin: 0;
   font-size: var(--text-label);
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
@@ -211,20 +258,73 @@
   color: var(--ink-tertiary);
 }
 
+.queueClear {
+  padding: var(--space-2xs) var(--space-sm);
+  font-size: var(--text-label);
+  font-weight: var(--fw-medium);
+  color: var(--ink-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.queueClear:hover {
+  color: var(--accent);
+}
+
 .qRow {
   display: flex;
   align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-2xs) var(--space-2xs) var(--space-2xs) 0;
+  border-radius: var(--radius-sm);
+}
+.qRow:hover {
+  background: var(--bg-raised);
+}
+
+.qHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  flex-shrink: 0;
+  color: var(--ink-tertiary);
+  cursor: grab;
+}
+.qHandle:active {
+  cursor: grabbing;
+}
+
+.qPlay {
+  display: flex;
+  align-items: center;
   gap: var(--space-md);
-  padding: var(--space-sm) var(--space-md);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-xs) 0;
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
-  width: 100%;
 }
-.qRow:hover {
-  background: var(--bg-raised);
+
+.qRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  color: var(--ink-tertiary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.qRemove:hover {
+  color: var(--danger);
 }
 
 .qActive .qTitle {

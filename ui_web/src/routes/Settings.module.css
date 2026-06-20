@@ -89,3 +89,102 @@
 .link:hover {
   text-decoration: underline;
 }
+
+.note {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--ink-tertiary);
+  line-height: var(--lh-normal);
+}
+
+.select {
+  height: 34px;
+  padding: 0 var(--space-sm);
+  font: inherit;
+  font-size: var(--text-label);
+  color: var(--ink-primary);
+  background: var(--bg-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.segment {
+  display: inline-flex;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs);
+  background: var(--bg-inset);
+  border-radius: var(--radius-full);
+}
+
+.seg {
+  padding: var(--space-2xs) var(--space-md);
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.segOn {
+  color: var(--ink-on-accent);
+  background: var(--accent);
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  font-size: var(--text-body);
+  color: var(--ink-secondary);
+}
+
+.switch {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  flex-shrink: 0;
+  padding: 0;
+  background: var(--bg-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out);
+}
+.switchOn {
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-1);
+  transition: transform var(--dur-short) var(--ease-out);
+}
+.switchOn .knob {
+  transform: translateX(18px);
+}
+
+.dangerBtn {
+  align-self: flex-start;
+  padding: var(--space-sm) var(--space-lg);
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  color: var(--danger);
+  background: transparent;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.dangerBtn:hover {
+  background: var(--danger);
+  color: #fff;
+}

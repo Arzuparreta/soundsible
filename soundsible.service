@@ -1,0 +1,16 @@
+[Unit]
+Description=Soundsible Station Engine
+After=network.target
+
+[Service]
+Type=simple
+User=arsu
+Group=arsu
+WorkingDirectory=/home/arsu/soundsible
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/arsu/soundsible/venv/bin/python /home/arsu/soundsible/run.py --daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

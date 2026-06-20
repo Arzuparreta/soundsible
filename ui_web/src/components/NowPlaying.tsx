@@ -2,6 +2,11 @@ import { createMemo, For, Show, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { state, actions, nowPlayingOpen, setNowPlayingOpen } from '../stores';
 import { coverUrl } from '../lib/media';
+import { openTrackMenu } from './trackActions';
+import { openPlaylistPicker } from './PlaylistPicker';
+import { openMetadataEditor } from './MetadataEditor';
+import { openPlayOnDevice } from './DeviceSheet';
+import { shareTrack } from '../lib/share';
 import styles from './NowPlaying.module.css';
 
 function fmt(s: number): string {
@@ -15,6 +20,11 @@ function fmt(s: number): string {
 export function NowPlaying() {
   const navigate = useNavigate();
   const t = createMemo(() => state.playback.currentTrack);
+  const isFav = createMemo(() => {
+    const c = t();
+    return !!c && state.favorites.includes(c.id);
+  });
+  let dragFrom: number | null = null;
   /** Library tracks link to their artist; preview/podcast sources do not. */
   const artistLinkable = createMemo(() => {
     const c = t();
@@ -132,22 +142,127 @@ export function NowPlaying() {
             </button>
           </div>
 
+          <div class={styles.actionsBar}>
+            <button
+              class={styles.actBtn}
+              classList={{ [styles.actOn]: isFav() }}
+              type="button"
+              aria-label={isFav() ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+              aria-pressed={isFav()}
+              onClick={() => actions.toggleFavourite(t()!.id)}
+            >
+              <svg viewBox="0 0 24 24" width="22" height="22" fill={isFav() ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 21s-7-4.35-9.5-8.5C.9 9.6 2.2 6 5.5 6 7.6 6 9 7.5 12 10c3-2.5 4.4-4 6.5-4 3.3 0 4.6 3.6 3 6.5C19 16.65 12 21 12 21z" />
+              </svg>
+            </button>
+
+            <div class={styles.volume}>
+              <button
+                class={styles.actBtn}
+                type="button"
+                aria-label={state.playback.muted ? 'Activar sonido' : 'Silenciar'}
+                onClick={() => actions.toggleMute()}
+              >
+                <Show
+                  when={!state.playback.muted && state.playback.volume > 0}
+                  fallback={
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6" />
+                    </svg>
+                  }
+                >
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
+                  </svg>
+                </Show>
+              </button>
+              <input
+                class={styles.volRange}
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round((state.playback.muted ? 0 : state.playback.volume) * 100)}
+                aria-label="Volumen"
+                onInput={(e) => actions.setVolume(Number(e.currentTarget.value) / 100)}
+              />
+            </div>
+
+            <button class={styles.actBtn} type="button" aria-label="Compartir" onClick={() => void shareTrack(t()!)}>
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 12v8h16v-8M12 16V3M8 7l4-4 4 4" />
+              </svg>
+            </button>
+
+            <button
+              class={styles.actBtn}
+              type="button"
+              aria-label="Más opciones"
+              onClick={() =>
+                openTrackMenu(t()!, {
+                  navigate,
+                  onAddToPlaylist: openPlaylistPicker,
+                  onEditMetadata: openMetadataEditor,
+                  onPlayOnDevice: openPlayOnDevice,
+                })
+              }
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+                <circle cx="5" cy="12" r="2" />
+                <circle cx="12" cy="12" r="2" />
+                <circle cx="19" cy="12" r="2" />
+              </svg>
+            </button>
+          </div>
+
           <Show when={state.playback.queue.length > 1}>
             <div class={styles.queue}>
-              <h2 class={styles.queueTitle}>En cola</h2>
+              <div class={styles.queueHead}>
+                <h2 class={styles.queueTitle}>En cola</h2>
+                <button class={styles.queueClear} type="button" onClick={() => actions.clearQueue()}>
+                  Vaciar
+                </button>
+              </div>
               <For each={state.playback.queue}>
                 {(qt, i) => (
-                  <button
+                  <div
                     classList={{ [styles.qRow]: true, [styles.qActive]: i() === state.playback.index }}
-                    type="button"
-                    onClick={() => actions.jumpTo(i())}
+                    draggable={true}
+                    onDragStart={(e) => {
+                      dragFrom = i();
+                      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (dragFrom != null && dragFrom !== i()) actions.moveInQueue(dragFrom, i());
+                      dragFrom = null;
+                    }}
                   >
-                    <span class={styles.qIndex}>{i() + 1}</span>
-                    <span class={styles.qMeta}>
-                      <span class={styles.qTitle}>{qt.title}</span>
-                      <span class={styles.qArtist}>{qt.artist}</span>
+                    <span class={styles.qHandle} aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" />
+                        <circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" />
+                        <circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" />
+                      </svg>
                     </span>
-                  </button>
+                    <button class={styles.qPlay} type="button" onClick={() => actions.jumpTo(i())}>
+                      <span class={styles.qIndex}>{i() + 1}</span>
+                      <span class={styles.qMeta}>
+                        <span class={styles.qTitle}>{qt.title}</span>
+                        <span class={styles.qArtist}>{qt.artist}</span>
+                      </span>
+                    </button>
+                    <button
+                      class={styles.qRemove}
+                      type="button"
+                      aria-label="Quitar de la cola"
+                      onClick={() => actions.removeFromQueue(i())}
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <path d="M6 6l12 12M18 6L6 18" />
+                      </svg>
+                    </button>
+                  </div>
                 )}
               </For>
             </div>

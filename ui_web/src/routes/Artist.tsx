@@ -1,8 +1,10 @@
-import { createMemo, type JSX } from 'solid-js';
+import { createMemo, For, Show, type JSX } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import { state, actions } from '../stores';
 import TrackList from '../components/TrackList';
 import Button from '../components/Button';
+import { coverUrl } from '../lib/media';
+import { buildAlbums } from '../lib/libraryView';
 import type { Track } from '../types/music';
 import styles from './Artist.module.css';
 
@@ -27,7 +29,11 @@ export default function Artist() {
     );
   });
 
+  const albums = createMemo(() => buildAlbums(tracks()));
   const avatar = (): JSX.CSSProperties => ({ background: gradientFor(name()) });
+  const albumBg = (id: string): JSX.CSSProperties => ({
+    background: `url("${coverUrl(id)}") center / cover no-repeat, var(--bg-raised)`,
+  });
   const playAll = () => tracks().length > 0 && actions.playFrom(tracks(), 0);
   const shuffle = () => actions.playShuffled(tracks());
 
@@ -59,6 +65,20 @@ export default function Artist() {
           </div>
         </div>
       </header>
+
+      <Show when={albums().length > 1}>
+        <div class={styles.albumRail}>
+          <For each={albums()}>
+            {(al) => (
+              <button class={styles.albumCard} type="button" onClick={() => actions.playFrom(al.tracks, 0)}>
+                <span class={styles.albumCover} style={albumBg(al.coverId)} />
+                <span class={styles.albumName}>{al.name}</span>
+                <span class={styles.albumCount}>{al.tracks.length} pistas</span>
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
 
       <TrackList
         tracks={tracks()}

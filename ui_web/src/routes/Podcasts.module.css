@@ -36,18 +36,37 @@
   color: var(--ink-secondary);
 }
 
+.sectionTitle {
+  margin: var(--space-md) 0 var(--space-md);
+  font-size: var(--text-h2);
+  font-weight: var(--fw-bold);
+  color: var(--ink-primary);
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: var(--space-lg);
 }
 
-.card {
+.card,
+.cardBtn {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
   text-decoration: none;
+  text-align: left;
   color: inherit;
+}
+
+.cardBtn {
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.cardBtn:disabled {
+  cursor: default;
 }
 
 .cover {

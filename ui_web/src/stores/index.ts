@@ -3,7 +3,9 @@ import { createSignal } from 'solid-js';
 import { createSocket, type AppSocket } from '../lib/socket';
 import { api, type DeviceRegistration } from '../lib/api';
 import { audioEl, audioService } from '../lib/audio';
-import { streamUrl, previewUrl, podcastStreamUrl, coverUrl } from '../lib/media';
+import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers } from '../lib/media';
+import { toast } from '../lib/toast';
+import { vibrate } from '../lib/haptics';
 import type { Track, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
 import type { DownloadQueueItem, DownloadEvent, CompletedDownload } from '../types/download';
@@ -29,12 +31,23 @@ export interface PlaybackState {
   index: number;
   shuffle: boolean;
   repeat: RepeatMode;
+  /** 0..1, persisted via the audio service. */
+  volume: number;
+  muted: boolean;
+}
+
+/** Read persisted volume without forcing the lazy <audio> element into existence. */
+function initialVolume(): number {
+  const raw = localStorage.getItem('volume');
+  const v = raw == null ? 1 : Number(raw);
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
 }
 
 export interface AppState {
   online: boolean;
   device: DeviceRegistration;
   theme: Theme;
+  haptics: boolean;
   loading: boolean;
   library: Track[];
   favorites: string[];
@@ -81,6 +94,7 @@ const [state, setState] = createStore<AppState>({
   online: false,
   device: loadDevice(),
   theme: (localStorage.getItem('theme') as Theme) ?? 'dark',
+  haptics: localStorage.getItem('haptics') !== 'off',
   loading: false,
   library: [],
   favorites: [],
@@ -96,6 +110,8 @@ const [state, setState] = createStore<AppState>({
     index: -1,
     shuffle: false,
     repeat: 'off',
+    volume: initialVolume(),
+    muted: false,
   },
   downloads: {
     queue: [],
@@ -181,6 +197,12 @@ function applyDownloadEvent(detail: DownloadEvent): void {
   });
 }
 
+/** Apply a playlist mutation response (authoritative playlists + settings). */
+function applyPlaylistMutation(res: { playlists?: PlaylistMap; settings?: LibrarySettings }): void {
+  if (res.playlists) setState('playlists', res.playlists);
+  if (res.settings) setState('librarySettings', res.settings);
+}
+
 /** Reactive download tallies — call inside a tracking scope (createMemo). */
 export function downloadCounts(): { active: number; failed: number } {
   let active = 0;
@@ -215,6 +237,7 @@ export const actions = {
   },
 
   toggleFavourite(id: string): void {
+    vibrate();
     const prev = state.favorites.slice();
     const has = prev.includes(id);
     setState('favorites', has ? prev.filter((f) => f !== id) : [id, ...prev]); // optimistic
@@ -267,8 +290,30 @@ export const actions = {
     }
   },
 
+  /** Enqueue a podcast episode for download. */
+  async downloadEpisode(ep: PodcastEpisode, sub: PodcastSubscription | null): Promise<void> {
+    const t = toast.loading('Añadiendo a descargas…');
+    try {
+      await api.enqueuePodcastEpisode({
+        enclosure_url: ep.enclosure_url,
+        guid: ep.guid,
+        title: ep.title,
+        show_title: sub?.title,
+        thumbnail_url: ep.image,
+        duration_sec: ep.duration_sec,
+        podcast_feed_id: sub?.id,
+        podcast_rss_url: sub?.rss_url,
+      });
+      void actions.loadDownloads();
+      t.update('success', 'Episodio en descargas');
+    } catch {
+      t.update('error', 'No se pudo descargar');
+    }
+  },
+
   togglePlay(): void {
     if (!state.playback.currentTrack) return;
+    vibrate();
     if (state.playback.isPlaying) audioService.pause();
     else void audioService.resume().catch(() => {});
   },
@@ -306,8 +351,189 @@ export const actions = {
     loadIndex(i);
   },
 
+  // ── Queue management (client-side; the playback queue lives in the store) ──
+  /** Append a track to the end of the queue (starts playback if idle). */
+  enqueue(track: Track): void {
+    if (state.playback.queue.length === 0) {
+      actions.playTrack(track);
+      return;
+    }
+    setState('playback', 'queue', (q) => [...q, track]);
+    toast.success('Añadida a la cola');
+  },
+
+  /** Insert a track right after the current one (starts playback if idle). */
+  playNext(track: Track): void {
+    const pb = state.playback;
+    if (pb.queue.length === 0) {
+      actions.playTrack(track);
+      return;
+    }
+    const at = pb.index + 1;
+    setState('playback', 'queue', (q) => [...q.slice(0, at), track, ...q.slice(at)]);
+    toast.success('Se reproducirá a continuación');
+  },
+
+  /** Remove the queue entry at `i`, keeping playback coherent. */
+  removeFromQueue(i: number): void {
+    const pb = state.playback;
+    if (i < 0 || i >= pb.queue.length) return;
+    const next = pb.queue.filter((_, idx) => idx !== i);
+    if (i === pb.index) {
+      setState('playback', 'queue', next);
+      if (next.length === 0) {
+        audioService.pause();
+        setState('playback', { currentTrack: null, index: -1, isPlaying: false });
+      } else {
+        loadIndex(Math.min(i, next.length - 1));
+      }
+      return;
+    }
+    setState('playback', 'queue', next);
+    if (i < pb.index) setState('playback', 'index', pb.index - 1);
+  },
+
+  /** Reorder a queue entry, tracking the current index across the move. */
+  moveInQueue(from: number, to: number): void {
+    const pb = state.playback;
+    if (from === to || from < 0 || to < 0 || from >= pb.queue.length || to >= pb.queue.length) return;
+    const q = pb.queue.slice();
+    const [item] = q.splice(from, 1);
+    q.splice(to, 0, item);
+    let index = pb.index;
+    if (from === pb.index) index = to;
+    else {
+      if (from < index) index--;
+      if (to <= index) index++;
+    }
+    setState('playback', { queue: q, index });
+  },
+
+  /** Clear upcoming tracks, keeping the one currently playing. */
+  clearQueue(): void {
+    const pb = state.playback;
+    if (pb.currentTrack && pb.index >= 0) setState('playback', { queue: [pb.currentTrack], index: 0 });
+    else setState('playback', { queue: [], index: -1 });
+  },
+
+  /** Start a radio station seeded from a track: plays it, then its YouTube mix. */
+  async startRadio(seed: Track): Promise<void> {
+    const ytId = seed.youtube_id ?? (seed.source === 'preview' ? seed.id : null);
+    if (!ytId) {
+      toast.error('Radio no disponible para esta pista');
+      return;
+    }
+    const t = toast.loading('Iniciando radio…');
+    try {
+      const related = await api.relatedYouTube(ytId);
+      const mix = related
+        .filter((r) => r.id !== ytId)
+        .map(
+          (r): Track => ({
+            id: r.id,
+            title: r.title,
+            artist: r.channel ?? '',
+            duration: r.duration,
+            cover: r.thumbnail,
+            source: 'preview',
+          }),
+        );
+      actions.playFrom([seed, ...mix], 0);
+      t.update('success', 'Radio iniciada');
+    } catch {
+      t.update('error', 'No se pudo iniciar la radio');
+    }
+  },
+
+  /** Delete a track from the library (optimistic; reverts on failure). */
+  async deleteTrack(id: string): Promise<void> {
+    const prevLib = state.library;
+    const prevFav = state.favorites;
+    const prevPlaylists = state.playlists;
+    setState('library', (l) => l.filter((t) => t.id !== id));
+    setState('favorites', (f) => f.filter((x) => x !== id));
+    setState(
+      'playlists',
+      Object.fromEntries(Object.entries(state.playlists).map(([n, ids]) => [n, ids.filter((x) => x !== id)])),
+    );
+    if (state.playback.currentTrack?.id === id) {
+      audioService.pause();
+      setState('playback', { currentTrack: null, index: -1, isPlaying: false, queue: [] });
+    }
+    try {
+      await api.deleteTrack(id);
+      toast.success('Pista eliminada');
+    } catch {
+      setState({ library: prevLib, favorites: prevFav, playlists: prevPlaylists });
+      toast.error('No se pudo eliminar');
+      void actions.syncLibrary();
+    }
+  },
+
+  // ── Track metadata + cover ──
+  async updateTrackMetadata(
+    id: string,
+    meta: { title?: string; artist?: string; album?: string; album_artist?: string | null },
+  ): Promise<boolean> {
+    const patch: Partial<Track> = {};
+    if (meta.title !== undefined) patch.title = meta.title;
+    if (meta.artist !== undefined) patch.artist = meta.artist;
+    if (meta.album !== undefined) patch.album = meta.album;
+    if (meta.album_artist !== undefined) patch.album_artist = meta.album_artist;
+    const prev = state.library;
+    setState('library', (l) => l.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    if (state.playback.currentTrack?.id === id)
+      setState('playback', 'currentTrack', (c) => (c ? { ...c, ...patch } : c));
+    try {
+      await api.updateTrackMetadata(id, meta);
+      toast.success('Datos actualizados');
+      return true;
+    } catch {
+      setState('library', prev);
+      toast.error('No se pudo actualizar');
+      return false;
+    }
+  },
+
+  async uploadTrackCover(id: string, file: File): Promise<void> {
+    const t = toast.loading('Subiendo portada…');
+    try {
+      await api.uploadTrackCover(id, file);
+      bustCovers();
+      t.update('success', 'Portada actualizada');
+    } catch {
+      t.update('error', 'No se pudo subir la portada');
+    }
+  },
+
+  async clearTrackCover(id: string): Promise<void> {
+    try {
+      await api.clearTrackCover(id);
+      bustCovers();
+      toast.success('Portada quitada');
+    } catch {
+      toast.error('No se pudo quitar la portada');
+    }
+  },
+
   toggleShuffle(): void {
     setState('playback', 'shuffle', !state.playback.shuffle);
+  },
+
+  setVolume(v: number): void {
+    const clamped = Math.min(1, Math.max(0, v));
+    audioService.setVolume(clamped);
+    setState('playback', 'volume', clamped);
+    if (state.playback.muted && clamped > 0) {
+      audioService.setMuted(false);
+      setState('playback', 'muted', false);
+    }
+  },
+
+  toggleMute(): void {
+    const muted = !state.playback.muted;
+    audioService.setMuted(muted);
+    setState('playback', 'muted', muted);
   },
 
   cycleRepeat(): void {
@@ -366,6 +592,101 @@ export const actions = {
     await actions.syncLibrary();
   },
 
+  // ── Playlists ──
+  async createPlaylist(name: string): Promise<boolean> {
+    const clean = name.trim();
+    if (!clean) return false;
+    if (state.playlists[clean]) {
+      toast.error('Ya existe una lista con ese nombre');
+      return false;
+    }
+    try {
+      applyPlaylistMutation(await api.createPlaylist(clean));
+      toast.success('Lista creada');
+      return true;
+    } catch {
+      toast.error('No se pudo crear la lista');
+      return false;
+    }
+  },
+
+  async deletePlaylist(name: string): Promise<void> {
+    try {
+      applyPlaylistMutation(await api.deletePlaylist(name));
+      toast.success('Lista eliminada');
+    } catch {
+      toast.error('No se pudo eliminar la lista');
+    }
+  },
+
+  async renamePlaylist(name: string, newName: string): Promise<boolean> {
+    const clean = newName.trim();
+    if (!clean || clean === name) return false;
+    try {
+      applyPlaylistMutation(await api.renamePlaylist(name, clean));
+      toast.success('Lista renombrada');
+      return true;
+    } catch {
+      toast.error('No se pudo renombrar (¿nombre repetido?)');
+      return false;
+    }
+  },
+
+  async duplicatePlaylist(name: string): Promise<void> {
+    const ids = state.playlists[name] ?? [];
+    let copy = `${name} (copia)`;
+    let n = 2;
+    while (state.playlists[copy]) copy = `${name} (copia ${n++})`;
+    try {
+      await api.createPlaylist(copy);
+      applyPlaylistMutation(await api.setPlaylistTracks(copy, ids));
+      toast.success('Lista duplicada');
+    } catch {
+      toast.error('No se pudo duplicar');
+    }
+  },
+
+  async addToPlaylist(name: string, trackId: string): Promise<void> {
+    if ((state.playlists[name] ?? []).includes(trackId)) {
+      toast.info('Ya está en la lista');
+      return;
+    }
+    try {
+      applyPlaylistMutation(await api.addTrackToPlaylist(name, trackId));
+      toast.success(`Añadida a «${name}»`);
+    } catch {
+      toast.error('No se pudo añadir a la lista');
+    }
+  },
+
+  async removeFromPlaylist(name: string, trackId: string): Promise<void> {
+    try {
+      applyPlaylistMutation(await api.removeTrackFromPlaylist(name, trackId));
+      toast.success('Quitada de la lista');
+    } catch {
+      toast.error('No se pudo quitar de la lista');
+    }
+  },
+
+  async reorderPlaylists(order: string[]): Promise<void> {
+    const prev = state.playlists;
+    try {
+      applyPlaylistMutation(await api.reorderPlaylists(order));
+    } catch {
+      setState('playlists', prev);
+      toast.error('No se pudo reordenar');
+    }
+  },
+
+  async setPlaylistCover(name: string, coverTrackId: string | null): Promise<void> {
+    try {
+      applyPlaylistMutation(await api.setPlaylistCover(name, coverTrackId));
+      toast.success('Portada actualizada');
+    } catch {
+      toast.error('No se pudo cambiar la portada');
+    }
+  },
+
   setDeviceName(name: string): void {
     setState('device', 'device_name', name);
     localStorage.setItem('device_name', name);
@@ -374,8 +695,23 @@ export const actions = {
   setTheme(theme: Theme): void {
     setState('theme', theme);
     localStorage.setItem('theme', theme);
+    applyTheme(theme);
+  },
+
+  setHaptics(on: boolean): void {
+    setState('haptics', on);
+    localStorage.setItem('haptics', on ? 'on' : 'off');
   },
 };
+
+/** Apply the theme to the document (token overrides live in tokens.css) and
+ * sync the mobile status-bar colour. */
+export function applyTheme(theme: Theme): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.dataset.theme = theme;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', theme === 'light' ? '#f6f6f7' : '#0c0c0e');
+}
 
 let socket: AppSocket | null = null;
 
@@ -383,6 +719,8 @@ let socket: AppSocket | null = null;
  * and pulls the initial library. */
 export function initStore(): void {
   if (socket) return;
+
+  applyTheme(state.theme);
 
   const a = audioEl();
   a.addEventListener('play', () => {
@@ -421,6 +759,62 @@ export function initStore(): void {
   socket.on('library_updated', () => void actions.syncLibrary());
   socket.on('downloader_update', (data) => applyDownloadEvent((data ?? {}) as DownloadEvent));
 
+  // ── Remote control: this device acts on commands from another device. ──
+  socket.on('playback_stop_requested', () => {
+    if (state.playback.isPlaying) audioService.pause();
+  });
+  socket.on('playback_start_requested', (data) => {
+    const trk = data?.track;
+    if (trk && typeof trk.id === 'string') {
+      const t: Track = {
+        id: trk.id,
+        title: typeof trk.title === 'string' ? trk.title : '',
+        artist: typeof trk.artist === 'string' ? trk.artist : '',
+        album: typeof trk.album === 'string' ? trk.album : undefined,
+        duration: typeof trk.duration === 'number' ? trk.duration : undefined,
+        youtube_id: typeof trk.youtube_id === 'string' ? trk.youtube_id : undefined,
+        media_kind: typeof trk.media_kind === 'string' ? trk.media_kind : undefined,
+      };
+      actions.playTrack(t);
+      const pos = Number(data?.state?.position_sec);
+      if (Number.isFinite(pos) && pos > 0) setTimeout(() => actions.seek(pos), 400);
+    } else if (state.playback.currentTrack) {
+      void audioService.resume().catch(() => {});
+    }
+  });
+  socket.on('playback_next_requested', () => actions.next());
+  socket.on('playback_previous_requested', () => actions.prev());
+  socket.on('playback_seek_requested', (data) => {
+    const p = Number(data?.position_sec);
+    if (Number.isFinite(p)) actions.seek(p);
+  });
+
   void actions.syncLibrary();
   void actions.loadDownloads();
+  // Warm Discover so the first visit renders instantly (cache + background fetch).
+  void import('../lib/discover').then((m) => m.ensureDiscover());
+
+  // Global keyboard shortcuts (desktop): space = play/pause, arrows = seek,
+  // shift+arrows = prev/next, Escape closes the Now Playing sheet.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('keydown', (e) => {
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      if (typing) return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        actions.togglePlay();
+      } else if (e.code === 'ArrowRight' && e.shiftKey) {
+        actions.next();
+      } else if (e.code === 'ArrowLeft' && e.shiftKey) {
+        actions.prev();
+      } else if (e.code === 'ArrowRight') {
+        actions.seek(state.playback.currentTime + 5);
+      } else if (e.code === 'ArrowLeft') {
+        actions.seek(Math.max(0, state.playback.currentTime - 5));
+      } else if (e.key === 'Escape' && nowPlayingOpen()) {
+        setNowPlayingOpen(false);
+      }
+    });
+  }
 }

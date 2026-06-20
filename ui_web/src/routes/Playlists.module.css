@@ -5,6 +5,55 @@
   padding: 0 var(--gutter) var(--space-2xl);
 }
 
+.newBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: var(--control-h);
+  margin-bottom: var(--space-lg);
+  padding: var(--space-sm) var(--space-lg);
+  color: var(--accent);
+  background: transparent;
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-body);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+.newBtn:hover {
+  background: var(--accent-soft);
+}
+
+.cardWrap {
+  position: relative;
+}
+
+.cardMenu {
+  position: absolute;
+  top: var(--space-xs);
+  right: var(--space-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-short) var(--ease-out);
+}
+.cardWrap:hover .cardMenu {
+  opacity: 1;
+}
+@media (hover: none) {
+  .cardMenu {
+    opacity: 1;
+  }
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));

@@ -75,6 +75,24 @@ export interface DeviceRegistration {
   device_type: string;
 }
 
+/** A device registered for playback in the current scope. */
+export interface Device {
+  device_id: string;
+  device_name?: string;
+  device_type?: string;
+  last_seen_ts?: number;
+  socket_active?: boolean;
+}
+
+export type RemoteCommand = 'play' | 'pause' | 'next' | 'previous' | 'seek';
+
+/** Shape returned by every playlist mutation (`_playlist_mutation_response`). */
+export interface PlaylistMutation {
+  status?: string;
+  playlists?: PlaylistMap;
+  settings?: LibrarySettings;
+}
+
 interface RequestOptions {
   method?: string;
   body?: unknown;
@@ -89,7 +107,9 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const headers: Record<string, string> = {};
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  // FormData sets its own multipart Content-Type (with boundary); JSON we set explicitly.
+  const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
+  if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
   const token = ownerToken();
   if (token) headers['X-Soundsible-Admin-Token'] = token;
 
@@ -97,7 +117,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     const res = await fetch(`${apiOrigin()}${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
       signal: opts.signal ?? controller.signal,
     });
     if (!res.ok) throw new ApiError(res.status, `${method} ${path} → ${res.status}`);
@@ -114,6 +134,14 @@ export const api = {
   health: () => request<{ status?: string }>('/api/health'),
   registerDevice: (d: DeviceRegistration) =>
     request<void>('/api/devices/register', { method: 'POST', body: d }),
+  /** Devices registered for playback in this scope (for remote control). */
+  listDevices: () => request<{ devices?: Device[] }>('/api/devices'),
+  /** Send a transport command to another device (it acts via Socket.IO). */
+  remoteCommand: (deviceId: string, command: RemoteCommand, extra?: { track_id?: string; position_sec?: number }) =>
+    request<{ status?: string }>('/api/playback/remote-command', {
+      method: 'POST',
+      body: { device_id: deviceId, command, ...extra },
+    }),
 
   getLibrary: () =>
     request<{
@@ -132,14 +160,100 @@ export const api = {
   /** Trigger a server-side rescan of the library files. */
   rescanLibrary: () =>
     request<{ status?: string }>('/api/library/sync', { method: 'POST', timeoutMs: 60000 }),
+  /** Delete a track from the library (and its file on disk). */
+  deleteTrack: (id: string) =>
+    request<{ status?: string }>(`/api/library/tracks/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      timeoutMs: 15000,
+    }),
+
+  // ── Track metadata + cover (engine rewrites the file's tags) ──
+  updateTrackMetadata: (
+    id: string,
+    meta: { title?: string; artist?: string; album?: string; album_artist?: string | null },
+  ) =>
+    request<{ status?: string }>(`/api/library/tracks/${encodeURIComponent(id)}/metadata`, {
+      method: 'POST',
+      body: meta,
+      timeoutMs: 20000,
+    }),
+  /** Upload a cover image (multipart). */
+  uploadTrackCover: (id: string, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request<{ status?: string }>(`/api/library/tracks/${encodeURIComponent(id)}/cover`, {
+      method: 'POST',
+      body: fd,
+      timeoutMs: 30000,
+    });
+  },
+  /** Copy the cover art from another library track. */
+  copyTrackCover: (id: string, sourceTrackId: string) =>
+    request<{ status?: string }>(`/api/library/tracks/${encodeURIComponent(id)}/cover/from-track`, {
+      method: 'POST',
+      body: { source_track_id: sourceTrackId },
+      timeoutMs: 20000,
+    }),
+  /** Remove the cover art. */
+  clearTrackCover: (id: string) =>
+    request<{ status?: string }>(`/api/library/tracks/${encodeURIComponent(id)}/cover/none`, {
+      method: 'POST',
+      timeoutMs: 20000,
+    }),
+
+  // ── Playlists (every mutation echoes back the full playlists + settings) ──
+  createPlaylist: (name: string) =>
+    request<PlaylistMutation>('/api/library/playlists', { method: 'POST', body: { name } }),
+  deletePlaylist: (name: string) =>
+    request<PlaylistMutation>(`/api/library/playlists/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  renamePlaylist: (name: string, newName: string) =>
+    request<PlaylistMutation>(`/api/library/playlists/${encodeURIComponent(name)}`, {
+      method: 'PATCH',
+      body: { name: newName },
+    }),
+  setPlaylistTracks: (name: string, trackIds: string[]) =>
+    request<PlaylistMutation>(`/api/library/playlists/${encodeURIComponent(name)}`, {
+      method: 'PATCH',
+      body: { track_ids: trackIds },
+    }),
+  setPlaylistCover: (name: string, coverTrackId: string | null) =>
+    request<PlaylistMutation>(`/api/library/playlists/${encodeURIComponent(name)}`, {
+      method: 'PATCH',
+      body: { cover_track_id: coverTrackId },
+    }),
+  reorderPlaylists: (order: string[]) =>
+    request<PlaylistMutation>('/api/library/playlists', { method: 'PATCH', body: { order } }),
+  addTrackToPlaylist: (name: string, trackId: string) =>
+    request<PlaylistMutation>(`/api/library/playlists/${encodeURIComponent(name)}/tracks`, {
+      method: 'POST',
+      body: { track_id: trackId },
+    }),
+  removeTrackFromPlaylist: (name: string, trackId: string) =>
+    request<PlaylistMutation>(
+      `/api/library/playlists/${encodeURIComponent(name)}/tracks/${encodeURIComponent(trackId)}`,
+      { method: 'DELETE' },
+    ),
 
   /** Discover: YouTube Music search. Accepts an AbortSignal for cancellation. */
   searchYouTube: async (q: string, signal?: AbortSignal): Promise<SearchResult[]> => {
-    const data = await request<{ results?: RawResult[] }>(
-      `/api/downloader/youtube/search?q=${encodeURIComponent(q)}&source=ytmusic&limit=20`,
-      { signal, timeoutMs: 15000 },
-    );
-    return (data.results ?? []).map(normalizeResult).filter((r) => r.id);
+    const search = async (source: 'ytmusic' | 'youtube') => {
+      const data = await request<{ results?: RawResult[] }>(
+        `/api/downloader/youtube/search?q=${encodeURIComponent(q)}&source=${source}&limit=20`,
+        { signal, timeoutMs: 15000 },
+      );
+      return (data.results ?? []).map(normalizeResult).filter((r) => r.id);
+    };
+
+    // YouTube Music occasionally returns an empty/error response even while
+    // regular YouTube search remains available. Discover is a user-facing
+    // search surface, so degrade to that compatible result source.
+    try {
+      const musicResults = await search('ytmusic');
+      if (musicResults.length > 0 || signal?.aborted) return musicResults;
+    } catch (error) {
+      if (signal?.aborted) throw error;
+    }
+    return search('youtube');
   },
   /** Discover radio: related/mix tracks for a seed video id. */
   relatedYouTube: async (id: string, signal?: AbortSignal): Promise<SearchResult[]> => {
@@ -186,6 +300,22 @@ export const api = {
     request<{ status?: string }>(`/api/podcasts/subscriptions/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }),
+  /** Enqueue a podcast episode for download (source_type podcast_enclosure). */
+  enqueuePodcastEpisode: (payload: {
+    enclosure_url: string;
+    guid?: string;
+    title?: string;
+    show_title?: string;
+    thumbnail_url?: string;
+    duration_sec?: number;
+    podcast_feed_id?: string;
+    podcast_rss_url?: string;
+  }) =>
+    request<{ status?: string; ids?: string[] }>('/api/downloader/queue', {
+      method: 'POST',
+      body: { items: [{ source_type: 'podcast_enclosure', ...payload }] },
+      timeoutMs: 15000,
+    }),
   /** Mint a short-lived stream token for an episode enclosure URL. */
   podcastPeek: (enclosureUrl: string) =>
     request<{ stream_token?: string }>('/api/podcasts/enclosure/peek', {
@@ -218,5 +348,31 @@ export const api = {
   clearFailedDownloads: () =>
     request<{ status?: string; removed?: number }>('/api/downloader/queue/failed', {
       method: 'DELETE',
+    }),
+
+  // ── Settings / system ──
+  getDiscoverySettings: () => request<{ learning_enabled?: boolean }>('/api/discovery/settings'),
+  setDiscoveryLearning: (enabled: boolean) =>
+    request<{ learning_enabled?: boolean }>('/api/discovery/settings', {
+      method: 'PATCH',
+      body: { learning_enabled: enabled },
+    }),
+  getDownloaderConfig: () =>
+    request<{ output_dir?: string; quality?: string; auto_update_ytdlp?: boolean }>('/api/downloader/config'),
+  setDownloaderConfig: (cfg: { quality?: string; auto_update_ytdlp?: boolean; output_dir?: string }) =>
+    request<{ status?: string }>('/api/downloader/config', { method: 'POST', body: cfg }),
+  optimizeLibrary: () =>
+    request<{ status?: string }>('/api/downloader/optimize', { method: 'POST', timeoutMs: 60000 }),
+  cloudSync: () => request<{ status?: string }>('/api/downloader/sync', { method: 'POST', timeoutMs: 60000 }),
+  wipeLibrary: () =>
+    request<{ status?: string }>('/api/library/wipe', {
+      method: 'POST',
+      body: { confirm: 'CONFIRM' },
+      timeoutMs: 30000,
+    }),
+  purgeMissing: () =>
+    request<{ status?: string; removed?: number }>('/api/library/purge-missing', {
+      method: 'POST',
+      timeoutMs: 60000,
     }),
 };
