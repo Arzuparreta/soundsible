@@ -19,6 +19,8 @@ class LocalStorageProvider(S3StorageProvider):
     def __init__(self):
         self.base_path: Optional[Path] = None
         self.bucket_name: Optional[str] = None
+        # Remote keys whose write failed once (e.g. read-only mount): logged once.
+        self._unwritable_keys: set = set()
 
     def authenticate(self, credentials: Dict[str, str]) -> bool:
         """
@@ -183,13 +185,18 @@ class LocalStorageProvider(S3StorageProvider):
         return total
 
     def upload_json(self, data: str, remote_key: str) -> bool:
+        if remote_key in self._unwritable_keys:
+            return False
         try:
             path = self._get_path(remote_key)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(data)
             return True
         except Exception as e:
-            print(f"Local upload_json error: {e}")
+            # Read-only mount (or similar): note it once, then stay quiet so
+            # repeated saves don't spam the console.
+            self._unwritable_keys.add(remote_key)
+            print(f"Local storage not writable, skipping cloud mirror for '{remote_key}': {e}")
             return False
 
     def download_json(self, remote_key: str) -> Optional[str]:

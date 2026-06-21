@@ -75,11 +75,13 @@
   height: 132px;
   border-radius: var(--radius-md);
   border: 1px solid var(--hairline);
-  box-shadow: var(--shadow-1);
+  /* Inset ring so dark album art still reads as a bounded tile against the
+   * dark background (a plain border blends into near-black covers). */
+  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
   transition: box-shadow var(--dur-short) var(--ease-out);
 }
 .cardBtn:hover .cardCover {
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-2), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
 }
 .cardCover.round {
   border-radius: var(--radius-full);
