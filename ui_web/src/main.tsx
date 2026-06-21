@@ -12,6 +12,7 @@ import Discover from './routes/Discover';
 import Podcasts from './routes/Podcasts';
 import PodcastShow from './routes/PodcastShow';
 import Downloads from './routes/Downloads';
+import Migrate from './routes/Migrate';
 import Artist from './routes/Artist';
 import { Placeholder } from './routes/Placeholder';
 import DesignPreview from './pages/DesignPreview';
@@ -37,6 +38,7 @@ render(
       <Route path="/podcasts" component={Podcasts} />
       <Route path="/podcasts/:id" component={PodcastShow} />
       <Route path="/downloads" component={Downloads} />
+      <Route path="/import" component={Migrate} />
       <Route path="/artist/:name" component={Artist} />
       <Route path="/preview" component={DesignPreview} />
       <Route path="*" component={() => <Placeholder title="No encontrado" blurb="Esta ruta no existe." />} />

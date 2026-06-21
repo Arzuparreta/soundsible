@@ -139,6 +139,35 @@ export interface PlaylistMutation {
   settings?: LibrarySettings;
 }
 
+/** One matched (or unmatched) source row from a migration preview. */
+export interface MigrationMatch {
+  source_index: number;
+  source_title: string;
+  source_artist: string;
+  source_album: string;
+  /** 0..1 match score; 0 when unmatched. */
+  confidence: number;
+  matched_track_id: string | null;
+  auto_accept: boolean;
+  needs_confirmation: boolean;
+}
+
+export interface MigrationStats {
+  total: number;
+  matched: number;
+  auto_accept: number;
+  needs_confirmation: number;
+  unmatched: number;
+  matched_ratio: number;
+}
+
+export interface MigrationPreview {
+  batch_id: string;
+  format: string;
+  stats: MigrationStats;
+  matches: MigrationMatch[];
+}
+
 interface RequestOptions {
   method?: string;
   body?: unknown;
@@ -317,6 +346,17 @@ export const api = {
     request<PlaylistMutation>(
       `/api/library/playlists/${encodeURIComponent(name)}/tracks/${encodeURIComponent(trackId)}`,
       { method: 'DELETE' },
+    ),
+
+  // ── Migration (import Spotify/Apple Music exports) ──
+  /** Match an exported playlist against the local library (no writes). */
+  migrationPreview: (body: { format: string; text: string }) =>
+    request<MigrationPreview>('/api/migration/preview', { method: 'POST', body, timeoutMs: 30000 }),
+  /** Create a playlist from the confirmed (matched) library track ids. */
+  migrationImportPlaylist: (body: { playlist_name: string; track_ids: string[]; batch_id?: string }) =>
+    request<PlaylistMutation & { playlist_name?: string; track_count?: number }>(
+      '/api/migration/import-playlist',
+      { method: 'POST', body, timeoutMs: 30000 },
     ),
 
   /** Discover: YouTube Music search. Accepts an AbortSignal for cancellation. */

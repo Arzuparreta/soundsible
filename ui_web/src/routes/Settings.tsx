@@ -229,6 +229,14 @@ export default function Settings() {
         </section>
 
         <section class={styles.card}>
+          <h2 class={styles.cardTitle}>Importar</h2>
+          <p class={styles.note}>Trae tus playlists de Spotify o Apple Music y emparéjalas con tu biblioteca.</p>
+          <A href="/import" class={styles.link}>
+            Importar de Spotify / Apple Music
+          </A>
+        </section>
+
+        <section class={styles.card}>
           <h2 class={styles.cardTitle}>Dispositivo</h2>
           <input
             class={styles.input}
