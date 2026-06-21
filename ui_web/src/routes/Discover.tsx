@@ -7,17 +7,11 @@ import { ensureDiscover, musicSections, recentSaved, topPodcasts, type DiscoverM
 import { openTrackMenu } from '../components/trackActions';
 import { openPlaylistPicker } from '../components/PlaylistPicker';
 import { openMetadataEditor } from '../components/MetadataEditor';
+import SearchResultRow from '../components/SearchResultRow';
 import { toast } from '../lib/toast';
 import type { SearchResult, Track } from '../types/music';
 import type { PodcastSearchResult } from '../types/podcast';
 import styles from './Discover.module.css';
-
-function fmtDur(s?: number): string {
-  if (s == null || !Number.isFinite(s)) return '';
-  const m = Math.floor(s / 60);
-  const x = Math.floor(s % 60);
-  return `${m}:${x.toString().padStart(2, '0')}`;
-}
 
 function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
@@ -295,7 +289,7 @@ export default function Discover() {
 
           <For each={results()}>
             {(r) => (
-              <ResultRow
+              <SearchResultRow
                 r={r}
                 active={state.playback.currentTrack?.id === r.id}
                 inLibrary={libYt().has(r.id)}
@@ -378,78 +372,5 @@ function RailSkeletons() {
         </section>
       )}
     </For>
-  );
-}
-
-interface RowProps {
-  r: SearchResult;
-  active: boolean;
-  inLibrary: boolean;
-  enqueued: boolean;
-  onPreview: () => void;
-  onAdd: () => void;
-  onRadio: () => void;
-}
-
-function ResultRow(props: RowProps) {
-  const bg = (): JSX.CSSProperties =>
-    props.r.thumbnail
-      ? { background: `url("${props.r.thumbnail}") center / cover no-repeat, var(--bg-raised)` }
-      : { background: 'var(--bg-raised)' };
-
-  return (
-    <div classList={{ [styles.row]: true, [styles.active]: props.active }} onClick={props.onPreview}>
-      <div class={styles.cover} style={bg()} />
-      <div class={styles.meta}>
-        <span class={styles.title}>{props.r.title}</span>
-        <span class={styles.sub}>{props.r.channel}</span>
-      </div>
-      <span class={styles.dur}>{fmtDur(props.r.duration)}</span>
-      <button
-        class={styles.iconBtn}
-        type="button"
-        aria-label="Radio: más como esto"
-        onClick={(e) => {
-          e.stopPropagation();
-          props.onRadio();
-        }}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 12a8 8 0 018-8M4 12a8 8 0 008 8M8 12a4 4 0 014-4" />
-          <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-        </svg>
-      </button>
-      <Show
-        when={props.inLibrary}
-        fallback={
-          <Show
-            when={props.enqueued}
-            fallback={
-              <button
-                class={styles.addBtn}
-                type="button"
-                aria-label="Añadir a biblioteca"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  props.onAdd();
-                }}
-              >
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-              </button>
-            }
-          >
-            <span class={styles.spinner} aria-label="Descargando" />
-          </Show>
-        }
-      >
-        <span class={styles.done} aria-label="En biblioteca">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M5 12l5 5L20 7" />
-          </svg>
-        </span>
-      </Show>
-    </div>
   );
 }

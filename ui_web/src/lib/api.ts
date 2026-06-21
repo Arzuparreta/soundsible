@@ -255,6 +255,14 @@ export const api = {
     }
     return search('youtube');
   },
+  /** Search-as-you-type suggestions (Google suggest, ds=yt). Best-effort. */
+  suggest: async (q: string, signal?: AbortSignal): Promise<string[]> => {
+    const data = await request<{ suggestions?: string[] }>(
+      `/api/downloader/youtube/suggest?q=${encodeURIComponent(q)}`,
+      { signal, timeoutMs: 5000 },
+    );
+    return Array.isArray(data.suggestions) ? data.suggestions : [];
+  },
   /** Discover radio: related/mix tracks for a seed video id. */
   relatedYouTube: async (id: string, signal?: AbortSignal): Promise<SearchResult[]> => {
     const data = await request<{ results?: RawResult[] }>(
