@@ -8,6 +8,7 @@ import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import { coverUrl } from '../lib/media';
+import { artistPath } from '../lib/artistRoute';
 import type { Track } from '../types/music';
 import styles from './TrackList.module.css';
 
@@ -27,7 +28,7 @@ export default function TrackList(props: {
 }) {
   let scrollRef: HTMLDivElement | undefined;
   const navigate = useNavigate();
-  const goArtist = (artist: string) => artist && navigate(`/artist/${encodeURIComponent(artist)}`);
+  const goArtist = (artist: string) => artist && navigate(artistPath(artist));
   const openMenu = (track: Track, ev?: MouseEvent) =>
     openTrackMenu(
       track,

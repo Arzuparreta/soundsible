@@ -2,13 +2,15 @@ import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
 import { openContextMenu } from '../lib/contextMenu';
 import { actions, state } from '../stores';
 import type { Track } from '../types/music';
+import { artistKey, artistPath } from '../lib/artistRoute';
 
 export interface ArtistMenuContext {
   navigate?: (path: string) => void;
 }
 
 function artistTracks(artist: string): Track[] {
-  return state.library.filter((t) => t.artist === artist);
+  const key = artistKey(artist);
+  return state.library.filter((t) => artistKey(t.artist) === key || artistKey(t.album_artist) === key);
 }
 
 /** Play / shuffle / go-to-artist menu definition for an artist. */
@@ -30,7 +32,7 @@ export function artistMenuOptions(artist: string, ctx: ArtistMenuContext = {}): 
     },
   ];
   if (ctx.navigate)
-    list.push({ label: 'Ir al artista', onSelect: () => ctx.navigate!(`/artist/${encodeURIComponent(artist)}`) });
+    list.push({ label: 'Ir al artista', onSelect: () => ctx.navigate!(artistPath(artist)) });
   return { title: artist, actions: list };
 }
 

@@ -11,6 +11,7 @@ import { openMetadataEditor } from '../components/MetadataEditor';
 import { openPlayOnDevice } from '../components/DeviceSheet';
 import type { SearchResult, Track } from '../types/music';
 import styles from './Search.module.css';
+import { artistPath } from '../lib/artistRoute';
 
 const LIBRARY_CAP = 50;
 
@@ -140,7 +141,7 @@ export default function Search() {
   };
 
   // ── Library row wiring (mirrors TrackList) ──
-  const goArtist = (artist: string) => artist && navigate(`/artist/${encodeURIComponent(artist)}`);
+  const goArtist = (artist: string) => artist && navigate(artistPath(artist));
   const openMenu = (track: Track, ev?: MouseEvent) =>
     openTrackMenu(
       track,

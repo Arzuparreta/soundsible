@@ -5,6 +5,7 @@ import TrackList from '../components/TrackList';
 import Button from '../components/Button';
 import { coverUrl } from '../lib/media';
 import { buildAlbums } from '../lib/libraryView';
+import { artistKey, decodeArtistName } from '../lib/artistRoute';
 import type { Track } from '../types/music';
 import styles from './Artist.module.css';
 
@@ -19,13 +20,13 @@ function gradientFor(seed: string): string {
 export default function Artist() {
   const params = useParams();
   const navigate = useNavigate();
-  const name = createMemo(() => params.name ?? '');
+  const name = createMemo(() => decodeArtistName(params.name));
 
   const tracks = createMemo<Track[]>(() => {
-    const n = name().trim().toLowerCase();
+    const n = artistKey(name());
     if (!n) return [];
     return state.library.filter(
-      (t) => (t.artist ?? '').toLowerCase() === n || (t.album_artist ?? '').toLowerCase() === n,
+      (t) => artistKey(t.artist) === n || artistKey(t.album_artist) === n,
     );
   });
 

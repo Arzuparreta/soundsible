@@ -5,6 +5,7 @@ import type { Track } from '../types/music';
 import { actions, state } from '../stores';
 import { shareTrack } from '../lib/share';
 import { confirmDialog } from '../lib/confirm';
+import { artistPath } from '../lib/artistRoute';
 
 /**
  * Context for building a track's action menu. Optional callbacks let later
@@ -71,7 +72,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     list.push({ icon: icons.playlist(), label: 'Añadir a playlist', onSelect: () => ctx.onAddToPlaylist!(track) });
   list.push({ icon: icons.radio(), label: 'Iniciar radio', onSelect: () => void actions.startRadio(track) });
   if (ctx.navigate && track.artist && isLibrary)
-    list.push({ icon: icons.artist(), label: 'Ir al artista', onSelect: () => ctx.navigate!(`/artist/${encodeURIComponent(track.artist)}`) });
+    list.push({ icon: icons.artist(), label: 'Ir al artista', onSelect: () => ctx.navigate!(artistPath(track.artist)) });
   list.push({
     icon: icons.heart(),
     label: isFav ? 'Quitar de favoritos' : 'Añadir a favoritos',

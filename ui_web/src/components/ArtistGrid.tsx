@@ -2,6 +2,7 @@ import { For, type JSX } from 'solid-js';
 import { A, useNavigate } from '@solidjs/router';
 import { coverUrl } from '../lib/media';
 import { attachContextMenu } from '../lib/contextMenu';
+import { artistPath } from '../lib/artistRoute';
 import { artistMenuOptions } from './artistActions';
 import type { ArtistEntry } from '../lib/libraryView';
 import styles from './ArtistGrid.module.css';
@@ -23,7 +24,7 @@ export default function ArtistGrid(props: { artists: ArtistEntry[] }) {
       <For each={props.artists}>
         {(a) => (
           <A
-            href={`/artist/${encodeURIComponent(a.name)}`}
+            href={artistPath(a.name)}
             class={styles.card}
             ref={(el) => attachContextMenu(el, () => artistMenuOptions(a.name, { navigate }))}
           >

@@ -7,6 +7,7 @@ import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import { shareTrack } from '../lib/share';
+import { artistPath } from '../lib/artistRoute';
 import styles from './NowPlaying.module.css';
 
 function fmt(s: number): string {
@@ -34,7 +35,7 @@ export function NowPlaying() {
     const c = t();
     if (!c?.artist) return;
     setNowPlayingOpen(false);
-    navigate(`/artist/${encodeURIComponent(c.artist)}`);
+    navigate(artistPath(c.artist));
   };
 
   const artBg = (): JSX.CSSProperties => {

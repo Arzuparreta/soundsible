@@ -1,5 +1,6 @@
 import { createSignal } from 'solid-js';
 import type { Track } from '../types/music';
+import { artistKey } from './artistRoute';
 
 export type SortMode = 'recent' | 'az' | 'fav';
 
@@ -42,7 +43,7 @@ export function buildArtists(tracks: Track[]): ArtistEntry[] {
   const map = new Map<string, ArtistEntry>();
   for (const t of tracks) {
     const name = (t.artist || t.album_artist || 'Desconocido').trim();
-    const key = name.toLowerCase();
+    const key = artistKey(name);
     const e = map.get(key);
     if (e) e.count++;
     else map.set(key, { name, count: 1, coverId: t.id });
