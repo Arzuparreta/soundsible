@@ -1,8 +1,19 @@
 let el: HTMLAudioElement | null = null;
 
+const VOLUME_KEY = 'volume';
+
+function initialVolume(): number {
+  const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(VOLUME_KEY) : null;
+  const v = raw == null ? 1 : Number(raw);
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+}
+
 /** Single shared audio element (lazy so it is never created during SSR/tests by accident). */
 export function audioEl(): HTMLAudioElement {
-  if (!el) el = new Audio();
+  if (!el) {
+    el = new Audio();
+    el.volume = initialVolume();
+  }
   return el;
 }
 
@@ -21,5 +32,21 @@ export const audioService = {
   seek(t: number): void {
     const a = audioEl();
     if (Number.isFinite(t)) a.currentTime = Math.max(0, t);
+  },
+  /** 0..1 — persisted so volume survives reloads. */
+  setVolume(v: number): void {
+    const clamped = Math.min(1, Math.max(0, v));
+    audioEl().volume = clamped;
+    try {
+      localStorage.setItem(VOLUME_KEY, String(clamped));
+    } catch {
+      /* private mode / storage disabled */
+    }
+  },
+  getVolume(): number {
+    return audioEl().volume;
+  },
+  setMuted(muted: boolean): void {
+    audioEl().muted = muted;
   },
 };

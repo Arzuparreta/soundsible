@@ -349,6 +349,16 @@ def serve_web_player_redirect():
 def serve_web_player():
     return make_response(_render_web_ui_html('index.html'))
 
+
+# Compatibility aliases for URLs exposed by the legacy multi-page player. The
+# SolidJS rebuild is one responsive application, so these surfaces all land on
+# the canonical player entry point.
+@app.route('/player/app.html')
+@app.route('/player/mobile')
+@app.route('/player/mobile/')
+def serve_web_player_legacy_aliases():
+    return redirect('/player/', code=308)
+
 @app.route('/player/desktop')
 def serve_web_player_desktop_redirect():
     return redirect('/player/desktop/', code=308)

@@ -40,14 +40,6 @@ const TYPE_SAMPLES: { label: string; size: string; weight: string }[] = [
  */
 export default function DesignPreview() {
   const [activeId, setActiveId] = createSignal<string | null>('t3');
-  const [favorites, setFavorites] = createSignal<Set<string>>(new Set(['t2']));
-
-  const toggleFavorite = (id: string) =>
-    setFavorites((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
 
   return (
     <div class={styles.page}>
@@ -101,19 +93,12 @@ export default function DesignPreview() {
       <section class={styles.section}>
         <h2 class={styles.h2}>Song list</h2>
         <p class={styles.hint}>
-          Click para "reproducir" (fila activa), hover para revelar el corazón. Solo cambia el nodo afectado.
+          Click para "reproducir" (fila activa); el botón ⋯ abre el menú de acciones. Solo cambia el nodo afectado.
         </p>
         <div class={styles.list}>
           <For each={SAMPLE_TRACKS}>
             {(track, i) => (
-              <SongRow
-                track={track}
-                index={i() + 1}
-                active={activeId() === track.id}
-                favorite={favorites().has(track.id)}
-                onPlay={setActiveId}
-                onToggleFavorite={toggleFavorite}
-              />
+              <SongRow track={track} index={i() + 1} active={activeId() === track.id} onPlay={setActiveId} />
             )}
           </For>
         </div>

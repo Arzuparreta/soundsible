@@ -9,11 +9,12 @@ export interface SongRowProps {
   /** Resolved cover URL; falls back to track.cover, then a gradient placeholder. */
   cover?: string;
   active?: boolean;
-  favorite?: boolean;
   onPlay?: (track: Track) => void;
-  onToggleFavorite?: (id: string) => void;
   /** When set, the artist name becomes a tappable link (navigates to the artist). */
   onArtist?: (artist: string) => void;
+  /** When set, exposes the context menu (⋯ button, long-press, right-click).
+   * The event (when present) lets the menu anchor a popover at the cursor. */
+  onMenu?: (track: Track, ev?: MouseEvent) => void;
 }
 
 function formatDuration(seconds?: number): string {
@@ -42,12 +43,48 @@ function coverStyle(props: SongRowProps): JSX.CSSProperties {
 /**
  * Dense, pro song row. Fine-grained reactivity: toggling `active`/`favorite`
  * updates only the affected node — no row or list re-render.
+ *
+ * Context menu: a ⋯ button (always), plus long-press (touch) and right-click
+ * (pointer) — restoring the action menu the legacy UI had on every row.
  */
 export default function SongRow(props: SongRowProps) {
+  let pressTimer: number | undefined;
+  let suppressClick = false;
+
+  const openMenu = (ev?: MouseEvent) => props.onMenu?.(props.track, ev);
+
+  const startPress = () => {
+    if (!props.onMenu) return;
+    pressTimer = window.setTimeout(() => {
+      suppressClick = true;
+      openMenu(); // long-press → bottom sheet (no cursor anchor)
+    }, 450);
+  };
+  const cancelPress = () => clearTimeout(pressTimer);
+
+  const onRowClick = () => {
+    if (suppressClick) {
+      suppressClick = false;
+      return;
+    }
+    props.onPlay?.(props.track);
+  };
+
+  const onContext = (e: MouseEvent) => {
+    if (!props.onMenu) return;
+    e.preventDefault();
+    openMenu(e);
+  };
+
   return (
     <div
       classList={{ [styles.row]: true, [styles.active]: props.active }}
-      onClick={() => props.onPlay?.(props.track)}
+      onClick={onRowClick}
+      onContextMenu={onContext}
+      onTouchStart={startPress}
+      onTouchEnd={cancelPress}
+      onTouchMove={cancelPress}
+      onTouchCancel={cancelPress}
     >
       <Show when={props.index != null}>
         <span class={styles.index}>{props.index}</span>
@@ -71,30 +108,23 @@ export default function SongRow(props: SongRowProps) {
           </button>
         </Show>
       </div>
-      <button
-        class={styles.iconBtn}
-        classList={{ [styles.faved]: props.favorite }}
-        aria-label={props.favorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
-        aria-pressed={props.favorite}
-        onClick={(e) => {
-          e.stopPropagation();
-          props.onToggleFavorite?.(props.track.id);
-        }}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          width="20"
-          height="20"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M12 21s-7-4.35-9.5-8.5C.9 9.6 2.2 6 5.5 6 7.6 6 9 7.5 12 10c3-2.5 4.4-4 6.5-4 3.3 0 4.6 3.6 3 6.5C19 16.65 12 21 12 21z" />
-        </svg>
-      </button>
       <span class={styles.duration}>{formatDuration(props.track.duration)}</span>
+      <Show when={props.onMenu}>
+        <button
+          class={styles.iconBtn}
+          aria-label="Más opciones"
+          onClick={(e) => {
+            e.stopPropagation();
+            openMenu(e);
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+            <circle cx="5" cy="12" r="2" />
+            <circle cx="12" cy="12" r="2" />
+            <circle cx="19" cy="12" r="2" />
+          </svg>
+        </button>
+      </Show>
     </div>
   );
 }

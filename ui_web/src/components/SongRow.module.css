@@ -123,16 +123,6 @@
   }
 }
 
-.faved {
-  opacity: 1;
-  color: var(--accent);
-}
-
-/* Solid heart once favourited (CSS fill overrides the SVG's fill="none"). */
-.faved svg {
-  fill: currentColor;
-}
-
 .duration {
   width: 40px;
   flex-shrink: 0;

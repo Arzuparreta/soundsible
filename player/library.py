@@ -65,6 +65,9 @@ class LibraryManager:
         self.db = DatabaseManager()
         self._manifest_mtime = 0
         self._lock = threading.Lock()
+        # Paths whose write failed once (e.g. read-only music mount). Logged once,
+        # then skipped, so a read-only output dir doesn't spam every save.
+        self._unwritable_paths: set[str] = set()
         
         # Note: Initialize cache
         try:
@@ -173,11 +176,16 @@ class LibraryManager:
                 out_dir = _output_dir_for_library()
                 if out_dir:
                     music_lib = Path(out_dir).expanduser().resolve() / LIBRARY_METADATA_FILENAME
-                    try:
-                        music_lib.parent.mkdir(parents=True, exist_ok=True)
-                        music_lib.write_text(json_str, encoding="utf-8")
-                    except OSError as e:
-                        self._log(f"Could not write library.json to music path {music_lib}: {e}")
+                    music_key = str(music_lib)
+                    if music_key not in self._unwritable_paths:
+                        try:
+                            music_lib.parent.mkdir(parents=True, exist_ok=True)
+                            music_lib.write_text(json_str, encoding="utf-8")
+                        except OSError as e:
+                            # Read-only mount (or similar): note it once, then stop
+                            # retrying so saves don't spam the console every time.
+                            self._unwritable_paths.add(music_key)
+                            self._log(f"Music path not writable, skipping library.json mirror to {music_lib}: {e}")
                 
                 # Note: 2. Remote cloud storage
                 if self.provider:

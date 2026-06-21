@@ -3,6 +3,7 @@ import { useParams, useNavigate } from '@solidjs/router';
 import { state, actions } from '../stores';
 import TrackList from '../components/TrackList';
 import Button from '../components/Button';
+import { openPlaylistMenu } from '../components/playlistActions';
 import type { Track } from '../types/music';
 import styles from './PlaylistDetail.module.css';
 
@@ -25,6 +26,12 @@ export default function PlaylistDetail() {
     if (tracks().length > 0) actions.playFrom(tracks(), 0);
   };
 
+  const openMenu = () =>
+    openPlaylistMenu(name(), {
+      onRenamed: (next) => navigate(`/playlists/${encodeURIComponent(next)}`, { replace: true }),
+      onDeleted: () => navigate('/playlists', { replace: true }),
+    });
+
   return (
     <div class="view">
       <header class={styles.header}>
@@ -40,10 +47,21 @@ export default function PlaylistDetail() {
         <Button onClick={playAll} disabled={tracks().length === 0}>
           Reproducir
         </Button>
+        <button class={styles.menu} type="button" aria-label="Opciones de la lista" onClick={openMenu}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+            <circle cx="5" cy="12" r="2" />
+            <circle cx="12" cy="12" r="2" />
+            <circle cx="19" cy="12" r="2" />
+          </svg>
+        </button>
       </header>
       <TrackList
         tracks={tracks()}
         loading={state.loading}
+        menu={{
+          playlistName: name(),
+          onRemoveFromPlaylist: (t) => void actions.removeFromPlaylist(name(), t.id),
+        }}
         empty={
           <p style={{ padding: '48px 16px', 'text-align': 'center', color: 'var(--ink-secondary)' }}>
             Lista vacía.

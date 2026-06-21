@@ -68,6 +68,13 @@
   margin: 0 auto;
 }
 
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  min-width: 0;
+}
+
 .art {
   width: 100%;
   max-width: 360px;
@@ -196,14 +203,155 @@
   background: var(--accent-hover);
 }
 
+/* Action bar: favourite · volume · share · more */
+.actionsBar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-lg);
+}
+
+.actBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out);
+}
+.actBtn:hover {
+  color: var(--ink-primary);
+}
+.actOn {
+  color: var(--accent);
+}
+
+.volume {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.volRange {
+  width: 96px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 .queue {
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
 }
 
+/* Desktop uses the available width instead of stacking a phone-sized player
+   into a tall column. The artwork and controls stay visible at once; only a
+   long queue gets its own scroll area. */
+@media (min-width: 768px) {
+  .head {
+    padding: var(--space-md) var(--space-xl);
+  }
+
+  .body {
+    display: grid;
+    grid-template-columns: minmax(220px, min(42vw, 520px)) minmax(340px, 520px);
+    align-items: center;
+    justify-content: center;
+    gap: clamp(24px, 5vw, 72px);
+    max-width: 1180px;
+    overflow: hidden;
+    padding: var(--space-md) var(--space-2xl) var(--space-xl);
+  }
+
+  .art {
+    width: min(100%, calc(100dvh - 140px));
+    max-width: 520px;
+    margin: 0;
+    justify-self: end;
+  }
+
+  .details {
+    align-self: stretch;
+    justify-content: center;
+    gap: clamp(10px, 2.2vh, 24px);
+    min-height: 0;
+    padding-block: var(--space-sm);
+  }
+
+  .info {
+    text-align: left;
+  }
+
+  .title {
+    font-size: clamp(24px, 3vw, 38px);
+    overflow-wrap: anywhere;
+  }
+
+  .controls,
+  .actionsBar {
+    justify-content: space-between;
+  }
+
+  .queue {
+    min-height: 0;
+    max-height: min(30vh, 240px);
+    overflow-y: auto;
+    padding-right: var(--space-xs);
+    overscroll-behavior: contain;
+  }
+}
+
+/* Short desktop windows still get a complete, usable player rather than an
+   oversized mobile composition. */
+@media (min-width: 768px) and (max-height: 559px) {
+  .body {
+    gap: var(--space-md);
+    padding-top: 0;
+  }
+
+  .art {
+    width: min(42vh, 220px);
+    margin-top: 0;
+  }
+
+  .details {
+    gap: var(--space-md);
+  }
+}
+
+@media (max-width: 420px) {
+  .body {
+    gap: var(--space-lg);
+    padding-top: var(--space-sm);
+  }
+
+  .controls {
+    gap: clamp(4px, 3vw, 16px);
+  }
+
+  .actionsBar {
+    gap: clamp(4px, 3vw, 16px);
+  }
+
+  .volRange {
+    width: min(22vw, 80px);
+  }
+}
+
+.queueHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-xs);
+}
+
 .queueTitle {
-  margin: 0 0 var(--space-xs);
+  margin: 0;
   font-size: var(--text-label);
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
@@ -211,20 +359,73 @@
   color: var(--ink-tertiary);
 }
 
+.queueClear {
+  padding: var(--space-2xs) var(--space-sm);
+  font-size: var(--text-label);
+  font-weight: var(--fw-medium);
+  color: var(--ink-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.queueClear:hover {
+  color: var(--accent);
+}
+
 .qRow {
   display: flex;
   align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-2xs) var(--space-2xs) var(--space-2xs) 0;
+  border-radius: var(--radius-sm);
+}
+.qRow:hover {
+  background: var(--bg-raised);
+}
+
+.qHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  flex-shrink: 0;
+  color: var(--ink-tertiary);
+  cursor: grab;
+}
+.qHandle:active {
+  cursor: grabbing;
+}
+
+.qPlay {
+  display: flex;
+  align-items: center;
   gap: var(--space-md);
-  padding: var(--space-sm) var(--space-md);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-xs) 0;
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
-  width: 100%;
 }
-.qRow:hover {
-  background: var(--bg-raised);
+
+.qRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  color: var(--ink-tertiary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.qRemove:hover {
+  color: var(--danger);
 }
 
 .qActive .qTitle {

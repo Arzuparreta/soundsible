@@ -1,0 +1,229 @@
+/* ── Pairing sheet (inside the overlay sheet) ── */
+.pair {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.eyebrow {
+  font-size: var(--text-caption);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.title {
+  font-size: var(--text-h2);
+  font-weight: var(--fw-bold);
+  color: var(--ink-primary);
+}
+
+.body {
+  display: flex;
+  gap: var(--space-lg);
+  align-items: flex-start;
+}
+
+.qrWrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 264px;
+  height: 264px;
+  padding: var(--space-md);
+  background: #fff;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+}
+
+.qr {
+  width: 240px;
+  height: 240px;
+  display: block;
+}
+
+.qrSkeleton {
+  width: 240px;
+  height: 240px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.codeBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  padding: var(--space-md);
+  background: var(--bg-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+}
+
+.codeLabel {
+  font-size: var(--text-caption);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-tertiary);
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-size: var(--text-h1);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.18em;
+  color: var(--ink-primary);
+}
+
+.status {
+  margin: 0;
+  font-size: var(--text-label);
+  color: var(--ink-secondary);
+}
+.status.done {
+  color: var(--success);
+  font-weight: var(--fw-semibold);
+}
+
+.link {
+  font-size: var(--text-label);
+  color: var(--accent);
+  word-break: break-all;
+}
+
+.note {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--ink-tertiary);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--danger);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.btn {
+  padding: var(--space-sm) var(--space-lg);
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-primary);
+  background: var(--bg-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out);
+}
+.btn:hover {
+  background: var(--bg-raised);
+}
+
+/* ── Paired devices panel (in Settings) ── */
+.empty {
+  padding: var(--space-md) 0;
+  font-size: var(--text-label);
+  color: var(--ink-tertiary);
+}
+
+.deviceRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.deviceMeta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.deviceName {
+  font-size: var(--text-body);
+  font-weight: var(--fw-medium);
+  color: var(--ink-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deviceSub {
+  font-size: var(--text-caption);
+  color: var(--ink-tertiary);
+}
+
+.revoke {
+  flex-shrink: 0;
+  padding: var(--space-2xs) var(--space-md);
+  font-size: var(--text-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--danger);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+}
+.revoke:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.pairBtn {
+  align-self: flex-start;
+  margin-top: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.pairBtn:hover {
+  filter: brightness(1.05);
+}
+
+@media (max-width: 520px) {
+  .body {
+    flex-direction: column;
+    align-items: center;
+  }
+}

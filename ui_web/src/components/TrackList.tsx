@@ -1,8 +1,12 @@
-import { createMemo, createSignal, For, Show, onMount, type JSX } from 'solid-js';
+import { createSignal, For, Show, onMount, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import { state, actions } from '../stores';
 import SongRow from './SongRow';
+import { openTrackMenu, type TrackMenuContext } from './trackActions';
+import { openPlaylistPicker } from './PlaylistPicker';
+import { openMetadataEditor } from './MetadataEditor';
+import { openPlayOnDevice } from './DeviceSheet';
 import { coverUrl } from '../lib/media';
 import type { Track } from '../types/music';
 import styles from './TrackList.module.css';
@@ -11,12 +15,31 @@ import styles from './TrackList.module.css';
  * Reusable virtualized song list. Shared by Home, Favourites and Search.
  * Reads playback/favourites/actions from the single store; only visible rows
  * render, and only the affected node updates on play/favourite changes.
+ *
+ * `menu` lets a view extend the row's context menu (e.g. a playlist passes
+ * `playlistName` + `onRemoveFromPlaylist`); `navigate` is always wired here.
  */
-export default function TrackList(props: { tracks: Track[]; loading?: boolean; empty?: JSX.Element }) {
+export default function TrackList(props: {
+  tracks: Track[];
+  loading?: boolean;
+  empty?: JSX.Element;
+  menu?: Partial<TrackMenuContext>;
+}) {
   let scrollRef: HTMLDivElement | undefined;
   const navigate = useNavigate();
-  const favSet = createMemo(() => new Set(state.favorites));
   const goArtist = (artist: string) => artist && navigate(`/artist/${encodeURIComponent(artist)}`);
+  const openMenu = (track: Track, ev?: MouseEvent) =>
+    openTrackMenu(
+      track,
+      {
+        navigate,
+        onAddToPlaylist: openPlaylistPicker,
+        onEditMetadata: openMetadataEditor,
+        onPlayOnDevice: openPlayOnDevice,
+        ...props.menu,
+      },
+      ev,
+    );
 
   // Row height follows the adaptive --row-h token (56 mobile / 44 desktop).
   const [rowH, setRowH] = createSignal(56);
@@ -65,10 +88,9 @@ export default function TrackList(props: { tracks: Track[]; loading?: boolean; e
                         index={vi.index + 1}
                         cover={coverUrl(track!.id)}
                         active={state.playback.currentTrack?.id === track!.id}
-                        favorite={favSet().has(track!.id)}
                         onPlay={() => actions.playFrom(props.tracks, vi.index)}
-                        onToggleFavorite={actions.toggleFavourite}
                         onArtist={goArtist}
+                        onMenu={openMenu}
                       />
                     </div>
                   </Show>

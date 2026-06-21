@@ -3,6 +3,17 @@
   display: flex;
   gap: var(--space-sm);
   padding: 0 var(--gutter) var(--space-md);
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.chips::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex: none;
 }
 
 .chip {
@@ -39,6 +50,74 @@
   color: var(--ink-on-accent);
   background: var(--accent);
   border-radius: var(--radius-full);
+}
+
+.toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: 0 var(--gutter) var(--space-sm);
+}
+
+@media (max-width: 380px) {
+  .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+
+  .tabs,
+  .select {
+    width: 100%;
+  }
+
+  .tab {
+    flex: 1;
+  }
+}
+
+.tabs {
+  display: inline-flex;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs);
+  background: var(--bg-raised);
+  border-radius: var(--radius-full);
+}
+
+.tab {
+  padding: var(--space-2xs) var(--space-md);
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
+}
+.tabActive {
+  color: var(--ink-on-accent);
+  background: var(--accent);
+}
+
+.select {
+  height: 32px;
+  padding: 0 var(--space-sm);
+  font: inherit;
+  font-size: var(--text-label);
+  color: var(--ink-secondary);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.artistsScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .empty {

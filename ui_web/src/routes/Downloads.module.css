@@ -307,3 +307,30 @@
     transform: translateY(0);
   }
 }
+
+@media (max-width: 520px) {
+  .header {
+    align-items: flex-start;
+    gap: var(--space-sm);
+  }
+
+  .clear {
+    max-width: 92px;
+    white-space: normal;
+  }
+
+  .row {
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+  }
+
+  .cover {
+    width: 40px;
+    height: 40px;
+  }
+
+  .actions {
+    flex-direction: column;
+  }
+}

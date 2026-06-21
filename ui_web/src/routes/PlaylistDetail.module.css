@@ -47,3 +47,22 @@
   color: var(--ink-tertiary);
   font-variant-numeric: tabular-nums;
 }
+
+.menu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
+}
+.menu:hover {
+  color: var(--ink-primary);
+  background: var(--bg-raised);
+}

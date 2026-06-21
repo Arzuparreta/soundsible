@@ -12,3 +12,12 @@ def test_player_pages_do_not_emit_invalid_permissions_policy_header():
 
     assert "Permissions-Policy" not in web_res.headers
     assert "Permissions-Policy" not in desktop_res.headers
+
+
+def test_legacy_player_urls_redirect_to_responsive_player():
+    client = app.test_client()
+
+    for path in ("/player/app.html", "/player/mobile", "/player/mobile/"):
+        response = client.get(path)
+        assert response.status_code == 308
+        assert response.headers["Location"] == "/player/"

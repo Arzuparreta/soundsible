@@ -1,9 +1,12 @@
 import type { RouteSectionProps } from '@solidjs/router';
 import { OverlayOutlet } from './lib/overlay';
+import { ToastOutlet } from './lib/toast';
 import { TabBar } from './components/TabBar';
 import { Sidebar } from './components/Sidebar';
 import { OmniBar } from './components/OmniBar';
 import { NowPlaying } from './components/NowPlaying';
+import { ResumeBanner } from './components/ResumeBanner';
+import { ContextMenuOutlet } from './lib/contextMenu';
 import styles from './app.module.css';
 
 /**
@@ -23,7 +26,10 @@ export default function Shell(props: RouteSectionProps) {
         </div>
       </div>
       <NowPlaying />
+      <ResumeBanner />
+      <ContextMenuOutlet />
       <OverlayOutlet />
+      <ToastOutlet />
     </div>
   );
 }

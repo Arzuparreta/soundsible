@@ -1,4 +1,4 @@
-import { createSignal, For, type JSX, type Component } from 'solid-js';
+import { createSignal, For, onCleanup, onMount, type JSX, type Component } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import styles from './overlay.module.css';
 
@@ -32,6 +32,17 @@ export function openOverlay(render: OverlayRender, opts: { dismissable?: boolean
 
 /** Mounted once by the app shell. */
 export const OverlayOutlet: Component = () => {
+  onMount(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const list = overlays();
+      const top = list[list.length - 1];
+      if (top && top.dismissable) remove(top.id);
+    };
+    window.addEventListener('keydown', onKey);
+    onCleanup(() => window.removeEventListener('keydown', onKey));
+  });
+
   return (
     <Portal>
       <For each={overlays()}>

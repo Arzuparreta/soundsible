@@ -1,5 +1,10 @@
-.bar {
+.searchBox {
+  position: relative;
   flex-shrink: 0;
+  z-index: 5;
+}
+
+.bar {
   padding: var(--space-lg) var(--gutter) var(--space-md);
 }
 
@@ -25,8 +30,97 @@
   border-color: var(--accent);
 }
 
+/* ── Search-suggest typeahead ── */
+.suggest {
+  position: absolute;
+  left: var(--gutter);
+  right: var(--gutter);
+  top: calc(var(--space-lg) + var(--control-h) - var(--space-2xs));
+  margin: 0;
+  padding: var(--space-2xs);
+  list-style: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.suggestItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  font: inherit;
+  font-size: var(--text-body);
+  text-align: left;
+  color: var(--ink-primary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.suggestItem svg {
+  flex-shrink: 0;
+  color: var(--ink-tertiary);
+}
+.suggestItem span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.suggestItem:hover {
+  background: var(--bg-raised);
+}
+
+/* ── Results ── */
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--space-sm) var(--space-lg);
+}
+
+.section {
+  margin: var(--space-md) var(--space-md) var(--space-2xs);
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.retry {
+  margin-left: var(--space-xs);
+  padding: 0 var(--space-xs);
+  font-size: var(--text-caption);
+  color: var(--ink-tertiary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .hint {
-  padding: var(--space-3xl) var(--gutter);
+  padding: var(--space-2xl) var(--gutter);
   text-align: center;
   color: var(--ink-secondary);
+}
+
+.skeleton {
+  height: 60px;
+  margin: var(--list-gap) var(--space-md);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--bg-raised), var(--bg-elevated), var(--bg-raised));
+  background-size: 200% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
 }

@@ -1,7 +1,8 @@
-import { createMemo, createSignal, For, Show, onCleanup, type JSX } from 'solid-js';
+import { createMemo, createSignal, For, Show, onMount, onCleanup, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
 import { api } from '../lib/api';
 import { state, actions } from '../stores';
+import { ensureDiscover, topPodcasts } from '../lib/discover';
 import type { PodcastSearchResult } from '../types/podcast';
 import styles from './Podcasts.module.css';
 
@@ -25,6 +26,8 @@ export default function Podcasts() {
 
   let aborter: AbortController | undefined;
   let debounce: number | undefined;
+
+  onMount(() => ensureDiscover());
 
   const run = (query: string) => {
     query = query.trim();
@@ -94,22 +97,48 @@ export default function Podcasts() {
         <Show
           when={q().trim().length >= 2}
           fallback={
-            <Show
-              when={state.podcastSubscriptions.length > 0}
-              fallback={<p class={styles.hint}>Busca podcasts arriba y suscríbete. Tus shows aparecerán aquí.</p>}
-            >
-              <div class={styles.grid}>
-                <For each={state.podcastSubscriptions}>
-                  {(s) => (
-                    <A href={`/podcasts/${encodeURIComponent(s.id)}`} class={styles.card}>
-                      <div class={styles.cover} style={coverBg(s.image_url)} />
-                      <span class={styles.name}>{s.title}</span>
-                      <span class={styles.author}>{s.author}</span>
-                    </A>
-                  )}
-                </For>
-              </div>
-            </Show>
+            <>
+              <Show when={state.podcastSubscriptions.length > 0}>
+                <h2 class={styles.sectionTitle}>Tus shows</h2>
+                <div class={styles.grid}>
+                  <For each={state.podcastSubscriptions}>
+                    {(s) => (
+                      <A href={`/podcasts/${encodeURIComponent(s.id)}`} class={styles.card}>
+                        <div class={styles.cover} style={coverBg(s.image_url)} />
+                        <span class={styles.name}>{s.title}</span>
+                        <span class={styles.author}>{s.author}</span>
+                      </A>
+                    )}
+                  </For>
+                </div>
+              </Show>
+
+              <Show when={topPodcasts().length > 0}>
+                <h2 class={styles.sectionTitle}>Podcasts populares</h2>
+                <div class={styles.grid}>
+                  <For each={topPodcasts()}>
+                    {(p) => (
+                      <button
+                        class={styles.cardBtn}
+                        type="button"
+                        disabled={subscribedFeeds().has(p.feed_url) || subscribing().has(p.feed_url)}
+                        onClick={() => subscribe(p)}
+                      >
+                        <div class={styles.cover} style={coverBg(p.image_url)} />
+                        <span class={styles.name}>{p.title}</span>
+                        <span class={styles.author}>
+                          {subscribedFeeds().has(p.feed_url) ? 'Suscrito' : p.author}
+                        </span>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </Show>
+
+              <Show when={state.podcastSubscriptions.length === 0 && topPodcasts().length === 0}>
+                <p class={styles.hint}>Busca podcasts arriba y suscríbete. Tus shows aparecerán aquí.</p>
+              </Show>
+            </>
           }
         >
           <Show when={loading() && results().length === 0}>

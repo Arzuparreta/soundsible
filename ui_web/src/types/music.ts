@@ -9,6 +9,8 @@ export interface Track {
   duration?: number;
   youtube_id?: string | null;
   media_kind?: string | null;
+  /** Set on downloaded podcast episodes; matches PodcastEpisode.guid. */
+  podcast_episode_guid?: string | null;
   /** Optional explicit cover URL; otherwise resolved from id or a gradient placeholder. */
   cover?: string;
   /** Playback source: undefined/library = local stream; 'preview' = yt-dlp preview stream. */
