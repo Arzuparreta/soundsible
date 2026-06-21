@@ -86,6 +86,40 @@ export interface Device {
 
 export type RemoteCommand = 'play' | 'pause' | 'next' | 'previous' | 'seek';
 
+/** Connect payload the engine attaches to a pairing session (QR + LAN URLs). */
+export interface PairingConnect {
+  claim_url?: string | null;
+  player_url?: string | null;
+  suggested_base_url?: string | null;
+  presentable?: boolean;
+  qr_text?: string;
+  lan_enabled?: boolean;
+}
+
+/** A pairing session as the owner sees it (`_session_response`). */
+export interface PairingSession {
+  session_id: string;
+  status: 'pending' | 'claimed' | 'completed' | 'cancelled' | 'expired' | string;
+  code: string;
+  device_name?: string | null;
+  device_type?: string | null;
+  claimed_at?: string | null;
+  completed_at?: string | null;
+  expires_at?: string | null;
+  connect?: PairingConnect;
+}
+
+/** A device that completed pairing and holds a long-lived token. */
+export interface PairedDevice {
+  token_id: string;
+  name?: string | null;
+  device_type?: string | null;
+  scopes?: string[];
+  created_at?: string | null;
+  last_used_at?: string | null;
+  revoked_at?: string | null;
+}
+
 /** Shape returned by every playlist mutation (`_playlist_mutation_response`). */
 export interface PlaylistMutation {
   status?: string;
@@ -142,6 +176,28 @@ export const api = {
       method: 'POST',
       body: { device_id: deviceId, command, ...extra },
     }),
+
+  // ── Device pairing (owner side; admin-scoped, allowed on the trusted LAN) ──
+  /** Open an auto-confirming pairing session; returns the code + QR connect payload. */
+  createPairingSession: () =>
+    request<PairingSession>('/api/pairing/sessions', {
+      method: 'POST',
+      body: { auto_confirm: true, display_active: true },
+    }),
+  /** Poll all sessions to track a session's status (no single-session GET exists). */
+  listPairingSessions: () => request<{ sessions?: PairingSession[] }>('/api/pairing/sessions'),
+  cancelPairingSession: (id: string) =>
+    request<PairingSession>(`/api/pairing/sessions/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  /** Keep a session auto-confirmable while its sheet is open; close it otherwise. */
+  setPairingDisplay: (id: string, active: boolean) =>
+    request<PairingSession>(
+      `/api/pairing/sessions/${encodeURIComponent(id)}/${active ? 'display-open' : 'display-close'}`,
+      { method: 'POST', body: active ? { auto_confirm: true } : undefined },
+    ),
+  /** Devices that completed pairing and hold a long-lived token. */
+  listPairedDevices: () => request<{ devices?: PairedDevice[] }>('/api/paired-devices'),
+  revokePairedDevice: (tokenId: string) =>
+    request<PairedDevice>(`/api/paired-devices/${encodeURIComponent(tokenId)}/revoke`, { method: 'POST' }),
 
   getLibrary: () =>
     request<{

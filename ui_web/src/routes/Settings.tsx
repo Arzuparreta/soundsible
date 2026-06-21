@@ -7,6 +7,7 @@ import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/confirm';
 import { DevicesPanel } from '../components/DeviceSheet';
+import { PairedDevicesPanel } from '../components/PairDevice';
 import styles from './Settings.module.css';
 
 function Switch(props: { checked: boolean; onChange: () => void; label: string }) {
@@ -239,6 +240,12 @@ export default function Settings() {
         <section class={styles.card}>
           <h2 class={styles.cardTitle}>Dispositivos</h2>
           <DevicesPanel />
+        </section>
+
+        <section class={styles.card}>
+          <h2 class={styles.cardTitle}>Dispositivos vinculados</h2>
+          <p class={styles.note}>Vincula tu teléfono escaneando un QR para controlarlo y reproducir en remoto.</p>
+          <PairedDevicesPanel />
         </section>
 
         <section class={styles.card}>
