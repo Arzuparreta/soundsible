@@ -4,7 +4,8 @@ import { state, actions } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import { coverUrl } from '../lib/media';
 import { pickPlaylistCoverId } from '../lib/playlists';
-import { openPlaylistMenu } from '../components/playlistActions';
+import { openPlaylistMenu, playlistMenuOptions } from '../components/playlistActions';
+import { attachContextMenu } from '../lib/contextMenu';
 import { promptDialog } from '../lib/prompt';
 import type { Track } from '../types/music';
 import styles from './Playlists.module.css';
@@ -27,7 +28,7 @@ export default function Playlists() {
   const menu = (e: MouseEvent, name: string) => {
     e.preventDefault();
     e.stopPropagation();
-    openPlaylistMenu(name);
+    openPlaylistMenu(name, {}, e);
   };
 
   return (
@@ -46,7 +47,7 @@ export default function Playlists() {
               {(name) => {
                 const ids = () => state.playlists[name] ?? [];
                 return (
-                  <div class={styles.cardWrap}>
+                  <div class={styles.cardWrap} ref={(el) => attachContextMenu(el, () => playlistMenuOptions(name))}>
                     <A href={`/playlists/${encodeURIComponent(name)}`} class={styles.card}>
                       <div class={styles.cover} style={coverBg(name, ids())} />
                       <span class={styles.name}>{name}</span>

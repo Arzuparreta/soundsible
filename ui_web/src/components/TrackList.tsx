@@ -28,14 +28,18 @@ export default function TrackList(props: {
   let scrollRef: HTMLDivElement | undefined;
   const navigate = useNavigate();
   const goArtist = (artist: string) => artist && navigate(`/artist/${encodeURIComponent(artist)}`);
-  const openMenu = (track: Track) =>
-    openTrackMenu(track, {
-      navigate,
-      onAddToPlaylist: openPlaylistPicker,
-      onEditMetadata: openMetadataEditor,
-      onPlayOnDevice: openPlayOnDevice,
-      ...props.menu,
-    });
+  const openMenu = (track: Track, ev?: MouseEvent) =>
+    openTrackMenu(
+      track,
+      {
+        navigate,
+        onAddToPlaylist: openPlaylistPicker,
+        onEditMetadata: openMetadataEditor,
+        onPlayOnDevice: openPlayOnDevice,
+        ...props.menu,
+      },
+      ev,
+    );
 
   // Row height follows the adaptive --row-h token (56 mobile / 44 desktop).
   const [rowH, setRowH] = createSignal(56);

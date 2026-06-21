@@ -4,9 +4,10 @@ import { api } from '../lib/api';
 import { actions, state } from '../stores';
 import { coverUrl } from '../lib/media';
 import { ensureDiscover, musicSections, recentSaved, topPodcasts, type DiscoverMusicItem } from '../lib/discover';
-import { openTrackMenu } from '../components/trackActions';
+import { openTrackMenu, trackMenuOptions } from '../components/trackActions';
 import { openPlaylistPicker } from '../components/PlaylistPicker';
 import { openMetadataEditor } from '../components/MetadataEditor';
+import { attachContextMenu, type MenuProvider } from '../lib/contextMenu';
 import SearchResultRow from '../components/SearchResultRow';
 import { toast } from '../lib/toast';
 import type { SearchResult, Track } from '../types/music';
@@ -146,12 +147,9 @@ export default function Discover() {
 
   const playSection = (items: DiscoverMusicItem[], i: number) => actions.playFrom(items.map(toTrack), i);
 
-  const menuFor = (item: DiscoverMusicItem) =>
-    openTrackMenu(toTrack(item), {
-      navigate,
-      onAddToPlaylist: openPlaylistPicker,
-      onEditMetadata: openMetadataEditor,
-    });
+  const trackCtx = () => ({ navigate, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor });
+  const menuOptsFor = (item: DiscoverMusicItem) => trackMenuOptions(toTrack(item), trackCtx());
+  const menuFor = (item: DiscoverMusicItem, ev?: MouseEvent) => openTrackMenu(toTrack(item), trackCtx(), ev);
 
   const subscribe = async (p: PodcastSearchResult) => {
     const t = toast.loading('Suscribiendo…');
@@ -233,7 +231,8 @@ export default function Discover() {
                           subtitle={it.artist}
                           seedId={it.track_id}
                           onClick={() => playSection(sec.items, i())}
-                          onMenu={() => menuFor(it)}
+                          onMenu={(ev) => menuFor(it, ev)}
+                          contextMenu={() => menuOptsFor(it)}
                         />
                       )}
                     </For>
@@ -314,7 +313,9 @@ interface CardProps {
   seedId: string;
   round?: boolean;
   onClick: () => void;
-  onMenu?: () => void;
+  onMenu?: (ev?: MouseEvent) => void;
+  /** Right-click / long-press contextual menu for the card. */
+  contextMenu?: MenuProvider;
 }
 
 function gradientFor(id: string): string {
@@ -331,7 +332,7 @@ function Card(props: CardProps) {
       : { background: grad };
   };
   return (
-    <div class={styles.card}>
+    <div class={styles.card} ref={(el) => props.contextMenu && attachContextMenu(el, props.contextMenu)}>
       <button class={styles.cardBtn} type="button" onClick={props.onClick}>
         <span classList={{ [styles.cardCover]: true, [styles.round]: props.round }} style={bg()} />
         <span class={styles.cardTitle}>{props.title}</span>
@@ -346,7 +347,7 @@ function Card(props: CardProps) {
           aria-label="Más opciones"
           onClick={(e) => {
             e.stopPropagation();
-            props.onMenu!();
+            props.onMenu!(e);
           }}
         >
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">

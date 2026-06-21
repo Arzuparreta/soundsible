@@ -141,13 +141,17 @@ export default function Search() {
 
   // ── Library row wiring (mirrors TrackList) ──
   const goArtist = (artist: string) => artist && navigate(`/artist/${encodeURIComponent(artist)}`);
-  const openMenu = (track: Track) =>
-    openTrackMenu(track, {
-      navigate,
-      onAddToPlaylist: openPlaylistPicker,
-      onEditMetadata: openMetadataEditor,
-      onPlayOnDevice: openPlayOnDevice,
-    });
+  const openMenu = (track: Track, ev?: MouseEvent) =>
+    openTrackMenu(
+      track,
+      {
+        navigate,
+        onAddToPlaylist: openPlaylistPicker,
+        onEditMetadata: openMetadataEditor,
+        onPlayOnDevice: openPlayOnDevice,
+      },
+      ev,
+    );
 
   // ── Online row wiring (mirrors Discover) ──
   const preview = (r: SearchResult) => {

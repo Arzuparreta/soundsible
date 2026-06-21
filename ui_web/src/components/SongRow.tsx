@@ -12,8 +12,9 @@ export interface SongRowProps {
   onPlay?: (track: Track) => void;
   /** When set, the artist name becomes a tappable link (navigates to the artist). */
   onArtist?: (artist: string) => void;
-  /** When set, exposes the context menu (⋯ button, long-press, right-click). */
-  onMenu?: (track: Track) => void;
+  /** When set, exposes the context menu (⋯ button, long-press, right-click).
+   * The event (when present) lets the menu anchor a popover at the cursor. */
+  onMenu?: (track: Track, ev?: MouseEvent) => void;
 }
 
 function formatDuration(seconds?: number): string {
@@ -50,13 +51,13 @@ export default function SongRow(props: SongRowProps) {
   let pressTimer: number | undefined;
   let suppressClick = false;
 
-  const openMenu = () => props.onMenu?.(props.track);
+  const openMenu = (ev?: MouseEvent) => props.onMenu?.(props.track, ev);
 
   const startPress = () => {
     if (!props.onMenu) return;
     pressTimer = window.setTimeout(() => {
       suppressClick = true;
-      openMenu();
+      openMenu(); // long-press → bottom sheet (no cursor anchor)
     }, 450);
   };
   const cancelPress = () => clearTimeout(pressTimer);
@@ -72,7 +73,7 @@ export default function SongRow(props: SongRowProps) {
   const onContext = (e: MouseEvent) => {
     if (!props.onMenu) return;
     e.preventDefault();
-    openMenu();
+    openMenu(e);
   };
 
   return (
@@ -114,7 +115,7 @@ export default function SongRow(props: SongRowProps) {
           aria-label="Más opciones"
           onClick={(e) => {
             e.stopPropagation();
-            openMenu();
+            openMenu(e);
           }}
         >
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">

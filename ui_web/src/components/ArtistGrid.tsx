@@ -1,6 +1,8 @@
 import { For, type JSX } from 'solid-js';
-import { A } from '@solidjs/router';
+import { A, useNavigate } from '@solidjs/router';
 import { coverUrl } from '../lib/media';
+import { attachContextMenu } from '../lib/contextMenu';
+import { artistMenuOptions } from './artistActions';
 import type { ArtistEntry } from '../lib/libraryView';
 import styles from './ArtistGrid.module.css';
 
@@ -12,6 +14,7 @@ function gradientFor(seed: string): string {
 
 /** Grid of artist cards (round avatars) linking to each artist's detail view. */
 export default function ArtistGrid(props: { artists: ArtistEntry[] }) {
+  const navigate = useNavigate();
   const bg = (a: ArtistEntry): JSX.CSSProperties => ({
     background: `url("${coverUrl(a.coverId)}") center / cover no-repeat, ${gradientFor(a.name)}`,
   });
@@ -19,7 +22,11 @@ export default function ArtistGrid(props: { artists: ArtistEntry[] }) {
     <div class={styles.grid}>
       <For each={props.artists}>
         {(a) => (
-          <A href={`/artist/${encodeURIComponent(a.name)}`} class={styles.card}>
+          <A
+            href={`/artist/${encodeURIComponent(a.name)}`}
+            class={styles.card}
+            ref={(el) => attachContextMenu(el, () => artistMenuOptions(a.name, { navigate }))}
+          >
             <div class={styles.avatar} style={bg(a)} />
             <span class={styles.name}>{a.name}</span>
             <span class={styles.count}>{a.count} pistas</span>

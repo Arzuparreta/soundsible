@@ -1,5 +1,6 @@
 import type { JSX } from 'solid-js';
-import { openActionMenu, type MenuAction } from './ActionMenu';
+import { type MenuAction, type ActionMenuOptions } from './ActionMenu';
+import { openContextMenu } from '../lib/contextMenu';
 import type { Track } from '../types/music';
 import { actions, state } from '../stores';
 import { shareTrack } from '../lib/share';
@@ -101,7 +102,13 @@ async function confirmDelete(track: Track): Promise<void> {
   if (ok) void actions.deleteTrack(track.id);
 }
 
-/** Convenience: open the action menu for a track in one call. */
-export function openTrackMenu(track: Track, ctx: TrackMenuContext = {}): void {
-  openActionMenu({ title: track.title, subtitle: track.artist, actions: buildTrackMenu(track, ctx) });
+/** The full menu definition for a track (for `use:ctxMenu`). */
+export function trackMenuOptions(track: Track, ctx: TrackMenuContext = {}): ActionMenuOptions {
+  return { title: track.title, subtitle: track.artist, actions: buildTrackMenu(track, ctx) };
+}
+
+/** Open the action menu for a track. Pass the triggering event to anchor a
+ * cursor popover on desktop (otherwise a bottom sheet). */
+export function openTrackMenu(track: Track, ctx: TrackMenuContext = {}, ev?: MouseEvent): void {
+  openContextMenu(trackMenuOptions(track, ctx), ev);
 }

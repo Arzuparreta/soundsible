@@ -16,24 +16,20 @@ export interface ActionMenuOptions {
   actions: MenuAction[];
 }
 
-/**
- * Context menu / action sheet. Renders through `openOverlay`, so it is a
- * bottom sheet on mobile and a centered popover on desktop (overlay.module.css
- * handles the responsive placement). Replaces the legacy long-press/right-click
- * action menu that the new UI dropped entirely.
- */
-export function openActionMenu(opts: ActionMenuOptions): void {
-  openOverlay((close) => (
+/** The menu body (header + action buttons). Shared by the bottom-sheet
+ * (`openActionMenu`) and the cursor-anchored popover (`openContextMenu`). */
+export function ActionMenuList(props: { opts: ActionMenuOptions; close: () => void }) {
+  return (
     <div class={styles.menu}>
-      <Show when={opts.title}>
+      <Show when={props.opts.title}>
         <header class={styles.head}>
-          <span class={styles.title}>{opts.title}</span>
-          <Show when={opts.subtitle}>
-            <span class={styles.sub}>{opts.subtitle}</span>
+          <span class={styles.title}>{props.opts.title}</span>
+          <Show when={props.opts.subtitle}>
+            <span class={styles.sub}>{props.opts.subtitle}</span>
           </Show>
         </header>
       </Show>
-      <For each={opts.actions}>
+      <For each={props.opts.actions}>
         {(a) => (
           <button
             type="button"
@@ -41,7 +37,7 @@ export function openActionMenu(opts: ActionMenuOptions): void {
             classList={{ [styles.danger]: a.danger }}
             disabled={a.disabled}
             onClick={() => {
-              close();
+              props.close();
               a.onSelect();
             }}
           >
@@ -53,5 +49,14 @@ export function openActionMenu(opts: ActionMenuOptions): void {
         )}
       </For>
     </div>
-  ));
+  );
+}
+
+/**
+ * Action sheet. Renders through `openOverlay`, so it is a bottom sheet on mobile
+ * and a centered popover on desktop (overlay.module.css handles placement).
+ * For a cursor-anchored context menu use `openContextMenu` (lib/contextMenu).
+ */
+export function openActionMenu(opts: ActionMenuOptions): void {
+  openOverlay((close) => <ActionMenuList opts={opts} close={close} />);
 }

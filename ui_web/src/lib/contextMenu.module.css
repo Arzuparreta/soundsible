@@ -1,0 +1,26 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-popover);
+}
+
+.popover {
+  position: fixed;
+  z-index: var(--z-popover);
+  min-width: 224px;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: var(--space-2xs);
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
+  animation: ctx-in var(--dur-short) var(--ease-out);
+  transform-origin: top left;
+}
+
+@keyframes ctx-in {
+  from {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+}

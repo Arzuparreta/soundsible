@@ -1,8 +1,10 @@
-import { openActionMenu } from './ActionMenu';
+import { type ActionMenuOptions } from './ActionMenu';
+import { openContextMenu } from '../lib/contextMenu';
 import { openPlaylistCoverPicker } from './CoverPicker';
-import { actions } from '../stores';
+import { actions, state } from '../stores';
 import { promptDialog } from '../lib/prompt';
 import { confirmDialog } from '../lib/confirm';
+import type { Track } from '../types/music';
 
 export interface PlaylistMenuHooks {
   /** Called with the new name after a successful rename (e.g. to update the route). */
@@ -11,11 +13,32 @@ export interface PlaylistMenuHooks {
   onDeleted?: () => void;
 }
 
-/** Rename / duplicate / change-cover / delete menu, shared by the grid and detail views. */
-export function openPlaylistMenu(name: string, hooks: PlaylistMenuHooks = {}): void {
-  openActionMenu({
+/** Resolve a playlist's track ids to library tracks (in order). */
+function playlistTracks(name: string): Track[] {
+  const ids = state.playlists[name] ?? [];
+  const byId = new Map(state.library.map((t) => [t.id, t] as const));
+  return ids.map((id) => byId.get(id)).filter((t): t is Track => !!t);
+}
+
+/** Play / rename / duplicate / change-cover / delete menu definition for a playlist. */
+export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {}): ActionMenuOptions {
+  return {
     title: name,
     actions: [
+      {
+        label: 'Reproducir',
+        onSelect: () => {
+          const t = playlistTracks(name);
+          if (t.length) actions.playFrom(t, 0);
+        },
+      },
+      {
+        label: 'Reproducir aleatorio',
+        onSelect: () => {
+          const t = playlistTracks(name);
+          if (t.length) actions.playShuffled(t);
+        },
+      },
       {
         label: 'Renombrar',
         onSelect: async () => {
@@ -42,5 +65,10 @@ export function openPlaylistMenu(name: string, hooks: PlaylistMenuHooks = {}): v
         },
       },
     ],
-  });
+  };
+}
+
+/** Open the playlist menu. Pass the triggering event to anchor a cursor popover. */
+export function openPlaylistMenu(name: string, hooks: PlaylistMenuHooks = {}, ev?: MouseEvent): void {
+  openContextMenu(playlistMenuOptions(name, hooks), ev);
 }
