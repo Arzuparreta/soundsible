@@ -5,6 +5,7 @@ import { TabBar } from './components/TabBar';
 import { Sidebar } from './components/Sidebar';
 import { OmniBar } from './components/OmniBar';
 import { NowPlaying } from './components/NowPlaying';
+import { ResumeBanner } from './components/ResumeBanner';
 import styles from './app.module.css';
 
 /**
@@ -24,6 +25,7 @@ export default function Shell(props: RouteSectionProps) {
         </div>
       </div>
       <NowPlaying />
+      <ResumeBanner />
       <OverlayOutlet />
       <ToastOutlet />
     </div>

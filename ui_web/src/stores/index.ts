@@ -1,7 +1,7 @@
 import { createStore } from 'solid-js/store';
 import { createSignal } from 'solid-js';
 import { createSocket, type AppSocket } from '../lib/socket';
-import { api, type DeviceRegistration } from '../lib/api';
+import { api, type DeviceRegistration, type RemotePlaybackState } from '../lib/api';
 import { audioEl, audioService } from '../lib/audio';
 import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers } from '../lib/media';
 import { toast } from '../lib/toast';
@@ -125,6 +125,10 @@ export { state };
 /** Now-Playing sheet open state (UI-only). */
 export const [nowPlayingOpen, setNowPlayingOpen] = createSignal(false);
 
+/** Cross-device resume candidate: another device's playback state we can pick up.
+ * Set once on boot, cleared when the user accepts or dismisses it. */
+export const [resumeState, setResumeState] = createSignal<RemotePlaybackState | null>(null);
+
 function trackUrl(track: Track): string {
   return track.source === 'preview' ? previewUrl(track.id) : streamUrl(track.id);
 }
@@ -150,6 +154,25 @@ function loadIndex(i: number): void {
   setState('playback', { currentTrack: track, index: i, isPlaying: true, currentTime: 0 });
   updateMediaSession(track);
   void audioService.load(trackUrl(track)).catch(() => setState('playback', 'isPlaying', false));
+}
+
+/** Publish this device's current playback to the engine so other devices can
+ * offer to resume it. Best-effort: fire-and-forget, errors swallowed. */
+function pushPlaybackState(): void {
+  const pb = state.playback;
+  const track = pb.currentTrack;
+  if (!track) return;
+  void api
+    .putPlaybackState({
+      track_id: track.id,
+      track,
+      position_sec: pb.currentTime || 0,
+      is_playing: pb.isPlaying,
+      device_id: state.device.device_id,
+      device_name: state.device.device_name,
+      device_type: state.device.device_type,
+    })
+    .catch(() => {});
 }
 
 function onEnded(): void {
@@ -702,6 +725,46 @@ export const actions = {
     setState('haptics', on);
     localStorage.setItem('haptics', on ? 'on' : 'off');
   },
+
+  // ── Cross-device resume ──
+  /** On boot: if another device has recent playback and we're idle, offer to resume it. */
+  async checkResume(): Promise<void> {
+    if (state.playback.currentTrack) return;
+    let remote: RemotePlaybackState | undefined;
+    try {
+      remote = await api.getPlaybackState(state.device.device_id);
+    } catch {
+      return;
+    }
+    if (!remote || !remote.track_id || state.playback.currentTrack) return;
+    if (remote.device_id === state.device.device_id) return;
+    const updatedAt = Number(remote.updated_at) || 0;
+    if (updatedAt && Date.now() / 1000 - updatedAt > 24 * 3600) return; // stale (>24h)
+    // Honour the 30-min "No" cooldown unless the other device has played since.
+    const now = Date.now();
+    const suppressUntil = Number(localStorage.getItem('resume_suppress_until')) || 0;
+    const cooldownAt = Number(localStorage.getItem('resume_cooldown_at')) || 0;
+    if (now < suppressUntil && updatedAt * 1000 <= cooldownAt) return;
+    setResumeState(remote);
+  },
+  /** Accept the resume offer: play that track here, seeking to its position. */
+  resumeHere(): void {
+    const r = resumeState();
+    setResumeState(null);
+    if (!r?.track_id) return;
+    const track = state.library.find((t) => t.id === r.track_id) ?? r.track ?? null;
+    if (!track) return;
+    actions.playTrack(track);
+    const pos = Number(r.position_sec) || 0;
+    if (pos > 0) setTimeout(() => actions.seek(pos), 400);
+  },
+  /** Decline the resume offer and suppress it for 30 minutes. */
+  dismissResume(): void {
+    setResumeState(null);
+    const now = Date.now();
+    localStorage.setItem('resume_suppress_until', String(now + 30 * 60 * 1000));
+    localStorage.setItem('resume_cooldown_at', String(now));
+  },
 };
 
 /** Apply the theme to the document (token overrides live in tokens.css) and
@@ -726,10 +789,12 @@ export function initStore(): void {
   a.addEventListener('play', () => {
     setState('playback', 'isPlaying', true);
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+    pushPlaybackState();
   });
   a.addEventListener('pause', () => {
     setState('playback', 'isPlaying', false);
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+    pushPlaybackState();
   });
   a.addEventListener('ended', onEnded);
   a.addEventListener('timeupdate', () => setState('playback', 'currentTime', a.currentTime || 0));
@@ -789,7 +854,12 @@ export function initStore(): void {
     if (Number.isFinite(p)) actions.seek(p);
   });
 
-  void actions.syncLibrary();
+  // Keep the published position fresh so other devices resume near where we are.
+  setInterval(() => {
+    if (state.playback.currentTrack && state.playback.isPlaying) pushPlaybackState();
+  }, 15000);
+
+  void actions.syncLibrary().then(() => actions.checkResume());
   void actions.loadDownloads();
   // Warm Discover so the first visit renders instantly (cache + background fetch).
   void import('../lib/discover').then((m) => m.ensureDiscover());

@@ -96,6 +96,18 @@ export interface PairingConnect {
   lan_enabled?: boolean;
 }
 
+/** Playback state shared across devices (`/api/playback/state`). */
+export interface RemotePlaybackState {
+  device_id?: string;
+  device_name?: string;
+  track_id?: string;
+  track?: Track | null;
+  position_sec?: number;
+  is_playing?: boolean;
+  /** Unix seconds the engine last stored this state. */
+  updated_at?: number;
+}
+
 /** A pairing session as the owner sees it (`_session_response`). */
 export interface PairingSession {
   session_id: string;
@@ -176,6 +188,23 @@ export const api = {
       method: 'POST',
       body: { device_id: deviceId, command, ...extra },
     }),
+
+  // ── Cross-device playback state (for resume) ──
+  /** Most recent playback state from another device (204 → none). */
+  getPlaybackState: (excludeDeviceId: string) =>
+    request<RemotePlaybackState | undefined>(
+      `/api/playback/state?exclude_device=${encodeURIComponent(excludeDeviceId)}`,
+    ),
+  /** Publish this device's playback state so others can offer to resume it. */
+  putPlaybackState: (body: {
+    track_id: string | null;
+    track: Track | null;
+    position_sec: number;
+    is_playing: boolean;
+    device_id: string;
+    device_name?: string;
+    device_type?: string;
+  }) => request<{ status?: string }>('/api/playback/state', { method: 'PUT', body }),
 
   // ── Device pairing (owner side; admin-scoped, allowed on the trusted LAN) ──
   /** Open an auto-confirming pairing session; returns the code + QR connect payload. */
