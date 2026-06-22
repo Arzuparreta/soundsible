@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/plus-jakarta-sans": "^5.2.8",
     "@types/node": "^25.9.3",
     "socket.io-client": "^4.7.2",
     "typescript": "^6.0.3",

@@ -17,6 +17,16 @@ import Artist from './routes/Artist';
 import { Placeholder } from './routes/Placeholder';
 import DesignPreview from './pages/DesignPreview';
 import { initStore } from './stores';
+// Self-host the design-system typefaces (DESIGN.md) so they render for every
+// user, not only those who happen to have them installed locally. Subsets load
+// on demand via unicode-range. Plus Jakarta Sans 400/500/600/700, JetBrains
+// Mono 400/500 — the weights referenced by --fw-* tokens.
+import '@fontsource/plus-jakarta-sans/400.css';
+import '@fontsource/plus-jakarta-sans/500.css';
+import '@fontsource/plus-jakarta-sans/600.css';
+import '@fontsource/plus-jakarta-sans/700.css';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/500.css';
 import './styles/tokens.css';
 import './styles/app.css';
 
