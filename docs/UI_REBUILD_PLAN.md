@@ -1,6 +1,6 @@
 # Player UI Rebuild — Master Plan (SolidJS)
 
-> Status: **Phase 3 done — all views + full playback subsystem landed; next: Phase 4 (desktop), then tests** — created 2026-06-16. Living document.
+> Status: **Phases 0–4 done + QA + design-review + test harness landed; next: expand test coverage, then Phase 5 cutover** — created 2026-06-16, last updated 2026-06-22. Living document.
 >
 > Done: Solid+TS+Vite toolchain isolated on `new-ui` (builds clean, served at `/player/`);
 > design direction locked (dark · dense · pro · adaptive · orange); tokens + seed primitives
@@ -61,10 +61,30 @@
 > · **Descargas** · **Artista** · Ajustes, on the single store + overlay manager, dark/dense/pro,
 > virtualized, fine-grained.
 >
-> Remaining before tests: (1) **cross-device playback resume/remote** (the legacy `playback_resume.js`
-> / `remote_control.js` sync — socket events are already typed in `lib/socket.ts`, not yet wired);
-> (2) the **desktop surface** (responsive + sidebar nav vs bottom tabs); (3) then the **full Vitest +
-> @solidjs/testing-library coverage pass** (user decision: tests LAST).
+> **Since landed (2026-06-22):** cross-device **resume + remote control** (`ResumeBanner`, store
+> command handler), **device pairing** (QR + paired-device management), the **desktop surface**
+> (`Sidebar` + responsive grid ≥1024px), **import from Spotify / Apple Music** (`Migrate`), and
+> **unified context menus** (right-click + long-press). **Phase 4 is done.**
+>
+> **QA + design-review pass (2026-06-22):** browser QA of every view — playback, queue/auto-advance,
+> Now Playing, unified search (autocomplete + online), discover rails, playlists, podcasts, downloads,
+> artist nav, theme dark/light, desktop sidebar, import — **zero console errors**; one content bug
+> fixed (`trackCount` pluralization, "1 pista"). Design-review (calibrated to `DESIGN.md`, Codex
+> outside-voice): **AI-slop PASS**, score A−; four HIGH findings fixed — **self-hosted Plus Jakarta
+> Sans + JetBrains Mono** (were never loaded → fell back to system-ui), **44px touch targets** on key
+> controls, **global `:focus-visible` ring**, and **complete `prefers-reduced-motion`**. Reports in
+> `ui_web/.gstack/{qa-reports,design-reports}/`.
+>
+> **Test harness landed:** Vitest + `@solidjs/testing-library` (jsdom) wired; first coverage pass —
+> `format`, `artistRoute`, `libraryView` units + the **overlay anti-leak component test** (open →
+> assert zero orphaned DOM on close). `npm test` = typecheck + `vitest run`. **20 tests green.**
+>
+> **Remaining:** (1) **expand test coverage** — more component tests (TrackList, OmniBar/NowPlaying,
+> SongRow) + **Playwright E2E** against the real Flask engine (play, queue, favourite, download,
+> navigate-away-from-Discover-and-assert-no-leak); (2) **broader 44px touch-target enforcement** via a
+> shared `IconButton` primitive (≈30 sub-44 controls remain — see design report); (3) **Phase 5
+> cutover** — parity audit, performance benchmark (1000+ track scroll vs legacy), docs, then merge
+> `new-ui` → `main`.
 
 ## Context
 
