@@ -13,6 +13,14 @@
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  /* index.html declares viewport-fit=cover, so content draws edge-to-edge under
+     the iOS notch/status bar. Reserve the safe areas here (once, for every route)
+     so view headers clear the clock, battery, and Dynamic Island in any
+     orientation. Insets are 0 without a cutout and on desktop — a no-op there.
+     The bottom inset is owned by the dock (TabBar.module.css). */
+  padding-top: env(safe-area-inset-top, 0);
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
 }
 
 .dock {
