@@ -143,4 +143,16 @@
     --dur-short: 0ms;
     --dur-medium: 0ms;
   }
+
+  /* Token durations cover tokenized transitions, but infinite loaders (shimmer,
+     pulse, spinners, the OmniBar progress sweep) hard-code their own. Neutralize
+     all animation/transition for users who asked for less motion. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
