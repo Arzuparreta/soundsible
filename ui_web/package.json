@@ -5,18 +5,24 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck",
+    "test": "npm run typecheck && vitest run",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@fontsource/plus-jakarta-sans": "^5.2.8",
+    "@solidjs/testing-library": "^0.8.10",
+    "@testing-library/jest-dom": "^6.9.1",
     "@types/node": "^25.9.3",
+    "jsdom": "^29.1.1",
     "socket.io-client": "^4.7.2",
     "typescript": "^6.0.3",
     "vite": "^6.2.0",
-    "vite-plugin-solid": "^2.11.12"
+    "vite-plugin-solid": "^2.11.12",
+    "vitest": "^4.1.9"
   },
   "dependencies": {
     "@solidjs/router": "^0.16.1",
