@@ -52,6 +52,13 @@
   .cardMenu {
     opacity: 1;
   }
+  /* Expand the tap area to the 44px system minimum (DESIGN.md) without
+     growing the visual circle: 32px + 6px on each side = 44px. */
+  .cardMenu::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
+  }
 }
 
 .grid {

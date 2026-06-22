@@ -27,8 +27,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  /* Adaptive density: 44px touch target on mobile (DESIGN.md min), 36px on desktop. */
+  width: var(--control-h);
+  height: var(--control-h);
   color: var(--ink-secondary);
   background: transparent;
   border: none;
