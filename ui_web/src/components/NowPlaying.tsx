@@ -1,4 +1,4 @@
-import { createMemo, For, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, For, Show, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { state, actions, nowPlayingOpen, setNowPlayingOpen } from '../stores';
 import { coverUrl } from '../lib/media';
@@ -26,6 +26,26 @@ export function NowPlaying() {
     return !!c && state.favorites.includes(c.id);
   });
   let dragFrom: number | null = null;
+  let bodyEl: HTMLDivElement | undefined;
+  // Distance (px) over which the floating "En cola" badge unwinds from its
+  // hovering hint position into its docked section-header position. While
+  // scrolled within [0, QUEUE_LIFT] the badge stays visually pinned (a stable
+  // hint); past it, it flows to its natural spot. Must match --queue-lift in
+  // NowPlaying.module.css.
+  const QUEUE_LIFT = 80;
+  const onBodyScroll = () => {
+    if (!bodyEl) return;
+    const q = Math.min(1, bodyEl.scrollTop / QUEUE_LIFT);
+    bodyEl.style.setProperty('--q', q.toFixed(3));
+    bodyEl.toggleAttribute('data-docked', q >= 1);
+  };
+  // Always (re)open on the player, with the queue badge in its hint state.
+  createEffect(() => {
+    if (!nowPlayingOpen() || !bodyEl) return;
+    bodyEl.scrollTop = 0;
+    bodyEl.style.setProperty('--q', '0');
+    bodyEl.removeAttribute('data-docked');
+  });
   /** Library tracks link to their artist; preview/podcast sources do not. */
   const artistLinkable = createMemo(() => {
     const c = t();
@@ -59,7 +79,8 @@ export function NowPlaying() {
       </header>
 
       <Show when={t()} fallback={<div class={styles.empty}>Nada sonando</div>}>
-        <div class={styles.body}>
+        <div class={styles.body} ref={bodyEl} onScroll={onBodyScroll}>
+          <div class={styles.player}>
           <div class={styles.art} style={artBg()} />
 
           <div class={styles.details}>
@@ -215,11 +236,29 @@ export function NowPlaying() {
               </svg>
             </button>
             </div>
+          </div>
+          </div>
 
-            <Show when={state.playback.queue.length > 1}>
-              <div class={styles.queue}>
+          <Show when={state.playback.queue.length > 1}>
+            <div class={styles.queue}>
               <div class={styles.queueHead}>
-                <h2 class={styles.queueTitle}>En cola</h2>
+                <span class={styles.queuePill}>
+                  <h2 class={styles.queueTitle}>En cola</h2>
+                  <svg
+                    class={styles.queueChevron}
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </span>
                 <button class={styles.queueClear} type="button" onClick={() => actions.clearQueue()}>
                   Vaciar
                 </button>
@@ -269,7 +308,6 @@ export function NowPlaying() {
               </For>
               </div>
             </Show>
-          </div>
         </div>
       </Show>
     </div>

@@ -62,11 +62,25 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-xl);
-  padding: var(--space-lg) var(--gutter) var(--space-2xl);
+  /* No gap/bottom-padding so .player fills the viewport exactly and the queue
+     (its sibling) begins right at the fold — see .player / .queue. */
+  gap: 0;
+  padding: var(--space-lg) var(--gutter) 0;
   max-width: 560px;
   width: 100%;
   margin: 0 auto;
+  --queue-lift: 80px;
+}
+
+/* The player (art + controls) fills the scroll viewport, so the queue that
+   follows it starts just below the fold: on open, the actions bar is the last
+   thing visible, in any aspect ratio. On desktop this wrapper dissolves
+   (display:contents) so art/details/queue lay out directly in the body grid. */
+.player {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  min-height: 100%;
 }
 
 .details {
@@ -74,6 +88,9 @@
   flex-direction: column;
   gap: var(--space-xl);
   min-width: 0;
+  /* Grow within the player so its trailing free space (where the queue badge
+     floats) sits between the actions bar and the fold. */
+  flex: 1;
 }
 
 .art {
@@ -248,6 +265,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
+  /* Sits right below the viewport-filling .player, so it opens below the fold;
+     the floating badge lifts above it as the scroll hint. */
+  padding-bottom: calc(var(--space-2xl) + env(safe-area-inset-bottom, 0));
 }
 
 /* Desktop uses the available width instead of stacking a phone-sized player
@@ -261,15 +281,27 @@
   .body {
     display: grid;
     grid-template-columns: minmax(220px, min(42vw, 520px)) minmax(340px, 520px);
-    align-items: center;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      'art details'
+      'art queue';
+    align-content: center;
     justify-content: center;
-    gap: clamp(24px, 5vw, 72px);
+    column-gap: clamp(24px, 5vw, 72px);
+    row-gap: var(--space-md);
     max-width: 1180px;
     overflow: hidden;
     padding: var(--space-md) var(--space-2xl) var(--space-xl);
   }
 
+  /* Mobile-only wrapper dissolves so art/details/queue place into the grid. */
+  .player {
+    display: contents;
+  }
+
   .art {
+    grid-area: art;
+    align-self: center;
     width: min(100%, calc(100dvh - 140px));
     max-width: 520px;
     margin: 0;
@@ -277,7 +309,8 @@
   }
 
   .details {
-    align-self: stretch;
+    grid-area: details;
+    align-self: end;
     justify-content: center;
     gap: clamp(10px, 2.2vh, 24px);
     min-height: 0;
@@ -299,10 +332,13 @@
   }
 
   .queue {
+    grid-area: queue;
+    align-self: start;
     min-height: 0;
     max-height: min(30vh, 240px);
     overflow-y: auto;
     padding-right: var(--space-xs);
+    padding-bottom: 0;
     overscroll-behavior: contain;
   }
 }
@@ -344,11 +380,40 @@
   }
 }
 
+/* The queue header doubles as the scroll-hint badge. Driven by --q (0 at the
+   top → 1 once docked, set by the body's scroll handler): at q=0 it floats as a
+   centered pill lifted toward the player; as you scroll it stays pinned for
+   --queue-lift px, then flows to its natural docked position while the pill
+   chrome fades out and "Vaciar" fades in. One element, no duplicates. */
 .queueHead {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   margin-bottom: var(--space-xs);
+  transform: translateY(calc((1 - var(--q, 0)) * var(--queue-lift, 80px) * -1));
+  z-index: 1;
+}
+
+.queuePill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-md);
+}
+/* Pill background/border/shadow live on a layer so they can fade independently
+   of the label as the badge docks. */
+.queuePill::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-1);
+  opacity: calc(1 - var(--q, 0));
 }
 
 .queueTitle {
@@ -360,7 +425,32 @@
   color: var(--ink-tertiary);
 }
 
+.queueChevron {
+  flex-shrink: 0;
+  color: var(--ink-tertiary);
+  opacity: calc(1 - var(--q, 0));
+  animation: queueBob 1.6s var(--ease-in-out) infinite;
+}
+
+@keyframes queueBob {
+  0%,
+  100% {
+    transform: translateY(-1px);
+  }
+  50% {
+    transform: translateY(2px);
+  }
+}
+
 .queueClear {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: var(--q, 0);
+  /* Only interactive once docked, so the invisible button can't be tapped while
+     the badge is floating. */
+  pointer-events: none;
   padding: var(--space-2xs) var(--space-sm);
   font-size: var(--text-label);
   font-weight: var(--fw-medium);
@@ -369,6 +459,9 @@
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
+}
+[data-docked] .queueClear {
+  pointer-events: auto;
 }
 .queueClear:hover {
   color: var(--accent);
@@ -464,4 +557,29 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Desktop reverts the scroll-hint badge to a plain section header: no float, no
+   pill, "Vaciar" inline on the right. Placed last so it wins the cascade over
+   the mobile badge rules above (equal specificity → source order decides). */
+@media (min-width: 768px) {
+  .queueHead {
+    transform: none;
+    justify-content: space-between;
+  }
+  .queuePill {
+    padding: 0;
+  }
+  .queuePill::before {
+    display: none;
+  }
+  .queueChevron {
+    display: none;
+  }
+  .queueClear {
+    position: static;
+    transform: none;
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
