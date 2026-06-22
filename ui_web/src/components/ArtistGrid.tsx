@@ -1,6 +1,7 @@
 import { For, type JSX } from 'solid-js';
 import { A, useNavigate } from '@solidjs/router';
 import { coverUrl } from '../lib/media';
+import { trackCount } from '../lib/format';
 import { attachContextMenu } from '../lib/contextMenu';
 import { artistPath } from '../lib/artistRoute';
 import { artistMenuOptions } from './artistActions';
@@ -30,7 +31,7 @@ export default function ArtistGrid(props: { artists: ArtistEntry[] }) {
           >
             <div class={styles.avatar} style={bg(a)} />
             <span class={styles.name}>{a.name}</span>
-            <span class={styles.count}>{a.count} pistas</span>
+            <span class={styles.count}>{trackCount(a.count)}</span>
           </A>
         )}
       </For>

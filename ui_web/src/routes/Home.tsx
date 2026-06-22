@@ -4,6 +4,7 @@ import { state, downloadCounts } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import ArtistGrid from '../components/ArtistGrid';
+import { trackCount } from '../lib/format';
 import { librarySort, setLibrarySort, libraryTab, setLibraryTab, sortTracks, buildArtists } from '../lib/libraryView';
 import styles from './Home.module.css';
 
@@ -16,7 +17,7 @@ export default function Home() {
 
   return (
     <div class="view">
-      <ViewHeader title="Tu biblioteca" meta={`${state.library.length} pistas`} />
+      <ViewHeader title="Tu biblioteca" meta={trackCount(state.library.length)} />
       <nav class={styles.chips}>
         <A href="/favourites" class={styles.chip}>
           Favoritos

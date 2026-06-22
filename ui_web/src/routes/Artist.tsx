@@ -4,6 +4,7 @@ import { state, actions } from '../stores';
 import TrackList from '../components/TrackList';
 import Button from '../components/Button';
 import { coverUrl } from '../lib/media';
+import { trackCount } from '../lib/format';
 import { buildAlbums } from '../lib/libraryView';
 import { artistKey, decodeArtistName } from '../lib/artistRoute';
 import type { Track } from '../types/music';
@@ -52,7 +53,7 @@ export default function Artist() {
             <span class={styles.initial}>{(name()[0] ?? '?').toUpperCase()}</span>
           </div>
           <h1 class={styles.title}>{name()}</h1>
-          <span class={styles.count}>{tracks().length} pistas</span>
+          <span class={styles.count}>{trackCount(tracks().length)}</span>
           <div class={styles.actions}>
             <Button onClick={playAll} disabled={tracks().length === 0}>
               Reproducir
@@ -74,7 +75,7 @@ export default function Artist() {
               <button class={styles.albumCard} type="button" onClick={() => actions.playFrom(al.tracks, 0)}>
                 <span class={styles.albumCover} style={albumBg(al.coverId)} />
                 <span class={styles.albumName}>{al.name}</span>
-                <span class={styles.albumCount}>{al.tracks.length} pistas</span>
+                <span class={styles.albumCount}>{trackCount(al.tracks.length)}</span>
               </button>
             )}
           </For>

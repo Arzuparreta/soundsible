@@ -2,6 +2,7 @@ import { createMemo } from 'solid-js';
 import { state } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
+import { trackCount } from '../lib/format';
 import type { Track } from '../types/music';
 
 /** Favourites = library tracks whose id is in `favorites`, in favourites order. */
@@ -13,7 +14,7 @@ export default function Favourites() {
 
   return (
     <div class="view">
-      <ViewHeader title="Favoritos" meta={`${favTracks().length} pistas`} />
+      <ViewHeader title="Favoritos" meta={trackCount(favTracks().length)} />
       <TrackList
         tracks={favTracks()}
         loading={state.loading}

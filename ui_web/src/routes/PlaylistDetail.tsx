@@ -4,6 +4,7 @@ import { state, actions } from '../stores';
 import TrackList from '../components/TrackList';
 import Button from '../components/Button';
 import { openPlaylistMenu } from '../components/playlistActions';
+import { trackCount } from '../lib/format';
 import type { Track } from '../types/music';
 import styles from './PlaylistDetail.module.css';
 
@@ -42,7 +43,7 @@ export default function PlaylistDetail() {
         </button>
         <div class={styles.titleWrap}>
           <h1 class={styles.title}>{name()}</h1>
-          <span class={styles.count}>{tracks().length} pistas</span>
+          <span class={styles.count}>{trackCount(tracks().length)}</span>
         </div>
         <Button onClick={playAll} disabled={tracks().length === 0}>
           Reproducir

@@ -3,6 +3,7 @@ import { A } from '@solidjs/router';
 import { state, actions } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import { coverUrl } from '../lib/media';
+import { trackCount } from '../lib/format';
 import { pickPlaylistCoverId } from '../lib/playlists';
 import { openPlaylistMenu, playlistMenuOptions } from '../components/playlistActions';
 import { attachContextMenu } from '../lib/contextMenu';
@@ -51,7 +52,7 @@ export default function Playlists() {
                     <A href={`/playlists/${encodeURIComponent(name)}`} class={styles.card}>
                       <div class={styles.cover} style={coverBg(name, ids())} />
                       <span class={styles.name}>{name}</span>
-                      <span class={styles.count}>{ids().length} pistas</span>
+                      <span class={styles.count}>{trackCount(ids().length)}</span>
                     </A>
                     <button
                       class={styles.cardMenu}
