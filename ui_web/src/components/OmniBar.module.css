@@ -93,3 +93,188 @@
   color: var(--ink-tertiary);
   cursor: default;
 }
+
+.soundBlade {
+  --level: 0%;
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .soundBlade {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 146px;
+    height: 36px;
+    flex-shrink: 0;
+    padding: 0 10px 0 8px;
+    color: var(--ink-secondary);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent),
+      var(--bg-inset);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-full);
+    cursor: default;
+    transition:
+      width var(--dur-short) var(--ease-out),
+      border-color var(--dur-short) var(--ease-out),
+      background var(--dur-short) var(--ease-out),
+      color var(--dur-short) var(--ease-out);
+  }
+
+  .soundBlade:hover,
+  .soundBlade:focus-within {
+    width: 164px;
+    color: var(--ink-primary);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.055), transparent),
+      var(--bg-elevated);
+    border-color: var(--hairline-strong);
+  }
+
+  .soundBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition:
+      color var(--dur-short) var(--ease-out),
+      background var(--dur-short) var(--ease-out);
+  }
+
+  .soundBtn:hover,
+  .soundBtn:focus-visible {
+    color: var(--accent);
+    background: var(--accent-soft);
+    outline: none;
+  }
+
+  .soundRail {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    height: 18px;
+    display: flex;
+    align-items: center;
+  }
+
+  .soundRail::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 3px;
+    transform: translateY(-50%);
+    background: var(--hairline-strong);
+    border-radius: var(--radius-full);
+  }
+
+  .soundFill {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: var(--level);
+    height: 3px;
+    transform: translateY(-50%);
+    background: linear-gradient(90deg, var(--accent-press), var(--accent-hover));
+    border-radius: var(--radius-full);
+    box-shadow: 0 0 12px rgba(249, 122, 18, 0.24);
+    pointer-events: none;
+    transition: width var(--dur-micro) linear;
+  }
+
+  .soundRange {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 18px;
+    margin: 0;
+    background: transparent;
+    opacity: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    transition: opacity var(--dur-short) var(--ease-out);
+  }
+
+  .soundBlade:hover .soundRange,
+  .soundBlade:focus-within .soundRange {
+    opacity: 1;
+  }
+
+  .soundRange:focus-visible {
+    outline: none;
+  }
+
+  .soundRange::-webkit-slider-runnable-track {
+    height: 18px;
+    background: transparent;
+  }
+
+  .soundRange::-webkit-slider-thumb {
+    width: 12px;
+    height: 12px;
+    margin-top: 3px;
+    border: 2px solid var(--bg-base);
+    border-radius: var(--radius-full);
+    background: var(--accent);
+    box-shadow: var(--shadow-1);
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .soundRange::-moz-range-track {
+    height: 18px;
+    background: transparent;
+  }
+
+  .soundRange::-moz-range-thumb {
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--bg-base);
+    border-radius: var(--radius-full);
+    background: var(--accent);
+    box-shadow: var(--shadow-1);
+  }
+
+  .soundValue {
+    width: 0;
+    overflow: hidden;
+    color: var(--ink-tertiary);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1;
+    text-align: right;
+    opacity: 0;
+    transition:
+      width var(--dur-short) var(--ease-out),
+      opacity var(--dur-short) var(--ease-out);
+  }
+
+  .soundBlade:hover .soundValue,
+  .soundBlade:focus-within .soundValue {
+    width: 24px;
+    opacity: 1;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1120px) {
+  .soundBlade {
+    width: 118px;
+  }
+
+  .soundBlade:hover,
+  .soundBlade:focus-within {
+    width: 138px;
+  }
+}
