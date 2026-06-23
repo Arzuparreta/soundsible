@@ -57,6 +57,12 @@ export function NowPlaying() {
   let swipeActive = false;
   let swipeOnBody = false;
   let swipeBodyAtTop = false;
+  // A drag only exists between a pointerdown on the sheet and its pointerup.
+  // pointermove on a mouse also fires on bare hover (no button held), so without
+  // tracking an in-progress gesture a hover over the freshly-opened sheet would
+  // be read as a swipe (stale swipeStartY=0 → phantom drag that never ends).
+  let pointerDown = false;
+  let activePointerId: number | null = null;
   /** Px of downward drag that closes the sheet on release. Tuned for a
    * comfortable mobile thumb swipe — roughly 1/8 of a typical phone height. */
   const SWIPE_CLOSE_THRESHOLD = 80;
@@ -71,6 +77,8 @@ export function NowPlaying() {
     // and right-clicks fall through to the element beneath.
     if (!e.isPrimary) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    pointerDown = true;
+    activePointerId = e.pointerId;
     swipeStartY = e.clientY;
     swipeActive = false;
     // The head always counts as a close handle. The body only counts when
@@ -83,6 +91,9 @@ export function NowPlaying() {
   };
 
   const onSheetPointerMove = (e: PointerEvent) => {
+    // Ignore moves that aren't part of a gesture started on this sheet (e.g. a
+    // bare mouse hover over the open sheet, which would otherwise drag it down).
+    if (!pointerDown || e.pointerId !== activePointerId) return;
     if (!nowPlayingOpen() || !sheetEl) return;
     const deltaY = e.clientY - swipeStartY;
     if (!swipeActive) {
@@ -92,6 +103,13 @@ export function NowPlaying() {
       // Disable the open/close transition so the sheet tracks the finger 1:1.
       // Restored on release.
       sheetEl.setAttribute('data-swiping', '');
+      // Keep receiving move/up even if the pointer leaves the sheet, so a drag
+      // that ends off-element still gets its pointerup (no stuck transform).
+      try {
+        sheetEl.setPointerCapture(e.pointerId);
+      } catch {
+        /* pointer already gone — nothing to capture */
+      }
     }
     sheetEl.style.transform = `translateY(${Math.max(0, deltaY)}px)`;
   };
@@ -110,11 +128,15 @@ export function NowPlaying() {
   };
 
   const onSheetPointerUp = (e: PointerEvent) => {
-    if (!swipeActive) return;
+    if (!pointerDown || e.pointerId !== activePointerId) return;
+    pointerDown = false;
+    activePointerId = null;
     endSwipe(e.clientY - swipeStartY > SWIPE_CLOSE_THRESHOLD);
   };
 
   const onSheetPointerCancel = () => {
+    pointerDown = false;
+    activePointerId = null;
     endSwipe(false);
   };
   /** Library tracks link to their artist; preview/podcast sources do not. */
