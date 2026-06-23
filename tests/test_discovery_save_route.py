@@ -6,23 +6,10 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
-# Stub all heavy transitive deps that shared.api.__init__ pulls in.
-# We load only shared.api.download_queue and shared.api.routes.discovery
-# by pointing importlib at the .py files directly, bypassing __init__.
-_STUBS = [
-    "flask_socketio", "flask_cors",
-    "watchdog", "watchdog.events", "watchdog.observers",
-    "yt_dlp",
-    "mutagen", "mutagen.mp3", "mutagen.id3",
-    "requests",
-    "player", "player.library", "player.queue_manager", "player.favourites_manager",
-    "odst_tool", "odst_tool.odst_downloader", "odst_tool.cloud_sync",
-    "odst_tool.optimize_library", "odst_tool.audio_utils",
-    "setup_tool", "setup_tool.uploader", "setup_tool.provider_factory",
-    "shared.api",  # prevent __init__ auto-execution when accessing submodules
-]
-for _m in _STUBS:
-    if _m not in sys.modules:
+for _m in ("watchdog", "watchdog.events", "watchdog.observers"):
+    try:
+        importlib.import_module(_m)
+    except ImportError:
         sys.modules[_m] = MagicMock()
 
 # Load download_queue and discovery route directly from their .py files.
@@ -35,10 +22,10 @@ def _load_module(name: str, rel_path: str):
     spec.loader.exec_module(mod)
     return mod
 
-_dq = _load_module("shared.api.download_queue", "shared/api/download_queue.py")
+_dq = _load_module("download_queue_under_test", "shared/api/download_queue.py")
 parse_intake_item = _dq.parse_intake_item
 
-_disc_routes = _load_module("shared.api.routes.discovery", "shared/api/routes/discovery.py")
+_disc_routes = _load_module("discovery_routes_under_test", "shared/api/routes/discovery.py")
 discovery_bp = _disc_routes.discovery_bp
 
 import json

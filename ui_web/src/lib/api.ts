@@ -1,5 +1,13 @@
 import { apiOrigin, ownerToken } from './config';
-import type { Track, PlaylistMap, LibrarySettings, SearchResult } from '../types/music';
+import type {
+  CatalogResolveResponse,
+  CatalogSaveResponse,
+  CatalogSearchResponse,
+  Track,
+  PlaylistMap,
+  LibrarySettings,
+  SearchResult,
+} from '../types/music';
 import type { PodcastSubscription, PodcastEpisode, PodcastSearchResult } from '../types/podcast';
 import type { DownloadQueueItem } from '../types/download';
 
@@ -491,6 +499,30 @@ export const api = {
       body: { event, payload: payload ?? {} },
       timeoutMs: 5000,
     }),
+  searchCatalog: (q: string, signal?: AbortSignal, type = 'all') =>
+    request<CatalogSearchResponse>(
+      `/api/catalog/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}&limit=36`,
+      { signal, timeoutMs: 15000 },
+    ),
+  suggestCatalog: async (q: string, signal?: AbortSignal): Promise<string[]> => {
+    const data = await request<{ suggestions?: string[] }>(
+      `/api/catalog/suggest?q=${encodeURIComponent(q)}`,
+      { signal, timeoutMs: 5000 },
+    );
+    return Array.isArray(data.suggestions) ? data.suggestions : [];
+  },
+  resolveCatalogItem: (body: { artist: string; title: string; duration?: number }) =>
+    request<CatalogResolveResponse>('/api/catalog/resolve', { method: 'POST', body, timeoutMs: 30000 }),
+  saveCatalogItem: (body: {
+    catalog_item_id?: string;
+    source?: string;
+    artist: string;
+    title: string;
+    duration?: number;
+    cover?: string;
+    external_ids?: Record<string, unknown>;
+    confirm_video_id?: string;
+  }) => request<CatalogSaveResponse>('/api/catalog/save', { method: 'POST', body, timeoutMs: 30000 }),
 
   // ── Podcasts ──
   getPodcastEpisodes: (feedId: string) =>

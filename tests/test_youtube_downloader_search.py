@@ -1,4 +1,10 @@
 from pathlib import Path
+import sys
+from unittest.mock import MagicMock
+
+for _module in ("yt_dlp", "mutagen", "mutagen.id3", "mutagen.mp3", "mutagen.flac"):
+    if _module not in sys.modules:
+        sys.modules[_module] = MagicMock()
 
 from odst_tool import youtube_downloader as yd
 
