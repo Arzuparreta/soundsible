@@ -8,6 +8,19 @@
   overflow: hidden;
 }
 
+/* Installed PWA (Add to Home Screen): there is no browser toolbar, so the
+   visible viewport IS the whole screen. Several iOS versions miscompute `100dvh`
+   in standalone mode — they subtract a phantom toolbar and leave the shell short,
+   producing a dead strip between the dock and the bottom edge (reported on an
+   older/larger iPhone where that iOS bug isn't fixed). With no dynamic chrome to
+   track, `100vh` equals the full screen in standalone, so prefer it here. The
+   dock's safe-area padding still lifts the buttons clear of the home indicator. */
+@media all and (display-mode: standalone) {
+  .app {
+    height: 100vh;
+  }
+}
+
 .content {
   flex: 1;
   min-width: 0;
