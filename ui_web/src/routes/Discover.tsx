@@ -258,47 +258,49 @@ export default function Discover() {
 
         {/* ── Search / radio results ── */}
         <Show when={!browsing()}>
-          <Show when={seed()}>
-            <p class={styles.seed}>
-              Radio basada en <strong>{seed()}</strong>{' '}
-              <button class={styles.seedClear} type="button" onClick={() => setSeed(null)}>
-                cerrar
-              </button>
-            </p>
-          </Show>
+          <div class={styles.results}>
+            <Show when={seed()}>
+              <p class={styles.seed}>
+                Radio basada en <strong>{seed()}</strong>{' '}
+                <button class={styles.seedClear} type="button" onClick={() => setSeed(null)}>
+                  cerrar
+                </button>
+              </p>
+            </Show>
 
-          <Show when={loading() && results().length === 0}>
-            <For each={Array.from({ length: 8 })}>{() => <div class={styles.skeleton} />}</For>
-          </Show>
+            <Show when={loading() && results().length === 0}>
+              <For each={Array.from({ length: 8 })}>{() => <div class={styles.skeleton} />}</For>
+            </Show>
 
-          <Show when={!loading() && results().length === 0}>
-            <p class={styles.hint}>
-              {searchError() ? (
-                <>
-                  No se pudo completar la búsqueda.{' '}
-                  <button class={styles.seedClear} type="button" onClick={() => run(q())}>
-                    Reintentar
-                  </button>
-                </>
-              ) : (
-                'Sin resultados.'
+            <Show when={!loading() && results().length === 0}>
+              <p class={styles.hint}>
+                {searchError() ? (
+                  <>
+                    No se pudo completar la búsqueda.{' '}
+                    <button class={styles.seedClear} type="button" onClick={() => run(q())}>
+                      Reintentar
+                    </button>
+                  </>
+                ) : (
+                  'Sin resultados.'
+                )}
+              </p>
+            </Show>
+
+            <For each={results()}>
+              {(r) => (
+                <SearchResultRow
+                  r={r}
+                  active={state.playback.currentTrack?.id === r.id}
+                  inLibrary={libYt().has(r.id)}
+                  enqueued={enqueued().has(r.id)}
+                  onPreview={() => preview(r)}
+                  onAdd={() => add(r)}
+                  onRadio={() => radio(r)}
+                />
               )}
-            </p>
-          </Show>
-
-          <For each={results()}>
-            {(r) => (
-              <SearchResultRow
-                r={r}
-                active={state.playback.currentTrack?.id === r.id}
-                inLibrary={libYt().has(r.id)}
-                enqueued={enqueued().has(r.id)}
-                onPreview={() => preview(r)}
-                onAdd={() => add(r)}
-                onRadio={() => radio(r)}
-              />
-            )}
-          </For>
+            </For>
+          </div>
         </Show>
       </div>
     </div>

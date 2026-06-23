@@ -45,6 +45,8 @@
   overflow-x: auto;
   scroll-snap-type: x proximity;
   padding: var(--space-2xs) var(--gutter) var(--space-sm);
+  scroll-padding-inline: var(--gutter);
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
 }
 .railRow::-webkit-scrollbar {
@@ -178,7 +180,11 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 var(--space-sm) var(--space-lg);
+  padding-bottom: var(--space-lg);
+}
+
+.results {
+  padding: 0 var(--space-sm);
 }
 
 .seed {
