@@ -161,6 +161,41 @@ def test_save_empty_body_returns_400(tmp_path):
     assert res.status_code == 400
 
 
+def test_music_feed_prioritizes_external_discovery_before_local_recs(tmp_path):
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[_track("local-1", "Local Song", "Local Artist")],
+        playlists={},
+        settings={},
+    )
+
+    chart = {
+        "tracks": {
+            "data": [
+                {
+                    "id": 1001,
+                    "title": "External Song",
+                    "title_short": "External Song",
+                    "duration": 201,
+                    "rank": 900000,
+                    "artist": {"name": "External Artist"},
+                    "album": {"title": "External Album", "cover_medium": "https://example.test/cover.jpg"},
+                }
+            ]
+        }
+    }
+
+    with patch.object(_disc_routes, "_deezer_json", return_value=chart):
+        body = _disc_routes._build_music_feed(metadata, [], limit=12)
+
+    assert body["sections"][0]["id"] == "trending_now"
+    first_id = body["sections"][0]["item_ids"][0]
+    first_item = next(item for item in body["items"] if item["id"] == first_id)
+    assert first_item["source"] == "deezer_chart"
+    assert first_item["title"] == "External Song"
+
+
 # ─── confirm_video_id path ────────────────────────────────────────────────────
 
 def test_save_confirm_video_id_queues_directly(tmp_path):

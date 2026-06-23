@@ -3,13 +3,6 @@ import { request } from './api';
 import type { DiscoveryFeedItem, DiscoveryFeedSection, DiscoveryMusicFeed } from './api';
 import type { PodcastSearchResult } from '../types/podcast';
 
-/**
- * Discover data layer with stale-while-revalidate caching. The legacy Discover
- * blocked ~15s on network every visit; here each rail renders instantly from a
- * localStorage cache, then revalidates in the background. The app also prefetches
- * on boot (see initStore) so the first visit is already warm.
- */
-
 export interface DiscoverMusicItem {
   id: string;
   track_id: string;
@@ -45,14 +38,14 @@ const [revalidating, setRevalidating] = createSignal(false);
 
 export { musicSections, recentSaved, topPodcasts, feedItems, feedSections, revalidating };
 
-const TTL_MS = 60_000; // background revalidate when cache is older than this
+const TTL_MS = 60_000;
 const KEY = {
-  feedItems: 'discover:feed:items',
-  feedSections: 'discover:feed:sections',
-  music: 'discover:music',
-  recent: 'discover:recent',
-  podcasts: 'discover:podcasts',
-  ts: 'discover:ts',
+  feedItems: 'discover:v2:feed:items',
+  feedSections: 'discover:v2:feed:sections',
+  music: 'discover:v2:music',
+  recent: 'discover:v2:recent',
+  podcasts: 'discover:v2:podcasts',
+  ts: 'discover:v2:ts',
 } as const;
 
 function readCache<T>(key: string): T | null {
@@ -73,7 +66,6 @@ function writeCache(key: string, data: unknown): void {
 }
 
 let hydrated = false;
-/** Populate signals from localStorage (instant, synchronous). */
 function hydrate(): void {
   if (hydrated) return;
   hydrated = true;
@@ -145,7 +137,6 @@ interface RawPodcastRow {
 }
 
 let inFlight: Promise<void> | null = null;
-/** Fetch all three rails and update signals + cache. Deduped. */
 async function revalidate(): Promise<void> {
   if (inFlight) return inFlight;
   setRevalidating(true);
@@ -208,11 +199,6 @@ async function revalidate(): Promise<void> {
   return inFlight;
 }
 
-/**
- * Ensure Discover data is available: hydrate from cache instantly, then
- * revalidate in the background if the cache is empty or stale. Safe to call on
- * every mount and once at boot.
- */
 export function ensureDiscover(): void {
   hydrate();
   const ts = readCache<number>(KEY.ts) ?? 0;
@@ -221,7 +207,6 @@ export function ensureDiscover(): void {
   if (stale || empty) void revalidate();
 }
 
-/** Force a refresh (e.g. pull-to-refresh / after saving tracks). */
 export function refreshDiscover(): void {
   void revalidate();
 }
