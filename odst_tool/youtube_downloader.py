@@ -860,7 +860,13 @@ class YouTubeDownloader:
             "artist": channel,
         }
 
-    def search_youtube(self, query: str, max_results: int = 10, use_ytmusic: bool = True) -> List[Dict[str, Any]]:
+    def search_youtube(
+        self,
+        query: str,
+        max_results: int = 10,
+        use_ytmusic: bool = True,
+        enrich_missing: bool = True,
+    ) -> List[Dict[str, Any]]:
         """
         Search YouTube or YouTube Music with plain text. Returns yt-dlp-derived dicts:
         id, title, duration, thumbnail, webpage_url, channel, artist (same value from
@@ -994,7 +1000,7 @@ class YouTubeDownloader:
                 item = to_item(entry)
                 if item is not None:
                     out.append(item)
-            if use_ytmusic:
+            if use_ytmusic and enrich_missing:
                 enrich_missing_creators(out)
         except Exception as e:
             logger.warning("YouTube search error (use_ytmusic=%s): %s", use_ytmusic, e)

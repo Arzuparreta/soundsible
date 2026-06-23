@@ -59,6 +59,27 @@ def test_ytmusic_search_enriches_flat_entries_with_artist(monkeypatch, tmp_path)
     ]
 
 
+def test_ytmusic_search_can_skip_blocking_artist_enrichment(monkeypatch, tmp_path):
+    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _FakeYoutubeDL)
+
+    downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
+    monkeypatch.setattr(
+        downloader,
+        "peek_brief",
+        lambda video_id: (_ for _ in ()).throw(AssertionError("peek_brief should not run")),
+    )
+
+    results = downloader.search_youtube(
+        "bohemian rhapsody",
+        max_results=1,
+        use_ytmusic=True,
+        enrich_missing=False,
+    )
+
+    assert results[0]["id"] == "bSnlKl_PoQU"
+    assert results[0]["artist"] == ""
+
+
 def test_download_profile_uses_bounded_network_resilience(monkeypatch):
     monkeypatch.delenv("SOUNDSIBLE_YTDLP_SOCKET_TIMEOUT", raising=False)
     monkeypatch.delenv("SOUNDSIBLE_YTDLP_HTTP_CHUNK_SIZE", raising=False)

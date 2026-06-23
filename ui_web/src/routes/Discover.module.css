@@ -26,15 +26,24 @@
   margin-bottom: var(--space-xl);
 }
 
-.railTitle {
+.railHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-md);
   margin: 0 var(--gutter) var(--space-sm);
+}
+
+.railTitle {
+  margin: 0;
   font-size: var(--text-h2);
   font-weight: var(--fw-bold);
   color: var(--ink-primary);
 }
 
 .railReason {
-  margin: calc(-1 * var(--space-2xs)) var(--gutter) var(--space-sm);
+  max-width: 760px;
+  margin: var(--space-2xs) 0 0;
   font-size: var(--text-caption);
   color: var(--ink-tertiary);
 }
@@ -133,6 +142,57 @@
   }
 }
 
+.saveBtn,
+.savedBadge {
+  position: absolute;
+  top: var(--space-xs);
+  left: var(--space-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.62);
+  border: none;
+  border-radius: var(--radius-full);
+  opacity: 0;
+  transition: opacity var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
+}
+
+.saveBtn {
+  cursor: pointer;
+}
+
+.saveBtn:hover {
+  background: var(--accent);
+}
+
+.savedBadge {
+  color: var(--success);
+}
+
+.card:hover .saveBtn,
+.card:hover .savedBadge {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .saveBtn,
+  .savedBadge {
+    opacity: 1;
+  }
+}
+
+.smallSpinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: var(--radius-full);
+  animation: spin 0.7s linear infinite;
+}
+
 .railTitleSkeleton {
   width: 180px;
   height: 22px;
@@ -216,4 +276,97 @@
   to {
     background-position: -200% 0;
   }
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gutter);
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.modal {
+  width: min(520px, 100%);
+  max-height: min(640px, 80vh);
+  overflow-y: auto;
+  padding: var(--space-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+}
+
+.modalHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.modalHead h2 {
+  margin: 0;
+  font-size: var(--text-h2);
+}
+
+.closeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font: inherit;
+  font-size: 24px;
+}
+
+.closeBtn:hover {
+  color: var(--ink-primary);
+  background: var(--bg-raised);
+}
+
+.candidate {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-height: 58px;
+  padding: var(--space-sm) var(--space-md);
+  color: var(--ink-primary);
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.candidate:hover {
+  background: var(--bg-raised);
+}
+
+.candidateTitle,
+.candidateSub {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidateTitle {
+  font-size: var(--text-body);
+  font-weight: var(--fw-semibold);
+}
+
+.candidateSub {
+  font-size: var(--text-label);
+  color: var(--ink-tertiary);
 }

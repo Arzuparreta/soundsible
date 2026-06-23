@@ -59,6 +59,72 @@ function normalizePodcastRow(r: RawPodcastRow): PodcastSearchResult {
   };
 }
 
+export interface DiscoveryActionState {
+  in_library?: boolean;
+  saved?: boolean;
+  playable?: boolean;
+  downloadable?: boolean;
+  needs_resolution?: boolean;
+}
+
+export interface DiscoveryFeedItem {
+  id: string;
+  media_type?: string;
+  source?: string;
+  track_id?: string;
+  title: string;
+  artist: string;
+  album?: string;
+  duration?: number;
+  cover?: string;
+  deezer_id?: string;
+  rank?: number;
+  reason?: string;
+  reason_code?: string;
+  confidence?: number;
+  action_state?: DiscoveryActionState;
+  external_ids?: Record<string, string | number | boolean | null | undefined>;
+}
+
+export interface DiscoveryFeedSection {
+  id: string;
+  title: string;
+  reason?: string;
+  item_ids?: string[];
+  section_type?: string;
+}
+
+export interface DiscoveryMusicFeed {
+  generated_at?: number;
+  cached?: boolean;
+  stale?: boolean;
+  items?: DiscoveryFeedItem[];
+  sections?: DiscoveryFeedSection[];
+}
+
+export interface DiscoverySaveCandidate {
+  id?: string;
+  video_id?: string;
+  title?: string;
+  channel?: string;
+  duration?: number;
+  thumbnail?: string;
+  confidence?: number;
+  confidence_level?: string;
+}
+
+export interface DiscoverySaveResponse {
+  status?: 'queued' | 'needs_review' | 'failed' | string;
+  queue_id?: string;
+  video_id?: string;
+  confidence?: number;
+  confidence_level?: string;
+  confidence_reason?: string;
+  reason?: string;
+  best?: DiscoverySaveCandidate;
+  candidates?: DiscoverySaveCandidate[];
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -359,26 +425,32 @@ export const api = {
       { method: 'POST', body, timeoutMs: 30000 },
     ),
 
-  /** Discover: YouTube Music search. Accepts an AbortSignal for cancellation. */
+  /** Internet search. The first path is the fast YouTube extractor; YouTube
+   * Music metadata enrichment is intentionally kept out of the blocking path. */
   searchYouTube: async (q: string, signal?: AbortSignal): Promise<SearchResult[]> => {
-    const search = async (source: 'ytmusic' | 'youtube') => {
+    const search = async (source: 'ytmusic' | 'youtube', enrich = true) => {
       const data = await request<{ results?: RawResult[] }>(
-        `/api/downloader/youtube/search?q=${encodeURIComponent(q)}&source=${source}&limit=20`,
+        `/api/downloader/youtube/search?q=${encodeURIComponent(q)}&source=${source}&limit=20&enrich=${enrich ? '1' : '0'}`,
         { signal, timeoutMs: 15000 },
       );
       return (data.results ?? []).map(normalizeResult).filter((r) => r.id);
     };
 
-    // YouTube Music occasionally returns an empty/error response even while
-    // regular YouTube search remains available. Discover is a user-facing
-    // search surface, so degrade to that compatible result source.
     try {
-      const musicResults = await search('ytmusic');
-      if (musicResults.length > 0 || signal?.aborted) return musicResults;
+      const youtubeResults = await search('youtube');
+      if (youtubeResults.length > 0 || signal?.aborted) return youtubeResults;
     } catch (error) {
       if (signal?.aborted) throw error;
     }
-    return search('youtube');
+    return search('ytmusic', false);
+  },
+  /** Optional metadata-only YouTube Music search for background enrichment. */
+  searchYouTubeMusic: async (q: string, signal?: AbortSignal): Promise<SearchResult[]> => {
+    const data = await request<{ results?: RawResult[] }>(
+      `/api/downloader/youtube/search?q=${encodeURIComponent(q)}&source=ytmusic&limit=20&enrich=0`,
+      { signal, timeoutMs: 8000 },
+    );
+    return (data.results ?? []).map(normalizeResult).filter((r) => r.id);
   },
   /** Search-as-you-type suggestions (Google suggest, ds=yt). Best-effort. */
   suggest: async (q: string, signal?: AbortSignal): Promise<string[]> => {
@@ -402,6 +474,22 @@ export const api = {
       method: 'POST',
       body: { items },
       timeoutMs: 15000,
+    }),
+  getDiscoveryMusicFeed: () =>
+    request<DiscoveryMusicFeed>('/api/discovery/music/feed?limit=36', { timeoutMs: 12000 }),
+  saveDiscoveryTrack: (body: {
+    artist: string;
+    title: string;
+    duration?: number;
+    deezer_id?: string;
+    cover?: string;
+    confirm_video_id?: string;
+  }) => request<DiscoverySaveResponse>('/api/discovery/save', { method: 'POST', body, timeoutMs: 30000 }),
+  emitDiscoveryEvent: (event: string, payload?: Record<string, unknown>) =>
+    request<{ status?: string; recorded?: boolean }>('/api/discovery/events', {
+      method: 'POST',
+      body: { event, payload: payload ?? {} },
+      timeoutMs: 5000,
     }),
 
   // ── Podcasts ──

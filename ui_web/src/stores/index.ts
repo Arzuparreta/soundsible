@@ -462,6 +462,14 @@ export const actions = {
           }),
         );
       actions.playFrom([seed, ...mix], 0);
+      void api.emitDiscoveryEvent('music_started_radio', {
+        track_id: seed.source === 'preview' ? undefined : seed.id,
+        title: seed.title,
+        artist: seed.artist,
+        album: seed.album,
+        youtube_id: ytId,
+        source: seed.source ?? 'library',
+      }).catch(() => {});
       t.update('success', 'Radio iniciada');
     } catch {
       t.update('error', 'No se pudo iniciar la radio');

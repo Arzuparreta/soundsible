@@ -65,6 +65,7 @@ def _fake_parse_intake(item: dict):
         "output_dir": None,
     }, None
 from shared.database import DatabaseManager
+from shared.models import LibraryMetadata, Track
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 from shared.telemetry import init_telemetry, reset_telemetry
 
@@ -95,6 +96,30 @@ def _make_app():
     app = Flask(__name__)
     app.register_blueprint(discovery_bp)
     return app
+
+
+class _FakeLibrary:
+    def __init__(self, metadata):
+        self.metadata = metadata
+
+    def refresh_if_stale(self):
+        return None
+
+
+def _track(track_id: str, title: str, artist: str) -> Track:
+    return Track(
+        id=track_id,
+        title=title,
+        artist=artist,
+        album="Album",
+        duration=180,
+        file_hash=f"hash-{track_id}",
+        original_filename=f"{track_id}.mp3",
+        compressed=False,
+        file_size=1000,
+        bitrate=320,
+        format="mp3",
+    )
 
 
 def _mock_api(search_results=None, queue_add_return=None, parse_fn=None):
@@ -413,3 +438,110 @@ def test_needs_review_response_has_required_fields(tmp_path):
     assert "candidates" in body
     assert "best" in body
     assert isinstance(body["candidates"], list)
+
+
+# ─── Music feed ───────────────────────────────────────────────────────────────
+
+class _FakeResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self._payload
+
+
+def test_music_feed_includes_deezer_tracks_and_local_recs(tmp_path):
+    _make_runtime(tmp_path)
+    _disc_routes._MUSIC_FEED_CACHE.clear()
+    _disc_routes._DEEZER_JSON_CACHE.clear()
+
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[_track("t1", "Local Song", "Local Artist")],
+        playlists={},
+        settings={},
+    )
+    fav = MagicMock()
+    fav.get_all.return_value = ["t1"]
+    mod = MagicMock()
+    mod.favourites_manager = fav
+    api = {
+        "get_core": MagicMock(return_value=(_FakeLibrary(metadata), None, None)),
+        "_mod": mod,
+    }
+
+    def fake_get(url, params=None, timeout=None, headers=None):
+        if url.endswith("/chart"):
+            return _FakeResponse({
+                "tracks": {
+                    "data": [
+                        {
+                            "id": 101,
+                            "title": "New Song",
+                            "title_short": "New Song",
+                            "duration": 201,
+                            "rank": 999,
+                            "artist": {"name": "New Artist"},
+                            "album": {"title": "New Album", "cover_big": "https://example.test/new.jpg"},
+                        }
+                    ]
+                }
+            })
+        if "/playlist/" in url:
+            return _FakeResponse({
+                "title": "Playlist",
+                "tracks": {
+                    "data": [
+                        {
+                            "id": 102,
+                            "title": "Playlist Song",
+                            "duration": 202,
+                            "rank": 500,
+                            "artist": {"name": "Playlist Artist"},
+                            "album": {"title": "Playlist Album", "cover_big": "https://example.test/pl.jpg"},
+                        }
+                    ]
+                },
+            })
+        raise AssertionError(url)
+
+    with patch.object(_disc_routes, "_get_api", return_value=api), \
+         patch.object(_disc_routes.requests, "get", side_effect=fake_get):
+        res = _make_app().test_client().get("/api/discovery/music/feed?limit=12")
+
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["cached"] is False
+    assert any(s["id"] == "made_for_your_library" for s in body["sections"])
+    assert any(s["id"] == "trending_now" for s in body["sections"])
+    assert any(item["id"] == "deezer:101" for item in body["items"])
+    external = next(item for item in body["items"] if item["id"] == "deezer:101")
+    assert external["action_state"]["needs_resolution"] is True
+
+
+def test_music_feed_uses_cache_when_fresh(tmp_path):
+    _make_runtime(tmp_path)
+    _disc_routes._MUSIC_FEED_CACHE.clear()
+    _disc_routes._DEEZER_JSON_CACHE.clear()
+
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    mod = MagicMock()
+    mod.favourites_manager = MagicMock()
+    mod.favourites_manager.get_all.return_value = []
+    api = {
+        "get_core": MagicMock(return_value=(_FakeLibrary(metadata), None, None)),
+        "_mod": mod,
+    }
+
+    with patch.object(_disc_routes, "_get_api", return_value=api), \
+         patch.object(_disc_routes.requests, "get", return_value=_FakeResponse({"tracks": {"data": []}})):
+        first = _make_app().test_client().get("/api/discovery/music/feed?limit=12")
+        second = _make_app().test_client().get("/api/discovery/music/feed?limit=12")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.get_json()["cached"] is False
+    assert second.get_json()["cached"] is True

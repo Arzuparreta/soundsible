@@ -49,9 +49,16 @@ _HTTP_HEADERS_ITUNES = {"User-Agent": "SoundsibleDiscovery/1.0"}
 
 _PODCAST_TOP_CACHE: dict[str, tuple[float, list]] = {}
 _PODCAST_TOP_TTL_SEC = 90
+_DEEZER_JSON_CACHE: dict[str, tuple[float, dict]] = {}
+_DEEZER_TRACK_CACHE_TTL_SEC = 180
+_MUSIC_FEED_CACHE: dict[str, tuple[float, dict]] = {}
+_MUSIC_FEED_TTL_SEC = 120
 _LOOKUP_CHUNK = 40
 # Short search terms — merged and deduped when RSS chart is unavailable.
 _ITUNES_TOP_FALLBACK_TERMS = ("podcast", "news", "comedy", "technology", "sports")
+_CURATED_DEEZER_PLAYLISTS = (
+    ("3155776842", "Fresh picks"),
+)
 
 
 def _podcast_row_from_itunes_search(r: dict) -> dict | None:
@@ -308,6 +315,217 @@ def _queue_confirmed(
     })
 
 
+def _norm_music_key(title: object, artist: object) -> str:
+    title_s = re.sub(r"\s+", " ", str(title or "").strip().casefold())
+    artist_s = re.sub(r"\s+", " ", str(artist or "").strip().casefold())
+    return f"{artist_s}\x00{title_s}"
+
+
+def _deezer_json(path: str, params: dict | None = None, ttl_sec: int = _DEEZER_TRACK_CACHE_TTL_SEC) -> dict:
+    params = params or {}
+    key = f"{path}?{tuple(sorted((str(k), str(v)) for k, v in params.items()))}"
+    now = time.time()
+    cached = _DEEZER_JSON_CACHE.get(key)
+    if cached and cached[0] > now:
+        return cached[1]
+    resp = requests.get(
+        f"{_DEEZER_HOST}/{path}",
+        params=params,
+        timeout=8,
+        headers={"User-Agent": "SoundsibleDiscovery/1.0"},
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict):
+        data = {}
+    _DEEZER_JSON_CACHE[key] = (now + ttl_sec, data)
+    return data
+
+
+def _deezer_track_to_feed_item(row: dict, *, source: str, reason: str, reason_code: str, in_library: bool) -> dict | None:
+    if not isinstance(row, dict):
+        return None
+    deezer_id = row.get("id")
+    title = (row.get("title_short") or row.get("title") or "").strip()
+    artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
+    artist = (artist_row.get("name") or row.get("artist") or "").strip()
+    if not deezer_id or not title or not artist:
+        return None
+    album_row = row.get("album") if isinstance(row.get("album"), dict) else {}
+    cover = (
+        album_row.get("cover_xl")
+        or album_row.get("cover_big")
+        or album_row.get("cover_medium")
+        or row.get("cover")
+        or ""
+    )
+    return {
+        "id": f"deezer:{deezer_id}",
+        "media_type": "music_track",
+        "source": source,
+        "title": title,
+        "artist": artist,
+        "album": (album_row.get("title") or "").strip(),
+        "duration": int(row.get("duration") or 0),
+        "cover": cover,
+        "deezer_id": str(deezer_id),
+        "rank": int(row.get("rank") or 0),
+        "reason": reason,
+        "reason_code": reason_code,
+        "confidence": 0.72,
+        "action_state": {
+            "in_library": bool(in_library),
+            "saved": bool(in_library),
+            "playable": True,
+            "downloadable": not in_library,
+            "needs_resolution": True,
+        },
+        "external_ids": {"deezer_id": str(deezer_id)},
+    }
+
+
+def _append_external_items(
+    items: list[dict],
+    rows: list,
+    *,
+    section_id: str,
+    title: str,
+    reason: str,
+    reason_code: str,
+    source: str,
+    local_keys: set[str],
+    seen: set[str],
+    limit: int,
+) -> dict | None:
+    section_ids: list[str] = []
+    for row in rows:
+        if len(section_ids) >= limit:
+            break
+        if not isinstance(row, dict):
+            continue
+        artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
+        key = _norm_music_key(row.get("title_short") or row.get("title"), artist_row.get("name") or row.get("artist"))
+        item = _deezer_track_to_feed_item(
+            row,
+            source=source,
+            reason=reason,
+            reason_code=reason_code,
+            in_library=key in local_keys,
+        )
+        if not item or item["id"] in seen:
+            continue
+        seen.add(item["id"])
+        items.append(item)
+        section_ids.append(item["id"])
+    if not section_ids:
+        return None
+    return {
+        "id": section_id,
+        "title": title,
+        "reason": reason,
+        "item_ids": section_ids,
+        "section_type": source,
+    }
+
+
+def _local_library_keys(metadata) -> set[str]:
+    tracks = list(metadata.tracks if metadata and metadata.tracks else [])
+    return {_norm_music_key(t.title, t.artist or t.album_artist) for t in tracks}
+
+
+def _build_music_feed(metadata, fav_ids: list[str], limit: int) -> dict:
+    local_recs = build_music_recommendations(metadata, fav_ids, limit=limit)
+    local_keys = _local_library_keys(metadata)
+    items: list[dict] = []
+    seen: set[str] = set()
+    sections: list[dict] = []
+
+    for item in local_recs.get("items") or []:
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        seen.add(str(item["id"]))
+        items.append(item)
+    for section in local_recs.get("sections") or []:
+        if isinstance(section, dict) and section.get("item_ids"):
+            sections.append(section)
+
+    chart_rows: list = []
+    try:
+        chart = _deezer_json("chart", {"limit": max(24, limit)}, ttl_sec=_DEEZER_TRACK_CACHE_TTL_SEC)
+        tracks = chart.get("tracks") if isinstance(chart.get("tracks"), dict) else {}
+        chart_rows = tracks.get("data") if isinstance(tracks.get("data"), list) else []
+    except Exception as exc:
+        logger.info("Discovery music feed: Deezer chart unavailable: %s", exc)
+
+    trending = _append_external_items(
+        items,
+        chart_rows,
+        section_id="trending_now",
+        title="Trending now",
+        reason="Live chart metadata from Deezer, resolved through Soundsible when you play or save.",
+        reason_code="deezer_chart",
+        source="deezer_chart",
+        local_keys=local_keys,
+        seen=seen,
+        limit=min(12, limit),
+    )
+    if trending:
+        sections.append(trending)
+
+    new_to_you_rows = [
+        row for row in chart_rows
+        if _norm_music_key(
+            row.get("title_short") or row.get("title"),
+            (row.get("artist") or {}).get("name") if isinstance(row.get("artist"), dict) else row.get("artist"),
+        ) not in local_keys
+    ]
+    new_to_you = _append_external_items(
+        items,
+        new_to_you_rows,
+        section_id="new_to_you",
+        title="New to you",
+        reason="Fresh tracks that are not already in your local library.",
+        reason_code="deezer_new_to_you",
+        source="deezer_new_to_you",
+        local_keys=local_keys,
+        seen=seen,
+        limit=min(12, limit),
+    )
+    if new_to_you:
+        sections.append(new_to_you)
+
+    for playlist_id, fallback_title in _CURATED_DEEZER_PLAYLISTS:
+        try:
+            playlist = _deezer_json(f"playlist/{playlist_id}", {"limit": min(24, limit)}, ttl_sec=_DEEZER_TRACK_CACHE_TTL_SEC)
+            tracks = playlist.get("tracks") if isinstance(playlist.get("tracks"), dict) else {}
+            rows = tracks.get("data") if isinstance(tracks.get("data"), list) else []
+        except Exception as exc:
+            logger.info("Discovery music feed: Deezer playlist %s unavailable: %s", playlist_id, exc)
+            continue
+        playlist_title = (playlist.get("title") or fallback_title).strip()
+        sec = _append_external_items(
+            items,
+            rows,
+            section_id=f"playlist_{playlist_id}",
+            title=playlist_title,
+            reason="Curated music metadata you can preview and save into your own library.",
+            reason_code="deezer_playlist",
+            source="deezer_playlist",
+            local_keys=local_keys,
+            seen=seen,
+            limit=min(12, limit),
+        )
+        if sec:
+            sections.append(sec)
+
+    return {
+        "generated_at": int(time.time()),
+        "items": items,
+        "sections": sections,
+        "settings": local_recs.get("settings") or load_discovery_settings(),
+    }
+
+
 @discovery_bp.route("/api/discovery/music/recommendations", methods=["GET"])
 @rate_limit("discovery_music_recommendations", limit=120, window_sec=60)
 def discovery_music_recommendations():
@@ -323,6 +541,52 @@ def discovery_music_recommendations():
     fav_manager = getattr(mod, "favourites_manager", None)
     fav_ids = fav_manager.get_all() if fav_manager is not None else []
     return jsonify(build_music_recommendations(metadata, fav_ids, limit=limit))
+
+
+@discovery_bp.route("/api/discovery/music/feed", methods=["GET"])
+@rate_limit("discovery_music_feed", limit=120, window_sec=60)
+def discovery_music_feed():
+    limit = min(50, max(1, request.args.get("limit", type=int) or 24))
+    cache_key = f"music-feed:{limit}"
+    now = time.time()
+    cached = _MUSIC_FEED_CACHE.get(cache_key)
+    if cached and cached[0] > now:
+        body = dict(cached[1])
+        body["cached"] = True
+        return jsonify(body)
+
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    try:
+        lib.refresh_if_stale()
+    except Exception:
+        pass
+    metadata = getattr(lib, "metadata", None)
+    mod = api["_mod"]
+    fav_manager = getattr(mod, "favourites_manager", None)
+    fav_ids = fav_manager.get_all() if fav_manager is not None else []
+
+    try:
+        body = _build_music_feed(metadata, fav_ids, limit)
+    except Exception as exc:
+        logger.warning("Discovery music feed failed: %s", exc)
+        if cached:
+            body = dict(cached[1])
+            body["cached"] = True
+            body["stale"] = True
+            return jsonify(body)
+        body = {
+            "generated_at": int(time.time()),
+            "items": [],
+            "sections": [],
+            "settings": load_discovery_settings(),
+            "error": "Discovery feed unavailable",
+        }
+        return jsonify(body), 502
+
+    body["cached"] = False
+    _MUSIC_FEED_CACHE[cache_key] = (now + _MUSIC_FEED_TTL_SEC, dict(body))
+    return jsonify(body)
 
 
 @discovery_bp.route("/api/discovery/music/recently-saved", methods=["GET"])

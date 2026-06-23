@@ -21,6 +21,9 @@ downloader_bp = Blueprint("downloader", __name__, url_prefix="")
 _PEEK_CACHE_TTL_SEC = 60
 _peek_cache: dict[str, tuple[float, dict]] = {}
 
+_SEARCH_CACHE_TTL_SEC = 300
+_search_cache: dict[str, tuple[float, list]] = {}
+
 
 def _get_api():
     from shared.api import (
@@ -50,12 +53,31 @@ def youtube_search():
         return jsonify({"results": []})
     limit = min(20, max(1, request.args.get("limit", 10, type=int)))
     source = (request.args.get("source") or "ytmusic").strip().lower()
+    enrich = (request.args.get("enrich") or "1").strip().lower() not in ("0", "false", "no", "off")
     # Note: Canonical ytmusic, youtube. support 'music' as legacy alias for ytmusic.
     use_ytmusic = (source in ("ytmusic", "music"))
+    source_key = "ytmusic" if use_ytmusic else "youtube"
+    cache_key = f"{source_key}:{limit}:{1 if enrich else 0}:{q.casefold()}"
+    now = time.time()
+    cached = _search_cache.get(cache_key)
+    if cached and now - cached[0] < _SEARCH_CACHE_TTL_SEC:
+        return jsonify({
+            "results": cached[1],
+            "meta": {"source": source_key, "cached": True, "enriched": enrich},
+        })
     try:
         dl = _get_api()["get_downloader"](open_browser=False)
-        results = dl.downloader.search_youtube(q, max_results=limit, use_ytmusic=use_ytmusic)
-        return jsonify({"results": results})
+        results = dl.downloader.search_youtube(
+            q,
+            max_results=limit,
+            use_ytmusic=use_ytmusic,
+            enrich_missing=enrich,
+        )
+        _search_cache[cache_key] = (now, results)
+        return jsonify({
+            "results": results,
+            "meta": {"source": source_key, "cached": False, "enriched": enrich},
+        })
     except Exception as e:
         logger.warning("API: YouTube search error: %s", e)
         return jsonify({"results": [], "error": sanitize_cli_message(str(e))}), 500

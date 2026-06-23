@@ -316,7 +316,7 @@ def test_playback_repeat_sets_mode(tmp_path, monkeypatch):
 class _FakeDownloaderWrapper:
     def __init__(self):
         self.downloader = MagicMock()
-        self.downloader.search_youtube = lambda q, max_results=10, use_ytmusic=True: [
+        self.downloader.search_youtube = lambda q, max_results=10, use_ytmusic=True, enrich_missing=True: [
             {"id": "yt1", "title": q, "artist": "A"}
         ]
 

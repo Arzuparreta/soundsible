@@ -1,9 +1,9 @@
-import { createMemo, createSignal, For, Show, onMount, onCleanup, type JSX } from 'solid-js';
+import { createMemo, createSignal, For, Match, Show, Switch, onCleanup, onMount, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { api } from '../lib/api';
+import { api, type DiscoveryFeedItem, type DiscoveryFeedSection, type DiscoverySaveCandidate } from '../lib/api';
 import { actions, state } from '../stores';
 import { coverUrl } from '../lib/media';
-import { ensureDiscover, musicSections, recentSaved, topPodcasts, type DiscoverMusicItem } from '../lib/discover';
+import { ensureDiscover, feedItems, feedSections, refreshDiscover } from '../lib/discover';
 import { openTrackMenu, trackMenuOptions } from '../components/trackActions';
 import { openPlaylistPicker } from '../components/PlaylistPicker';
 import { openMetadataEditor } from '../components/MetadataEditor';
@@ -11,16 +11,33 @@ import { attachContextMenu, type MenuProvider } from '../lib/contextMenu';
 import SearchResultRow from '../components/SearchResultRow';
 import { toast } from '../lib/toast';
 import type { SearchResult, Track } from '../types/music';
-import type { PodcastSearchResult } from '../types/podcast';
 import styles from './Discover.module.css';
 
 function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
 }
 
+function itemKey(item: DiscoveryFeedItem): string {
+  return item.id || item.track_id || `${item.artist}:${item.title}`;
+}
+
+function itemCover(item: DiscoveryFeedItem): string | undefined {
+  if (item.action_state?.in_library && item.track_id) return coverUrl(item.track_id);
+  return item.cover;
+}
+
+function isExternal(item: DiscoveryFeedItem): boolean {
+  return !!item.deezer_id || !!item.action_state?.needs_resolution || item.source?.startsWith('deezer') === true;
+}
+
+function candidateId(candidate: DiscoverySaveCandidate): string {
+  return candidate.video_id || candidate.id || '';
+}
+
 /**
- * Discover: instant recommendation rails (stale-while-revalidate, prefetched on
- * boot) plus instant YouTube-Music search with one-tap preview / add / radio.
+ * Discover: real music feed backed by the engine's discovery contract.
+ * Local-library rails play instantly; external rows use Deezer metadata for
+ * discovery and resolve through Soundsible/YouTube only when previewed or saved.
  */
 export default function Discover() {
   const navigate = useNavigate();
@@ -29,13 +46,16 @@ export default function Discover() {
   const [loading, setLoading] = createSignal(false);
   const [searchError, setSearchError] = createSignal(false);
   const [enqueued, setEnqueued] = createSignal<Set<string>>(new Set());
-  const [seed, setSeed] = createSignal<string | null>(null);
+  const [resolved, setResolved] = createSignal<Map<string, SearchResult>>(new Map());
+  const [saving, setSaving] = createSignal<Set<string>>(new Set());
+  const [review, setReview] = createSignal<{ item: DiscoveryFeedItem; candidates: DiscoverySaveCandidate[] } | null>(null);
 
   const libYt = createMemo(() => new Set(state.library.map((t) => t.youtube_id).filter((x): x is string => !!x)));
   const libById = createMemo(() => new Map(state.library.map((t) => [t.id, t] as const)));
-  const browsing = () => !q().trim() && !seed();
+  const itemById = createMemo(() => new Map(feedItems().map((it) => [it.id, it] as const)));
+  const browsing = () => !q().trim();
 
-  const cache = new Map<string, SearchResult[]>();
+  const searchCache = new Map<string, SearchResult[]>();
   let aborter: AbortController | undefined;
   let debounce: number | undefined;
   let requestId = 0;
@@ -44,7 +64,6 @@ export default function Discover() {
 
   const run = (query: string) => {
     query = query.trim();
-    setSeed(null);
     const currentRequest = ++requestId;
     aborter?.abort();
     aborter = undefined;
@@ -54,7 +73,7 @@ export default function Discover() {
       setLoading(false);
       return;
     }
-    const cached = cache.get(query);
+    const cached = searchCache.get(query);
     if (cached) {
       setResults(cached);
       setLoading(false);
@@ -66,7 +85,7 @@ export default function Discover() {
       .searchYouTube(query, aborter.signal)
       .then((res) => {
         if (currentRequest !== requestId) return;
-        cache.set(query, res);
+        searchCache.set(query, res);
         setResults(res);
       })
       .catch((e) => {
@@ -82,33 +101,140 @@ export default function Discover() {
   const onInput = (v: string) => {
     setQ(v);
     clearTimeout(debounce);
-    debounce = window.setTimeout(() => run(v), 250);
+    debounce = window.setTimeout(() => run(v), 180);
   };
 
-  const radio = (r: SearchResult) => {
-    aborter?.abort();
-    aborter = new AbortController();
-    setSeed(r.title);
-    setLoading(true);
-    api
-      .relatedYouTube(r.id, aborter.signal)
-      .then((res) => setResults(res))
-      .catch((e) => {
-        if (!isAbort(e)) setResults([]);
-      })
-      .finally(() => setLoading(false));
+  const toTrack = (item: DiscoveryFeedItem): Track | null => {
+    if (!item.track_id) return null;
+    return (
+      libById().get(item.track_id) ?? {
+        id: item.track_id,
+        title: item.title,
+        artist: item.artist,
+        album: item.album,
+        duration: item.duration,
+        cover: item.cover,
+      }
+    );
+  };
+
+  const trackCtx = () => ({ navigate, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor });
+  const menuOptsFor = (item: DiscoveryFeedItem) => {
+    const track = toTrack(item);
+    return track ? trackMenuOptions(track, trackCtx()) : null;
+  };
+  const menuFor = (item: DiscoveryFeedItem, ev?: MouseEvent) => {
+    const track = toTrack(item);
+    if (track) openTrackMenu(track, trackCtx(), ev);
+  };
+
+  const sectionItems = (section: DiscoveryFeedSection): DiscoveryFeedItem[] =>
+    (section.item_ids ?? []).map((id) => itemById().get(id)).filter((x): x is DiscoveryFeedItem => !!x);
+
+  const playLocalSection = (section: DiscoveryFeedSection, item: DiscoveryFeedItem) => {
+    const tracks = sectionItems(section).map(toTrack).filter((x): x is Track => !!x);
+    const idx = tracks.findIndex((t) => t.id === item.track_id);
+    if (idx >= 0) actions.playFrom(tracks, idx);
+  };
+
+  const resolveExternal = async (item: DiscoveryFeedItem): Promise<SearchResult | null> => {
+    const key = itemKey(item);
+    const cached = resolved().get(key);
+    if (cached) return cached;
+    const query = `${item.title} ${item.artist}`.trim();
+    const found = (await api.searchYouTube(query))[0];
+    if (!found) return null;
+    setResolved((m) => {
+      const next = new Map(m);
+      next.set(key, found);
+      return next;
+    });
+    return found;
+  };
+
+  const previewExternal = async (item: DiscoveryFeedItem) => {
+    const t = toast.loading('Buscando preview…');
+    try {
+      const r = await resolveExternal(item);
+      if (!r) throw new Error('not-found');
+      actions.playTrack({
+        id: r.id,
+        title: item.title || r.title,
+        artist: item.artist || r.channel || '',
+        album: item.album,
+        duration: item.duration || r.duration,
+        source: 'preview',
+        cover: item.cover || r.thumbnail,
+      });
+      void api.emitDiscoveryEvent('music_search_played', {
+        title: item.title,
+        artist: item.artist,
+        source: item.source,
+        deezer_id: item.deezer_id,
+        youtube_id: r.id,
+      }).catch(() => {});
+      t.update('success', 'Reproduciendo preview');
+    } catch {
+      t.update('error', 'No se pudo encontrar preview');
+    }
+  };
+
+  const playItem = (section: DiscoveryFeedSection, item: DiscoveryFeedItem) => {
+    if (isExternal(item)) void previewExternal(item);
+    else playLocalSection(section, item);
+  };
+
+  const saveExternal = async (item: DiscoveryFeedItem, confirmVideoId?: string) => {
+    const key = itemKey(item);
+    setSaving((s) => new Set(s).add(key));
+    try {
+      const res = await api.saveDiscoveryTrack({
+        artist: item.artist,
+        title: item.title,
+        duration: item.duration,
+        deezer_id: item.deezer_id,
+        cover: item.cover,
+        confirm_video_id: confirmVideoId,
+      });
+      if (res.status === 'queued') {
+        setReview(null);
+        setEnqueued((s) => new Set(s).add(key));
+        void refreshDiscover();
+        toast.success('Guardado en biblioteca');
+        return;
+      }
+      if (res.status === 'needs_review' && res.candidates?.length) {
+        setReview({ item, candidates: res.candidates });
+        return;
+      }
+      toast.error('No se pudo guardar');
+    } catch {
+      toast.error('No se pudo guardar');
+    } finally {
+      setSaving((s) => {
+        const next = new Set(s);
+        next.delete(key);
+        return next;
+      });
+    }
   };
 
   const preview = (r: SearchResult) => {
-    const track: Track = {
+    actions.playTrack({
       id: r.id,
       title: r.title,
       artist: r.channel ?? '',
       duration: r.duration,
       source: 'preview',
       cover: r.thumbnail,
-    };
-    actions.playTrack(track);
+    });
+    void api.emitDiscoveryEvent('music_search_played', {
+      title: r.title,
+      artist: r.channel ?? '',
+      source: 'search',
+      youtube_id: r.id,
+      query: q(),
+    }).catch(() => {});
   };
 
   const add = async (r: SearchResult) => {
@@ -126,45 +252,19 @@ export default function Discover() {
           metadata_evidence: null,
         },
       ]);
+      void api.emitDiscoveryEvent('music_added_to_queue', {
+        title: r.title,
+        artist: r.channel ?? '',
+        source: 'search',
+        youtube_id: r.id,
+        query: q(),
+      }).catch(() => {});
     } catch {
       setEnqueued((s) => {
         const n = new Set(s);
         n.delete(r.id);
         return n;
       });
-    }
-  };
-
-  // ── Rails ──
-  const toTrack = (item: DiscoverMusicItem): Track =>
-    libById().get(item.track_id) ?? {
-      id: item.track_id,
-      title: item.title,
-      artist: item.artist,
-      album: item.album,
-      duration: item.duration,
-    };
-
-  const playSection = (items: DiscoverMusicItem[], i: number) => actions.playFrom(items.map(toTrack), i);
-
-  const trackCtx = () => ({ navigate, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor });
-  const menuOptsFor = (item: DiscoverMusicItem) => trackMenuOptions(toTrack(item), trackCtx());
-  const menuFor = (item: DiscoverMusicItem, ev?: MouseEvent) => openTrackMenu(toTrack(item), trackCtx(), ev);
-
-  const subscribe = async (p: PodcastSearchResult) => {
-    const t = toast.loading('Suscribiendo…');
-    try {
-      await api.subscribePodcast({
-        rss_url: p.feed_url,
-        title: p.title,
-        author: p.author,
-        image_url: p.image_url,
-        itunes_collection_id: p.itunes_collection_id,
-      });
-      await actions.syncLibrary();
-      t.update('success', `Suscrito a ${p.title}`);
-    } catch {
-      t.update('error', 'No se pudo suscribir');
     }
   };
 
@@ -180,59 +280,38 @@ export default function Discover() {
         <input
           class={styles.input}
           type="search"
-          placeholder="Buscar canciones, artistas…"
+          placeholder="Buscar o descubrir música nueva"
           value={q()}
           onInput={(e) => onInput(e.currentTarget.value)}
         />
       </div>
 
       <div class={styles.scroll}>
-        {/* ── Browse mode: recommendation rails ── */}
         <Show when={browsing()}>
-          <Show
-            when={musicSections().length > 0 || recentSaved().length > 0 || topPodcasts().length > 0}
-            fallback={<RailSkeletons />}
-          >
-            <Show when={recentSaved().length > 0}>
-              <section class={styles.rail}>
-                <h2 class={styles.railTitle}>Guardado recientemente</h2>
-                <div class={styles.railRow}>
-                  <For each={recentSaved()}>
-                    {(it) => (
-                      <Card
-                        cover={it.in_library ? coverUrl(it.track_id) : it.cover}
-                        title={it.title}
-                        subtitle={it.artist}
-                        seedId={it.track_id}
-                        onClick={() => {
-                          const t = libById().get(it.track_id);
-                          if (t) actions.playTrack(t);
-                        }}
-                      />
-                    )}
-                  </For>
-                </div>
-              </section>
-            </Show>
-
-            <For each={musicSections()}>
-              {(sec) => (
+          <Show when={feedSections().length > 0} fallback={<RailSkeletons />}>
+            <For each={feedSections()}>
+              {(section) => (
                 <section class={styles.rail}>
-                  <h2 class={styles.railTitle}>{sec.title}</h2>
-                  <Show when={sec.reason}>
-                    <p class={styles.railReason}>{sec.reason}</p>
-                  </Show>
+                  <div class={styles.railHead}>
+                    <div>
+                      <h2 class={styles.railTitle}>{section.title}</h2>
+                      <Show when={section.reason}>
+                        <p class={styles.railReason}>{section.reason}</p>
+                      </Show>
+                    </div>
+                  </div>
                   <div class={styles.railRow}>
-                    <For each={sec.items}>
-                      {(it, i) => (
+                    <For each={sectionItems(section)}>
+                      {(it) => (
                         <Card
-                          cover={coverUrl(it.track_id)}
-                          title={it.title}
-                          subtitle={it.artist}
-                          seedId={it.track_id}
-                          onClick={() => playSection(sec.items, i())}
-                          onMenu={(ev) => menuFor(it, ev)}
-                          contextMenu={() => menuOptsFor(it)}
+                          item={it}
+                          cover={itemCover(it)}
+                          onClick={() => playItem(section, it)}
+                          onSave={isExternal(it) && !it.action_state?.in_library ? () => saveExternal(it) : undefined}
+                          saving={saving().has(itemKey(it))}
+                          saved={enqueued().has(itemKey(it)) || !!it.action_state?.in_library}
+                          onMenu={!isExternal(it) ? (ev) => menuFor(it, ev) : undefined}
+                          contextMenu={!isExternal(it) ? () => menuOptsFor(it) : undefined}
                         />
                       )}
                     </For>
@@ -240,34 +319,11 @@ export default function Discover() {
                 </section>
               )}
             </For>
-
-            <Show when={topPodcasts().length > 0}>
-              <section class={styles.rail}>
-                <h2 class={styles.railTitle}>Podcasts populares</h2>
-                <div class={styles.railRow}>
-                  <For each={topPodcasts()}>
-                    {(p) => (
-                      <Card cover={p.image_url} title={p.title} subtitle={p.author} round seedId={p.feed_url} onClick={() => subscribe(p)} />
-                    )}
-                  </For>
-                </div>
-              </section>
-            </Show>
           </Show>
         </Show>
 
-        {/* ── Search / radio results ── */}
         <Show when={!browsing()}>
           <div class={styles.results}>
-            <Show when={seed()}>
-              <p class={styles.seed}>
-                Radio basada en <strong>{seed()}</strong>{' '}
-                <button class={styles.seedClear} type="button" onClick={() => setSeed(null)}>
-                  cerrar
-                </button>
-              </p>
-            </Show>
-
             <Show when={loading() && results().length === 0}>
               <For each={Array.from({ length: 8 })}>{() => <div class={styles.skeleton} />}</For>
             </Show>
@@ -296,27 +352,54 @@ export default function Discover() {
                   enqueued={enqueued().has(r.id)}
                   onPreview={() => preview(r)}
                   onAdd={() => add(r)}
-                  onRadio={() => radio(r)}
                 />
               )}
             </For>
           </div>
         </Show>
       </div>
+
+      <Show when={review()}>
+        {(r) => (
+          <div class={styles.modalBackdrop} onClick={() => setReview(null)}>
+            <div class={styles.modal} onClick={(e) => e.stopPropagation()}>
+              <div class={styles.modalHead}>
+                <h2>Elige la versión</h2>
+                <button class={styles.closeBtn} type="button" aria-label="Cerrar" onClick={() => setReview(null)}>
+                  ×
+                </button>
+              </div>
+              <For each={r().candidates.slice(0, 5)}>
+                {(candidate) => (
+                  <button
+                    class={styles.candidate}
+                    type="button"
+                    onClick={() => {
+                      const id = candidateId(candidate);
+                      if (id) void saveExternal(r().item, id);
+                    }}
+                  >
+                    <span class={styles.candidateTitle}>{candidate.title}</span>
+                    <span class={styles.candidateSub}>{candidate.channel}</span>
+                  </button>
+                )}
+              </For>
+            </div>
+          </div>
+        )}
+      </Show>
     </div>
   );
 }
 
 interface CardProps {
+  item: DiscoveryFeedItem;
   cover?: string;
-  title: string;
-  subtitle?: string;
-  /** Used for the deterministic gradient fallback. */
-  seedId: string;
-  round?: boolean;
   onClick: () => void;
+  onSave?: () => void;
+  saving?: boolean;
+  saved?: boolean;
   onMenu?: (ev?: MouseEvent) => void;
-  /** Right-click / long-press contextual menu for the card. */
   contextMenu?: MenuProvider;
 }
 
@@ -328,7 +411,7 @@ function gradientFor(id: string): string {
 
 function Card(props: CardProps) {
   const bg = (): JSX.CSSProperties => {
-    const grad = gradientFor(props.seedId);
+    const grad = gradientFor(itemKey(props.item));
     return props.cover
       ? { background: `url("${props.cover}") center / cover no-repeat, ${grad}` }
       : { background: grad };
@@ -336,12 +419,33 @@ function Card(props: CardProps) {
   return (
     <div class={styles.card} ref={(el) => props.contextMenu && attachContextMenu(el, props.contextMenu)}>
       <button class={styles.cardBtn} type="button" onClick={props.onClick}>
-        <span classList={{ [styles.cardCover]: true, [styles.round]: props.round }} style={bg()} />
-        <span class={styles.cardTitle}>{props.title}</span>
-        <Show when={props.subtitle}>
-          <span class={styles.cardSub}>{props.subtitle}</span>
-        </Show>
+        <span class={styles.cardCover} style={bg()} />
+        <span class={styles.cardTitle}>{props.item.title}</span>
+        <span class={styles.cardSub}>{props.item.artist}</span>
       </button>
+      <Switch>
+        <Match when={props.onSave && !props.saved}>
+          <button
+            class={styles.saveBtn}
+            type="button"
+            aria-label="Guardar en biblioteca"
+            disabled={props.saving}
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onSave?.();
+            }}
+          >
+            <Show when={props.saving} fallback={<PlusIcon />}>
+              <span class={styles.smallSpinner} />
+            </Show>
+          </button>
+        </Match>
+        <Match when={props.saved && isExternal(props.item)}>
+          <span class={styles.savedBadge} aria-label="Guardado">
+            <CheckIcon />
+          </span>
+        </Match>
+      </Switch>
       <Show when={props.onMenu}>
         <button
           class={styles.cardMenu}
@@ -360,6 +464,22 @@ function Card(props: CardProps) {
         </button>
       </Show>
     </div>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+      <path d="M5 12l5 5L20 7" />
+    </svg>
   );
 }
 
