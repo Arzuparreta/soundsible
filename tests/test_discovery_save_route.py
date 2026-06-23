@@ -161,7 +161,7 @@ def test_save_empty_body_returns_400(tmp_path):
     assert res.status_code == 400
 
 
-def test_music_feed_prioritizes_external_discovery_before_local_recs(tmp_path):
+def test_music_feed_without_taste_returns_seed_state_not_generic_rows(tmp_path):
     _make_runtime(tmp_path)
     metadata = LibraryMetadata(
         version=1,
@@ -170,30 +170,62 @@ def test_music_feed_prioritizes_external_discovery_before_local_recs(tmp_path):
         settings={},
     )
 
-    chart = {
-        "tracks": {
-            "data": [
-                {
-                    "id": 1001,
-                    "title": "External Song",
-                    "title_short": "External Song",
-                    "duration": 201,
-                    "rank": 900000,
-                    "artist": {"name": "External Artist"},
-                    "album": {"title": "External Album", "cover_medium": "https://example.test/cover.jpg"},
-                }
-            ]
-        }
-    }
-
-    with patch.object(_disc_routes, "_deezer_json", return_value=chart):
+    with patch.object(_disc_routes, "_deezer_json", return_value={"data": []}):
         body = _disc_routes._build_music_feed(metadata, [], limit=12)
 
-    assert body["sections"][0]["id"] == "trending_now"
+    assert body["needs_seed"] is True
+    assert body["sections"] == []
+    assert body["items"] == []
+
+
+def test_music_feed_uses_taste_artist_before_generic_external(tmp_path):
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[
+            _track("fav-1", "Favourite Song", "Taste Artist"),
+            _track("other-1", "Other Song", "Other Artist"),
+        ],
+        playlists={"Daily": ["fav-1"]},
+        settings={},
+    )
+
+    def fake_deezer(path, params=None, ttl_sec=0):
+        if path == "search":
+            return {
+                "data": [
+                    {
+                        "id": 500,
+                        "title": "Seed Search Result",
+                        "artist": {"id": 77, "name": "Taste Artist"},
+                        "album": {"title": "Seed Album"},
+                    }
+                ]
+            }
+        if path == "artist/77/top":
+            return {
+                "data": [
+                    {
+                        "id": 501,
+                        "title": "Taste External",
+                        "title_short": "Taste External",
+                        "duration": 220,
+                        "rank": 800000,
+                        "artist": {"id": 77, "name": "Taste Artist"},
+                        "album": {"title": "Taste Album", "cover_medium": "https://example.test/taste.jpg"},
+                    }
+                ]
+            }
+        return {"tracks": {"data": []}, "data": []}
+
+    with patch.object(_disc_routes, "_deezer_json", side_effect=fake_deezer):
+        body = _disc_routes._build_music_feed(metadata, ["fav-1"], limit=12)
+
+    assert body["sections"][0]["id"] == "because_you_listen_taste_artist"
     first_id = body["sections"][0]["item_ids"][0]
     first_item = next(item for item in body["items"] if item["id"] == first_id)
-    assert first_item["source"] == "deezer_chart"
-    assert first_item["title"] == "External Song"
+    assert first_item["source"] == "deezer_taste_artist"
+    assert first_item["title"] == "Taste External"
 
 
 # ─── confirm_video_id path ────────────────────────────────────────────────────
@@ -475,7 +507,7 @@ class _FakeResponse:
         return self._payload
 
 
-def test_music_feed_includes_deezer_tracks_and_local_recs(tmp_path):
+def test_music_feed_includes_taste_based_external_tracks_and_local_recs(tmp_path):
     _make_runtime(tmp_path)
     _disc_routes._MUSIC_FEED_CACHE.clear()
     _disc_routes._DEEZER_JSON_CACHE.clear()
@@ -496,37 +528,30 @@ def test_music_feed_includes_deezer_tracks_and_local_recs(tmp_path):
     }
 
     def fake_get(url, params=None, timeout=None, headers=None):
-        if url.endswith("/chart"):
+        if url.endswith("/search"):
             return _FakeResponse({
-                "tracks": {
-                    "data": [
-                        {
-                            "id": 101,
-                            "title": "New Song",
-                            "title_short": "New Song",
-                            "duration": 201,
-                            "rank": 999,
-                            "artist": {"name": "New Artist"},
-                            "album": {"title": "New Album", "cover_big": "https://example.test/new.jpg"},
-                        }
-                    ]
-                }
+                "data": [
+                    {
+                        "id": 100,
+                        "title": "Seed Song",
+                        "artist": {"id": 77, "name": "Local Artist"},
+                        "album": {"title": "Seed Album"},
+                    }
+                ]
             })
-        if "/playlist/" in url:
+        if url.endswith("/artist/77/top"):
             return _FakeResponse({
-                "title": "Playlist",
-                "tracks": {
-                    "data": [
-                        {
-                            "id": 102,
-                            "title": "Playlist Song",
-                            "duration": 202,
-                            "rank": 500,
-                            "artist": {"name": "Playlist Artist"},
-                            "album": {"title": "Playlist Album", "cover_big": "https://example.test/pl.jpg"},
-                        }
-                    ]
-                },
+                "data": [
+                    {
+                        "id": 101,
+                        "title": "Taste Match",
+                        "title_short": "Taste Match",
+                        "duration": 201,
+                        "rank": 999,
+                        "artist": {"id": 77, "name": "Local Artist"},
+                        "album": {"title": "Taste Album", "cover_big": "https://example.test/new.jpg"},
+                    }
+                ]
             })
         raise AssertionError(url)
 
@@ -538,7 +563,7 @@ def test_music_feed_includes_deezer_tracks_and_local_recs(tmp_path):
     body = res.get_json()
     assert body["cached"] is False
     assert any(s["id"] == "made_for_your_library" for s in body["sections"])
-    assert any(s["id"] == "trending_now" for s in body["sections"])
+    assert body["sections"][0]["id"] == "because_you_listen_local_artist"
     assert any(item["id"] == "deezer:101" for item in body["items"])
     external = next(item for item in body["items"] if item["id"] == "deezer:101")
     assert external["action_state"]["needs_resolution"] is True

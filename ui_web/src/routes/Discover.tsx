@@ -3,7 +3,7 @@ import { useNavigate } from '@solidjs/router';
 import { api, type DiscoveryFeedItem, type DiscoveryFeedSection, type DiscoverySaveCandidate } from '../lib/api';
 import { actions, state } from '../stores';
 import { coverUrl } from '../lib/media';
-import { ensureDiscover, feedItems, feedSections, refreshDiscover } from '../lib/discover';
+import { ensureDiscover, feedItems, feedSections, refreshDiscover, revalidating } from '../lib/discover';
 import { openTrackMenu, trackMenuOptions } from '../components/trackActions';
 import { openPlaylistPicker } from '../components/PlaylistPicker';
 import { openMetadataEditor } from '../components/MetadataEditor';
@@ -59,6 +59,7 @@ export default function Discover() {
   let aborter: AbortController | undefined;
   let debounce: number | undefined;
   let requestId = 0;
+  let searchInput: HTMLInputElement | undefined;
 
   onMount(() => ensureDiscover());
 
@@ -282,13 +283,17 @@ export default function Discover() {
           type="search"
           placeholder="Buscar o descubrir música nueva"
           value={q()}
+          ref={searchInput}
           onInput={(e) => onInput(e.currentTarget.value)}
         />
       </div>
 
       <div class={styles.scroll}>
         <Show when={browsing()}>
-          <Show when={feedSections().length > 0} fallback={<RailSkeletons />}>
+          <Show
+            when={feedSections().length > 0}
+            fallback={revalidating() ? <RailSkeletons /> : <SeedDiscover onFocusSearch={() => searchInput?.focus()} />}
+          >
             <For each={feedSections()}>
               {(section) => (
                 <section class={styles.rail}>
@@ -388,6 +393,18 @@ export default function Discover() {
           </div>
         )}
       </Show>
+    </div>
+  );
+}
+
+function SeedDiscover(props: { onFocusSearch: () => void }) {
+  return (
+    <div class={styles.seedState}>
+      <h2>Busca musica para empezar</h2>
+      <p>Discover se genera con artistas, favoritos, playlists y canciones que guardas o reproduces.</p>
+      <button class={styles.seedAction} type="button" onClick={props.onFocusSearch}>
+        Buscar canciones
+      </button>
     </div>
   );
 }

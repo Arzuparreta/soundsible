@@ -40,12 +40,12 @@ export { musicSections, recentSaved, topPodcasts, feedItems, feedSections, reval
 
 const TTL_MS = 60_000;
 const KEY = {
-  feedItems: 'discover:v2:feed:items',
-  feedSections: 'discover:v2:feed:sections',
-  music: 'discover:v2:music',
-  recent: 'discover:v2:recent',
-  podcasts: 'discover:v2:podcasts',
-  ts: 'discover:v2:ts',
+  feedItems: 'discover:v3:feed:items',
+  feedSections: 'discover:v3:feed:sections',
+  music: 'discover:v3:music',
+  recent: 'discover:v3:recent',
+  podcasts: 'discover:v3:podcasts',
+  ts: 'discover:v3:ts',
 } as const;
 
 function readCache<T>(key: string): T | null {

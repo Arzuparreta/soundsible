@@ -106,6 +106,7 @@ export interface DiscoveryMusicFeed {
   generated_at?: number;
   cached?: boolean;
   stale?: boolean;
+  needs_seed?: boolean;
   items?: DiscoveryFeedItem[];
   sections?: DiscoveryFeedSection[];
 }

@@ -17,6 +17,7 @@ from shared.discovery_intelligence import (
     build_music_recommendations,
     build_podcast_recommendations,
     emit_discovery_event,
+    load_listening_event_rollups,
     load_discovery_settings,
     load_recently_saved_tracks,
     save_discovery_settings,
@@ -52,18 +53,11 @@ _PODCAST_TOP_TTL_SEC = 90
 _DEEZER_JSON_CACHE: dict[str, tuple[float, dict]] = {}
 _DEEZER_TRACK_CACHE_TTL_SEC = 180
 _MUSIC_FEED_CACHE: dict[str, tuple[float, dict]] = {}
-_MUSIC_FEED_TTL_SEC = 120
+_MUSIC_FEED_TTL_SEC = 600
 _LOOKUP_CHUNK = 40
 # Short search terms — merged and deduped when RSS chart is unavailable.
 _ITUNES_TOP_FALLBACK_TERMS = ("podcast", "news", "comedy", "technology", "sports")
-_CURATED_DEEZER_PLAYLISTS = (
-    ("3155776842", "Fresh picks"),
-)
-_CURATED_DISCOVERY_SEARCHES = (
-    ("latin pop", "Fresh latin pop"),
-    ("indie pop", "Indie discoveries"),
-    ("electronic", "Electronic pulse"),
-)
+_MAX_PERSONALIZED_SEEDS = 5
 
 
 def _podcast_row_from_itunes_search(r: dict) -> dict | None:
@@ -433,77 +427,121 @@ def _append_external_items(
     }
 
 
-def _catalog_item_to_feed_item(row: dict, *, source: str, reason: str, reason_code: str, local_keys: set[str]) -> dict | None:
-    title = (row.get("title") or "").strip()
-    artist = (row.get("artist") or row.get("subtitle") or "").strip()
-    if not title or not artist:
-        return None
-    ext = row.get("external_ids") if isinstance(row.get("external_ids"), dict) else {}
-    local_key = _norm_music_key(title, artist)
-    item_id = row.get("id") or f"{source}:{artist}:{title}"
-    return {
-        "id": str(item_id),
-        "media_type": "music_track",
-        "source": source,
-        "title": title,
-        "artist": artist,
-        "album": (row.get("album") or "").strip(),
-        "duration": int(row.get("duration") or 0),
-        "cover": row.get("cover") or "",
-        "deezer_id": str(ext.get("deezer_id") or "") or None,
-        "rank": int(row.get("popularity") or 0),
-        "reason": reason,
-        "reason_code": reason_code,
-        "confidence": 0.68,
-        "action_state": {
-            "in_library": local_key in local_keys,
-            "saved": local_key in local_keys,
-            "playable": True,
-            "downloadable": local_key not in local_keys,
-            "needs_resolution": True,
-        },
-        "external_ids": ext,
-    }
+def _top_taste_artists(metadata, fav_ids: list[str], limit: int = _MAX_PERSONALIZED_SEEDS) -> list[str]:
+    tracks = list(metadata.tracks if metadata and metadata.tracks else [])
+    if not tracks:
+        return []
+    rollup = load_listening_event_rollups()
+    by_id = {t.id: t for t in tracks}
+    scores: dict[str, float] = {}
+    display: dict[str, str] = {}
+
+    def add_artist(raw: object, score: float) -> None:
+        name = str(raw or "").strip()
+        key = name.casefold()
+        if not key:
+            return
+        scores[key] = scores.get(key, 0.0) + score
+        display.setdefault(key, name)
+
+    for idx, tid in enumerate(fav_ids):
+        track = by_id.get(str(tid))
+        if track:
+            add_artist(track.album_artist or track.artist, 9.0 - min(idx, 8) * 0.35)
+
+    playlists = metadata.playlists if metadata and isinstance(metadata.playlists, dict) else {}
+    playlist_track_ids: set[str] = set()
+    for ids in playlists.values():
+        if isinstance(ids, list):
+            playlist_track_ids.update(str(x) for x in ids)
+    for tid in playlist_track_ids:
+        track = by_id.get(tid)
+        if track:
+            add_artist(track.album_artist or track.artist, 3.0)
+
+    artist_counts: dict[str, int] = {}
+    for track in tracks:
+        name = track.album_artist or track.artist
+        key = str(name or "").strip().casefold()
+        if not key:
+            continue
+        artist_counts[key] = artist_counts.get(key, 0) + 1
+        display.setdefault(key, str(name).strip())
+    for key, count in artist_counts.items():
+        scores[key] = scores.get(key, 0.0) + min(8.0, count * 1.4)
+
+    for key, count in rollup.artist_plays.items():
+        scores[key] = scores.get(key, 0.0) + min(12.0, count * 2.0)
+        display.setdefault(key, key.title())
+    for key, count in rollup.artist_saves.items():
+        scores[key] = scores.get(key, 0.0) + min(10.0, count * 3.0)
+        display.setdefault(key, key.title())
+
+    ranked = sorted(scores, key=lambda key: scores[key], reverse=True)
+    return [display[key] for key in ranked[:limit] if display.get(key)]
 
 
-def _append_catalog_items(
+def _deezer_artist_top_rows(artist_name: str, limit: int) -> list[dict]:
+    search = _deezer_json("search", {"q": f'artist:"{artist_name}"', "limit": 8}, ttl_sec=_DEEZER_TRACK_CACHE_TTL_SEC)
+    rows = search.get("data") if isinstance(search.get("data"), list) else []
+    artist_id = ""
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
+        name = (artist_row.get("name") or "").strip()
+        if name.casefold() == artist_name.strip().casefold():
+            artist_id = str(artist_row.get("id") or "")
+            break
+    if not artist_id:
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
+            artist_id = str(artist_row.get("id") or "")
+            if artist_id:
+                break
+    if not artist_id:
+        return rows[:limit]
+    top = _deezer_json(f"artist/{artist_id}/top", {"limit": max(limit, 12)}, ttl_sec=_DEEZER_TRACK_CACHE_TTL_SEC)
+    top_rows = top.get("data") if isinstance(top.get("data"), list) else []
+    return top_rows[:limit]
+
+
+def _append_personalized_artist_sections(
     items: list[dict],
-    rows: list[dict],
+    sections: list[dict],
     *,
-    section_id: str,
-    title: str,
-    reason: str,
-    reason_code: str,
-    source: str,
+    metadata,
+    fav_ids: list[str],
     local_keys: set[str],
     seen: set[str],
     limit: int,
-) -> dict | None:
-    section_ids: list[str] = []
-    for row in rows:
-        if len(section_ids) >= limit:
-            break
-        item = _catalog_item_to_feed_item(
-            row,
-            source=source,
-            reason=reason,
-            reason_code=reason_code,
-            local_keys=local_keys,
-        )
-        if not item or item["id"] in seen:
+) -> None:
+    added = 0
+    for artist in _top_taste_artists(metadata, fav_ids):
+        try:
+            rows = _deezer_artist_top_rows(artist, max(12, min(18, limit)))
+        except Exception as exc:
+            logger.info("Discovery music feed: personalized seed %s unavailable: %s", artist, exc)
             continue
-        seen.add(item["id"])
-        items.append(item)
-        section_ids.append(item["id"])
-    if not section_ids:
-        return None
-    return {
-        "id": section_id,
-        "title": title,
-        "reason": reason,
-        "item_ids": section_ids,
-        "section_type": source,
-    }
+        sec = _append_external_items(
+            items,
+            rows,
+            section_id=f"because_you_listen_{re.sub(r'[^a-z0-9]+', '_', artist.casefold()).strip('_')[:44]}",
+            title=f"More like {artist}",
+            reason="Based on artists you play, save, favourite, or collect in playlists.",
+            reason_code="taste_artist_seed",
+            source="deezer_taste_artist",
+            local_keys=local_keys,
+            seen=seen,
+            limit=min(10, limit),
+        )
+        if sec:
+            sections.append(sec)
+            added += 1
+        if added >= 3:
+            break
 
 
 def _local_library_keys(metadata) -> set[str]:
@@ -518,121 +556,32 @@ def _build_music_feed(metadata, fav_ids: list[str], limit: int) -> dict:
     seen: set[str] = set()
     sections: list[dict] = []
 
-    chart_rows: list = []
-    try:
-        chart = _deezer_json("chart", {"limit": max(24, limit)}, ttl_sec=_DEEZER_TRACK_CACHE_TTL_SEC)
-        tracks = chart.get("tracks") if isinstance(chart.get("tracks"), dict) else {}
-        chart_rows = tracks.get("data") if isinstance(tracks.get("data"), list) else []
-    except Exception as exc:
-        logger.info("Discovery music feed: Deezer chart unavailable: %s", exc)
-
-    trending = _append_external_items(
+    _append_personalized_artist_sections(
         items,
-        chart_rows,
-        section_id="trending_now",
-        title="Trending now",
-        reason="Live chart metadata from Deezer, resolved through Soundsible when you play or save.",
-        reason_code="deezer_chart",
-        source="deezer_chart",
+        sections,
+        metadata=metadata,
+        fav_ids=fav_ids,
         local_keys=local_keys,
         seen=seen,
-        limit=min(12, limit),
+        limit=limit,
     )
-    if trending:
-        sections.append(trending)
 
-    new_to_you_rows = [
-        row for row in chart_rows
-        if _norm_music_key(
-            row.get("title_short") or row.get("title"),
-            (row.get("artist") or {}).get("name") if isinstance(row.get("artist"), dict) else row.get("artist"),
-        ) not in local_keys
-    ]
-    new_to_you = _append_external_items(
-        items,
-        new_to_you_rows,
-        section_id="new_to_you",
-        title="New to you",
-        reason="Fresh tracks that are not already in your local library.",
-        reason_code="deezer_new_to_you",
-        source="deezer_new_to_you",
-        local_keys=local_keys,
-        seen=seen,
-        limit=min(12, limit),
-    )
-    if new_to_you:
-        sections.append(new_to_you)
-
-    for playlist_id, fallback_title in _CURATED_DEEZER_PLAYLISTS:
-        try:
-            playlist = _deezer_json(f"playlist/{playlist_id}", {"limit": min(24, limit)}, ttl_sec=_DEEZER_TRACK_CACHE_TTL_SEC)
-            tracks = playlist.get("tracks") if isinstance(playlist.get("tracks"), dict) else {}
-            rows = tracks.get("data") if isinstance(tracks.get("data"), list) else []
-        except Exception as exc:
-            logger.info("Discovery music feed: Deezer playlist %s unavailable: %s", playlist_id, exc)
-            continue
-        playlist_title = (playlist.get("title") or fallback_title).strip()
-        sec = _append_external_items(
-            items,
-            rows,
-            section_id=f"playlist_{playlist_id}",
-            title=playlist_title,
-            reason="Curated music metadata you can preview and save into your own library.",
-            reason_code="deezer_playlist",
-            source="deezer_playlist",
-            local_keys=local_keys,
-            seen=seen,
-            limit=min(12, limit),
-        )
-        if sec:
-            sections.append(sec)
-
-    existing_external = any(str(s.get("section_type") or "").startswith("deezer") for s in sections)
-    if not existing_external:
-        try:
-            from shared.api.routes.catalog import _deezer_search, _musicbrainz_search
-
-            rows: list[dict] = []
-            for query, _title in _CURATED_DISCOVERY_SEARCHES:
-                rows.extend(_deezer_search(query, max(8, min(12, limit))))
-                if len(rows) >= limit:
-                    break
-            if not rows:
-                for query, _title in _CURATED_DISCOVERY_SEARCHES:
-                    rows.extend(_musicbrainz_search(query, max(6, min(10, limit))))
-                    if len(rows) >= limit:
-                        break
-            fallback = _append_catalog_items(
-                items,
-                rows,
-                section_id="fresh_external",
-                title="Fresh outside your library",
-                reason="Catalog metadata from external music directories, resolved through Soundsible when you play or save.",
-                reason_code="catalog_fallback",
-                source="catalog_discovery",
-                local_keys=local_keys,
-                seen=seen,
-                limit=min(12, limit),
-            )
-            if fallback:
-                sections.insert(0, fallback)
-        except Exception as exc:
-            logger.info("Discovery music feed: catalog fallback unavailable: %s", exc)
-
-    for item in local_recs.get("items") or []:
-        if not isinstance(item, dict) or not item.get("id") or str(item["id"]) in seen:
-            continue
-        seen.add(str(item["id"]))
-        items.append(item)
-    for section in local_recs.get("sections") or []:
-        if isinstance(section, dict) and section.get("item_ids"):
-            sections.append(section)
+    if sections:
+        for item in local_recs.get("items") or []:
+            if not isinstance(item, dict) or not item.get("id") or str(item["id"]) in seen:
+                continue
+            seen.add(str(item["id"]))
+            items.append(item)
+        for section in local_recs.get("sections") or []:
+            if isinstance(section, dict) and section.get("item_ids"):
+                sections.append(section)
 
     return {
         "generated_at": int(time.time()),
         "items": items,
         "sections": sections,
         "settings": local_recs.get("settings") or load_discovery_settings(),
+        "needs_seed": not bool(sections),
     }
 
 
@@ -657,7 +606,7 @@ def discovery_music_recommendations():
 @rate_limit("discovery_music_feed", limit=120, window_sec=60)
 def discovery_music_feed():
     limit = min(50, max(1, request.args.get("limit", type=int) or 24))
-    cache_key = f"music-feed-v2:{limit}"
+    cache_key = f"music-feed-v3:{limit}"
     now = time.time()
     cached = _MUSIC_FEED_CACHE.get(cache_key)
     if cached and cached[0] > now:

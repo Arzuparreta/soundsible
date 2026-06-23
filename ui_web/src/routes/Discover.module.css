@@ -263,6 +263,41 @@
   color: var(--ink-secondary);
 }
 
+.seedState {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-sm);
+  max-width: 520px;
+  margin: var(--space-3xl) auto;
+  padding: 0 var(--gutter);
+  text-align: center;
+}
+
+.seedState h2 {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: var(--text-h1);
+}
+
+.seedState p {
+  margin: 0;
+  color: var(--ink-secondary);
+  line-height: 1.5;
+}
+
+.seedAction {
+  height: var(--control-h);
+  margin-top: var(--space-sm);
+  padding: 0 var(--space-lg);
+  color: var(--bg-base);
+  background: var(--ink-primary);
+  border: none;
+  border-radius: var(--radius-full);
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+
 .skeleton {
   height: 60px;
   margin: var(--list-gap) var(--space-md);
