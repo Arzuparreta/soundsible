@@ -1,4 +1,4 @@
-import { createMemo, Show } from 'solid-js';
+import { createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { A } from '@solidjs/router';
 import { state, downloadCounts } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
@@ -14,6 +14,18 @@ export default function Home() {
   const favSet = createMemo(() => new Set(state.favorites));
   const sorted = createMemo(() => sortTracks(state.library, librarySort(), favSet()));
   const artists = createMemo(() => buildArtists(state.library));
+
+  // Desktop breakpoint is 1024px (matches app.module.css / tokens.css). On
+  // mobile the song row's subtitle is the same gesture as the row itself, so
+  // we render the artist as plain text and let the row click play the track.
+  const [isMobile, setIsMobile] = createSignal(true);
+  onMount(() => {
+    const mq = window.matchMedia('(max-width: 1023px)');
+    setIsMobile(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', onChange);
+    onCleanup(() => mq.removeEventListener('change', onChange));
+  });
 
   return (
     <div class="view">
@@ -81,6 +93,7 @@ export default function Home() {
           tracks={sorted()}
           loading={state.loading}
           empty={<p class={styles.empty}>Tu biblioteca está vacía. Descarga algo desde Discover.</p>}
+          linkArtist={!isMobile()}
         />
       </Show>
     </div>

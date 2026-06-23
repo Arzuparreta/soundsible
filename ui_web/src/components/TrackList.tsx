@@ -25,6 +25,10 @@ export default function TrackList(props: {
   loading?: boolean;
   empty?: JSX.Element;
   menu?: Partial<TrackMenuContext>;
+  /** When false, the artist name is rendered as plain text so tapping it
+   * bubbles to the row and plays the track instead of navigating. Useful on
+   * mobile, where tapping the subtitle is the same gesture as tapping the row. */
+  linkArtist?: boolean;
 }) {
   let scrollRef: HTMLDivElement | undefined;
   const navigate = useNavigate();
@@ -90,7 +94,7 @@ export default function TrackList(props: {
                         cover={coverUrl(track!.id)}
                         active={state.playback.currentTrack?.id === track!.id}
                         onPlay={() => actions.playFrom(props.tracks, vi.index)}
-                        onArtist={goArtist}
+                        onArtist={props.linkArtist === false ? undefined : goArtist}
                         onMenu={openMenu}
                       />
                     </div>
