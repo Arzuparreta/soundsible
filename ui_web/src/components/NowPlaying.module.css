@@ -14,6 +14,15 @@
   transform: translateY(0);
 }
 
+/* While the user is dragging the sheet down, suppress the open/close
+   transition so the transform tracks the pointer 1:1. The transition is
+   restored on release so the snap-back (→ translateY(0)) or close
+   (→ translateY(100%)) animation can play from the finger's release
+   position. */
+.sheet[data-swiping] {
+  transition: none;
+}
+
 .head {
   flex-shrink: 0;
   display: flex;
@@ -70,6 +79,10 @@
   width: 100%;
   margin: 0 auto;
   --queue-lift: 80px;
+  /* Lock the body to its content: no overscroll bounce (rubber-band) at the
+     top, and no scroll-chaining to the sheet behind it. Swipe-down is handled
+     at the sheet level (pointer events), not by the body's native scroll. */
+  overscroll-behavior-y: none;
 }
 
 /* The player (art + controls) fills the scroll viewport, so the queue that

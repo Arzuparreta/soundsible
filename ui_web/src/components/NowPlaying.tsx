@@ -27,6 +27,7 @@ export function NowPlaying() {
   });
   let dragFrom: number | null = null;
   let bodyEl: HTMLDivElement | undefined;
+  let sheetEl: HTMLDivElement | undefined;
   // Distance (px) over which the floating "En cola" badge unwinds from its
   // hovering hint position into its docked section-header position. While
   // scrolled within [0, QUEUE_LIFT] the badge stays visually pinned (a stable
@@ -46,6 +47,76 @@ export function NowPlaying() {
     bodyEl.style.setProperty('--q', '0');
     bodyEl.removeAttribute('data-docked');
   });
+
+  // Swipe-down-to-close. The body itself is locked (overscroll-behavior-y:
+  // none in CSS) so a downward drag at the top of the body is no longer
+  // absorbed by the body's native scroll. We capture it here on the sheet and
+  // close on release, with the sheet visually following the finger while
+  // dragging.
+  let swipeStartY = 0;
+  let swipeActive = false;
+  let swipeOnBody = false;
+  let swipeBodyAtTop = false;
+  /** Px of downward drag that closes the sheet on release. Tuned for a
+   * comfortable mobile thumb swipe — roughly 1/8 of a typical phone height. */
+  const SWIPE_CLOSE_THRESHOLD = 80;
+  /** Px of downward movement that activates swipe-to-close. Below this we
+   * treat the gesture as a tap or horizontal interaction and stay out of the
+   * way (so seek/volume sliders and button taps work normally). */
+  const SWIPE_ACTIVATE_THRESHOLD = 8;
+
+  const onSheetPointerDown = (e: PointerEvent) => {
+    if (!nowPlayingOpen()) return;
+    // Only the primary pointer (first finger / left mouse button). Multi-touch
+    // and right-clicks fall through to the element beneath.
+    if (!e.isPrimary) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    swipeStartY = e.clientY;
+    swipeActive = false;
+    // The head always counts as a close handle. The body only counts when
+    // it's scrolled to the very top — otherwise a downward drag is just the
+    // user scrolling the queue back to the player and must not close the
+    // sheet.
+    const target = e.target as Node | null;
+    swipeOnBody = !!(bodyEl && target && bodyEl.contains(target));
+    swipeBodyAtTop = (bodyEl?.scrollTop ?? 0) === 0;
+  };
+
+  const onSheetPointerMove = (e: PointerEvent) => {
+    if (!nowPlayingOpen() || !sheetEl) return;
+    const deltaY = e.clientY - swipeStartY;
+    if (!swipeActive) {
+      if (deltaY <= SWIPE_ACTIVATE_THRESHOLD) return;
+      if (swipeOnBody && !swipeBodyAtTop) return;
+      swipeActive = true;
+      // Disable the open/close transition so the sheet tracks the finger 1:1.
+      // Restored on release.
+      sheetEl.setAttribute('data-swiping', '');
+    }
+    sheetEl.style.transform = `translateY(${Math.max(0, deltaY)}px)`;
+  };
+
+  const endSwipe = (close: boolean) => {
+    if (!swipeActive || !sheetEl) return;
+    swipeActive = false;
+    sheetEl.removeAttribute('data-swiping');
+    if (close) setNowPlayingOpen(false);
+    // Clear the inline transform on the next frame so the CSS transition can
+    // animate from the finger's release position to translateY(0) (snap back)
+    // or translateY(100%) (close, once .open is removed above).
+    requestAnimationFrame(() => {
+      if (sheetEl) sheetEl.style.transform = '';
+    });
+  };
+
+  const onSheetPointerUp = (e: PointerEvent) => {
+    if (!swipeActive) return;
+    endSwipe(e.clientY - swipeStartY > SWIPE_CLOSE_THRESHOLD);
+  };
+
+  const onSheetPointerCancel = () => {
+    endSwipe(false);
+  };
   /** Library tracks link to their artist; preview/podcast sources do not. */
   const artistLinkable = createMemo(() => {
     const c = t();
@@ -67,7 +138,15 @@ export function NowPlaying() {
   };
 
   return (
-    <div classList={{ [styles.sheet]: true, [styles.open]: nowPlayingOpen() }} aria-hidden={!nowPlayingOpen()}>
+    <div
+      ref={sheetEl}
+      classList={{ [styles.sheet]: true, [styles.open]: nowPlayingOpen() }}
+      aria-hidden={!nowPlayingOpen()}
+      onPointerDown={onSheetPointerDown}
+      onPointerMove={onSheetPointerMove}
+      onPointerUp={onSheetPointerUp}
+      onPointerCancel={onSheetPointerCancel}
+    >
       <header class={styles.head}>
         <button class={styles.iconBtn} type="button" aria-label="Cerrar" onClick={() => setNowPlayingOpen(false)}>
           <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
