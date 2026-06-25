@@ -441,13 +441,26 @@ export const actions = {
 
   /** Start a radio station seeded from a track: plays it, then its YouTube mix. */
   async startRadio(seed: Track): Promise<void> {
-    const ytId = seed.youtube_id ?? (seed.source === 'preview' ? seed.id : null);
-    if (!ytId) {
-      toast.error('Radio no disponible para esta pista');
-      return;
-    }
     const t = toast.loading('Iniciando radio…');
     try {
+      let ytId = seed.youtube_id ?? (seed.source === 'preview' ? seed.id : null);
+
+      // For library tracks without a youtube_id, try to resolve one via search.
+      if (!ytId && seed.source !== 'preview') {
+        const query = `${seed.title} ${seed.artist}`.trim();
+        if (query) {
+          const found = await api.searchYouTube(query);
+          if (found.length > 0 && found[0].id) {
+            ytId = found[0].id;
+          }
+        }
+      }
+
+      if (!ytId) {
+        t.update('error', 'No se encontró el video en YouTube para iniciar la radio');
+        return;
+      }
+
       const related = await api.relatedYouTube(ytId);
       const mix = related
         .filter((r) => r.id !== ytId)

@@ -1032,27 +1032,11 @@ class YouTubeDownloader:
     def get_related_videos(self, seed_video_id: str, max_results: int = 25) -> List[Dict[str, Any]]:
         """
         Fetch related/mix videos for a seed from YouTube Music (playlist RD{id}).
+        Falls back to YouTube Music search if the mix playlist is unavailable.
         Returns same shape as search_youtube: id, title, duration, thumbnail, webpage_url, channel, artist.
         """
         if not _is_valid_youtube_video_id(seed_video_id):
             return []
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': 'in_playlist',
-            'noplaylist': False,
-            'extractor_args': {
-                'youtube': {'player_client': ['android', 'ios', 'web']}
-            }
-        }
-        _apply_ytdlp_network_options(ydl_opts)
-        if self.cookie_file and os.path.exists(self.cookie_file):
-            ydl_opts['cookiefile'] = self.cookie_file
-        elif self.cookie_browser:
-            ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
-
-        # Note: Watch URL with list=RD direct playlist?list=RD returns "this playlist type is unviewable".
-        mix_url = f"https://www.youtube.com/watch?v={seed_video_id}&list=RD{seed_video_id}&start_radio=1"
 
         def to_item(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             if not entry:
@@ -1073,12 +1057,15 @@ class YouTubeDownloader:
                 'artist': channel,
             }
 
-        out: List[Dict[str, Any]] = []
-        try:
+        def _try_extract(ydl_opts: dict, url: str) -> List[Dict[str, Any]]:
+            out = []
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                result = ydl.extract_info(mix_url, download=False)
+                result = ydl.extract_info(url, download=False)
             if not result or 'entries' not in result:
-                logger.debug("[Discover] get_related_videos: no entries in result for seed %s (result keys: %s)", seed_video_id, list(result.keys()) if result else "None")
+                logger.debug(
+                    "[Discover] get_related_videos: no entries in result for seed %s (result keys: %s)",
+                    seed_video_id, list(result.keys()) if result else "None",
+                )
                 return []
             raw_entries = result['entries']
             if raw_entries is None:
@@ -1089,10 +1076,61 @@ class YouTubeDownloader:
                 item = to_item(entry)
                 if item is not None:
                     out.append(item)
+            return out
+
+        base_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extractor_args': {
+                'youtube': {'player_client': ['android', 'ios', 'web']}
+            }
+        }
+        _apply_ytdlp_network_options(base_opts)
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            base_opts['cookiefile'] = self.cookie_file
+        elif self.cookie_browser:
+            base_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
+
+        # — Attempt 1: RD mix playlist with flat extraction (fast) —
+        mix_url = f"https://www.youtube.com/watch?v={seed_video_id}&list=RD{seed_video_id}&start_radio=1"
+        opts1 = {**base_opts, 'extract_flat': 'in_playlist', 'noplaylist': False}
+        try:
+            results = _try_extract(opts1, mix_url)
+            if results:
+                return results
         except Exception as e:
-            logger.warning("[Discover] get_related_videos failed for seed %s: %s", seed_video_id, e)
-            return []
-        return out
+            logger.debug("[Discover] get_related_videos RD attempt failed: %s", e)
+
+        # — Attempt 2: RD mix without flat extraction (full video info) —
+        opts2 = {**base_opts, 'noplaylist': False}
+        try:
+            results = _try_extract(opts2, mix_url)
+            if results:
+                return results
+        except Exception as e:
+            logger.debug("[Discover] get_related_videos RD full attempt failed: %s", e)
+
+        # — Attempt 3: YouTube Music search using video metadata —
+        try:
+            info = self._peek_video_metadata(f"https://www.youtube.com/watch?v={seed_video_id}")
+            if info:
+                raw_title = info.get('track') or info.get('title') or ''
+                raw_artist = info.get('artist') or info.get('channel') or info.get('uploader') or ''
+                title = str(raw_title).strip()
+                artist = str(raw_artist).strip() if isinstance(raw_artist, (str, list, tuple)) else ''
+                if isinstance(artist, (list, tuple)):
+                    artist = ', '.join(str(x) for x in artist if x)
+                query = f"{title} {artist}".strip()
+                if query:
+                    results = self.search_youtube(query, max_results=max_results, use_ytmusic=True)
+                    # Filter out the seed video itself
+                    results = [r for r in results if str(r.get('id', '')) != seed_video_id]
+                    if results:
+                        return results
+        except Exception as e:
+            logger.debug("[Discover] get_related_videos search fallback failed: %s", e)
+
+        return []
 
     def get_stream_url(self, video_id: str) -> Optional[str]:
         """Return direct audio stream URL via yt-dlp CLI (-g)."""
