@@ -1031,8 +1031,10 @@ class YouTubeDownloader:
 
     def get_related_videos(self, seed_video_id: str, max_results: int = 25) -> List[Dict[str, Any]]:
         """
-        Fetch related/mix videos for a seed from YouTube Music (playlist RD{id}).
-        Falls back to YouTube Music search if the mix playlist is unavailable.
+        Fetch related/mix videos for a seed from YouTube.
+        Tries the fastest approach first (search by metadata), then falls back
+        to the RD mix playlist extraction.
+
         Returns same shape as search_youtube: id, title, duration, thumbnail, webpage_url, channel, artist.
         """
         if not _is_valid_youtube_video_id(seed_video_id):
@@ -1063,13 +1065,12 @@ class YouTubeDownloader:
                 result = ydl.extract_info(url, download=False)
             if not result or 'entries' not in result:
                 logger.debug(
-                    "[Discover] get_related_videos: no entries in result for seed %s (result keys: %s)",
-                    seed_video_id, list(result.keys()) if result else "None",
+                    "[Discover] get_related_videos: no entries in result (keys: %s)",
+                    list(result.keys()) if result else "None",
                 )
                 return []
             raw_entries = result['entries']
             if raw_entries is None:
-                logger.debug("[Discover] get_related_videos: entries is None for seed %s", seed_video_id)
                 return []
             entries_list = list(raw_entries) if not isinstance(raw_entries, list) else raw_entries
             for entry in entries_list[:max_results]:
@@ -1081,6 +1082,7 @@ class YouTubeDownloader:
         base_opts = {
             'quiet': True,
             'no_warnings': True,
+            'socket_timeout': 12,
             'extractor_args': {
                 'youtube': {'player_client': ['android', 'ios', 'web']}
             }
@@ -1091,26 +1093,7 @@ class YouTubeDownloader:
         elif self.cookie_browser:
             base_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
 
-        # — Attempt 1: RD mix playlist with flat extraction (fast) —
-        mix_url = f"https://www.youtube.com/watch?v={seed_video_id}&list=RD{seed_video_id}&start_radio=1"
-        opts1 = {**base_opts, 'extract_flat': 'in_playlist', 'noplaylist': False}
-        try:
-            results = _try_extract(opts1, mix_url)
-            if results:
-                return results
-        except Exception as e:
-            logger.debug("[Discover] get_related_videos RD attempt failed: %s", e)
-
-        # — Attempt 2: RD mix without flat extraction (full video info) —
-        opts2 = {**base_opts, 'noplaylist': False}
-        try:
-            results = _try_extract(opts2, mix_url)
-            if results:
-                return results
-        except Exception as e:
-            logger.debug("[Discover] get_related_videos RD full attempt failed: %s", e)
-
-        # — Attempt 3: YouTube Music search using video metadata —
+        # — Attempt 1 (fastest): YouTube Music search by video metadata —
         try:
             info = self._peek_video_metadata(f"https://www.youtube.com/watch?v={seed_video_id}")
             if info:
@@ -1123,12 +1106,30 @@ class YouTubeDownloader:
                 query = f"{title} {artist}".strip()
                 if query:
                     results = self.search_youtube(query, max_results=max_results, use_ytmusic=True)
-                    # Filter out the seed video itself
                     results = [r for r in results if str(r.get('id', '')) != seed_video_id]
                     if results:
                         return results
         except Exception as e:
             logger.debug("[Discover] get_related_videos search fallback failed: %s", e)
+
+        # — Attempt 2: RD mix playlist (flat extraction) —
+        mix_url = f"https://www.youtube.com/watch?v={seed_video_id}&list=RD{seed_video_id}&start_radio=1"
+        opts_flat = {**base_opts, 'extract_flat': 'in_playlist', 'noplaylist': False}
+        try:
+            results = _try_extract(opts_flat, mix_url)
+            if results:
+                return results
+        except Exception as e:
+            logger.debug("[Discover] get_related_videos RD flat failed: %s", e)
+
+        # — Attempt 3: RD mix without flat extraction (full) —
+        opts_full = {**base_opts, 'noplaylist': False}
+        try:
+            results = _try_extract(opts_full, mix_url)
+            if results:
+                return results
+        except Exception as e:
+            logger.debug("[Discover] get_related_videos RD full failed: %s", e)
 
         return []
 

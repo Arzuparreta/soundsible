@@ -474,6 +474,10 @@ export const actions = {
             source: 'preview',
           }),
         );
+      if (mix.length === 0) {
+        t.update('error', `No se encontraron canciones relacionadas (semilla: ${ytId})`);
+        return;
+      }
       actions.playFrom([seed, ...mix], 0);
       void api.emitDiscoveryEvent('music_started_radio', {
         track_id: seed.source === 'preview' ? undefined : seed.id,
@@ -484,8 +488,9 @@ export const actions = {
         source: seed.source ?? 'library',
       }).catch(() => {});
       t.update('success', 'Radio iniciada');
-    } catch {
-      t.update('error', 'No se pudo iniciar la radio');
+    } catch (err) {
+      console.error('[startRadio] error', err, 'seed:', seed.id, seed.youtube_id);
+      t.update('error', `No se pudo iniciar la radio (${seed.youtube_id || 'sin ytId'})`);
     }
   },
 

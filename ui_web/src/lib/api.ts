@@ -473,7 +473,7 @@ export const api = {
   relatedYouTube: async (id: string, signal?: AbortSignal): Promise<SearchResult[]> => {
     const data = await request<{ results?: RawResult[] }>(
       `/api/downloader/youtube/related?id=${encodeURIComponent(id)}&limit=25`,
-      { signal, timeoutMs: 15000 },
+      { signal, timeoutMs: 45000 },
     );
     return (data.results ?? []).map(normalizeResult).filter((r) => r.id);
   },
