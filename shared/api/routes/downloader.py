@@ -204,6 +204,12 @@ def add_to_downloader_queue():
             accepted.append({"index": idx, "id": new_item["id"], "source_type": parsed.get("source_type")})
         status = "queued" if accepted else "error"
         code = 200 if accepted else 400
+        if accepted:
+            try:
+                if not api["queue_manager_dl"].is_processing:
+                    api["start_downloader_pump"]()
+            except Exception:
+                pass
         return jsonify({"status": status, "ids": added_ids, "accepted": accepted, "rejected": rejected}), code
     except Exception as e:
         logger.warning("API: Queue Add Error: %s", e)

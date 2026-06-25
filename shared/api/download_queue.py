@@ -195,9 +195,15 @@ def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
         normalized = normalize_youtube_url(song_str)
         extracted_id = extract_youtube_video_id(normalized or song_str)
         effective_video_id = video_id or extracted_id or (metadata_evidence or {}).get("video_id")
-        
-        if not normalized or ("youtube.com" not in normalized and "youtu.be" not in normalized) or not effective_video_id:
-            return None, "Invalid or unsupported YouTube URL or missing video_id"
+
+        # Auto-construct the YouTube URL from video_id when song_str is absent or invalid.
+        # This keeps items from save/discovery flows from being rejected just because
+        # they carry a video_id but not a full URL.
+        if effective_video_id and not (normalized and ("youtube.com" in normalized or "youtu.be" in normalized)):
+            normalized = f"https://www.youtube.com/watch?v={effective_video_id}"
+
+        if not effective_video_id:
+            return None, "Missing or invalid YouTube video id"
 
         base = {
             "source_type": source_type,

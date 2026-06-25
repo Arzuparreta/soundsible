@@ -263,7 +263,8 @@ def _queue_confirmed(
     """Add a confirmed video id to the download queue and return queued status."""
     thumb = cover or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else "")
     item = {
-        "source_type": "ytmusic_search",
+        "source_type": "youtube_url",
+        "song_str": f"https://www.youtube.com/watch?v={video_id}" if video_id else "",
         "video_id": video_id,
         "display_title": title,
         "display_artist": artist,

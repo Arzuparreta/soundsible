@@ -693,40 +693,47 @@ class YouTubeDownloader:
     def _download_audio(
         self, url: str, progress_callback: Optional[Callable[..., None]] = None
     ) -> Optional[Path]:
-        """Download via yt-dlp CLI (subprocess) so behavior matches a normal terminal download."""
+        """Download via yt-dlp CLI (subprocess).
+
+        Strategy: try native audio first (no re-encode — faster, fewer failures
+        with non-standard YouTube videos). Only re-encode if the native attempt
+        fails or the quality profile explicitly demands a specific codec.
+        """
         import time
         temp_filename = f"temp_{os.getpid()}_{time.time_ns()}_{uuid.uuid4().hex[:6]}"
         output_template = str(self.temp_dir / f"{temp_filename}.%(ext)s")
         profile = QUALITY_PROFILES.get(self.quality, QUALITY_PROFILES[DEFAULT_QUALITY])
 
-        codec = profile['format'] if profile['format'] != 'best' else 'flac'
-        args = [
-            get_subprocess_python(), "-u", "-m", "yt_dlp",
-            "-f", YDL_FORMAT_AUDIO,
-            "-x",
-            "--audio-format", codec,
-        ]
-        _add_ytdlp_cli_network_args(args)
-        args.extend(_ytdlp_download_resilience_args())
-        if profile.get('bitrate', 0) > 0 and codec == 'mp3':
-            args.extend(["--audio-quality", str(profile['bitrate'])])
-        args.extend([
-            "--extractor-args", "youtube:player_client=android,ios,web",
-            "--add-metadata",
-            "--embed-thumbnail",
-            "--parse-metadata", "playlist_index:%(track_number)s",
-            "-o", output_template,
-            "--retries", "10",
-            "--no-warnings",
-            "--newline",
-            "--progress",
-        ])
+        def _build_args(native: bool = False) -> list[str]:
+            args = [
+                get_subprocess_python(), "-u", "-m", "yt_dlp",
+                "-f", YDL_FORMAT_AUDIO,
+            ]
+            if not native:
+                codec = profile['format'] if profile['format'] != 'best' else 'flac'
+                args.extend(["-x", "--audio-format", codec])
+                if profile.get('bitrate', 0) > 0 and codec == 'mp3':
+                    args.extend(["--audio-quality", str(profile['bitrate'])])
+            _add_ytdlp_cli_network_args(args)
+            args.extend(_ytdlp_download_resilience_args())
+            args.extend([
+                "--extractor-args", "youtube:player_client=android,ios,web",
+                "--add-metadata",
+                "--embed-thumbnail",
+                "--parse-metadata", "playlist_index:%(track_number)s",
+                "-o", output_template,
+                "--retries", "10",
+                "--no-warnings",
+                "--newline",
+                "--progress",
+            ])
+            return args
+
         cookie_args = []
         if self.cookie_file and os.path.exists(self.cookie_file):
             cookie_args = ["--cookies", self.cookie_file]
         elif self.cookie_browser:
             cookie_args = ["--cookies-from-browser", self.cookie_browser]
-        args.append(url)
 
         def _with_cookie_args(args_list):
             if not cookie_args:
@@ -764,22 +771,36 @@ class YouTubeDownloader:
                 raise
             return proc.returncode, "".join(combined_chunks)
 
-        returncode, combined_output = _run_stream(args)
-        # Public extraction usually exposes the cleanest audio-only formats.
-        # Retry with configured cookies only when YouTube explicitly requires them.
+        # — Attempt 1: native audio (no re-encode) — fastest, most reliable —
+        native_args = _build_args(native=True) + [url]
+        returncode, combined_output = _run_stream(native_args)
+        if returncode == 0:
+            ext = None
+            for f in self.temp_dir.glob(f"{temp_filename}.*"):
+                return f
+            # yt-dlp sometimes names with a different extension; try common ones
+            for ext in ("m4a", "webm", "opus", "mp3", "ogg", "aac"):
+                p = self.temp_dir / f"{temp_filename}.{ext}"
+                if p.exists():
+                    return p
+
+        # — Attempt 2: cookies (native) —
         if returncode != 0 and cookie_args and _should_retry_download_with_cookies(combined_output):
-            returncode, combined_output = _run_stream(_with_cookie_args(args))
+            returncode, combined_output = _run_stream(_with_cookie_args(native_args))
+            if returncode == 0:
+                for f in self.temp_dir.glob(f"{temp_filename}.*"):
+                    return f
 
-        if returncode != 0:
-            raise Exception(combined_output or f"yt-dlp exited {returncode}")
+        # — Attempt 3: re-encode (with -x, cookies if available) —
+        encode_args = _build_args(native=False) + [url]
+        final_args = _with_cookie_args(encode_args) if cookie_args else encode_args
+        returncode, combined_output = _run_stream(final_args)
+        if returncode == 0:
+            for f in self.temp_dir.glob(f"{temp_filename}.*"):
+                return f
 
-        ext = codec
-        expected_path = self.temp_dir / f"{temp_filename}.{ext}"
-        if expected_path.exists():
-            return expected_path
-        for f in self.temp_dir.glob(f"{temp_filename}.*"):
-            return f
-        return None
+        # — All attempts exhausted —
+        raise Exception(combined_output or f"yt-dlp exited {returncode}")
 
     def _peek_video_metadata(self, url: str) -> Dict[str, Any]:
         """Single extract_info (no download) to recover title/artist when embedded tags are wrong.

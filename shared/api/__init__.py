@@ -809,9 +809,15 @@ def process_queue_background(stop_event: Optional[threading.Event] = None):
             # Note: Filter out those already being processed
             pending = [p for p in pending if f"dl_{p['id']}" not in active_ids]
 
+            # Note: When idle, just sleep — the pump stays alive so new items are
+            # picked up automatically without needing an explicit restart signal.
             if not pending and not active_ids:
-                queue_manager_dl.add_log("Station Engine: All tasks complete.")
-                break
+                if stop_event is not None:
+                    if stop_event.wait(timeout=2):
+                        continue
+                else:
+                    time.sleep(2)
+                continue
 
             # Note: Fill slots if we have capacity (max 3 concurrent downloads by default)
             # The effective concurrency can be tuned via the JobOrchestrator max_workers if needed.
@@ -1277,6 +1283,20 @@ def start_api(
         api_observer.schedule(event_handler, str(config_dir), recursive=False)
         api_observer.start()
         logger.info("API: Library File Watcher started on %s", config_dir)
+
+        # Note: Auto-start the downloader pump so queued items begin processing
+        # immediately without waiting for a manual trigger from the frontend.
+        # The pump stays alive as a watchdog — when the queue empties it sleeps
+        # instead of exiting, so new items are always picked up.
+        try:
+            if queue_manager_dl.get_pending():
+                start_downloader_pump()
+                logger.info("API: Downloader pump started (pending items in queue).")
+            else:
+                start_downloader_pump()
+                logger.info("API: Downloader pump started (watchdog mode).")
+        except Exception:
+            logger.debug("API: Downloader pump start skipped", exc_info=True)
 
     except Exception as e:
         logger.error("FATAL: Core initialization failed: %s", e)

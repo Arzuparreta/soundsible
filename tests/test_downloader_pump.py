@@ -49,21 +49,27 @@ def test_start_downloader_pump_is_idempotent(orch):
     assert not orch.pump_is_running()
 
 
-def test_pump_can_be_restarted_after_exit(orch):
+def test_pump_is_still_idempotent_as_watchdog(orch):
+    """With the always-on watchdog, a pump never auto-exits — stop_downloader_pump is required."""
     runs = []
 
     def pump(stop_event):
         runs.append(1)
+        # Simulate watchdog: sleep until signalled.
+        stop_event.wait(timeout=2)
 
     assert orch.start_downloader_pump(pump) is True
-    # Wait for the pump to exit on its own.
-    for _ in range(20):
-        if not orch.pump_is_running():
-            break
-        time.sleep(0.05)
+    # Give it time to enter.
+    time.sleep(0.1)
+    assert orch.pump_is_running()
+
+    # Second start must be rejected while pump is alive.
+    assert orch.start_downloader_pump(pump) is False
+
+    orch.stop_downloader_pump(wait=True)
     assert not orch.pump_is_running()
 
-    # Now a fresh start is allowed.
+    # After explicit stop, a new pump can start.
     assert orch.start_downloader_pump(pump) is True
     orch.stop_downloader_pump(wait=True)
     assert runs == [1, 1]
