@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { state, actions, nowPlayingOpen, setNowPlayingOpen } from '../stores';
 import { coverUrl } from '../lib/media';
@@ -28,6 +28,7 @@ export function NowPlaying() {
   let dragFrom: number | null = null;
   let bodyEl: HTMLDivElement | undefined;
   let sheetEl: HTMLDivElement | undefined;
+  let headEl: HTMLElement | undefined;
   // Distance (px) over which the floating "En cola" badge unwinds from its
   // hovering hint position into its docked section-header position. While
   // scrolled within [0, QUEUE_LIFT] the badge stays visually pinned (a stable
@@ -48,15 +49,15 @@ export function NowPlaying() {
     bodyEl.removeAttribute('data-docked');
   });
 
-  // Swipe-down-to-close. The body itself is locked (overscroll-behavior-y:
-  // none in CSS) so a downward drag at the top of the body is no longer
-  // absorbed by the body's native scroll. We capture it here on the sheet and
-  // close on release, with the sheet visually following the finger while
-  // dragging.
+  // Swipe-down-to-close. The body is scrollable because the queue lives below
+  // the player, so touch gestures need an explicit non-passive path: when the
+  // body is already at the top, a downward pan belongs to the sheet instead of
+  // the native scroll container.
   let swipeStartY = 0;
   let swipeActive = false;
   let swipeOnBody = false;
   let swipeBodyAtTop = false;
+  let swipeStartAt = 0;
   // A drag only exists between a pointerdown on the sheet and its pointerup.
   // pointermove on a mouse also fires on bare hover (no button held), so without
   // tracking an in-progress gesture a hover over the freshly-opened sheet would
@@ -66,28 +67,63 @@ export function NowPlaying() {
   /** Px of downward drag that closes the sheet on release. Tuned for a
    * comfortable mobile thumb swipe — roughly 1/8 of a typical phone height. */
   const SWIPE_CLOSE_THRESHOLD = 80;
+  const SWIPE_FAST_CLOSE_THRESHOLD = 32;
+  const SWIPE_CLOSE_VELOCITY = 0.45;
   /** Px of downward movement that activates swipe-to-close. Below this we
    * treat the gesture as a tap or horizontal interaction and stay out of the
    * way (so seek/volume sliders and button taps work normally). */
   const SWIPE_ACTIVATE_THRESHOLD = 8;
+  const HORIZONTAL_CANCEL_THRESHOLD = 12;
+
+  const isRangeTarget = (target: EventTarget | null) =>
+    target instanceof Element && !!target.closest('input[type="range"]');
+
+  const bodyAtTop = () => (bodyEl?.scrollTop ?? 0) <= 1;
+
+  const canStartSheetSwipe = (target: EventTarget | null) => {
+    if (!nowPlayingOpen() || isRangeTarget(target) || !(target instanceof Node)) {
+      return { allowed: false, onBody: false, bodyTop: false };
+    }
+    if (headEl?.contains(target)) {
+      return { allowed: true, onBody: false, bodyTop: true };
+    }
+    const onBody = !!bodyEl?.contains(target);
+    const atTop = bodyAtTop();
+    return { allowed: onBody && atTop, onBody, bodyTop: atTop };
+  };
+
+  const beginSheetSwipe = (clientY: number, start: ReturnType<typeof canStartSheetSwipe>) => {
+    swipeStartY = clientY;
+    swipeStartAt = performance.now();
+    swipeActive = false;
+    swipeOnBody = start.onBody;
+    swipeBodyAtTop = start.bodyTop;
+  };
+
+  const activateSheetSwipe = () => {
+    if (!sheetEl) return;
+    swipeActive = true;
+    // Disable the open/close transition so the sheet tracks the finger 1:1.
+    // Restored on release.
+    sheetEl.setAttribute('data-swiping', '');
+  };
+
+  const updateSheetSwipe = (deltaY: number) => {
+    if (!sheetEl) return;
+    sheetEl.style.transform = `translateY(${Math.max(0, deltaY)}px)`;
+  };
 
   const onSheetPointerDown = (e: PointerEvent) => {
-    if (!nowPlayingOpen()) return;
+    if (!nowPlayingOpen() || e.pointerType === 'touch') return;
     // Only the primary pointer (first finger / left mouse button). Multi-touch
     // and right-clicks fall through to the element beneath.
     if (!e.isPrimary) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const start = canStartSheetSwipe(e.target);
+    if (!start.allowed) return;
     pointerDown = true;
     activePointerId = e.pointerId;
-    swipeStartY = e.clientY;
-    swipeActive = false;
-    // The head always counts as a close handle. The body only counts when
-    // it's scrolled to the very top — otherwise a downward drag is just the
-    // user scrolling the queue back to the player and must not close the
-    // sheet.
-    const target = e.target as Node | null;
-    swipeOnBody = !!(bodyEl && target && bodyEl.contains(target));
-    swipeBodyAtTop = (bodyEl?.scrollTop ?? 0) === 0;
+    beginSheetSwipe(e.clientY, start);
   };
 
   const onSheetPointerMove = (e: PointerEvent) => {
@@ -99,10 +135,7 @@ export function NowPlaying() {
     if (!swipeActive) {
       if (deltaY <= SWIPE_ACTIVATE_THRESHOLD) return;
       if (swipeOnBody && !swipeBodyAtTop) return;
-      swipeActive = true;
-      // Disable the open/close transition so the sheet tracks the finger 1:1.
-      // Restored on release.
-      sheetEl.setAttribute('data-swiping', '');
+      activateSheetSwipe();
       // Keep receiving move/up even if the pointer leaves the sheet, so a drag
       // that ends off-element still gets its pointerup (no stuck transform).
       try {
@@ -111,7 +144,7 @@ export function NowPlaying() {
         /* pointer already gone — nothing to capture */
       }
     }
-    sheetEl.style.transform = `translateY(${Math.max(0, deltaY)}px)`;
+    updateSheetSwipe(deltaY);
   };
 
   const endSwipe = (close: boolean) => {
@@ -131,7 +164,10 @@ export function NowPlaying() {
     if (!pointerDown || e.pointerId !== activePointerId) return;
     pointerDown = false;
     activePointerId = null;
-    endSwipe(e.clientY - swipeStartY > SWIPE_CLOSE_THRESHOLD);
+    const deltaY = e.clientY - swipeStartY;
+    const elapsed = Math.max(1, performance.now() - swipeStartAt);
+    const velocity = deltaY / elapsed;
+    endSwipe(deltaY > SWIPE_CLOSE_THRESHOLD || (deltaY > SWIPE_FAST_CLOSE_THRESHOLD && velocity > SWIPE_CLOSE_VELOCITY));
   };
 
   const onSheetPointerCancel = () => {
@@ -139,6 +175,97 @@ export function NowPlaying() {
     activePointerId = null;
     endSwipe(false);
   };
+
+  let touchAllowed = false;
+  let activeTouchId: number | null = null;
+  let touchStartX = 0;
+
+  const resetTouchSwipe = () => {
+    touchAllowed = false;
+    activeTouchId = null;
+  };
+
+  const touchById = (touches: TouchList) => {
+    if (activeTouchId == null) return null;
+    for (let i = 0; i < touches.length; i += 1) {
+      const touch = touches.item(i);
+      if (touch?.identifier === activeTouchId) return touch;
+    }
+    return null;
+  };
+
+  const onSheetTouchStart = (e: TouchEvent) => {
+    if (!nowPlayingOpen() || e.touches.length !== 1) {
+      resetTouchSwipe();
+      return;
+    }
+    const start = canStartSheetSwipe(e.target);
+    if (!start.allowed) {
+      resetTouchSwipe();
+      return;
+    }
+    const touch = e.touches.item(0);
+    if (!touch) return;
+    touchAllowed = true;
+    activeTouchId = touch.identifier;
+    touchStartX = touch.clientX;
+    beginSheetSwipe(touch.clientY, start);
+  };
+
+  const onSheetTouchMove = (e: TouchEvent) => {
+    if (!touchAllowed || !sheetEl) return;
+    const touch = touchById(e.touches);
+    if (!touch) return;
+    const deltaY = touch.clientY - swipeStartY;
+    const deltaX = touch.clientX - touchStartX;
+
+    if (!swipeActive) {
+      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > HORIZONTAL_CANCEL_THRESHOLD) {
+        resetTouchSwipe();
+        return;
+      }
+      if (deltaY <= 0) return;
+      if (swipeOnBody && !swipeBodyAtTop) return;
+      // Critical on mobile Safari/Chrome: without a non-passive preventDefault,
+      // the scroll container owns the downward pan and cancels the sheet drag.
+      e.preventDefault();
+      if (deltaY <= SWIPE_ACTIVATE_THRESHOLD) return;
+      activateSheetSwipe();
+    } else {
+      e.preventDefault();
+    }
+    updateSheetSwipe(deltaY);
+  };
+
+  const onSheetTouchEnd = (e: TouchEvent) => {
+    if (!touchAllowed) return;
+    const touch = touchById(e.changedTouches);
+    if (!touch) return;
+    const deltaY = touch.clientY - swipeStartY;
+    const elapsed = Math.max(1, performance.now() - swipeStartAt);
+    const velocity = deltaY / elapsed;
+    resetTouchSwipe();
+    endSwipe(deltaY > SWIPE_CLOSE_THRESHOLD || (deltaY > SWIPE_FAST_CLOSE_THRESHOLD && velocity > SWIPE_CLOSE_VELOCITY));
+  };
+
+  const onSheetTouchCancel = () => {
+    resetTouchSwipe();
+    endSwipe(false);
+  };
+
+  onMount(() => {
+    if (!sheetEl) return;
+    sheetEl.addEventListener('touchstart', onSheetTouchStart, { passive: true });
+    sheetEl.addEventListener('touchmove', onSheetTouchMove, { passive: false });
+    sheetEl.addEventListener('touchend', onSheetTouchEnd, { passive: true });
+    sheetEl.addEventListener('touchcancel', onSheetTouchCancel, { passive: true });
+    onCleanup(() => {
+      sheetEl?.removeEventListener('touchstart', onSheetTouchStart);
+      sheetEl?.removeEventListener('touchmove', onSheetTouchMove);
+      sheetEl?.removeEventListener('touchend', onSheetTouchEnd);
+      sheetEl?.removeEventListener('touchcancel', onSheetTouchCancel);
+    });
+  });
   /** Library tracks link to their artist; preview/podcast sources do not. */
   const artistLinkable = createMemo(() => {
     const c = t();
@@ -169,7 +296,7 @@ export function NowPlaying() {
       onPointerUp={onSheetPointerUp}
       onPointerCancel={onSheetPointerCancel}
     >
-      <header class={styles.head}>
+      <header class={styles.head} ref={headEl}>
         <button class={styles.iconBtn} type="button" aria-label="Cerrar" onClick={() => setNowPlayingOpen(false)}>
           <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M6 9l6 6 6-6" />
