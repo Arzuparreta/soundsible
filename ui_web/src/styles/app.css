@@ -9,6 +9,8 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -19,6 +21,7 @@ body {
   text-rendering: optimizeLegibility;
   /* The app shell owns all scrolling; the page itself never scrolls. */
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 #app {
@@ -32,6 +35,21 @@ body {
 :where(a, button, select, [role='button'], [tabindex]):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+:where(a, button, [role='button']) {
+  touch-action: manipulation;
+}
+
+/* iOS Safari auto-zooms focused form controls below 16px. Keep dense text tokens
+   for normal UI, but make editable controls compute to 16px on touch devices so
+   focusing search/settings fields does not leave the whole app zoomed in. */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type='range']):not([type='checkbox']):not([type='radio']),
+  textarea:not([readonly]),
+  select:not([multiple]) {
+    font-size: max(16px, var(--text-body));
+  }
 }
 
 /* Layout primitive: a full-height column view (header + internally-scrolling body). */

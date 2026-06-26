@@ -30,6 +30,22 @@ import '@fontsource/jetbrains-mono/500.css';
 import './styles/tokens.css';
 import './styles/app.css';
 
+function installViewportHeightSync() {
+  const root = document.documentElement;
+  const viewport = window.visualViewport;
+  if (!viewport) return;
+
+  const sync = () => {
+    root.style.setProperty('--app-viewport-height', `${viewport.height}px`);
+  };
+
+  sync();
+  viewport.addEventListener('resize', sync);
+  viewport.addEventListener('scroll', sync);
+  window.addEventListener('orientationchange', sync);
+}
+
+installViewportHeightSync();
 initStore();
 
 const root = document.getElementById('app');

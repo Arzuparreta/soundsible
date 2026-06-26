@@ -5,6 +5,7 @@
      dock pins to the bottom. dvh tracks mobile browser chrome; vh is the fallback. */
   height: 100vh;
   height: 100dvh;
+  height: var(--app-viewport-height, 100dvh);
   overflow: hidden;
 }
 
