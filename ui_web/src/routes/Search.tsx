@@ -300,6 +300,7 @@ export default function Search() {
             value={q()}
             onInput={(e) => onInput(e.currentTarget.value)}
             onFocus={() => setShowSuggest(true)}
+            onBlur={() => setShowSuggest(false)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') commit(e.currentTarget.value);
               if (e.key === 'Escape') setShowSuggest(false);
@@ -307,9 +308,9 @@ export default function Search() {
             autofocus
           />
         </div>
-        <Show when={showSuggest() && (suggestions().length > 0 || (!q().trim() && recents().length > 0))}>
+        <Show when={showSuggest() && q().trim().length >= 2 && suggestions().length > 0}>
           <div class={styles.suggest}>
-            <For each={q().trim() ? suggestions() : recents()}>
+            <For each={suggestions()}>
               {(value) => (
                 <button class={styles.suggestItem} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => commit(value)}>
                   <SearchIcon />
