@@ -591,6 +591,52 @@ export const actions = {
   },
 
   // ── Downloads ──
+  /** Enqueue a preview track for download into the library. */
+  async downloadTrack(track: Track): Promise<void> {
+    if (track.source !== 'preview') return;
+    // Exclude podcast episodes (handled by downloadEpisode).
+    if (track.podcast_episode_guid) return;
+    const alreadySaved = state.library.some(
+      (t) => t.youtube_id === track.id || t.id === track.id,
+    );
+    if (alreadySaved) {
+      toast.info('Ya está en tu biblioteca');
+      return;
+    }
+    const alreadyDownloading = state.downloads.queue.some(
+      (i) => i.video_id === track.id && i.status !== 'failed' && i.status !== 'interrupted',
+    );
+    if (alreadyDownloading) {
+      toast.info('Ya está en la cola de descargas');
+      return;
+    }
+    const t = toast.loading('Añadiendo a descargas…');
+    try {
+      await api.enqueueDownload([
+        {
+          source_type: 'youtube_url',
+          song_str: `https://www.youtube.com/watch?v=${track.id}`,
+          video_id: track.id,
+          display_title: track.title,
+          display_artist: track.artist,
+          thumbnail_url: track.cover,
+          duration_sec: track.duration,
+          metadata_evidence: null,
+        },
+      ]);
+      void actions.loadDownloads();
+      void api.emitDiscoveryEvent('music_added_to_queue', {
+        title: track.title,
+        artist: track.artist,
+        source: 'now_playing',
+        youtube_id: track.id,
+      }).catch(() => {});
+      t.update('success', 'Añadido a descargas');
+    } catch {
+      t.update('error', 'No se pudo añadir a descargas');
+    }
+  },
+
   /** Seed the live queue from the engine (called on connect + when opening the view). */
   async loadDownloads(): Promise<void> {
     try {

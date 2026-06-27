@@ -56,6 +56,7 @@ const icons = {
       <path d="M8 21h8M12 17v4" />
     </svg>
   ),
+  download: () => sw('M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3'),
   remove: () => sw('M5 12h14'),
   trash: () => sw('M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'),
 };
@@ -83,6 +84,19 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   if (ctx.onEditCover && isLibrary)
     list.push({ icon: icons.image(), label: 'Cambiar portada', onSelect: () => ctx.onEditCover!(track) });
   list.push({ icon: icons.share(), label: 'Compartir', onSelect: () => void shareTrack(track) });
+  // Save to library for preview tracks (not yet downloaded).
+  // Exclude podcast episodes — they use a different download flow.
+  if (track.source === 'preview' && !track.podcast_episode_guid) {
+    const alreadySaved = state.library.some((t) => t.youtube_id === track.id || t.id === track.id);
+    const alreadyDownloading = state.downloads.queue.some(
+      (i) => i.video_id === track.id && i.status !== 'failed' && i.status !== 'interrupted',
+    );
+    if (!alreadySaved && !alreadyDownloading) {
+      list.push({ icon: icons.download(), label: 'Guardar en biblioteca', onSelect: () => void actions.downloadTrack(track) });
+    } else if (alreadyDownloading) {
+      list.push({ icon: icons.download(), label: 'Descargando…', disabled: true, onSelect: () => {} });
+    }
+  }
   if (ctx.onPlayOnDevice && isLibrary)
     list.push({ icon: icons.device(), label: 'Reproducir en dispositivo', onSelect: () => ctx.onPlayOnDevice!(track) });
   if (ctx.playlistName && ctx.onRemoveFromPlaylist)

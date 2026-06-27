@@ -407,6 +407,19 @@ export function NowPlaying() {
               </svg>
             </button>
 
+            <Show when={t()!.source === 'preview' && !t()!.podcast_episode_guid}>
+              <button
+                class={styles.actBtn}
+                type="button"
+                aria-label="Guardar en biblioteca"
+                onClick={() => void actions.downloadTrack(t()!)}
+              >
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                </svg>
+              </button>
+            </Show>
+
             <div class={styles.volume}>
               <button
                 class={styles.actBtn}
