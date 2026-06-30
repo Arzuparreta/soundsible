@@ -65,10 +65,17 @@ jobs:
           # AppImage/RPM are slow and often look hung on CI; ship .deb for Linux beta.
           npm run tauri build -- --bundles deb
 
+      # actions/upload-artifact@v4 rejects '/' in artifact names. On
+      # pull_request events github.ref_name is "<PR>/merge" (e.g. "22/merge"),
+      # so sanitise the ref into a slash-free suffix.
+      - name: Compute artifact name
+        shell: bash
+        run: echo "ARTIFACT_NAME=soundsible-desktop-linux-${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
+
       - name: Upload Linux bundles
         uses: actions/upload-artifact@v4
         with:
-          name: soundsible-desktop-linux-${{ github.ref_name }}
+          name: ${{ env.ARTIFACT_NAME }}
           path: |
             desktop-shell/src-tauri/target/release/bundle/deb/*.deb
           if-no-files-found: error
@@ -113,10 +120,16 @@ jobs:
           npm ci
           npm run build
 
+      # See the Linux job: github.ref_name can contain '/' (PR refs), which
+      # actions/upload-artifact@v4 rejects — sanitise it into the name.
+      - name: Compute artifact name
+        shell: bash
+        run: echo "ARTIFACT_NAME=soundsible-desktop-windows-${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
+
       - name: Upload Windows bundles
         uses: actions/upload-artifact@v4
         with:
-          name: soundsible-desktop-windows-${{ github.ref_name }}
+          name: ${{ env.ARTIFACT_NAME }}
           path: |
             desktop-shell/src-tauri/target/release/bundle/msi/*.msi
             desktop-shell/src-tauri/target/release/bundle/nsis/*.exe
