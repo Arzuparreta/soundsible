@@ -6,6 +6,7 @@ import { actions, state } from '../stores';
 import { shareTrack } from '../lib/share';
 import { confirmDialog } from '../lib/confirm';
 import { artistPath } from '../lib/artistRoute';
+import { isPodcastTrack } from '../lib/track';
 
 /**
  * Context for building a track's action menu. Optional callbacks let later
@@ -65,20 +66,29 @@ const icons = {
 export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAction[] {
   const isFav = state.favorites.includes(track.id);
   const isLibrary = track.source !== 'preview';
+  const isPodcast = isPodcastTrack(track);
+  // A streamed podcast episode plays via a minted token, not a `previewUrl`, so
+  // the generic queue can't re-load it — keep it out of queue/playlist flows.
+  // Downloaded episodes are real library files and queue fine.
+  const queueable = !isPodcast || isLibrary;
   const list: MenuAction[] = [];
 
-  list.push({ icon: icons.playNext(), label: 'Reproducir a continuación', onSelect: () => actions.playNext(track) });
-  list.push({ icon: icons.queue(), label: 'Añadir a la cola', onSelect: () => actions.enqueue(track) });
-  if (ctx.onAddToPlaylist)
+  if (queueable) {
+    list.push({ icon: icons.playNext(), label: 'Reproducir a continuación', onSelect: () => actions.playNext(track) });
+    list.push({ icon: icons.queue(), label: 'Añadir a la cola', onSelect: () => actions.enqueue(track) });
+  }
+  if (ctx.onAddToPlaylist && !isPodcast)
     list.push({ icon: icons.playlist(), label: 'Añadir a playlist', onSelect: () => ctx.onAddToPlaylist!(track) });
-  list.push({ icon: icons.radio(), label: 'Iniciar radio', onSelect: () => void actions.startRadio(track) });
-  if (ctx.navigate && track.artist && isLibrary)
+  if (!isPodcast)
+    list.push({ icon: icons.radio(), label: 'Iniciar radio', onSelect: () => void actions.startRadio(track) });
+  if (ctx.navigate && track.artist && isLibrary && !isPodcast)
     list.push({ icon: icons.artist(), label: 'Ir al artista', onSelect: () => ctx.navigate!(artistPath(track.artist)) });
-  list.push({
-    icon: icons.heart(),
-    label: isFav ? 'Quitar de favoritos' : 'Añadir a favoritos',
-    onSelect: () => actions.toggleFavourite(track.id),
-  });
+  if (!isPodcast)
+    list.push({
+      icon: icons.heart(),
+      label: isFav ? 'Quitar de favoritos' : 'Añadir a favoritos',
+      onSelect: () => actions.toggleFavourite(track.id),
+    });
   if (ctx.onEditMetadata && isLibrary)
     list.push({ icon: icons.edit(), label: 'Editar datos', onSelect: () => ctx.onEditMetadata!(track) });
   if (ctx.onEditCover && isLibrary)

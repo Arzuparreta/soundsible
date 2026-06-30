@@ -1,6 +1,6 @@
 import { createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { A } from '@solidjs/router';
-import { state, downloadCounts } from '../stores';
+import { state, downloadCounts, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import ArtistGrid from '../components/ArtistGrid';
@@ -12,8 +12,9 @@ import styles from './Home.module.css';
 export default function Home() {
   const active = createMemo(() => downloadCounts().active);
   const favSet = createMemo(() => new Set(state.favorites));
-  const sorted = createMemo(() => sortTracks(state.library, librarySort(), favSet()));
-  const artists = createMemo(() => buildArtists(state.library));
+  const songs = createMemo(() => musicLibrary());
+  const sorted = createMemo(() => sortTracks(songs(), librarySort(), favSet()));
+  const artists = createMemo(() => buildArtists(songs()));
 
   // Desktop breakpoint is 1024px (matches app.module.css / tokens.css). On
   // mobile the song row's subtitle is the same gesture as the row itself, so
@@ -29,7 +30,7 @@ export default function Home() {
 
   return (
     <div class="view">
-      <ViewHeader title="Tu biblioteca" meta={trackCount(state.library.length)} />
+      <ViewHeader title="Tu biblioteca" meta={trackCount(songs().length)} />
       <nav class={styles.chips}>
         <A href="/favourites" class={styles.chip}>
           Favoritos

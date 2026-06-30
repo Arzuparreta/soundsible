@@ -1,14 +1,15 @@
 import { createMemo } from 'solid-js';
-import { state } from '../stores';
+import { state, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import { trackCount } from '../lib/format';
 import type { Track } from '../types/music';
 
-/** Favourites = library tracks whose id is in `favorites`, in favourites order. */
+/** Favourites = music library tracks whose id is in `favorites`, in favourites
+ * order. Podcasts are excluded — they live under their own section. */
 export default function Favourites() {
   const favTracks = createMemo<Track[]>(() => {
-    const byId = new Map(state.library.map((t) => [t.id, t]));
+    const byId = new Map(musicLibrary().map((t) => [t.id, t]));
     return state.favorites.map((id) => byId.get(id)).filter((t): t is Track => !!t);
   });
 

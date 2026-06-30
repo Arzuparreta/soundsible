@@ -6,6 +6,7 @@ import { audioEl, audioService } from '../lib/audio';
 import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers } from '../lib/media';
 import { toast } from '../lib/toast';
 import { vibrate } from '../lib/haptics';
+import { isMusicTrack, isPodcastTrack, podcastEpisodeToTrack } from '../lib/track';
 import type { Track, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
 import type { DownloadQueueItem, DownloadEvent, CompletedDownload } from '../types/download';
@@ -226,6 +227,13 @@ function applyPlaylistMutation(res: { playlists?: PlaylistMap; settings?: Librar
   if (res.settings) setState('librarySettings', res.settings);
 }
 
+/** Library tracks that are music — podcast episodes excluded. Reactive: call
+ * inside a tracking scope (e.g. createMemo). Music browse surfaces (Library,
+ * Favourites, Artist) use this so downloaded podcasts don't pollute them. */
+export function musicLibrary(): Track[] {
+  return state.library.filter(isMusicTrack);
+}
+
 /** Reactive download tallies — call inside a tracking scope (createMemo). */
 export function downloadCounts(): { active: number; failed: number } {
   let active = 0;
@@ -287,14 +295,7 @@ export const actions = {
 
   /** Play a podcast episode: queue = just this episode; stream via a minted token. */
   async playEpisode(ep: PodcastEpisode, showTitle?: string): Promise<void> {
-    const track: Track = {
-      id: ep.guid || ep.enclosure_url,
-      title: ep.title,
-      artist: showTitle ?? '',
-      duration: ep.duration_sec,
-      cover: ep.image,
-      source: 'preview',
-    };
+    const track = podcastEpisodeToTrack(ep, showTitle);
     setState('playback', {
       currentTrack: track,
       queue: [track],
@@ -441,6 +442,11 @@ export const actions = {
 
   /** Start a radio station seeded from a track: plays it, then its YouTube mix. */
   async startRadio(seed: Track): Promise<void> {
+    // Podcast episodes have no meaningful YouTube mix; the seed id is a guid.
+    if (isPodcastTrack(seed)) {
+      toast.error('La radio no está disponible para podcasts');
+      return;
+    }
     const t = toast.loading('Iniciando radio…');
     try {
       let ytId = seed.youtube_id ?? (seed.source === 'preview' ? seed.id : null);
@@ -595,7 +601,7 @@ export const actions = {
   async downloadTrack(track: Track): Promise<void> {
     if (track.source !== 'preview') return;
     // Exclude podcast episodes (handled by downloadEpisode).
-    if (track.podcast_episode_guid) return;
+    if (isPodcastTrack(track)) return;
     const alreadySaved = state.library.some(
       (t) => t.youtube_id === track.id || t.id === track.id,
     );

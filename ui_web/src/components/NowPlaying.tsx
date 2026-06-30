@@ -8,6 +8,7 @@ import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import { shareTrack } from '../lib/share';
 import { artistPath } from '../lib/artistRoute';
+import { isPodcastTrack } from '../lib/track';
 import styles from './NowPlaying.module.css';
 
 function fmt(s: number): string {
@@ -24,6 +25,10 @@ export function NowPlaying() {
   const isFav = createMemo(() => {
     const c = t();
     return !!c && state.favorites.includes(c.id);
+  });
+  const isPodcast = createMemo(() => {
+    const c = t();
+    return !!c && isPodcastTrack(c);
   });
   let dragFrom: number | null = null;
   let bodyEl: HTMLDivElement | undefined;
@@ -394,20 +399,22 @@ export function NowPlaying() {
             </div>
 
             <div class={styles.actionsBar}>
-            <button
-              class={styles.actBtn}
-              classList={{ [styles.actOn]: isFav() }}
-              type="button"
-              aria-label={isFav() ? 'Quitar de favoritos' : 'Añadir a favoritos'}
-              aria-pressed={isFav()}
-              onClick={() => actions.toggleFavourite(t()!.id)}
-            >
-              <svg viewBox="0 0 24 24" width="22" height="22" fill={isFav() ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 21s-7-4.35-9.5-8.5C.9 9.6 2.2 6 5.5 6 7.6 6 9 7.5 12 10c3-2.5 4.4-4 6.5-4 3.3 0 4.6 3.6 3 6.5C19 16.65 12 21 12 21z" />
-              </svg>
-            </button>
+            <Show when={!isPodcast()}>
+              <button
+                class={styles.actBtn}
+                classList={{ [styles.actOn]: isFav() }}
+                type="button"
+                aria-label={isFav() ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+                aria-pressed={isFav()}
+                onClick={() => actions.toggleFavourite(t()!.id)}
+              >
+                <svg viewBox="0 0 24 24" width="22" height="22" fill={isFav() ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 21s-7-4.35-9.5-8.5C.9 9.6 2.2 6 5.5 6 7.6 6 9 7.5 12 10c3-2.5 4.4-4 6.5-4 3.3 0 4.6 3.6 3 6.5C19 16.65 12 21 12 21z" />
+                </svg>
+              </button>
+            </Show>
 
-            <Show when={t()!.source === 'preview' && !t()!.podcast_episode_guid}>
+            <Show when={t()!.source === 'preview' && !isPodcast()}>
               <button
                 class={styles.actBtn}
                 type="button"

@@ -1,6 +1,6 @@
 import { createMemo, For, Show, type JSX } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
-import { state, actions } from '../stores';
+import { state, actions, musicLibrary } from '../stores';
 import TrackList from '../components/TrackList';
 import Button from '../components/Button';
 import { coverUrl } from '../lib/media';
@@ -26,7 +26,7 @@ export default function Artist() {
   const tracks = createMemo<Track[]>(() => {
     const n = artistKey(name());
     if (!n) return [];
-    return state.library.filter(
+    return musicLibrary().filter(
       (t) => artistKey(t.artist) === n || artistKey(t.album_artist) === n,
     );
   });

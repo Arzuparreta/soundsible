@@ -1,6 +1,6 @@
 import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
 import { openContextMenu } from '../lib/contextMenu';
-import { actions, state } from '../stores';
+import { actions, musicLibrary } from '../stores';
 import type { Track } from '../types/music';
 import { artistKey, artistPath } from '../lib/artistRoute';
 
@@ -10,7 +10,7 @@ export interface ArtistMenuContext {
 
 function artistTracks(artist: string): Track[] {
   const key = artistKey(artist);
-  return state.library.filter((t) => artistKey(t.artist) === key || artistKey(t.album_artist) === key);
+  return musicLibrary().filter((t) => artistKey(t.artist) === key || artistKey(t.album_artist) === key);
 }
 
 /** Play / shuffle / go-to-artist menu definition for an artist. */
