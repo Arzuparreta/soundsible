@@ -123,7 +123,7 @@ export default function Downloads() {
               <div class={styles.empty}>
                 <p class={styles.emptyTitle}>Nada en la cola</p>
                 <p class={styles.emptyText}>
-                  Añade canciones desde Discover y verás aquí su progreso en tiempo real.
+                  Añade canciones desde Buscar y verás aquí su progreso en tiempo real.
                 </p>
               </div>
             </Show>

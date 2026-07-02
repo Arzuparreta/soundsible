@@ -32,16 +32,6 @@ const primary: NavItem[] = [
       </svg>
     ),
   },
-  {
-    href: '/discover',
-    label: 'Discover',
-    icon: () => (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M15 9l-2 4-4 2 2-4z" />
-      </svg>
-    ),
-  },
 ];
 
 /** Library section (bottom group). */

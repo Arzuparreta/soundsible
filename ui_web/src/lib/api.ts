@@ -248,6 +248,7 @@ interface RequestOptions {
   body?: unknown;
   signal?: AbortSignal;
   timeoutMs?: number;
+  keepalive?: boolean;
 }
 
 /** Typed fetch wrapper over the engine REST contract. Reuses the timeout/abort
@@ -269,6 +270,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
       headers,
       body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
       signal: opts.signal ?? controller.signal,
+      keepalive: opts.keepalive,
     });
     if (!res.ok) throw new ApiError(res.status, `${method} ${path} → ${res.status}`);
     if (res.status === 204) return undefined as T;
@@ -308,7 +310,8 @@ export const api = {
     device_id: string;
     device_name?: string;
     device_type?: string;
-  }) => request<{ status?: string }>('/api/playback/state', { method: 'PUT', body }),
+  }, opts?: { keepalive?: boolean }) =>
+    request<{ status?: string }>('/api/playback/state', { method: 'PUT', body, keepalive: opts?.keepalive }),
 
   // ── Device pairing (owner side; admin-scoped, allowed on the trusted LAN) ──
   /** Open an auto-confirming pairing session; returns the code + QR connect payload. */
@@ -476,6 +479,15 @@ export const api = {
       { signal, timeoutMs: 45000 },
     );
     return (data.results ?? []).map(normalizeResult).filter((r) => r.id);
+  },
+  /** Resolve a pasted YouTube URL/video id to display metadata without downloading. */
+  peekYouTube: async (urlOrId: string, signal?: AbortSignal): Promise<SearchResult | null> => {
+    const data = await request<{ peek?: RawResult | null }>(
+      `/api/downloader/youtube/peek?url=${encodeURIComponent(urlOrId)}`,
+      { signal, timeoutMs: 15000 },
+    );
+    const result = data.peek ? normalizeResult(data.peek) : null;
+    return result?.id ? result : null;
   },
   /** Enqueue downloads (add to library). */
   enqueueDownload: (items: DownloadItem[]) =>
