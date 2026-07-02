@@ -93,7 +93,7 @@ export default function Home() {
         <TrackList
           tracks={sorted()}
           loading={state.loading}
-          empty={<p class={styles.empty}>Tu biblioteca está vacía. Descarga algo desde Discover.</p>}
+          empty={<p class={styles.empty}>Tu biblioteca está vacía. Descarga algo desde Buscar.</p>}
           linkArtist={!isMobile()}
         />
       </Show>

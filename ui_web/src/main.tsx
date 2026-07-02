@@ -1,6 +1,7 @@
 /* SolidJS player entry point for mobile, desktop, PWA, and the desktop shell. */
 import { render } from 'solid-js/web';
-import { HashRouter, Route } from '@solidjs/router';
+import { onMount } from 'solid-js';
+import { HashRouter, Route, useNavigate } from '@solidjs/router';
 import Shell from './app';
 import Home from './routes/Home';
 import Favourites from './routes/Favourites';
@@ -8,7 +9,6 @@ import Search from './routes/Search';
 import Settings from './routes/Settings';
 import Playlists from './routes/Playlists';
 import PlaylistDetail from './routes/PlaylistDetail';
-import Discover from './routes/Discover';
 import Podcasts from './routes/Podcasts';
 import PodcastShow from './routes/PodcastShow';
 import Downloads from './routes/Downloads';
@@ -51,6 +51,12 @@ initStore();
 const root = document.getElementById('app');
 if (!root) throw new Error('#app mount point missing');
 
+function DiscoverRedirect() {
+  const navigate = useNavigate();
+  onMount(() => navigate('/search', { replace: true }));
+  return <Search />;
+}
+
 render(
   () => (
     <HashRouter root={Shell}>
@@ -58,7 +64,7 @@ render(
       <Route path="/favourites" component={Favourites} />
       <Route path="/search" component={Search} />
       <Route path="/settings" component={Settings} />
-      <Route path="/discover" component={Discover} />
+      <Route path="/discover" component={DiscoverRedirect} />
       <Route path="/playlists" component={Playlists} />
       <Route path="/playlists/:name" component={PlaylistDetail} />
       <Route path="/podcasts" component={Podcasts} />

@@ -23,6 +23,19 @@ export const audioService = {
     a.src = url;
     return a.play();
   },
+  prime(url: string, positionSec = 0): void {
+    const a = audioEl();
+    a.src = url;
+    a.load();
+    const applyPosition = () => {
+      const pos = Math.max(0, positionSec);
+      if (!Number.isFinite(pos) || pos <= 0) return;
+      const dur = a.duration;
+      a.currentTime = Number.isFinite(dur) && dur > 0 ? Math.min(pos, dur) : pos;
+    };
+    if (a.readyState >= 1) applyPosition();
+    else a.addEventListener('loadedmetadata', applyPosition, { once: true });
+  },
   resume(): Promise<void> {
     return audioEl().play();
   },

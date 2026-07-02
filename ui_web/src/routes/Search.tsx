@@ -1,13 +1,17 @@
-import { createMemo, createSignal, For, Match, Show, Switch, onCleanup, type JSX } from 'solid-js';
+import { createMemo, createSignal, For, Match, Show, Switch, onCleanup, onMount, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { api } from '../lib/api';
+import { api, type DiscoveryFeedItem, type DiscoveryFeedSection, type DiscoverySaveCandidate } from '../lib/api';
 import { actions, state } from '../stores';
 import { coverUrl } from '../lib/media';
 import { artistPath } from '../lib/artistRoute';
 import { toast } from '../lib/toast';
-import type { CatalogItem, CatalogSaveResponse, Track } from '../types/music';
+import { parseYouTubeInput } from '../lib/youtube';
+import { ensureDiscover, feedItems, feedSections, refreshDiscover, revalidating } from '../lib/discover';
+import SearchResultRow from '../components/SearchResultRow';
+import type { CatalogItem, CatalogSaveResponse, SearchResult, Track } from '../types/music';
 import styles from './Search.module.css';
 
+type SearchDomain = 'music' | 'youtube';
 type SearchTab = 'all' | 'track,library_track' | 'artist' | 'album';
 
 const tabs: Array<{ id: SearchTab; label: string }> = [
@@ -18,6 +22,7 @@ const tabs: Array<{ id: SearchTab; label: string }> = [
 ];
 
 const RECENTS_KEY = 'catalog_search_recents';
+const RECENTS_KEY_YOUTUBE = 'youtube_search_recents';
 
 function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
@@ -36,17 +41,21 @@ function gradientFor(seed: string): string {
   return `linear-gradient(135deg, hsl(${h} 46% 31%), hsl(${(h + 42) % 360} 54% 18%))`;
 }
 
-function loadRecents(): string[] {
+function recentsKey(domain: SearchDomain): string {
+  return domain === 'youtube' ? RECENTS_KEY_YOUTUBE : RECENTS_KEY;
+}
+
+function loadRecents(domain: SearchDomain): string[] {
   try {
-    const raw = JSON.parse(localStorage.getItem(RECENTS_KEY) || '[]');
+    const raw = JSON.parse(localStorage.getItem(recentsKey(domain)) || '[]');
     return Array.isArray(raw) ? raw.filter((x) => typeof x === 'string').slice(0, 8) : [];
   } catch {
     return [];
   }
 }
 
-function saveRecents(values: string[]): void {
-  localStorage.setItem(RECENTS_KEY, JSON.stringify(values.slice(0, 8)));
+function saveRecents(domain: SearchDomain, values: string[]): void {
+  localStorage.setItem(recentsKey(domain), JSON.stringify(values.slice(0, 8)));
 }
 
 function itemArtist(item: CatalogItem): string {
@@ -76,28 +85,58 @@ function candidateVideoId(candidate: Record<string, unknown>): string {
   return String(candidate.video_id || candidate.id || '');
 }
 
+function discoveryItemKey(item: DiscoveryFeedItem): string {
+  return item.id || item.track_id || `${item.artist}:${item.title}`;
+}
+
+function discoveryItemCover(item: DiscoveryFeedItem): string | undefined {
+  if (item.action_state?.in_library && item.track_id) return coverUrl(item.track_id);
+  return item.cover;
+}
+
+function isDiscoveryExternal(item: DiscoveryFeedItem): boolean {
+  return !!item.deezer_id || !!item.action_state?.needs_resolution || item.source?.startsWith('deezer') === true;
+}
+
+function discoveryCandidateId(candidate: DiscoverySaveCandidate): string {
+  return candidate.video_id || candidate.id || '';
+}
+
 export default function Search() {
   const navigate = useNavigate();
+  const [domain, setDomain] = createSignal<SearchDomain>('music');
   const [q, setQ] = createSignal('');
   const [tab, setTab] = createSignal<SearchTab>('all');
   const [items, setItems] = createSignal<CatalogItem[]>([]);
   const [sectionIds, setSectionIds] = createSignal<Record<string, string[]>>({});
   const [loading, setLoading] = createSignal(false);
   const [searchError, setSearchError] = createSignal(false);
+  const [youtubeResults, setYoutubeResults] = createSignal<SearchResult[]>([]);
+  const [youtubeDirect, setYoutubeDirect] = createSignal<SearchResult | null>(null);
+  const [youtubeLoading, setYoutubeLoading] = createSignal(false);
+  const [youtubeError, setYoutubeError] = createSignal(false);
   const [suggestions, setSuggestions] = createSignal<string[]>([]);
   const [showSuggest, setShowSuggest] = createSignal(false);
-  const [recents, setRecents] = createSignal<string[]>(loadRecents());
+  const [recents, setRecents] = createSignal<string[]>(loadRecents('music'));
   const [saving, setSaving] = createSignal<Set<string>>(new Set());
   const [saved, setSaved] = createSignal<Set<string>>(new Set());
+  const [youtubeEnqueued, setYoutubeEnqueued] = createSignal<Set<string>>(new Set());
   const [review, setReview] = createSignal<{ item: CatalogItem; response: CatalogSaveResponse } | null>(null);
+  const [resolvedDiscovery, setResolvedDiscovery] = createSignal<Map<string, SearchResult>>(new Map());
+  const [discoverySaving, setDiscoverySaving] = createSignal<Set<string>>(new Set());
+  const [discoverySaved, setDiscoverySaved] = createSignal<Set<string>>(new Set());
+  const [discoveryReview, setDiscoveryReview] = createSignal<{ item: DiscoveryFeedItem; candidates: DiscoverySaveCandidate[] } | null>(null);
 
   let aborter: AbortController | undefined;
   let suggestAborter: AbortController | undefined;
   let debounce: number | undefined;
   let suggestDebounce: number | undefined;
   let requestId = 0;
+  let searchInput: HTMLInputElement | undefined;
+  const youtubeCache = new Map<string, SearchResult[]>();
 
   const byId = createMemo(() => new Map(items().map((item) => [item.id, item] as const)));
+  const libYt = createMemo(() => new Set(state.library.map((t) => t.youtube_id).filter((x): x is string => !!x)));
   const top = createMemo(() => items()[0]);
   const songs = createMemo(() =>
     (sectionIds().songs ?? [])
@@ -123,13 +162,20 @@ export default function Search() {
       .filter((item, idx, arr) => arr.findIndex((x) => x.id === item.id) === idx)
       .slice(0, 12),
   );
+  const discoveryById = createMemo(() => new Map(feedItems().map((item) => [item.id, item] as const)));
 
-  const run = (query: string, nextTab = tab()) => {
+  onMount(() => ensureDiscover());
+
+  const runCatalog = (query: string, nextTab = tab()) => {
     query = query.trim();
     const current = ++requestId;
     aborter?.abort();
     aborter = undefined;
     setSearchError(false);
+    setYoutubeError(false);
+    setYoutubeDirect(null);
+    setYoutubeResults([]);
+    setYoutubeLoading(false);
     if (query.length < 2) {
       setItems([]);
       setSectionIds({});
@@ -158,44 +204,133 @@ export default function Search() {
       });
   };
 
+  const fallbackDirectResult = (videoId: string): SearchResult => ({
+    id: videoId,
+    title: 'YouTube video',
+    channel: 'YouTube',
+    thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+  });
+
+  const runYouTube = (query: string) => {
+    query = query.trim();
+    const current = ++requestId;
+    aborter?.abort();
+    aborter = undefined;
+    setYoutubeError(false);
+    setLoading(false);
+    setItems([]);
+    setSectionIds({});
+    const direct = parseYouTubeInput(query);
+    if (direct) {
+      aborter = new AbortController();
+      setYoutubeLoading(true);
+      setYoutubeResults([]);
+      api
+        .peekYouTube(direct.url, aborter.signal)
+        .then((res) => {
+          if (current !== requestId) return;
+          setYoutubeDirect(res ?? fallbackDirectResult(direct.videoId));
+        })
+        .catch((e) => {
+          if (current !== requestId || isAbort(e)) return;
+          setYoutubeDirect(fallbackDirectResult(direct.videoId));
+        })
+        .finally(() => {
+          if (current === requestId) setYoutubeLoading(false);
+        });
+      return;
+    }
+
+    setYoutubeDirect(null);
+    if (query.length < 2) {
+      setYoutubeResults([]);
+      setYoutubeLoading(false);
+      return;
+    }
+    const cached = youtubeCache.get(query);
+    if (cached) {
+      setYoutubeResults(cached);
+      setYoutubeLoading(false);
+      return;
+    }
+    aborter = new AbortController();
+    setYoutubeLoading(true);
+    api
+      .searchYouTube(query, aborter.signal)
+      .then((res) => {
+        if (current !== requestId) return;
+        youtubeCache.set(query, res);
+        setYoutubeResults(res);
+      })
+      .catch((e) => {
+        if (current !== requestId || isAbort(e)) return;
+        setYoutubeResults([]);
+        setYoutubeError(true);
+      })
+      .finally(() => {
+        if (current === requestId) setYoutubeLoading(false);
+      });
+  };
+
+  const runSearch = (query: string, nextDomain = domain(), nextTab = tab()) => {
+    if (nextDomain === 'youtube') runYouTube(query);
+    else runCatalog(query, nextTab);
+  };
+
   const runSuggest = (query: string) => {
     query = query.trim();
     suggestAborter?.abort();
-    if (query.length < 2) {
+    if (query.length < 2 || parseYouTubeInput(query)) {
       setSuggestions([]);
       return;
     }
     suggestAborter = new AbortController();
-    api.suggestCatalog(query, suggestAborter.signal).then((s) => setSuggestions(s)).catch(() => {});
+    const suggest = domain() === 'youtube' ? api.suggest(query, suggestAborter.signal) : api.suggestCatalog(query, suggestAborter.signal);
+    suggest.then((s) => setSuggestions(s)).catch(() => {});
   };
 
   const commit = (value: string) => {
     const query = value.trim();
+    const nextDomain = parseYouTubeInput(query) ? 'youtube' : domain();
+    if (nextDomain !== domain()) setDomain(nextDomain);
     setQ(query);
     setShowSuggest(false);
     setSuggestions([]);
     clearTimeout(debounce);
     clearTimeout(suggestDebounce);
-    run(query);
+    runSearch(query, nextDomain);
     if (query.length >= 2) {
       const next = [query, ...recents().filter((x) => x.toLowerCase() !== query.toLowerCase())].slice(0, 8);
       setRecents(next);
-      saveRecents(next);
+      saveRecents(nextDomain, next);
     }
   };
 
   const onInput = (value: string) => {
+    const nextDomain = parseYouTubeInput(value) ? 'youtube' : domain();
+    if (nextDomain !== domain()) {
+      setDomain(nextDomain);
+      setRecents(loadRecents(nextDomain));
+    }
     setQ(value);
     setShowSuggest(true);
     clearTimeout(debounce);
     clearTimeout(suggestDebounce);
-    debounce = window.setTimeout(() => run(value), 220);
+    debounce = window.setTimeout(() => runSearch(value, nextDomain), 220);
     suggestDebounce = window.setTimeout(() => runSuggest(value), 120);
   };
 
   const setActiveTab = (next: SearchTab) => {
     setTab(next);
-    run(q(), next);
+    runCatalog(q(), next);
+  };
+
+  const setActiveDomain = (next: SearchDomain) => {
+    setDomain(next);
+    setRecents(loadRecents(next));
+    setShowSuggest(false);
+    setSuggestions([]);
+    runSearch(q(), next);
   };
 
   const coverStyle = (item: CatalogItem, round = false): JSX.CSSProperties => {
@@ -281,6 +416,172 @@ export default function Search() {
     }
   };
 
+  const previewYouTube = (result: SearchResult) => {
+    actions.playTrack({
+      id: result.id,
+      title: result.title,
+      artist: result.channel ?? '',
+      duration: result.duration,
+      source: 'preview',
+      cover: result.thumbnail,
+    });
+    void api.emitDiscoveryEvent('music_search_played', {
+      title: result.title,
+      artist: result.channel ?? '',
+      source: 'youtube_search',
+      youtube_id: result.id,
+      query: q(),
+    }).catch(() => {});
+  };
+
+  const addYouTube = async (result: SearchResult) => {
+    if (libYt().has(result.id)) {
+      toast.info('Ya está en tu biblioteca');
+      return;
+    }
+    const alreadyDownloading = state.downloads.queue.some(
+      (item) => item.video_id === result.id && item.status !== 'failed' && item.status !== 'interrupted',
+    );
+    if (alreadyDownloading || youtubeEnqueued().has(result.id)) {
+      toast.info('Ya está en la cola de descargas');
+      return;
+    }
+    setYoutubeEnqueued((s) => new Set(s).add(result.id));
+    try {
+      await api.enqueueDownload([
+        {
+          source_type: 'youtube_url',
+          song_str: `https://www.youtube.com/watch?v=${result.id}`,
+          video_id: result.id,
+          display_title: result.title,
+          display_artist: result.channel,
+          thumbnail_url: result.thumbnail,
+          duration_sec: result.duration,
+          metadata_evidence: null,
+        },
+      ]);
+      void actions.loadDownloads();
+      void api.emitDiscoveryEvent('music_added_to_queue', {
+        title: result.title,
+        artist: result.channel ?? '',
+        source: 'youtube_search',
+        youtube_id: result.id,
+        query: q(),
+      }).catch(() => {});
+      toast.success('Añadido a descargas');
+    } catch {
+      setYoutubeEnqueued((s) => {
+        const next = new Set(s);
+        next.delete(result.id);
+        return next;
+      });
+      toast.error('No se pudo añadir a descargas');
+    }
+  };
+
+  const discoverySectionItems = (section: DiscoveryFeedSection): DiscoveryFeedItem[] =>
+    (section.item_ids ?? []).map((id) => discoveryById().get(id)).filter((item): item is DiscoveryFeedItem => !!item);
+
+  const discoveryTrack = (item: DiscoveryFeedItem): Track | null => {
+    if (!item.track_id) return null;
+    const found = state.library.find((t) => t.id === item.track_id);
+    return (
+      found ?? {
+        id: item.track_id,
+        title: item.title,
+        artist: item.artist,
+        album: item.album,
+        duration: item.duration,
+        cover: item.cover,
+      }
+    );
+  };
+
+  const resolveDiscoveryExternal = async (item: DiscoveryFeedItem): Promise<SearchResult | null> => {
+    const key = discoveryItemKey(item);
+    const cached = resolvedDiscovery().get(key);
+    if (cached) return cached;
+    const found = (await api.searchYouTube(`${item.title} ${item.artist}`.trim()))[0];
+    if (!found) return null;
+    setResolvedDiscovery((current) => {
+      const next = new Map(current);
+      next.set(key, found);
+      return next;
+    });
+    return found;
+  };
+
+  const previewDiscoveryExternal = async (item: DiscoveryFeedItem) => {
+    const t = toast.loading('Buscando preview...');
+    try {
+      const resolved = await resolveDiscoveryExternal(item);
+      if (!resolved) throw new Error('not-found');
+      actions.playTrack({
+        id: resolved.id,
+        title: item.title || resolved.title,
+        artist: item.artist || resolved.channel || '',
+        album: item.album,
+        duration: item.duration || resolved.duration,
+        source: 'preview',
+        cover: item.cover || resolved.thumbnail,
+      });
+      void api.emitDiscoveryEvent('music_search_played', {
+        title: item.title,
+        artist: item.artist,
+        source: item.source,
+        deezer_id: item.deezer_id,
+        youtube_id: resolved.id,
+      }).catch(() => {});
+      t.update('success', 'Reproduciendo preview');
+    } catch {
+      t.update('error', 'No se pudo encontrar preview');
+    }
+  };
+
+  const playDiscoveryItem = (item: DiscoveryFeedItem) => {
+    if (isDiscoveryExternal(item)) {
+      void previewDiscoveryExternal(item);
+      return;
+    }
+    const track = discoveryTrack(item);
+    if (track) actions.playTrack(track);
+  };
+
+  const saveDiscoveryExternal = async (item: DiscoveryFeedItem, confirmVideoId?: string) => {
+    const key = discoveryItemKey(item);
+    setDiscoverySaving((current) => new Set(current).add(key));
+    try {
+      const res = await api.saveDiscoveryTrack({
+        artist: item.artist,
+        title: item.title,
+        duration: item.duration,
+        deezer_id: item.deezer_id,
+        cover: item.cover,
+        confirm_video_id: confirmVideoId,
+      });
+      if (res.status === 'queued') {
+        setDiscoveryReview(null);
+        setDiscoverySaved((current) => new Set(current).add(key));
+        void refreshDiscover();
+        toast.success('Añadido a descargas');
+        return;
+      }
+      if (res.status === 'needs_review' && res.candidates?.length) {
+        setDiscoveryReview({ item, candidates: res.candidates });
+        return;
+      }
+      toast.error('No se pudo guardar');
+    } catch {
+      toast.error('No se pudo guardar');
+    } finally {
+      setDiscoverySaving((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
   onCleanup(() => {
     requestId += 1;
     aborter?.abort();
@@ -296,8 +597,9 @@ export default function Search() {
           <input
             class={styles.input}
             type="search"
-            placeholder="Que quieres escuchar?"
+            placeholder="Qué quieres escuchar?"
             value={q()}
+            ref={searchInput}
             onInput={(e) => onInput(e.currentTarget.value)}
             onFocus={() => setShowSuggest(true)}
             onBlur={() => setShowSuggest(false)}
@@ -322,7 +624,7 @@ export default function Search() {
         </Show>
       </div>
 
-      <Show when={q().trim().length >= 2}>
+      <Show when={domain() === 'music' && q().trim().length >= 2}>
         <div class={styles.tabs}>
           <For each={tabs}>
             {(t) => (
@@ -341,7 +643,77 @@ export default function Search() {
       <div class={styles.scroll}>
         <Switch>
           <Match when={!q().trim()}>
-            <StartPanel recents={recents()} onPick={commit} />
+            <StartPanel
+              recents={recents()}
+              domain={domain()}
+              sections={feedSections()}
+              revalidating={revalidating()}
+              sectionItems={discoverySectionItems}
+              onPick={commit}
+              onFocusSearch={() => searchInput?.focus()}
+              onPlay={playDiscoveryItem}
+              onSave={(item) => void saveDiscoveryExternal(item)}
+              saving={(item) => discoverySaving().has(discoveryItemKey(item))}
+              saved={(item) => discoverySaved().has(discoveryItemKey(item)) || !!item.action_state?.in_library}
+            />
+          </Match>
+          <Match when={domain() === 'youtube'}>
+            <div class={styles.results}>
+              <Show when={youtubeLoading() && youtubeResults().length === 0 && !youtubeDirect()}>
+                <div class={styles.skeletonGrid}>
+                  <For each={Array.from({ length: 8 })}>{() => <div class={styles.skeleton} />}</For>
+                </div>
+              </Show>
+
+              <Show when={!youtubeLoading() && !youtubeDirect() && youtubeResults().length === 0 && q().trim().length >= 2}>
+                <p class={styles.hint}>
+                  {youtubeError() ? (
+                    <>
+                      No se pudo completar la búsqueda en YouTube.{' '}
+                      <button class={styles.retry} type="button" onClick={() => runYouTube(q())}>
+                        Reintentar
+                      </button>
+                    </>
+                  ) : (
+                    'Sin resultados en YouTube.'
+                  )}
+                </p>
+              </Show>
+
+              <Show when={youtubeDirect()}>
+                {(result) => (
+                  <section class={styles.section}>
+                    <h2 class={styles.sectionTitle}>Video detectado</h2>
+                    <SearchResultRow
+                      r={result()}
+                      active={state.playback.currentTrack?.id === result().id}
+                      inLibrary={libYt().has(result().id)}
+                      enqueued={youtubeEnqueued().has(result().id)}
+                      onPreview={() => previewYouTube(result())}
+                      onAdd={() => void addYouTube(result())}
+                    />
+                  </section>
+                )}
+              </Show>
+
+              <Show when={youtubeResults().length > 0}>
+                <section class={styles.section}>
+                  <h2 class={styles.sectionTitle}>Resultados en YouTube</h2>
+                  <For each={youtubeResults()}>
+                    {(result) => (
+                      <SearchResultRow
+                        r={result}
+                        active={state.playback.currentTrack?.id === result.id}
+                        inLibrary={libYt().has(result.id)}
+                        enqueued={youtubeEnqueued().has(result.id)}
+                        onPreview={() => previewYouTube(result)}
+                        onAdd={() => void addYouTube(result)}
+                      />
+                    )}
+                  </For>
+                </section>
+              </Show>
+            </div>
           </Match>
           <Match when={loading() && items().length === 0}>
             <div class={styles.skeletonGrid}>
@@ -352,13 +724,18 @@ export default function Search() {
             <p class={styles.hint}>
               {searchError() ? (
                 <>
-                  No se pudo completar la busqueda.{' '}
-                  <button class={styles.retry} type="button" onClick={() => run(q())}>
+                  No se pudo completar la búsqueda.{' '}
+                  <button class={styles.retry} type="button" onClick={() => runCatalog(q())}>
                     Reintentar
                   </button>
                 </>
               ) : (
-                'Sin resultados.'
+                <>
+                  Sin resultados en Música.{' '}
+                  <button class={styles.retry} type="button" onClick={() => setActiveDomain('youtube')}>
+                    Buscar en YouTube
+                  </button>
+                </>
               )}
             </p>
           </Match>
@@ -440,16 +817,91 @@ export default function Search() {
           </div>
         )}
       </Show>
+
+      <Show when={discoveryReview()}>
+        {(r) => (
+          <div class={styles.modalBackdrop} onClick={() => setDiscoveryReview(null)}>
+            <div class={styles.modal} onClick={(e) => e.stopPropagation()}>
+              <div class={styles.modalHead}>
+                <h2>Elige la version</h2>
+                <button class={styles.closeBtn} type="button" aria-label="Cerrar" onClick={() => setDiscoveryReview(null)}>
+                  x
+                </button>
+              </div>
+              <For each={r().candidates.slice(0, 5)}>
+                {(candidate) => (
+                  <button
+                    class={styles.candidate}
+                    type="button"
+                    onClick={() => {
+                      const id = discoveryCandidateId(candidate);
+                      if (id) void saveDiscoveryExternal(r().item, id);
+                    }}
+                  >
+                    <span class={styles.candidateTitle}>{candidate.title}</span>
+                    <span class={styles.candidateSub}>{candidate.channel}</span>
+                  </button>
+                )}
+              </For>
+            </div>
+          </div>
+        )}
+      </Show>
     </div>
   );
 }
 
-function StartPanel(props: { recents: string[]; onPick: (value: string) => void }) {
+function StartPanel(props: {
+  recents: string[];
+  domain: SearchDomain;
+  sections: DiscoveryFeedSection[];
+  revalidating: boolean;
+  sectionItems: (section: DiscoveryFeedSection) => DiscoveryFeedItem[];
+  onPick: (value: string) => void;
+  onFocusSearch: () => void;
+  onPlay: (item: DiscoveryFeedItem) => void;
+  onSave: (item: DiscoveryFeedItem) => void;
+  saving: (item: DiscoveryFeedItem) => boolean;
+  saved: (item: DiscoveryFeedItem) => boolean;
+}) {
   return (
     <div class={styles.start}>
+      <Show
+        when={props.sections.length > 0}
+        fallback={props.revalidating ? <RailSkeletons /> : <SeedSearch onFocusSearch={props.onFocusSearch} />}
+      >
+        <For each={props.sections}>
+          {(section) => (
+            <section class={styles.rail}>
+              <div class={styles.railHead}>
+                <div>
+                  <h2 class={styles.railTitle}>{section.title}</h2>
+                  <Show when={section.reason}>
+                    <p class={styles.railReason}>{section.reason}</p>
+                  </Show>
+                </div>
+              </div>
+              <div class={styles.railRow}>
+                <For each={props.sectionItems(section)}>
+                  {(item) => (
+                    <DiscoveryCard
+                      item={item}
+                      onPlay={() => props.onPlay(item)}
+                      onSave={isDiscoveryExternal(item) && !item.action_state?.in_library ? () => props.onSave(item) : undefined}
+                      saving={props.saving(item)}
+                      saved={props.saved(item)}
+                    />
+                  )}
+                </For>
+              </div>
+            </section>
+          )}
+        </For>
+      </Show>
+
       <Show when={props.recents.length > 0}>
         <section>
-          <h2 class={styles.sectionTitle}>Busquedas recientes</h2>
+          <h2 class={styles.sectionTitle}>{props.domain === 'youtube' ? 'Búsquedas recientes en YouTube' : 'Búsquedas recientes'}</h2>
           <div class={styles.recentGrid}>
             <For each={props.recents}>
               {(value) => (
@@ -463,6 +915,79 @@ function StartPanel(props: { recents: string[]; onPick: (value: string) => void 
         </section>
       </Show>
     </div>
+  );
+}
+
+function SeedSearch(props: { onFocusSearch: () => void }) {
+  return (
+    <div class={styles.seedState}>
+      <h2>Busca musica para empezar</h2>
+      <p>Las recomendaciones se generan con artistas, favoritos, playlists y canciones que guardas o reproduces.</p>
+      <button class={styles.seedAction} type="button" onClick={props.onFocusSearch}>
+        Buscar canciones
+      </button>
+    </div>
+  );
+}
+
+function DiscoveryCard(props: {
+  item: DiscoveryFeedItem;
+  onPlay: () => void;
+  onSave?: () => void;
+  saving: boolean;
+  saved: boolean;
+}) {
+  const bg = (): JSX.CSSProperties => {
+    const cover = discoveryItemCover(props.item);
+    const grad = gradientFor(discoveryItemKey(props.item));
+    return cover ? { background: `url("${cover}") center / cover no-repeat, ${grad}` } : { background: grad };
+  };
+  return (
+    <div class={styles.discoverCard}>
+      <button class={styles.discoverCardBtn} type="button" onClick={props.onPlay}>
+        <span class={styles.discoverCardCover} style={bg()} />
+        <span class={styles.discoverCardTitle}>{props.item.title}</span>
+        <span class={styles.discoverCardSub}>{props.item.artist}</span>
+      </button>
+      <Switch>
+        <Match when={props.onSave && !props.saved}>
+          <button
+            class={styles.discoverSaveBtn}
+            type="button"
+            aria-label="Guardar en biblioteca"
+            disabled={props.saving}
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onSave?.();
+            }}
+          >
+            <Show when={props.saving} fallback={<PlusIcon />}>
+              <span class={styles.smallSpinner} />
+            </Show>
+          </button>
+        </Match>
+        <Match when={props.saved && isDiscoveryExternal(props.item)}>
+          <span class={styles.discoverSavedBadge} aria-label="Guardado">
+            <CheckIcon />
+          </span>
+        </Match>
+      </Switch>
+    </div>
+  );
+}
+
+function RailSkeletons() {
+  return (
+    <For each={Array.from({ length: 3 })}>
+      {() => (
+        <section class={styles.rail}>
+          <div class={styles.railTitleSkeleton} />
+          <div class={styles.railRow}>
+            <For each={Array.from({ length: 6 })}>{() => <div class={styles.discoverCardSkeleton} />}</For>
+          </div>
+        </section>
+      )}
+    </For>
   );
 }
 

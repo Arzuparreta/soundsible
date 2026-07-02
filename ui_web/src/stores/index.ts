@@ -130,6 +130,11 @@ export const [nowPlayingOpen, setNowPlayingOpen] = createSignal(false);
  * Set once on boot, cleared when the user accepts or dismisses it. */
 export const [resumeState, setResumeState] = createSignal<RemotePlaybackState | null>(null);
 
+let librarySyncInFlight = false;
+let librarySyncPending = false;
+let librarySyncVersion = 0;
+let userPlaybackStartedThisSession = false;
+
 function trackUrl(track: Track): string {
   return track.source === 'preview' ? previewUrl(track.id) : streamUrl(track.id);
 }
@@ -152,28 +157,98 @@ function updateMediaSession(track: Track | null): void {
 function loadIndex(i: number): void {
   const track = state.playback.queue[i];
   if (!track) return;
+  userPlaybackStartedThisSession = true;
   setState('playback', { currentTrack: track, index: i, isPlaying: true, currentTime: 0 });
   updateMediaSession(track);
   void audioService.load(trackUrl(track)).catch(() => setState('playback', 'isPlaying', false));
 }
 
+function playbackStateBody(
+  override: Partial<{
+    track: Track | null;
+    position_sec: number;
+    is_playing: boolean;
+  }> = {},
+) {
+  const pb = state.playback;
+  const track = override.track !== undefined ? override.track : pb.currentTrack;
+  return {
+    track_id: track?.id ?? null,
+    track: track ?? null,
+    position_sec: override.position_sec ?? pb.currentTime ?? 0,
+    is_playing: override.is_playing ?? pb.isPlaying,
+    device_id: state.device.device_id,
+    device_name: state.device.device_name,
+    device_type: state.device.device_type,
+  };
+}
+
 /** Publish this device's current playback to the engine so other devices can
  * offer to resume it. Best-effort: fire-and-forget, errors swallowed. */
-function pushPlaybackState(): void {
+function pushPlaybackState(opts: { keepalive?: boolean; body?: ReturnType<typeof playbackStateBody> } = {}): void {
+  void api.putPlaybackState(opts.body ?? playbackStateBody(), { keepalive: opts.keepalive }).catch(() => {});
+}
+
+function pushEmptyPlaybackState(opts: { keepalive?: boolean } = {}): void {
+  pushPlaybackState({ keepalive: opts.keepalive, body: playbackStateBody({ track: null, position_sec: 0, is_playing: false }) });
+}
+
+function invalidateLibrarySync(): void {
+  librarySyncVersion += 1;
+}
+
+function removeTrackReferences(id: string): void {
+  setState('library', (l) => l.filter((t) => t.id !== id));
+  setState('favorites', (f) => f.filter((x) => x !== id));
+  setState(
+    'playlists',
+    Object.fromEntries(Object.entries(state.playlists).map(([n, ids]) => [n, ids.filter((x) => x !== id)])),
+  );
+
   const pb = state.playback;
-  const track = pb.currentTrack;
+  const nextQueue = pb.queue.filter((t) => t.id !== id);
+  if (nextQueue.length !== pb.queue.length) {
+    const nextIndex = pb.currentTrack ? nextQueue.findIndex((t) => t.id === pb.currentTrack?.id) : -1;
+    setState('playback', { queue: nextQueue, index: nextIndex });
+  }
+
+  if (pb.currentTrack?.id === id) {
+    audioService.pause();
+    setState('playback', {
+      currentTrack: null,
+      isPlaying: false,
+      currentTime: 0,
+      duration: 0,
+      queue: nextQueue,
+      index: -1,
+    });
+    updateMediaSession(null);
+    pushEmptyPlaybackState();
+  }
+}
+
+function restorePlaybackSnapshot(snapshot: PlaybackState): void {
+  setState('playback', {
+    ...snapshot,
+    queue: snapshot.queue.slice(),
+  });
+  updateMediaSession(snapshot.currentTrack);
+}
+
+function restoreSameDevicePlayback(remote: RemotePlaybackState): void {
+  const track = state.library.find((t) => t.id === remote.track_id) ?? remote.track ?? null;
   if (!track) return;
-  void api
-    .putPlaybackState({
-      track_id: track.id,
-      track,
-      position_sec: pb.currentTime || 0,
-      is_playing: pb.isPlaying,
-      device_id: state.device.device_id,
-      device_name: state.device.device_name,
-      device_type: state.device.device_type,
-    })
-    .catch(() => {});
+  const pos = Math.max(0, Number(remote.position_sec) || 0);
+  setState('playback', {
+    currentTrack: track,
+    isPlaying: false,
+    currentTime: pos,
+    duration: track.duration ?? 0,
+    queue: [track],
+    index: 0,
+  });
+  updateMediaSession(track);
+  audioService.prime(trackUrl(track), pos);
 }
 
 function onEnded(): void {
@@ -247,12 +322,19 @@ export function downloadCounts(): { active: number; failed: number } {
 
 export const actions = {
   async syncLibrary(): Promise<void> {
+    if (librarySyncInFlight) {
+      librarySyncPending = true;
+      return;
+    }
+    librarySyncInFlight = true;
+    const syncVersion = ++librarySyncVersion;
     setState('loading', true);
     try {
       const [lib, favorites] = await Promise.all([
         api.getLibrary(),
         api.getFavourites().catch(() => state.favorites),
       ]);
+      if (syncVersion !== librarySyncVersion) return;
       setState({
         library: lib.tracks ?? [],
         playlists: lib.playlists ?? {},
@@ -263,7 +345,11 @@ export const actions = {
     } catch {
       // Offline or engine down — keep whatever we have.
     } finally {
-      setState('loading', false);
+      if (syncVersion === librarySyncVersion) setState('loading', false);
+      librarySyncInFlight = false;
+      const runAgain = librarySyncPending;
+      librarySyncPending = false;
+      if (runAgain) queueMicrotask(() => void actions.syncLibrary());
     }
   },
 
@@ -296,6 +382,7 @@ export const actions = {
   /** Play a podcast episode: queue = just this episode; stream via a minted token. */
   async playEpisode(ep: PodcastEpisode, showTitle?: string): Promise<void> {
     const track = podcastEpisodeToTrack(ep, showTitle);
+    userPlaybackStartedThisSession = true;
     setState('playback', {
       currentTrack: track,
       queue: [track],
@@ -337,6 +424,7 @@ export const actions = {
 
   togglePlay(): void {
     if (!state.playback.currentTrack) return;
+    userPlaybackStartedThisSession = true;
     vibrate();
     if (state.playback.isPlaying) audioService.pause();
     else void audioService.resume().catch(() => {});
@@ -368,6 +456,7 @@ export const actions = {
   seek(t: number): void {
     audioService.seek(t);
     setState('playback', 'currentTime', Math.max(0, t));
+    pushPlaybackState();
   },
 
   /** Jump to a specific entry in the current queue. */
@@ -502,24 +591,19 @@ export const actions = {
 
   /** Delete a track from the library (optimistic; reverts on failure). */
   async deleteTrack(id: string): Promise<void> {
-    const prevLib = state.library;
-    const prevFav = state.favorites;
-    const prevPlaylists = state.playlists;
-    setState('library', (l) => l.filter((t) => t.id !== id));
-    setState('favorites', (f) => f.filter((x) => x !== id));
-    setState(
-      'playlists',
-      Object.fromEntries(Object.entries(state.playlists).map(([n, ids]) => [n, ids.filter((x) => x !== id)])),
-    );
-    if (state.playback.currentTrack?.id === id) {
-      audioService.pause();
-      setState('playback', { currentTrack: null, index: -1, isPlaying: false, queue: [] });
-    }
+    const prevLib = state.library.slice();
+    const prevFav = state.favorites.slice();
+    const prevPlaylists = Object.fromEntries(Object.entries(state.playlists).map(([n, ids]) => [n, ids.slice()]));
+    const prevPlayback = { ...state.playback, queue: state.playback.queue.slice() };
+    invalidateLibrarySync();
+    removeTrackReferences(id);
     try {
       await api.deleteTrack(id);
+      await actions.syncLibrary();
       toast.success('Pista eliminada');
     } catch {
       setState({ library: prevLib, favorites: prevFav, playlists: prevPlaylists });
+      restorePlaybackSnapshot(prevPlayback);
       toast.error('No se pudo eliminar');
       void actions.syncLibrary();
     }
@@ -807,17 +891,20 @@ export const actions = {
   // ── Cross-device resume ──
   /** On boot: if another device has recent playback and we're idle, offer to resume it. */
   async checkResume(): Promise<void> {
-    if (state.playback.currentTrack) return;
+    if (state.playback.currentTrack || userPlaybackStartedThisSession) return;
     let remote: RemotePlaybackState | undefined;
     try {
       remote = await api.getPlaybackState(state.device.device_id);
     } catch {
       return;
     }
-    if (!remote || !remote.track_id || state.playback.currentTrack) return;
-    if (remote.device_id === state.device.device_id) return;
+    if (!remote || !remote.track_id || state.playback.currentTrack || userPlaybackStartedThisSession) return;
     const updatedAt = Number(remote.updated_at) || 0;
     if (updatedAt && Date.now() / 1000 - updatedAt > 24 * 3600) return; // stale (>24h)
+    if (remote.device_id === state.device.device_id) {
+      restoreSameDevicePlayback(remote);
+      return;
+    }
     // Honour the 30-min "No" cooldown unless the other device has played since.
     const now = Date.now();
     const suppressUntil = Number(localStorage.getItem('resume_suppress_until')) || 0;
@@ -832,6 +919,7 @@ export const actions = {
     if (!r?.track_id) return;
     const track = state.library.find((t) => t.id === r.track_id) ?? r.track ?? null;
     if (!track) return;
+    userPlaybackStartedThisSession = true;
     actions.playTrack(track);
     const pos = Number(r.position_sec) || 0;
     if (pos > 0) setTimeout(() => actions.seek(pos), 400);
@@ -937,9 +1025,20 @@ export function initStore(): void {
     if (state.playback.currentTrack && state.playback.isPlaying) pushPlaybackState();
   }, 15000);
 
+  const pushStateOnUnload = () => {
+    if (!state.playback.currentTrack) return;
+    const position = Number.isFinite(a.currentTime) ? a.currentTime : state.playback.currentTime || 0;
+    pushPlaybackState({
+      keepalive: true,
+      body: playbackStateBody({ position_sec: position, is_playing: false }),
+    });
+  };
+  window.addEventListener('beforeunload', pushStateOnUnload);
+  window.addEventListener('pagehide', pushStateOnUnload);
+
   void actions.syncLibrary().then(() => actions.checkResume());
   void actions.loadDownloads();
-  // Warm Discover so the first visit renders instantly (cache + background fetch).
+  // Warm the discovery feed so Search and Podcasts render cached rails instantly.
   void import('../lib/discover').then((m) => m.ensureDiscover());
 
   // Global keyboard shortcuts (desktop): space = play/pause, arrows = seek,
