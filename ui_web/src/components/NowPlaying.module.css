@@ -392,7 +392,7 @@
 
   .queue {
     grid-area: queue;
-    align-self: start;
+    align-self: stretch;
     min-height: 0;
     /* No fixed max-height: the queue fills its grid row (auto-sized to
        details above, 1fr below) and scrolls only when it overflows, so the
