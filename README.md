@@ -47,14 +47,14 @@ Soundsible is a music app you run on your **own** machine. Browse, stream, and s
 
 ### Mobile
 
-<table>
-  <tr>
-    <td align="center"><img src="docs/images/mobile-search.PNG" alt="Mobile search" width="190"><br><sub>Search</sub></td>
-    <td align="center"><img src="docs/images/mobile-library.PNG" alt="Mobile library" width="190"><br><sub>Library</sub></td>
-    <td align="center"><img src="docs/images/mobile-discover.PNG" alt="Mobile discover" width="190"><br><sub>Discover</sub></td>
-    <td align="center"><img src="docs/images/mobile-np.PNG" alt="Mobile now playing" width="190"><br><sub>Now Playing</sub></td>
-  </tr>
-</table>
+<p>
+  <img src="docs/images/mobile-search.PNG" alt="Mobile search" width="190">
+  <img src="docs/images/mobile-library.PNG" alt="Mobile library" width="190">
+  <img src="docs/images/mobile-discover.PNG" alt="Mobile discover" width="190">
+  <img src="docs/images/mobile-np.PNG" alt="Mobile now playing" width="190">
+</p>
+
+<sub>Search · Library · Discover · Now Playing</sub>
 
 ### Desktop
 
