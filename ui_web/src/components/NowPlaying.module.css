@@ -340,11 +340,11 @@
   .body {
     display: grid;
     grid-template-columns: minmax(220px, min(42vw, 520px)) minmax(340px, 520px);
-    grid-template-rows: auto auto;
+    grid-template-rows: auto minmax(0, 1fr);
     grid-template-areas:
       'art details'
       'art queue';
-    align-content: start;
+    align-content: stretch;
     justify-content: center;
     column-gap: clamp(24px, 5vw, 72px);
     row-gap: var(--space-md);
@@ -394,7 +394,9 @@
     grid-area: queue;
     align-self: start;
     min-height: 0;
-    max-height: min(30vh, 240px);
+    /* No fixed max-height: the queue fills its grid row (auto-sized to
+       details above, 1fr below) and scrolls only when it overflows, so the
+       player column reaches the bottom edge like its search-panel sibling. */
     overflow-y: auto;
     padding-right: var(--space-xs);
     padding-bottom: 0;
