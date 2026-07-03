@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Match, Show, Switch, onCleanup, onMount, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Match, Show, Switch, onCleanup, onMount, untrack, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { api, type DiscoveryFeedItem, type DiscoveryFeedSection, type DiscoverySaveCandidate } from '../lib/api';
 import { actions, state } from '../stores';
@@ -6,6 +6,7 @@ import { coverUrl } from '../lib/media';
 import { artistPath } from '../lib/artistRoute';
 import { toast } from '../lib/toast';
 import { parseYouTubeInput } from '../lib/youtube';
+import { prefetchPreviews } from '../lib/prefetch';
 import { ensureDiscover, feedItems, feedSections, refreshDiscover, revalidating } from '../lib/discover';
 import { t as tr } from '../lib/i18n';
 import SearchResultRow from '../components/SearchResultRow';
@@ -277,6 +278,37 @@ export default function Search() {
     if (nextDomain === 'youtube') runYouTube(query);
     else runCatalog(query, nextTab);
   };
+
+  // ── Speculative warm-up: resolve the top of the results in the background
+  // while the user is still deciding, so the eventual play click starts
+  // near-instantly. YouTube rows already carry playable ids; top catalog
+  // (Deezer) songs are resolved to a video id first (server-cached forever).
+  const prefetchedCatalog = new Set<string>();
+  createEffect(() => {
+    const directResult = youtubeDirect();
+    const ytTop = youtubeResults().slice(0, 3).map((r) => r.id);
+    const topSongs = songs().slice(0, 2);
+    untrack(() => {
+      if (directResult) prefetchPreviews([directResult.id]);
+      prefetchPreviews(ytTop);
+      for (const item of topSongs) {
+        if (item.type !== 'track' || item.track_id) continue;
+        if (item.raw?.id && typeof item.raw.id === 'string') {
+          prefetchPreviews([item.raw.id]);
+          continue;
+        }
+        const artist = itemArtist(item);
+        if (!artist || !item.title || prefetchedCatalog.has(item.id)) continue;
+        prefetchedCatalog.add(item.id);
+        void api
+          .resolveCatalogItem({ artist, title: item.title, duration: item.duration })
+          .then((res) => {
+            if (res.video_id) prefetchPreviews([res.video_id]);
+          })
+          .catch(() => {});
+      }
+    });
+  });
 
   const runSuggest = (query: string) => {
     query = query.trim();

@@ -4,6 +4,7 @@ import { createSocket, type AppSocket } from '../lib/socket';
 import { api, type DeviceRegistration, type RemotePlaybackState } from '../lib/api';
 import { audioEl, audioService } from '../lib/audio';
 import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers } from '../lib/media';
+import { prefetchPreviews, upcomingPreviewIds } from '../lib/prefetch';
 import { toast } from '../lib/toast';
 import { vibrate } from '../lib/haptics';
 import { isMusicTrack, isPodcastTrack, podcastEpisodeToTrack } from '../lib/track';
@@ -141,6 +142,19 @@ function trackUrl(track: Track): string {
   return track.source === 'preview' ? previewUrl(track.id) : streamUrl(track.id);
 }
 
+/** Set when the user starts a track; consumed by the audio 'playing' event to
+ * report click→sound latency (local-only telemetry, see play-timing route). */
+let pendingPlayTiming: { trackId: string; preview: boolean; startedAt: number } | null = null;
+
+/** Warm the tracks `actions.next` would reach so track changes start instantly.
+ * Skipped in shuffle mode — the next pick is random, prefetch would guess wrong. */
+function prefetchUpcoming(): void {
+  const pb = state.playback;
+  if (pb.shuffle) return;
+  const ids = upcomingPreviewIds(pb.queue, pb.index, pb.repeat === 'all');
+  if (ids.length > 0) prefetchPreviews(ids, { download: true });
+}
+
 function updateMediaSession(track: Track | null): void {
   if (!('mediaSession' in navigator)) return;
   if (!track) {
@@ -162,7 +176,13 @@ function loadIndex(i: number): void {
   userPlaybackStartedThisSession = true;
   setState('playback', { currentTrack: track, index: i, isPlaying: true, currentTime: 0 });
   updateMediaSession(track);
+  pendingPlayTiming = {
+    trackId: track.id,
+    preview: track.source === 'preview',
+    startedAt: performance.now(),
+  };
   void audioService.load(trackUrl(track)).catch(() => setState('playback', 'isPlaying', false));
+  prefetchUpcoming();
 }
 
 function playbackStateBody(
@@ -475,6 +495,7 @@ export const actions = {
     }
     setState('playback', 'queue', (q) => [...q, track]);
     toast.success(tr('toast.addedToQueue'));
+    prefetchUpcoming();
   },
 
   /** Play a track right now WITHOUT discarding the queue: jumps to it if it is
@@ -507,6 +528,7 @@ export const actions = {
     const at = pb.index + 1;
     setState('playback', 'queue', (q) => [...q.slice(0, at), track, ...q.slice(at)]);
     toast.success(tr('toast.playNextConfirmed'));
+    prefetchUpcoming();
   },
 
   /** Remove the queue entry at `i`, keeping playback coherent. */
@@ -542,6 +564,7 @@ export const actions = {
       if (to <= index) index++;
     }
     setState('playback', { queue: q, index });
+    prefetchUpcoming();
   },
 
   /** Clear upcoming tracks, keeping the one currently playing. */
@@ -985,6 +1008,23 @@ export function initStore(): void {
     pushPlaybackState();
   });
   a.addEventListener('ended', onEnded);
+  // First 'playing' after a user-initiated load → click-to-sound latency.
+  a.addEventListener('playing', () => {
+    const timing = pendingPlayTiming;
+    if (!timing || state.playback.currentTrack?.id !== timing.trackId) return;
+    pendingPlayTiming = null;
+    void api
+      .sendPlayTiming({
+        track_id: timing.trackId,
+        device_id: state.device.device_id,
+        phase: 'ui_click_to_playing',
+        segments: {
+          click_to_playing_ms: Math.round(performance.now() - timing.startedAt),
+          preview: timing.preview,
+        },
+      })
+      .catch(() => {});
+  });
   a.addEventListener('timeupdate', () => setState('playback', 'currentTime', a.currentTime || 0));
   const setDur = () => setState('playback', 'duration', Number.isFinite(a.duration) ? a.duration : 0);
   a.addEventListener('durationchange', setDur);

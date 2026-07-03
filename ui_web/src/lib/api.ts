@@ -295,6 +295,23 @@ export const api = {
       body: { device_id: deviceId, command, ...extra },
     }),
 
+  /** Warm previews the user is likely to play next: the engine resolves their
+   * stream URLs in the background and, with `download`, also caches the audio
+   * on disk. Best-effort — errors are the caller's to swallow. */
+  prefetchPreviews: (videoIds: string[], download = false) =>
+    request<{ status?: string; queued?: string[] }>('/api/preview/prefetch', {
+      method: 'POST',
+      body: { video_ids: videoIds, download },
+      timeoutMs: 5000,
+    }),
+  /** Local-only playback latency telemetry (see docs/TELEMETRY_PRIVACY.md). */
+  sendPlayTiming: (body: {
+    track_id?: string;
+    device_id?: string;
+    phase?: string;
+    segments?: Record<string, number | boolean>;
+  }) => request<{ status?: string }>('/api/playback/play-timing', { method: 'POST', body, timeoutMs: 5000 }),
+
   // ── Cross-device playback state (for resume) ──
   /** Most recent playback state from another device (204 → none). */
   getPlaybackState: (excludeDeviceId: string) =>

@@ -8,6 +8,7 @@ const apiMock = vi.hoisted(() => ({
   peekYouTube: vi.fn(),
   resolveCatalogItem: vi.fn(),
   emitDiscoveryEvent: vi.fn(),
+  prefetchPreviews: vi.fn(() => Promise.resolve({ status: 'queued' })),
 }));
 const toastMock = vi.hoisted(() => ({
   info: vi.fn(),
