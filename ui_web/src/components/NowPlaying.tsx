@@ -36,24 +36,10 @@ export function NowPlaying() {
   let bodyEl: HTMLDivElement | undefined;
   let sheetEl: HTMLDivElement | undefined;
   let headEl: HTMLElement | undefined;
-  // Distance (px) over which the floating "En cola" badge unwinds from its
-  // hovering hint position into its docked section-header position. While
-  // scrolled within [0, QUEUE_LIFT] the badge stays visually pinned (a stable
-  // hint); past it, it flows to its natural spot. Must match --queue-lift in
-  // NowPlaying.module.css.
-  const QUEUE_LIFT = 80;
-  const onBodyScroll = () => {
-    if (!bodyEl) return;
-    const q = Math.min(1, bodyEl.scrollTop / QUEUE_LIFT);
-    bodyEl.style.setProperty('--q', q.toFixed(3));
-    bodyEl.toggleAttribute('data-docked', q >= 1);
-  };
-  // Always (re)open on the player, with the queue badge in its hint state.
+  // Always (re)open at the top of the sheet.
   createEffect(() => {
     if (!nowPlayingOpen() || !bodyEl) return;
     bodyEl.scrollTop = 0;
-    bodyEl.style.setProperty('--q', '0');
-    bodyEl.removeAttribute('data-docked');
   });
 
   // Swipe-down-to-close. The body is scrollable because the queue lives below
@@ -304,12 +290,6 @@ export function NowPlaying() {
       onPointerCancel={onSheetPointerCancel}
     >
       <header class={styles.head} ref={headEl}>
-        <button class={styles.iconBtn} type="button" aria-label={tr('common.close')} onClick={() => setNowPlayingOpen(false)}>
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M6 9l6 6 6-6" />
-          </svg>
-        </button>
-        <span class={styles.headLabel}>{tr('nowPlaying.playing')}</span>
         <button
           classList={{ [styles.iconBtn]: true, [styles.panelToggle]: true, [styles.panelToggleOn]: panelOpen() }}
           type="button"
@@ -322,15 +302,19 @@ export function NowPlaying() {
             <path d="M21 21l-4.3-4.3" />
           </svg>
         </button>
+        <span class={styles.headLabel}>{tr('nowPlaying.playing')}</span>
+        <button class={styles.iconBtn} type="button" aria-label={tr('common.close')} onClick={() => setNowPlayingOpen(false)}>
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
       </header>
 
       <Show when={t()} fallback={<div class={styles.empty}>{tr('nowPlaying.nothingPlaying')}</div>}>
         <div class={styles.main} data-panel-side={panelSide()}>
-        <div class={styles.body} ref={bodyEl} onScroll={onBodyScroll}>
-          <div class={styles.player}>
-          <div class={styles.art} style={artBg()} />
-
-          <div class={styles.details}>
+        <div class={styles.body} ref={bodyEl}>
+          <div class={styles.media}>
+            <div class={styles.art} style={artBg()} />
             <div class={styles.info}>
               <h1 class={styles.title}>{t()!.title}</h1>
               <Show when={artistLinkable()} fallback={<p class={styles.artist}>{t()!.artist}</p>}>
@@ -339,7 +323,79 @@ export function NowPlaying() {
                 </button>
               </Show>
             </div>
+          </div>
 
+          <Show when={state.playback.queue.length > 1}>
+            <div class={styles.queue}>
+              <div class={styles.queueHead}>
+                <span class={styles.queuePill}>
+                  <h2 class={styles.queueTitle}>{tr('nowPlaying.queue')}</h2>
+                  <svg
+                    class={styles.queueChevron}
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </span>
+                <button class={styles.queueClear} type="button" onClick={() => actions.clearQueue()}>
+                  {tr('nowPlaying.clearQueue')}
+                </button>
+              </div>
+              <For each={state.playback.queue}>
+                {(qt, i) => (
+                  <div
+                    classList={{ [styles.qRow]: true, [styles.qActive]: i() === state.playback.index }}
+                    draggable={true}
+                    onDragStart={(e) => {
+                      dragFrom = i();
+                      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (dragFrom != null && dragFrom !== i()) actions.moveInQueue(dragFrom, i());
+                      dragFrom = null;
+                    }}
+                  >
+                    <span class={styles.qHandle} aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" />
+                        <circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" />
+                        <circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" />
+                      </svg>
+                    </span>
+                    <button class={styles.qPlay} type="button" onClick={() => actions.jumpTo(i())}>
+                      <span class={styles.qIndex}>{i() + 1}</span>
+                      <span class={styles.qMeta}>
+                        <span class={styles.qTitle}>{qt.title}</span>
+                        <span class={styles.qArtist}>{qt.artist}</span>
+                      </span>
+                    </button>
+                    <button
+                      class={styles.qRemove}
+                      type="button"
+                      aria-label={tr('nowPlaying.removeFromQueue')}
+                      onClick={() => actions.removeFromQueue(i())}
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <path d="M6 6l12 12M18 6L6 18" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
+
+          <div class={styles.controlsPanel}>
             <div class={styles.seekWrap}>
             <input
               class={styles.seek}
@@ -499,77 +555,6 @@ export function NowPlaying() {
             </button>
             </div>
           </div>
-          </div>
-
-          <Show when={state.playback.queue.length > 1}>
-            <div class={styles.queue}>
-              <div class={styles.queueHead}>
-                <span class={styles.queuePill}>
-                  <h2 class={styles.queueTitle}>{tr('nowPlaying.queue')}</h2>
-                  <svg
-                    class={styles.queueChevron}
-                    viewBox="0 0 24 24"
-                    width="14"
-                    height="14"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.5"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </span>
-                <button class={styles.queueClear} type="button" onClick={() => actions.clearQueue()}>
-                  {tr('nowPlaying.clearQueue')}
-                </button>
-              </div>
-              <For each={state.playback.queue}>
-                {(qt, i) => (
-                  <div
-                    classList={{ [styles.qRow]: true, [styles.qActive]: i() === state.playback.index }}
-                    draggable={true}
-                    onDragStart={(e) => {
-                      dragFrom = i();
-                      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-                    }}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      if (dragFrom != null && dragFrom !== i()) actions.moveInQueue(dragFrom, i());
-                      dragFrom = null;
-                    }}
-                  >
-                    <span class={styles.qHandle} aria-hidden="true">
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                        <circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" />
-                        <circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" />
-                        <circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" />
-                      </svg>
-                    </span>
-                    <button class={styles.qPlay} type="button" onClick={() => actions.jumpTo(i())}>
-                      <span class={styles.qIndex}>{i() + 1}</span>
-                      <span class={styles.qMeta}>
-                        <span class={styles.qTitle}>{qt.title}</span>
-                        <span class={styles.qArtist}>{qt.artist}</span>
-                      </span>
-                    </button>
-                    <button
-                      class={styles.qRemove}
-                      type="button"
-                      aria-label={tr('nowPlaying.removeFromQueue')}
-                      onClick={() => actions.removeFromQueue(i())}
-                    >
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                        <path d="M6 6l12 12M18 6L6 18" />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-              </For>
-              </div>
-            </Show>
         </div>
 
         <SearchPanel />
