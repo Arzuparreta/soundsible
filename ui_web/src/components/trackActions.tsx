@@ -7,6 +7,7 @@ import { shareTrack } from '../lib/share';
 import { confirmDialog } from '../lib/confirm';
 import { artistPath } from '../lib/artistRoute';
 import { isPodcastTrack } from '../lib/track';
+import { t } from '../lib/i18n';
 
 /**
  * Context for building a track's action menu. Optional callbacks let later
@@ -74,26 +75,26 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   const list: MenuAction[] = [];
 
   if (queueable) {
-    list.push({ icon: icons.playNext(), label: 'Reproducir a continuación', onSelect: () => actions.playNext(track) });
-    list.push({ icon: icons.queue(), label: 'Añadir a la cola', onSelect: () => actions.enqueue(track) });
+    list.push({ icon: icons.playNext(), label: t('trackActions.playNext'), onSelect: () => actions.playNext(track) });
+    list.push({ icon: icons.queue(), label: t('trackActions.addToQueue'), onSelect: () => actions.enqueue(track) });
   }
   if (ctx.onAddToPlaylist && !isPodcast)
-    list.push({ icon: icons.playlist(), label: 'Añadir a playlist', onSelect: () => ctx.onAddToPlaylist!(track) });
+    list.push({ icon: icons.playlist(), label: t('trackActions.addToPlaylist'), onSelect: () => ctx.onAddToPlaylist!(track) });
   if (!isPodcast)
-    list.push({ icon: icons.radio(), label: 'Iniciar radio', onSelect: () => void actions.startRadio(track) });
+    list.push({ icon: icons.radio(), label: t('trackActions.startRadio'), onSelect: () => void actions.startRadio(track) });
   if (ctx.navigate && track.artist && isLibrary && !isPodcast)
-    list.push({ icon: icons.artist(), label: 'Ir al artista', onSelect: () => ctx.navigate!(artistPath(track.artist)) });
+    list.push({ icon: icons.artist(), label: t('trackActions.goToArtist'), onSelect: () => ctx.navigate!(artistPath(track.artist)) });
   if (!isPodcast)
     list.push({
       icon: icons.heart(),
-      label: isFav ? 'Quitar de favoritos' : 'Añadir a favoritos',
+      label: isFav ? t('trackActions.removeFav') : t('trackActions.addFav'),
       onSelect: () => actions.toggleFavourite(track.id),
     });
   if (ctx.onEditMetadata && isLibrary)
-    list.push({ icon: icons.edit(), label: 'Editar datos', onSelect: () => ctx.onEditMetadata!(track) });
+    list.push({ icon: icons.edit(), label: t('trackActions.editData'), onSelect: () => ctx.onEditMetadata!(track) });
   if (ctx.onEditCover && isLibrary)
-    list.push({ icon: icons.image(), label: 'Cambiar portada', onSelect: () => ctx.onEditCover!(track) });
-  list.push({ icon: icons.share(), label: 'Compartir', onSelect: () => void shareTrack(track) });
+    list.push({ icon: icons.image(), label: t('trackActions.changeCover'), onSelect: () => ctx.onEditCover!(track) });
+  list.push({ icon: icons.share(), label: t('trackActions.share'), onSelect: () => void shareTrack(track) });
   // Save to library for preview tracks (not yet downloaded).
   // Exclude podcast episodes — they use a different download flow.
   if (track.source === 'preview' && !track.podcast_episode_guid) {
@@ -102,26 +103,26 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
       (i) => i.video_id === track.id && i.status !== 'failed' && i.status !== 'interrupted',
     );
     if (!alreadySaved && !alreadyDownloading) {
-      list.push({ icon: icons.download(), label: 'Guardar en biblioteca', onSelect: () => void actions.downloadTrack(track) });
+      list.push({ icon: icons.download(), label: t('trackActions.saveToLibrary'), onSelect: () => void actions.downloadTrack(track) });
     } else if (alreadyDownloading) {
-      list.push({ icon: icons.download(), label: 'Descargando…', disabled: true, onSelect: () => {} });
+      list.push({ icon: icons.download(), label: t('trackActions.downloading'), disabled: true, onSelect: () => {} });
     }
   }
   if (ctx.onPlayOnDevice && isLibrary)
-    list.push({ icon: icons.device(), label: 'Reproducir en dispositivo', onSelect: () => ctx.onPlayOnDevice!(track) });
+    list.push({ icon: icons.device(), label: t('trackActions.playOnDevice'), onSelect: () => ctx.onPlayOnDevice!(track) });
   if (ctx.playlistName && ctx.onRemoveFromPlaylist)
-    list.push({ icon: icons.remove(), label: 'Quitar de la playlist', danger: true, onSelect: () => ctx.onRemoveFromPlaylist!(track) });
+    list.push({ icon: icons.remove(), label: t('trackActions.removeFromPlaylist'), danger: true, onSelect: () => ctx.onRemoveFromPlaylist!(track) });
   if (isLibrary)
-    list.push({ icon: icons.trash(), label: 'Eliminar de la biblioteca', danger: true, onSelect: () => void confirmDelete(track) });
+    list.push({ icon: icons.trash(), label: t('trackActions.deleteFromLibrary'), danger: true, onSelect: () => void confirmDelete(track) });
 
   return list;
 }
 
 async function confirmDelete(track: Track): Promise<void> {
   const ok = await confirmDialog({
-    title: 'Eliminar pista',
-    message: `Se eliminará «${track.title}» de la biblioteca y del disco.`,
-    confirmLabel: 'Eliminar',
+    title: t('trackActions.deleteTitle'),
+    message: t('trackActions.deleteMsg', { title: track.title }),
+    confirmLabel: t('trackActions.deleteConfirm'),
     danger: true,
   });
   if (ok) void actions.deleteTrack(track.id);

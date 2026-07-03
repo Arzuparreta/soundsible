@@ -8,6 +8,7 @@ import { pickPlaylistCoverId } from '../lib/playlists';
 import { openPlaylistMenu, playlistMenuOptions } from '../components/playlistActions';
 import { attachContextMenu } from '../lib/contextMenu';
 import { promptDialog } from '../lib/prompt';
+import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './Playlists.module.css';
 
@@ -22,7 +23,7 @@ export default function Playlists() {
   };
 
   const createNew = async () => {
-    const name = await promptDialog({ title: 'Nueva lista', placeholder: 'Nombre de la lista', confirmLabel: 'Crear' });
+    const name = await promptDialog({ title: t('playlists.new'), placeholder: t('playlists.newPlaceholder'), confirmLabel: t('playlists.newConfirm') });
     if (name) void actions.createPlaylist(name);
   };
 
@@ -34,15 +35,15 @@ export default function Playlists() {
 
   return (
     <div class="view">
-      <ViewHeader title="Listas" meta={`${names().length}`} />
+      <ViewHeader title={t('playlists.title')} meta={`${names().length}`} />
       <div class={styles.scroll}>
         <button class={styles.newBtn} type="button" onClick={createNew}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M12 5v14M5 12h14" />
           </svg>
-          Nueva lista
+          {t('playlists.new')}
         </button>
-        <Show when={names().length > 0} fallback={<p class={styles.empty}>Aún no tienes listas.</p>}>
+        <Show when={names().length > 0} fallback={<p class={styles.empty}>{t('playlists.empty')}</p>}>
           <div class={styles.grid}>
             <For each={names()}>
               {(name) => {
@@ -57,7 +58,7 @@ export default function Playlists() {
                     <button
                       class={styles.cardMenu}
                       type="button"
-                      aria-label="Opciones de la lista"
+                      aria-label={t('playlists.ariaOptions')}
                       onClick={(e) => menu(e, name)}
                     >
                       <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">

@@ -9,6 +9,7 @@ import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import { coverUrl } from '../lib/media';
 import { artistPath } from '../lib/artistRoute';
+import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './TrackList.module.css';
 
@@ -70,7 +71,7 @@ export default function TrackList(props: {
       >
         <Show
           when={props.tracks.length > 0}
-          fallback={props.empty ?? <p class={styles.empty}>Nada por aquí.</p>}
+          fallback={props.empty ?? <p class={styles.empty}>{t('trackList.defaultEmpty')}</p>}
         >
           <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative', width: '100%' }}>
             <For each={virtualizer.getVirtualItems()}>

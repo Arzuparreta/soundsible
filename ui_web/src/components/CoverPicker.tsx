@@ -2,6 +2,7 @@ import { For, Show, createMemo, type JSX } from 'solid-js';
 import { openOverlay } from '../lib/overlay';
 import { state, actions } from '../stores';
 import { coverUrl } from '../lib/media';
+import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './CoverPicker.module.css';
 
@@ -30,12 +31,12 @@ export function openPlaylistCoverPicker(name: string): void {
     return (
       <div class={styles.picker}>
         <header class={styles.head}>
-          <span class={styles.title}>Portada de «{name}»</span>
+          <span class={styles.title}>{t('coverPicker.header', { name })}</span>
         </header>
         <button class={styles.none} type="button" onClick={() => pick(null)}>
-          Sin portada (automática)
+          {t('coverPicker.none')}
         </button>
-        <Show when={tracks().length > 0} fallback={<p class={styles.empty}>La lista no tiene pistas.</p>}>
+        <Show when={tracks().length > 0} fallback={<p class={styles.empty}>{t('coverPicker.empty')}</p>}>
           <div class={styles.grid}>
             <For each={tracks()}>
               {(t) => (

@@ -3,6 +3,7 @@ import { state, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import { trackCount } from '../lib/format';
+import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 
 /** Favourites = music library tracks whose id is in `favorites`, in favourites
@@ -15,13 +16,13 @@ export default function Favourites() {
 
   return (
     <div class="view">
-      <ViewHeader title="Favoritos" meta={trackCount(favTracks().length)} />
+      <ViewHeader title={t('favourites.title')} meta={trackCount(favTracks().length)} />
       <TrackList
         tracks={favTracks()}
         loading={state.loading}
         empty={
           <p style={{ padding: '48px 16px', 'text-align': 'center', color: 'var(--ink-secondary)' }}>
-            Aún no tienes favoritos. Toca el corazón en cualquier canción.
+            {t('favourites.empty')}
           </p>
         }
       />

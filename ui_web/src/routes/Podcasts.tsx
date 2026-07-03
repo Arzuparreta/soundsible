@@ -3,6 +3,7 @@ import { A } from '@solidjs/router';
 import { api } from '../lib/api';
 import { state, actions } from '../stores';
 import { ensureDiscover, topPodcasts } from '../lib/discover';
+import { t } from '../lib/i18n';
 import type { PodcastSearchResult } from '../types/podcast';
 import styles from './Podcasts.module.css';
 
@@ -87,7 +88,7 @@ export default function Podcasts() {
         <input
           class={styles.input}
           type="search"
-          placeholder="Buscar podcasts…"
+          placeholder={t('podcasts.searchPlaceholder')}
           value={q()}
           onInput={(e) => onInput(e.currentTarget.value)}
         />
@@ -99,7 +100,7 @@ export default function Podcasts() {
           fallback={
             <>
               <Show when={state.podcastSubscriptions.length > 0}>
-                <h2 class={styles.sectionTitle}>Tus shows</h2>
+                <h2 class={styles.sectionTitle}>{t('podcasts.yourShows')}</h2>
                 <div class={styles.grid}>
                   <For each={state.podcastSubscriptions}>
                     {(s) => (
@@ -114,7 +115,7 @@ export default function Podcasts() {
               </Show>
 
               <Show when={topPodcasts().length > 0}>
-                <h2 class={styles.sectionTitle}>Podcasts populares</h2>
+                <h2 class={styles.sectionTitle}>{t('podcasts.top')}</h2>
                 <div class={styles.grid}>
                   <For each={topPodcasts()}>
                     {(p) => (
@@ -127,7 +128,7 @@ export default function Podcasts() {
                         <div class={styles.cover} style={coverBg(p.image_url)} />
                         <span class={styles.name}>{p.title}</span>
                         <span class={styles.author}>
-                          {subscribedFeeds().has(p.feed_url) ? 'Suscrito' : p.author}
+                          {subscribedFeeds().has(p.feed_url) ? t('podcasts.subscribed') : p.author}
                         </span>
                       </button>
                     )}
@@ -136,7 +137,7 @@ export default function Podcasts() {
               </Show>
 
               <Show when={state.podcastSubscriptions.length === 0 && topPodcasts().length === 0}>
-                <p class={styles.hint}>Busca podcasts arriba y suscríbete. Tus shows aparecerán aquí.</p>
+                <p class={styles.hint}>{t('podcasts.hint')}</p>
               </Show>
             </>
           }
@@ -145,7 +146,7 @@ export default function Podcasts() {
             <For each={Array.from({ length: 6 })}>{() => <div class={styles.skeleton} />}</For>
           </Show>
           <Show when={!loading() && results().length === 0}>
-            <p class={styles.hint}>Sin resultados.</p>
+            <p class={styles.hint}>{t('podcasts.noResults')}</p>
           </Show>
           <For each={results()}>
             {(r) => (
@@ -157,7 +158,7 @@ export default function Podcasts() {
                 </div>
                 <Show
                   when={!subscribedFeeds().has(r.feed_url)}
-                  fallback={<span class={styles.subbed}>Suscrito</span>}
+                  fallback={<span class={styles.subbed}>{t('podcasts.subscribed')}</span>}
                 >
                   <button
                     class={styles.subBtn}
@@ -165,7 +166,7 @@ export default function Podcasts() {
                     disabled={subscribing().has(r.feed_url)}
                     onClick={() => subscribe(r)}
                   >
-                    {subscribing().has(r.feed_url) ? '…' : 'Suscribir'}
+                    {subscribing().has(r.feed_url) ? t('podcasts.subscribing') : t('podcasts.subscribe')}
                   </button>
                 </Show>
               </div>

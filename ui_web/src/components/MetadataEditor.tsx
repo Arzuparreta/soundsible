@@ -2,6 +2,7 @@ import { createSignal, type JSX } from 'solid-js';
 import { openOverlay } from '../lib/overlay';
 import { actions } from '../stores';
 import { coverUrl } from '../lib/media';
+import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './MetadataEditor.module.css';
 
@@ -52,44 +53,44 @@ export function openMetadataEditor(track: Track): void {
 
     return (
       <form class={styles.form} onSubmit={save}>
-        <h2 class={styles.title}>Editar datos</h2>
+        <h2 class={styles.title}>{t('metadataEditor.title')}</h2>
 
         <div class={styles.coverRow}>
           <span class={styles.coverPreview} style={coverBg()} />
           <div class={styles.coverActions}>
             <button class={styles.coverBtn} type="button" disabled={busy()} onClick={() => fileInput?.click()}>
-              Subir portada
+              {t('metadataEditor.uploadCover')}
             </button>
             <button class={styles.coverBtn} type="button" disabled={busy()} onClick={removeCover}>
-              Quitar portada
+              {t('metadataEditor.removeCover')}
             </button>
           </div>
           <input ref={fileInput} type="file" accept="image/*" hidden onChange={onFile} />
         </div>
 
         <label class={styles.field}>
-          <span class={styles.label}>Título</span>
+          <span class={styles.label}>{t('metadataEditor.fieldTitle')}</span>
           <input class={styles.input} value={title()} onInput={(e) => setTitle(e.currentTarget.value)} />
         </label>
         <label class={styles.field}>
-          <span class={styles.label}>Artista</span>
+          <span class={styles.label}>{t('metadataEditor.fieldArtist')}</span>
           <input class={styles.input} value={artist()} onInput={(e) => setArtist(e.currentTarget.value)} />
         </label>
         <label class={styles.field}>
-          <span class={styles.label}>Álbum</span>
+          <span class={styles.label}>{t('metadataEditor.fieldAlbum')}</span>
           <input class={styles.input} value={album()} onInput={(e) => setAlbum(e.currentTarget.value)} />
         </label>
         <label class={styles.field}>
-          <span class={styles.label}>Artista del álbum</span>
+          <span class={styles.label}>{t('metadataEditor.fieldAlbumArtist')}</span>
           <input class={styles.input} value={albumArtist()} onInput={(e) => setAlbumArtist(e.currentTarget.value)} />
         </label>
 
         <div class={styles.actions}>
           <button type="button" class={styles.cancel} onClick={close}>
-            Cancelar
+            {t('metadataEditor.cancel')}
           </button>
           <button type="submit" class={styles.confirm} disabled={busy()}>
-            Guardar
+            {t('metadataEditor.save')}
           </button>
         </div>
       </form>

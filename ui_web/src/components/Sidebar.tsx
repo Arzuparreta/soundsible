@@ -1,11 +1,12 @@
 import { For, Show, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
 import { downloadCounts } from '../stores';
+import { t } from '../lib/i18n';
 import styles from './Sidebar.module.css';
 
 interface NavItem {
   href: string;
-  label: string;
+  label: () => string;
   end?: boolean;
   icon: () => JSX.Element;
 }
@@ -14,7 +15,7 @@ interface NavItem {
 const primary: NavItem[] = [
   {
     href: '/',
-    label: 'Inicio',
+    label: () => t('nav.home'),
     end: true,
     icon: () => (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -24,7 +25,7 @@ const primary: NavItem[] = [
   },
   {
     href: '/search',
-    label: 'Buscar',
+    label: () => t('nav.search'),
     icon: () => (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="7" />
@@ -38,7 +39,7 @@ const primary: NavItem[] = [
 const library: NavItem[] = [
   {
     href: '/favourites',
-    label: 'Favoritos',
+    label: () => t('nav.favourites'),
     icon: () => (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 21s-7-4.35-9.5-8.5C.9 9.6 2.2 6 5.5 6 7.6 6 9 7.5 12 10c3-2.5 4.4-4 6.5-4 3.3 0 4.6 3.6 3 6.5C19 16.65 12 21 12 21z" />
@@ -47,7 +48,7 @@ const library: NavItem[] = [
   },
   {
     href: '/playlists',
-    label: 'Listas',
+    label: () => t('nav.playlists'),
     icon: () => (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M4 7h11M4 12h11M4 17h7M18 16v-6l3 1.5" />
@@ -56,7 +57,7 @@ const library: NavItem[] = [
   },
   {
     href: '/podcasts',
-    label: 'Podcasts',
+    label: () => t('nav.podcasts'),
     icon: () => (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="9" y="3" width="6" height="11" rx="3" />
@@ -66,7 +67,7 @@ const library: NavItem[] = [
   },
   {
     href: '/downloads',
-    label: 'Descargas',
+    label: () => t('nav.downloads'),
     icon: () => (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" />
@@ -77,7 +78,7 @@ const library: NavItem[] = [
 
 const settings: NavItem = {
   href: '/settings',
-  label: 'Ajustes',
+  label: () => t('nav.settings'),
   icon: () => (
     <svg
       viewBox="0 0 24 24"
@@ -97,7 +98,7 @@ function Item(props: { item: NavItem; badge?: number }) {
   return (
     <A href={props.item.href} end={props.item.end} class={styles.item} activeClass={styles.active}>
       <span class={styles.icon}>{props.item.icon()}</span>
-      <span class={styles.label}>{props.item.label}</span>
+      <span class={styles.label}>{props.item.label()}</span>
       <Show when={props.badge}>
         <span class={styles.badge}>{props.badge}</span>
       </Show>
@@ -122,7 +123,7 @@ export function Sidebar() {
         <For each={primary}>{(item) => <Item item={item} />}</For>
       </nav>
 
-      <p class={styles.heading}>Biblioteca</p>
+      <p class={styles.heading}>{t('nav.library')}</p>
       <nav class={styles.group}>
         <For each={library}>
           {(item) => <Item item={item} badge={item.href === '/downloads' ? active() : undefined} />}

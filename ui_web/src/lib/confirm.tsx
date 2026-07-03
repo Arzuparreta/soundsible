@@ -1,5 +1,6 @@
 import { onCleanup, Show } from 'solid-js';
 import { openOverlay } from './overlay';
+import { t } from './i18n';
 import styles from './confirm.module.css';
 
 export interface ConfirmOptions {
@@ -37,14 +38,14 @@ export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
           </Show>
           <div class={styles.actions}>
             <button type="button" class={styles.cancel} onClick={() => choose(false)}>
-              {opts.cancelLabel ?? 'Cancelar'}
+              {opts.cancelLabel ?? t('confirm.cancel')}
             </button>
             <button
               type="button"
               classList={{ [styles.confirm]: true, [styles.danger]: opts.danger }}
               onClick={() => choose(true)}
             >
-              {opts.confirmLabel ?? 'Aceptar'}
+              {opts.confirmLabel ?? t('confirm.accept')}
             </button>
           </div>
         </div>

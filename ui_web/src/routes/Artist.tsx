@@ -7,6 +7,7 @@ import { coverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
 import { buildAlbums } from '../lib/libraryView';
 import { artistKey, decodeArtistName } from '../lib/artistRoute';
+import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './Artist.module.css';
 
@@ -42,7 +43,7 @@ export default function Artist() {
   return (
     <div class="view">
       <header class={styles.header}>
-        <button class={styles.back} type="button" aria-label="Volver" onClick={() => navigate(-1)}>
+        <button class={styles.back} type="button" aria-label={t('artist.ariaBack')} onClick={() => navigate(-1)}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M15 18l-6-6 6-6" />
           </svg>
@@ -56,13 +57,13 @@ export default function Artist() {
           <span class={styles.count}>{trackCount(tracks().length)}</span>
           <div class={styles.actions}>
             <Button onClick={playAll} disabled={tracks().length === 0}>
-              Reproducir
+              {t('artist.play')}
             </Button>
             <Button variant="secondary" onClick={shuffle} disabled={tracks().length === 0}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style={{ 'margin-right': '6px' }}>
                 <path d="M16 3h5v5M21 3l-7 7M4 20l7-7M16 21h5v-5M4 4l5 5" />
               </svg>
-              Aleatorio
+              {t('artist.shuffle')}
             </Button>
           </div>
         </div>
@@ -86,7 +87,7 @@ export default function Artist() {
         tracks={tracks()}
         loading={state.loading}
         empty={
-          <p class={styles.empty}>No hay pistas de este artista en tu biblioteca.</p>
+          <p class={styles.empty}>{t('artist.empty')}</p>
         }
       />
     </div>

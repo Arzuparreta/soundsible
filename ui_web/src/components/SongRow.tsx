@@ -1,5 +1,6 @@
 import { Show, type JSX } from 'solid-js';
 import type { Track } from '../types/music';
+import { t } from '../lib/i18n';
 import styles from './SongRow.module.css';
 
 export interface SongRowProps {
@@ -112,7 +113,7 @@ export default function SongRow(props: SongRowProps) {
       <Show when={props.onMenu}>
         <button
           class={styles.iconBtn}
-          aria-label="Más opciones"
+          aria-label={t('songRow.ariaMore')}
           onClick={(e) => {
             e.stopPropagation();
             openMenu(e);

@@ -5,22 +5,23 @@ import { actions } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import Button from '../components/Button';
 import { toast } from '../lib/toast';
+import { t } from '../lib/i18n';
 import styles from './Migrate.module.css';
 
 type Format = 'spotify_json' | 'apple_music_csv';
 
-const FORMATS: { id: Format; label: string; accept: string; hint: string }[] = [
+const FORMATS: { id: Format; label: () => string; accept: string; hint: () => string }[] = [
   {
     id: 'spotify_json',
-    label: 'Spotify',
+    label: () => t('migrate.spotify'),
     accept: '.json,application/json',
-    hint: 'Exporta tus datos desde Spotify (o usa una herramienta de exportación) y sube el archivo JSON de la playlist.',
+    hint: () => t('migrate.spotifyHint'),
   },
   {
     id: 'apple_music_csv',
-    label: 'Apple Music',
+    label: () => t('migrate.apple'),
     accept: '.csv,text/csv',
-    hint: 'En Apple Music, exporta la playlist como archivo de texto/CSV y súbelo aquí.',
+    hint: () => t('migrate.appleHint'),
   },
 ];
 
@@ -32,7 +33,7 @@ export default function Migrate() {
   const [loading, setLoading] = createSignal(false);
   const [preview, setPreview] = createSignal<MigrationPreview | null>(null);
   const [selected, setSelected] = createSignal<Set<number>>(new Set<number>());
-  const [playlistName, setPlaylistName] = createSignal('Importado');
+  const [playlistName, setPlaylistName] = createSignal(t('migrate.defaultName'));
   const [importing, setImporting] = createSignal(false);
 
   const fmtMeta = createMemo(() => FORMATS.find((f) => f.id === format())!);
@@ -48,14 +49,14 @@ export default function Migrate() {
     try {
       setText(await file.text());
     } catch {
-      toast.error('No se pudo leer el archivo');
+      toast.error(t('migrate.toast.readFailed'));
     }
   };
 
   const runPreview = async () => {
     const body = text().trim();
     if (!body) {
-      toast.error('Añade un archivo o pega el contenido del export');
+      toast.error(t('migrate.toast.empty'));
       return;
     }
     setLoading(true);
@@ -67,10 +68,10 @@ export default function Migrate() {
     } catch (e) {
       const msg =
         e instanceof ApiError && e.status === 400
-          ? 'No se pudo leer el export. ¿Es el formato correcto?'
+          ? t('migrate.toast.badFormat')
           : e instanceof ApiError && e.status === 409
-            ? 'Tu biblioteca está vacía: descarga música antes de importar.'
-            : 'No se pudo previsualizar la importación';
+            ? t('migrate.toast.libraryEmpty')
+            : t('migrate.toast.previewFailed');
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -96,7 +97,7 @@ export default function Migrate() {
     const p = preview();
     const name = playlistName().trim();
     if (!name) {
-      toast.error('Pon un nombre a la playlist');
+      toast.error(t('migrate.toast.nameRequired'));
       return;
     }
     const ids = matched()
@@ -104,22 +105,22 @@ export default function Migrate() {
       .map((m) => m.matched_track_id!)
       .filter(Boolean);
     if (ids.length === 0) {
-      toast.error('Selecciona al menos una pista');
+      toast.error(t('migrate.toast.selectOne'));
       return;
     }
     setImporting(true);
-    const t = toast.loading('Importando…');
+    const h = toast.loading(t('migrate.toast.importing'));
     try {
       await api.migrationImportPlaylist({ playlist_name: name, track_ids: ids, batch_id: p?.batch_id });
       await actions.syncLibrary();
-      t.update('success', `Playlist "${name}" creada (${ids.length})`);
+      h.update('success', t('migrate.toast.created', { name, count: ids.length }));
       navigate(`/playlists/${encodeURIComponent(name)}`);
     } catch (e) {
       const msg =
         e instanceof ApiError && e.status === 409
-          ? 'Ya existe una playlist con ese nombre'
-          : 'No se pudo crear la playlist';
-      t.update('error', msg);
+          ? t('migrate.toast.dupe')
+          : t('migrate.toast.createFailed');
+      h.update('error', msg);
     } finally {
       setImporting(false);
     }
@@ -132,7 +133,7 @@ export default function Migrate() {
 
   return (
     <div class="view">
-      <ViewHeader title="Importar biblioteca" />
+      <ViewHeader title={t('migrate.title')} />
       <div class={styles.scroll}>
         <Show
           when={preview()}
@@ -147,12 +148,12 @@ export default function Migrate() {
                       type="button"
                       onClick={() => setFormat(f.id)}
                     >
-                      {f.label}
+                      {f.label()}
                     </button>
                   )}
                 </For>
               </div>
-              <p class={styles.hint}>{fmtMeta().hint}</p>
+              <p class={styles.hint}>{fmtMeta().hint()}</p>
 
               <label class={styles.fileBtn}>
                 <input
@@ -161,20 +162,20 @@ export default function Migrate() {
                   class={styles.fileInput}
                   onChange={(e) => onFile(e.currentTarget.files?.[0])}
                 />
-                {fileName() || 'Elegir archivo…'}
+                {fileName() || t('migrate.chooseFile')}
               </label>
 
-              <p class={styles.or}>o pega el contenido</p>
+              <p class={styles.or}>{t('migrate.orPaste')}</p>
               <textarea
                 class={styles.textarea}
                 rows="6"
-                placeholder={format() === 'spotify_json' ? '{ "tracks": [ … ] }' : 'Title,Artist,Album…'}
+                placeholder={format() === 'spotify_json' ? t('migrate.placeholderSpotify') : t('migrate.placeholderApple')}
                 value={text()}
                 onInput={(e) => setText(e.currentTarget.value)}
               />
 
               <Button onClick={runPreview} disabled={loading() || !text().trim()}>
-                {loading() ? 'Analizando…' : 'Previsualizar coincidencias'}
+                {loading() ? t('migrate.analyzing') : t('migrate.preview')}
               </Button>
             </section>
           }
@@ -183,18 +184,18 @@ export default function Migrate() {
             <>
               <section class={styles.card}>
                 <h2 class={styles.statLine}>
-                  {p().stats.matched} de {p().stats.total} pistas encontradas en tu biblioteca
+                  {t('migrate.statLine', { matched: p().stats.matched, total: p().stats.total })}
                 </h2>
                 <div class={styles.chips}>
-                  <span class={styles.chip}>{p().stats.auto_accept} seguras</span>
-                  <span class={styles.chip}>{p().stats.needs_confirmation} a revisar</span>
+                  <span class={styles.chip}>{p().stats.auto_accept} {t('migrate.chipAuto')}</span>
+                  <span class={styles.chip}>{p().stats.needs_confirmation} {t('migrate.chipReview')}</span>
                   <span classList={{ [styles.chip]: true, [styles.chipMuted]: true }}>
-                    {p().stats.unmatched} sin encontrar
+                    {p().stats.unmatched} {t('migrate.chipUnmatched')}
                   </span>
                 </div>
 
                 <label class={styles.nameRow}>
-                  <span>Nombre de la playlist</span>
+                  <span>{t('migrate.playlistName')}</span>
                   <input
                     class={styles.input}
                     value={playlistName()}
@@ -206,9 +207,9 @@ export default function Migrate() {
               <Show when={matched().length > 0}>
                 <section class={styles.card}>
                   <div class={styles.listHead}>
-                    <span class={styles.sectionTitle}>Coincidencias ({matched().length})</span>
+                    <span class={styles.sectionTitle}>{t('migrate.matches', { count: matched().length })}</span>
                     <button class={styles.selectAll} type="button" onClick={toggleAll}>
-                      {allSelected() ? 'Quitar todas' : 'Marcar todas'}
+                      {allSelected() ? t('migrate.deselectAll') : t('migrate.selectAll')}
                     </button>
                   </div>
                   <For each={matched()}>
@@ -221,12 +222,12 @@ export default function Migrate() {
 
               <Show when={unmatched().length > 0}>
                 <section class={styles.card}>
-                  <span class={styles.sectionTitle}>Sin encontrar ({unmatched().length})</span>
-                  <p class={styles.hint}>No están en tu biblioteca, así que no se importarán. Búscalas en Buscar para descargarlas.</p>
+                  <span class={styles.sectionTitle}>{t('migrate.unmatched', { count: unmatched().length })}</span>
+                  <p class={styles.hint}>{t('migrate.unmatchedHint')}</p>
                   <For each={unmatched().slice(0, 50)}>
                     {(m) => (
                       <div class={styles.missRow}>
-                        <span class={styles.missTitle}>{m.source_title || '—'}</span>
+                        <span class={styles.missTitle}>{m.source_title || t('migrate.dash')}</span>
                         <span class={styles.missArtist}>{m.source_artist}</span>
                       </div>
                     )}
@@ -236,10 +237,10 @@ export default function Migrate() {
 
               <div class={styles.actions}>
                 <Button variant="secondary" onClick={reset} disabled={importing()}>
-                  Atrás
+                  {t('migrate.back')}
                 </Button>
                 <Button onClick={doImport} disabled={importing() || selected().size === 0}>
-                  {importing() ? 'Importando…' : `Crear playlist (${selected().size})`}
+                  {importing() ? t('migrate.toast.importing') : t('migrate.create', { count: selected().size })}
                 </Button>
               </div>
             </>
@@ -259,13 +260,13 @@ function MatchRow(props: { m: MigrationMatch; checked: boolean; onToggle: () => 
     <label class={styles.matchRow}>
       <input type="checkbox" class={styles.check} checked={props.checked} onChange={props.onToggle} />
       <div class={styles.matchMeta}>
-        <span class={styles.matchTitle}>{props.m.source_title || '—'}</span>
+        <span class={styles.matchTitle}>{props.m.source_title || t('migrate.dash')}</span>
         <span class={styles.matchArtist}>{props.m.source_artist}</span>
       </div>
       <span
         class={styles.confidence}
         classList={{ [styles.review]: props.m.needs_confirmation }}
-        title={props.m.auto_accept ? 'Coincidencia segura' : 'Conviene revisar'}
+        title={props.m.auto_accept ? t('migrate.confidenceAuto') : t('migrate.confidenceReview')}
       >
         {pct(props.m.confidence)}
       </span>

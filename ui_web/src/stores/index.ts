@@ -8,6 +8,7 @@ import { toast } from '../lib/toast';
 import { vibrate } from '../lib/haptics';
 import { isMusicTrack, isPodcastTrack, podcastEpisodeToTrack } from '../lib/track';
 import { queueIndexOf } from '../lib/queueDiscovery';
+import { t as tr } from '../lib/i18n';
 import type { Track, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
 import type { DownloadQueueItem, DownloadEvent, CompletedDownload } from '../types/download';
@@ -283,7 +284,7 @@ function applyDownloadEvent(detail: DownloadEvent): void {
     setState('downloads', 'queue', (q) => q.filter((i) => i.id !== id));
     addRecentCompleted({
       id,
-      title: track?.title ?? finished?.display_title ?? finished?.podcast_title ?? 'Pista',
+      title: track?.title ?? finished?.display_title ?? finished?.podcast_title ?? tr('toast.trackFallback'),
       artist: track?.artist ?? finished?.display_artist ?? finished?.podcast_show_title ?? '',
     });
     return;
@@ -404,7 +405,7 @@ export const actions = {
 
   /** Enqueue a podcast episode for download. */
   async downloadEpisode(ep: PodcastEpisode, sub: PodcastSubscription | null): Promise<void> {
-    const t = toast.loading('Añadiendo a descargas…');
+    const t = toast.loading(tr('toast.addingDownloads'));
     try {
       await api.enqueuePodcastEpisode({
         enclosure_url: ep.enclosure_url,
@@ -417,9 +418,9 @@ export const actions = {
         podcast_rss_url: sub?.rss_url,
       });
       void actions.loadDownloads();
-      t.update('success', 'Episodio en descargas');
+      t.update('success', tr('toast.episodeInDownloads'));
     } catch {
-      t.update('error', 'No se pudo descargar');
+      t.update('error', tr('toast.downloadFailed'));
     }
   },
 
@@ -473,7 +474,7 @@ export const actions = {
       return;
     }
     setState('playback', 'queue', (q) => [...q, track]);
-    toast.success('Añadida a la cola');
+    toast.success(tr('toast.addedToQueue'));
   },
 
   /** Play a track right now WITHOUT discarding the queue: jumps to it if it is
@@ -505,7 +506,7 @@ export const actions = {
     }
     const at = pb.index + 1;
     setState('playback', 'queue', (q) => [...q.slice(0, at), track, ...q.slice(at)]);
-    toast.success('Se reproducirá a continuación');
+    toast.success(tr('toast.playNextConfirmed'));
   },
 
   /** Remove the queue entry at `i`, keeping playback coherent. */
@@ -554,10 +555,10 @@ export const actions = {
   async startRadio(seed: Track): Promise<void> {
     // Podcast episodes have no meaningful YouTube mix; the seed id is a guid.
     if (isPodcastTrack(seed)) {
-      toast.error('La radio no está disponible para podcasts');
+      toast.error(tr('toast.radioUnavailable'));
       return;
     }
-    const t = toast.loading('Iniciando radio…');
+    const t = toast.loading(tr('toast.startingRadio'));
     try {
       let ytId = seed.youtube_id ?? (seed.source === 'preview' ? seed.id : null);
 
@@ -573,7 +574,7 @@ export const actions = {
       }
 
       if (!ytId) {
-        t.update('error', 'No se encontró el video en YouTube para iniciar la radio');
+        t.update('error', tr('toast.noYtForRadio'));
         return;
       }
 
@@ -591,7 +592,7 @@ export const actions = {
           }),
         );
       if (mix.length === 0) {
-        t.update('error', `No se encontraron canciones relacionadas (semilla: ${ytId})`);
+        t.update('error', tr('toast.noRelatedMix', { ytId }));
         return;
       }
       actions.playFrom([seed, ...mix], 0);
@@ -603,10 +604,10 @@ export const actions = {
         youtube_id: ytId,
         source: seed.source ?? 'library',
       }).catch(() => {});
-      t.update('success', 'Radio iniciada');
+      t.update('success', tr('toast.radioStarted'));
     } catch (err) {
       console.error('[startRadio] error', err, 'seed:', seed.id, seed.youtube_id);
-      t.update('error', `No se pudo iniciar la radio (${seed.youtube_id || 'sin ytId'})`);
+      t.update('error', tr('toast.radioFailed', { ytId: seed.youtube_id || tr('toast.radioFailedFallback') }));
     }
   },
 
@@ -621,11 +622,11 @@ export const actions = {
     try {
       await api.deleteTrack(id);
       await actions.syncLibrary();
-      toast.success('Pista eliminada');
+      toast.success(tr('toast.trackDeleted'));
     } catch {
       setState({ library: prevLib, favorites: prevFav, playlists: prevPlaylists });
       restorePlaybackSnapshot(prevPlayback);
-      toast.error('No se pudo eliminar');
+      toast.error(tr('toast.deleteFailed'));
       void actions.syncLibrary();
     }
   },
@@ -646,23 +647,23 @@ export const actions = {
       setState('playback', 'currentTrack', (c) => (c ? { ...c, ...patch } : c));
     try {
       await api.updateTrackMetadata(id, meta);
-      toast.success('Datos actualizados');
+      toast.success(tr('toast.dataUpdated'));
       return true;
     } catch {
       setState('library', prev);
-      toast.error('No se pudo actualizar');
+      toast.error(tr('toast.updateFailed'));
       return false;
     }
   },
 
   async uploadTrackCover(id: string, file: File): Promise<void> {
-    const t = toast.loading('Subiendo portada…');
+    const t = toast.loading(tr('toast.uploadingCover'));
     try {
       await api.uploadTrackCover(id, file);
       bustCovers();
-      t.update('success', 'Portada actualizada');
+      t.update('success', tr('toast.coverUpdated'));
     } catch {
-      t.update('error', 'No se pudo subir la portada');
+      t.update('error', tr('toast.coverUploadFailed'));
     }
   },
 
@@ -670,9 +671,9 @@ export const actions = {
     try {
       await api.clearTrackCover(id);
       bustCovers();
-      toast.success('Portada quitada');
+      toast.success(tr('toast.coverRemoved'));
     } catch {
-      toast.error('No se pudo quitar la portada');
+      toast.error(tr('toast.coverRemoveFailed'));
     }
   },
 
@@ -711,17 +712,17 @@ export const actions = {
       (t) => t.youtube_id === track.id || t.id === track.id,
     );
     if (alreadySaved) {
-      toast.info('Ya está en tu biblioteca');
+      toast.info(tr('toast.alreadyInLibrary'));
       return;
     }
     const alreadyDownloading = state.downloads.queue.some(
       (i) => i.video_id === track.id && i.status !== 'failed' && i.status !== 'interrupted',
     );
     if (alreadyDownloading) {
-      toast.info('Ya está en la cola de descargas');
+      toast.info(tr('toast.alreadyInDownloadsQueue'));
       return;
     }
-    const t = toast.loading('Añadiendo a descargas…');
+    const t = toast.loading(tr('toast.addingDownloads'));
     try {
       await api.enqueueDownload([
         {
@@ -742,9 +743,9 @@ export const actions = {
         source: 'now_playing',
         youtube_id: track.id,
       }).catch(() => {});
-      t.update('success', 'Añadido a descargas');
+      t.update('success', tr('toast.addedToDownloads'));
     } catch {
-      t.update('error', 'No se pudo añadir a descargas');
+      t.update('error', tr('toast.addToDownloadsFailed'));
     }
   },
 
@@ -803,15 +804,15 @@ export const actions = {
     const clean = name.trim();
     if (!clean) return false;
     if (state.playlists[clean]) {
-      toast.error('Ya existe una lista con ese nombre');
+      toast.error(tr('toast.playlistExists'));
       return false;
     }
     try {
       applyPlaylistMutation(await api.createPlaylist(clean));
-      toast.success('Lista creada');
+      toast.success(tr('toast.playlistCreated'));
       return true;
     } catch {
-      toast.error('No se pudo crear la lista');
+      toast.error(tr('toast.playlistCreateFailed'));
       return false;
     }
   },
@@ -819,9 +820,9 @@ export const actions = {
   async deletePlaylist(name: string): Promise<void> {
     try {
       applyPlaylistMutation(await api.deletePlaylist(name));
-      toast.success('Lista eliminada');
+      toast.success(tr('toast.playlistDeleted'));
     } catch {
-      toast.error('No se pudo eliminar la lista');
+      toast.error(tr('toast.playlistDeleteFailed'));
     }
   },
 
@@ -830,47 +831,47 @@ export const actions = {
     if (!clean || clean === name) return false;
     try {
       applyPlaylistMutation(await api.renamePlaylist(name, clean));
-      toast.success('Lista renombrada');
+      toast.success(tr('toast.playlistRenamed'));
       return true;
     } catch {
-      toast.error('No se pudo renombrar (¿nombre repetido?)');
+      toast.error(tr('toast.playlistRenameFailed'));
       return false;
     }
   },
 
   async duplicatePlaylist(name: string): Promise<void> {
     const ids = state.playlists[name] ?? [];
-    let copy = `${name} (copia)`;
+    let copy = `${name}${tr('toast.playlistDuplicateSuffix')}`;
     let n = 2;
-    while (state.playlists[copy]) copy = `${name} (copia ${n++})`;
+    while (state.playlists[copy]) copy = `${name}${tr('toast.playlistDuplicateSuffixN', { n: n++ })}`;
     try {
       await api.createPlaylist(copy);
       applyPlaylistMutation(await api.setPlaylistTracks(copy, ids));
-      toast.success('Lista duplicada');
+      toast.success(tr('toast.playlistDuplicated'));
     } catch {
-      toast.error('No se pudo duplicar');
+      toast.error(tr('toast.playlistDuplicateFailed'));
     }
   },
 
   async addToPlaylist(name: string, trackId: string): Promise<void> {
     if ((state.playlists[name] ?? []).includes(trackId)) {
-      toast.info('Ya está en la lista');
+      toast.info(tr('toast.alreadyInPlaylist'));
       return;
     }
     try {
       applyPlaylistMutation(await api.addTrackToPlaylist(name, trackId));
-      toast.success(`Añadida a «${name}»`);
+      toast.success(tr('toast.addedToPlaylist', { name }));
     } catch {
-      toast.error('No se pudo añadir a la lista');
+      toast.error(tr('toast.addToPlaylistFailed'));
     }
   },
 
   async removeFromPlaylist(name: string, trackId: string): Promise<void> {
     try {
       applyPlaylistMutation(await api.removeTrackFromPlaylist(name, trackId));
-      toast.success('Quitada de la lista');
+      toast.success(tr('toast.removedFromPlaylist'));
     } catch {
-      toast.error('No se pudo quitar de la lista');
+      toast.error(tr('toast.removeFromPlaylistFailed'));
     }
   },
 
@@ -880,16 +881,16 @@ export const actions = {
       applyPlaylistMutation(await api.reorderPlaylists(order));
     } catch {
       setState('playlists', prev);
-      toast.error('No se pudo reordenar');
+      toast.error(tr('toast.reorderFailed'));
     }
   },
 
   async setPlaylistCover(name: string, coverTrackId: string | null): Promise<void> {
     try {
       applyPlaylistMutation(await api.setPlaylistCover(name, coverTrackId));
-      toast.success('Portada actualizada');
+      toast.success(tr('toast.playlistCoverUpdated'));
     } catch {
-      toast.error('No se pudo cambiar la portada');
+      toast.error(tr('toast.playlistCoverFailed'));
     }
   },
 

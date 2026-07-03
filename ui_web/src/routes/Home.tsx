@@ -5,6 +5,7 @@ import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import ArtistGrid from '../components/ArtistGrid';
 import { trackCount } from '../lib/format';
+import { t } from '../lib/i18n';
 import { librarySort, setLibrarySort, libraryTab, setLibraryTab, sortTracks, buildArtists } from '../lib/libraryView';
 import styles from './Home.module.css';
 
@@ -30,19 +31,19 @@ export default function Home() {
 
   return (
     <div class="view">
-      <ViewHeader title="Tu biblioteca" meta={trackCount(songs().length)} />
+      <ViewHeader title={t('home.title')} meta={trackCount(songs().length)} />
       <nav class={styles.chips}>
         <A href="/favourites" class={styles.chip}>
-          Favoritos
+          {t('home.favourites')}
         </A>
         <A href="/playlists" class={styles.chip}>
-          Listas
+          {t('home.playlists')}
         </A>
         <A href="/podcasts" class={styles.chip}>
-          Podcasts
+          {t('home.podcasts')}
         </A>
         <A href="/downloads" class={styles.chip}>
-          Descargas
+          {t('home.downloads')}
           <Show when={active() > 0}>
             <span class={styles.badge}>{active()}</span>
           </Show>
@@ -57,7 +58,7 @@ export default function Home() {
             type="button"
             onClick={() => setLibraryTab('songs')}
           >
-            Canciones
+            {t('home.songs')}
           </button>
           <button
             class={styles.tab}
@@ -65,14 +66,14 @@ export default function Home() {
             type="button"
             onClick={() => setLibraryTab('artists')}
           >
-            Artistas
+            {t('home.artists')}
           </button>
         </div>
         <Show when={libraryTab() === 'songs'}>
           <select class={styles.select} value={librarySort()} onChange={(e) => setLibrarySort(e.currentTarget.value)}>
-            <option value="recent">Recientes</option>
-            <option value="az">A–Z</option>
-            <option value="fav">Favoritos primero</option>
+            <option value="recent">{t('home.sortRecent')}</option>
+            <option value="az">{t('home.sortAZ')}</option>
+            <option value="fav">{t('home.sortFavFirst')}</option>
           </select>
         </Show>
       </div>
@@ -82,7 +83,7 @@ export default function Home() {
         fallback={
           <Show
             when={artists().length > 0}
-            fallback={<p class={styles.empty}>No hay artistas todavía.</p>}
+            fallback={<p class={styles.empty}>{t('home.emptyArtists')}</p>}
           >
             <div class={styles.artistsScroll}>
               <ArtistGrid artists={artists()} />
@@ -93,7 +94,7 @@ export default function Home() {
         <TrackList
           tracks={sorted()}
           loading={state.loading}
-          empty={<p class={styles.empty}>Tu biblioteca está vacía. Descarga algo desde Buscar.</p>}
+          empty={<p class={styles.empty}>{t('home.emptyLibrary')}</p>}
           linkArtist={!isMobile()}
         />
       </Show>

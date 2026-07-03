@@ -7,6 +7,7 @@ import { artistPath } from '../lib/artistRoute';
 import { toast } from '../lib/toast';
 import { parseYouTubeInput } from '../lib/youtube';
 import { ensureDiscover, feedItems, feedSections, refreshDiscover, revalidating } from '../lib/discover';
+import { t as tr } from '../lib/i18n';
 import SearchResultRow from '../components/SearchResultRow';
 import type { CatalogItem, CatalogSaveResponse, SearchResult, Track } from '../types/music';
 import styles from './Search.module.css';
@@ -14,11 +15,11 @@ import styles from './Search.module.css';
 type SearchDomain = 'music' | 'youtube';
 type SearchTab = 'all' | 'track,library_track' | 'artist' | 'album';
 
-const tabs: Array<{ id: SearchTab; label: string }> = [
-  { id: 'all', label: 'Todo' },
-  { id: 'track,library_track', label: 'Canciones' },
-  { id: 'artist', label: 'Artistas' },
-  { id: 'album', label: 'Albums' },
+const tabs: Array<{ id: SearchTab; label: () => string }> = [
+  { id: 'all', label: () => tr('search.tabAll') },
+  { id: 'track,library_track', label: () => tr('search.tabSongs') },
+  { id: 'artist', label: () => tr('search.tabArtists') },
+  { id: 'album', label: () => tr('search.tabAlbums') },
 ];
 
 const RECENTS_KEY = 'catalog_search_recents';
@@ -206,8 +207,8 @@ export default function Search() {
 
   const fallbackDirectResult = (videoId: string): SearchResult => ({
     id: videoId,
-    title: 'YouTube video',
-    channel: 'YouTube',
+    title: tr('search.ytVideoTitle'),
+    channel: tr('search.ytVideoChannel'),
     thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
   });
 
@@ -345,7 +346,7 @@ export default function Search() {
   const previewExternal = async (item: CatalogItem) => {
     const artist = itemArtist(item);
     if (!artist || !item.title) return;
-    const t = toast.loading('Buscando preview...');
+    const h = toast.loading(tr('search.looking'));
     try {
       const resolved = await api.resolveCatalogItem({ artist, title: item.title, duration: item.duration });
       if (!resolved.video_id) throw new Error('not-found');
@@ -358,9 +359,9 @@ export default function Search() {
         cover: item.cover,
         source: 'preview',
       });
-      t.update('success', 'Reproduciendo preview');
+      h.update('success', tr('search.playingPreview'));
     } catch {
-      t.update('error', 'No se pudo encontrar preview');
+      h.update('error', tr('search.noPreview'));
     }
   };
 
@@ -399,14 +400,14 @@ export default function Search() {
       if (response.status === 'queued') {
         setReview(null);
         setSaved((s) => new Set(s).add(item.id));
-        toast.success('Añadido a descargas');
+        toast.success(tr('search.addedToDownloads'));
       } else if (response.status === 'needs_review') {
         setReview({ item, response });
       } else {
-        toast.error('No se pudo guardar');
+        toast.error(tr('search.notSaved'));
       }
     } catch {
-      toast.error('No se pudo guardar');
+      toast.error(tr('search.notSaved'));
     } finally {
       setSaving((s) => {
         const next = new Set(s);
@@ -436,14 +437,14 @@ export default function Search() {
 
   const addYouTube = async (result: SearchResult) => {
     if (libYt().has(result.id)) {
-      toast.info('Ya está en tu biblioteca');
+      toast.info(tr('search.alreadyInLibrary'));
       return;
     }
     const alreadyDownloading = state.downloads.queue.some(
       (item) => item.video_id === result.id && item.status !== 'failed' && item.status !== 'interrupted',
     );
     if (alreadyDownloading || youtubeEnqueued().has(result.id)) {
-      toast.info('Ya está en la cola de descargas');
+      toast.info(tr('search.alreadyInQueue'));
       return;
     }
     setYoutubeEnqueued((s) => new Set(s).add(result.id));
@@ -468,14 +469,14 @@ export default function Search() {
         youtube_id: result.id,
         query: q(),
       }).catch(() => {});
-      toast.success('Añadido a descargas');
+      toast.success(tr('search.addedToDownloads'));
     } catch {
       setYoutubeEnqueued((s) => {
         const next = new Set(s);
         next.delete(result.id);
         return next;
       });
-      toast.error('No se pudo añadir a descargas');
+      toast.error(tr('search.notAddedDownloads'));
     }
   };
 
@@ -512,7 +513,7 @@ export default function Search() {
   };
 
   const previewDiscoveryExternal = async (item: DiscoveryFeedItem) => {
-    const t = toast.loading('Buscando preview...');
+    const h = toast.loading(tr('search.looking'));
     try {
       const resolved = await resolveDiscoveryExternal(item);
       if (!resolved) throw new Error('not-found');
@@ -532,9 +533,9 @@ export default function Search() {
         deezer_id: item.deezer_id,
         youtube_id: resolved.id,
       }).catch(() => {});
-      t.update('success', 'Reproduciendo preview');
+      h.update('success', tr('search.playingPreview'));
     } catch {
-      t.update('error', 'No se pudo encontrar preview');
+      h.update('error', tr('search.noPreview'));
     }
   };
 
@@ -563,16 +564,16 @@ export default function Search() {
         setDiscoveryReview(null);
         setDiscoverySaved((current) => new Set(current).add(key));
         void refreshDiscover();
-        toast.success('Añadido a descargas');
+        toast.success(tr('search.addedToDownloads'));
         return;
       }
       if (res.status === 'needs_review' && res.candidates?.length) {
         setDiscoveryReview({ item, candidates: res.candidates });
         return;
       }
-      toast.error('No se pudo guardar');
+      toast.error(tr('search.notSaved'));
     } catch {
-      toast.error('No se pudo guardar');
+      toast.error(tr('search.notSaved'));
     } finally {
       setDiscoverySaving((current) => {
         const next = new Set(current);
@@ -597,7 +598,7 @@ export default function Search() {
           <input
             class={styles.input}
             type="search"
-            placeholder="Qué quieres escuchar?"
+            placeholder={tr('search.placeholder')}
             value={q()}
             ref={searchInput}
             onInput={(e) => onInput(e.currentTarget.value)}
@@ -633,7 +634,7 @@ export default function Search() {
                 type="button"
                 onClick={() => setActiveTab(t.id)}
               >
-                {t.label}
+                {t.label()}
               </button>
             )}
           </For>
@@ -669,13 +670,13 @@ export default function Search() {
                 <p class={styles.hint}>
                   {youtubeError() ? (
                     <>
-                      No se pudo completar la búsqueda en YouTube.{' '}
+                      {tr('search.ytErrorHint')}{' '}
                       <button class={styles.retry} type="button" onClick={() => runYouTube(q())}>
-                        Reintentar
+                        {tr('common.retry')}
                       </button>
                     </>
                   ) : (
-                    'Sin resultados en YouTube.'
+                    tr('search.ytNoResults')
                   )}
                 </p>
               </Show>
@@ -683,7 +684,7 @@ export default function Search() {
               <Show when={youtubeDirect()}>
                 {(result) => (
                   <section class={styles.section}>
-                    <h2 class={styles.sectionTitle}>Video detectado</h2>
+                    <h2 class={styles.sectionTitle}>{tr('search.ytDirectSection')}</h2>
                     <SearchResultRow
                       r={result()}
                       active={state.playback.currentTrack?.id === result().id}
@@ -698,7 +699,7 @@ export default function Search() {
 
               <Show when={youtubeResults().length > 0}>
                 <section class={styles.section}>
-                  <h2 class={styles.sectionTitle}>Resultados en YouTube</h2>
+                  <h2 class={styles.sectionTitle}>{tr('search.ytResultsSection')}</h2>
                   <For each={youtubeResults()}>
                     {(result) => (
                       <SearchResultRow
@@ -724,16 +725,16 @@ export default function Search() {
             <p class={styles.hint}>
               {searchError() ? (
                 <>
-                  No se pudo completar la búsqueda.{' '}
+                  {tr('search.catalogErrorHint')}{' '}
                   <button class={styles.retry} type="button" onClick={() => runCatalog(q())}>
-                    Reintentar
+                    {tr('common.retry')}
                   </button>
                 </>
               ) : (
                 <>
-                  Sin resultados en Música.{' '}
+                  {tr('search.catalogNoResults')}{' '}
                   <button class={styles.retry} type="button" onClick={() => setActiveDomain('youtube')}>
-                    Buscar en YouTube
+                    {tr('search.searchInYt')}
                   </button>
                 </>
               )}
@@ -744,7 +745,7 @@ export default function Search() {
               <Show when={top()}>
                 {(item) => (
                   <section class={styles.topSection}>
-                    <h2 class={styles.sectionTitle}>Top result</h2>
+                    <h2 class={styles.sectionTitle}>{tr('search.topResultSection')}</h2>
                     <TopResult
                       item={item()}
                       coverStyle={coverStyle}
@@ -759,7 +760,7 @@ export default function Search() {
 
               <Show when={songs().length > 0}>
                 <section class={styles.section}>
-                  <h2 class={styles.sectionTitle}>Canciones</h2>
+                  <h2 class={styles.sectionTitle}>{tr('search.songsSection')}</h2>
                   <For each={songs()}>
                     {(item) => (
                       <SongResult
@@ -777,11 +778,11 @@ export default function Search() {
               </Show>
 
               <Show when={artists().length > 0}>
-                <CardSection title="Artistas" items={artists()} round coverStyle={coverStyle} onPick={playItem} />
+                <CardSection title={tr('search.artistsSection')} items={artists()} round coverStyle={coverStyle} onPick={playItem} />
               </Show>
 
               <Show when={albums().length > 0}>
-                <CardSection title="Albums" items={albums()} coverStyle={coverStyle} onPick={playItem} />
+                <CardSection title={tr('search.albumsSection')} items={albums()} coverStyle={coverStyle} onPick={playItem} />
               </Show>
             </div>
           </Match>
@@ -793,8 +794,8 @@ export default function Search() {
           <div class={styles.modalBackdrop} onClick={() => setReview(null)}>
             <div class={styles.modal} onClick={(e) => e.stopPropagation()}>
               <div class={styles.modalHead}>
-                <h2>Elige la version</h2>
-                <button class={styles.closeBtn} type="button" aria-label="Cerrar" onClick={() => setReview(null)}>
+                <h2>{tr('search.chooseVersion')}</h2>
+                <button class={styles.closeBtn} type="button" aria-label={tr('common.close')} onClick={() => setReview(null)}>
                   x
                 </button>
               </div>
@@ -823,8 +824,8 @@ export default function Search() {
           <div class={styles.modalBackdrop} onClick={() => setDiscoveryReview(null)}>
             <div class={styles.modal} onClick={(e) => e.stopPropagation()}>
               <div class={styles.modalHead}>
-                <h2>Elige la version</h2>
-                <button class={styles.closeBtn} type="button" aria-label="Cerrar" onClick={() => setDiscoveryReview(null)}>
+                <h2>{tr('search.chooseVersion')}</h2>
+                <button class={styles.closeBtn} type="button" aria-label={tr('common.close')} onClick={() => setDiscoveryReview(null)}>
                   x
                 </button>
               </div>
@@ -901,7 +902,7 @@ function StartPanel(props: {
 
       <Show when={props.recents.length > 0}>
         <section>
-          <h2 class={styles.sectionTitle}>{props.domain === 'youtube' ? 'Búsquedas recientes en YouTube' : 'Búsquedas recientes'}</h2>
+          <h2 class={styles.sectionTitle}>{props.domain === 'youtube' ? tr('search.ytRecentsSection') : tr('search.recentsSection')}</h2>
           <div class={styles.recentGrid}>
             <For each={props.recents}>
               {(value) => (
@@ -921,10 +922,10 @@ function StartPanel(props: {
 function SeedSearch(props: { onFocusSearch: () => void }) {
   return (
     <div class={styles.seedState}>
-      <h2>Busca musica para empezar</h2>
-      <p>Las recomendaciones se generan con artistas, favoritos, playlists y canciones que guardas o reproduces.</p>
+      <h2>{tr('search.seedHeading')}</h2>
+      <p>{tr('search.seedDesc')}</p>
       <button class={styles.seedAction} type="button" onClick={props.onFocusSearch}>
-        Buscar canciones
+        {tr('search.seedAction')}
       </button>
     </div>
   );
@@ -954,7 +955,7 @@ function DiscoveryCard(props: {
           <button
             class={styles.discoverSaveBtn}
             type="button"
-            aria-label="Guardar en biblioteca"
+            aria-label={tr('search.ariaSaveToLibrary')}
             disabled={props.saving}
             onClick={(e) => {
               e.stopPropagation();
@@ -967,7 +968,7 @@ function DiscoveryCard(props: {
           </button>
         </Match>
         <Match when={props.saved && isDiscoveryExternal(props.item)}>
-          <span class={styles.discoverSavedBadge} aria-label="Guardado">
+          <span class={styles.discoverSavedBadge} aria-label={tr('search.ariaSaved')}>
             <CheckIcon />
           </span>
         </Match>
@@ -1011,7 +1012,7 @@ function TopResult(props: {
         </span>
       </button>
       <Show when={canSave()}>
-        <button class={styles.primaryIcon} type="button" disabled={props.saving} aria-label="Guardar" onClick={props.onSave}>
+        <button class={styles.primaryIcon} type="button" disabled={props.saving} aria-label={tr('search.ariaSave')} onClick={props.onSave}>
           <Show when={props.saving} fallback={<PlusIcon />}>
             <span class={styles.spinner} />
           </Show>
@@ -1041,7 +1042,7 @@ function SongResult(props: {
       <span class={styles.source}>{props.item.source}</span>
       <span class={styles.duration}>{formatDuration(props.item.duration)}</span>
       <Show when={props.saved}>
-        <span class={styles.done} aria-label="En biblioteca">
+        <span class={styles.done} aria-label={tr('search.ariaInLibrary')}>
           <CheckIcon />
         </span>
       </Show>
@@ -1050,7 +1051,7 @@ function SongResult(props: {
           class={styles.iconBtn}
           type="button"
           disabled={props.saving}
-          aria-label="Guardar"
+          aria-label={tr('search.ariaSave')}
           onClick={(e) => {
             e.stopPropagation();
             props.onSave();
@@ -1091,11 +1092,11 @@ function CardSection(props: {
 }
 
 function labelFor(item: CatalogItem): string {
-  if (item.type === 'library_track') return 'En tu biblioteca';
-  if (item.type === 'track') return 'Cancion';
-  if (item.type === 'artist') return 'Artista';
-  if (item.type === 'album') return 'Album';
-  return 'Playlist';
+  if (item.type === 'library_track') return tr('search.labelLibraryTrack');
+  if (item.type === 'track') return tr('search.labelTrack');
+  if (item.type === 'artist') return tr('search.labelArtist');
+  if (item.type === 'album') return tr('search.labelAlbum');
+  return tr('search.labelPlaylist');
 }
 
 function SearchIcon() {

@@ -11,6 +11,7 @@ import { openTrackMenu } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
+import { t } from '../lib/i18n';
 import type { CatalogItem, SearchResult, Track } from '../types/music';
 import styles from './SearchPanel.module.css';
 
@@ -144,15 +145,15 @@ export function SearchPanel() {
           setDirect(
             res ?? {
               id: url.videoId,
-              title: 'Video de YouTube',
-              channel: 'YouTube',
+              title: t('searchPanel.fallbackTitle'),
+              channel: t('searchPanel.fallbackChannel'),
               thumbnail: `https://img.youtube.com/vi/${url.videoId}/mqdefault.jpg`,
             },
           );
         })
         .catch((e) => {
           if (currentReq !== requestId || isAbort(e)) return;
-          setDirect({ id: url.videoId, title: 'Video de YouTube', channel: 'YouTube' });
+          setDirect({ id: url.videoId, title: t('searchPanel.fallbackTitle'), channel: t('searchPanel.fallbackChannel') });
         })
         .finally(() => {
           if (currentReq === requestId) setYtLoading(false);
@@ -305,7 +306,7 @@ export function SearchPanel() {
       if (!track) throw new Error('not-found');
       use(track);
     } catch {
-      toast.error('No se pudo resolver la canción');
+      toast.error(t('searchPanel.noResolve'));
     } finally {
       markResolving(key, false);
     }
@@ -328,7 +329,7 @@ export function SearchPanel() {
 
   const addToQueue = (track: Track) => {
     if (queueIndexOf(state.playback.queue, track) !== -1) {
-      toast.info('Ya está en la cola');
+      toast.info(t('searchPanel.inQueue'));
       return;
     }
     actions.enqueue(track);
@@ -380,23 +381,23 @@ export function SearchPanel() {
     <aside
       classList={{ [styles.panel]: true, [styles.closed]: !panelOpen() }}
       data-side={panelSide()}
-      aria-label="Buscar música"
+      aria-label={t('searchPanel.ariaSearch')}
     >
       <header class={styles.head}>
-        <h2 class={styles.title}>Buscar</h2>
+        <h2 class={styles.title}>{t('searchPanel.panelTitle')}</h2>
         <div class={styles.headActions}>
           <button
             class={styles.headBtn}
             type="button"
-            aria-label={panelSide() === 'right' ? 'Mover panel a la izquierda' : 'Mover panel a la derecha'}
-            title="Mover panel"
+            aria-label={panelSide() === 'right' ? t('searchPanel.moveLeft') : t('searchPanel.moveRight')}
+            title={t('searchPanel.moveTitle')}
             onClick={swapPanelSide}
           >
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
               <path d="M8 7L4 12l4 5M16 7l4 5-4 5" />
             </svg>
           </button>
-          <button class={styles.headBtn} type="button" aria-label="Cerrar panel" onClick={togglePanel}>
+          <button class={styles.headBtn} type="button" aria-label={t('searchPanel.closePanel')} onClick={togglePanel}>
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
               <path d="M6 6l12 12M18 6L6 18" />
             </svg>
@@ -413,7 +414,7 @@ export function SearchPanel() {
           ref={inputEl}
           class={styles.input}
           type="search"
-          placeholder="Buscar en Soundsible"
+          placeholder={t('searchPanel.placeholder')}
           value={q()}
           onInput={(e) => onInput(e.currentTarget.value)}
           onKeyDown={(e) => {
@@ -424,7 +425,7 @@ export function SearchPanel() {
           }}
         />
         <Show when={q()}>
-          <button class={styles.clearBtn} type="button" aria-label="Borrar búsqueda" onClick={clearQuery}>
+          <button class={styles.clearBtn} type="button" aria-label={t('searchPanel.clear')} onClick={clearQuery}>
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
               <path d="M6 6l12 12M18 6L6 18" />
             </svg>
@@ -441,7 +442,7 @@ export function SearchPanel() {
                 revalidating() ? (
                   <SkeletonRows count={8} />
                 ) : (
-                  <p class={styles.hint}>Busca canciones, artistas o pega un enlace de YouTube.</p>
+                  <p class={styles.hint}>{t('searchPanel.hint')}</p>
                 )
               }
             >
@@ -492,7 +493,7 @@ export function SearchPanel() {
                       <span class={styles.chipCover} style={coverStyle(item.cover, item.id)} data-round={item.type === 'artist' ? '' : undefined} />
                       <span class={styles.chipMeta}>
                         <span class={styles.chipTitle}>{item.title}</span>
-                        <span class={styles.chipSub}>{item.type === 'artist' ? 'Artista' : 'Álbum'}</span>
+                        <span class={styles.chipSub}>{item.type === 'artist' ? t('searchPanel.chipArtist') : t('searchPanel.chipAlbum')}</span>
                       </span>
                     </button>
                   )}
@@ -503,7 +504,7 @@ export function SearchPanel() {
             <Show when={direct()}>
               {(r) => (
                 <section class={styles.section}>
-                  <h3 class={styles.sectionTitle}>Video detectado</h3>
+                  <h3 class={styles.sectionTitle}>{t('searchPanel.directSection')}</h3>
                   <PanelRow
                     title={r().title}
                     sub={r().channel ?? ''}
@@ -522,7 +523,7 @@ export function SearchPanel() {
 
             <Show when={songs().length > 0}>
               <section class={styles.section}>
-                <h3 class={styles.sectionTitle}>Canciones</h3>
+                <h3 class={styles.sectionTitle}>{t('searchPanel.songsSection')}</h3>
                 <For each={songs()}>
                   {(item) => (
                     <PanelRow
@@ -548,7 +549,7 @@ export function SearchPanel() {
 
             <Show when={ytResults().length > 0}>
               <section class={styles.section}>
-                <h3 class={styles.sectionTitle}>Resultados de YouTube</h3>
+                <h3 class={styles.sectionTitle}>{t('searchPanel.ytSection')}</h3>
                 <For each={ytResults()}>
                   {(r) => (
                     <PanelRow
@@ -572,13 +573,13 @@ export function SearchPanel() {
               <p class={styles.hint}>
                 {searchError() ? (
                   <>
-                    No se pudo completar la búsqueda.{' '}
+                    {t('searchPanel.searchError')}{' '}
                     <button class={styles.retry} type="button" onClick={() => runSearch(q())}>
-                      Reintentar
+                      {t('searchPanel.retry')}
                     </button>
                   </>
                 ) : (
-                  'Sin resultados.'
+                  t('searchPanel.noResults')
                 )}
               </p>
             </Show>
@@ -615,7 +616,7 @@ function PanelRow(props: {
         <span class={styles.rowTitle}>{props.title}</span>
         <span class={styles.rowSub}>
           <Show when={props.inLibrary}>
-            <svg class={styles.libMark} viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" aria-label="En tu biblioteca">
+            <svg class={styles.libMark} viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" aria-label={t('searchPanel.ariaInLibrary')}>
               <path d="M5 12l5 5L20 7" />
             </svg>
           </Show>
@@ -623,12 +624,12 @@ function PanelRow(props: {
         </span>
       </span>
       <Show when={props.resolving}>
-        <span class={styles.spinner} aria-label="Cargando" />
+        <span class={styles.spinner} aria-label={t('searchPanel.ariaLoading')} />
       </Show>
       <Show
         when={!props.queued}
         fallback={
-          <span class={styles.queuedMark} aria-label="En la cola">
+          <span class={styles.queuedMark} aria-label={t('searchPanel.ariaQueued')}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
               <path d="M5 12l5 5L20 7" />
             </svg>
@@ -638,8 +639,8 @@ function PanelRow(props: {
         <button
           class={styles.rowBtn}
           type="button"
-          aria-label="Añadir a la cola"
-          title="Añadir a la cola"
+          aria-label={t('searchPanel.ariaAddQueue')}
+          title={t('searchPanel.ariaAddQueue')}
           onClick={(e) => {
             e.stopPropagation();
             props.onQueue();
@@ -653,7 +654,7 @@ function PanelRow(props: {
       <button
         class={styles.rowBtn}
         type="button"
-        aria-label="Más opciones"
+        aria-label={t('searchPanel.ariaMore')}
         onClick={(e) => {
           e.stopPropagation();
           props.onMenu(e);

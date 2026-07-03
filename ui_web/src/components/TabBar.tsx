@@ -1,10 +1,11 @@
 import { For, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
+import { t } from '../lib/i18n';
 import styles from './TabBar.module.css';
 
 interface Tab {
   href: string;
-  label: string;
+  label: () => string;
   end?: boolean;
   icon: () => JSX.Element;
 }
@@ -12,7 +13,7 @@ interface Tab {
 const tabs: Tab[] = [
   {
     href: '/',
-    label: 'Inicio',
+    label: () => t('nav.home'),
     end: true,
     icon: () => (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -22,7 +23,7 @@ const tabs: Tab[] = [
   },
   {
     href: '/search',
-    label: 'Buscar',
+    label: () => t('nav.search'),
     icon: () => (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="7" />
@@ -32,7 +33,7 @@ const tabs: Tab[] = [
   },
   {
     href: '/settings',
-    label: 'Ajustes',
+    label: () => t('nav.settings'),
     icon: () => (
       <svg
         viewBox="0 0 24 24"
@@ -57,7 +58,7 @@ export function TabBar() {
         {(t) => (
           <A href={t.href} end={t.end} class={styles.tab} activeClass={styles.active}>
             {t.icon()}
-            <span class={styles.label}>{t.label}</span>
+            <span class={styles.label}>{t.label()}</span>
           </A>
         )}
       </For>

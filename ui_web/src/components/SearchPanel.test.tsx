@@ -57,7 +57,7 @@ import { SearchPanel } from './SearchPanel';
 
 async function typeQuery(value: string) {
   vi.useFakeTimers();
-  fireEvent.input(screen.getByPlaceholderText('Buscar en Soundsible'), { target: { value } });
+  fireEvent.input(screen.getByPlaceholderText('Search on Soundsible'), { target: { value } });
   await vi.advanceTimersByTimeAsync(260);
   vi.useRealTimers();
 }
@@ -121,7 +121,7 @@ describe('SearchPanel', () => {
     await typeQuery('internet song');
 
     await screen.findByText('Internet Song');
-    fireEvent.click(screen.getByLabelText('Añadir a la cola'));
+    fireEvent.click(screen.getByLabelText('Add to queue'));
 
     await waitFor(() =>
       expect(apiMock.resolveCatalogItem).toHaveBeenCalledWith({ artist: 'Web Artist', title: 'Internet Song', duration: 201 }),
@@ -142,7 +142,7 @@ describe('SearchPanel', () => {
     render(() => <SearchPanel />);
     await typeQuery('rare live set');
 
-    expect(await screen.findByText('Resultados de YouTube')).toBeInTheDocument();
+    expect(await screen.findByText('YouTube results')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Only On YouTube'));
     expect(storeMock.actions.playNow).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'ytresult001', source: 'preview' }),

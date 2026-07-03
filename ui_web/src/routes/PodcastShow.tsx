@@ -2,13 +2,14 @@ import { createMemo, createResource, createSignal, For, Show, type JSX } from 's
 import { useParams, useNavigate } from '@solidjs/router';
 import { api } from '../lib/api';
 import { state, actions } from '../stores';
+import { t } from '../lib/i18n';
 import type { PodcastEpisode } from '../types/podcast';
 import styles from './PodcastShow.module.css';
 
 function fmtDur(s?: number): string {
   if (s == null || !Number.isFinite(s) || s <= 0) return '';
   const m = Math.round(s / 60);
-  return `${m} min`;
+  return t('podcastShow.durationMin', { m });
 }
 
 function fmtDate(s?: string): string {
@@ -31,7 +32,7 @@ export default function PodcastShow() {
     (id) => api.getPodcastEpisodes(id),
   );
 
-  const title = () => sub()?.title ?? data()?.subscription?.title ?? 'Podcast';
+  const title = () => sub()?.title ?? data()?.subscription?.title ?? t('podcastShow.fallbackTitle');
   const image = () => sub()?.image_url ?? data()?.subscription?.image_url ?? null;
 
   const [onlyDownloaded, setOnlyDownloaded] = createSignal(false);
@@ -67,7 +68,7 @@ export default function PodcastShow() {
   return (
     <div class="view">
       <header class={styles.header}>
-        <button class={styles.back} type="button" aria-label="Volver" onClick={() => navigate('/podcasts')}>
+        <button class={styles.back} type="button" aria-label={t('podcastShow.ariaBack')} onClick={() => navigate('/podcasts')}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M15 18l-6-6 6-6" />
           </svg>
@@ -79,7 +80,7 @@ export default function PodcastShow() {
         </div>
         <Show when={sub()}>
           <button class={styles.unsub} type="button" onClick={unsubscribe}>
-            Dejar de seguir
+            {t('podcastShow.unsubscribe')}
           </button>
         </Show>
       </header>
@@ -91,7 +92,7 @@ export default function PodcastShow() {
           type="button"
           onClick={() => setOnlyDownloaded((v) => !v)}
         >
-          Solo descargados
+          {t('podcastShow.downloadedOnly')}
         </button>
       </div>
 
@@ -100,7 +101,7 @@ export default function PodcastShow() {
           when={!data.loading}
           fallback={<For each={Array.from({ length: 8 })}>{() => <div class={styles.skeleton} />}</For>}
         >
-          <For each={episodes()} fallback={<p class={styles.hint}>Sin episodios.</p>}>
+          <For each={episodes()} fallback={<p class={styles.hint}>{t('podcastShow.empty')}</p>}>
             {(ep) => {
               const id = ep.guid || ep.enclosure_url;
               const downloaded = () => isDownloaded(ep);
@@ -109,7 +110,7 @@ export default function PodcastShow() {
                   <button
                     class={styles.epPlay}
                     type="button"
-                    aria-label="Reproducir episodio"
+                    aria-label={t('podcastShow.ariaPlay')}
                     onClick={(e) => {
                       e.stopPropagation();
                       playEp(ep);
@@ -136,7 +137,7 @@ export default function PodcastShow() {
                       <button
                         class={styles.epDownload}
                         type="button"
-                        aria-label="Descargar episodio"
+                        aria-label={t('podcastShow.ariaDownload')}
                         onClick={(e) => {
                           e.stopPropagation();
                           void actions.downloadEpisode(ep, sub());
@@ -148,7 +149,7 @@ export default function PodcastShow() {
                       </button>
                     }
                   >
-                    <span class={styles.epDownloaded} aria-label="Descargado">
+                    <span class={styles.epDownloaded} aria-label={t('podcastShow.ariaDownloaded')}>
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
                         <path d="M5 12l5 5L20 7" />
                       </svg>

@@ -1,5 +1,6 @@
 import { Show, type JSX } from 'solid-js';
 import type { SearchResult } from '../types/music';
+import { t } from '../lib/i18n';
 import styles from './SearchResultRow.module.css';
 
 function fmtDur(s?: number): string {
@@ -45,7 +46,7 @@ export default function SearchResultRow(props: SearchResultRowProps) {
         <button
           class={styles.iconBtn}
           type="button"
-          aria-label="Radio: más como esto"
+          aria-label={t('searchResultRow.ariaRadio')}
           onClick={(e) => {
             e.stopPropagation();
             props.onRadio!();
@@ -66,7 +67,7 @@ export default function SearchResultRow(props: SearchResultRowProps) {
               <button
                 class={styles.addBtn}
                 type="button"
-                aria-label="Añadir a biblioteca"
+                aria-label={t('searchResultRow.ariaAdd')}
                 onClick={(e) => {
                   e.stopPropagation();
                   props.onAdd();
@@ -78,11 +79,11 @@ export default function SearchResultRow(props: SearchResultRowProps) {
               </button>
             }
           >
-            <span class={styles.spinner} aria-label="Descargando" />
+            <span class={styles.spinner} aria-label={t('searchResultRow.ariaDownloading')} />
           </Show>
         }
       >
-        <span class={styles.done} aria-label="En biblioteca">
+        <span class={styles.done} aria-label={t('searchResultRow.ariaInLibrary')}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5">
             <path d="M5 12l5 5L20 7" />
           </svg>
