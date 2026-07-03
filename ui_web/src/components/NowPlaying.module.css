@@ -344,7 +344,7 @@
     grid-template-areas:
       'art details'
       'art queue';
-    align-content: center;
+    align-content: start;
     justify-content: center;
     column-gap: clamp(24px, 5vw, 72px);
     row-gap: var(--space-md);
