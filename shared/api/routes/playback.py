@@ -10,6 +10,7 @@ import time
 import requests
 from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context, redirect
 
+from shared import preview_cache
 from shared.constants import DEFAULT_CACHE_DIR
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, rate_limit, require_scope
 from shared.path_resolver import resolve_local_track_path
@@ -190,12 +191,23 @@ def preview_stream_proxy(video_id):
         return jsonify({"error": "Invalid video id"}), 400
     if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
         return jsonify({"error": "Too many requests"}), 429
+
+    # Fully cached preview: serve straight from disk (instant, seekable).
+    cached = preview_cache.get_cached(video_id)
+    if cached:
+        path, content_type = cached
+        return send_file(str(path), mimetype=content_type, conditional=True)
+
     try:
         stream_url = _get_preview_stream_url_cached(api, video_id)
         if not stream_url:
             return jsonify({"error": "Preview unavailable"}), 502
         range_header = request.headers.get("Range")
-        req_headers = {"Range": range_header} if range_header else {}
+        # googlevideo throttles DASH URLs fetched *without* a Range header to
+        # roughly realtime; an open-ended bytes=0- is served at full speed.
+        # Browsers always send a Range, but direct/no-Range clients would
+        # crawl — so inject one and translate the upstream 206 back to a 200.
+        req_headers = {"Range": range_header or "bytes=0-"}
         # Route through the same proxy used for yt-dlp resolution if set.
         # YouTube CDN URLs are IP-bound to the resolver's IP; the VPS
         # cannot fetch them directly when resolution went through a proxy.
@@ -213,27 +225,80 @@ def preview_stream_proxy(video_id):
         resp.raise_for_status()
         content_length = resp.headers.get("Content-Length")
         content_range = resp.headers.get("Content-Range")
-        response_headers = {"Content-Type": "audio/mpeg"}
+        content_type = resp.headers.get("Content-Type") or "audio/mpeg"
+        status_code = resp.status_code
+        if range_header is None and status_code == 206:
+            # The client never asked for a range; hide the injected one.
+            status_code = 200
+            content_range = None
+        response_headers = {"Content-Type": content_type, "Accept-Ranges": "bytes"}
         if content_range:
             response_headers["Content-Range"] = content_range
         if content_length:
             response_headers["Content-Length"] = content_length
 
+        # Tee the bytes to the disk cache when this response covers the whole
+        # file from byte 0 (no Range, or an open-ended bytes=0- request).
+        writer = None
+        covers_whole_file = range_header is None or range_header.strip() == "bytes=0-"
+        if covers_whole_file:
+            expected = int(content_length) if content_length and content_length.isdigit() else None
+            writer = preview_cache.open_writer(video_id, content_type, expected)
+
         def iter_chunks():
-            for chunk in resp.iter_content(chunk_size=65536):
-                if chunk:
-                    yield chunk
+            try:
+                for chunk in resp.iter_content(chunk_size=65536):
+                    if chunk:
+                        if writer:
+                            writer.write(chunk)
+                        yield chunk
+            except BaseException:
+                # Client dropped (GeneratorExit) or upstream failed: the tee
+                # is incomplete, throw it away.
+                if writer:
+                    writer.abandon()
+                raise
+            if writer:
+                writer.commit()
 
         return Response(
             stream_with_context(iter_chunks()),
-            status=resp.status_code,
+            status=status_code,
             headers=response_headers,
-            mimetype="audio/mpeg",
+            mimetype=content_type,
             direct_passthrough=True,
         )
     except Exception as e:
         logger.warning("API: [Preview stream] Error for %s: %s", video_id, e)
         return jsonify({"error": "Preview unavailable"}), 502
+
+
+@playback_bp.route("/api/preview/prefetch", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
+@rate_limit("preview_prefetch", limit=60, window_sec=60)
+def preview_prefetch():
+    """Warm previews before the user clicks play.
+
+    Body: {"video_ids": [...], "download": bool}. Resolution (yt-dlp) always
+    runs in the background worker; with download=true the audio itself is
+    also fetched into the disk cache (used for the next track in the queue).
+    Returns immediately — prefetch is best-effort.
+    """
+    api = _get_api()
+    data = request.get_json(silent=True) or {}
+    raw_ids = data.get("video_ids")
+    if not isinstance(raw_ids, list):
+        return jsonify({"error": "video_ids must be a list"}), 400
+    video_ids = [str(v) for v in raw_ids if validate_youtube_video_id(str(v))][:8]
+    if not video_ids:
+        return jsonify({"status": "queued", "queued": []})
+    download = bool(data.get("download"))
+
+    def resolver(vid: str) -> str:
+        return _get_preview_stream_url_cached(api, vid)
+
+    queued = preview_cache.request_prefetch(video_ids, download=download, resolver=resolver)
+    return jsonify({"status": "queued", "queued": queued})
 
 
 @playback_bp.route("/api/preview/stream-url/<video_id>", methods=["GET"])

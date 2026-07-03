@@ -13,12 +13,30 @@
     width: clamp(300px, 26vw, 380px);
     min-height: 0;
     background: var(--bg-base);
-    border-left: 1px solid var(--hairline);
   }
 
-  .panel[data-side='left'] {
-    border-left: none;
-    border-right: 1px solid var(--hairline);
+  /* The divider between the search panel and the player runs the full height
+     of the sheet — top edge to bottom edge — instead of stopping at the Now
+     Playing header. The panel still starts below the header (layout is
+     unchanged), but the divider stroke is drawn as a full-height pseudo so it
+     reads as one continuous line all the way to the top of the screen. The
+     containing block is the sheet (position: fixed), and the hairline sits in
+     the header's empty horizontal whitespace so it never crosses head content. */
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 1px solid var(--hairline);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .panel[data-side='right']::before {
+    left: calc(100% - clamp(300px, 26vw, 380px));
+  }
+  .panel:not([data-side='right'])::before {
+    left: clamp(300px, 26vw, 380px);
   }
 
   .closed {

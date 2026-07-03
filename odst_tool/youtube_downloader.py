@@ -1167,7 +1167,9 @@ class YouTubeDownloader:
         # Routes yt-dlp through a residential IP (e.g. Tailscale desktop).
         yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "")
         if yt_proxy:
-            result = _try(common + ["--proxy", yt_proxy, yt_url], timeout=90)
+            # 40s caps the worst case when the proxy host is unreachable-slow;
+            # a healthy residential proxy resolves in well under 15s.
+            result = _try(common + ["--proxy", yt_proxy, yt_url], timeout=40)
             if result == "__ERROR__":
                 return None
             if result:
@@ -1181,8 +1183,11 @@ class YouTubeDownloader:
             if result:
                 return result
 
-        # Attempt 3: Android client via IPv4 (residential IPs, direct)
-        result = _try(common + ["--force-ipv4", "--extractor-args", "youtube:player_client=android,ios", yt_url])
+        # Attempt 3: default web client first (audio-only formats: itag 140/251),
+        # then android/ios within the same call. Without "default" the android
+        # client only offers muxed video+audio (itag 18) — ~4x the bytes for
+        # the same audio.
+        result = _try(common + ["--force-ipv4", "--extractor-args", "youtube:player_client=default,android,ios", yt_url])
         if result == "__ERROR__":
             return None
         if result:
@@ -1197,68 +1202,6 @@ class YouTubeDownloader:
                 return result
 
         logger.warning("[Preview] All attempts failed for %s.", video_id)
-        return None
-        yt_url = f"https://www.youtube.com/watch?v={video_id}"
-
-        def _run(args_list: List[str]) -> tuple[int, str, str]:
-            result = subprocess.run(args_list, capture_output=True, text=True, timeout=30)
-            return result.returncode, result.stdout or "", result.stderr or ""
-
-        def _try_ytdlp(args_list: List[str]) -> Optional[str]:
-            try:
-                rc, out, err = _run(args_list)
-                combined = (err or "") + (out or "")
-                if rc == 0:
-                    line = (out or "").strip().splitlines()
-                    url = line[0] if line else None
-                    if url:
-                        return url
-                # Recoverable: try next strategy
-                if "Requested format is not available" in combined:
-                    return None
-                if "Sign in to confirm" in combined:
-                    return None
-                logger.warning("[Preview] yt-dlp -g failed for %s: rc=%s stderr=%s", video_id, rc, (combined.strip() or "no stderr")[:300])
-                return "__ERROR__"
-            except subprocess.TimeoutExpired:
-                return None
-
-        common = [
-            get_subprocess_python(), "-m", "yt_dlp", "-g",
-            "-f", YDL_FORMAT_AUDIO, "--no-warnings", "--quiet",
-        ]
-
-        # Attempt 1: cookies via IPv6 (matches cookie origin — VPS)
-        if self.cookie_file and os.path.exists(self.cookie_file):
-            result = _try_ytdlp(common + ["-6", "--cookies", self.cookie_file, yt_url])
-            if result == "__ERROR__":
-                return None
-            if result:
-                return result
-
-        # Attempt 2: Android client via IPv4 (residential IPs, sometimes VPS)
-        result = _try_ytdlp(common + ["--force-ipv4", "--extractor-args", "youtube:player_client=android,ios", yt_url])
-        if result == "__ERROR__":
-            return None
-        if result:
-            return result
-
-        # Attempt 3: cookies via IPv4 (fallback)
-        if self.cookie_file and os.path.exists(self.cookie_file):
-            result = _try_ytdlp(common + ["--force-ipv4", "--cookies", self.cookie_file, yt_url])
-            if result == "__ERROR__":
-                return None
-            if result:
-                return result
-
-        # Attempt 4: Tor SOCKS5 proxy (bypasses datacenter IP blocks)
-        result = _try_ytdlp(common + ["--proxy", "socks5://127.0.0.1:9050", yt_url])
-        if result == "__ERROR__":
-            return None
-        if result:
-            return result
-
-        logger.warning("[Preview] All resolution methods failed for %s", video_id)
         return None
 
     def get_cover_for_query(self, artist: str, title: str) -> Optional[str]:

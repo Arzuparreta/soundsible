@@ -13,6 +13,7 @@ const apiMock = vi.hoisted(() => ({
   resolveCatalogItem: vi.fn(),
   saveCatalogItem: vi.fn(),
   saveDiscoveryTrack: vi.fn(),
+  prefetchPreviews: vi.fn(() => Promise.resolve({ status: 'queued' })),
 }));
 const discoverMock = vi.hoisted(() => ({
   ensureDiscover: vi.fn(),

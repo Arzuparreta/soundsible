@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Match, Show, Switch, onCleanup, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Match, Show, Switch, onCleanup, untrack, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { api, type DiscoveryFeedItem, type DiscoveryFeedSection } from '../lib/api';
 import { actions, state } from '../stores';
@@ -7,6 +7,7 @@ import { toast } from '../lib/toast';
 import { parseYouTubeInput } from '../lib/youtube';
 import { ensureDiscover, feedItems, feedSections, revalidating } from '../lib/discover';
 import { libraryTrackFor, queueIndexOf, resultToTrack } from '../lib/queueDiscovery';
+import { prefetchPreviews } from '../lib/prefetch';
 import { openTrackMenu } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
@@ -297,6 +298,36 @@ export function SearchPanel() {
   };
 
   const trackForResult = (r: SearchResult): Track => libraryTrackFor(state.library, r) ?? resultToTrack(r);
+
+  // ── Speculative warm-up: while the user is still deciding, resolve the top
+  // of the results in the background so the eventual play click starts
+  // near-instantly. YouTube rows already carry playable ids; top catalog
+  // (Deezer) songs are resolved to a video id first (server-cached forever).
+  const prefetchedCatalog = new Set<string>();
+  createEffect(() => {
+    if (!searching()) return;
+    const directResult = direct();
+    const ytTop = ytResults().slice(0, 3).map((r) => r.id);
+    const topSongs = songs().slice(0, 2);
+    untrack(() => {
+      if (directResult) prefetchPreviews([directResult.id]);
+      prefetchPreviews(ytTop);
+      for (const item of topSongs) {
+        if (item.track_id || item.type === 'library_track') continue;
+        if (item.raw?.id && typeof item.raw.id === 'string') {
+          prefetchPreviews([item.raw.id]);
+          continue;
+        }
+        if (prefetchedCatalog.has(item.id)) continue;
+        prefetchedCatalog.add(item.id);
+        void trackForCatalog(item)
+          .then((t) => {
+            if (t && t.source === 'preview') prefetchPreviews([t.id]);
+          })
+          .catch(() => {});
+      }
+    });
+  });
 
   // ── Row actions: play now (queue-preserving) / add to queue / full menu ──
   const withTrack = async (key: string, get: () => Promise<Track | null>, use: (t: Track) => void) => {
