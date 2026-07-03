@@ -347,36 +347,6 @@ def _build_main_items(
     return items, seen
 
 
-def _build_because_saved_section(tracks: list[Track], rollup: ListeningRollup) -> dict[str, Any] | None:
-    saved_artists = rollup.saved_artists
-    if not saved_artists:
-        return None
-    saved_artist_set = set(saved_artists)
-    because_saved_ids: list[str] = []
-    because_saved_dedup: set[str] = set()
-    for track in tracks:
-        if len(because_saved_ids) >= 12:
-            break
-        artist_norm = _norm(track.album_artist or track.artist)
-        if artist_norm in saved_artist_set and track.id not in because_saved_dedup:
-            because_saved_dedup.add(track.id)
-            because_saved_ids.append(f"music:{track.id}")
-    if not because_saved_ids:
-        return None
-    trigger_artist = ""
-    for track in tracks:
-        if _norm(track.album_artist or track.artist) == saved_artists[0]:
-            trigger_artist = track.album_artist or track.artist
-            break
-    trigger_artist = trigger_artist or saved_artists[0].title()
-    return {
-        "id": "because_you_saved",
-        "title": f"Because you saved {trigger_artist}",
-        "reason": "More from artists you've recently saved.",
-        "item_ids": because_saved_ids,
-    }
-
-
 def _build_rediscover_section(tracks: list[Track], rollup: ListeningRollup) -> dict[str, Any] | None:
     if not rollup.played_track_ids or len(rollup.played_track_ids) < 3:
         return None
@@ -488,10 +458,6 @@ def build_music_recommendations(
             "item_ids": [item["id"] for item in items[:limit]],
         }
     ]
-
-    because_saved = _build_because_saved_section(tracks, rollup)
-    if because_saved:
-        sections.append(because_saved)
 
     rediscover = _build_rediscover_section(tracks, rollup)
     if rediscover:
