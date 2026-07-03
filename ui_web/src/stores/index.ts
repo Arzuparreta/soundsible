@@ -7,6 +7,7 @@ import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers } from '.
 import { toast } from '../lib/toast';
 import { vibrate } from '../lib/haptics';
 import { isMusicTrack, isPodcastTrack, podcastEpisodeToTrack } from '../lib/track';
+import { queueIndexOf } from '../lib/queueDiscovery';
 import type { Track, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
 import type { DownloadQueueItem, DownloadEvent, CompletedDownload } from '../types/download';
@@ -473,6 +474,26 @@ export const actions = {
     }
     setState('playback', 'queue', (q) => [...q, track]);
     toast.success('Añadida a la cola');
+  },
+
+  /** Play a track right now WITHOUT discarding the queue: jumps to it if it is
+   * already queued (cross-source: a preview and its downloaded twin match),
+   * otherwise inserts it right after the current entry and plays it. The rest
+   * of the queue keeps playing afterwards. */
+  playNow(track: Track): void {
+    const pb = state.playback;
+    if (pb.queue.length === 0) {
+      actions.playTrack(track);
+      return;
+    }
+    const at = queueIndexOf(pb.queue, track);
+    if (at !== -1) {
+      loadIndex(at);
+      return;
+    }
+    const insertAt = pb.index + 1;
+    setState('playback', 'queue', (q) => [...q.slice(0, insertAt), track, ...q.slice(insertAt)]);
+    loadIndex(insertAt);
   },
 
   /** Insert a track right after the current one (starts playback if idle). */

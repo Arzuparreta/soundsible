@@ -138,6 +138,26 @@ describe('Solid store library and playback resume', () => {
     expect(api.putPlaybackState).toHaveBeenCalledWith(expect.objectContaining({ track_id: null }), expect.anything());
   });
 
+  it('playNow inserts into the queue after the current track instead of replacing it', async () => {
+    const { actions, state } = await loadStore();
+    const t3: Track = { id: 't3', title: 'Three', artist: 'Artist', youtube_id: 'yt333yt333y' };
+
+    actions.playFrom([t1, t2], 0);
+    actions.playNow(t3);
+
+    expect(state.playback.queue.map((t) => t.id)).toEqual(['t1', 't3', 't2']);
+    expect(state.playback.currentTrack?.id).toBe('t3');
+
+    // Already queued (as its preview twin): jump to it, no duplicate.
+    actions.playNow({ id: 'yt333yt333y', title: 'Three', artist: 'Chan', source: 'preview' });
+    expect(state.playback.queue.map((t) => t.id)).toEqual(['t1', 't3', 't2']);
+    expect(state.playback.currentTrack?.id).toBe('t3');
+
+    actions.playNow(t2);
+    expect(state.playback.queue.map((t) => t.id)).toEqual(['t1', 't3', 't2']);
+    expect(state.playback.currentTrack?.id).toBe('t2');
+  });
+
   it('does not let an older library sync reinsert a track after optimistic delete', async () => {
     const stale = deferred<{ tracks: Track[]; playlists: Record<string, string[]>; settings: Record<string, never>; podcast_subscriptions: never[] }>();
     const getLibrary = vi

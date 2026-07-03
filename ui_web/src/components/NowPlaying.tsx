@@ -9,6 +9,7 @@ import { openPlayOnDevice } from './DeviceSheet';
 import { shareTrack } from '../lib/share';
 import { artistPath } from '../lib/artistRoute';
 import { isPodcastTrack } from '../lib/track';
+import { SearchPanel, panelOpen, panelSide, togglePanel } from './SearchPanel';
 import styles from './NowPlaying.module.css';
 
 function fmt(s: number): string {
@@ -308,10 +309,22 @@ export function NowPlaying() {
           </svg>
         </button>
         <span class={styles.headLabel}>Reproduciendo</span>
-        <span class={styles.iconBtn} aria-hidden="true" />
+        <button
+          classList={{ [styles.iconBtn]: true, [styles.panelToggle]: true, [styles.panelToggleOn]: panelOpen() }}
+          type="button"
+          aria-label={panelOpen() ? 'Ocultar panel de búsqueda' : 'Mostrar panel de búsqueda'}
+          aria-pressed={panelOpen()}
+          onClick={togglePanel}
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3" />
+          </svg>
+        </button>
       </header>
 
       <Show when={t()} fallback={<div class={styles.empty}>Nada sonando</div>}>
+        <div class={styles.main} data-panel-side={panelSide()}>
         <div class={styles.body} ref={bodyEl} onScroll={onBodyScroll}>
           <div class={styles.player}>
           <div class={styles.art} style={artBg()} />
@@ -556,6 +569,9 @@ export function NowPlaying() {
               </For>
               </div>
             </Show>
+        </div>
+
+        <SearchPanel />
         </div>
       </Show>
     </div>
