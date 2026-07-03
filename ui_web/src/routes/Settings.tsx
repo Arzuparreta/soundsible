@@ -1,4 +1,4 @@
-import { createSignal, onMount } from 'solid-js';
+import { createSignal, onMount, For } from 'solid-js';
 import { A } from '@solidjs/router';
 import { state, actions } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
@@ -8,6 +8,7 @@ import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/confirm';
 import { DevicesPanel } from '../components/DeviceSheet';
 import { PairedDevicesPanel } from '../components/PairDevice';
+import { t, locale, setLocale, LOCALES, type Locale } from '../lib/i18n';
 import styles from './Settings.module.css';
 
 function Switch(props: { checked: boolean; onChange: () => void; label: string }) {
@@ -68,7 +69,7 @@ export default function Settings() {
       await api.setDiscoveryLearning(next);
     } catch {
       setLearning(!next);
-      toast.error('No se pudo guardar');
+      toast.error(t('settings.toast.notSaved'));
     }
   };
 
@@ -76,9 +77,9 @@ export default function Settings() {
     setQuality(q);
     try {
       await api.setDownloaderConfig({ quality: q });
-      toast.success('Calidad actualizada');
+      toast.success(t('settings.toast.qualityUpdated'));
     } catch {
-      toast.error('No se pudo guardar');
+      toast.error(t('settings.toast.notSaved'));
     }
   };
 
@@ -89,74 +90,74 @@ export default function Settings() {
       await api.setDownloaderConfig({ auto_update_ytdlp: next });
     } catch {
       setAutoUpdate(!next);
-      toast.error('No se pudo guardar');
+      toast.error(t('settings.toast.notSaved'));
     }
   };
 
   const optimize = async () => {
-    const t = toast.loading('Optimizando…');
+    const h = toast.loading(t('settings.toast.optimizing'));
     try {
       await api.optimizeLibrary();
-      t.update('success', 'Biblioteca optimizada');
+      h.update('success', t('settings.toast.optimized'));
     } catch {
-      t.update('error', 'No se pudo optimizar');
+      h.update('error', t('settings.toast.optimizeFailed'));
     }
   };
 
   const cloudSync = async () => {
-    const t = toast.loading('Sincronizando…');
+    const h = toast.loading(t('settings.toast.syncing'));
     try {
       await api.cloudSync();
       await actions.syncLibrary();
-      t.update('success', 'Sincronizado');
+      h.update('success', t('settings.toast.synced'));
     } catch {
-      t.update('error', 'No se pudo sincronizar');
+      h.update('error', t('settings.toast.syncFailed'));
     }
   };
 
   const purge = async () => {
     const ok = await confirmDialog({
-      title: 'Purgar archivos perdidos',
-      message: 'Quita de la biblioteca las pistas cuyos archivos ya no existen en el disco.',
-      confirmLabel: 'Purgar',
+      title: t('settings.purgeTitle'),
+      message: t('settings.purgeMsg'),
+      confirmLabel: t('settings.purgeConfirm'),
     });
     if (!ok) return;
-    const t = toast.loading('Purgando…');
+    const h = toast.loading(t('settings.toast.purging'));
     try {
       const r = await api.purgeMissing();
       await actions.syncLibrary();
-      t.update('success', `Purgado (${r.removed ?? 0})`);
+      h.update('success', t('settings.toast.purged', { count: r.removed ?? 0 }));
     } catch {
-      t.update('error', 'No se pudo purgar');
+      h.update('error', t('settings.toast.purgeFailed'));
     }
   };
 
   const wipe = async () => {
     const ok = await confirmDialog({
-      title: 'Vaciar biblioteca',
-      message: 'Se borrará TODA la biblioteca. Esta acción no se puede deshacer.',
-      confirmLabel: 'Vaciar todo',
+      title: t('settings.emptyLibraryTitle'),
+      message: t('settings.emptyLibraryMsg'),
+      confirmLabel: t('settings.emptyLibraryConfirm'),
       danger: true,
     });
     if (!ok) return;
-    const t = toast.loading('Vaciando…');
+    const h = toast.loading(t('settings.toast.emptying'));
     try {
       await api.wipeLibrary();
       await actions.syncLibrary();
-      t.update('success', 'Biblioteca vaciada');
+      h.update('success', t('settings.toast.emptied'));
     } catch {
-      t.update('error', 'No se pudo vaciar');
+      h.update('error', t('settings.toast.emptyFailed'));
     }
   };
 
   return (
     <div class="view">
-      <ViewHeader title="Ajustes" />
+      <ViewHeader title={t('settings.title')} />
       <div class={styles.scroll}>
         <section class={styles.card}>
-          <h2 class={styles.cardTitle}>Apariencia</h2>
+          <h2 class={styles.cardTitle}>{t('settings.appearance')}</h2>
           <div class={styles.row}>
-            <span>Tema</span>
+            <span>{t('settings.theme')}</span>
             <div class={styles.segment}>
               <button
                 class={styles.seg}
@@ -164,7 +165,7 @@ export default function Settings() {
                 type="button"
                 onClick={() => actions.setTheme('dark')}
               >
-                Oscuro
+                {t('settings.themeDark')}
               </button>
               <button
                 class={styles.seg}
@@ -172,72 +173,88 @@ export default function Settings() {
                 type="button"
                 onClick={() => actions.setTheme('light')}
               >
-                Claro
+                {t('settings.themeLight')}
               </button>
             </div>
           </div>
-          <Switch label="Vibración (hápticos)" checked={state.haptics} onChange={() => actions.setHaptics(!state.haptics)} />
-        </section>
-
-        <section class={styles.card}>
-          <h2 class={styles.cardTitle}>Descubrimiento</h2>
-          <Switch label="Aprender de mi actividad" checked={learning()} onChange={toggleLearning} />
-          <p class={styles.note}>Mejora las recomendaciones usando tu historial local. No se envía a terceros.</p>
-        </section>
-
-        <section class={styles.card}>
-          <h2 class={styles.cardTitle}>Descargas</h2>
+          <Switch
+            label={t('settings.haptics')}
+            checked={state.haptics}
+            onChange={() => actions.setHaptics(!state.haptics)}
+          />
           <div class={styles.row}>
-            <span>Calidad</span>
-            <select class={styles.select} value={quality()} onChange={(e) => changeQuality(e.currentTarget.value)}>
-              <option value="low">Baja</option>
-              <option value="normal">Normal</option>
-              <option value="high">Alta</option>
+            <span>{t('settings.language')}</span>
+            <select
+              class={styles.select}
+              value={locale()}
+              onChange={(e) => setLocale(e.currentTarget.value as Locale)}
+            >
+              <For each={LOCALES}>
+                {(l) => <option value={l.code}>{l.native}</option>}
+              </For>
             </select>
           </div>
-          <Switch label="Auto-actualizar yt-dlp" checked={autoUpdate()} onChange={toggleAuto} />
+        </section>
+
+        <section class={styles.card}>
+          <h2 class={styles.cardTitle}>{t('settings.discovery')}</h2>
+          <Switch label={t('settings.learnActivity')} checked={learning()} onChange={toggleLearning} />
+          <p class={styles.note}>{t('settings.learnActivityNote')}</p>
+        </section>
+
+        <section class={styles.card}>
+          <h2 class={styles.cardTitle}>{t('settings.downloads')}</h2>
+          <div class={styles.row}>
+            <span>{t('settings.quality')}</span>
+            <select class={styles.select} value={quality()} onChange={(e) => changeQuality(e.currentTarget.value)}>
+              <option value="low">{t('settings.qualityLow')}</option>
+              <option value="normal">{t('settings.qualityNormal')}</option>
+              <option value="high">{t('settings.qualityHigh')}</option>
+            </select>
+          </div>
+          <Switch label={t('settings.autoUpdateYtdlp')} checked={autoUpdate()} onChange={toggleAuto} />
           <div class={styles.actions}>
             <Button variant="secondary" onClick={optimize}>
-              Optimizar biblioteca
+              {t('settings.optimize')}
             </Button>
             <Button variant="secondary" onClick={cloudSync}>
-              Sincronizar en la nube
+              {t('settings.sync')}
             </Button>
           </div>
         </section>
 
         <section class={styles.card}>
-          <h2 class={styles.cardTitle}>Biblioteca</h2>
+          <h2 class={styles.cardTitle}>{t('settings.libraryCard')}</h2>
           <p class={styles.row}>
-            <span>Pistas</span>
+            <span>{t('settings.tracks')}</span>
             <span class={styles.mono}>{state.library.length}</span>
           </p>
           <div class={styles.actions}>
             <Button variant="secondary" disabled={busy()} onClick={reload}>
-              Recargar
+              {t('settings.reload')}
             </Button>
             <Button variant="secondary" disabled={busy()} onClick={rescan}>
-              Re-escanear archivos
+              {t('settings.rescan')}
             </Button>
             <Button variant="secondary" onClick={purge}>
-              Purgar archivos perdidos
+              {t('settings.purgeFiles')}
             </Button>
           </div>
           <button class={styles.dangerBtn} type="button" onClick={wipe}>
-            Vaciar biblioteca
+            {t('settings.emptyLibrary')}
           </button>
         </section>
 
         <section class={styles.card}>
-          <h2 class={styles.cardTitle}>Importar</h2>
-          <p class={styles.note}>Trae tus playlists de Spotify o Apple Music y emparéjalas con tu biblioteca.</p>
+          <h2 class={styles.cardTitle}>{t('settings.importCard')}</h2>
+          <p class={styles.note}>{t('settings.importNote')}</p>
           <A href="/import" class={styles.link}>
-            Importar de Spotify / Apple Music
+            {t('settings.importFrom')}
           </A>
         </section>
 
         <section class={styles.card}>
-          <h2 class={styles.cardTitle}>Dispositivo</h2>
+          <h2 class={styles.cardTitle}>{t('settings.device')}</h2>
           <input
             class={styles.input}
             value={state.device.device_name}
@@ -246,34 +263,34 @@ export default function Settings() {
         </section>
 
         <section class={styles.card}>
-          <h2 class={styles.cardTitle}>Dispositivos</h2>
+          <h2 class={styles.cardTitle}>{t('settings.devices')}</h2>
           <DevicesPanel />
         </section>
 
         <section class={styles.card}>
-          <h2 class={styles.cardTitle}>Dispositivos vinculados</h2>
-          <p class={styles.note}>Vincula tu teléfono escaneando un QR para controlarlo y reproducir en remoto.</p>
+          <h2 class={styles.cardTitle}>{t('settings.pairedDevices')}</h2>
+          <p class={styles.note}>{t('settings.pairNote')}</p>
           <PairedDevicesPanel />
         </section>
 
         <section class={styles.card}>
-          <h2 class={styles.cardTitle}>Conexión</h2>
+          <h2 class={styles.cardTitle}>{t('settings.connection')}</h2>
           <p class={styles.row}>
-            <span>Engine</span>
+            <span>{t('settings.engineLabel')}</span>
             <span classList={{ [styles.ok]: state.online, [styles.bad]: !state.online }}>
-              {state.online ? 'Conectado' : 'Sin conexión'}
+              {state.online ? t('common.online') : t('common.offline')}
             </span>
           </p>
         </section>
 
         <section class={styles.card}>
-          <h2 class={styles.cardTitle}>Acerca de</h2>
+          <h2 class={styles.cardTitle}>{t('settings.about')}</h2>
           <p class={styles.row}>
-            <span>Soundsible</span>
-            <span class={styles.mono}>Beta · UI Solid</span>
+            <span>{t('brand.soundsible')}</span>
+            <span class={styles.mono}>{t('settings.version')}</span>
           </p>
           <A href="/preview" class={styles.link}>
-            Ver design system
+            {t('settings.viewDesign')}
           </A>
         </section>
       </div>

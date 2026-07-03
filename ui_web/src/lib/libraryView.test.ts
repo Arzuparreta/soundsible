@@ -48,13 +48,13 @@ describe('buildArtists', () => {
     expect(out[0].count).toBe(2);
   });
 
-  it('falls back to album_artist, then to "Desconocido"', () => {
+  it('falls back to album_artist, then to the localised "unknown" label', () => {
     const out = buildArtists([
       t('1', { artist: '', album_artist: 'VA' }),
       t('2', { artist: '', album_artist: null }),
     ]);
     const names = out.map((a) => a.name).sort();
-    expect(names).toEqual(['Desconocido', 'VA']);
+    expect(names).toEqual(['Unknown', 'VA']);
   });
 });
 
@@ -69,10 +69,10 @@ describe('buildAlbums', () => {
     expect(out[0].tracks.map((x) => x.id)).toEqual(['1', '3']);
   });
 
-  it('groups tracks with no album under "Sin álbum"', () => {
+  it('groups tracks with no album under the localised "no album" label', () => {
     const out = buildAlbums([t('1', { album: undefined }), t('2', { album: undefined })]);
     expect(out).toHaveLength(1);
-    expect(out[0].name).toBe('Sin álbum');
+    expect(out[0].name).toBe('No album');
     expect(out[0].tracks).toHaveLength(2);
   });
 });

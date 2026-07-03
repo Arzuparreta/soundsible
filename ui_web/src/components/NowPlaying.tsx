@@ -9,6 +9,8 @@ import { openPlayOnDevice } from './DeviceSheet';
 import { shareTrack } from '../lib/share';
 import { artistPath } from '../lib/artistRoute';
 import { isPodcastTrack } from '../lib/track';
+import { t as tr } from '../lib/i18n';
+import { SearchPanel, panelOpen, panelSide, togglePanel } from './SearchPanel';
 import styles from './NowPlaying.module.css';
 
 function fmt(s: number): string {
@@ -302,16 +304,28 @@ export function NowPlaying() {
       onPointerCancel={onSheetPointerCancel}
     >
       <header class={styles.head} ref={headEl}>
-        <button class={styles.iconBtn} type="button" aria-label="Cerrar" onClick={() => setNowPlayingOpen(false)}>
+        <button class={styles.iconBtn} type="button" aria-label={tr('common.close')} onClick={() => setNowPlayingOpen(false)}>
           <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M6 9l6 6 6-6" />
           </svg>
         </button>
-        <span class={styles.headLabel}>Reproduciendo</span>
-        <span class={styles.iconBtn} aria-hidden="true" />
+        <span class={styles.headLabel}>{tr('nowPlaying.playing')}</span>
+        <button
+          classList={{ [styles.iconBtn]: true, [styles.panelToggle]: true, [styles.panelToggleOn]: panelOpen() }}
+          type="button"
+          aria-label={panelOpen() ? tr('nowPlaying.hideSearchPanel') : tr('nowPlaying.showSearchPanel')}
+          aria-pressed={panelOpen()}
+          onClick={togglePanel}
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3" />
+          </svg>
+        </button>
       </header>
 
-      <Show when={t()} fallback={<div class={styles.empty}>Nada sonando</div>}>
+      <Show when={t()} fallback={<div class={styles.empty}>{tr('nowPlaying.nothingPlaying')}</div>}>
+        <div class={styles.main} data-panel-side={panelSide()}>
         <div class={styles.body} ref={bodyEl} onScroll={onBodyScroll}>
           <div class={styles.player}>
           <div class={styles.art} style={artBg()} />
@@ -334,7 +348,7 @@ export function NowPlaying() {
               max={Math.max(1, Math.floor(state.playback.duration))}
               value={Math.floor(state.playback.currentTime)}
               step={1}
-              aria-label="Buscar en la pista"
+              aria-label={tr('nowPlaying.seekLabel')}
               onInput={(e) => actions.seek(Number(e.currentTarget.value))}
             />
             <div class={styles.times}>
@@ -347,7 +361,7 @@ export function NowPlaying() {
             <button
               classList={{ [styles.toggle]: true, [styles.on]: state.playback.shuffle }}
               type="button"
-              aria-label="Aleatorio"
+              aria-label={tr('nowPlaying.shuffle')}
               aria-pressed={state.playback.shuffle}
               onClick={() => actions.toggleShuffle()}
             >
@@ -356,13 +370,13 @@ export function NowPlaying() {
               </svg>
             </button>
 
-            <button class={styles.ctrl} type="button" aria-label="Anterior" onClick={() => actions.prev()}>
+            <button class={styles.ctrl} type="button" aria-label={tr('common.prev')} onClick={() => actions.prev()}>
               <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
                 <path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
               </svg>
             </button>
 
-            <button class={styles.play} type="button" aria-label={state.playback.isPlaying ? 'Pausar' : 'Reproducir'} onClick={() => actions.togglePlay()}>
+            <button class={styles.play} type="button" aria-label={state.playback.isPlaying ? tr('common.pause') : tr('common.play')} onClick={() => actions.togglePlay()}>
               <Show
                 when={state.playback.isPlaying}
                 fallback={
@@ -377,7 +391,7 @@ export function NowPlaying() {
               </Show>
             </button>
 
-            <button class={styles.ctrl} type="button" aria-label="Siguiente" onClick={() => actions.next()}>
+            <button class={styles.ctrl} type="button" aria-label={tr('common.next')} onClick={() => actions.next()}>
               <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
                 <path fill="currentColor" d="M16 6h2v12h-2zm-1.5 6L6 6v12z" />
               </svg>
@@ -386,7 +400,7 @@ export function NowPlaying() {
             <button
               classList={{ [styles.toggle]: true, [styles.on]: state.playback.repeat !== 'off' }}
               type="button"
-              aria-label="Repetir"
+              aria-label={tr('nowPlaying.repeat')}
               onClick={() => actions.cycleRepeat()}
             >
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
@@ -404,7 +418,7 @@ export function NowPlaying() {
                 class={styles.actBtn}
                 classList={{ [styles.actOn]: isFav() }}
                 type="button"
-                aria-label={isFav() ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+                aria-label={isFav() ? tr('nowPlaying.removeFav') : tr('nowPlaying.addFav')}
                 aria-pressed={isFav()}
                 onClick={() => actions.toggleFavourite(t()!.id)}
               >
@@ -418,7 +432,7 @@ export function NowPlaying() {
               <button
                 class={styles.actBtn}
                 type="button"
-                aria-label="Guardar en biblioteca"
+                aria-label={tr('nowPlaying.saveToLibrary')}
                 onClick={() => void actions.downloadTrack(t()!)}
               >
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -431,7 +445,7 @@ export function NowPlaying() {
               <button
                 class={styles.actBtn}
                 type="button"
-                aria-label={state.playback.muted ? 'Activar sonido' : 'Silenciar'}
+                aria-label={state.playback.muted ? tr('omnibar.unmute') : tr('omnibar.mute')}
                 onClick={() => actions.toggleMute()}
               >
                 <Show
@@ -453,12 +467,12 @@ export function NowPlaying() {
                 min={0}
                 max={100}
                 value={Math.round((state.playback.muted ? 0 : state.playback.volume) * 100)}
-                aria-label="Volumen"
+                aria-label={tr('omnibar.volume')}
                 onInput={(e) => actions.setVolume(Number(e.currentTarget.value) / 100)}
               />
             </div>
 
-            <button class={styles.actBtn} type="button" aria-label="Compartir" onClick={() => void shareTrack(t()!)}>
+            <button class={styles.actBtn} type="button" aria-label={tr('nowPlaying.share')} onClick={() => void shareTrack(t()!)}>
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M4 12v8h16v-8M12 16V3M8 7l4-4 4 4" />
               </svg>
@@ -467,7 +481,7 @@ export function NowPlaying() {
             <button
               class={styles.actBtn}
               type="button"
-              aria-label="Más opciones"
+              aria-label={tr('common.more')}
               onClick={() =>
                 openTrackMenu(t()!, {
                   navigate,
@@ -491,7 +505,7 @@ export function NowPlaying() {
             <div class={styles.queue}>
               <div class={styles.queueHead}>
                 <span class={styles.queuePill}>
-                  <h2 class={styles.queueTitle}>En cola</h2>
+                  <h2 class={styles.queueTitle}>{tr('nowPlaying.queue')}</h2>
                   <svg
                     class={styles.queueChevron}
                     viewBox="0 0 24 24"
@@ -508,7 +522,7 @@ export function NowPlaying() {
                   </svg>
                 </span>
                 <button class={styles.queueClear} type="button" onClick={() => actions.clearQueue()}>
-                  Vaciar
+                  {tr('nowPlaying.clearQueue')}
                 </button>
               </div>
               <For each={state.playback.queue}>
@@ -544,7 +558,7 @@ export function NowPlaying() {
                     <button
                       class={styles.qRemove}
                       type="button"
-                      aria-label="Quitar de la cola"
+                      aria-label={tr('nowPlaying.removeFromQueue')}
                       onClick={() => actions.removeFromQueue(i())}
                     >
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -556,6 +570,9 @@ export function NowPlaying() {
               </For>
               </div>
             </Show>
+        </div>
+
+        <SearchPanel />
         </div>
       </Show>
     </div>

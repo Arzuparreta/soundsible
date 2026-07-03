@@ -1,6 +1,7 @@
 import { Show } from 'solid-js';
 import { state } from '../stores';
 import { openOverlay } from '../lib/overlay';
+import { t } from '../lib/i18n';
 import Button from '../components/Button';
 import styles from './Placeholder.module.css';
 
@@ -13,25 +14,23 @@ export function Placeholder(props: { title: string; blurb?: string }) {
   const demo = () =>
     openOverlay((close) => (
       <div class={styles.demo}>
-        <h2 class={styles.demoTitle}>Overlay manager</h2>
+        <h2 class={styles.demoTitle}>{t('placeholder.overlayHeading')}</h2>
         <p class={styles.demoText}>
-          Este sheet vive en el registro de overlays. Al cerrarlo — o al navegar a otra
-          vista — su DOM, listeners y scope reactivo se limpian solos. El leak histórico de
-          Discover es imposible por diseño.
+          {t('placeholder.overlayText')}
         </p>
-        <Button onClick={close}>Cerrar</Button>
+        <Button onClick={close}>{t('placeholder.overlayClose')}</Button>
       </div>
     ));
 
   return (
     <section class={styles.page}>
-      <span class={styles.kicker}>{state.online ? 'engine ●' : 'offline ○'}</span>
+      <span class={styles.kicker}>{state.online ? t('placeholder.statusOnline') : t('placeholder.statusOffline')}</span>
       <h1 class={styles.title}>{props.title}</h1>
       <Show when={props.blurb}>
         <p class={styles.blurb}>{props.blurb}</p>
       </Show>
       <div class={styles.actions}>
-        <Button onClick={demo}>Probar overlay</Button>
+        <Button onClick={demo}>{t('placeholder.tryOverlay')}</Button>
       </div>
     </section>
   );

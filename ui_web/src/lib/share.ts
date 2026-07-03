@@ -1,5 +1,6 @@
 import { toast } from './toast';
 import { isPodcastTrack } from './track';
+import { t } from './i18n';
 
 interface ShareableTrack {
   id: string;
@@ -49,8 +50,8 @@ export async function shareTrack(track: ShareableTrack): Promise<void> {
   const payload = url || text;
   try {
     await navigator.clipboard.writeText(payload);
-    toast.success('Copiado al portapapeles');
+    toast.success(t('social.copied'));
   } catch {
-    toast.error('No se pudo compartir');
+    toast.error(t('social.shareFailed'));
   }
 }

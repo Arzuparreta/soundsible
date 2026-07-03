@@ -1,5 +1,6 @@
 import { onCleanup, createSignal } from 'solid-js';
 import { openOverlay } from './overlay';
+import { t } from './i18n';
 import styles from './prompt.module.css';
 
 export interface PromptOptions {
@@ -43,10 +44,10 @@ export function promptDialog(opts: PromptOptions): Promise<string | null> {
           />
           <div class={styles.actions}>
             <button type="button" class={styles.cancel} onClick={() => finish(null)}>
-              Cancelar
+              {t('prompt.cancel')}
             </button>
             <button type="submit" class={styles.confirm}>
-              {opts.confirmLabel ?? 'Guardar'}
+              {opts.confirmLabel ?? t('prompt.save')}
             </button>
           </div>
         </form>

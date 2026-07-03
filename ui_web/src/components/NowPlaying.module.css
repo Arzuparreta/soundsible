@@ -65,6 +65,42 @@
   color: var(--ink-secondary);
 }
 
+/* Dynamic-panels wrapper: on mobile it dissolves so .body stays the sheet's
+   direct flex child (untouched layout); on desktop it lays the player and the
+   search panel side by side. data-panel-side="left" flips the order. */
+.main {
+  display: contents;
+}
+
+/* The search-panel toggle only exists where the panel can (≥1024px); below
+   that it keeps its header slot (so the title stays centered) but is inert. */
+.panelToggle {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.panelToggleOn {
+  color: var(--accent);
+}
+
+@media (min-width: 1024px) {
+  .main {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
+
+  .main[data-panel-side='left'] {
+    flex-direction: row-reverse;
+  }
+
+  .panelToggle {
+    visibility: visible;
+    pointer-events: auto;
+  }
+}
+
 .body {
   flex: 1;
   min-height: 0;

@@ -17,6 +17,7 @@ import Artist from './routes/Artist';
 import { Placeholder } from './routes/Placeholder';
 import DesignPreview from './pages/DesignPreview';
 import { initStore } from './stores';
+import { initLocale, t } from './lib/i18n';
 // Self-host the design-system typefaces (DESIGN.md) so they render for every
 // user, not only those who happen to have them installed locally. Subsets load
 // on demand via unicode-range. Plus Jakarta Sans 400/500/600/700, JetBrains
@@ -46,6 +47,7 @@ function installViewportHeightSync() {
 }
 
 installViewportHeightSync();
+initLocale();
 initStore();
 
 const root = document.getElementById('app');
@@ -73,7 +75,7 @@ render(
       <Route path="/import" component={Migrate} />
       <Route path="/artist/:name" component={Artist} />
       <Route path="/preview" component={DesignPreview} />
-      <Route path="*" component={() => <Placeholder title="No encontrado" blurb="Esta ruta no existe." />} />
+      <Route path="*" component={() => <Placeholder title={t('placeholder.notFoundTitle')} blurb={t('placeholder.notFoundBlurb')} />} />
     </HashRouter>
   ),
   root,

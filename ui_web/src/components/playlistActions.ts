@@ -5,6 +5,7 @@ import { actions, state } from '../stores';
 import { promptDialog } from '../lib/prompt';
 import { confirmDialog } from '../lib/confirm';
 import type { Track } from '../types/music';
+import { t } from '../lib/i18n';
 
 export interface PlaylistMenuHooks {
   /** Called with the new name after a successful rename (e.g. to update the route). */
@@ -26,36 +27,36 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
     title: name,
     actions: [
       {
-        label: 'Reproducir',
+        label: t('playlistActions.play'),
         onSelect: () => {
           const t = playlistTracks(name);
           if (t.length) actions.playFrom(t, 0);
         },
       },
       {
-        label: 'Reproducir aleatorio',
+        label: t('playlistActions.shuffle'),
         onSelect: () => {
           const t = playlistTracks(name);
           if (t.length) actions.playShuffled(t);
         },
       },
       {
-        label: 'Renombrar',
+        label: t('playlistActions.rename'),
         onSelect: async () => {
-          const next = await promptDialog({ title: 'Renombrar lista', initial: name, confirmLabel: 'Renombrar' });
+          const next = await promptDialog({ title: t('playlistActions.renameTitle'), initial: name, confirmLabel: t('playlistActions.renameConfirm') });
           if (next && (await actions.renamePlaylist(name, next))) hooks.onRenamed?.(next.trim());
         },
       },
-      { label: 'Duplicar', onSelect: () => void actions.duplicatePlaylist(name) },
-      { label: 'Cambiar portada', onSelect: () => openPlaylistCoverPicker(name) },
+      { label: t('playlistActions.duplicate'), onSelect: () => void actions.duplicatePlaylist(name) },
+      { label: t('playlistActions.changeCover'), onSelect: () => openPlaylistCoverPicker(name) },
       {
-        label: 'Eliminar lista',
+        label: t('playlistActions.deleteList'),
         danger: true,
         onSelect: async () => {
           const ok = await confirmDialog({
-            title: 'Eliminar lista',
-            message: `Se eliminará «${name}». Las pistas seguirán en tu biblioteca.`,
-            confirmLabel: 'Eliminar',
+            title: t('playlistActions.deleteTitle'),
+            message: t('playlistActions.deleteMsg', { name }),
+            confirmLabel: t('playlistActions.deleteConfirm'),
             danger: true,
           });
           if (ok) {

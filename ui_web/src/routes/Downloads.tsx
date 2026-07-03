@@ -1,11 +1,12 @@
 import { createMemo, For, Show, onMount, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { state, actions, downloadCounts } from '../stores';
+import { t } from '../lib/i18n';
 import type { DownloadQueueItem } from '../types/download';
 import styles from './Downloads.module.css';
 
 function titleOf(i: DownloadQueueItem): string {
-  return i.display_title || i.podcast_title || i.song_str || 'Descarga';
+  return i.display_title || i.podcast_title || i.song_str || t('downloads.fallbackTitle');
 }
 function artistOf(i: DownloadQueueItem): string {
   return i.display_artist || i.podcast_show_title || '';
@@ -37,17 +38,17 @@ function progressView(i: DownloadQueueItem): ProgressView {
   if (failed) {
     phaseLabel =
       i.status === 'interrupted'
-        ? 'Interrumpido'
+        ? t('downloads.phaseInterrupted')
         : percent == null
-          ? 'Error'
-          : `Error al ${Math.round(percent)}%`;
-  } else if (i.phase === 'preparing') phaseLabel = 'Preparando';
-  else if (i.phase === 'processing') phaseLabel = 'Procesando';
-  else if (i.status === 'downloading') phaseLabel = 'Descargando';
-  else phaseLabel = 'En cola';
+          ? t('downloads.phaseFailed')
+          : t('downloads.phaseFailedPercent', { percent: Math.round(percent) });
+  } else if (i.phase === 'preparing') phaseLabel = t('downloads.phasePreparing');
+  else if (i.phase === 'processing') phaseLabel = t('downloads.phaseProcessing');
+  else if (i.status === 'downloading') phaseLabel = t('downloads.phaseDownloading');
+  else phaseLabel = t('downloads.phasePending');
 
   const detailLabel = failed
-    ? i.error_message || 'La descarga falló.'
+    ? i.error_message || t('downloads.failedDetail')
     : [i.speed, i.eta].filter(Boolean).join(' · ');
 
   return { failed, percent, indeterminate, phaseLabel, detailLabel };
@@ -79,22 +80,22 @@ export default function Downloads() {
   return (
     <div class="view">
       <header class={styles.header}>
-        <button class={styles.back} type="button" aria-label="Volver" onClick={() => navigate('/')}>
+        <button class={styles.back} type="button" aria-label={t('downloads.ariaBack')} onClick={() => navigate('/')}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
         <div class={styles.titleWrap}>
-          <h1 class={styles.title}>Descargas</h1>
+          <h1 class={styles.title}>{t('downloads.title')}</h1>
           <span class={styles.count}>
-            <Show when={counts().active > 0} fallback="Sin descargas activas">
-              {counts().active} en curso{counts().failed > 0 ? ` · ${counts().failed} con error` : ''}
+            <Show when={counts().active > 0} fallback={t('downloads.noActive')}>
+              {t('downloads.countActive', { active: counts().active })}{counts().failed > 0 ? t('downloads.countFailed', { failed: counts().failed }) : ''}
             </Show>
           </span>
         </div>
         <Show when={counts().failed > 0}>
           <button class={styles.clear} type="button" onClick={() => actions.clearFailedDownloads()}>
-            Limpiar errores
+            {t('downloads.clearErrors')}
           </button>
         </Show>
       </header>
@@ -110,7 +111,7 @@ export default function Downloads() {
               </span>
               <span class={styles.recentMeta}>
                 <span class={styles.recentTitle}>{r.title}</span>
-                <span class={styles.recentSub}>Añadido a la biblioteca</span>
+                <span class={styles.recentSub}>{t('downloads.recentSubtitle')}</span>
               </span>
             </div>
           )}
@@ -121,9 +122,9 @@ export default function Downloads() {
           fallback={
             <Show when={state.downloads.recent.length === 0}>
               <div class={styles.empty}>
-                <p class={styles.emptyTitle}>Nada en la cola</p>
+                <p class={styles.emptyTitle}>{t('downloads.emptyTitle')}</p>
                 <p class={styles.emptyText}>
-                  Añade canciones desde Buscar y verás aquí su progreso en tiempo real.
+                  {t('downloads.emptyBody')}
                 </p>
               </div>
             </Show>
@@ -134,7 +135,7 @@ export default function Downloads() {
 
         <Show when={hasClearable()}>
           <button class={styles.clearAll} type="button" onClick={() => actions.clearDownloads()}>
-            Vaciar cola
+            {t('downloads.clearQueue')}
           </button>
         </Show>
       </div>
@@ -183,7 +184,7 @@ function DownloadRow(props: { item: DownloadQueueItem }) {
           <button
             class={styles.iconBtn}
             type="button"
-            aria-label="Reintentar"
+            aria-label={t('downloads.ariaRetry')}
             onClick={() => actions.retryDownload(props.item.id)}
           >
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
@@ -194,7 +195,7 @@ function DownloadRow(props: { item: DownloadQueueItem }) {
         <button
           class={styles.iconBtn}
           type="button"
-          aria-label={v().failed ? 'Quitar' : 'Cancelar'}
+          aria-label={v().failed ? t('downloads.ariaRemove') : t('downloads.ariaCancel')}
           onClick={() => actions.removeDownload(props.item.id)}
         >
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">

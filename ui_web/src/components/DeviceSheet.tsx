@@ -3,6 +3,7 @@ import { openOverlay } from '../lib/overlay';
 import { api, type Device, type RemoteCommand } from '../lib/api';
 import { state } from '../stores';
 import { toast } from '../lib/toast';
+import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './DeviceSheet.module.css';
 
@@ -41,28 +42,28 @@ export function openPlayOnDevice(track: Track): void {
     });
     const play = async (d: Device) => {
       close();
-      const t = toast.loading(`Enviando a ${d.device_name ?? 'dispositivo'}…`);
+      const h = toast.loading(t('deviceSheet.sendingTo', { device: d.device_name ?? t('deviceSheet.fallbackDevice') }));
       try {
         await api.remoteCommand(d.device_id, 'play', { track_id: track.id });
-        t.update('success', 'Reproduciendo en el dispositivo');
+        h.update('success', t('deviceSheet.playingOn'));
       } catch {
-        t.update('error', 'No se pudo controlar el dispositivo');
+        h.update('error', t('deviceSheet.failed'));
       }
     };
     return (
       <div class={styles.sheet}>
         <header class={styles.head}>
-          <span class={styles.title}>Reproducir en…</span>
+          <span class={styles.title}>{t('deviceSheet.title')}</span>
         </header>
-        <Show when={!loading()} fallback={<p class={styles.empty}>Buscando dispositivos…</p>}>
-          <Show when={devs().length > 0} fallback={<p class={styles.empty}>No hay otros dispositivos conectados.</p>}>
+        <Show when={!loading()} fallback={<p class={styles.empty}>{t('deviceSheet.searching')}</p>}>
+          <Show when={devs().length > 0} fallback={<p class={styles.empty}>{t('deviceSheet.emptyOthers')}</p>}>
             <For each={devs()}>
               {(d) => (
                 <button class={styles.item} type="button" onClick={() => play(d)}>
                   <span class={styles.icon}>{deviceIcon(d.device_type)}</span>
                   <span class={styles.itemName}>{d.device_name ?? d.device_id}</span>
                   <Show when={d.socket_active}>
-                    <span class={styles.dot} aria-label="En línea" />
+                    <span class={styles.dot} aria-label={t('deviceSheet.ariaOnline')} />
                   </Show>
                 </button>
               )}
@@ -94,13 +95,13 @@ export function DevicesPanel() {
     try {
       await api.remoteCommand(d.device_id, command);
     } catch {
-      toast.error('No se pudo controlar el dispositivo');
+      toast.error(t('deviceSheet.failed'));
     }
   };
 
   return (
-    <Show when={!loading()} fallback={<p class={styles.empty}>Buscando…</p>}>
-      <Show when={devs().length > 0} fallback={<p class={styles.empty}>No hay dispositivos conectados.</p>}>
+    <Show when={!loading()} fallback={<p class={styles.empty}>{t('deviceSheet.searchingShort')}</p>}>
+      <Show when={devs().length > 0} fallback={<p class={styles.empty}>{t('deviceSheet.empty')}</p>}>
         <For each={devs()}>
           {(d) => (
             <div class={styles.deviceRow}>
@@ -108,21 +109,21 @@ export function DevicesPanel() {
               <span class={styles.itemName}>
                 {d.device_name ?? d.device_id}
                 <Show when={d.device_id === state.device.device_id}>
-                  <span class={styles.self}> (este)</span>
+                  <span class={styles.self}>{t('deviceSheet.selfSuffix')}</span>
                 </Show>
               </span>
               <Show when={d.device_id !== state.device.device_id}>
                 <div class={styles.controls}>
-                  <button class={styles.ctrl} type="button" aria-label="Anterior" onClick={() => cmd(d, 'previous')}>
+                  <button class={styles.ctrl} type="button" aria-label={t('deviceSheet.ariaPrev')} onClick={() => cmd(d, 'previous')}>
                     <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
                   </button>
-                  <button class={styles.ctrl} type="button" aria-label="Pausar" onClick={() => cmd(d, 'pause')}>
+                  <button class={styles.ctrl} type="button" aria-label={t('deviceSheet.ariaPause')} onClick={() => cmd(d, 'pause')}>
                     <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
                   </button>
-                  <button class={styles.ctrl} type="button" aria-label="Reproducir" onClick={() => cmd(d, 'play')}>
+                  <button class={styles.ctrl} type="button" aria-label={t('deviceSheet.ariaPlay')} onClick={() => cmd(d, 'play')}>
                     <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8 5v14l11-7z" /></svg>
                   </button>
-                  <button class={styles.ctrl} type="button" aria-label="Siguiente" onClick={() => cmd(d, 'next')}>
+                  <button class={styles.ctrl} type="button" aria-label={t('deviceSheet.ariaNext')} onClick={() => cmd(d, 'next')}>
                     <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M16 6h2v12h-2zm-1.5 6L6 6v12z" /></svg>
                   </button>
                 </div>

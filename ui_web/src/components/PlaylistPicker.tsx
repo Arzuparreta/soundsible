@@ -2,6 +2,7 @@ import { For, Show } from 'solid-js';
 import { openOverlay } from '../lib/overlay';
 import { state, actions } from '../stores';
 import { promptDialog } from '../lib/prompt';
+import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './PlaylistPicker.module.css';
 
@@ -11,9 +12,9 @@ export function openPlaylistPicker(track: Track): void {
     const names = () => Object.keys(state.playlists);
     const createNew = async () => {
       const name = await promptDialog({
-        title: 'Nueva lista',
-        placeholder: 'Nombre de la lista',
-        confirmLabel: 'Crear',
+        title: t('playlistPicker.new'),
+        placeholder: t('playlistPicker.newPlaceholder'),
+        confirmLabel: t('playlistPicker.newConfirm'),
       });
       if (!name) return;
       const ok = await actions.createPlaylist(name);
@@ -29,15 +30,15 @@ export function openPlaylistPicker(track: Track): void {
     return (
       <div class={styles.picker}>
         <header class={styles.head}>
-          <span class={styles.title}>Añadir a playlist</span>
+          <span class={styles.title}>{t('playlistPicker.title')}</span>
         </header>
         <button class={styles.new} type="button" onClick={createNew}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M12 5v14M5 12h14" />
           </svg>
-          Nueva lista
+          {t('playlistPicker.new')}
         </button>
-        <Show when={names().length > 0} fallback={<p class={styles.empty}>No tienes listas todavía.</p>}>
+        <Show when={names().length > 0} fallback={<p class={styles.empty}>{t('playlistPicker.empty')}</p>}>
           <div class={styles.list}>
             <For each={names()}>
               {(name) => (

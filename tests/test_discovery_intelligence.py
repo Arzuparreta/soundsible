@@ -194,7 +194,7 @@ def test_rollup_boosts_played_artist_scores(tmp_path):
     assert scores["a"] > scores["b"], "Played artist should score higher"
 
 
-def test_rollup_adds_because_you_saved_section(tmp_path):
+def test_saved_artists_boost_scores_without_because_saved_section(tmp_path):
     runtime = _make_runtime(tmp_path)
     init_telemetry(runtime)
 
@@ -207,7 +207,10 @@ def test_rollup_adds_because_you_saved_section(tmp_path):
 
     result = build_music_recommendations(metadata, favourite_ids=[], limit=10)
     section_ids = [s["id"] for s in result["sections"]]
-    assert "because_you_saved" in section_ids
+    scores = {item["track_id"]: item["score"] for item in result["items"]}
+
+    assert "because_you_saved" not in section_ids
+    assert scores["a"] > scores["b"], "Saved artist should still score higher"
 
 
 def test_rollup_adds_rediscover_section(tmp_path):

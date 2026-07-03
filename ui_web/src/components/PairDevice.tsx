@@ -4,6 +4,7 @@ import { openOverlay } from '../lib/overlay';
 import { api, type PairingSession, type PairedDevice } from '../lib/api';
 import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/confirm';
+import { t } from '../lib/i18n';
 import styles from './PairDevice.module.css';
 
 const POLL_MS = 2000;
@@ -12,15 +13,15 @@ const ACTIVE = new Set(['pending', 'claimed']);
 function statusLabel(s: PairingSession | null): string {
   switch (s?.status) {
     case 'pending':
-      return 'Esperando a que el dispositivo escanee…';
+      return t('pairDevice.statusPending');
     case 'claimed':
-      return 'Vinculando dispositivo…';
+      return t('pairDevice.statusClaimed');
     case 'completed':
-      return '¡Dispositivo vinculado!';
+      return t('pairDevice.statusCompleted');
     case 'cancelled':
-      return 'Sesión cancelada';
+      return t('pairDevice.statusCancelled');
     case 'expired':
-      return 'El código ha caducado';
+      return t('pairDevice.statusExpired');
     default:
       return '';
   }
@@ -64,7 +65,7 @@ function openPairDevice(onPaired: () => void): void {
       try {
         s = await api.createPairingSession();
       } catch {
-        setError('No se pudo iniciar el emparejamiento. Abre el reproductor en el equipo anfitrión.');
+        setError(t('pairDevice.initError'));
         return;
       }
       sessionId = s.session_id;
@@ -83,7 +84,7 @@ function openPairDevice(onPaired: () => void): void {
           lastStatus = rec.status;
           if (rec.status === 'completed') {
             stopPoll();
-            toast.success(`Vinculado: ${rec.device_name ?? 'dispositivo'}`);
+            toast.success(t('pairDevice.linkedToast', { device: rec.device_name ?? t('pairDevice.fallbackDevice') }));
             onPaired();
           } else if (rec.status === 'cancelled' || rec.status === 'expired') {
             stopPoll();
@@ -113,7 +114,7 @@ function openPairDevice(onPaired: () => void): void {
       if (!code) return;
       try {
         await navigator.clipboard.writeText(code);
-        toast.success('Código copiado');
+        toast.success(t('pairDevice.codeCopied'));
       } catch {
         /* clipboard blocked */
       }
@@ -122,25 +123,25 @@ function openPairDevice(onPaired: () => void): void {
     return (
       <div class={styles.pair}>
         <header class={styles.head}>
-          <span class={styles.eyebrow}>Vincular dispositivo</span>
-          <span class={styles.title}>Escanea y conecta</span>
+          <span class={styles.eyebrow}>{t('pairDevice.eyebrow')}</span>
+          <span class={styles.title}>{t('pairDevice.pairTitle')}</span>
         </header>
 
         <Show
           when={!error()}
           fallback={<p class={styles.error}>{error()}</p>}
         >
-          <Show when={session()} fallback={<p class={styles.status}>Generando código…</p>}>
+          <Show when={session()} fallback={<p class={styles.status}>{t('pairDevice.generating')}</p>}>
             <div class={styles.body}>
               <div class={styles.qrWrap}>
                 <Show when={qrSrc()} fallback={<div class={styles.qrSkeleton} />}>
-                  <img class={styles.qr} src={qrSrc()} alt="Código QR de emparejamiento" width="240" height="240" />
+                  <img class={styles.qr} src={qrSrc()} alt={t('pairDevice.qrAlt')} width="240" height="240" />
                 </Show>
               </div>
 
               <div class={styles.info}>
                 <div class={styles.codeBlock}>
-                  <span class={styles.codeLabel}>Código</span>
+                  <span class={styles.codeLabel}>{t('pairDevice.codeLabel')}</span>
                   <span class={styles.code}>{session()!.code}</span>
                 </div>
                 <p
@@ -150,12 +151,12 @@ function openPairDevice(onPaired: () => void): void {
                   {statusLabel(session())}
                 </p>
                 <Show when={session()!.connect?.claim_url} fallback={
-                  <p class={styles.note}>El acceso por LAN no está disponible: introduce el código manualmente en el otro dispositivo.</p>
+                  <p class={styles.note}>{t('pairDevice.noteNoClaimUrl')}</p>
                 }>
                   <a class={styles.link} href={session()!.connect!.claim_url!} target="_blank" rel="noopener">
                     {session()!.connect!.player_url ?? session()!.connect!.claim_url}
                   </a>
-                  <p class={styles.note}>Si no puedes escanear, abre el enlace e introduce el código.</p>
+                  <p class={styles.note}>{t('pairDevice.noteWithClaim')}</p>
                 </Show>
               </div>
             </div>
@@ -165,11 +166,11 @@ function openPairDevice(onPaired: () => void): void {
         <footer class={styles.actions}>
           <Show when={session() && session()!.status !== 'completed'}>
             <button class={styles.btn} type="button" onClick={copyCode}>
-              Copiar código
+              {t('pairDevice.copy')}
             </button>
           </Show>
           <button class={styles.btn} type="button" onClick={cancel}>
-            {session()?.status === 'completed' ? 'Cerrar' : 'Cancelar'}
+            {session()?.status === 'completed' ? t('pairDevice.close') : t('pairDevice.cancel')}
           </button>
         </footer>
       </div>
@@ -178,7 +179,7 @@ function openPairDevice(onPaired: () => void): void {
 }
 
 function fmtWhen(value?: string | null): string {
-  if (!value) return 'Nunca';
+  if (!value) return t('pairDevice.never');
   const d = new Date(value.includes('T') ? value : value.replace(' ', 'T') + 'Z');
   if (Number.isNaN(d.getTime())) return String(value);
   return d.toLocaleString();
@@ -203,36 +204,36 @@ export function PairedDevicesPanel() {
 
   const revoke = async (d: PairedDevice) => {
     const ok = await confirmDialog({
-      title: 'Revocar dispositivo',
-      message: `Se revocará el acceso de "${d.name ?? 'este dispositivo'}". Tendrá que volver a vincularse.`,
-      confirmLabel: 'Revocar',
+      title: t('pairDevice.revokeTitle'),
+      message: t('pairDevice.revokeMsg', { name: d.name ?? t('pairDevice.revokeMsgFallback') }),
+      confirmLabel: t('pairDevice.revokeConfirm'),
       danger: true,
     });
     if (!ok) return;
     try {
       await api.revokePairedDevice(d.token_id);
-      toast.success('Dispositivo revocado');
+      toast.success(t('pairDevice.revoked'));
       await refresh();
     } catch {
-      toast.error('No se pudo revocar');
+      toast.error(t('pairDevice.revokeFailed'));
     }
   };
 
   return (
     <>
-      <Show when={!loading()} fallback={<p class={styles.empty}>Cargando…</p>}>
-        <Show when={devices().length > 0} fallback={<p class={styles.empty}>Aún no hay dispositivos vinculados.</p>}>
+      <Show when={!loading()} fallback={<p class={styles.empty}>{t('pairDevice.loading')}</p>}>
+        <Show when={devices().length > 0} fallback={<p class={styles.empty}>{t('pairDevice.empty')}</p>}>
           <For each={devices()}>
             {(d) => (
               <div class={styles.deviceRow}>
                 <div class={styles.deviceMeta}>
-                  <span class={styles.deviceName}>{d.name ?? 'Dispositivo vinculado'}</span>
+                  <span class={styles.deviceName}>{d.name ?? t('pairDevice.pairedFallback')}</span>
                   <span class={styles.deviceSub}>
-                    {(d.device_type ?? 'phone')} · usado: {fmtWhen(d.last_used_at)}
+                    {(d.device_type ?? t('pairDevice.phoneType'))} · {t('pairDevice.lastUsed', { when: fmtWhen(d.last_used_at) })}
                   </span>
                 </div>
                 <button class={styles.revoke} type="button" onClick={() => revoke(d)}>
-                  Revocar
+                  {t('pairDevice.revoke')}
                 </button>
               </div>
             )}
@@ -240,7 +241,7 @@ export function PairedDevicesPanel() {
         </Show>
       </Show>
       <button class={styles.pairBtn} type="button" onClick={() => openPairDevice(refresh)}>
-        Vincular dispositivo nuevo
+        {t('pairDevice.pairNew')}
       </button>
     </>
   );

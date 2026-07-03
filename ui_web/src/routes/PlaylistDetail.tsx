@@ -5,6 +5,7 @@ import TrackList from '../components/TrackList';
 import Button from '../components/Button';
 import { openPlaylistMenu } from '../components/playlistActions';
 import { trackCount } from '../lib/format';
+import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './PlaylistDetail.module.css';
 
@@ -36,7 +37,7 @@ export default function PlaylistDetail() {
   return (
     <div class="view">
       <header class={styles.header}>
-        <button class={styles.back} type="button" aria-label="Volver" onClick={() => navigate('/playlists')}>
+        <button class={styles.back} type="button" aria-label={t('playlistDetail.ariaBack')} onClick={() => navigate('/playlists')}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M15 18l-6-6 6-6" />
           </svg>
@@ -46,9 +47,9 @@ export default function PlaylistDetail() {
           <span class={styles.count}>{trackCount(tracks().length)}</span>
         </div>
         <Button onClick={playAll} disabled={tracks().length === 0}>
-          Reproducir
+          {t('playlistDetail.play')}
         </Button>
-        <button class={styles.menu} type="button" aria-label="Opciones de la lista" onClick={openMenu}>
+        <button class={styles.menu} type="button" aria-label={t('playlistDetail.ariaOptions')} onClick={openMenu}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
             <circle cx="5" cy="12" r="2" />
             <circle cx="12" cy="12" r="2" />
@@ -65,7 +66,7 @@ export default function PlaylistDetail() {
         }}
         empty={
           <p style={{ padding: '48px 16px', 'text-align': 'center', color: 'var(--ink-secondary)' }}>
-            Lista vacía.
+            {t('playlistDetail.empty')}
           </p>
         }
       />

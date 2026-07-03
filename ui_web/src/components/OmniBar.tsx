@@ -1,6 +1,7 @@
 import { createMemo, Show, type JSX } from 'solid-js';
 import { state, actions, setNowPlayingOpen } from '../stores';
 import { coverUrl } from '../lib/media';
+import { t } from '../lib/i18n';
 import styles from './OmniBar.module.css';
 
 /** Persistent mini-player. Progress line + tap-to-expand + play/pause + next. */
@@ -46,8 +47,8 @@ export function OmniBar() {
             when={current()}
             fallback={
               <>
-                <span class={styles.title}>Nada sonando</span>
-                <span class={styles.sub}>{state.online ? 'Engine conectado' : 'Sin conexión'}</span>
+                <span class={styles.title}>{t('omnibar.nothingPlaying')}</span>
+                <span class={styles.sub}>{state.online ? t('omnibar.engineConnected') : t('common.offline')}</span>
               </>
             }
           >
@@ -60,7 +61,7 @@ export function OmniBar() {
       <button
         class={styles.ctrl}
         type="button"
-        aria-label={state.playback.isPlaying ? 'Pausar' : 'Reproducir'}
+        aria-label={state.playback.isPlaying ? t('common.pause') : t('common.play')}
         disabled={!current()}
         onClick={() => actions.togglePlay()}
       >
@@ -81,7 +82,7 @@ export function OmniBar() {
       <button
         class={styles.ctrl}
         type="button"
-        aria-label="Siguiente"
+        aria-label={t('common.next')}
         disabled={!current()}
         onClick={() => actions.next()}
       >
@@ -94,7 +95,7 @@ export function OmniBar() {
         <button
           class={styles.soundBtn}
           type="button"
-          aria-label={state.playback.muted || state.playback.volume === 0 ? 'Activar sonido' : 'Silenciar'}
+          aria-label={state.playback.muted || state.playback.volume === 0 ? t('omnibar.unmute') : t('omnibar.mute')}
           aria-pressed={state.playback.muted}
           onClick={() => actions.toggleMute()}
         >
@@ -120,7 +121,7 @@ export function OmniBar() {
             min={0}
             max={100}
             value={volumePct()}
-            aria-label="Volumen"
+            aria-label={t('omnibar.volume')}
             aria-valuetext={`${volumePct()}%`}
             onInput={(e) => actions.setVolume(Number(e.currentTarget.value) / 100)}
           />

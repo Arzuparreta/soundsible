@@ -84,16 +84,16 @@ describe('Search route', () => {
   it('bridges empty Musica results into YouTube search', async () => {
     render(() => <Search />);
 
-    fireEvent.input(screen.getByPlaceholderText('Qué quieres escuchar?'), {
+    fireEvent.input(screen.getByPlaceholderText('What do you want to play?'), {
       target: { value: 'Oliver Heldens live set' },
     });
     await vi.advanceTimersByTimeAsync(230);
 
-    await screen.findByText('Buscar en YouTube');
-    fireEvent.click(screen.getByText('Buscar en YouTube'));
+    await screen.findByText('Search on YouTube');
+    fireEvent.click(screen.getByText('Search on YouTube'));
 
     await waitFor(() => expect(apiMock.searchYouTube).toHaveBeenCalledWith('Oliver Heldens live set', expect.any(AbortSignal)));
-    expect(await screen.findByText('Resultados en YouTube')).toBeInTheDocument();
+    expect(await screen.findByText('YouTube results')).toBeInTheDocument();
     expect(screen.getByText('Oliver Heldens Live Set')).toBeInTheDocument();
   });
 
@@ -120,7 +120,7 @@ describe('Search route', () => {
   it('treats pasted YouTube URLs as exact YouTube items', async () => {
     render(() => <Search />);
 
-    fireEvent.input(screen.getByPlaceholderText('Qué quieres escuchar?'), {
+    fireEvent.input(screen.getByPlaceholderText('What do you want to play?'), {
       target: { value: 'https://youtu.be/dQw4w9WgXcQ?t=42' },
     });
     await vi.advanceTimersByTimeAsync(230);
@@ -128,7 +128,7 @@ describe('Search route', () => {
     await waitFor(() =>
       expect(apiMock.peekYouTube).toHaveBeenCalledWith('https://www.youtube.com/watch?v=dQw4w9WgXcQ', expect.any(AbortSignal)),
     );
-    expect(await screen.findByText('Video detectado')).toBeInTheDocument();
+    expect(await screen.findByText('Detected video')).toBeInTheDocument();
     expect(screen.getByText('Direct Video')).toBeInTheDocument();
     expect(apiMock.searchCatalog).not.toHaveBeenCalled();
   });

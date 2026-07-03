@@ -1,6 +1,7 @@
 import { createSignal } from 'solid-js';
 import type { Track } from '../types/music';
 import { artistKey } from './artistRoute';
+import { t as tr } from './i18n';
 
 export type SortMode = 'recent' | 'az' | 'fav';
 
@@ -42,7 +43,7 @@ export interface ArtistEntry {
 export function buildArtists(tracks: Track[]): ArtistEntry[] {
   const map = new Map<string, ArtistEntry>();
   for (const t of tracks) {
-    const name = (t.artist || t.album_artist || 'Desconocido').trim();
+    const name = (t.artist || t.album_artist || tr('libraryView.unknownArtist')).trim();
     const key = artistKey(name);
     const e = map.get(key);
     if (e) e.count++;
@@ -61,7 +62,7 @@ export interface AlbumEntry {
 export function buildAlbums(tracks: Track[]): AlbumEntry[] {
   const map = new Map<string, AlbumEntry>();
   for (const t of tracks) {
-    const name = (t.album || 'Sin álbum').trim();
+    const name = (t.album || tr('libraryView.noAlbum')).trim();
     const key = name.toLowerCase();
     const e = map.get(key);
     if (e) e.tracks.push(t);
