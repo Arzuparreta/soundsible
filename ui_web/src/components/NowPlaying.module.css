@@ -104,11 +104,12 @@
 .body {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: var(--space-xl);
-  padding: var(--space-lg) var(--gutter) calc(var(--space-2xl) + env(safe-area-inset-bottom, 0));
+  justify-content: space-between;
+  gap: clamp(14px, 2.6dvh, 24px);
+  padding: var(--space-sm) var(--gutter) calc(var(--space-md) + env(safe-area-inset-bottom, 0));
   max-width: 560px;
   width: 100%;
   margin: 0 auto;
@@ -123,20 +124,36 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  flex-shrink: 0;
 }
 
 .media {
   align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-height: 0;
   gap: var(--space-md);
 }
 
 .controlsPanel {
-  gap: var(--space-xl);
+  gap: clamp(12px, 2.2dvh, 20px);
+}
+
+.visualSlot {
+  position: relative;
+  width: min(100%, 360px, 42dvh);
+  max-width: 360px;
+  aspect-ratio: 1;
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 0;
+  margin: 0 auto;
 }
 
 .art {
-  width: min(100%, 360px);
-  max-width: 360px;
+  width: 100%;
+  height: 100%;
+  max-width: none;
   aspect-ratio: 1;
   flex-shrink: 0;
   margin: 0 auto;
@@ -315,10 +332,54 @@
 }
 
 .queue {
-  display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
   min-width: 0;
+  overflow-y: auto;
+  padding-right: var(--space-xs);
+  overscroll-behavior: contain;
+}
+
+.desktopQueue,
+.mobileQueue {
+  display: none;
+}
+
+.visualSlot[data-queue-open] .art {
+  display: none;
+}
+
+.visualSlot[data-queue-open] .mobileQueue {
+  display: flex;
+}
+
+.mobileQueue {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: var(--space-sm);
+  background: var(--bg-raised);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+}
+
+@media (max-width: 767px) {
+  .title {
+    display: -webkit-box;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    font-size: clamp(22px, 6vw, 30px);
+  }
+
+  .artist,
+  .artistLink {
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
 }
 
 /* Desktop uses the available width instead of stacking a phone-sized player
@@ -355,6 +416,11 @@
     overflow-y: auto;
   }
 
+  .visualSlot {
+    width: 100%;
+    max-width: 520px;
+  }
+
   .art {
     width: 100%;
     max-width: 520px;
@@ -385,11 +451,21 @@
 
   .queue {
     grid-area: queue;
+    display: flex;
     align-self: stretch;
     min-height: 0;
     overflow-y: auto;
     padding-right: var(--space-xs);
     overscroll-behavior: contain;
+  }
+
+  .desktopQueue {
+    display: flex;
+  }
+
+  .mobileQueue,
+  .mobileQueueToggle {
+    display: none;
   }
 }
 
@@ -408,8 +484,16 @@
 
 @media (max-width: 420px) {
   .body {
-    gap: var(--space-lg);
-    padding-top: var(--space-sm);
+    gap: clamp(10px, 2dvh, 16px);
+    padding-top: var(--space-xs);
+  }
+
+  .media {
+    gap: var(--space-sm);
+  }
+
+  .controlsPanel {
+    gap: clamp(10px, 1.8dvh, 16px);
   }
 
   .controls {
@@ -424,6 +508,7 @@
 .queueHead {
   position: relative;
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
@@ -471,6 +556,7 @@
 
 .qRow {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: var(--space-xs);
   padding: var(--space-2xs) var(--space-2xs) var(--space-2xs) 0;
