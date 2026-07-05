@@ -34,17 +34,19 @@ export function NowPlaying() {
   });
   let dragFrom: number | null = null;
   let bodyEl: HTMLDivElement | undefined;
+  let queueEl: HTMLDivElement | undefined;
   let sheetEl: HTMLDivElement | undefined;
   let headEl: HTMLElement | undefined;
   // Always (re)open at the top of the sheet.
   createEffect(() => {
     if (!nowPlayingOpen() || !bodyEl) return;
     bodyEl.scrollTop = 0;
+    if (queueEl) queueEl.scrollTop = 0;
   });
 
-  // Swipe-down-to-close. The body is scrollable because the queue lives below
-  // the player, so touch gestures need an explicit non-passive path: when the
-  // body is already at the top, a downward pan belongs to the sheet instead of
+  // Swipe-down-to-close. The queue is its own scroll container below the player,
+  // so touch gestures need an explicit non-passive path: when the active scroll
+  // area is already at the top, a downward pan belongs to the sheet instead of
   // the native scroll container.
   let swipeStartY = 0;
   let swipeActive = false;
@@ -71,7 +73,12 @@ export function NowPlaying() {
   const isRangeTarget = (target: EventTarget | null) =>
     target instanceof Element && !!target.closest('input[type="range"]');
 
-  const bodyAtTop = () => (bodyEl?.scrollTop ?? 0) <= 1;
+  const activeScrollAtTop = (target: EventTarget | null) => {
+    if (target instanceof Node && queueEl?.contains(target)) {
+      return queueEl.scrollTop <= 1;
+    }
+    return (bodyEl?.scrollTop ?? 0) <= 1;
+  };
 
   const canStartSheetSwipe = (target: EventTarget | null) => {
     if (!nowPlayingOpen() || isRangeTarget(target) || !(target instanceof Node)) {
@@ -81,7 +88,7 @@ export function NowPlaying() {
       return { allowed: true, onBody: false, bodyTop: true };
     }
     const onBody = !!bodyEl?.contains(target);
-    const atTop = bodyAtTop();
+    const atTop = activeScrollAtTop(target);
     return { allowed: onBody && atTop, onBody, bodyTop: atTop };
   };
 
@@ -326,7 +333,7 @@ export function NowPlaying() {
           </div>
 
           <Show when={state.playback.queue.length > 1}>
-            <div class={styles.queue}>
+            <div class={styles.queue} ref={queueEl}>
               <div class={styles.queueHead}>
                 <span class={styles.queuePill}>
                   <h2 class={styles.queueTitle}>{tr('nowPlaying.queue')}</h2>
