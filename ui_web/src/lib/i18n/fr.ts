@@ -432,6 +432,21 @@ export const fr: Dict = {
     no: 'Non',
     resume: 'Reprendre',
   },
+  discoverySections: {
+    moreLike: 'Plus comme {artist}',
+    coldStart: 'Commencez votre bibliothèque',
+    madeForLibrary: 'Pour votre bibliothèque',
+    rediscover: 'Redécouvrir',
+    reasonTasteArtist:
+      'Basé sur les artistes que vous écoutez, enregistrez, ajoutez aux favoris ou placez dans des listes.',
+    reasonRediscover:
+      "Titres de votre bibliothèque que vous n'avez pas écoutés depuis un moment.",
+    reasonPlaylist: 'Titres de votre liste.',
+    reasonColdStart:
+      'Ajoutez de la musique, importez des listes ou recherchez pour apprendre à Soundsible quoi recommander.',
+    reasonMadeForLibrary:
+      'Sélections locales à partir des favoris, listes et de la structure de votre bibliothèque.',
+  },
   searchPanel: {
     fallbackTitle: 'Vidéo YouTube',
     fallbackChannel: 'YouTube',

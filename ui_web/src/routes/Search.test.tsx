@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Search from './Search';
+import { setLocale } from '../lib/i18n';
 
 const apiMock = vi.hoisted(() => ({
   searchCatalog: vi.fn(),
@@ -55,6 +56,7 @@ vi.mock('../stores', () => ({
 
 describe('Search route', () => {
   beforeEach(() => {
+    setLocale('en');
     vi.useFakeTimers();
     discoverMock.items = [];
     discoverMock.sections = [];
@@ -78,6 +80,7 @@ describe('Search route', () => {
   });
 
   afterEach(() => {
+    setLocale('en');
     vi.useRealTimers();
     vi.clearAllMocks();
   });
@@ -99,6 +102,7 @@ describe('Search route', () => {
   });
 
   it('renders discovery rails as the empty search state', async () => {
+    setLocale('es');
     discoverMock.items = [
       {
         id: 'deezer:1',
@@ -109,11 +113,17 @@ describe('Search route', () => {
         action_state: { needs_resolution: true },
       },
     ];
-    discoverMock.sections = [{ id: 'trending', title: 'Descubrir ahora', item_ids: ['deezer:1'] }];
+    discoverMock.sections = [{
+      id: 'because_you_listen_rosalia',
+      title: 'More like Rosalía',
+      reason: 'Based on artists you play, save, favourite, or collect in playlists.',
+      item_ids: ['deezer:1'],
+    }];
 
     render(() => <Search />);
 
-    expect(await screen.findByText('Descubrir ahora')).toBeInTheDocument();
+    expect(await screen.findByText('Más como Rosalía')).toBeInTheDocument();
+    expect(screen.getByText('Basado en los artistas que escuchas, guardas, marcas como favoritos o añades a listas.')).toBeInTheDocument();
     expect(screen.getByText('New Track')).toBeInTheDocument();
     expect(discoverMock.ensureDiscover).toHaveBeenCalled();
   });

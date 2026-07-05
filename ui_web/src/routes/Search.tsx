@@ -8,6 +8,7 @@ import { toast } from '../lib/toast';
 import { parseYouTubeInput } from '../lib/youtube';
 import { prefetchPreviews } from '../lib/prefetch';
 import { ensureDiscover, feedItems, feedSections, refreshDiscover, revalidating } from '../lib/discover';
+import { discoverySectionReason, discoverySectionTitle } from '../lib/discoveryText';
 import { t as tr } from '../lib/i18n';
 import SearchResultRow from '../components/SearchResultRow';
 import type { CatalogItem, CatalogSaveResponse, SearchResult, Track } from '../types/music';
@@ -908,9 +909,9 @@ function StartPanel(props: {
             <section class={styles.rail}>
               <div class={styles.railHead}>
                 <div>
-                  <h2 class={styles.railTitle}>{section.title}</h2>
-                  <Show when={section.reason}>
-                    <p class={styles.railReason}>{section.reason}</p>
+                  <h2 class={styles.railTitle}>{discoverySectionTitle(section)}</h2>
+                  <Show when={discoverySectionReason(section)}>
+                    {(reason) => <p class={styles.railReason}>{reason()}</p>}
                   </Show>
                 </div>
               </div>

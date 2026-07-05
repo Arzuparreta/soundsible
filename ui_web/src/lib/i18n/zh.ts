@@ -417,6 +417,17 @@ export const zh: Dict = {
     no: '否',
     resume: '继续',
   },
+  discoverySections: {
+    moreLike: '更多类似 {artist}',
+    coldStart: '开始建立资料库',
+    madeForLibrary: '为你的资料库推荐',
+    rediscover: '重新发现',
+    reasonTasteArtist: '根据你播放、保存、收藏或加入歌单的艺人推荐。',
+    reasonRediscover: '你的资料库中有一段时间没播放的曲目。',
+    reasonPlaylist: '来自你的歌单的曲目。',
+    reasonColdStart: '添加音乐、导入歌单或搜索内容，让 Soundsible 学会推荐。',
+    reasonMadeForLibrary: '基于收藏、歌单和资料库结构的本地优先推荐。',
+  },
   searchPanel: {
     fallbackTitle: 'YouTube 视频',
     fallbackChannel: 'YouTube',

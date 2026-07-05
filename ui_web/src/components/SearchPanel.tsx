@@ -6,6 +6,7 @@ import { coverUrl } from '../lib/media';
 import { toast } from '../lib/toast';
 import { parseYouTubeInput } from '../lib/youtube';
 import { ensureDiscover, feedItems, feedSections, revalidating } from '../lib/discover';
+import { discoverySectionTitle } from '../lib/discoveryText';
 import { libraryTrackFor, queueIndexOf, resultToTrack } from '../lib/queueDiscovery';
 import { prefetchPreviews } from '../lib/prefetch';
 import { openTrackMenu } from './trackActions';
@@ -480,7 +481,7 @@ export function SearchPanel() {
               <For each={feedSections().slice(0, 3)}>
                 {(section) => (
                   <section class={styles.section}>
-                    <h3 class={styles.sectionTitle}>{section.title}</h3>
+                    <h3 class={styles.sectionTitle}>{discoverySectionTitle(section)}</h3>
                     <For each={discoverySectionItems(section)}>
                       {(item) => {
                         const key = () => `d:${discoveryKey(item)}`;

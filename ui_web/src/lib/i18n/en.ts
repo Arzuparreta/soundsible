@@ -421,6 +421,20 @@ export const en = {
     no: 'No',
     resume: 'Resume',
   },
+  discoverySections: {
+    moreLike: 'More like {artist}',
+    coldStart: 'Start your library',
+    madeForLibrary: 'Made for Your Library',
+    rediscover: 'Rediscover',
+    reasonTasteArtist:
+      'Based on artists you play, save, favourite, or collect in playlists.',
+    reasonRediscover: "Tracks in your library you haven't played in a while.",
+    reasonPlaylist: 'Tracks from your playlist.',
+    reasonColdStart:
+      'Add music, import playlists, or search to teach Soundsible what to recommend.',
+    reasonMadeForLibrary:
+      'Local-first picks from favourites, playlists, and library structure.',
+  },
   searchPanel: {
     fallbackTitle: 'YouTube video',
     fallbackChannel: 'YouTube',

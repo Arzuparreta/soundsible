@@ -55,6 +55,7 @@ vi.mock('./MetadataEditor', () => ({ openMetadataEditor: vi.fn() }));
 vi.mock('./DeviceSheet', () => ({ openPlayOnDevice: vi.fn() }));
 
 import { SearchPanel } from './SearchPanel';
+import { setLocale } from '../lib/i18n';
 
 async function typeQuery(value: string) {
   vi.useFakeTimers();
@@ -65,6 +66,7 @@ async function typeQuery(value: string) {
 
 describe('SearchPanel', () => {
   beforeEach(() => {
+    setLocale('en');
     storeMock.state.playback.queue = [];
     storeMock.state.playback.currentTrack = null;
     discoverMock.items = [];
@@ -77,18 +79,20 @@ describe('SearchPanel', () => {
   });
 
   afterEach(() => {
+    setLocale('en');
     vi.clearAllMocks();
   });
 
   it('shows discovery rails as the empty state', async () => {
+    setLocale('es');
     discoverMock.items = [
       { id: 'd1', title: 'Fresh Track', artist: 'New Artist', source: 'deezer_chart', deezer_id: '1' },
     ];
-    discoverMock.sections = [{ id: 's1', title: 'Descubrir ahora', item_ids: ['d1'] }];
+    discoverMock.sections = [{ id: 'because_you_listen_rosalia', title: 'More like Rosalía', item_ids: ['d1'] }];
 
     render(() => <SearchPanel />);
 
-    expect(await screen.findByText('Descubrir ahora')).toBeInTheDocument();
+    expect(await screen.findByText('Más como Rosalía')).toBeInTheDocument();
     expect(screen.getByText('Fresh Track')).toBeInTheDocument();
     expect(discoverMock.ensureDiscover).toHaveBeenCalled();
   });
