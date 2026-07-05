@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { state, actions, nowPlayingOpen, setNowPlayingOpen } from '../stores';
 import { coverUrl } from '../lib/media';
@@ -32,16 +32,30 @@ export function NowPlaying() {
     const c = t();
     return !!c && isPodcastTrack(c);
   });
+  const [mobileQueueOpen, setMobileQueueOpen] = createSignal(false);
   let dragFrom: number | null = null;
   let bodyEl: HTMLDivElement | undefined;
-  let queueEl: HTMLDivElement | undefined;
+  let desktopQueueEl: HTMLDivElement | undefined;
+  let mobileQueueEl: HTMLDivElement | undefined;
   let sheetEl: HTMLDivElement | undefined;
   let headEl: HTMLElement | undefined;
   // Always (re)open at the top of the sheet.
   createEffect(() => {
-    if (!nowPlayingOpen() || !bodyEl) return;
-    bodyEl.scrollTop = 0;
-    if (queueEl) queueEl.scrollTop = 0;
+    if (!nowPlayingOpen()) {
+      setMobileQueueOpen(false);
+      return;
+    }
+    if (bodyEl) bodyEl.scrollTop = 0;
+    if (desktopQueueEl) desktopQueueEl.scrollTop = 0;
+    if (mobileQueueEl) mobileQueueEl.scrollTop = 0;
+  });
+
+  createEffect(() => {
+    if (state.playback.queue.length <= 1) setMobileQueueOpen(false);
+  });
+
+  createEffect(() => {
+    if (mobileQueueOpen() && mobileQueueEl) mobileQueueEl.scrollTop = 0;
   });
 
   // Swipe-down-to-close. The queue is its own scroll container below the player,
@@ -74,8 +88,11 @@ export function NowPlaying() {
     target instanceof Element && !!target.closest('input[type="range"]');
 
   const activeScrollAtTop = (target: EventTarget | null) => {
-    if (target instanceof Node && queueEl?.contains(target)) {
-      return queueEl.scrollTop <= 1;
+    if (target instanceof Node && mobileQueueEl?.contains(target)) {
+      return mobileQueueEl.scrollTop <= 1;
+    }
+    if (target instanceof Node && desktopQueueEl?.contains(target)) {
+      return desktopQueueEl.scrollTop <= 1;
     }
     return (bodyEl?.scrollTop ?? 0) <= 1;
   };
@@ -286,6 +303,76 @@ export function NowPlaying() {
       : { background: 'var(--bg-raised)' };
   };
 
+  const QueueList = (props: { className: string; setRef: (el: HTMLDivElement) => void }) => (
+    <div class={`${styles.queue} ${props.className}`} ref={props.setRef}>
+      <div class={styles.queueHead}>
+        <span class={styles.queuePill}>
+          <h2 class={styles.queueTitle}>{tr('nowPlaying.queue')}</h2>
+          <svg
+            class={styles.queueChevron}
+            viewBox="0 0 24 24"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </span>
+        <button class={styles.queueClear} type="button" onClick={() => actions.clearQueue()}>
+          {tr('nowPlaying.clearQueue')}
+        </button>
+      </div>
+      <For each={state.playback.queue}>
+        {(qt, i) => (
+          <div
+            classList={{ [styles.qRow]: true, [styles.qActive]: i() === state.playback.index }}
+            draggable={true}
+            onDragStart={(e) => {
+              dragFrom = i();
+              if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (dragFrom != null && dragFrom !== i()) actions.moveInQueue(dragFrom, i());
+              dragFrom = null;
+            }}
+          >
+            <span class={styles.qHandle} aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" />
+                <circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" />
+                <circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" />
+              </svg>
+            </span>
+            <button class={styles.qPlay} type="button" onClick={() => actions.jumpTo(i())}>
+              <span class={styles.qIndex}>{i() + 1}</span>
+              <span class={styles.qMeta}>
+                <span class={styles.qTitle}>{qt.title}</span>
+                <span class={styles.qArtist}>{qt.artist}</span>
+              </span>
+            </button>
+            <button
+              class={styles.qRemove}
+              type="button"
+              aria-label={tr('nowPlaying.removeFromQueue')}
+              onClick={() => actions.removeFromQueue(i())}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </For>
+    </div>
+  );
+
   return (
     <div
       ref={sheetEl}
@@ -321,7 +408,12 @@ export function NowPlaying() {
         <div class={styles.main} data-panel-side={panelSide()}>
         <div class={styles.body} ref={bodyEl}>
           <div class={styles.media}>
-            <div class={styles.art} style={artBg()} />
+            <div class={styles.visualSlot} data-queue-open={mobileQueueOpen() ? '' : undefined}>
+              <div class={styles.art} style={artBg()} />
+              <Show when={state.playback.queue.length > 1 && mobileQueueOpen()}>
+                <QueueList className={styles.mobileQueue} setRef={(el) => { mobileQueueEl = el; }} />
+              </Show>
+            </div>
             <div class={styles.info}>
               <h1 class={styles.title}>{t()!.title}</h1>
               <Show when={artistLinkable()} fallback={<p class={styles.artist}>{t()!.artist}</p>}>
@@ -333,73 +425,7 @@ export function NowPlaying() {
           </div>
 
           <Show when={state.playback.queue.length > 1}>
-            <div class={styles.queue} ref={queueEl}>
-              <div class={styles.queueHead}>
-                <span class={styles.queuePill}>
-                  <h2 class={styles.queueTitle}>{tr('nowPlaying.queue')}</h2>
-                  <svg
-                    class={styles.queueChevron}
-                    viewBox="0 0 24 24"
-                    width="14"
-                    height="14"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.5"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </span>
-                <button class={styles.queueClear} type="button" onClick={() => actions.clearQueue()}>
-                  {tr('nowPlaying.clearQueue')}
-                </button>
-              </div>
-              <For each={state.playback.queue}>
-                {(qt, i) => (
-                  <div
-                    classList={{ [styles.qRow]: true, [styles.qActive]: i() === state.playback.index }}
-                    draggable={true}
-                    onDragStart={(e) => {
-                      dragFrom = i();
-                      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-                    }}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      if (dragFrom != null && dragFrom !== i()) actions.moveInQueue(dragFrom, i());
-                      dragFrom = null;
-                    }}
-                  >
-                    <span class={styles.qHandle} aria-hidden="true">
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                        <circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" />
-                        <circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" />
-                        <circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" />
-                      </svg>
-                    </span>
-                    <button class={styles.qPlay} type="button" onClick={() => actions.jumpTo(i())}>
-                      <span class={styles.qIndex}>{i() + 1}</span>
-                      <span class={styles.qMeta}>
-                        <span class={styles.qTitle}>{qt.title}</span>
-                        <span class={styles.qArtist}>{qt.artist}</span>
-                      </span>
-                    </button>
-                    <button
-                      class={styles.qRemove}
-                      type="button"
-                      aria-label={tr('nowPlaying.removeFromQueue')}
-                      onClick={() => actions.removeFromQueue(i())}
-                    >
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                        <path d="M6 6l12 12M18 6L6 18" />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-              </For>
-            </div>
+            <QueueList className={styles.desktopQueue} setRef={(el) => { desktopQueueEl = el; }} />
           </Show>
 
           <div class={styles.controlsPanel}>
@@ -476,6 +502,24 @@ export function NowPlaying() {
             </div>
 
             <div class={styles.actionsBar}>
+            <Show when={state.playback.queue.length > 1}>
+              <button
+                classList={{
+                  [styles.actBtn]: true,
+                  [styles.mobileQueueToggle]: true,
+                  [styles.actOn]: mobileQueueOpen(),
+                }}
+                type="button"
+                aria-label={tr('nowPlaying.queue')}
+                aria-pressed={mobileQueueOpen()}
+                onClick={() => setMobileQueueOpen((open) => !open)}
+              >
+                <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                  <path d="M4 7h11M4 12h11M4 17h7M18 14v6M21 17h-6" />
+                </svg>
+              </button>
+            </Show>
+
             <Show when={!isPodcast()}>
               <button
                 class={styles.actBtn}
