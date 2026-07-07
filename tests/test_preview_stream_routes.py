@@ -207,3 +207,18 @@ def test_preview_prefetch_rejects_non_list_body(tmp_path, monkeypatch):
     response = _make_app().test_client().post("/api/preview/prefetch", json={"video_ids": "abc"})
 
     assert response.status_code == 400
+
+
+def test_warm_preview_stream_cache_fills_ttl_entry():
+    """Catalog/discovery resolve warms the in-process preview URL cache so the
+    next /api/preview/stream/<id> request cannot pay the yt-dlp resolution."""
+    assert playback_routes._preview_stream_cache.get(VID) is None
+    playback_routes.warm_preview_stream_cache(VID, "https://rr.googlevideo.com/warmed")
+    entry = playback_routes._preview_stream_cache.get(VID)
+    assert entry is not None
+    assert entry["url"] == "https://rr.googlevideo.com/warmed"
+    assert entry["expires_at"] > 0
+    try:
+        playback_routes._preview_stream_cache.pop(VID, None)
+    finally:
+        pass

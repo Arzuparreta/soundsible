@@ -79,6 +79,23 @@ def _get_preview_stream_url_cached(api, video_id: str) -> str:
     return url
 
 
+def warm_preview_stream_cache(video_id: str, url: str, ttl_sec: int = PREVIEW_STREAM_CACHE_TTL_SEC) -> None:
+    """Warm the in-process preview URL cache from another route.
+
+    Catalog/discovery resolve knows the best video_id before the user clicks the
+    preview, and during that resolve it can resolve the googlevideo URL itself
+    (the same `extract_info` already runs there). Pre-filling this cache here
+    eliminates the second yt-dlp call that the upcoming `/api/preview/stream/<id>`
+    request would otherwise perform. Pure internal optimization — no new state,
+    no client contract change, no extra cache layer.
+    """
+    if not video_id or not isinstance(url, str) or not url:
+        return
+    now = time.time()
+    with _preview_stream_cache_lock:
+        _preview_stream_cache[video_id] = {"url": url, "expires_at": now + ttl_sec}
+
+
 def _get_api():
     from shared.api import (
         get_core,

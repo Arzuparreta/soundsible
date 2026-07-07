@@ -12,6 +12,7 @@ from shared.database import DatabaseManager
 from shared.hardening import rate_limit
 from shared.resolution_confidence import best_candidate, classify_confidence
 from shared.text_utils import sanitize_cli_message
+from shared.url_utils import validate_youtube_video_id
 
 logger = logging.getLogger(__name__)
 
@@ -552,6 +553,24 @@ def _resolve_candidates(artist: str, title: str, duration_s: int | None = None) 
             "candidates": ranked,
         },
     )
+
+    # Warm the preview stream URL cache so the upcoming
+    # `/api/preview/stream/<id>` request hit the in-process cache and skips
+    # the second yt-dlp resolution that the user's click would otherwise pay.
+    # This pre-resolution happens here (during the explicit resolve round-trip
+    # the user already tolerates); it does *not* add new state — it fills the
+    # same TTL cache the playback route already uses.
+    best_id = best.get("id")
+    if best_id and validate_youtube_video_id(str(best_id)):
+        try:
+            stream_url = dl.downloader.get_stream_url(str(best_id))
+            if stream_url:
+                from shared.api.routes.playback import warm_preview_stream_cache
+
+                warm_preview_stream_cache(str(best_id), stream_url)
+        except Exception as warm_exc:
+            logger.debug("Catalog resolve: warm stream URL cache for %s failed: %s", best_id, warm_exc)
+
     return {**best, "confidence": score, "confidence_reason": reason}, ranked
 
 

@@ -2,8 +2,18 @@ from pathlib import Path
 import sys
 from unittest.mock import MagicMock
 
+# These deps are required by the production code path under test, but not by
+# this specific module's assertions. If they are installed in the test
+# environment they take precedence; otherwise fall back to a MagicMock stub so
+# CI without them can still run search/preview tests. We deliberately avoid
+# stubbing *over* an already-loaded real module so unrelated tests that
+# import mutagen (e.g., player.library → setup_tool.audio) keep working.
 for _module in ("yt_dlp", "mutagen", "mutagen.id3", "mutagen.mp3", "mutagen.flac"):
-    if _module not in sys.modules:
+    if _module in sys.modules:
+        continue
+    try:
+        __import__(_module)
+    except Exception:
         sys.modules[_module] = MagicMock()
 
 from odst_tool import youtube_downloader as yd
@@ -129,6 +139,162 @@ def test_audio_selector_never_falls_back_to_unrestricted_best_video():
         "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/worst[acodec!=none]"
     )
     assert "/best/" not in yd.YDL_FORMAT_AUDIO
+
+
+def test_audio_selector_preview_tier_prefers_low_bitrate_audio_first():
+    """The preview selector must lead with abr-banded audio so the engine
+    moves the fewest bytes possible on a preview click, while still
+    containing the full fallback chain so any video resolves."""
+    preview = yd.YDL_FORMAT_AUDIO_PREVIEW
+    parts = [p for p in preview.split("/") if p]
+    assert parts[0].startswith("bestaudio[ext=m4a][abr<=130]")
+    assert parts[1].startswith("bestaudio[ext=webm][abr<=170]")
+    # The fallback chain must still include every selector used by the
+    # download-tier YDL_FORMAT_AUDIO so a video never fails to resolve.
+    for required in [
+        "worstaudio[ext=m4a]",
+        "worstaudio[ext=webm]",
+        "worst[acodec!=none]",
+        "bestaudio[ext=m4a]",
+        "bestaudio[ext=webm]",
+        "bestaudio",
+    ]:
+        assert required in preview
+    assert parts[-1] == "worst[acodec!=none]"
+    # And never degrade to a stream that bundles video.
+    assert "/best/" not in preview
+
+
+def test_get_stream_url_returns_direct_url_from_extract_info_in_process(monkeypatch, tmp_path):
+    """Cold-path in-process resolution: extract_info() returns a dict with a
+    'url' field, and get_stream_url returns it without spawning a subprocess."""
+    captured_opts = {}
+
+    class _YDL:
+        def __init__(self, opts):
+            self.opts = opts
+            captured_opts.update(opts)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def extract_info(self, url, download=False):
+            assert url == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            assert download is False
+            assert self.opts["format"] == yd.YDL_FORMAT_AUDIO_PREVIEW
+            return {
+                "id": "dQw4w9WgXcQ",
+                "title": "Never Gonna Give You Up",
+                "url": "https://rr.googlevideo.com/preview/audio",
+            }
+
+    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _YDL)
+    monkeypatch.delenv("SOUNDSIBLE_YT_PROXY", raising=False)
+
+    downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
+
+    url = downloader.get_stream_url("dQw4w9WgXcQ")
+
+    assert url == "https://rr.googlevideo.com/preview/audio"
+    # Noplaylist + quiet + no_warnings must be present so the extractor stays
+    # focused on a single video and silent.
+    assert captured_opts.get("noplaylist") is True
+    assert captured_opts.get("quiet") is True
+    assert captured_opts.get("no_warnings") is True
+
+
+def test_get_stream_url_reads_url_from_requested_formats_when_top_level_missing(monkeypatch, tmp_path):
+    """When the chosen URL lives under `requested_formats` (typical when yt-dlp
+    separates muxed streams), get_stream_url walks it instead of returning None."""
+
+    class _YDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def extract_info(self, url, download=False):
+            return {
+                "id": "dQw4w9WgXcQ",
+                "requested_formats": [
+                    {"format_id": "140", "url": "https://rr.googlevideo.com/aac"},
+                ],
+            }
+
+    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _YDL)
+    monkeypatch.delenv("SOUNDSIBLE_YT_PROXY", raising=False)
+
+    downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
+    assert downloader.get_stream_url("dQw4w9WgXcQ") == "https://rr.googlevideo.com/aac"
+
+
+def test_get_stream_url_returns_none_for_format_not_available(monkeypatch, tmp_path):
+    """A 'Requested format is not available' error should be swallowed as a
+    soft failure (None), not propagated through the __ERROR__ sentinel."""
+
+    class _RaisingYDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def extract_info(self, url, download=False):
+            raise Exception("Requested format is not available for this video")
+
+    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _RaisingYDL)
+    monkeypatch.delenv("SOUNDSIBLE_YT_PROXY", raising=False)
+
+    downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
+    assert downloader.get_stream_url("dQw4w9WgXcQ") is None
+
+
+def test_get_stream_url_rejects_empty_or_none_video_id(tmp_path):
+    downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
+    assert downloader.get_stream_url("") is None
+    assert downloader.get_stream_url(None) is None  # type: ignore[arg-type]
+
+
+def test_get_stream_url_uses_proxy_first_when_set(monkeypatch, tmp_path):
+    """With SOUNDSIBLE_YT_PROXY set the first attempt must spawn with proxy
+    in opts and the subsequent ipv4 default must not be reached."""
+    seen = []
+
+    class _YDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def extract_info(self, url, download=False):
+            seen.append(self.opts.get("proxy"))
+            return {
+                "id": "dQw4w9WgXcQ",
+                "url": f"https://rr.googlevideo.com/proxy-hit/{len(seen)}",
+            }
+
+    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _YDL)
+    monkeypatch.setenv("SOUNDSIBLE_YT_PROXY", "http://residential.invalid:8080")
+
+    downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
+    url = downloader.get_stream_url("dQw4w9WgXcQ")
+
+    assert url == "https://rr.googlevideo.com/proxy-hit/1"
+    assert seen == ["http://residential.invalid:8080"]  # stopped at attempt 1
 
 
 def test_cookie_fallback_only_handles_authentication_and_format_failures():
