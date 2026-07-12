@@ -157,7 +157,7 @@ def test_feed_returns_cache_hits_immediately(monkeypatch):
     assert res.status_code == 200
     assert len(body["ready"]) == 1
     assert body["ready"][0]["seed_track_id"] == "t1"
-    assert body["ready"][0]["recs"][0]["id"] == "rec11111111"
+    assert body["ready"][0]["recs"][0]["id"] == "rec1111111"
     assert body["pending"] == []
     # No expansion scheduled, no socketio emit.
     mock_dl.downloader.get_related_videos.assert_not_called()
@@ -214,7 +214,7 @@ def test_feed_schedules_async_expansion_for_cache_miss(monkeypatch):
     emit_args = fake_sio.emit.call_args
     assert emit_args.args[0] == "discover_seed_ready"
     assert emit_args.args[1]["seed_track_id"] == "t1"
-    assert emit_args.args[1]["recs"][0]["id"] == "rel11111111"
+    assert emit_args.args[1]["recs"][0]["id"] == "rel1111111"
 
 
 def test_feed_inflight_dedup_does_not_double_extract(monkeypatch):

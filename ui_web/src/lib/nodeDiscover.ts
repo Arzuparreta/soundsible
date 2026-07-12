@@ -27,7 +27,7 @@ import { state } from '../stores';
 import { isPodcastTrack } from './track';
 import { prefetchPreviews } from './prefetch';
 import { setDiscoverSeedHandler } from './socket';
-import type { SearchResult, Track } from '../types/music';
+import type { SearchResult } from '../types/music';
 
 export interface NodeRec extends SearchResult {
   /** Library track this recommendation branched from. */
@@ -361,6 +361,7 @@ function startRebuild(): Promise<void> {
 export function ensureNodeFeed(): void {
   hydrate();
   if (nodeFeed().length === 0 || !feedFresh()) {
+    if (inFlight) return;
     inFlight = startRebuild().finally(() => { inFlight = null; });
   }
 }
@@ -368,5 +369,6 @@ export function ensureNodeFeed(): void {
 /** Explicit re-roll: new seeds, new feed (still coalesced while in flight). */
 export function refreshNodeFeed(): void {
   hydrate();
+  if (inFlight) return;
   inFlight = startRebuild().finally(() => { inFlight = null; });
 }
