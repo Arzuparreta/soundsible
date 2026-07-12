@@ -1,24 +1,13 @@
 import { createSignal } from 'solid-js';
 import { request } from './api';
-import type { DiscoveryFeedItem, DiscoveryFeedSection, DiscoveryMusicFeed } from './api';
 import type { PodcastSearchResult } from '../types/podcast';
 
-export interface DiscoverMusicItem {
-  id: string;
-  track_id: string;
-  title: string;
-  artist: string;
-  album?: string;
-  cover?: string;
-  duration?: number;
-}
-
-export interface DiscoverSection {
-  id: string;
-  title: string;
-  reason?: string;
-  items: DiscoverMusicItem[];
-}
+/**
+ * Lightweight discovery-adjacent data: the user's recently saved tracks and
+ * the top-podcasts rail. Music recommendations themselves are produced
+ * client-side by the node engine (`nodeDiscover.ts`) — the old server feed of
+ * fixed "More like X" rails is intentionally gone.
+ */
 
 export interface RecentlySavedItem {
   track_id: string;
@@ -29,20 +18,14 @@ export interface RecentlySavedItem {
   cover?: string;
 }
 
-const [musicSections, setMusicSections] = createSignal<DiscoverSection[]>([]);
 const [recentSaved, setRecentSaved] = createSignal<RecentlySavedItem[]>([]);
 const [topPodcasts, setTopPodcasts] = createSignal<PodcastSearchResult[]>([]);
-const [feedItems, setFeedItems] = createSignal<DiscoveryFeedItem[]>([]);
-const [feedSections, setFeedSections] = createSignal<DiscoveryFeedSection[]>([]);
 const [revalidating, setRevalidating] = createSignal(false);
 
-export { musicSections, recentSaved, topPodcasts, feedItems, feedSections, revalidating };
+export { recentSaved, topPodcasts, revalidating };
 
 const TTL_MS = 60_000;
 const KEY = {
-  feedItems: 'discover:v3:feed:items',
-  feedSections: 'discover:v3:feed:sections',
-  music: 'discover:v3:music',
   recent: 'discover:v3:recent',
   podcasts: 'discover:v3:podcasts',
   ts: 'discover:v3:ts',
@@ -69,53 +52,10 @@ let hydrated = false;
 function hydrate(): void {
   if (hydrated) return;
   hydrated = true;
-  const m = readCache<DiscoverSection[]>(KEY.music);
   const r = readCache<RecentlySavedItem[]>(KEY.recent);
   const p = readCache<PodcastSearchResult[]>(KEY.podcasts);
-  const fi = readCache<DiscoveryFeedItem[]>(KEY.feedItems);
-  const fs = readCache<DiscoveryFeedSection[]>(KEY.feedSections);
-  if (m) setMusicSections(m);
   if (r) setRecentSaved(r);
   if (p) setTopPodcasts(p);
-  if (fi) setFeedItems(fi);
-  if (fs) setFeedSections(fs);
-}
-
-interface RawRecItem {
-  id?: string;
-  track_id?: string;
-  title?: string;
-  artist?: string;
-  album?: string;
-  cover?: string;
-  duration?: number;
-}
-interface RawRecs {
-  items?: RawRecItem[];
-  sections?: { id?: string; title?: string; reason?: string; item_ids?: string[] }[];
-}
-
-function normalizeRecs(data: RawRecs): DiscoverSection[] {
-  const byId = new Map<string, DiscoverMusicItem>();
-  for (const it of data.items ?? []) {
-    if (!it.id || !it.track_id) continue;
-    byId.set(it.id, {
-      id: it.id,
-      track_id: it.track_id,
-      title: it.title ?? '',
-      artist: it.artist ?? '',
-      album: it.album,
-      cover: it.cover,
-      duration: it.duration,
-    });
-  }
-  const sections: DiscoverSection[] = [];
-  for (const s of data.sections ?? []) {
-    const items = (s.item_ids ?? []).map((id) => byId.get(id)).filter((x): x is DiscoverMusicItem => !!x);
-    if (items.length === 0) continue;
-    sections.push({ id: s.id ?? '', title: s.title ?? '', reason: s.reason, items });
-  }
-  return sections;
 }
 
 interface RawSaved {
@@ -141,23 +81,6 @@ async function revalidate(): Promise<void> {
   if (inFlight) return inFlight;
   setRevalidating(true);
   inFlight = (async () => {
-    const feed = request<DiscoveryMusicFeed>('/api/discovery/music/feed?limit=36', { timeoutMs: 12000 })
-      .then((d) => {
-        const items = Array.isArray(d.items) ? d.items : [];
-        const sections = Array.isArray(d.sections) ? d.sections : [];
-        setFeedItems(items);
-        setFeedSections(sections);
-        writeCache(KEY.feedItems, items);
-        writeCache(KEY.feedSections, sections);
-      })
-      .catch(() => {});
-    const music = request<RawRecs>('/api/discovery/music/recommendations?limit=24', { timeoutMs: 15000 })
-      .then((d) => {
-        const secs = normalizeRecs(d);
-        setMusicSections(secs);
-        writeCache(KEY.music, secs);
-      })
-      .catch(() => {});
     const recent = request<{ items?: RawSaved[] }>('/api/discovery/music/recently-saved?limit=12')
       .then((d) => {
         const items: RecentlySavedItem[] = (d.items ?? [])
@@ -190,7 +113,7 @@ async function revalidate(): Promise<void> {
         writeCache(KEY.podcasts, rows);
       })
       .catch(() => {});
-    await Promise.all([feed, music, recent, podcasts]);
+    await Promise.all([recent, podcasts]);
     writeCache(KEY.ts, Date.now());
   })().finally(() => {
     inFlight = null;
@@ -203,7 +126,7 @@ export function ensureDiscover(): void {
   hydrate();
   const ts = readCache<number>(KEY.ts) ?? 0;
   const stale = Date.now() - ts > TTL_MS;
-  const empty = feedSections().length === 0 && musicSections().length === 0 && recentSaved().length === 0 && topPodcasts().length === 0;
+  const empty = recentSaved().length === 0 && topPodcasts().length === 0;
   if (stale || empty) void revalidate();
 }
 

@@ -1,14 +1,13 @@
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, onCleanup, onMount, untrack, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { api, type DiscoveryFeedItem, type DiscoveryFeedSection, type DiscoverySaveCandidate } from '../lib/api';
+import { api } from '../lib/api';
 import { actions, state } from '../stores';
 import { coverUrl } from '../lib/media';
 import { artistPath } from '../lib/artistRoute';
 import { toast } from '../lib/toast';
 import { parseYouTubeInput } from '../lib/youtube';
 import { prefetchPreviews } from '../lib/prefetch';
-import { ensureDiscover, feedItems, feedSections, refreshDiscover, revalidating } from '../lib/discover';
-import { discoverySectionReason, discoverySectionTitle } from '../lib/discoveryText';
+import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed, type NodeRec } from '../lib/nodeDiscover';
 import { t as tr } from '../lib/i18n';
 import SearchResultRow from '../components/SearchResultRow';
 import type { CatalogItem, CatalogSaveResponse, SearchResult, Track } from '../types/music';
@@ -88,23 +87,6 @@ function candidateVideoId(candidate: Record<string, unknown>): string {
   return String(candidate.video_id || candidate.id || '');
 }
 
-function discoveryItemKey(item: DiscoveryFeedItem): string {
-  return item.id || item.track_id || `${item.artist}:${item.title}`;
-}
-
-function discoveryItemCover(item: DiscoveryFeedItem): string | undefined {
-  if (item.action_state?.in_library && item.track_id) return coverUrl(item.track_id);
-  return item.cover;
-}
-
-function isDiscoveryExternal(item: DiscoveryFeedItem): boolean {
-  return !!item.deezer_id || !!item.action_state?.needs_resolution || item.source?.startsWith('deezer') === true;
-}
-
-function discoveryCandidateId(candidate: DiscoverySaveCandidate): string {
-  return candidate.video_id || candidate.id || '';
-}
-
 export default function Search() {
   const navigate = useNavigate();
   const [domain, setDomain] = createSignal<SearchDomain>('music');
@@ -125,10 +107,7 @@ export default function Search() {
   const [saved, setSaved] = createSignal<Set<string>>(new Set());
   const [youtubeEnqueued, setYoutubeEnqueued] = createSignal<Set<string>>(new Set());
   const [review, setReview] = createSignal<{ item: CatalogItem; response: CatalogSaveResponse } | null>(null);
-  const [resolvedDiscovery, setResolvedDiscovery] = createSignal<Map<string, SearchResult>>(new Map());
-  const [discoverySaving, setDiscoverySaving] = createSignal<Set<string>>(new Set());
-  const [discoverySaved, setDiscoverySaved] = createSignal<Set<string>>(new Set());
-  const [discoveryReview, setDiscoveryReview] = createSignal<{ item: DiscoveryFeedItem; candidates: DiscoverySaveCandidate[] } | null>(null);
+  const [nodeSaving, setNodeSaving] = createSignal<Set<string>>(new Set());
 
   let aborter: AbortController | undefined;
   let suggestAborter: AbortController | undefined;
@@ -165,9 +144,7 @@ export default function Search() {
       .filter((item, idx, arr) => arr.findIndex((x) => x.id === item.id) === idx)
       .slice(0, 12),
   );
-  const discoveryById = createMemo(() => new Map(feedItems().map((item) => [item.id, item] as const)));
-
-  onMount(() => ensureDiscover());
+  onMount(() => ensureNodeFeed());
 
   const runCatalog = (query: string, nextTab = tab()) => {
     query = query.trim();
@@ -513,108 +490,47 @@ export default function Search() {
     }
   };
 
-  const discoverySectionItems = (section: DiscoveryFeedSection): DiscoveryFeedItem[] =>
-    (section.item_ids ?? []).map((id) => discoveryById().get(id)).filter((item): item is DiscoveryFeedItem => !!item);
+  // ── Node feed: play instantly (the video id is already resolved) and save
+  // through the standard download pipeline. ──
+  const nodeTrack = (rec: NodeRec): Track => ({
+    id: rec.id,
+    title: rec.title,
+    artist: rec.channel ?? '',
+    duration: rec.duration,
+    cover: rec.thumbnail,
+    source: 'preview',
+  });
 
-  const discoveryTrack = (item: DiscoveryFeedItem): Track | null => {
-    if (!item.track_id) return null;
-    const found = state.library.find((t) => t.id === item.track_id);
-    return (
-      found ?? {
-        id: item.track_id,
-        title: item.title,
-        artist: item.artist,
-        album: item.album,
-        duration: item.duration,
-        cover: item.cover,
-      }
-    );
+  const playNodeRec = (rec: NodeRec) => {
+    actions.playTrack(nodeTrack(rec));
+    void api
+      .emitDiscoveryEvent('music_search_played', {
+        title: rec.title,
+        artist: rec.channel,
+        source: 'node_discover',
+        youtube_id: rec.id,
+      })
+      .catch(() => {});
   };
 
-  const resolveDiscoveryExternal = async (item: DiscoveryFeedItem): Promise<SearchResult | null> => {
-    const key = discoveryItemKey(item);
-    const cached = resolvedDiscovery().get(key);
-    if (cached) return cached;
-    const found = (await api.searchYouTube(`${item.title} ${item.artist}`.trim()))[0];
-    if (!found) return null;
-    setResolvedDiscovery((current) => {
-      const next = new Map(current);
-      next.set(key, found);
-      return next;
-    });
-    return found;
-  };
-
-  const previewDiscoveryExternal = async (item: DiscoveryFeedItem) => {
-    const h = toast.loading(tr('search.looking'));
+  const saveNodeRec = async (rec: NodeRec) => {
+    setNodeSaving((current) => new Set(current).add(rec.id));
     try {
-      const resolved = await resolveDiscoveryExternal(item);
-      if (!resolved) throw new Error('not-found');
-      actions.playTrack({
-        id: resolved.id,
-        title: item.title || resolved.title,
-        artist: item.artist || resolved.channel || '',
-        album: item.album,
-        duration: item.duration || resolved.duration,
-        source: 'preview',
-        cover: item.cover || resolved.thumbnail,
-      });
-      void api.emitDiscoveryEvent('music_search_played', {
-        title: item.title,
-        artist: item.artist,
-        source: item.source,
-        deezer_id: item.deezer_id,
-        youtube_id: resolved.id,
-      }).catch(() => {});
-      h.update('success', tr('search.playingPreview'));
-    } catch {
-      h.update('error', tr('search.noPreview'));
-    }
-  };
-
-  const playDiscoveryItem = (item: DiscoveryFeedItem) => {
-    if (isDiscoveryExternal(item)) {
-      void previewDiscoveryExternal(item);
-      return;
-    }
-    const track = discoveryTrack(item);
-    if (track) actions.playTrack(track);
-  };
-
-  const saveDiscoveryExternal = async (item: DiscoveryFeedItem, confirmVideoId?: string) => {
-    const key = discoveryItemKey(item);
-    setDiscoverySaving((current) => new Set(current).add(key));
-    try {
-      const res = await api.saveDiscoveryTrack({
-        artist: item.artist,
-        title: item.title,
-        duration: item.duration,
-        deezer_id: item.deezer_id,
-        cover: item.cover,
-        confirm_video_id: confirmVideoId,
-      });
-      if (res.status === 'queued') {
-        setDiscoveryReview(null);
-        setDiscoverySaved((current) => new Set(current).add(key));
-        void refreshDiscover();
-        toast.success(tr('search.addedToDownloads'));
-        return;
-      }
-      if (res.status === 'needs_review' && res.candidates?.length) {
-        setDiscoveryReview({ item, candidates: res.candidates });
-        return;
-      }
-      toast.error(tr('search.notSaved'));
-    } catch {
-      toast.error(tr('search.notSaved'));
+      await actions.downloadTrack(nodeTrack(rec));
     } finally {
-      setDiscoverySaving((current) => {
+      setNodeSaving((current) => {
         const next = new Set(current);
-        next.delete(key);
+        next.delete(rec.id);
         return next;
       });
     }
   };
+
+  const nodeSaved = (rec: NodeRec) =>
+    state.library.some((t) => t.id === rec.id || t.youtube_id === rec.id) ||
+    state.downloads.queue.some(
+      (i) => i.video_id === rec.id && i.status !== 'failed' && i.status !== 'interrupted',
+    );
 
   onCleanup(() => {
     requestId += 1;
@@ -680,15 +596,15 @@ export default function Search() {
             <StartPanel
               recents={recents()}
               domain={domain()}
-              sections={feedSections()}
-              revalidating={revalidating()}
-              sectionItems={discoverySectionItems}
+              recs={nodeFeed()}
+              loading={nodeLoading()}
               onPick={commit}
               onFocusSearch={() => searchInput?.focus()}
-              onPlay={playDiscoveryItem}
-              onSave={(item) => void saveDiscoveryExternal(item)}
-              saving={(item) => discoverySaving().has(discoveryItemKey(item))}
-              saved={(item) => discoverySaved().has(discoveryItemKey(item)) || !!item.action_state?.in_library}
+              onRefresh={refreshNodeFeed}
+              onPlay={playNodeRec}
+              onSave={(rec) => void saveNodeRec(rec)}
+              saving={(rec) => nodeSaving().has(rec.id)}
+              saved={nodeSaved}
             />
           </Match>
           <Match when={domain() === 'youtube'}>
@@ -852,35 +768,6 @@ export default function Search() {
         )}
       </Show>
 
-      <Show when={discoveryReview()}>
-        {(r) => (
-          <div class={styles.modalBackdrop} onClick={() => setDiscoveryReview(null)}>
-            <div class={styles.modal} onClick={(e) => e.stopPropagation()}>
-              <div class={styles.modalHead}>
-                <h2>{tr('search.chooseVersion')}</h2>
-                <button class={styles.closeBtn} type="button" aria-label={tr('common.close')} onClick={() => setDiscoveryReview(null)}>
-                  x
-                </button>
-              </div>
-              <For each={r().candidates.slice(0, 5)}>
-                {(candidate) => (
-                  <button
-                    class={styles.candidate}
-                    type="button"
-                    onClick={() => {
-                      const id = discoveryCandidateId(candidate);
-                      if (id) void saveDiscoveryExternal(r().item, id);
-                    }}
-                  >
-                    <span class={styles.candidateTitle}>{candidate.title}</span>
-                    <span class={styles.candidateSub}>{candidate.channel}</span>
-                  </button>
-                )}
-              </For>
-            </div>
-          </div>
-        )}
-      </Show>
     </div>
   );
 }
@@ -888,49 +775,69 @@ export default function Search() {
 function StartPanel(props: {
   recents: string[];
   domain: SearchDomain;
-  sections: DiscoveryFeedSection[];
-  revalidating: boolean;
-  sectionItems: (section: DiscoveryFeedSection) => DiscoveryFeedItem[];
+  recs: NodeRec[];
+  loading: boolean;
   onPick: (value: string) => void;
   onFocusSearch: () => void;
-  onPlay: (item: DiscoveryFeedItem) => void;
-  onSave: (item: DiscoveryFeedItem) => void;
-  saving: (item: DiscoveryFeedItem) => boolean;
-  saved: (item: DiscoveryFeedItem) => boolean;
+  onRefresh: () => void;
+  onPlay: (rec: NodeRec) => void;
+  onSave: (rec: NodeRec) => void;
+  saving: (rec: NodeRec) => boolean;
+  saved: (rec: NodeRec) => boolean;
 }) {
   return (
     <div class={styles.start}>
       <Show
-        when={props.sections.length > 0}
-        fallback={props.revalidating ? <RailSkeletons /> : <SeedSearch onFocusSearch={props.onFocusSearch} />}
+        when={props.recs.length > 0}
+        fallback={props.loading ? <RailSkeletons /> : <SeedSearch onFocusSearch={props.onFocusSearch} />}
       >
-        <For each={props.sections}>
-          {(section) => (
-            <section class={styles.rail}>
-              <div class={styles.railHead}>
-                <div>
-                  <h2 class={styles.railTitle}>{discoverySectionTitle(section)}</h2>
-                  <Show when={discoverySectionReason(section)}>
-                    {(reason) => <p class={styles.railReason}>{reason()}</p>}
-                  </Show>
-                </div>
-              </div>
-              <div class={styles.railRow}>
-                <For each={props.sectionItems(section)}>
-                  {(item) => (
-                    <DiscoveryCard
-                      item={item}
-                      onPlay={() => props.onPlay(item)}
-                      onSave={isDiscoveryExternal(item) && !item.action_state?.in_library ? () => props.onSave(item) : undefined}
-                      saving={props.saving(item)}
-                      saved={props.saved(item)}
-                    />
-                  )}
-                </For>
-              </div>
-            </section>
-          )}
-        </For>
+        <section class={styles.rail}>
+          <div class={styles.railHead}>
+            <div>
+              <h2 class={styles.railTitle}>{tr('discoverNodes.title')}</h2>
+              <p class={styles.railReason}>{tr('discoverNodes.subtitle')}</p>
+            </div>
+            <button
+              class={styles.railRefresh}
+              type="button"
+              aria-label={tr('discoverNodes.refresh')}
+              title={tr('discoverNodes.refresh')}
+              disabled={props.loading}
+              onClick={props.onRefresh}
+            >
+              <svg
+                classList={{ [styles.spinning]: props.loading }}
+                viewBox="0 0 24 24"
+                width="17"
+                height="17"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M21 12a9 9 0 11-2.64-6.36M21 3v6h-6" />
+              </svg>
+            </button>
+          </div>
+          <div class={styles.discoverGrid}>
+            <For each={props.recs}>
+              {(rec) => (
+                <DiscoveryCard
+                  title={rec.title}
+                  sub={rec.channel ?? ''}
+                  cover={rec.thumbnail}
+                  seedKey={rec.id}
+                  onPlay={() => props.onPlay(rec)}
+                  onSave={props.saved(rec) ? undefined : () => props.onSave(rec)}
+                  saving={props.saving(rec)}
+                  saved={props.saved(rec)}
+                />
+              )}
+            </For>
+          </div>
+        </section>
       </Show>
 
       <Show when={props.recents.length > 0}>
@@ -965,23 +872,25 @@ function SeedSearch(props: { onFocusSearch: () => void }) {
 }
 
 function DiscoveryCard(props: {
-  item: DiscoveryFeedItem;
+  title: string;
+  sub: string;
+  cover?: string;
+  seedKey: string;
   onPlay: () => void;
   onSave?: () => void;
   saving: boolean;
   saved: boolean;
 }) {
   const bg = (): JSX.CSSProperties => {
-    const cover = discoveryItemCover(props.item);
-    const grad = gradientFor(discoveryItemKey(props.item));
-    return cover ? { background: `url("${cover}") center / cover no-repeat, ${grad}` } : { background: grad };
+    const grad = gradientFor(props.seedKey);
+    return props.cover ? { background: `url("${props.cover}") center / cover no-repeat, ${grad}` } : { background: grad };
   };
   return (
     <div class={styles.discoverCard}>
       <button class={styles.discoverCardBtn} type="button" onClick={props.onPlay}>
         <span class={styles.discoverCardCover} style={bg()} />
-        <span class={styles.discoverCardTitle}>{props.item.title}</span>
-        <span class={styles.discoverCardSub}>{props.item.artist}</span>
+        <span class={styles.discoverCardTitle}>{props.title}</span>
+        <span class={styles.discoverCardSub}>{props.sub}</span>
       </button>
       <Switch>
         <Match when={props.onSave && !props.saved}>
@@ -1000,7 +909,7 @@ function DiscoveryCard(props: {
             </Show>
           </button>
         </Match>
-        <Match when={props.saved && isDiscoveryExternal(props.item)}>
+        <Match when={props.saved}>
           <span class={styles.discoverSavedBadge} aria-label={tr('search.ariaSaved')}>
             <CheckIcon />
           </span>

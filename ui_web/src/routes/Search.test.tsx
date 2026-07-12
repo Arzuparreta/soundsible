@@ -16,22 +16,20 @@ const apiMock = vi.hoisted(() => ({
   saveDiscoveryTrack: vi.fn(),
   prefetchPreviews: vi.fn(() => Promise.resolve({ status: 'queued' })),
 }));
-const discoverMock = vi.hoisted(() => ({
-  ensureDiscover: vi.fn(),
-  refreshDiscover: vi.fn(),
+const nodeMock = vi.hoisted(() => ({
+  ensureNodeFeed: vi.fn(),
+  refreshNodeFeed: vi.fn(),
   items: [] as Array<Record<string, unknown>>,
-  sections: [] as Array<Record<string, unknown>>,
-  revalidating: false,
+  loading: false,
 }));
 
 vi.mock('@solidjs/router', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('../lib/api', () => ({ api: apiMock }));
-vi.mock('../lib/discover', () => ({
-  ensureDiscover: discoverMock.ensureDiscover,
-  refreshDiscover: discoverMock.refreshDiscover,
-  feedItems: () => discoverMock.items,
-  feedSections: () => discoverMock.sections,
-  revalidating: () => discoverMock.revalidating,
+vi.mock('../lib/nodeDiscover', () => ({
+  ensureNodeFeed: nodeMock.ensureNodeFeed,
+  refreshNodeFeed: nodeMock.refreshNodeFeed,
+  nodeFeed: () => nodeMock.items,
+  nodeLoading: () => nodeMock.loading,
 }));
 vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
 vi.mock('../lib/toast', () => ({
@@ -58,9 +56,8 @@ describe('Search route', () => {
   beforeEach(() => {
     setLocale('en');
     vi.useFakeTimers();
-    discoverMock.items = [];
-    discoverMock.sections = [];
-    discoverMock.revalidating = false;
+    nodeMock.items = [];
+    nodeMock.loading = false;
     apiMock.searchCatalog.mockResolvedValue({ items: [], sections: [] });
     apiMock.suggestCatalog.mockResolvedValue([]);
     apiMock.searchYouTube.mockResolvedValue([
@@ -101,31 +98,25 @@ describe('Search route', () => {
     expect(screen.getByText('Oliver Heldens Live Set')).toBeInTheDocument();
   });
 
-  it('renders discovery rails as the empty search state', async () => {
+  it('renders the node feed as the empty search state', async () => {
     setLocale('es');
-    discoverMock.items = [
+    nodeMock.items = [
       {
-        id: 'deezer:1',
+        id: 'rec00000001',
         title: 'New Track',
-        artist: 'New Artist',
-        source: 'deezer_chart',
-        deezer_id: '1',
-        action_state: { needs_resolution: true },
+        channel: 'New Artist',
+        seedId: 'lib1',
+        seedTitle: 'Seed Song',
+        seedArtist: 'Seed Artist',
       },
     ];
-    discoverMock.sections = [{
-      id: 'because_you_listen_rosalia',
-      title: 'More like Rosalía',
-      reason: 'Based on artists you play, save, favourite, or collect in playlists.',
-      item_ids: ['deezer:1'],
-    }];
 
     render(() => <Search />);
 
-    expect(await screen.findByText('Más como Rosalía')).toBeInTheDocument();
-    expect(screen.getByText('Basado en los artistas que escuchas, guardas, marcas como favoritos o añades a listas.')).toBeInTheDocument();
+    expect(await screen.findByText('Para ti')).toBeInTheDocument();
+    expect(screen.getByText('Novedades que parten de tu biblioteca — lo último que añadiste pesa más.')).toBeInTheDocument();
     expect(screen.getByText('New Track')).toBeInTheDocument();
-    expect(discoverMock.ensureDiscover).toHaveBeenCalled();
+    expect(nodeMock.ensureNodeFeed).toHaveBeenCalled();
   });
 
   it('treats pasted YouTube URLs as exact YouTube items', async () => {

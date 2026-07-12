@@ -18,8 +18,13 @@ const toastMock = vi.hoisted(() => ({
 }));
 const discoverMock = vi.hoisted(() => ({
   ensureDiscover: vi.fn(),
+  saved: [] as Array<Record<string, unknown>>,
+}));
+const nodeMock = vi.hoisted(() => ({
+  ensureNodeFeed: vi.fn(),
+  refreshNodeFeed: vi.fn(),
   items: [] as Array<Record<string, unknown>>,
-  sections: [] as Array<Record<string, unknown>>,
+  loading: false,
 }));
 const storeMock = vi.hoisted(() => {
   const libTrack: Track = { id: 'lib1', title: 'Local Song', artist: 'Local Artist' };
@@ -27,13 +32,21 @@ const storeMock = vi.hoisted(() => {
     libTrack,
     state: {
       library: [libTrack] as Track[],
-      playback: { queue: [] as Track[], index: -1, currentTrack: null as Track | null },
+      favorites: [] as string[],
+      playback: {
+        queue: [] as Track[],
+        index: -1,
+        currentTrack: null as Track | null,
+        radioMode: false,
+        radioLoading: false,
+      },
       downloads: { queue: [] },
     },
     actions: {
       playNow: vi.fn(),
       enqueue: vi.fn(),
       playTrack: vi.fn(),
+      startRadio: vi.fn(),
     },
   };
 });
@@ -44,9 +57,13 @@ vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
 vi.mock('../lib/toast', () => ({ toast: toastMock }));
 vi.mock('../lib/discover', () => ({
   ensureDiscover: discoverMock.ensureDiscover,
-  feedItems: () => discoverMock.items,
-  feedSections: () => discoverMock.sections,
-  revalidating: () => false,
+  recentSaved: () => discoverMock.saved,
+}));
+vi.mock('../lib/nodeDiscover', () => ({
+  ensureNodeFeed: nodeMock.ensureNodeFeed,
+  refreshNodeFeed: nodeMock.refreshNodeFeed,
+  nodeFeed: () => nodeMock.items,
+  nodeLoading: () => nodeMock.loading,
 }));
 vi.mock('../stores', () => ({ state: storeMock.state, actions: storeMock.actions }));
 vi.mock('./trackActions', () => ({ openTrackMenu: vi.fn() }));
@@ -54,7 +71,7 @@ vi.mock('./PlaylistPicker', () => ({ openPlaylistPicker: vi.fn() }));
 vi.mock('./MetadataEditor', () => ({ openMetadataEditor: vi.fn() }));
 vi.mock('./DeviceSheet', () => ({ openPlayOnDevice: vi.fn() }));
 
-import { SearchPanel } from './SearchPanel';
+import { SearchPanel, selectPanelTab } from './SearchPanel';
 import { setLocale } from '../lib/i18n';
 
 async function typeQuery(value: string) {
@@ -67,10 +84,12 @@ async function typeQuery(value: string) {
 describe('SearchPanel', () => {
   beforeEach(() => {
     setLocale('en');
+    selectPanelTab('search');
     storeMock.state.playback.queue = [];
     storeMock.state.playback.currentTrack = null;
-    discoverMock.items = [];
-    discoverMock.sections = [];
+    discoverMock.saved = [];
+    nodeMock.items = [];
+    nodeMock.loading = false;
     apiMock.searchCatalog.mockResolvedValue({ items: [], sections: [] });
     apiMock.searchYouTube.mockResolvedValue([]);
     apiMock.peekYouTube.mockResolvedValue(null);
@@ -83,18 +102,31 @@ describe('SearchPanel', () => {
     vi.clearAllMocks();
   });
 
-  it('shows discovery rails as the empty state', async () => {
+  it('shows the node feed in the Discover tab', async () => {
     setLocale('es');
-    discoverMock.items = [
-      { id: 'd1', title: 'Fresh Track', artist: 'New Artist', source: 'deezer_chart', deezer_id: '1' },
+    nodeMock.items = [
+      { id: 'rec00000001', title: 'Fresh Track', channel: 'New Artist', seedId: 'lib1', seedTitle: 'Local Song', seedArtist: 'Local Artist' },
     ];
-    discoverMock.sections = [{ id: 'because_you_listen_rosalia', title: 'More like Rosalía', item_ids: ['d1'] }];
 
     render(() => <SearchPanel />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Descubrir' }));
 
-    expect(await screen.findByText('Más como Rosalía')).toBeInTheDocument();
+    expect(await screen.findByText('Para ti')).toBeInTheDocument();
     expect(screen.getByText('Fresh Track')).toBeInTheDocument();
-    expect(discoverMock.ensureDiscover).toHaveBeenCalled();
+    expect(screen.getByText('Radio de esta canción')).toBeInTheDocument();
+    expect(nodeMock.ensureNodeFeed).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('Fresh Track'));
+    expect(storeMock.actions.playNow).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'rec00000001', source: 'preview' }),
+    );
+  });
+
+  it('starts radio from a library pick via Surprise me', () => {
+    render(() => <SearchPanel />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Discover' }));
+    fireEvent.click(screen.getByText('Surprise me'));
+    expect(storeMock.actions.startRadio).toHaveBeenCalledWith(storeMock.libTrack);
   });
 
   it('plays a library result via playNow (queue-preserving), never playTrack', async () => {

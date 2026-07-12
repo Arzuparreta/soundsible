@@ -11,7 +11,7 @@ import { artistPath } from '../lib/artistRoute';
 import { isPodcastTrack } from '../lib/track';
 import { t as tr } from '../lib/i18n';
 import { SearchPanel, panelOpen, panelSide, togglePanel } from './SearchPanel';
-import { RadioBadge } from './RadioBadge';
+import { RadioBadge, onStopRadio } from './RadioBadge';
 import styles from './NowPlaying.module.css';
 
 function fmt(s: number): string {
@@ -32,6 +32,10 @@ export function NowPlaying() {
   const isPodcast = createMemo(() => {
     const c = t();
     return !!c && isPodcastTrack(c);
+  });
+  const isLibrary = createMemo(() => {
+    const c = t();
+    return !!c && c.source !== 'preview';
   });
   const [mobileQueueOpen, setMobileQueueOpen] = createSignal(false);
   let dragFrom: number | null = null;
@@ -304,30 +308,29 @@ export function NowPlaying() {
       : { background: 'var(--bg-raised)' };
   };
 
+  const seekPct = () => {
+    const d = state.playback.duration;
+    return d > 0 ? Math.min(100, (state.playback.currentTime / d) * 100) : 0;
+  };
+  const volPct = () => Math.round((state.playback.muted ? 0 : state.playback.volume) * 100);
+
   const QueueList = (props: { className: string; setRef: (el: HTMLDivElement) => void }) => (
-    <div class={`${styles.queue} ${props.className}`} ref={props.setRef}>
+    <div class={`${styles.queue} ${props.className}`}>
       <div class={styles.queueHead}>
-        <span class={styles.queuePill}>
+        <span class={styles.queueHeading}>
           <h2 class={styles.queueTitle}>{tr('nowPlaying.queue')}</h2>
-          <svg
-            class={styles.queueChevron}
-            viewBox="0 0 24 24"
-            width="14"
-            height="14"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M6 9l6 6 6-6" />
-          </svg>
+          <span class={styles.queueCount}>{state.playback.queue.length}</span>
         </span>
-        <button class={styles.queueClear} type="button" onClick={() => actions.clearQueue()}>
+        <button
+          class={styles.queueClear}
+          type="button"
+          disabled={state.playback.queue.length <= 1}
+          onClick={() => actions.clearQueue()}
+        >
           {tr('nowPlaying.clearQueue')}
         </button>
       </div>
+      <div class={styles.queueRows} ref={props.setRef}>
       <For each={state.playback.queue}>
         {(qt, i) => (
           <div
@@ -352,7 +355,13 @@ export function NowPlaying() {
               </svg>
             </span>
             <button class={styles.qPlay} type="button" onClick={() => actions.jumpTo(i())}>
-              <span class={styles.qIndex}>{i() + 1}</span>
+              <span class={styles.qIndex}>
+                <Show when={i() === state.playback.index} fallback={<>{i() + 1}</>}>
+                  <span class={styles.eq} data-paused={state.playback.isPlaying ? undefined : ''} aria-hidden="true">
+                    <i /><i /><i />
+                  </span>
+                </Show>
+              </span>
               <span class={styles.qMeta}>
                 <span class={styles.qTitle}>{qt.title}</span>
                 <span class={styles.qArtist}>{qt.artist}</span>
@@ -371,6 +380,7 @@ export function NowPlaying() {
           </div>
         )}
       </For>
+      </div>
     </div>
   );
 
@@ -428,10 +438,6 @@ export function NowPlaying() {
             </div>
           </div>
 
-          <Show when={state.playback.queue.length > 1}>
-            <QueueList className={styles.desktopQueue} setRef={(el) => { desktopQueueEl = el; }} />
-          </Show>
-
           <div class={styles.controlsPanel}>
             <div class={styles.seekWrap}>
             <input
@@ -441,6 +447,7 @@ export function NowPlaying() {
               max={Math.max(1, Math.floor(state.playback.duration))}
               value={Math.floor(state.playback.currentTime)}
               step={1}
+              style={{ '--fill': `${seekPct()}%` }}
               aria-label={tr('nowPlaying.seekLabel')}
               onInput={(e) => actions.seek(Number(e.currentTarget.value))}
             />
@@ -530,6 +537,7 @@ export function NowPlaying() {
                 classList={{ [styles.actOn]: isFav() }}
                 type="button"
                 aria-label={isFav() ? tr('nowPlaying.removeFav') : tr('nowPlaying.addFav')}
+                title={isFav() ? tr('nowPlaying.removeFav') : tr('nowPlaying.addFav')}
                 aria-pressed={isFav()}
                 onClick={() => actions.toggleFavourite(t()!.id)}
               >
@@ -544,10 +552,78 @@ export function NowPlaying() {
                 class={styles.actBtn}
                 type="button"
                 aria-label={tr('nowPlaying.saveToLibrary')}
+                title={tr('nowPlaying.saveToLibrary')}
                 onClick={() => void actions.downloadTrack(t()!)}
               >
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                </svg>
+              </button>
+            </Show>
+
+            {/* Desktop-only: the most useful ⋯-menu actions, inlined into the
+                free horizontal space under the transport. The ⋯ menu keeps the
+                long tail (delete, cover, …). */}
+            <Show when={!isPodcast()}>
+              <button
+                classList={{
+                  [styles.actBtn]: true,
+                  [styles.deskAct]: true,
+                  [styles.actOn]: state.playback.radioMode,
+                  [styles.actPulse]: state.playback.radioLoading,
+                }}
+                type="button"
+                aria-label={tr('trackActions.startRadio')}
+                title={tr('trackActions.startRadio')}
+                aria-pressed={state.playback.radioMode}
+                onClick={() => (state.playback.radioMode ? void onStopRadio() : void actions.startRadio(t()!))}
+              >
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M4 12a8 8 0 018-8M4 12a8 8 0 008 8M8 12a4 4 0 014-4" />
+                  <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+            </Show>
+
+            <Show when={!isPodcast()}>
+              <button
+                classList={{ [styles.actBtn]: true, [styles.deskAct]: true }}
+                type="button"
+                aria-label={tr('trackActions.addToPlaylist')}
+                title={tr('trackActions.addToPlaylist')}
+                onClick={() => openPlaylistPicker(t()!)}
+              >
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3 6h13M3 12h9M3 18h7M17 12v7M21 14l-4-2v7" />
+                </svg>
+              </button>
+            </Show>
+
+            <Show when={isLibrary() && !isPodcast()}>
+              <button
+                classList={{ [styles.actBtn]: true, [styles.deskAct]: true }}
+                type="button"
+                aria-label={tr('trackActions.editData')}
+                title={tr('trackActions.editData')}
+                onClick={() => openMetadataEditor(t()!)}
+              >
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" />
+                </svg>
+              </button>
+            </Show>
+
+            <Show when={isLibrary()}>
+              <button
+                classList={{ [styles.actBtn]: true, [styles.deskAct]: true }}
+                type="button"
+                aria-label={tr('trackActions.playOnDevice')}
+                title={tr('trackActions.playOnDevice')}
+                onClick={() => openPlayOnDevice(t()!)}
+              >
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <rect x="2" y="4" width="20" height="13" rx="2" />
+                  <path d="M8 21h8M12 17v4" />
                 </svg>
               </button>
             </Show>
@@ -577,13 +653,14 @@ export function NowPlaying() {
                 type="range"
                 min={0}
                 max={100}
-                value={Math.round((state.playback.muted ? 0 : state.playback.volume) * 100)}
+                value={volPct()}
+                style={{ '--fill': `${volPct()}%` }}
                 aria-label={tr('omnibar.volume')}
                 onInput={(e) => actions.setVolume(Number(e.currentTarget.value) / 100)}
               />
             </div>
 
-            <button class={styles.actBtn} type="button" aria-label={tr('nowPlaying.share')} onClick={() => void shareTrack(t()!)}>
+            <button class={styles.actBtn} type="button" aria-label={tr('nowPlaying.share')} title={tr('nowPlaying.share')} onClick={() => void shareTrack(t()!)}>
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M4 12v8h16v-8M12 16V3M8 7l4-4 4 4" />
               </svg>
@@ -593,6 +670,7 @@ export function NowPlaying() {
               class={styles.actBtn}
               type="button"
               aria-label={tr('common.more')}
+              title={tr('common.more')}
               onClick={() =>
                 openTrackMenu(t()!, {
                   navigate,
@@ -611,6 +689,11 @@ export function NowPlaying() {
             </div>
           </div>
         </div>
+
+        {/* Desktop queue column: always mounted while something plays so the
+            three-panel layout stays stable (no columns popping in and out as
+            the queue grows or shrinks). Hidden below 768px by CSS. */}
+        <QueueList className={styles.desktopQueue} setRef={(el) => { desktopQueueEl = el; }} />
 
         <SearchPanel />
         </div>
