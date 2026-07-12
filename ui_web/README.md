@@ -1,21 +1,24 @@
 # Soundsible web UI
 
-This branch contains one player frontend: the SolidJS + TypeScript application in
-`src/`. It is responsive and is used by browsers, mobile/PWA clients, and the
-desktop shell. The legacy vanilla HTML/CSS/JS player deliberately does not exist
-on this branch.
+The Station player: a responsive **SolidJS + TypeScript** app in `src/`, built with Vite. It is the only web frontend — used by browsers, mobile/PWA clients, and the Tauri desktop shell. Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`.
+
+The production bundle (`dist/`) is not committed. Build it before serving through the engine, or use the Vite dev server while developing.
+
+## Prerequisites
+
+- **Node.js 20+** and **npm**
+- Station Engine listening on **port 5005** (start via `python3 run.py` or the launcher)
 
 ## Development
 
-Start the Python engine on port 5005, then run:
+Start the Python engine, then:
 
 ```bash
-npm install
+npm install    # first time; use npm ci in CI or clean installs
 npm run dev
 ```
 
-Vite serves the UI on `http://localhost:5173/player/` and proxies `/api` and
-`/socket.io` to `http://127.0.0.1:5005`.
+Vite serves the UI on `http://localhost:5173/player/` and proxies `/api` and `/socket.io` to `http://127.0.0.1:5005`.
 
 ## Verification
 
@@ -24,16 +27,21 @@ npm test
 npm run build
 ```
 
-`npm test` currently runs the TypeScript check. `npm run build` typechecks and
-creates the production bundle in `dist/`.
+`npm test` runs the TypeScript check and Vitest unit tests. `npm run build` typechecks and writes the production bundle to `dist/`.
 
 ## Running through the engine
 
-Build first, then start Soundsible normally. The API automatically serves
-`ui_web/dist/index.html` at both `/player/` and `/player/desktop/`. The desktop
-route renders the same responsive application and injects its owner token for
-protected engine calls.
+Build first, then start Soundsible normally:
 
-Set `SOUNDSIBLE_WEB_UI_DIST=1` to require the built UI explicitly. Source
-`index.html` is a Vite entry point and is not intended to run directly through
-Flask without a build.
+```bash
+npm ci && npm run build
+```
+
+The API serves `ui_web/dist/index.html` at:
+
+| Route | Use |
+| --- | --- |
+| `/player/` | Browsers, phones, PWAs |
+| `/player/desktop/` | Same UI with owner-token bootstrap for the desktop shell |
+
+Set `SOUNDSIBLE_WEB_UI_DIST=1` to require the built bundle explicitly, or `0`/`false`/`no` to force the source tree (not useful for production — `index.html` is a Vite dev entry pointing at `/src/main.tsx`).

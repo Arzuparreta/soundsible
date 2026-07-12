@@ -70,7 +70,7 @@ Soundsible is a music app you run on your **own** machine. Browse, stream, and s
 
 ## Install
 
-Soundsible runs anywhere Python does. You need **Python 3.10+**, **git**, and **FFmpeg** — the steps below install all three.
+Soundsible runs anywhere Python does. From a git clone you need **Python 3.10+**, **git**, **FFmpeg**, and **Node.js 20+** (one-time build of the SolidJS player — the production bundle is not committed to the repo). **Desktop beta** installers bundle the player, so they skip the Node.js build step.
 
 ### 👉 Pick your OS — click to expand
 
@@ -80,20 +80,23 @@ Soundsible runs anywhere Python does. You need **Python 3.10+**, **git**, and **
 
 ```bash
 # 1. Install prerequisites (Debian / Ubuntu)
-sudo apt install -y git ffmpeg python3 python3-venv python3-pip
+sudo apt install -y git ffmpeg python3 python3-venv python3-pip nodejs npm
 
 # 2. Get Soundsible
 git clone https://github.com/Arzuparreta/soundsible.git
 cd soundsible
 
-# 3. Run it
+# 3. Build the web player (one-time)
+cd ui_web && npm ci && npm run build && cd ..
+
+# 4. Run it
 python3 run.py
 ```
 
 **Other distros** — swap step 1:
 
-- **Arch:** `sudo pacman -S git ffmpeg python python-pip`
-- **Fedora:** `sudo dnf install git ffmpeg python3 python3-pip`
+- **Arch:** `sudo pacman -S git ffmpeg python python-pip nodejs npm`
+- **Fedora:** `sudo dnf install git ffmpeg python3 python3-pip nodejs npm`
 
 </details>
 
@@ -105,13 +108,16 @@ Requires [Homebrew](https://brew.sh).
 
 ```bash
 # 1. Install prerequisites
-brew install git ffmpeg python
+brew install git ffmpeg python node
 
 # 2. Get Soundsible
 git clone https://github.com/Arzuparreta/soundsible.git
 cd soundsible
 
-# 3. Run it
+# 3. Build the web player (one-time)
+cd ui_web && npm ci && npm run build && cd ..
+
+# 4. Run it
 python3 run.py
 ```
 
@@ -125,40 +131,49 @@ In **PowerShell**:
 
 ```powershell
 # 1. Install prerequisites
-winget install Git.Git Python.Python.3.12 Gyan.FFmpeg
+winget install Git.Git Python.Python.3.12 Gyan.FFmpeg OpenJS.NodeJS.LTS
 
 # 2. Close and reopen PowerShell so the new tools are on PATH, then:
 git clone https://github.com/Arzuparreta/soundsible.git
 cd soundsible
 
-# 3. Run it
+# 3. Build the web player (one-time)
+cd ui_web; npm ci; npm run build; cd ..
+
+# 4. Run it
 python run.py
 ```
 
-No `winget`? Install [Git](https://git-scm.com/download/win), [Python](https://www.python.org/downloads/) (tick *"Add to PATH"*), and [FFmpeg](https://ffmpeg.org/download.html) manually.
+No `winget`? Install [Git](https://git-scm.com/download/win), [Python](https://www.python.org/downloads/) (tick *"Add to PATH"*), [Node.js](https://nodejs.org/) (LTS), and [FFmpeg](https://ffmpeg.org/download.html) manually.
 
 </details>
 
 ### First run
 
-The first `run.py` builds its environment and opens a **setup wizard** in your browser — pick your music folder and storage, and you're set. After that:
+The first `python3 run.py` creates the project virtualenv, installs Python dependencies, and — if you have not configured storage yet — starts the **setup wizard** at **<http://localhost:5099/setup>** (no terminal menu yet). Complete setup in the browser, then click **Launch** on the launcher page to start the engine.
+
+On later runs you get a terminal menu. Start listening with:
 
 ```bash
 python3 run.py          # choose "Start Station Engine & Open Station"
 ```
 
-Then open **<http://localhost:5005/player/>** and start listening. Keep the terminal open while you play; closing it stops the engine.
+That starts the engine and opens **<http://localhost:5005/player/>**. Keep the terminal open while you play; closing it stops the engine.
 
-> **`new-ui` branch:** the player is one responsive SolidJS app. Its canonical
-> URL is **<http://localhost:5005/player/>** on both desktop and mobile;
-> **<http://localhost:5005/player/desktop/>** serves the same UI with the owner
-> bootstrap used by the desktop shell. There is no separate `app.html` or mobile
-> frontend. Build the branch once with `cd ui_web && npm ci && npm run build`
-> before starting the engine. For frontend development, run `npm run dev` in
-> `ui_web/` and open **<http://localhost:5173/player/>** while the engine runs on
-> port 5005.
+### Web player
 
-> 💡 Prefer a web control panel? Run `./venv/bin/python start_launcher.py`, open **<http://localhost:5099>**, and click **Launch Ecosystem**.
+The Station is one responsive **SolidJS** app served by the engine:
+
+| URL | Use |
+| --- | --- |
+| **<http://localhost:5005/player/>** | Browsers, phones, PWAs — the default player |
+| **<http://localhost:5005/player/desktop/>** | Same UI with owner-token bootstrap for the desktop shell |
+
+Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`.
+
+**Frontend development** — with the engine on port 5005, run `npm run dev` in `ui_web/` and open **<http://localhost:5173/player/>** (Vite proxies API and Socket.IO). See [ui_web/README.md](ui_web/README.md).
+
+> 💡 Prefer a browser control panel over the terminal menu? Run `./venv/bin/python start_launcher.py`, open **<http://localhost:5099>**, and click **Launch**. Setup-only: `python3 run.py --setup`.
 
 ### Listen everywhere
 
@@ -166,7 +181,7 @@ Then open **<http://localhost:5005/player/>** and start listening. Keep the term
 - **From anywhere** — reach your station over [Tailscale](https://tailscale.com/) at `http://<your-tailscale-ip>:5005/player/`.
 - **Servers, reverse proxies, security** — see the [Install & Deployment guide](docs/INSTALL.md).
 
-> 🖥️ **Desktop app (beta)** — a one-click app with no terminal is in the works. Track its status in [docs/DESKTOP_BETA.md](docs/DESKTOP_BETA.md).
+> 🖥️ **Desktop app (beta)** — a one-click Tauri app with no terminal is available for early testers. Install from [GitHub Releases](https://github.com/Arzuparreta/soundsible/releases) (tag `desktop-v*`) or build locally — see [docs/DESKTOP_BETA.md](docs/DESKTOP_BETA.md).
 
 ---
 
@@ -204,10 +219,12 @@ Then open **<http://localhost:5005/player/>** and start listening. Keep the term
 
 ## Built with
 
-Soundsible stands on the shoulders of these projects. FFmpeg is system-installed; the rest come in via `pip`.
+Soundsible stands on the shoulders of these projects. FFmpeg is system-installed; Python deps come in via `pip`; the player is built with `npm` in `ui_web/`.
 
 | Project | License | Role |
 | ------------------------------------------------------------- | ------------------ | ----------------------------------------------------------- |
+| [SolidJS](https://www.solidjs.com/) + [Vite](https://vite.dev/) | MIT | Responsive Station web player (`ui_web/`) |
+| [Flask](https://flask.palletsprojects.com/) + [Socket.IO](https://socket.io/) | BSD / MIT | Station Engine API and real-time events |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Unlicense (PD) | YouTube / YouTube Music download & search |
 | [Deezer public API](https://developers.deezer.com/) | Public API | Discovery metadata only (no audio streamed from Deezer) |
 | [FFmpeg](https://ffmpeg.org/) | LGPL / GPL | Audio conversion & extraction |
