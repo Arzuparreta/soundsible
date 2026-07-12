@@ -25,7 +25,7 @@ export type PanelTab = 'search' | 'discover';
  * the layout comes back the way the user arranged it. */
 const [panelOpen, setPanelOpen] = createSignal(localStorage.getItem('np:panel') !== 'closed');
 const [panelSide, setPanelSide] = createSignal<PanelSide>(
-  localStorage.getItem('np:panelSide') === 'left' ? 'left' : 'right',
+  localStorage.getItem('np:panelSide') === 'right' ? 'right' : 'left',
 );
 export { panelOpen, panelSide };
 
