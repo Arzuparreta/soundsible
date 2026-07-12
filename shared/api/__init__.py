@@ -1298,6 +1298,22 @@ def start_api(
         except Exception:
             logger.debug("API: Downloader pump start skipped", exc_info=True)
 
+        # Note: Pre-warm the discover node feed's persistent related-mix cache
+        # for the top likely seeds (favourites + most-recent additions). This
+        # runs in the background so the user's first Discover open is instant.
+        # The related_mix_cache survives restarts (SQLite, 7-day TTL), so on a
+        # warm restart this is a no-op (all cache hits).
+        try:
+            from shared.api.routes.discovery import warm_discover_top_seeds
+            threading.Thread(
+                target=warm_discover_top_seeds,
+                name="discover-warm-startup",
+                daemon=True,
+            ).start()
+            logger.info("API: Discover cache warming scheduled (top seeds).")
+        except Exception:
+            logger.debug("API: Discover warming start skipped", exc_info=True)
+
     except Exception as e:
         logger.error("FATAL: Core initialization failed: %s", e)
         import traceback

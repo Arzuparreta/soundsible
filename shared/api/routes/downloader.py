@@ -126,7 +126,14 @@ _related_cache: dict[str, tuple[float, list]] = {}
 @downloader_bp.route("/api/downloader/youtube/related", methods=["GET"])
 @rate_limit("youtube_related", limit=30, window_sec=60)
 def youtube_related():
-    """Fetch related/mix videos for a seed video ID (YouTube Music Mix playlist)."""
+    """Fetch related/mix videos for a seed video ID (YouTube Music Mix playlist).
+
+    Reads from the persistent SQLite ``related_mix_cache`` (7-day TTL) first — a
+    hit is a sub-millisecond read that survives restarts and is shared across
+    sessions. Only on a miss does it pay the yt-dlp extraction and write the
+    result back to the persistent cache. The in-memory dict is kept only as a
+    per-request fast-path within a single process's hot loop.
+    """
     video_id = (request.args.get("id") or "").strip()
     if not video_id or len(video_id) != 11:
         return jsonify({"results": [], "error": "missing or invalid id"}), 400
@@ -134,13 +141,32 @@ def youtube_related():
     enrich = (request.args.get("enrich", "1") or "1").strip().lower() not in ("0", "false", "no", "off")
     now = time.time()
     cache_key = f"{video_id}:{limit}:{int(enrich)}"
+
+    # Note: Per-process hot loop (same call within a second → skip even SQLite).
     cached = _related_cache.get(cache_key)
     if cached and now - cached[0] < _RELATED_CACHE_TTL_SEC:
         return jsonify({"results": cached[1]})
+
+    from shared.database import DatabaseManager
+
+    db = DatabaseManager()
+    # Note: The persistent cache stores the full related-mix list (untrimmed by
+    # limit/enrich — those are presentation-time concerns). A hit here means the
+    # yt-dlp extraction that the original call paid is reused for every future
+    # request for this seed, from any session.
+    persisted = db.get_related_mix(video_id)
+    if persisted is not None:
+        trimmed = persisted[:limit]
+        _related_cache[cache_key] = (now, trimmed)
+        return jsonify({"results": trimmed})
+
     try:
         dl = _get_api()["get_downloader"](open_browser=False)
         results = dl.downloader.get_related_videos(video_id, max_results=limit, enrich=enrich)
         _related_cache[cache_key] = (now, results)
+        # Note: Persist the full-resolution list so future requests with a
+        # different limit/enrich still hit the cache.
+        db.set_related_mix(video_id, results)
         return jsonify({"results": results})
     except Exception as e:
         logger.warning("API: YouTube related error: %s", e)

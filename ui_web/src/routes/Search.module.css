@@ -140,6 +140,52 @@
   margin-bottom: var(--space-sm);
 }
 
+.railRefresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  color: var(--ink-secondary);
+  background: var(--bg-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+}
+.railRefresh:hover:not(:disabled) {
+  color: var(--ink-primary);
+  border-color: var(--hairline-strong);
+}
+.railRefresh:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.spinning {
+  animation: refreshSpin 0.8s linear infinite;
+}
+
+@keyframes refreshSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Node-feed grid: same cards as the old rails, laid out as a responsive
+   grid instead of per-section horizontal scrollers. */
+.discoverGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-md);
+  padding: var(--space-2xs) 0 var(--space-sm);
+}
+
+.discoverGrid .discoverCard {
+  width: auto;
+}
+
 .railTitle {
   margin: 0;
   color: var(--ink-primary);

@@ -439,6 +439,11 @@ export const en = {
     reasonMadeForLibrary:
       'Local-first picks from favourites, playlists, and library structure.',
   },
+  discoverNodes: {
+    title: 'For you',
+    subtitle: 'Fresh picks branching out from your library — your newest additions weigh more.',
+    refresh: 'New recommendations',
+  },
   searchPanel: {
     fallbackTitle: 'YouTube video',
     fallbackChannel: 'YouTube',
@@ -446,6 +451,16 @@ export const en = {
     inQueue: 'Already in queue',
     ariaSearch: 'Search music',
     panelTitle: 'Search',
+    tabSearch: 'Search',
+    tabDiscover: 'Discover',
+    radioTile: 'Song radio',
+    radioTileSub: 'A mix seeded by what’s playing',
+    surpriseTile: 'Surprise me',
+    surpriseTileSub: 'Radio from a random pick of yours',
+    similarSection: 'Similar to what’s playing',
+    recentSearches: 'Recent searches',
+    recentlySaved: 'Recently saved',
+    discoverHint: 'Play and save music to teach Soundsible what to recommend.',
     moveLeft: 'Move panel left',
     moveRight: 'Move panel right',
     moveTitle: 'Move panel',

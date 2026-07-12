@@ -1,6 +1,6 @@
 import { createStore } from 'solid-js/store';
 import { createSignal } from 'solid-js';
-import { createSocket, type AppSocket } from '../lib/socket';
+import { createSocket, type AppSocket, dispatchDiscoverSeed } from '../lib/socket';
 import { api, type DeviceRegistration, type RemotePlaybackState } from '../lib/api';
 import { audioEl, audioService } from '../lib/audio';
 import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers } from '../lib/media';
@@ -1096,6 +1096,7 @@ export function applyTheme(theme: Theme): void {
 }
 
 let socket: AppSocket | null = null;
+let _warmTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Single source of truth bootstrap: wires audio + engine events, Media Session,
  * and pulls the initial library. */
@@ -1157,8 +1158,17 @@ export function initStore(): void {
     void actions.loadDownloads(); // re-seed the queue after a (re)connect
   });
   socket.on('disconnect', () => setState('online', false));
-  socket.on('library_updated', () => void actions.syncLibrary());
+  socket.on('library_updated', () => {
+    void actions.syncLibrary();
+    // Note: Debounced discover cache warming — when the library changes (new
+    // saves, favourites, deletes) the top seeds may shift, so re-warm the
+    // persistent related-mix cache in the background. The server picks its own
+    // top seeds; this is fire-and-forget.
+    if (_warmTimer) clearTimeout(_warmTimer);
+    _warmTimer = setTimeout(() => { void api.warmDiscoverSeeds([]).catch(() => {}); }, 4000);
+  });
   socket.on('downloader_update', (data) => applyDownloadEvent((data ?? {}) as DownloadEvent));
+  socket.on('discover_seed_ready', (data) => dispatchDiscoverSeed(data as { request_id: string; seed_track_id: string; recs: unknown[] }));
 
   // ── Remote control: this device acts on commands from another device. ──
   socket.on('playback_stop_requested', () => {

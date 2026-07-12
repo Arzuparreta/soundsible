@@ -451,6 +451,11 @@ export const fr: Dict = {
     reasonMadeForLibrary:
       'Sélections locales à partir des favoris, listes et de la structure de votre bibliothèque.',
   },
+  discoverNodes: {
+    title: 'Pour vous',
+    subtitle: 'Des découvertes issues de votre bibliothèque — vos derniers ajouts pèsent plus.',
+    refresh: 'Nouvelles recommandations',
+  },
   searchPanel: {
     fallbackTitle: 'Vidéo YouTube',
     fallbackChannel: 'YouTube',
@@ -458,6 +463,16 @@ export const fr: Dict = {
     inQueue: 'Déjà dans la file',
     ariaSearch: 'Rechercher de la musique',
     panelTitle: 'Rechercher',
+    tabSearch: 'Rechercher',
+    tabDiscover: 'Découvrir',
+    radioTile: 'Radio de ce titre',
+    radioTileSub: 'Un mix inspiré de la lecture en cours',
+    surpriseTile: 'Surprends-moi',
+    surpriseTileSub: 'Radio depuis un de vos titres au hasard',
+    similarSection: 'Dans la même veine',
+    recentSearches: 'Recherches récentes',
+    recentlySaved: 'Enregistrés récemment',
+    discoverHint: 'Écoutez et enregistrez de la musique pour que Soundsible apprenne à vous recommander.',
     moveLeft: 'Déplacer le panneau à gauche',
     moveRight: 'Déplacer le panneau à droite',
     moveTitle: 'Déplacer le panneau',

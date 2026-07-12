@@ -497,6 +497,40 @@ export const api = {
     );
     return (data.results ?? []).map(normalizeResult).filter((r) => r.id);
   },
+  /** Node feed: resolve seeds server-side, return cache-hit recs immediately,
+   * and schedule async expansion for misses (streamed via `discover_seed_ready`
+   * socket event). The server owns the persistent related-mix cache and seed
+   * resolution — the client just picks seed track ids and interleaves. */
+  discoverFeed: async (seeds: string[], limit: number, signal?: AbortSignal): Promise<{
+    request_id: string;
+    ready: Array<{ seed_track_id: string; recs: SearchResult[] }>;
+    pending: string[];
+  }> => {
+    const data = await request<{
+      request_id: string;
+      ready: Array<{ seed_track_id: string; recs: RawResult[] }>;
+      pending: string[];
+    }>(
+      `/api/discover/feed?seeds=${encodeURIComponent(seeds.join(','))}&limit=${limit}`,
+      { signal, timeoutMs: 8000 },
+    );
+    return {
+      request_id: data.request_id ?? '',
+      ready: (data.ready ?? []).map((r) => ({
+        seed_track_id: r.seed_track_id,
+        recs: (r.recs ?? []).map(normalizeResult).filter((x) => x.id),
+      })),
+      pending: data.pending ?? [],
+    };
+  },
+  /** Pre-expand seeds into the persistent server cache so future Discover opens
+   * are instant. Fire-and-forget; called on library_updated. */
+  warmDiscoverSeeds: (seeds: string[]) =>
+    request<{ status?: string; warmed?: number }>('/api/discover/warm', {
+      method: 'POST',
+      body: { seeds },
+      timeoutMs: 5000,
+    }),
   /** Resolve a pasted YouTube URL/video id to display metadata without downloading. */
   peekYouTube: async (urlOrId: string, signal?: AbortSignal): Promise<SearchResult | null> => {
     const data = await request<{ peek?: RawResult | null }>(
