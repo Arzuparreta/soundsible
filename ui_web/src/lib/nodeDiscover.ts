@@ -1,28 +1,32 @@
 /**
- * Node-based discovery engine.
+ * Node-based discovery engine — server-backed edition.
  *
  * The user's library is a graph of nodes; discovery walks outward from it.
  * Each refresh weighted-samples a handful of *seed* tracks from the library —
  * gradually preferring the most recently added, boosting favourites, and
- * rotating away from recently used seeds — then expands every seed through
- * the same recommendation source the radio mode uses (`related` mixes), and
- * interleaves the results round-robin into one feed. Anything already in the
- * library (or duplicated across seeds) is filtered out, so the feed is always
- * *new* music that branches off what the user actually collects.
+ * rotating away from recently used seeds — then sends them to the server's
+ * `/api/discover/feed` endpoint, which resolves each seed to a video id and
+ * expands it through the same related-mix source the radio mode uses.
+ *
+ * The server returns cache-hit recs immediately and streams misses back via
+ * the `discover_seed_ready` socket event. The client interleaves everything
+ * round-robin into one feed, painting cache hits instantly and appending
+ * streamed results as they arrive — so the feed is never a blank 90s wait.
  *
  * Performance contract:
- * - At most SEED_COUNT `related` calls per rebuild, run CONCURRENCY at a time.
- * - Per-seed results are cached for REL_TTL_MS (they change slowly), and
- *   library-track → video-id resolutions are cached forever — so a typical
- *   rebuild after the first session is mostly cache hits.
- * - The assembled feed is persisted and rehydrated for instant paint; it only
- *   rebuilds when stale (FEED_TTL_MS) or on explicit refresh.
+ * - The client does zero yt-dlp calls. The server owns the persistent
+ *   related-mix cache (SQLite, 7-day TTL) and seed resolution.
+ * - The assembled feed is persisted in localStorage (short TTL) so tab
+ *   switches and navigations repaint instantly without re-requesting.
+ * - Pure logic (seedWeight / pickWeighted / interleave) is exported and
+ *   unit-tested independently of the server.
  */
 import { createSignal } from 'solid-js';
 import { api } from './api';
 import { state } from '../stores';
 import { isPodcastTrack } from './track';
 import { prefetchPreviews } from './prefetch';
+import { setDiscoverSeedHandler } from './socket';
 import type { SearchResult, Track } from '../types/music';
 
 export interface NodeRec extends SearchResult {
@@ -35,13 +39,10 @@ export interface NodeRec extends SearchResult {
 /* ── Tuning ── */
 const SEED_COUNT = 6;
 const FEED_SIZE = 30;
-const CONCURRENCY = 2;
 /** Feed freshness: within this window, tab switches / navigations reuse the
- * assembled feed instead of re-rolling seeds. */
-const FEED_TTL_MS = 30 * 60_000;
-/** Related mixes move slowly; a day of reuse saves most upstream calls. */
-const REL_TTL_MS = 24 * 3_600_000;
-const REL_CACHE_MAX = 30;
+ * assembled feed instead of re-requesting. Short because the server cache is
+ * the real source of truth — this just avoids redundant HTTP on tab flips. */
+const FEED_TTL_MS = 5 * 60_000;
 /** Recency half-life, in tracks: the newest addition weighs 1, the ~25th
  * newest weighs 0.5, the ~50th 0.25 … a gradual preference, not a cutoff. */
 const RECENCY_HALF_LIFE = 25;
@@ -50,12 +51,13 @@ const FAV_BOOST = 1.6;
  * library instead of orbiting the same few tracks. */
 const RECENT_SEED_PENALTY = 0.25;
 const RECENT_SEEDS_MAX = 12;
+/** Safety net: if the socket is disconnected and pending seeds never report,
+ * finalize with what we have after this delay. */
+const PENDING_TIMEOUT_MS = 30_000;
 
 /* ── Storage ── */
 const KEY = {
   feed: 'nodefeed:v1:feed',
-  related: 'nodefeed:v1:related',
-  resolve: 'nodefeed:v1:resolve',
   seeds: 'nodefeed:v1:recentSeeds',
 } as const;
 
@@ -150,45 +152,7 @@ export function interleave(perSeed: SeedExpansion[], exclude: Set<string>, limit
   return out;
 }
 
-/* ── Caches ── */
-
-type RelatedCache = Record<string, { ts: number; results: SearchResult[] }>;
-
-async function relatedCached(ytId: string): Promise<SearchResult[]> {
-  const cache = readJson<RelatedCache>(KEY.related) ?? {};
-  const hit = cache[ytId];
-  if (hit && Date.now() - hit.ts < REL_TTL_MS && Array.isArray(hit.results)) return hit.results;
-  const results = await api.relatedYouTube(ytId);
-  cache[ytId] = { ts: Date.now(), results };
-  // Prune oldest entries so the blob stays bounded.
-  const ids = Object.keys(cache);
-  if (ids.length > REL_CACHE_MAX) {
-    ids
-      .sort((a, b) => cache[a].ts - cache[b].ts)
-      .slice(0, ids.length - REL_CACHE_MAX)
-      .forEach((id) => delete cache[id]);
-  }
-  writeJson(KEY.related, cache);
-  return results;
-}
-
-/** Library track → video id, cached forever (stable mapping). */
-async function ytIdForSeed(track: Track): Promise<string | null> {
-  if (track.youtube_id) return track.youtube_id;
-  if (track.source === 'preview') return track.id;
-  const map = readJson<Record<string, string>>(KEY.resolve) ?? {};
-  if (map[track.id]) return map[track.id];
-  if (!track.artist || !track.title) return null;
-  try {
-    const res = await api.resolveCatalogItem({ artist: track.artist, title: track.title, duration: track.duration });
-    if (!res.video_id) return null;
-    map[track.id] = res.video_id;
-    writeJson(KEY.resolve, map);
-    return res.video_id;
-  } catch {
-    return null;
-  }
-}
+/* ── Helpers ── */
 
 function readRecentSeeds(): string[] {
   const v = readJson<string[]>(KEY.seeds);
@@ -198,6 +162,28 @@ function readRecentSeeds(): string[] {
 function pushRecentSeeds(ids: string[]): void {
   const next = [...ids, ...readRecentSeeds().filter((id) => !ids.includes(id))].slice(0, RECENT_SEEDS_MAX);
   writeJson(KEY.seeds, next);
+}
+
+/** Ids the feed must never contain: the whole library, under both track and
+ * video identity. */
+function libraryExclude(): Set<string> {
+  const exclude = new Set<string>();
+  for (const t of state.library) {
+    exclude.add(t.id);
+    if (t.youtube_id) exclude.add(t.youtube_id);
+  }
+  return exclude;
+}
+
+/** Normalize a raw rec dict (from the socket or HTTP) into a SearchResult. */
+function normalizeRec(r: Record<string, unknown>): SearchResult {
+  return {
+    id: String(r.id ?? r.video_id ?? r.videoId ?? ''),
+    title: String(r.title ?? ''),
+    channel: r.channel ? String(r.channel) : r.uploader ? String(r.uploader) : r.artist ? String(r.artist) : undefined,
+    duration: typeof r.duration === 'number' ? r.duration : undefined,
+    thumbnail: r.thumbnail ? String(r.thumbnail) : undefined,
+  };
 }
 
 /* ── Feed state ── */
@@ -219,90 +205,168 @@ function feedFresh(): boolean {
   return !!cached && Date.now() - cached.ts < FEED_TTL_MS;
 }
 
-/** Ids the feed must never contain: the whole library, under both track and
- * video identity. */
-function libraryExclude(): Set<string> {
-  const exclude = new Set<string>();
-  for (const t of state.library) {
-    exclude.add(t.id);
-    if (t.youtube_id) exclude.add(t.youtube_id);
-  }
-  return exclude;
+/** Per-rebuild state: the request_id, the seeds we picked, and which are still
+ * pending. The socket handler closes over this. */
+interface RebuildState {
+  requestId: string;
+  seeds: Array<{ id: string; title: string; artist: string }>;
+  perSeed: SeedExpansion[];
+  pending: Set<string>;
+  aborter: AbortController;
+  timer: ReturnType<typeof setTimeout> | null;
+  done: boolean;
 }
 
+let currentRebuild: RebuildState | null = null;
 let inFlight: Promise<void> | null = null;
 
-async function rebuild(): Promise<void> {
-  if (inFlight) return inFlight;
+/** Re-interleave all accumulated expansions and update the feed. */
+function paint(rs: RebuildState): void {
+  const exclude = libraryExclude();
+  for (const s of rs.seeds) exclude.add(s.id);
+  const feed = interleave(rs.perSeed, exclude, FEED_SIZE);
+  if (feed.length > 0) {
+    setNodeFeed(feed);
+    writeJson(KEY.feed, { ts: Date.now(), items: feed });
+  }
+}
+
+/** Finalize a rebuild: clear the socket handler, cancel the safety timer, mark
+ * done, and stop loading. */
+function finalize(rs: RebuildState): void {
+  if (rs.done) return;
+  rs.done = true;
+  if (rs.timer) clearTimeout(rs.timer);
+  if (currentRebuild === rs) currentRebuild = null;
+  setDiscoverSeedHandler(null);
+  if (rs === currentRebuild || currentRebuild === null) setNodeLoading(false);
+  // Warm the first rows so the eventual tap starts near-instantly.
+  prefetchPreviews(nodeFeed().slice(0, 4).map((r) => r.id));
+}
+
+function startRebuild(): Promise<void> {
   const library = state.library.filter((t) => !isPodcastTrack(t));
   if (library.length === 0) {
     setNodeFeed([]);
-    return;
+    return Promise.resolve();
   }
+
+  // Cancel any in-flight rebuild.
+  if (currentRebuild) {
+    currentRebuild.aborter.abort();
+    if (currentRebuild.timer) clearTimeout(currentRebuild.timer);
+    currentRebuild.done = true;
+  }
+
   setNodeLoading(true);
-  inFlight = (async () => {
-    const favs = new Set(state.favorites);
-    const recentSeeds = readRecentSeeds();
-    const total = library.length;
-    // Library arrives oldest → newest; rank 0 = newest addition.
-    const candidates = library.map((track, i) => ({
-      track,
-      recencyRank: total - 1 - i,
-      fav: favs.has(track.id),
-      recentlyUsed: recentSeeds.includes(track.id),
-    }));
-    const seeds = pickWeighted(candidates, SEED_COUNT);
+  const aborter = new AbortController();
 
-    // Expand seeds with bounded concurrency; a failed seed is just skipped.
-    const perSeed: SeedExpansion[] = [];
-    const seedYts = new Set<string>();
-    const queue = [...seeds];
-    await Promise.all(
-      Array.from({ length: CONCURRENCY }, async () => {
-        for (;;) {
-          const s = queue.shift();
-          if (!s) return;
-          try {
-            const yt = await ytIdForSeed(s.track);
-            if (!yt) continue;
-            seedYts.add(yt);
-            const recs = await relatedCached(yt);
-            perSeed.push({
-              seed: { id: s.track.id, title: s.track.title, artist: s.track.artist },
-              recs,
-            });
-          } catch {
-            /* skip this seed */
-          }
-        }
-      }),
+  const favs = new Set(state.favorites);
+  const recentSeeds = readRecentSeeds();
+  const total = library.length;
+  const candidates = library.map((track, i) => ({
+    track,
+    recencyRank: total - 1 - i,
+    fav: favs.has(track.id),
+    recentlyUsed: recentSeeds.includes(track.id),
+  }));
+  const seeds = pickWeighted(candidates, SEED_COUNT);
+  const seedMeta = seeds.map((s) => ({
+    id: s.track.id,
+    title: s.track.title,
+    artist: s.track.artist,
+  }));
+
+  const rs: RebuildState = {
+    requestId: '',
+    seeds: seedMeta,
+    perSeed: [],
+    pending: new Set<string>(),
+    aborter,
+    timer: null,
+    done: false,
+  };
+  currentRebuild = rs;
+
+  return (async () => {
+    const res = await api.discoverFeed(
+      seedMeta.map((s) => s.id),
+      25,
+      aborter.signal,
     );
+    if (rs.done || aborter.signal.aborted) return;
 
-    const exclude = libraryExclude();
-    for (const yt of seedYts) exclude.add(yt);
-    const feed = interleave(perSeed, exclude, FEED_SIZE);
-    if (feed.length > 0) {
-      setNodeFeed(feed);
-      writeJson(KEY.feed, { ts: Date.now(), items: feed });
-      pushRecentSeeds(seeds.map((s) => s.track.id));
-      // Warm the first rows so the eventual tap starts near-instantly.
-      prefetchPreviews(feed.slice(0, 4).map((r) => r.id));
+    rs.requestId = res.request_id;
+
+    // Seed info map for looking up by track id.
+    const seedById = new Map(seedMeta.map((s) => [s.id, s]));
+
+    // Populate cache-hit expansions.
+    for (const r of res.ready) {
+      const seed = seedById.get(r.seed_track_id);
+      if (!seed) continue;
+      rs.perSeed.push({ seed, recs: r.recs });
     }
-  })().finally(() => {
-    inFlight = null;
-    setNodeLoading(false);
+
+    // Track pending seeds.
+    for (const pid of res.pending) {
+      const seed = seedById.get(pid);
+      if (seed) {
+        rs.pending.add(pid);
+        // Ensure the seed has an expansion slot (empty until streamed).
+        if (!rs.perSeed.some((e) => e.seed.id === pid)) {
+          rs.perSeed.push({ seed, recs: [] });
+        }
+      }
+    }
+
+    // Paint what we have now (cache hits).
+    paint(rs);
+    pushRecentSeeds(seedMeta.map((s) => s.id));
+
+    if (rs.pending.size === 0) {
+      finalize(rs);
+      return;
+    }
+
+    // Register the socket handler for streamed seeds.
+    setDiscoverSeedHandler((data) => {
+      if (rs.done || data.request_id !== rs.requestId) return;
+      const seed = seedById.get(data.seed_track_id);
+      if (!seed || !rs.pending.has(data.seed_track_id)) return;
+
+      // Fill the expansion slot.
+      const slot = rs.perSeed.find((e) => e.seed.id === data.seed_track_id);
+      if (slot) {
+        slot.recs = (data.recs ?? [])
+          .map((r) => normalizeRec(r as Record<string, unknown>))
+          .filter((r) => r.id);
+      }
+      rs.pending.delete(data.seed_track_id);
+      paint(rs);
+
+      if (rs.pending.size === 0) finalize(rs);
+    });
+
+    // Safety net: if the socket is down or seeds never report, finalize.
+    rs.timer = setTimeout(() => finalize(rs), PENDING_TIMEOUT_MS);
+  })().catch((e: unknown) => {
+    if (e instanceof DOMException && e.name === 'AbortError') return;
+    /* On any error, finalize with whatever we have (possibly empty). */
+    finalize(rs);
   });
-  return inFlight;
 }
 
 /** Hydrate from cache and rebuild only if the feed is stale or empty. */
 export function ensureNodeFeed(): void {
   hydrate();
-  if (nodeFeed().length === 0 || !feedFresh()) void rebuild();
+  if (nodeFeed().length === 0 || !feedFresh()) {
+    inFlight = startRebuild().finally(() => { inFlight = null; });
+  }
 }
 
 /** Explicit re-roll: new seeds, new feed (still coalesced while in flight). */
 export function refreshNodeFeed(): void {
   hydrate();
-  void rebuild();
+  inFlight = startRebuild().finally(() => { inFlight = null; });
 }

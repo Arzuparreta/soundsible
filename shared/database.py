@@ -172,6 +172,27 @@ class DatabaseManager:
                 conn.execute(f"ALTER TABLE youtube_resolution_cache ADD COLUMN {col} {defn}")
 
     @staticmethod
+    def _create_related_mix_cache_table(conn):
+        """Persistent cache for YouTube related/mix expansions keyed by seed video id.
+
+        Replaces the in-memory 5-min dict in the downloader route. Related mixes
+        change slowly (days), so a 7-day TTL here turns the second-and-later
+        request for any seed into a sub-millisecond SQLite read — across
+        sessions, restarts, and devices.
+        """
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS related_mix_cache (
+                video_id TEXT PRIMARY KEY,
+                results_json TEXT NOT NULL,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_related_mix_cache_updated
+            ON related_mix_cache (last_updated)
+        """)
+
+    @staticmethod
     def _create_auth_tables(conn):
         conn.execute("""
             CREATE TABLE IF NOT EXISTS agent_tokens (
@@ -251,6 +272,7 @@ class DatabaseManager:
                 self._create_fts5_triggers(conn)
                 self._migrate_tracks_columns(conn)
                 self._create_youtube_cache_table(conn)
+                self._create_related_mix_cache_table(conn)
                 self._create_auth_tables(conn)
                 self._create_pairing_table(conn)
                 self._create_performance_indexes(conn)
@@ -511,6 +533,60 @@ class DatabaseManager:
             except Exception as e:
                 conn.execute("ROLLBACK")
                 logger.warning("Error caching YouTube resolution: %s", e)
+
+    # Note: Related/mix expansion cache (discover node engine)
+
+    _RELATED_MIX_TTL_SEC = 7 * 24 * 3600
+
+    def get_related_mix(self, video_id: str) -> Optional[list]:
+        """Return cached related-mix results for a seed video id, or None if
+        missing or older than the 7-day TTL. Results are returned as a parsed
+        list (the same shape `get_related_videos` produces). The TTL check is
+        done in SQL so it works with SQLite's text CURRENT_TIMESTAMP format."""
+        if not video_id:
+            return None
+        cutoff = int(self._RELATED_MIX_TTL_SEC)
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT results_json FROM related_mix_cache
+                WHERE video_id = ?
+                  AND last_updated >= datetime('now', ? || ' seconds')
+                """,
+                (video_id, f"-{cutoff}"),
+            ).fetchone()
+            if not row:
+                return None
+            try:
+                return json.loads(row["results_json"])
+            except Exception:
+                return None
+
+    def set_related_mix(self, video_id: str, results: list) -> None:
+        """Persist related-mix results for a seed video id (upsert). Empty
+        results are still cached so a known-empty seed isn't re-fetched for a
+        week."""
+        if not video_id or not isinstance(results, list):
+            return
+        payload = json.dumps(results)
+        with self._get_connection() as conn:
+            conn.execute("BEGIN TRANSACTION")
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO related_mix_cache (video_id, results_json, last_updated)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(video_id) DO UPDATE SET
+                        results_json=excluded.results_json,
+                        last_updated=CURRENT_TIMESTAMP
+                    """,
+                    (video_id, payload),
+                )
+                conn.execute("COMMIT")
+            except Exception as e:
+                conn.execute("ROLLBACK")
+                logger.warning("Error caching related mix: %s", e)
 
     # Note: Agent token storage
 

@@ -9,6 +9,7 @@ export interface ServerToClientEvents {
   library_updated: () => void;
   downloader_log: (data: unknown) => void;
   downloader_update: (data: unknown) => void;
+  discover_seed_ready: (data: { request_id: string; seed_track_id: string; recs: unknown[] }) => void;
   playback_stop_requested: () => void;
   playback_start_requested: (data: { state?: { position_sec?: number }; track?: Record<string, unknown> }) => void;
   playback_next_requested: () => void;
@@ -34,4 +35,27 @@ export function createSocket(): AppSocket {
     timeout: 8000,
     transports: ['websocket', 'polling'],
   });
+}
+
+/* ── Discover seed streaming ──
+ * The server emits `discover_seed_ready` when an async seed expansion finishes.
+ * nodeDiscover registers a handler here (avoiding a circular import with stores,
+ * which owns the socket). stores' socket listener dispatches into this. */
+type DiscoverSeedHandler = (data: {
+  request_id: string;
+  seed_track_id: string;
+  recs: unknown[];
+}) => void;
+let _discoverSeedHandler: DiscoverSeedHandler | null = null;
+
+export function setDiscoverSeedHandler(h: DiscoverSeedHandler | null): void {
+  _discoverSeedHandler = h;
+}
+
+export function dispatchDiscoverSeed(data: {
+  request_id: string;
+  seed_track_id: string;
+  recs: unknown[];
+}): void {
+  _discoverSeedHandler?.(data);
 }

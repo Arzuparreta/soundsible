@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('./api', () => ({ api: {} }));
 vi.mock('../stores', () => ({ state: { library: [], favorites: [] } }));
 vi.mock('./prefetch', () => ({ prefetchPreviews: vi.fn() }));
+vi.mock('./socket', () => ({ setDiscoverSeedHandler: vi.fn() }));
 
 import { interleave, pickWeighted, seedWeight, type SeedExpansion } from './nodeDiscover';
 
@@ -73,5 +74,10 @@ describe('interleave', () => {
   it('respects the limit and terminates when all lists are drained', () => {
     expect(interleave([exp('s1', ['a', 'b', 'c'])], new Set(), 2)).toHaveLength(2);
     expect(interleave([exp('s1', ['a'])], new Set(['a']), 10)).toHaveLength(0);
+  });
+
+  it('handles empty expansions gracefully (streamed seed not yet arrived)', () => {
+    const out = interleave([exp('s1', ['a']), exp('s2', [])], new Set(), 10);
+    expect(out.map((r) => r.id)).toEqual(['a']);
   });
 });
