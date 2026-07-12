@@ -29,6 +29,9 @@ async function loadStore(apiOverrides: Record<string, unknown> = {}) {
     getPlaybackState: vi.fn().mockResolvedValue(undefined),
     putPlaybackState: vi.fn().mockResolvedValue({ status: 'ok' }),
     deleteTrack: vi.fn().mockResolvedValue({ status: 'ok' }),
+    searchYouTube: vi.fn(),
+    relatedYouTube: vi.fn(),
+    emitDiscoveryEvent: vi.fn().mockResolvedValue(undefined),
     ...apiOverrides,
   };
   const audioService = {
@@ -179,5 +182,109 @@ describe('Solid store library and playback resume', () => {
 
     expect(getLibrary).toHaveBeenCalledTimes(3);
     expect(state.library.map((t) => t.id)).toEqual(['t2']);
+  });
+});
+
+describe('Radio mode', () => {
+  const seed: Track = { id: 'seed1', title: 'Seed Song', artist: 'Artist', youtube_id: 'yt111111111', source: 'preview' as const };
+
+  function mockRelated(otherId: string) {
+    return vi.fn().mockResolvedValue([
+      { id: otherId, title: 'Other', channel: 'Chan', duration: 200, thumbnail: 'thumb' },
+    ]);
+  }
+
+  it('startRadio does not reload audio when the seed is already playing (Bug 2)', async () => {
+    const { actions, state, audioService, api } = await loadStore({
+      searchYouTube: vi.fn(),
+      relatedYouTube: mockRelated('mix01'),
+      emitDiscoveryEvent: vi.fn().mockResolvedValue(undefined),
+    });
+
+    // Seed is currently playing some way in.
+    actions.playFrom([seed], 0);
+    audioService.load.mockClear();
+    expect(state.playback.isPlaying).toBe(true);
+
+    await actions.startRadio(seed);
+
+    // No audio reload — A keeps playing from currentTime.
+    expect(audioService.load).not.toHaveBeenCalled();
+    expect(state.playback.radioMode).toBe(true);
+    expect(state.playback.radioLoading).toBe(false);
+    expect(state.playback.radioSeedId).toBe(seed.id);
+    expect(state.playback.queue.map((t) => t.id)).toEqual(['seed1', 'mix01']);
+    expect(api.relatedYouTube).toHaveBeenCalledWith('yt111111111', undefined, false);
+  });
+
+  it('startRadio swaps audio immediately when the seed is not the current track', async () => {
+    const t3: Track = { id: 'other', title: 'B', artist: 'X', youtube_id: 'yt222222222', source: 'preview' as const };
+    const seed2: Track = { id: 'seed2', title: 'C', artist: 'Y', youtube_id: 'yt333333333', source: 'preview' as const };
+    const { actions, state, audioService } = await loadStore({
+      searchYouTube: vi.fn(),
+      relatedYouTube: mockRelated('mix02'),
+      emitDiscoveryEvent: vi.fn().mockResolvedValue(undefined),
+    });
+
+    actions.playFrom([t3], 0);
+    audioService.load.mockClear();
+
+    await actions.startRadio(seed2);
+
+    expect(audioService.load).toHaveBeenCalledTimes(1);
+    expect(audioService.load).toHaveBeenCalledWith('/preview/seed2');
+    expect(state.playback.radioMode).toBe(true);
+    expect(state.playback.radioSeedId).toBe('seed2');
+    expect(state.playback.queue.map((t) => t.id)).toEqual(['seed2', 'mix02']);
+  });
+
+  it('exits radio mode, keeps current track, on mix generation failure', async () => {
+    const { actions, state } = await loadStore({
+      searchYouTube: vi.fn(),
+      relatedYouTube: vi.fn().mockRejectedValue(new Error('boom')),
+      emitDiscoveryEvent: vi.fn().mockResolvedValue(undefined),
+    });
+
+    actions.playFrom([seed], 0);
+    await actions.startRadio(seed);
+
+    expect(state.playback.radioMode).toBe(false);
+    expect(state.playback.radioLoading).toBe(false);
+    expect(state.playback.radioSeedId).toBeNull();
+    // Queue truncated to current track (the seed).
+    expect(state.playback.queue.map((t) => t.id)).toEqual(['seed1']);
+  });
+
+  it('playNow disables radio when a different track is requested', async () => {
+    const t3: Track = { id: 't3', title: 'Three', artist: 'Artist', youtube_id: 'yt333333333' };
+    const { actions, state } = await loadStore();
+    actions.playFrom([seed], 0, { radio: true });
+    // Simulate radio active.
+    expect(state.playback.radioMode).toBe(true);
+
+    // playNow a different track cancels radio.
+    actions.playNow(t3);
+    expect(state.playback.radioMode).toBe(false);
+  });
+
+  it('next/jumpTo keep radio active (navigating within the radio queue)', async () => {
+    const { actions, state } = await loadStore();
+    actions.playFrom([seed, { id: 'mixA', title: 'A', artist: 'x', source: 'preview' }, { id: 'mixB', title: 'B', artist: 'y', source: 'preview' }], 0, { radio: true });
+    expect(state.playback.radioMode).toBe(true);
+    actions.jumpTo(1);
+    expect(state.playback.radioMode).toBe(true);
+    actions.next();
+    expect(state.playback.radioMode).toBe(true);
+  });
+
+  it('stopRadio drops the rest of the mix but keeps the current track', async () => {
+    const { actions, state } = await loadStore();
+    actions.playFrom([seed, { id: 'mixA', title: 'A', artist: 'x', source: 'preview' }], 0, { radio: true });
+    expect(state.playback.radioMode).toBe(true);
+    actions.stopRadio();
+    expect(state.playback.radioMode).toBe(false);
+    expect(state.playback.radioLoading).toBe(false);
+    expect(state.playback.radioSeedId).toBeNull();
+    expect(state.playback.queue.map((t) => t.id)).toEqual(['seed1']);
   });
 });

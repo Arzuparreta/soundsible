@@ -2,6 +2,7 @@ import { createMemo, Show, type JSX } from 'solid-js';
 import { state, actions, setNowPlayingOpen } from '../stores';
 import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
+import { RadioBadge } from './RadioBadge';
 import styles from './OmniBar.module.css';
 
 /** Persistent mini-player. Progress line + tap-to-expand + play/pause + next. */
@@ -52,7 +53,10 @@ export function OmniBar() {
               </>
             }
           >
-            <span class={styles.title}>{current()!.title}</span>
+            <span class={styles.title}>
+              {current()!.title}
+              <RadioBadge class={styles.radioBadge} loadingClass={styles.radioBadgeLoading} />
+            </span>
             <span class={styles.sub}>{current()!.artist}</span>
           </Show>
         </div>

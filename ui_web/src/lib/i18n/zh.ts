@@ -54,6 +54,10 @@ export const zh: Dict = {
     queue: '播放队列',
     clearQueue: '清空',
     removeFromQueue: '从队列中移除',
+    radioActiveAria: '电台运行中。点击停止电台。',
+    stopRadioTitle: '停止电台？',
+    stopRadioMsg: '当前曲目会继续播放，但电台的剩余列表将被清空。',
+    stopRadioConfirm: '停止电台',
   },
   home: {
     title: '你的资料库',

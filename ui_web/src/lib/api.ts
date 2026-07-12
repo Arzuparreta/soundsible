@@ -490,9 +490,9 @@ export const api = {
     return Array.isArray(data.suggestions) ? data.suggestions : [];
   },
   /** Discover radio: related/mix tracks for a seed video id. */
-  relatedYouTube: async (id: string, signal?: AbortSignal): Promise<SearchResult[]> => {
+  relatedYouTube: async (id: string, signal?: AbortSignal, enrich = false): Promise<SearchResult[]> => {
     const data = await request<{ results?: RawResult[] }>(
-      `/api/downloader/youtube/related?id=${encodeURIComponent(id)}&limit=25`,
+      `/api/downloader/youtube/related?id=${encodeURIComponent(id)}&limit=25&enrich=${enrich ? 1 : 0}`,
       { signal, timeoutMs: 45000 },
     );
     return (data.results ?? []).map(normalizeResult).filter((r) => r.id);

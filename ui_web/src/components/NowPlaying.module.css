@@ -173,6 +173,42 @@
   line-height: var(--lh-snug);
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1, 8px);
+}
+
+.radioBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+}
+
+.radioBadge:hover {
+  background: var(--accent);
+  color: var(--bg-raised, #fff);
+}
+
+.radioBadgeLoading {
+  animation: radioBadgePulse 1.2s var(--ease-out) infinite;
+}
+
+@keyframes radioBadgePulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
 .artist {
   margin: var(--space-xs) 0 0;
   color: var(--ink-secondary);

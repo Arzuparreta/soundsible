@@ -53,6 +53,10 @@ export const en = {
     queue: 'Up next',
     clearQueue: 'Clear',
     removeFromQueue: 'Remove from queue',
+    radioActiveAria: 'Radio is active. Click to stop the radio.',
+    stopRadioTitle: 'Stop radio?',
+    stopRadioMsg: 'The current track will keep playing, but the rest of the radio mix will be cleared.',
+    stopRadioConfirm: 'Stop radio',
   },
   home: {
     title: 'Your library',

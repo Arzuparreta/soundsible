@@ -54,6 +54,10 @@ export const fr: Dict = {
     queue: 'File de lecture',
     clearQueue: 'Vider',
     removeFromQueue: 'Retirer de la file',
+    radioActiveAria: 'Radio active. Cliquez pour arrêter la radio.',
+    stopRadioTitle: 'Arrêter la radio ?',
+    stopRadioMsg: "La piste actuelle continuera à jouer, mais le reste de la radio sera effacé.",
+    stopRadioConfirm: 'Arrêter la radio',
   },
   home: {
     title: 'Votre bibliothèque',

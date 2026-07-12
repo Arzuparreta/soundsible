@@ -54,6 +54,10 @@ export const es: Dict = {
     queue: 'En cola',
     clearQueue: 'Vaciar',
     removeFromQueue: 'Quitar de la cola',
+    radioActiveAria: 'Radio activa. Clic para detener la radio.',
+    stopRadioTitle: '¿Detener la radio?',
+    stopRadioMsg: 'La canción actual seguirá sonando, pero se vaciará el resto de la mezcla de radio.',
+    stopRadioConfirm: 'Detener radio',
   },
   home: {
     title: 'Tu biblioteca',

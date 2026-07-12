@@ -38,6 +38,17 @@ export interface PlaybackState {
   /** 0..1, persisted via the audio service. */
   volume: number;
   muted: boolean;
+  /** Whether the queue came from a radio session. Reset to false on any
+   * non-radio play (playTrack/playFrom without `{ radio: true }`, playNow,
+   * playEpisode). The seed COULD already be playing when radio started;
+   * see `startRadio` for the keep-currentTrack branch. */
+  radioMode: boolean;
+  /** True while the radio mix is still loading in the background. The UI
+   * badge pulses during this window; falls back to plain radio badge after. */
+  radioLoading: boolean;
+  /** Track id of the seed used to start the current radio. Useful to
+   * preserve the seed vs mix identity without inferring from the queue. */
+  radioSeedId: string | null;
 }
 
 /** Read persisted volume without forcing the lazy <audio> element into existence. */
@@ -116,6 +127,9 @@ const [state, setState] = createStore<AppState>({
     repeat: 'off',
     volume: initialVolume(),
     muted: false,
+    radioMode: false,
+    radioLoading: false,
+    radioSeedId: null,
   },
   downloads: {
     queue: [],
@@ -383,9 +397,20 @@ export const actions = {
     api.toggleFavourite(id).catch(() => setState('favorites', prev)); // revert on failure
   },
 
-  /** Play a list starting at index `i`; the list becomes the queue (next/prev work). */
-  playFrom(tracks: Track[], i: number): void {
-    setState('playback', 'queue', tracks.slice());
+  /** Play a list starting at index `i`; the list becomes the queue (next/prev work).
+   * Pass `{ radio: true }` when the queue is the seed-only radio placeholder so
+   * `radioMode`/`radioSeedId` are set; `radioLoading` is preserved (the caller
+   * manages it through the async mix resolution). Without `radio`, all radio
+   * flags are reset — `playTrack`/`playShuffled`/external callers therefore
+   * cancel any active radio session. */
+  playFrom(tracks: Track[], i: number, opts?: { radio?: boolean }): void {
+    const isRadio = opts?.radio === true;
+    setState('playback', {
+      queue: tracks.slice(),
+      radioMode: isRadio,
+      radioLoading: isRadio ? state.playback.radioLoading : false,
+      radioSeedId: isRadio ? (tracks[i]?.id ?? null) : null,
+    });
     loadIndex(i);
   },
 
@@ -412,6 +437,9 @@ export const actions = {
       isPlaying: true,
       currentTime: 0,
       duration: 0,
+      radioMode: false,
+      radioLoading: false,
+      radioSeedId: null,
     });
     updateMediaSession(track);
     try {
@@ -508,6 +536,12 @@ export const actions = {
       actions.playTrack(track);
       return;
     }
+    // Explicitly requested a different track to play now: cancels any active radio.
+    setState('playback', {
+      radioMode: false,
+      radioLoading: false,
+      radioSeedId: null,
+    });
     const at = queueIndexOf(pb.queue, track);
     if (at !== -1) {
       loadIndex(at);
@@ -574,7 +608,20 @@ export const actions = {
     else setState('playback', { queue: [], index: -1 });
   },
 
-  /** Start a radio station seeded from a track: plays it, then its YouTube mix. */
+  /** Start a radio station seeded from a track: plays it, then its YouTube mix.
+   * The mix is generated asynchronously — to keep click→sound latency at zero,
+   * we activate `radioMode` immediately and swap audio only when the seed
+   * isn't already playing. See `stopRadio` for the manual exit path.
+   *
+   * Continuity semantics:
+   * - If the seed is the currentTrack AND it's currently playing, we DON'T
+   *   reload audio — A keeps playing and the mix appends behind it. When A
+   *   finishes, the next mix track (different from A) plays.
+   * - Otherwise (seed differs from currentTrack, or nothing playing), we
+   *   swap to the seed immediately. The mix loads behind it.
+   * - If the async mix generation fails, we show a toast and exit radio mode;
+   *   the current track keeps playing and the queue is truncated to it.
+   */
   async startRadio(seed: Track): Promise<void> {
     // Podcast episodes have no meaningful YouTube mix; the seed id is a guid.
     if (isPodcastTrack(seed)) {
@@ -582,10 +629,13 @@ export const actions = {
       return;
     }
     const t = toast.loading(tr('toast.startingRadio'));
-    try {
-      let ytId = seed.youtube_id ?? (seed.source === 'preview' ? seed.id : null);
 
-      // For library tracks without a youtube_id, try to resolve one via search.
+    // Resolve a youtube_id up front. This step CAN block (search round-trip
+    // for library tracks without a stored id) — but it has to happen before we
+    // can meaningfully claim "radio starting", so we keep it before the
+    // radioMode activation.
+    let ytId = seed.youtube_id ?? (seed.source === 'preview' ? seed.id : null);
+    try {
       if (!ytId && seed.source !== 'preview') {
         const query = `${seed.title} ${seed.artist}`.trim();
         if (query) {
@@ -595,15 +645,45 @@ export const actions = {
           }
         }
       }
-
       if (!ytId) {
         t.update('error', tr('toast.noYtForRadio'));
         return;
       }
+    } catch (err) {
+      console.error('[startRadio] ytId resolve error', err, 'seed:', seed.id, seed.youtube_id);
+      t.update('error', tr('toast.radioFailed', { ytId: seed.youtube_id || tr('toast.radioFailedFallback') }));
+      return;
+    }
 
-      const related = await api.relatedYouTube(ytId);
+    // Activate radio mode immediately. The badge lights up before the mix lands.
+    setState('playback', {
+      radioMode: true,
+      radioLoading: true,
+      radioSeedId: seed.id,
+    });
+
+    // Decide the playback branch BEFORE doing the async work.
+    const isCurrentPlaying =
+      state.playback.currentTrack?.id === seed.id && state.playback.isPlaying;
+
+    if (isCurrentPlaying) {
+      // Bug 2 fix: A is already playing the seed. Keep audio running; queue
+      // the seed as the only entry for now. The mix will be appended after.
+      setState('playback', {
+        queue: [seed],
+        index: 0,
+        // currentTrack/isPlaying/currentTime intentionally NOT patched.
+      });
+    } else {
+      // General case (B playing, start radio of C; or nothing playing): swap
+      // to the seed immediately so the user hears it now. The mix loads behind.
+      actions.playFrom([seed], 0, { radio: true });
+    }
+
+    try {
+      const related = await api.relatedYouTube(ytId, undefined, false);
       const mix = related
-        .filter((r) => r.id !== ytId)
+        .filter((r) => r.id !== ytId && (isCurrentPlaying || r.id !== seed.id))
         .map(
           (r): Track => ({
             id: r.id,
@@ -615,10 +695,12 @@ export const actions = {
           }),
         );
       if (mix.length === 0) {
-        t.update('error', tr('toast.noRelatedMix', { ytId }));
-        return;
+        throw new Error('noRelatedMix');
       }
-      actions.playFrom([seed, ...mix], 0);
+      // Append the mix after the seed (which is now queue[0]). Don't touch
+      // index/currentTrack/currentTime — playback continues seamlessly.
+      setState('playback', 'queue', (q) => [...q, ...mix]);
+      prefetchUpcoming();
       void api.emitDiscoveryEvent('music_started_radio', {
         track_id: seed.source === 'preview' ? undefined : seed.id,
         title: seed.title,
@@ -629,9 +711,35 @@ export const actions = {
       }).catch(() => {});
       t.update('success', tr('toast.radioStarted'));
     } catch (err) {
-      console.error('[startRadio] error', err, 'seed:', seed.id, seed.youtube_id);
+      console.error('[startRadio] mix generation error', err, 'seed:', seed.id, seed.youtube_id);
       t.update('error', tr('toast.radioFailed', { ytId: seed.youtube_id || tr('toast.radioFailedFallback') }));
+      // Rollback: exit radio mode. Truncate queue to whatever is currently
+      // playing (the seed in both branches; A in the Bug 2 branch).
+      const cur = state.playback.currentTrack;
+      setState('playback', {
+        radioMode: false,
+        radioLoading: false,
+        radioSeedId: null,
+        queue: cur ? [cur] : [],
+        index: cur ? 0 : -1,
+      });
+    } finally {
+      setState('playback', 'radioLoading', false);
     }
+  },
+
+  /** Stop the active radio session. The current track keeps playing, but the
+   * rest of the pending mix is dropped from the queue. Invoked from the radio
+   * badge popup in the player. */
+  stopRadio(): void {
+    const cur = state.playback.currentTrack;
+    setState('playback', {
+      radioMode: false,
+      radioLoading: false,
+      radioSeedId: null,
+      queue: cur ? [cur] : [],
+      index: cur ? 0 : -1,
+    });
   },
 
   /** Delete a track from the library (optimistic; reverts on failure). */

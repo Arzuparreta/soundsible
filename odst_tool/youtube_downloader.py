@@ -1040,13 +1040,25 @@ class YouTubeDownloader:
             raise e
         return out
 
-    def get_related_videos(self, seed_video_id: str, max_results: int = 25) -> List[Dict[str, Any]]:
+    def get_related_videos(
+        self,
+        seed_video_id: str,
+        max_results: int = 25,
+        enrich: bool = True,
+    ) -> List[Dict[str, Any]]:
         """
         Fetch related/mix videos for a seed from YouTube.
-        Tries the fastest approach first (search by metadata), then falls back
-        to the RD mix playlist extraction.
 
-        Returns same shape as search_youtube: id, title, duration, thumbnail, webpage_url, channel, artist.
+        Order of attempts (revised for low-latency radio starts):
+          1. RD mix playlist (flat extraction) — one yt-dlp call, deterministic,
+             matches YouTube's official "Radio" mix for the seed. No fan-out.
+          2. YouTube Music search by seed metadata (peek + ytmusic search). When
+             `enrich=False`, skips the per-item `peek_brief` fan-out that can add
+             several seconds. Used as a fallback when RD mix isn't available.
+          3. RD mix without flat extraction (full per-entry extract) — last resort.
+
+        Returns same shape as search_youtube: id, title, duration, thumbnail,
+        webpage_url, channel, artist.
         """
         if not _is_valid_youtube_video_id(seed_video_id):
             return []
@@ -1104,7 +1116,18 @@ class YouTubeDownloader:
         elif self.cookie_browser:
             base_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
 
-        # — Attempt 1 (fastest): YouTube Music search by video metadata —
+        mix_url = f"https://www.youtube.com/watch?v={seed_video_id}&list=RD{seed_video_id}&start_radio=1"
+
+        # — Attempt 1: RD mix playlist (flat extraction) — one yt-dlp call, no fan-out —
+        opts_flat = {**base_opts, 'extract_flat': 'in_playlist', 'noplaylist': False}
+        try:
+            results = _try_extract(opts_flat, mix_url)
+            if results:
+                return results
+        except Exception as e:
+            logger.debug("[Discover] get_related_videos RD flat failed: %s", e)
+
+        # — Attempt 2: YouTube Music search by video metadata —
         try:
             info = self._peek_video_metadata(f"https://www.youtube.com/watch?v={seed_video_id}")
             if info:
@@ -1116,24 +1139,19 @@ class YouTubeDownloader:
                     artist = ', '.join(str(x) for x in artist if x)
                 query = f"{title} {artist}".strip()
                 if query:
-                    results = self.search_youtube(query, max_results=max_results, use_ytmusic=True)
+                    results = self.search_youtube(
+                        query,
+                        max_results=max_results,
+                        use_ytmusic=True,
+                        enrich_missing=enrich,
+                    )
                     results = [r for r in results if str(r.get('id', '')) != seed_video_id]
                     if results:
                         return results
         except Exception as e:
             logger.debug("[Discover] get_related_videos search fallback failed: %s", e)
 
-        # — Attempt 2: RD mix playlist (flat extraction) —
-        mix_url = f"https://www.youtube.com/watch?v={seed_video_id}&list=RD{seed_video_id}&start_radio=1"
-        opts_flat = {**base_opts, 'extract_flat': 'in_playlist', 'noplaylist': False}
-        try:
-            results = _try_extract(opts_flat, mix_url)
-            if results:
-                return results
-        except Exception as e:
-            logger.debug("[Discover] get_related_videos RD flat failed: %s", e)
-
-        # — Attempt 3: RD mix without flat extraction (full) —
+        # — Attempt 3: RD mix without flat extraction (full) — last resort —
         opts_full = {**base_opts, 'noplaylist': False}
         try:
             results = _try_extract(opts_full, mix_url)

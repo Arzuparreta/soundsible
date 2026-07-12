@@ -62,6 +62,39 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.radioBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  flex-shrink: 0;
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+}
+
+.radioBadge:hover {
+  background: var(--accent);
+  color: var(--bg-raised, #fff);
+}
+
+.radioBadgeLoading {
+  animation: radioBadgePulse 1.2s var(--ease-out) infinite;
+}
+
+@keyframes radioBadgePulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
 
 .sub {

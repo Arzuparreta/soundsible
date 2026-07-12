@@ -304,3 +304,120 @@ def test_cookie_fallback_only_handles_authentication_and_format_failures():
     assert not yd._should_retry_download_with_cookies(
         "Got error: 137 bytes read, 10400093 more expected"
     )
+
+
+class _RecordingYoutubeDL:
+    """Records every extract_info invocation and returns the next prepared
+    response. Asserts on the URL it was called with so tests can verify the
+    new attempt order: RD mix flat FIRST, then YTMusic search, then RD full."""
+
+    def __init__(self, responses):
+        self.opts = None
+        self._responses = list(responses)
+        self.calls = []
+        self.urls = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def extract_info(self, search_input, download=False):
+        self.urls.append(search_input)
+        self.calls.append(search_input)
+        if not self._responses:
+            return {}
+        return self._responses.pop(0)
+
+
+def test_get_related_videos_tries_rd_mix_flat_first(monkeypatch, tmp_path):
+    """Attempt 1 must be the RD mix flat extract (one yt-dlp call, no fan-out)."""
+    instances = []
+
+    class _YDL(_RecordingYoutubeDL):
+        def __init__(self, opts):
+            super().__init__([{
+                "entries": [
+                    {"id": "relA1BcdEfG", "title": "Rel One", "duration": 200, "thumbnail": "t"},
+                ],
+            }])
+            self.opts = opts
+            instances.append(self)
+
+    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _YDL)
+
+    downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
+    # Disable cookies to keep the first attempt's opts predictable.
+    downloader.cookie_file = None
+    downloader.cookie_browser = None
+
+    results = downloader.get_related_videos("seedxxxxxxX", max_results=5)
+
+    assert results and results[0]["id"] == "relA1BcdEfG"
+    # Only one yt-dlp invocation; first URL is the RD mix.
+    assert len(instances) == 1
+    assert instances[0].urls == [
+        "https://www.youtube.com/watch?v=seedxxxxxxX&list=RDseedxxxxxxX&start_radio=1"
+    ]
+    # And flat extraction was requested.
+    assert instances[0].opts.get("extract_flat") == "in_playlist"
+
+
+def test_get_related_videos_falls_back_to_ytmusic_search_when_rd_mix_empty(monkeypatch, tmp_path):
+    """When the RD mix flat extract returns no entries, the fallback is a
+    YTMusic search; with enrich=False, search_youtube must NOT issue the
+    per-item peek_brief fan-out."""
+    instances = []
+    # Each yt-dlp instantiation gets the next scheduled response (instance #1 =
+    # RD mix flat empty, instance #2 = YTMusic search hit).
+    queue = [
+        {"entries": []},
+        {
+            "entries": [
+                {"id": "ytmFallback01", "title": "Fallback", "duration": 180, "thumbnail": "t"},
+            ],
+        },
+    ]
+
+    class _YDL:
+        def __init__(self, opts):
+            self.opts = opts
+            self.urls = []
+            self._response = queue.pop(0)
+            instances.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def extract_info(self, url, download=False):
+            self.urls.append(url)
+            return self._response
+
+    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _YDL)
+
+    downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
+    downloader.cookie_file = None
+    downloader.cookie_browser = None
+
+    # peek_brief must NOT be called when enrich=False.
+    def _no_peek(*a, **k):
+        raise AssertionError("peek_brief should not run when enrich=False")
+
+    monkeypatch.setattr(downloader, "peek_brief", _no_peek)
+    # _peek_video_metadata runs in the fallback — make it return metadata so the search query is built.
+    monkeypatch.setattr(
+        downloader,
+        "_peek_video_metadata",
+        lambda url: {"track": "Seed Title", "channel": "Seed Artist"},
+    )
+
+    results = downloader.get_related_videos("seedxxxxxxX", max_results=5, enrich=False)
+
+    assert results and results[0]["id"] == "ytmFallback01"
+    # First call was RD flat, second was YTMusic search.
+    assert len(instances) == 2
+    assert "music.youtube.com/search" in instances[1].urls[0]

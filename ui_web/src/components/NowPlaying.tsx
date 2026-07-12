@@ -11,6 +11,7 @@ import { artistPath } from '../lib/artistRoute';
 import { isPodcastTrack } from '../lib/track';
 import { t as tr } from '../lib/i18n';
 import { SearchPanel, panelOpen, panelSide, togglePanel } from './SearchPanel';
+import { RadioBadge } from './RadioBadge';
 import styles from './NowPlaying.module.css';
 
 function fmt(s: number): string {
@@ -415,7 +416,10 @@ export function NowPlaying() {
               </Show>
             </div>
             <div class={styles.info}>
-              <h1 class={styles.title}>{t()!.title}</h1>
+              <div class={styles.titleRow}>
+                <h1 class={styles.title}>{t()!.title}</h1>
+                <RadioBadge class={styles.radioBadge} loadingClass={styles.radioBadgeLoading} />
+              </div>
               <Show when={artistLinkable()} fallback={<p class={styles.artist}>{t()!.artist}</p>}>
                 <button class={styles.artistLink} type="button" onClick={goArtist}>
                   {t()!.artist}
