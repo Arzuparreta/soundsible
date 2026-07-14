@@ -89,3 +89,65 @@ export type PlaylistMap = Record<string, string[]>;
 export interface LibrarySettings {
   playlist_covers?: Record<string, string>;
 }
+
+export interface ArtistCandidate {
+  deezer_id: string;
+  name: string;
+  picture: string;
+  nb_fans: number;
+  nb_album?: number;
+}
+
+export interface AlbumSummary {
+  deezer_id: string;
+  title: string;
+  cover: string;
+  year?: number | null;
+  track_count?: number;
+}
+
+export interface ArtistSummary {
+  deezer_id: string;
+  name: string;
+  picture: string;
+  nb_fans: number;
+}
+
+export interface LibraryAlbumSummary {
+  title: string;
+  cover: string;
+  track_count: number;
+}
+
+export interface ArtistProfile {
+  name: string;
+  resolved: boolean;
+  deezer_id?: string | null;
+  metadata?: { name: string; picture: string; nb_fans: number };
+  candidates: ArtistCandidate[];
+  top_tracks: CatalogItem[];
+  albums: AlbumSummary[];
+  singles_eps: AlbumSummary[];
+  related_artists: ArtistSummary[];
+  library_tracks: CatalogItem[];
+  library_albums: LibraryAlbumSummary[];
+  in_library: boolean;
+  partial_failures?: Array<{ source: string; error: string }>;
+  cached: boolean;
+  generated_at?: number;
+}
+
+export interface AlbumProfile {
+  title: string;
+  artist: string;
+  cover: string;
+  year?: number | null;
+  genre?: string;
+  tracklist: CatalogItem[];
+  library_tracks: CatalogItem[];
+  in_library: boolean;
+  resolved: boolean;
+  partial_failures?: Array<{ source: string; error: string }>;
+  cached: boolean;
+  generated_at?: number;
+}

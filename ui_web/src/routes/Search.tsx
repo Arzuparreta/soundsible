@@ -3,7 +3,7 @@ import { useNavigate } from '@solidjs/router';
 import { api } from '../lib/api';
 import { actions, state } from '../stores';
 import { coverUrl } from '../lib/media';
-import { artistPath } from '../lib/artistRoute';
+import { artistPath, albumPath } from '../lib/artistRoute';
 import { toast } from '../lib/toast';
 import { parseYouTubeInput } from '../lib/youtube';
 import { prefetchPreviews } from '../lib/prefetch';
@@ -384,11 +384,15 @@ export default function Search() {
     if (item.type === 'track') void previewExternal(item);
     else if (item.type === 'artist') {
       const artist = itemArtist(item) || item.title;
-      const hasLocal = state.library.some((t) => t.artist === artist || t.album_artist === artist);
-      if (hasLocal) navigate(artistPath(artist));
-      else commit(artist);
+      const deezerId = item.external_ids?.deezer_artist_id
+        ? String(item.external_ids.deezer_artist_id)
+        : undefined;
+      navigate(artistPath(artist, { view: 'discover', deezerId }));
     } else if (item.type === 'album') {
-      commit(`${item.title} ${itemArtist(item)}`.trim());
+      const deezerId = item.external_ids?.deezer_album_id
+        ? String(item.external_ids.deezer_album_id)
+        : undefined;
+      navigate(albumPath(item.title, itemArtist(item), { view: 'discover', deezerId }));
     }
   };
 

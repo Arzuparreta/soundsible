@@ -83,7 +83,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   if (!isPodcast)
     list.push({ icon: icons.radio(), label: t('trackActions.startRadio'), onSelect: () => void actions.startRadio(track) });
   if (ctx.navigate && track.artist && isLibrary && !isPodcast)
-    list.push({ icon: icons.artist(), label: t('trackActions.goToArtist'), onSelect: () => ctx.navigate!(artistPath(track.artist)) });
+    list.push({ icon: icons.artist(), label: t('trackActions.goToArtist'), onSelect: () => ctx.navigate!(artistPath(track.artist, { view: 'library' })) });
   if (!isPodcast)
     list.push({
       icon: icons.heart(),

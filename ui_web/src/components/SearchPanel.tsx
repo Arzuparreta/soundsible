@@ -10,6 +10,7 @@ import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed } from '../lib/n
 import { libraryTrackFor, queueIndexOf, resultToTrack } from '../lib/queueDiscovery';
 import { prefetchPreviews } from '../lib/prefetch';
 import { isPodcastTrack } from '../lib/track';
+import { artistPath, albumPath } from '../lib/artistRoute';
 import { openTrackMenu } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
@@ -784,7 +785,25 @@ export function SearchPanel() {
                 <div class={styles.chips}>
                   <For each={chips()}>
                     {(item) => (
-                      <button class={styles.chip} type="button" onClick={() => commit(item.type === 'album' ? `${item.title} ${itemArtist(item)}`.trim() : item.title)}>
+                      <button
+                        class={styles.chip}
+                        type="button"
+                        onClick={() => {
+                          if (item.type === 'artist') {
+                            const deezerId = item.external_ids?.deezer_artist_id
+                              ? String(item.external_ids.deezer_artist_id)
+                              : undefined;
+                            navigate(artistPath(item.title, { view: 'discover', deezerId }));
+                          } else if (item.type === 'album') {
+                            const deezerId = item.external_ids?.deezer_album_id
+                              ? String(item.external_ids.deezer_album_id)
+                              : undefined;
+                            navigate(albumPath(item.title, itemArtist(item), { view: 'discover', deezerId }));
+                          } else {
+                            commit(item.title);
+                          }
+                        }}
+                      >
                         <span class={styles.chipCover} style={coverStyle(item.cover, item.id)} data-round={item.type === 'artist' ? '' : undefined} />
                         <span class={styles.chipMeta}>
                           <span class={styles.chipTitle}>{item.title}</span>

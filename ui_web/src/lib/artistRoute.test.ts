@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { artistPath, decodeArtistName, artistKey } from './artistRoute';
+import { artistPath, albumPath, parseViewParams, decodeArtistName, artistKey } from './artistRoute';
 
 describe('artistPath / decodeArtistName round-trip', () => {
   it('preserves spaces and Unicode through encode -> decode', () => {
     for (const name of ['Extremoduro', 'System Of A Down', 'Sigur Rós', 'Café Tacvba', '坂本龍一']) {
-      expect(decodeArtistName(artistPath(name).replace('/artist/', ''))).toBe(name);
+      const seg = artistPath(name).replace('/artist/', '').split('?')[0];
+      expect(decodeArtistName(seg)).toBe(name);
     }
   });
 
@@ -24,6 +25,66 @@ describe('artistPath / decodeArtistName round-trip', () => {
   });
 });
 
+describe('artistPath with opts', () => {
+  it('appends view query param', () => {
+    const path = artistPath('Oliver Heldens', { view: 'library' });
+    expect(path).toContain('view=library');
+    expect(path).toContain('Oliver%20Heldens');
+  });
+
+  it('appends deezer_id query param', () => {
+    const path = artistPath('Oliver Heldens', { deezerId: '27' });
+    expect(path).toContain('deezer_id=27');
+  });
+
+  it('appends both view and deezer_id', () => {
+    const path = artistPath('Oliver Heldens', { view: 'discover', deezerId: '27' });
+    expect(path).toContain('view=discover');
+    expect(path).toContain('deezer_id=27');
+  });
+
+  it('omits query string when no opts', () => {
+    const path = artistPath('Oliver Heldens');
+    expect(path).toBe('/artist/Oliver%20Heldens');
+  });
+});
+
+describe('albumPath', () => {
+  it('builds album route with artist param', () => {
+    const path = albumPath('Heldeep', 'Oliver Heldens');
+    expect(path).toContain('/album/Heldeep');
+    expect(path).toContain('artist=Oliver+Heldens');
+  });
+
+  it('includes view and deezer_id', () => {
+    const path = albumPath('Heldeep', 'Oliver Heldens', { view: 'discover', deezerId: '201' });
+    expect(path).toContain('view=discover');
+    expect(path).toContain('deezer_id=201');
+  });
+});
+
+describe('parseViewParams', () => {
+  it('defaults to discover when no view param', () => {
+    expect(parseViewParams({}).view).toBe('discover');
+  });
+
+  it('returns library when view=library', () => {
+    expect(parseViewParams({ view: 'library' }).view).toBe('library');
+  });
+
+  it('returns discover when view=discover', () => {
+    expect(parseViewParams({ view: 'discover' }).view).toBe('discover');
+  });
+
+  it('falls back to discover for unknown values', () => {
+    expect(parseViewParams({ view: 'bogus' }).view).toBe('discover');
+  });
+
+  it('extracts deezer_id', () => {
+    expect(parseViewParams({ deezer_id: '27' }).deezerId).toBe('27');
+  });
+});
+
 describe('artistKey', () => {
   it('is case- and whitespace-insensitive', () => {
     expect(artistKey('  Extremoduro ')).toBe(artistKey('extremoduro'));
@@ -33,8 +94,8 @@ describe('artistKey', () => {
     // Precomposed "o-acute" (U+00F3) vs decomposed "o" + combining acute
     // (U+006F U+0301) must collapse to one key, so both spellings of the same
     // name route to the same artist.
-    const precomposed = 'Rós';
-    const decomposed = 'Rós';
+    const precomposed = 'R\u00F3s';
+    const decomposed = 'Ro\u0301s';
     expect(precomposed).not.toBe(decomposed);
     expect(artistKey(precomposed)).toBe(artistKey(decomposed));
   });

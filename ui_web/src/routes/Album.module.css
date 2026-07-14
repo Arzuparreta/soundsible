@@ -28,33 +28,26 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
   padding-top: var(--space-sm);
 }
 
-.avatar {
+.cover {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 112px;
-  height: 112px;
-  border-radius: var(--radius-full);
+  width: 160px;
+  height: 160px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-2);
   overflow: hidden;
 }
 
 .initial {
-  font-size: 44px;
+  font-size: 56px;
   font-weight: var(--fw-bold);
   color: var(--ink-primary);
   opacity: 0.92;
-}
-
-.titleRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  max-width: 100%;
 }
 
 .title {
@@ -67,96 +60,23 @@
   white-space: nowrap;
 }
 
-.disambigWrap {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-
-.chevronBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  color: var(--ink-tertiary);
+.artistLink {
   background: transparent;
   border: none;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  opacity: 0.6;
-  transition: opacity var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
-}
-
-.chevronBtn:hover {
-  opacity: 1;
-  color: var(--ink-primary);
-}
-
-.disambigDropdown {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-top: var(--space-2xs);
-  min-width: 200px;
-  background: var(--bg-raised);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-3);
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--space-2xs);
-}
-
-.disambigItem {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-2xs) var(--space-xs);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  text-align: left;
-  transition: background var(--dur-short) var(--ease-out);
-}
-
-.disambigItem:hover {
-  background: var(--bg-elevated);
-}
-
-.disambigAvatar {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-full);
-}
-
-.disambigMeta {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  overflow: hidden;
-}
-
-.disambigName {
+  padding: 0;
   font-size: var(--text-body);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-medium);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out);
+}
+
+.artistLink:hover {
   color: var(--ink-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-decoration: underline;
 }
 
-.disambigFans {
-  font-size: var(--text-caption);
-  color: var(--ink-tertiary);
-}
-
-.count {
+.meta {
   font-size: var(--text-caption);
   color: var(--ink-tertiary);
   font-variant-numeric: tabular-nums;
@@ -166,7 +86,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  margin-top: var(--space-sm);
+  margin-top: var(--space-xs);
 }
 
 .btnPrimary {
@@ -217,7 +137,6 @@
   cursor: not-allowed;
 }
 
-/* ── Toggle tabs ── */
 .toggleTabs {
   display: flex;
   gap: var(--space-2xs);
@@ -247,31 +166,12 @@
   font-weight: var(--fw-semibold);
 }
 
-/* ── Sections ── */
-.section {
-  padding: var(--space-md) var(--gutter);
-}
-
-.sectionTitle {
-  margin: 0 0 var(--space-sm);
-  font-size: var(--text-h3);
-  font-weight: var(--fw-bold);
-  color: var(--ink-primary);
-}
-
-.sectionEmpty {
-  padding: var(--space-md) var(--gutter);
-  font-size: var(--text-body);
-  color: var(--ink-tertiary);
-}
-
-.discoverView,
-.libraryView {
+.contentView {
   flex: 1;
   overflow-y: auto;
+  padding: var(--space-md) 0;
 }
 
-/* ── Track list (discover + library) ── */
 .trackList {
   display: flex;
   flex-direction: column;
@@ -329,7 +229,7 @@
   text-overflow: ellipsis;
 }
 
-.trackAlbum {
+.trackArtist {
   font-size: var(--text-caption);
   color: var(--ink-tertiary);
   white-space: nowrap;
@@ -394,66 +294,12 @@
   }
 }
 
-/* ── Album / related rails ── */
-.albumRail {
-  display: flex;
-  gap: var(--space-md);
-  overflow-x: auto;
-  padding: 0 0 var(--space-xs);
-  scrollbar-width: none;
-}
-
-.albumRail::-webkit-scrollbar {
-  display: none;
-}
-
-.albumCard {
-  flex: none;
-  width: 120px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-  padding: 0;
-  background: transparent;
-  border: none;
-  text-align: left;
-  cursor: pointer;
-}
-
-.albumCover {
-  width: 120px;
-  height: 120px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--hairline);
-}
-
-.roundCover {
-  border-radius: var(--radius-full);
-}
-
-.albumName {
-  margin-top: var(--space-2xs);
-  font-size: var(--text-caption);
-  font-weight: var(--fw-semibold);
-  color: var(--ink-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.albumCount {
-  font-size: var(--text-caption);
-  color: var(--ink-tertiary);
-}
-
-/* ── Library view ── */
 .empty {
   padding: var(--space-3xl) var(--gutter);
   text-align: center;
   color: var(--ink-secondary);
 }
 
-/* ── Skeleton ── */
 .skeletonScroll {
   padding: var(--space-md) var(--gutter);
   display: flex;
