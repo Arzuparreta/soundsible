@@ -8,6 +8,13 @@ from typing import Any
 import requests
 from flask import Blueprint, jsonify, request
 
+try:
+    import gevent
+    from gevent import spawn, joinall
+    _HAS_GEVENT = True
+except ImportError:  # pragma: no cover
+    _HAS_GEVENT = False
+
 from shared.database import DatabaseManager
 from shared.hardening import rate_limit
 from shared.resolution_confidence import best_candidate, classify_confidence
@@ -21,6 +28,10 @@ _DEEZER_HOST = "https://api.deezer.com"
 _MUSICBRAINZ_HOST = "https://musicbrainz.org/ws/2"
 _CATALOG_CACHE_TTL_SEC = 180
 _CATALOG_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_ARTIST_CACHE_TTL_SEC = 600
+_ARTIST_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_ALBUM_CACHE_TTL_SEC = 600
+_ALBUM_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _MUSICBRAINZ_HEADERS = {
     "User-Agent": "Soundsible/1.0 (https://github.com/Arzuparreta/soundsible)",
     "Accept": "application/json",
@@ -659,3 +670,558 @@ def catalog_save():
         "confidence_level": "confirmed" if confidence_reason == "confirmed" else classify_confidence(confidence),
         "confidence_reason": confidence_reason,
     })
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Artist & Album profile endpoints (native pages)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def _deezer_get(path: str, params: dict[str, Any] | None = None, timeout: int = 8) -> dict[str, Any]:
+    resp = requests.get(
+        f"{_DEEZER_HOST}/{path}",
+        params=params or {},
+        timeout=timeout,
+        headers={"User-Agent": "SoundsibleCatalog/1.0"},
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data if isinstance(data, dict) else {}
+
+
+def _deezer_artist_search(name: str, limit: int = 10) -> list[dict[str, Any]]:
+    data = _deezer_get("search/artist", {"q": name, "limit": min(limit, 25)})
+    rows = data.get("data") if isinstance(data.get("data"), list) else []
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        artist_id = str(row.get("id") or "")
+        artist_name = (row.get("name") or "").strip()
+        if not artist_id or not artist_name:
+            continue
+        out.append({
+            "deezer_id": artist_id,
+            "name": artist_name,
+            "picture": row.get("picture_xl") or row.get("picture_big") or row.get("picture_medium") or "",
+            "nb_fans": int(row.get("nb_fan") or 0),
+            "nb_album": int(row.get("nb_album") or 0),
+        })
+    return out
+
+
+def _resolve_artist_id(name: str, deezer_id: str | None = None) -> tuple[str | None, list[dict[str, Any]]]:
+    """Resolve an artist name to a Deezer artist id, returning candidates for disambiguation."""
+    if deezer_id:
+        return deezer_id, []
+
+    candidates = _deezer_artist_search(name, limit=10)
+    if not candidates:
+        return None, []
+
+    name_norm = _norm(name)
+    exact = [c for c in candidates if _norm(c["name"]) == name_norm]
+    if exact:
+        exact.sort(key=lambda c: c["nb_fans"], reverse=True)
+        best = exact[0]
+        rest = [c for c in exact[1:] if _norm(c["name"]) == name_norm]
+        return best["deezer_id"], rest
+    # No exact match — pick most popular, return all others as candidates
+    candidates.sort(key=lambda c: c["nb_fans"], reverse=True)
+    return candidates[0]["deezer_id"], candidates[1:4]
+
+
+def _deezer_artist_profile(artist_id: str) -> dict[str, Any]:
+    data = _deezer_get(f"artist/{artist_id}")
+    return {
+        "name": (data.get("name") or "").strip(),
+        "picture": data.get("picture_xl") or data.get("picture_big") or data.get("picture_medium") or "",
+        "nb_fans": int(data.get("nb_fan") or 0),
+    }
+
+
+def _deezer_artist_top_tracks(artist_id: str, limit: int = 50, library_keys: set[str] | None = None) -> list[dict[str, Any]]:
+    data = _deezer_get(f"artist/{artist_id}/top", {"limit": min(limit, 100)})
+    rows = data.get("data") if isinstance(data.get("data"), list) else []
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        item = _deezer_track_to_catalog_item(row, library_keys)
+        if item:
+            out.append(item)
+    return out
+
+
+def _deezer_track_to_catalog_item(row: dict[str, Any], library_keys: set[str] | None = None) -> dict[str, Any] | None:
+    artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
+    album_row = row.get("album") if isinstance(row.get("album"), dict) else {}
+    title = _clean(row.get("title_short") or row.get("title"))
+    artist = _clean(artist_row.get("name"))
+    if not title or not artist:
+        return None
+    deezer_id = str(row.get("id") or "")
+    in_library = False
+    if library_keys is not None:
+        in_library = _key(title, artist) in library_keys
+    return _catalog_item(
+        item_id=f"deezer:track:{deezer_id}",
+        item_type="track",
+        source="deezer",
+        title=title,
+        subtitle=artist,
+        artist=artist,
+        album=_clean(album_row.get("title")),
+        duration=_duration(row.get("duration")),
+        cover=album_row.get("cover_xl") or album_row.get("cover_big") or album_row.get("cover_medium") or "",
+        popularity=float(row.get("rank") or 0),
+        external_ids={"deezer_id": deezer_id},
+        attribution_url=row.get("link") or "",
+        in_library=in_library,
+        playable=False,
+        downloadable=not in_library,
+        raw={"deezer_id": deezer_id},
+    )
+
+
+def _deezer_artist_albums(artist_id: str, album_type: str = "album", limit: int = 50) -> list[dict[str, Any]]:
+    data = _deezer_get(f"artist/{artist_id}/albums", {"type": album_type, "limit": min(limit, 100)})
+    rows = data.get("data") if isinstance(data.get("data"), list) else []
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        album_id = str(row.get("id") or "")
+        title = _clean(row.get("title"))
+        if not album_id or not title:
+            continue
+        out.append({
+            "deezer_id": album_id,
+            "title": title,
+            "cover": row.get("cover_xl") or row.get("cover_big") or row.get("cover_medium") or "",
+            "year": _extract_year(row.get("release_date")),
+            "track_count": int(row.get("nb_tracks") or 0),
+        })
+    return out
+
+
+def _deezer_related_artists(artist_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    data = _deezer_get(f"artist/{artist_id}/related", {"limit": min(limit, 50)})
+    rows = data.get("data") if isinstance(data.get("data"), list) else []
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        aid = str(row.get("id") or "")
+        aname = (row.get("name") or "").strip()
+        if not aid or not aname:
+            continue
+        out.append({
+            "deezer_id": aid,
+            "name": aname,
+            "picture": row.get("picture_xl") or row.get("picture_big") or row.get("picture_medium") or "",
+            "nb_fans": int(row.get("nb_fan") or 0),
+        })
+    return out
+
+
+def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -> dict[str, Any]:
+    data = _deezer_get(f"album/{album_id}")
+    artist_row = data.get("artist") if isinstance(data.get("artist"), dict) else {}
+    title = _clean(data.get("title"))
+    artist = _clean(artist_row.get("name"))
+    cover = data.get("cover_xl") or data.get("cover_big") or data.get("cover_medium") or ""
+    year = _extract_year(data.get("release_date"))
+    genre_names: list[str] = []
+    genres = data.get("genres") if isinstance(data.get("genres"), dict) else {}
+    gen_data = genres.get("data") if isinstance(genres.get("data"), list) else []
+    for g in gen_data:
+        if isinstance(g, dict) and g.get("name"):
+            genre_names.append(str(g["name"]).strip())
+
+    track_rows = data.get("tracks") if isinstance(data.get("tracks"), dict) else {}
+    track_list = track_rows.get("data") if isinstance(track_rows.get("data"), list) else []
+    tracklist: list[dict[str, Any]] = []
+    for row in track_list:
+        if not isinstance(row, dict):
+            continue
+        item = _deezer_track_to_catalog_item(row, library_keys)
+        if item:
+            tracklist.append(item)
+
+    return {
+        "title": title,
+        "artist": artist,
+        "cover": cover,
+        "year": year,
+        "genre": ", ".join(genre_names) if genre_names else "",
+        "tracklist": tracklist,
+    }
+
+
+def _extract_year(release_date: Any) -> int | None:
+    if not release_date:
+        return None
+    text = str(release_date).strip()
+    m = re.match(r"(\d{4})", text)
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:
+            return None
+    return None
+
+
+def _library_artist_tracks(name: str) -> list[dict[str, Any]]:
+    """Return library tracks by an artist (as catalog items)."""
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    try:
+        lib.refresh_if_stale()
+    except Exception:
+        pass
+    metadata = getattr(lib, "metadata", None)
+    tracks = list(metadata.tracks if metadata and metadata.tracks else [])
+    name_key = _norm(name)
+    out: list[dict[str, Any]] = []
+    for track in tracks:
+        artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
+        if name_key and _norm(artist) != name_key:
+            continue
+        out.append(
+            _catalog_item(
+                item_id=f"library:track:{track.id}",
+                item_type="library_track",
+                source="library",
+                title=getattr(track, "title", "") or "",
+                subtitle=artist,
+                artist=artist,
+                album=getattr(track, "album", "") or "",
+                duration=_duration(getattr(track, "duration", None)),
+                cover=_cover_from_track(track),
+                track_id=track.id,
+                external_ids={
+                    "youtube_id": getattr(track, "youtube_id", None),
+                    "isrc": getattr(track, "isrc", None),
+                    "musicbrainz_id": getattr(track, "musicbrainz_id", None),
+                },
+                in_library=True,
+                playable=True,
+                downloadable=False,
+                raw=_track_dict(track),
+            )
+        )
+    return out
+
+
+def _library_album_tracks(name: str, artist: str) -> list[dict[str, Any]]:
+    """Return library tracks from a specific album by an artist."""
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    try:
+        lib.refresh_if_stale()
+    except Exception:
+        pass
+    metadata = getattr(lib, "metadata", None)
+    tracks = list(metadata.tracks if metadata and metadata.tracks else [])
+    name_key = _norm(name)
+    artist_key = _norm(artist)
+    out: list[dict[str, Any]] = []
+    for track in tracks:
+        t_artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
+        t_album = getattr(track, "album", "") or ""
+        if name_key and _norm(t_album) != name_key:
+            continue
+        if artist_key and _norm(t_artist) != artist_key:
+            continue
+        out.append(
+            _catalog_item(
+                item_id=f"library:track:{track.id}",
+                item_type="library_track",
+                source="library",
+                title=getattr(track, "title", "") or "",
+                subtitle=t_artist,
+                artist=t_artist,
+                album=t_album,
+                duration=_duration(getattr(track, "duration", None)),
+                cover=_cover_from_track(track),
+                track_id=track.id,
+                external_ids={
+                    "youtube_id": getattr(track, "youtube_id", None),
+                    "isrc": getattr(track, "isrc", None),
+                    "musicbrainz_id": getattr(track, "musicbrainz_id", None),
+                },
+                in_library=True,
+                playable=True,
+                downloadable=False,
+                raw=_track_dict(track),
+            )
+        )
+    return out
+
+
+def _library_keys_for_artist(name: str) -> set[str]:
+    """Return normalized artist\00title keys for library tracks matching the artist."""
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    try:
+        lib.refresh_if_stale()
+    except Exception:
+        pass
+    metadata = getattr(lib, "metadata", None)
+    tracks = list(metadata.tracks if metadata and metadata.tracks else [])
+    name_key = _norm(name)
+    keys: set[str] = set()
+    for track in tracks:
+        artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
+        if name_key and _norm(artist) != name_key:
+            continue
+        title = getattr(track, "title", "") or ""
+        keys.add(_key(title, artist))
+    return keys
+
+
+def _library_album_keys(album_name: str, artist: str) -> set[str]:
+    """Return normalized artist\00title keys for library tracks matching the album."""
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    try:
+        lib.refresh_if_stale()
+    except Exception:
+        pass
+    metadata = getattr(lib, "metadata", None)
+    tracks = list(metadata.tracks if metadata and metadata.tracks else [])
+    album_key = _norm(album_name)
+    artist_key = _norm(artist)
+    keys: set[str] = set()
+    for track in tracks:
+        t_artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
+        t_album = getattr(track, "album", "") or ""
+        if album_key and _norm(t_album) != album_key:
+            continue
+        if artist_key and _norm(t_artist) != artist_key:
+            continue
+        title = getattr(track, "title", "") or ""
+        keys.add(_key(title, t_artist))
+    return keys
+
+
+def _group_library_albums(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Group library track items into album summaries."""
+    by_album: dict[str, dict[str, Any]] = {}
+    for item in items:
+        album_name = item.get("album") or ""
+        key = _norm(album_name) or "unknown"
+        if key not in by_album:
+            by_album[key] = {
+                "title": album_name or "Unknown",
+                "cover": item.get("cover") or "",
+                "track_count": 0,
+            }
+        by_album[key]["track_count"] += 1
+    return list(by_album.values())
+
+
+def _resolve_album_deezer_id(name: str, artist: str) -> str | None:
+    """Search Deezer for an album by name + artist, return best match deezer_id."""
+    q = f'album:"{name}" artist:"{artist}"' if artist else f'album:"{name}"'
+    data = _deezer_get("search", {"q": q, "limit": 5})
+    rows = data.get("data") if isinstance(data.get("data"), list) else []
+    name_norm = _norm(name)
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        album_row = row.get("album") if isinstance(row.get("album"), dict) else {}
+        album_title = _clean(album_row.get("title"))
+        album_id = str(album_row.get("id") or "")
+        if album_id and _norm(album_title) == name_norm:
+            return album_id
+    # Fuzzy: first result with an album id
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        album_row = row.get("album") if isinstance(row.get("album"), dict) else {}
+        album_id = str(album_row.get("id") or "")
+        if album_id:
+            return album_id
+    return None
+
+
+@catalog_bp.route("/api/catalog/artist", methods=["GET"])
+@rate_limit("catalog_artist", limit=60, window_sec=60)
+def catalog_artist():
+    name = _clean(request.args.get("name", ""), 200)
+    if len(name) < 1:
+        return jsonify({"error": "name is required"}), 400
+    deezer_id = _clean(request.args.get("deezer_id", ""), 32) or None
+
+    cache_key = f"artist:{deezer_id or name.casefold()}"
+    now = time.time()
+    cached = _ARTIST_CACHE.get(cache_key)
+    if cached and cached[0] > now:
+        body = dict(cached[1])
+        body["cached"] = True
+        return jsonify(body)
+
+    library_tracks = _library_artist_tracks(name)
+    in_library = len(library_tracks) > 0
+    library_albums = _group_library_albums(library_tracks)
+    library_keys = _library_keys_for_artist(name)
+
+    resolved_id: str | None = None
+    candidates: list[dict[str, Any]] = []
+    metadata: dict[str, Any] = {}
+    top_tracks: list[dict[str, Any]] = []
+    albums: list[dict[str, Any]] = []
+    singles_eps: list[dict[str, Any]] = []
+    related: list[dict[str, Any]] = []
+    resolved = False
+    failures: list[dict[str, str]] = []
+
+    try:
+        resolved_id, candidates = _resolve_artist_id(name, deezer_id)
+    except Exception as exc:
+        logger.info("Artist resolve failed for %r: %s", name, exc)
+        failures.append({"source": "deezer", "error": sanitize_cli_message(str(exc))})
+
+    if resolved_id:
+        resolved = True
+        try:
+            metadata = _deezer_artist_profile(resolved_id)
+        except Exception as exc:
+            logger.info("Artist profile fetch failed for %s: %s", resolved_id, exc)
+            failures.append({"source": "deezer", "error": sanitize_cli_message(str(exc))})
+
+        if _HAS_GEVENT:
+            jobs = []
+            for label, fn in (
+                ("top", lambda: _deezer_artist_top_tracks(resolved_id, 50, library_keys)),
+                ("albums", lambda: _deezer_artist_albums(resolved_id, "album", 50)),
+                ("singles", lambda: _deezer_artist_albums(resolved_id, "singl,ep", 50)),
+                ("related", lambda: _deezer_related_artists(resolved_id, 20)),
+            ):
+                jobs.append((label, spawn(fn)))
+            joinall([j for _, j in jobs], timeout=12)
+            for label, job in jobs:
+                try:
+                    result = job.value
+                    if label == "top":
+                        top_tracks = result
+                    elif label == "albums":
+                        albums = result
+                    elif label == "singles":
+                        singles_eps = result
+                    elif label == "related":
+                        related = result
+                except Exception as exc:
+                    logger.info("Artist %s fetch failed: %s", label, exc)
+                    failures.append({"source": "deezer", "error": sanitize_cli_message(str(exc))})
+        else:
+            for label, fn in (
+                ("top", lambda: _deezer_artist_top_tracks(resolved_id, 50, library_keys)),
+                ("albums", lambda: _deezer_artist_albums(resolved_id, "album", 50)),
+                ("singles", lambda: _deezer_artist_albums(resolved_id, "singl,ep", 50)),
+                ("related", lambda: _deezer_related_artists(resolved_id, 20)),
+            ):
+                try:
+                    result = fn()
+                    if label == "top":
+                        top_tracks = result
+                    elif label == "albums":
+                        albums = result
+                    elif label == "singles":
+                        singles_eps = result
+                    elif label == "related":
+                        related = result
+                except Exception as exc:
+                    logger.info("Artist %s fetch failed: %s", label, exc)
+                    failures.append({"source": "deezer", "error": sanitize_cli_message(str(exc))})
+
+    body = {
+        "name": name,
+        "resolved": resolved,
+        "deezer_id": resolved_id,
+        "metadata": metadata,
+        "candidates": candidates,
+        "top_tracks": top_tracks,
+        "albums": albums,
+        "singles_eps": singles_eps,
+        "related_artists": related,
+        "library_tracks": library_tracks,
+        "library_albums": library_albums,
+        "in_library": in_library,
+        "partial_failures": failures,
+        "cached": False,
+        "generated_at": int(now),
+    }
+    _ARTIST_CACHE[cache_key] = (now + _ARTIST_CACHE_TTL_SEC, dict(body))
+    return jsonify(body)
+
+
+@catalog_bp.route("/api/catalog/album", methods=["GET"])
+@rate_limit("catalog_album", limit=60, window_sec=60)
+def catalog_album():
+    name = _clean(request.args.get("name", ""), 200)
+    if len(name) < 1:
+        return jsonify({"error": "name is required"}), 400
+    artist = _clean(request.args.get("artist", ""), 200) or None
+    deezer_id = _clean(request.args.get("deezer_id", ""), 32) or None
+
+    cache_key = f"album:{deezer_id or (name + '|' + (artist or '')).casefold()}"
+    now = time.time()
+    cached = _ALBUM_CACHE.get(cache_key)
+    if cached and cached[0] > now:
+        body = dict(cached[1])
+        body["cached"] = True
+        return jsonify(body)
+
+    library_tracks = _library_album_tracks(name, artist or "")
+    in_library = len(library_tracks) > 0
+    library_keys = _library_album_keys(name, artist or "")
+
+    title = name
+    album_artist = artist or ""
+    cover = ""
+    year: int | None = None
+    genre = ""
+    tracklist: list[dict[str, Any]] = []
+    resolved = False
+    failures: list[dict[str, str]] = []
+
+    if not deezer_id and artist:
+        try:
+            deezer_id = _resolve_album_deezer_id(name, artist)
+        except Exception as exc:
+            logger.info("Album resolve failed for %r: %s", name, exc)
+            failures.append({"source": "deezer", "error": sanitize_cli_message(str(exc))})
+
+    if deezer_id:
+        try:
+            profile = _deezer_album_profile(deezer_id, library_keys)
+            title = profile["title"] or title
+            album_artist = profile["artist"] or album_artist
+            cover = profile["cover"]
+            year = profile["year"]
+            genre = profile["genre"]
+            tracklist = profile["tracklist"]
+            resolved = True
+        except Exception as exc:
+            logger.info("Album profile fetch failed for %s: %s", deezer_id, exc)
+            failures.append({"source": "deezer", "error": sanitize_cli_message(str(exc))})
+
+    body = {
+        "title": title,
+        "artist": album_artist,
+        "cover": cover,
+        "year": year,
+        "genre": genre,
+        "tracklist": tracklist,
+        "library_tracks": library_tracks,
+        "in_library": in_library,
+        "resolved": resolved,
+        "partial_failures": failures,
+        "cached": False,
+        "generated_at": int(now),
+    }
+    _ALBUM_CACHE[cache_key] = (now + _ALBUM_CACHE_TTL_SEC, dict(body))
+    return jsonify(body)

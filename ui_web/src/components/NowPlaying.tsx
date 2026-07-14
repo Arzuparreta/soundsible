@@ -292,7 +292,7 @@ export function NowPlaying() {
     const c = t();
     if (!c?.artist) return;
     setNowPlayingOpen(false);
-    navigate(artistPath(c.artist));
+    navigate(artistPath(c.artist, { view: c.source === 'preview' ? 'discover' : 'library' }));
   };
 
   const artBg = (): JSX.CSSProperties => {

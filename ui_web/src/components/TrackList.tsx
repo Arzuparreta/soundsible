@@ -33,7 +33,7 @@ export default function TrackList(props: {
 }) {
   let scrollRef: HTMLDivElement | undefined;
   const navigate = useNavigate();
-  const goArtist = (artist: string) => artist && navigate(artistPath(artist));
+  const goArtist = (artist: string) => artist && navigate(artistPath(artist, { view: 'library' }));
   const openMenu = (track: Track, ev?: MouseEvent) =>
     openTrackMenu(
       track,

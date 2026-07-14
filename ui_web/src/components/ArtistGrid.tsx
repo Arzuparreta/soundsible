@@ -25,7 +25,7 @@ export default function ArtistGrid(props: { artists: ArtistEntry[] }) {
       <For each={props.artists}>
         {(a) => (
           <A
-            href={artistPath(a.name)}
+            href={artistPath(a.name, { view: 'library' })}
             class={styles.card}
             ref={(el) => attachContextMenu(el, () => artistMenuOptions(a.name, { navigate }))}
           >

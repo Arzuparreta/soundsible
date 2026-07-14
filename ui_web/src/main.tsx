@@ -14,6 +14,7 @@ import PodcastShow from './routes/PodcastShow';
 import Downloads from './routes/Downloads';
 import Migrate from './routes/Migrate';
 import Artist from './routes/Artist';
+import Album from './routes/Album';
 import { Placeholder } from './routes/Placeholder';
 import DesignPreview from './pages/DesignPreview';
 import { initStore } from './stores';
@@ -74,6 +75,7 @@ render(
       <Route path="/downloads" component={Downloads} />
       <Route path="/import" component={Migrate} />
       <Route path="/artist/:name" component={Artist} />
+      <Route path="/album/:name" component={Album} />
       <Route path="/preview" component={DesignPreview} />
       <Route path="*" component={() => <Placeholder title={t('placeholder.notFoundTitle')} blurb={t('placeholder.notFoundBlurb')} />} />
     </HashRouter>

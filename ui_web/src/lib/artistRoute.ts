@@ -4,8 +4,26 @@
  * Artist names are display values rather than URL-safe IDs, so every path
  * segment must be encoded on navigation and decoded exactly once on arrival.
  */
-export function artistPath(name: string): string {
-  return `/artist/${encodeURIComponent(name.normalize('NFC'))}`;
+export function artistPath(name: string, opts?: { view?: 'discover' | 'library'; deezerId?: string }): string {
+  const params = new URLSearchParams();
+  if (opts?.view) params.set('view', opts.view);
+  if (opts?.deezerId) params.set('deezer_id', opts.deezerId);
+  const qs = params.toString();
+  return `/artist/${encodeURIComponent(name.normalize('NFC'))}${qs ? `?${qs}` : ''}`;
+}
+
+export function albumPath(name: string, artist: string, opts?: { view?: 'discover' | 'library'; deezerId?: string }): string {
+  const params = new URLSearchParams({ artist });
+  if (opts?.view) params.set('view', opts.view);
+  if (opts?.deezerId) params.set('deezer_id', opts.deezerId);
+  return `/album/${encodeURIComponent(name.normalize('NFC'))}?${params.toString()}`;
+}
+
+export function parseViewParams(query: Record<string, string | undefined>): { view: 'discover' | 'library'; deezerId?: string } {
+  return {
+    view: query.view === 'library' ? 'library' : 'discover',
+    deezerId: query.deezer_id || undefined,
+  };
 }
 
 export function decodeArtistName(segment: string | undefined): string {

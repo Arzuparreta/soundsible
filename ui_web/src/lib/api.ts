@@ -7,6 +7,8 @@ import type {
   PlaylistMap,
   LibrarySettings,
   SearchResult,
+  ArtistProfile,
+  AlbumProfile,
 } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode, PodcastSearchResult } from '../types/podcast';
 import type { DownloadQueueItem } from '../types/download';
@@ -553,6 +555,21 @@ export const api = {
     external_ids?: Record<string, unknown>;
     confirm_video_id?: string;
   }) => request<CatalogSaveResponse>('/api/catalog/save', { method: 'POST', body, timeoutMs: 30000 }),
+
+  getArtistProfile: (name: string, deezerId?: string, signal?: AbortSignal) =>
+    request<ArtistProfile>(
+      `/api/catalog/artist?name=${encodeURIComponent(name)}` +
+        (deezerId ? `&deezer_id=${encodeURIComponent(deezerId)}` : ''),
+      { signal, timeoutMs: 15000 },
+    ),
+
+  getAlbumProfile: (name: string, artist: string, deezerId?: string, signal?: AbortSignal) =>
+    request<AlbumProfile>(
+      `/api/catalog/album?name=${encodeURIComponent(name)}` +
+        `&artist=${encodeURIComponent(artist)}` +
+        (deezerId ? `&deezer_id=${encodeURIComponent(deezerId)}` : ''),
+      { signal, timeoutMs: 15000 },
+    ),
 
   // ── Podcasts ──
   getPodcastEpisodes: (feedId: string) =>

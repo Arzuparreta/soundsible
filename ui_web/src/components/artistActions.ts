@@ -33,7 +33,7 @@ export function artistMenuOptions(artist: string, ctx: ArtistMenuContext = {}): 
     },
   ];
   if (ctx.navigate)
-    list.push({ label: t('artistActions.goToArtist'), onSelect: () => ctx.navigate!(artistPath(artist)) });
+    list.push({ label: t('artistActions.goToArtist'), onSelect: () => ctx.navigate!(artistPath(artist, { view: 'library' })) });
   return { title: artist, actions: list };
 }
 
