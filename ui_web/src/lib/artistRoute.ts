@@ -26,6 +26,24 @@ export function parseViewParams(query: Record<string, string | undefined>): { vi
   };
 }
 
+/**
+ * Decide which tab an artist/album page shows.
+ *
+ * The URL carries the requested tab and a tap on the toggle overrides it until
+ * the next navigation. The clamp is the important part: the toggle is only
+ * rendered when the subject is in the library, so a `library` tab that survives
+ * onto a subject the user does not own would strand them on an empty list with
+ * no control to leave it.
+ */
+export function resolveViewMode(opts: {
+  urlView: 'discover' | 'library';
+  override: 'discover' | 'library' | null;
+  canToggle: boolean;
+}): 'discover' | 'library' {
+  if (!opts.canToggle) return 'discover';
+  return opts.override ?? opts.urlView;
+}
+
 export function decodeArtistName(segment: string | undefined): string {
   if (!segment) return '';
   try {

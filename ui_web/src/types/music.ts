@@ -98,12 +98,15 @@ export interface ArtistCandidate {
   nb_album?: number;
 }
 
+/** A release on an artist's page. Deezer's artist/<id>/albums rows carry no
+ * track count, so none is exposed here; `record_type` is what separates the
+ * albums rail from the singles/EPs rail. */
 export interface AlbumSummary {
   deezer_id: string;
   title: string;
   cover: string;
   year?: number | null;
-  track_count?: number;
+  record_type?: string;
 }
 
 export interface ArtistSummary {
@@ -111,12 +114,6 @@ export interface ArtistSummary {
   name: string;
   picture: string;
   nb_fans: number;
-}
-
-export interface LibraryAlbumSummary {
-  title: string;
-  cover: string;
-  track_count: number;
 }
 
 export interface ArtistProfile {
@@ -129,8 +126,6 @@ export interface ArtistProfile {
   albums: AlbumSummary[];
   singles_eps: AlbumSummary[];
   related_artists: ArtistSummary[];
-  library_tracks: CatalogItem[];
-  library_albums: LibraryAlbumSummary[];
   in_library: boolean;
   partial_failures?: Array<{ source: string; error: string }>;
   cached: boolean;
@@ -144,7 +139,6 @@ export interface AlbumProfile {
   year?: number | null;
   genre?: string;
   tracklist: CatalogItem[];
-  library_tracks: CatalogItem[];
   in_library: boolean;
   resolved: boolean;
   partial_failures?: Array<{ source: string; error: string }>;

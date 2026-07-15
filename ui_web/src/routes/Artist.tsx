@@ -1,11 +1,11 @@
-import { createMemo, createResource, createSignal, For, Show, type JSX, onCleanup } from 'solid-js';
+import { createEffect, createMemo, createResource, createSignal, For, on, Show, type JSX, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
 import { state, actions, musicLibrary } from '../stores';
 import { api } from '../lib/api';
 import { coverUrl } from '../lib/media';
-import { trackCount } from '../lib/format';
+import { shuffled } from '../lib/shuffle';
 import { toast } from '../lib/toast';
-import { artistKey, artistPath, albumPath, decodeArtistName, parseViewParams } from '../lib/artistRoute';
+import { artistKey, artistPath, albumPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { ArtistProfile, CatalogItem, Track } from '../types/music';
 import styles from './Artist.module.css';
@@ -55,7 +55,7 @@ export default function Artist() {
   const navigate = useNavigate();
   const name = createMemo(() => decodeArtistName(params.name));
   const viewParams = createMemo(() => parseViewParams(searchParams as Record<string, string | undefined>));
-  const [view, setView] = createSignal<ViewMode>(viewParams().view);
+  const [viewOverride, setViewOverride] = createSignal<ViewMode | null>(null);
   const [disambigOpen, setDisambigOpen] = createSignal(false);
   const [saving, setSaving] = createSignal<Set<string>>(new Set());
   const [saved, setSaved] = createSignal<Set<string>>(new Set());
@@ -103,6 +103,23 @@ export default function Artist() {
 
   const showToggle = createMemo(() => inLibrary());
 
+  // The router reuses this component when only :name changes, so a tab held in
+  // a signal seeded at mount would survive navigation to a different artist —
+  // stranding the user on an empty "My library" tab whose toggle is hidden for
+  // artists they do not own. The URL is the source of truth; a tap overrides it
+  // until the next navigation, and the tab is forced to discover whenever the
+  // toggle is not offered, so the view always has a way out.
+  createEffect(
+    on(
+      () => JSON.stringify([name(), viewParams().deezerId ?? '']),
+      () => setViewOverride(null),
+      { defer: true },
+    ),
+  );
+  const view = createMemo<ViewMode>(() =>
+    resolveViewMode({ urlView: viewParams().view, override: viewOverride(), canToggle: showToggle() }),
+  );
+
   const playAll = () => {
     if (view() === 'library') {
       const tracks = libraryTrackList();
@@ -120,8 +137,8 @@ export default function Artist() {
     } else {
       const items = topTracks();
       if (items.length === 0) return;
-      const shuffled = [...items].sort(() => Math.random() - 0.5);
-      void playExternalItem(shuffled[0], shuffled);
+      const order = shuffled(items);
+      void playExternalItem(order[0], order);
     }
   };
 
@@ -152,13 +169,15 @@ export default function Artist() {
         source: 'preview',
       };
       if (queue) {
-        const tracks = queue.map((q) => {
-          const tr = itemToTrack(q);
-          if (tr) return tr;
-          return { id: '', title: q.title, artist: itemArtist(q), cover: q.cover, source: 'preview' as const };
-        }).filter((tr) => tr.id);
-        tracks[0] = track;
-        actions.playFrom(tracks, 0);
+        // Queue entries that are not in the library have no playable id yet and
+        // are dropped. The resolved track is prepended rather than written over
+        // index 0, which used to silently evict whichever owned track happened
+        // to sort first.
+        const rest = queue
+          .filter((q) => q !== item)
+          .map(itemToTrack)
+          .filter((tr): tr is Track => !!tr);
+        actions.playFrom([track, ...rest], 0);
       } else {
         actions.playTrack(track);
       }
@@ -221,7 +240,7 @@ export default function Artist() {
   };
 
   const switchView = (mode: ViewMode) => {
-    setView(mode);
+    setViewOverride(mode);
   };
 
   return (
@@ -476,7 +495,7 @@ function DiscoverView(props: {
                 <button class={styles.albumCard} type="button" onClick={() => props.onAlbumClick(al)}>
                   <span class={styles.albumCover} style={{ background: al.cover ? `url("${al.cover}") center / cover no-repeat, ${gradientFor(al.title)}` : gradientFor(al.title) }} />
                   <span class={styles.albumName}>{al.title}</span>
-                  <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}{al.year && al.track_count ? ' · ' : ''}{al.track_count ? trackCount(al.track_count) : ''}</span>
+                  <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
                 </button>
               )}
             </For>

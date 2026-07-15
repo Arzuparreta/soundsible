@@ -260,10 +260,15 @@ def _mock_deezer_artist_top(artist_id, limit=50, library_keys=None):
     ]
 
 
-def _mock_deezer_artist_albums(artist_id, album_type="album", limit=50):
-    return [
-        {"deezer_id": "201", "title": "Heldeep Sessions", "cover": "http://x/201.jpg", "year": 2020, "track_count": 12},
-    ]
+def _mock_deezer_artist_releases(artist_id, limit=100):
+    return {
+        "albums": [
+            {"deezer_id": "201", "title": "Heldeep Sessions", "cover": "http://x/201.jpg", "year": 2020, "record_type": "album"},
+        ],
+        "singles_eps": [
+            {"deezer_id": "202", "title": "Gecko", "cover": "http://x/202.jpg", "year": 2014, "record_type": "single"},
+        ],
+    }
 
 
 def _mock_deezer_related(artist_id, limit=20):
@@ -296,7 +301,7 @@ def test_artist_endpoint_with_deezer_id(monkeypatch):
     monkeypatch.setattr(catalog_routes, "_resolve_artist_id", _mock_resolve_artist_id)
     monkeypatch.setattr(catalog_routes, "_deezer_artist_profile", _mock_deezer_artist_profile)
     monkeypatch.setattr(catalog_routes, "_deezer_artist_top_tracks", _mock_deezer_artist_top)
-    monkeypatch.setattr(catalog_routes, "_deezer_artist_albums", _mock_deezer_artist_albums)
+    monkeypatch.setattr(catalog_routes, "_deezer_artist_releases", _mock_deezer_artist_releases)
     monkeypatch.setattr(catalog_routes, "_deezer_related_artists", _mock_deezer_related)
 
     body = _make_app().test_client().get("/api/catalog/artist?name=Oliver+Heldens&deezer_id=27").get_json()
@@ -320,7 +325,7 @@ def test_artist_endpoint_by_name_only(monkeypatch):
     monkeypatch.setattr(catalog_routes, "_resolve_artist_id", _mock_resolve_artist_id)
     monkeypatch.setattr(catalog_routes, "_deezer_artist_profile", _mock_deezer_artist_profile)
     monkeypatch.setattr(catalog_routes, "_deezer_artist_top_tracks", _mock_deezer_artist_top)
-    monkeypatch.setattr(catalog_routes, "_deezer_artist_albums", _mock_deezer_artist_albums)
+    monkeypatch.setattr(catalog_routes, "_deezer_artist_releases", _mock_deezer_artist_releases)
     monkeypatch.setattr(catalog_routes, "_deezer_related_artists", _mock_deezer_related)
 
     body = _make_app().test_client().get("/api/catalog/artist?name=Oliver+Heldens").get_json()
@@ -336,7 +341,7 @@ def test_artist_endpoint_ambiguous_name(monkeypatch):
     monkeypatch.setattr(catalog_routes, "_resolve_artist_id", _mock_resolve_artist_id_ambiguous)
     monkeypatch.setattr(catalog_routes, "_deezer_artist_profile", _mock_deezer_artist_profile)
     monkeypatch.setattr(catalog_routes, "_deezer_artist_top_tracks", _mock_deezer_artist_top)
-    monkeypatch.setattr(catalog_routes, "_deezer_artist_albums", _mock_deezer_artist_albums)
+    monkeypatch.setattr(catalog_routes, "_deezer_artist_releases", _mock_deezer_artist_releases)
     monkeypatch.setattr(catalog_routes, "_deezer_related_artists", _mock_deezer_related)
 
     body = _make_app().test_client().get("/api/catalog/artist?name=Nirvana").get_json()
@@ -359,9 +364,9 @@ def test_artist_endpoint_not_in_deezer(monkeypatch):
     assert body["resolved"] is False
     assert body["deezer_id"] is None
     assert body["top_tracks"] == []
+    assert body["albums"] == []
+    assert body["singles_eps"] == []
     assert body["in_library"] is True
-    assert len(body["library_tracks"]) == 1
-    assert body["library_tracks"][0]["title"] == "Local Song"
 
 
 def test_artist_endpoint_caching(monkeypatch):
@@ -370,7 +375,7 @@ def test_artist_endpoint_caching(monkeypatch):
     monkeypatch.setattr(catalog_routes, "_resolve_artist_id", _mock_resolve_artist_id)
     monkeypatch.setattr(catalog_routes, "_deezer_artist_profile", _mock_deezer_artist_profile)
     monkeypatch.setattr(catalog_routes, "_deezer_artist_top_tracks", _mock_deezer_artist_top)
-    monkeypatch.setattr(catalog_routes, "_deezer_artist_albums", _mock_deezer_artist_albums)
+    monkeypatch.setattr(catalog_routes, "_deezer_artist_releases", _mock_deezer_artist_releases)
     monkeypatch.setattr(catalog_routes, "_deezer_related_artists", _mock_deezer_related)
 
     client = _make_app().test_client()
@@ -401,13 +406,12 @@ def test_artist_endpoint_in_library_badge(monkeypatch):
         return [item]
 
     monkeypatch.setattr(catalog_routes, "_deezer_artist_top_tracks", top_with_library)
-    monkeypatch.setattr(catalog_routes, "_deezer_artist_albums", _mock_deezer_artist_albums)
+    monkeypatch.setattr(catalog_routes, "_deezer_artist_releases", _mock_deezer_artist_releases)
     monkeypatch.setattr(catalog_routes, "_deezer_related_artists", _mock_deezer_related)
 
     body = _make_app().test_client().get("/api/catalog/artist?name=Oliver+Heldens").get_json()
 
     assert body["in_library"] is True
-    assert len(body["library_tracks"]) == 1
     assert body["top_tracks"][0]["title"] == "Gecko"
     assert body["top_tracks"][0]["action_state"]["in_library"] is True
 
@@ -481,5 +485,173 @@ def test_album_endpoint_not_in_deezer(monkeypatch):
 
     assert body["resolved"] is False
     assert body["in_library"] is True
-    assert len(body["library_tracks"]) == 1
-    assert body["library_tracks"][0]["title"] == "Local Track"
+    assert body["tracklist"] == []
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Regressions: Deezer release partitioning, greenlet failures, cache bounds
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def _deezer_album_row(album_id: str, title: str, record_type: str, release_date: str = "2020-01-01"):
+    """A row shaped like a real artist/<id>/albums entry.
+
+    Deliberately has no `nb_tracks` key, because the live endpoint does not
+    return one — that absence is what made the old `track_count` always 0.
+    """
+    return {
+        "id": album_id,
+        "title": title,
+        "record_type": record_type,
+        "release_date": release_date,
+        "cover_xl": f"http://x/{album_id}.jpg",
+        "explicit_lyrics": False,
+    }
+
+
+def test_artist_releases_partition_by_record_type(monkeypatch):
+    """Deezer ignores the `type` argument on artist/<id>/albums: every value
+    returns the same mixed rows. Partitioning must come from record_type, and
+    the fetch must happen exactly once rather than per rail."""
+    calls = []
+
+    def fake_get(path, params=None, timeout=8):
+        calls.append((path, dict(params or {})))
+        return {
+            "data": [
+                _deezer_album_row("1", "Real Album", "album"),
+                _deezer_album_row("2", "A Single", "single"),
+                _deezer_album_row("3", "An EP", "ep"),
+                _deezer_album_row("4", "Another Album", "album"),
+            ]
+        }
+
+    monkeypatch.setattr(catalog_routes, "_deezer_get", fake_get)
+
+    out = catalog_routes._deezer_artist_releases("27")
+
+    assert [a["title"] for a in out["albums"]] == ["Real Album", "Another Album"]
+    assert [s["title"] for s in out["singles_eps"]] == ["A Single", "An EP"]
+    assert len(calls) == 1, "releases must be fetched once, not once per rail"
+    assert "type" not in calls[0][1], "Deezer ignores `type`; sending it implies a filter that does not exist"
+
+
+def test_artist_releases_treats_unknown_record_type_as_album(monkeypatch):
+    monkeypatch.setattr(
+        catalog_routes,
+        "_deezer_get",
+        lambda path, params=None, timeout=8: {"data": [_deezer_album_row("9", "Odd One", "compilation")]},
+    )
+
+    out = catalog_routes._deezer_artist_releases("27")
+
+    assert [a["title"] for a in out["albums"]] == ["Odd One"]
+    assert out["singles_eps"] == []
+
+
+def test_artist_releases_omit_track_count(monkeypatch):
+    """artist/<id>/albums carries no nb_tracks, so no track_count is emitted
+    rather than a hardcoded 0 that the UI would render as a blank count."""
+    monkeypatch.setattr(
+        catalog_routes,
+        "_deezer_get",
+        lambda path, params=None, timeout=8: {"data": [_deezer_album_row("1", "Real Album", "album")]},
+    )
+
+    album = catalog_routes._deezer_artist_releases("27")["albums"][0]
+
+    assert "track_count" not in album
+    assert album["year"] == 2020
+    assert album["record_type"] == "album"
+
+
+def test_artist_endpoint_reports_failing_fetch_instead_of_null(monkeypatch):
+    """A fetch that raises must surface in partial_failures and leave the rail
+    an empty list. Reading greenlet .value swallowed the error and emitted null."""
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_routes, "_resolve_artist_id", _mock_resolve_artist_id)
+    monkeypatch.setattr(catalog_routes, "_deezer_artist_profile", _mock_deezer_artist_profile)
+    monkeypatch.setattr(catalog_routes, "_deezer_artist_top_tracks", _mock_deezer_artist_top)
+    monkeypatch.setattr(catalog_routes, "_deezer_related_artists", _mock_deezer_related)
+
+    def boom(artist_id, limit=100):
+        raise RuntimeError("deezer 503")
+
+    monkeypatch.setattr(catalog_routes, "_deezer_artist_releases", boom)
+
+    body = _make_app().test_client().get("/api/catalog/artist?name=Oliver+Heldens").get_json()
+
+    assert body["albums"] == []
+    assert body["singles_eps"] == []
+    assert body["albums"] is not None and body["singles_eps"] is not None
+    assert {"source": "deezer", "error": "deezer 503"} in body["partial_failures"]
+    # An unrelated rail still resolves.
+    assert body["top_tracks"][0]["title"] == "Gecko"
+
+
+def test_gather_reports_timed_out_job(monkeypatch):
+    """A greenlet still running at the deadline leaves both .value and
+    .exception unset, so it must be reported from .successful()."""
+    pytest.importorskip("gevent")
+    import gevent
+
+    monkeypatch.setattr(catalog_routes, "_DEEZER_FANOUT_TIMEOUT_SEC", 0.05)
+    failures = []
+
+    def slow():
+        gevent.sleep(5)
+        return ["never"]
+
+    results = catalog_routes._gather((("slow", slow), ("fast", lambda: ["ok"])), failures)
+
+    assert results.get("fast") == ["ok"]
+    assert "slow" not in results
+    assert failures == [{"source": "deezer", "error": "timed out"}]
+
+
+def test_cache_put_evicts_expired_and_caps_size(monkeypatch):
+    cache = {}
+    monkeypatch.setattr(catalog_routes, "_CACHE_MAX_ENTRIES", 3)
+
+    catalog_routes._cache_put(cache, "stale", -1, {"v": "stale"})
+    assert catalog_routes._cache_get(cache, "stale") is None
+
+    for i in range(10):
+        catalog_routes._cache_put(cache, f"k{i}", 600, {"v": i})
+
+    assert len(cache) <= 3
+    assert "stale" not in cache
+    assert catalog_routes._cache_get(cache, "k9") == {"v": 9}
+
+
+def test_cache_get_drops_expired_entry():
+    cache = {}
+    catalog_routes._cache_put(cache, "k", -1, {"v": 1})
+    assert catalog_routes._cache_get(cache, "k") is None
+    assert "k" not in cache, "expired entry should not linger after a read"
+
+
+def test_cached_body_is_isolated_from_caller_mutation():
+    cache = {}
+    catalog_routes._cache_put(cache, "k", 600, {"v": 1})
+    first = catalog_routes._cache_get(cache, "k")
+    first["v"] = "mutated"
+    assert catalog_routes._cache_get(cache, "k") == {"v": 1}
+
+
+def test_resolve_artist_id_returns_other_exact_matches_as_candidates(monkeypatch):
+    monkeypatch.setattr(
+        catalog_routes,
+        "_deezer_artist_search",
+        lambda name, limit=10: [
+            {"deezer_id": "1", "name": "Nirvana", "picture": "", "nb_fans": 10, "nb_album": 1},
+            {"deezer_id": "2", "name": "Nirvana", "picture": "", "nb_fans": 900, "nb_album": 2},
+            {"deezer_id": "3", "name": "Nirvana UK", "picture": "", "nb_fans": 5, "nb_album": 1},
+        ],
+    )
+
+    resolved, candidates = catalog_routes._resolve_artist_id("Nirvana")
+
+    assert resolved == "2", "most-followed exact match wins"
+    assert [c["deezer_id"] for c in candidates] == ["1"]
