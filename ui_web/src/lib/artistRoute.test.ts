@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { artistPath, albumPath, parseViewParams, decodeArtistName, artistKey } from './artistRoute';
+import { artistPath, albumPath, parseViewParams, decodeArtistName, artistKey, resolveViewMode } from './artistRoute';
 
 describe('artistPath / decodeArtistName round-trip', () => {
   it('preserves spaces and Unicode through encode -> decode', () => {
@@ -103,5 +103,24 @@ describe('artistKey', () => {
   it('treats null/undefined as an empty key', () => {
     expect(artistKey(null)).toBe('');
     expect(artistKey(undefined)).toBe('');
+  });
+});
+
+describe('resolveViewMode', () => {
+  it('follows the URL when the toggle is available', () => {
+    expect(resolveViewMode({ urlView: 'library', override: null, canToggle: true })).toBe('library');
+    expect(resolveViewMode({ urlView: 'discover', override: null, canToggle: true })).toBe('discover');
+  });
+
+  it('lets an explicit tap win over the URL', () => {
+    expect(resolveViewMode({ urlView: 'discover', override: 'library', canToggle: true })).toBe('library');
+    expect(resolveViewMode({ urlView: 'library', override: 'discover', canToggle: true })).toBe('discover');
+  });
+
+  it('forces discover when no toggle is offered, whatever was asked for', () => {
+    // Without this clamp a `library` tab carried onto an artist the user does
+    // not own renders an empty list with no visible control to escape it.
+    expect(resolveViewMode({ urlView: 'library', override: null, canToggle: false })).toBe('discover');
+    expect(resolveViewMode({ urlView: 'library', override: 'library', canToggle: false })).toBe('discover');
   });
 });
