@@ -256,6 +256,22 @@ class DatabaseManager:
                 conn.execute(f"ALTER TABLE pairing_sessions ADD COLUMN {col} {defn}")
 
     @staticmethod
+    def _create_lyrics_table(conn):
+        """Lyrics cache keyed by track id. Kept separate from `tracks` because
+        that table is rebuilt from the library.json manifest on every sync;
+        lyrics are local-only and must survive re-syncs."""
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS track_lyrics (
+                track_id TEXT PRIMARY KEY,
+                synced TEXT,
+                plain TEXT,
+                instrumental INTEGER NOT NULL DEFAULT 0,
+                source TEXT,
+                checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+    @staticmethod
     def _create_performance_indexes(conn):
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_tracks_album_sort
@@ -275,6 +291,7 @@ class DatabaseManager:
                 self._create_related_mix_cache_table(conn)
                 self._create_auth_tables(conn)
                 self._create_pairing_table(conn)
+                self._create_lyrics_table(conn)
                 self._create_performance_indexes(conn)
                 conn.execute("COMMIT")
             except Exception as e:
@@ -587,6 +604,73 @@ class DatabaseManager:
             except Exception as e:
                 conn.execute("ROLLBACK")
                 logger.warning("Error caching related mix: %s", e)
+
+    # Note: Lyrics cache
+
+    _LYRICS_NEGATIVE_TTL_SEC = 7 * 24 * 3600
+
+    def get_lyrics(self, track_id: str) -> Optional[Dict[str, Any]]:
+        """Return the cached lyrics record for a track, or None if missing.
+        A not-found record (no synced/plain, not instrumental) expires after
+        7 days so the provider is retried; positive results never expire."""
+        if not track_id:
+            return None
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT synced, plain, instrumental, source, checked_at FROM track_lyrics WHERE track_id = ?",
+                (track_id,),
+            ).fetchone()
+            if not row:
+                return None
+            record = dict(row)
+            record["instrumental"] = bool(record["instrumental"])
+            if not record["synced"] and not record["plain"] and not record["instrumental"]:
+                cutoff = int(self._LYRICS_NEGATIVE_TTL_SEC)
+                fresh = conn.execute(
+                    """
+                    SELECT 1 FROM track_lyrics
+                    WHERE track_id = ?
+                      AND checked_at >= datetime('now', ? || ' seconds')
+                    """,
+                    (track_id, f"-{cutoff}"),
+                ).fetchone()
+                if not fresh:
+                    return None
+            return record
+
+    def set_lyrics(
+        self,
+        track_id: str,
+        *,
+        synced: Optional[str] = None,
+        plain: Optional[str] = None,
+        instrumental: bool = False,
+        source: Optional[str] = None,
+    ) -> None:
+        """Upsert the lyrics record for a track (also used for negative caching)."""
+        if not track_id:
+            return
+        with self._get_connection() as conn:
+            conn.execute("BEGIN TRANSACTION")
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO track_lyrics (track_id, synced, plain, instrumental, source, checked_at)
+                    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(track_id) DO UPDATE SET
+                        synced=excluded.synced,
+                        plain=excluded.plain,
+                        instrumental=excluded.instrumental,
+                        source=excluded.source,
+                        checked_at=CURRENT_TIMESTAMP
+                    """,
+                    (track_id, synced, plain, 1 if instrumental else 0, source),
+                )
+                conn.execute("COMMIT")
+            except Exception as e:
+                conn.execute("ROLLBACK")
+                logger.warning("Error caching lyrics: %s", e)
 
     # Note: Agent token storage
 

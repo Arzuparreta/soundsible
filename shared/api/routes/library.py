@@ -180,6 +180,79 @@ def purge_missing_library_tracks():
     return jsonify({"status": "success", **summary})
 
 
+@library_bp.route("/api/library/tracks/<track_id>/lyrics", methods=["GET"])
+@rate_limit("library_lyrics", limit=60, window_sec=60)
+def get_track_lyrics(track_id):
+    """Lyrics for a library track: served from the local cache when present,
+    otherwise fetched from LRCLIB and cached (including not-found results)."""
+    from shared.database import DatabaseManager
+    from shared.lyrics import fetch_lyrics
+
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    track = api["get_track_by_id"](lib, track_id)
+    if not track:
+        return jsonify({"error": "Track not found"}), 404
+
+    db = DatabaseManager()
+    refresh = request.args.get("refresh") in ("1", "true")
+    if not refresh:
+        cached = db.get_lyrics(track_id)
+        if cached:
+            return jsonify({
+                "synced": cached["synced"],
+                "plain": cached["plain"],
+                "instrumental": cached["instrumental"],
+                "cached": True,
+            })
+
+    record = fetch_lyrics(track.artist, track.title, track.album, track.duration)
+    if record is None:
+        # Provider unreachable: don't cache, let a later request retry.
+        return jsonify({"synced": None, "plain": None, "instrumental": False, "cached": False})
+    db.set_lyrics(
+        track_id,
+        synced=record["synced"],
+        plain=record["plain"],
+        instrumental=record["instrumental"],
+        source=record["source"],
+    )
+    return jsonify({
+        "synced": record["synced"],
+        "plain": record["plain"],
+        "instrumental": record["instrumental"],
+        "cached": False,
+    })
+
+
+@library_bp.route("/api/lyrics", methods=["GET"])
+@rate_limit("lyrics_lookup", limit=60, window_sec=60)
+def get_lyrics_by_metadata():
+    """Lyrics lookup by metadata, for tracks not in the library (previews).
+    No caching: preview ids are ephemeral and LRCLIB is keyless and fast."""
+    from shared.lyrics import fetch_lyrics
+
+    artist = (request.args.get("artist") or "").strip()
+    title = (request.args.get("title") or "").strip()
+    album = (request.args.get("album") or "").strip() or None
+    try:
+        duration = int(request.args.get("duration") or 0) or None
+    except ValueError:
+        duration = None
+    if not artist or not title:
+        return jsonify({"error": "artist and title are required"}), 400
+
+    record = fetch_lyrics(artist, title, album, duration)
+    if record is None:
+        return jsonify({"synced": None, "plain": None, "instrumental": False, "cached": False})
+    return jsonify({
+        "synced": record["synced"],
+        "plain": record["plain"],
+        "instrumental": record["instrumental"],
+        "cached": False,
+    })
+
+
 @library_bp.route("/api/library/tracks/<track_id>/metadata", methods=["POST"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_update_metadata", limit=60, window_sec=60)

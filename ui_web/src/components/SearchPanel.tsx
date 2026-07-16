@@ -15,12 +15,13 @@ import { openTrackMenu } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
+import { LyricsPanel } from './LyricsPanel';
 import { t } from '../lib/i18n';
 import type { CatalogItem, SearchResult, Track } from '../types/music';
 import styles from './SearchPanel.module.css';
 
 export type PanelSide = 'left' | 'right';
-export type PanelTab = 'search' | 'discover';
+export type PanelTab = 'search' | 'discover' | 'lyrics';
 
 /** Search panel visibility + docking side (desktop Now Playing). Persisted so
  * the layout comes back the way the user arranged it. */
@@ -30,10 +31,12 @@ const [panelSide, setPanelSide] = createSignal<PanelSide>(
 );
 export { panelOpen, panelSide };
 
-/** Two modes, two intents: "search" is *I know what I want to hear*;
- * "discover" is *play me something — I don't know what*. Persisted. */
+/** Three modes, three intents: "search" is *I know what I want to hear*;
+ * "discover" is *play me something — I don't know what*; "lyrics" follows
+ * along with what's playing. Persisted. */
+const _storedTab = localStorage.getItem('np:panelTab');
 const [panelTab, setPanelTab] = createSignal<PanelTab>(
-  localStorage.getItem('np:panelTab') === 'discover' ? 'discover' : 'search',
+  _storedTab === 'discover' || _storedTab === 'lyrics' ? _storedTab : 'search',
 );
 export { panelTab };
 
@@ -545,6 +548,15 @@ export function SearchPanel() {
           >
             {t('searchPanel.tabDiscover')}
           </button>
+          <button
+            classList={{ [styles.tab]: true, [styles.tabOn]: panelTab() === 'lyrics' }}
+            type="button"
+            role="tab"
+            aria-selected={panelTab() === 'lyrics'}
+            onClick={() => selectPanelTab('lyrics')}
+          >
+            {t('searchPanel.tabLyrics')}
+          </button>
         </div>
         <div class={styles.headActions}>
           <button
@@ -569,7 +581,8 @@ export function SearchPanel() {
       <Show
         when={panelTab() === 'search'}
         fallback={
-          /* ── Discover: "I don't know what to play" ── */
+          <Show when={panelTab() === 'discover'} fallback={<LyricsPanel />}>
+          {/* ── Discover: "I don't know what to play" ── */}
           <div class={styles.body}>
             <div class={styles.tiles}>
               <button
@@ -697,6 +710,7 @@ export function SearchPanel() {
               <p class={styles.hint}>{t('searchPanel.discoverHint')}</p>
             </Show>
           </div>
+          </Show>
         }
       >
         {/* ── Search: "I know what I want to hear" ── */}

@@ -457,6 +457,13 @@ export const zh: Dict = {
     reasonColdStart: '添加音乐、导入歌单或搜索内容，让 Soundsible 学会推荐。',
     reasonMadeForLibrary: '基于收藏、歌单和资料库结构的本地优先推荐。',
   },
+  lyricsPanel: {
+    noTrack: '播放歌曲后即可查看歌词。',
+    loading: '正在加载歌词',
+    error: '歌词加载失败。',
+    instrumental: '纯音乐。',
+    notFound: '未找到这首歌的歌词。',
+  },
   discoverNodes: {
     title: '为你推荐',
     subtitle: '从你的曲库延伸出的新音乐——最近添加的权重更高。',
@@ -471,6 +478,7 @@ export const zh: Dict = {
     panelTitle: '搜索',
     tabSearch: '搜索',
     tabDiscover: '发现',
+    tabLyrics: '歌词',
     radioTile: '歌曲电台',
     radioTileSub: '基于当前播放的混音带',
     surpriseTile: '给我惊喜',

@@ -471,6 +471,13 @@ export const es: Dict = {
     reasonMadeForLibrary:
       'Selecciones locales a partir de favoritos, listas y la estructura de tu biblioteca.',
   },
+  lyricsPanel: {
+    noTrack: 'Reproduce algo para ver su letra.',
+    loading: 'Cargando letra',
+    error: 'No se pudo cargar la letra.',
+    instrumental: 'Pista instrumental.',
+    notFound: 'No se encontró letra para esta canción.',
+  },
   discoverNodes: {
     title: 'Para ti',
     subtitle: 'Novedades que parten de tu biblioteca — lo último que añadiste pesa más.',
@@ -485,6 +492,7 @@ export const es: Dict = {
     panelTitle: 'Buscar',
     tabSearch: 'Buscar',
     tabDiscover: 'Descubrir',
+    tabLyrics: 'Letra',
     radioTile: 'Radio de esta canción',
     radioTileSub: 'Una mezcla a partir de lo que suena',
     surpriseTile: 'Sorpréndeme',

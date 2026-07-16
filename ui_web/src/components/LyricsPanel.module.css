@@ -1,0 +1,77 @@
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-md) var(--space-sm) var(--space-xl) var(--space-md);
+  overscroll-behavior: contain;
+}
+
+.hint {
+  margin: var(--space-md) var(--space-2xs);
+  font-size: var(--text-caption);
+  color: var(--ink-secondary);
+}
+
+.loading {
+  margin: var(--space-xl) auto;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--hairline);
+  border-top-color: var(--accent);
+  border-radius: var(--radius-full);
+  animation: lyricsSpin 0.8s linear infinite;
+}
+
+@keyframes lyricsSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.plain {
+  margin: 0;
+  padding: 0 var(--space-2xs);
+  font: inherit;
+  font-size: var(--text-body);
+  line-height: 1.7;
+  color: var(--ink-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.synced {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  /* Breathing room so the first/last lines can still centre on scroll. */
+  padding: 30% 0 40%;
+}
+
+.line {
+  padding: var(--space-2xs) var(--space-2xs);
+  border: 0;
+  background: none;
+  text-align: left;
+  font: inherit;
+  font-size: var(--text-title);
+  font-weight: var(--fw-semibold);
+  line-height: 1.45;
+  color: var(--ink-tertiary);
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out), transform var(--dur-short) var(--ease-out);
+}
+
+.line:hover {
+  color: var(--ink-secondary);
+}
+
+.linePast {
+  color: var(--ink-secondary);
+}
+
+.lineActive,
+.lineActive:hover {
+  color: var(--ink-primary);
+  transform: scale(1.02);
+  transform-origin: left center;
+}

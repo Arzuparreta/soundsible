@@ -12,6 +12,13 @@ export interface Track {
   source?: 'preview';
 }
 
+export interface LyricsResponse {
+  synced: string | null;
+  plain: string | null;
+  instrumental: boolean;
+  cached: boolean;
+}
+
 export interface SearchResult {
   id: string;
   title: string;

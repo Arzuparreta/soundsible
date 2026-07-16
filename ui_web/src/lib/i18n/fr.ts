@@ -476,6 +476,13 @@ export const fr: Dict = {
     reasonMadeForLibrary:
       'Sélections locales à partir des favoris, listes et de la structure de votre bibliothèque.',
   },
+  lyricsPanel: {
+    noTrack: 'Lancez un titre pour voir ses paroles.',
+    loading: 'Chargement des paroles',
+    error: 'Impossible de charger les paroles.',
+    instrumental: 'Titre instrumental.',
+    notFound: 'Aucunes paroles trouvées pour ce titre.',
+  },
   discoverNodes: {
     title: 'Pour vous',
     subtitle: 'Des découvertes issues de votre bibliothèque — vos derniers ajouts pèsent plus.',
@@ -490,6 +497,7 @@ export const fr: Dict = {
     panelTitle: 'Rechercher',
     tabSearch: 'Rechercher',
     tabDiscover: 'Découvrir',
+    tabLyrics: 'Paroles',
     radioTile: 'Radio de ce titre',
     radioTileSub: 'Un mix inspiré de la lecture en cours',
     surpriseTile: 'Surprends-moi',

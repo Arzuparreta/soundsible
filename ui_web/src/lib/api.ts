@@ -9,6 +9,7 @@ import type {
   SearchResult,
   ArtistProfile,
   AlbumProfile,
+  LyricsResponse,
 } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode, PodcastSearchResult } from '../types/podcast';
 import type { DownloadQueueItem } from '../types/download';
@@ -377,6 +378,19 @@ export const api = {
       method: 'DELETE',
       timeoutMs: 15000,
     }),
+
+  // ── Lyrics (LRCLIB via the engine; library tracks are cached server-side) ──
+  getTrackLyrics: (trackId: string) =>
+    request<LyricsResponse>(`/api/library/tracks/${encodeURIComponent(trackId)}/lyrics`, {
+      timeoutMs: 15000,
+    }),
+  /** Lyrics for tracks not in the library (previews), looked up by metadata. */
+  getLyricsByMetadata: (p: { artist: string; title: string; album?: string; duration?: number }) => {
+    const params = new URLSearchParams({ artist: p.artist, title: p.title });
+    if (p.album) params.set('album', p.album);
+    if (p.duration) params.set('duration', String(Math.round(p.duration)));
+    return request<LyricsResponse>(`/api/lyrics?${params.toString()}`, { timeoutMs: 15000 });
+  },
 
   // ── Track metadata + cover (engine rewrites the file's tags) ──
   updateTrackMetadata: (

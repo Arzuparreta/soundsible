@@ -464,6 +464,13 @@ export const en = {
     reasonMadeForLibrary:
       'Local-first picks from favourites, playlists, and library structure.',
   },
+  lyricsPanel: {
+    noTrack: 'Play something to see its lyrics.',
+    loading: 'Loading lyrics',
+    error: 'Lyrics could not be loaded.',
+    instrumental: 'Instrumental track.',
+    notFound: 'No lyrics found for this track.',
+  },
   discoverNodes: {
     title: 'For you',
     subtitle: 'Fresh picks branching out from your library — your newest additions weigh more.',
@@ -478,6 +485,7 @@ export const en = {
     panelTitle: 'Search',
     tabSearch: 'Search',
     tabDiscover: 'Discover',
+    tabLyrics: 'Lyrics',
     radioTile: 'Song radio',
     radioTileSub: 'A mix seeded by what’s playing',
     surpriseTile: 'Surprise me',
