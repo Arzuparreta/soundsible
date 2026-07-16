@@ -17,6 +17,7 @@ export interface LyricsResponse {
   plain: string | null;
   instrumental: boolean;
   cached: boolean;
+  pending?: boolean;
 }
 
 export interface SearchResult {

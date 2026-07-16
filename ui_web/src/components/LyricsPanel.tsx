@@ -32,13 +32,22 @@ export function LyricsPanel() {
   });
 
   const [lyrics] = createResource(lyricsKey, async (key): Promise<LyricsResponse> => {
-    if (key.inLibrary) return api.getTrackLyrics(key.id);
-    return api.getLyricsByMetadata({
-      artist: key.artist,
-      title: key.title,
-      album: key.album,
-      duration: key.duration,
-    });
+    // Cold LRCLIB calls run on two dedicated, zero-backlog server workers.
+    // Polling keeps this resource in its loading state without tying up an API
+    // worker while LRCLIB responds (typically several seconds on a cold miss).
+    for (let attempt = 0; attempt < 16; attempt += 1) {
+      const result = key.inLibrary
+        ? await api.getTrackLyrics(key.id)
+        : await api.getLyricsByMetadata({
+            artist: key.artist,
+            title: key.title,
+            album: key.album,
+            duration: key.duration,
+          });
+      if (!result.pending) return result;
+      await new Promise((resolve) => window.setTimeout(resolve, 750));
+    }
+    throw new Error('Lyrics lookup timed out');
   });
 
   const parsed = createMemo(() => {
