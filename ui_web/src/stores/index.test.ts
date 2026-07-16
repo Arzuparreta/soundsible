@@ -50,6 +50,8 @@ async function loadStore(apiOverrides: Record<string, unknown> = {}) {
   vi.doMock('../lib/media', () => ({
     streamUrl: (id: string) => `/stream/${id}`,
     previewUrl: (id: string) => `/preview/${id}`,
+    playbackYoutubeId: (track: { id: string; youtube_id?: string | null; source?: 'preview' }) =>
+      track.source === 'preview' ? track.id : track.youtube_id || null,
     podcastStreamUrl: (id: string) => `/podcast/${id}`,
     coverUrl: (id: string) => `/cover/${id}`,
     bustCovers: vi.fn(),

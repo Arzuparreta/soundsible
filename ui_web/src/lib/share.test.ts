@@ -14,6 +14,17 @@ describe('shareUrlFor', () => {
     );
   });
 
+  it('shares the exact id used by preview playback when youtube_id disagrees', () => {
+    expect(
+      shareUrlFor({
+        id: 'playing-id',
+        title: 'Song',
+        source: 'preview',
+        youtube_id: 'stale-catalog-id',
+      }),
+    ).toBe('https://www.youtube.com/watch?v=playing-id');
+  });
+
   it('returns no url for podcast episodes (id is a guid, not a video)', () => {
     expect(
       shareUrlFor({ id: 'ep-guid', title: 'Episode', source: 'preview', media_kind: 'podcast_episode', podcast_episode_guid: 'ep-guid' }),
