@@ -186,7 +186,7 @@ def get_track_lyrics(track_id):
     """Lyrics for a library track: served from the local cache when present,
     otherwise fetched from LRCLIB and cached (including not-found results)."""
     from shared.database import DatabaseManager
-    from shared.lyrics import fetch_lyrics
+    from shared.lyrics import poll_lyrics
 
     api = _get_api()
     lib, _, _ = api["get_core"]()
@@ -206,10 +206,24 @@ def get_track_lyrics(track_id):
                 "cached": True,
             })
 
-    record = fetch_lyrics(track.artist, track.title, track.album, track.duration)
+    lookup_status, record = poll_lyrics(track.artist, track.title, track.album, track.duration)
+    if lookup_status != "complete":
+        return jsonify({
+            "synced": None,
+            "plain": None,
+            "instrumental": False,
+            "cached": False,
+            "pending": True,
+        }), 202
     if record is None:
         # Provider unreachable: don't cache, let a later request retry.
-        return jsonify({"synced": None, "plain": None, "instrumental": False, "cached": False})
+        return jsonify({
+            "synced": None,
+            "plain": None,
+            "instrumental": False,
+            "cached": False,
+            "pending": False,
+        })
     db.set_lyrics(
         track_id,
         synced=record["synced"],
@@ -222,6 +236,7 @@ def get_track_lyrics(track_id):
         "plain": record["plain"],
         "instrumental": record["instrumental"],
         "cached": False,
+        "pending": False,
     })
 
 
@@ -229,8 +244,9 @@ def get_track_lyrics(track_id):
 @rate_limit("lyrics_lookup", limit=60, window_sec=60)
 def get_lyrics_by_metadata():
     """Lyrics lookup by metadata, for tracks not in the library (previews).
-    No caching: preview ids are ephemeral and LRCLIB is keyless and fast."""
-    from shared.lyrics import fetch_lyrics
+    No persistent caching: preview ids are ephemeral; cold provider work runs
+    through the bounded lyrics coordinator."""
+    from shared.lyrics import poll_lyrics
 
     artist = (request.args.get("artist") or "").strip()
     title = (request.args.get("title") or "").strip()
@@ -242,14 +258,29 @@ def get_lyrics_by_metadata():
     if not artist or not title:
         return jsonify({"error": "artist and title are required"}), 400
 
-    record = fetch_lyrics(artist, title, album, duration)
+    lookup_status, record = poll_lyrics(artist, title, album, duration)
+    if lookup_status != "complete":
+        return jsonify({
+            "synced": None,
+            "plain": None,
+            "instrumental": False,
+            "cached": False,
+            "pending": True,
+        }), 202
     if record is None:
-        return jsonify({"synced": None, "plain": None, "instrumental": False, "cached": False})
+        return jsonify({
+            "synced": None,
+            "plain": None,
+            "instrumental": False,
+            "cached": False,
+            "pending": False,
+        })
     return jsonify({
         "synced": record["synced"],
         "plain": record["plain"],
         "instrumental": record["instrumental"],
         "cached": False,
+        "pending": False,
     })
 
 
