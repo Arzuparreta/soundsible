@@ -1,6 +1,7 @@
 import { toast } from './toast';
 import { isPodcastTrack } from './track';
 import { t } from './i18n';
+import { playbackYoutubeId } from './media';
 
 interface ShareableTrack {
   id: string;
@@ -13,17 +14,14 @@ interface ShareableTrack {
 }
 
 /**
- * Resolve the shareable YouTube URL for a track. Library tracks carry an
- * explicit `youtube_id`; preview tracks (Discover/Search) instead use their
- * `id` as the video id. Podcast episodes have no YouTube identity (their id is
- * an episode guid), so they share as text only.
+ * Resolve the shareable YouTube URL from the same video identity playback
+ * uses. Podcast episodes have no YouTube identity (their id is an episode
+ * guid), so they share as text only.
  */
 export function shareUrlFor(track: ShareableTrack): string {
-  if (track.youtube_id) return `https://www.youtube.com/watch?v=${track.youtube_id}`;
-  if (track.source === 'preview' && !isPodcastTrack(track)) {
-    return `https://www.youtube.com/watch?v=${track.id}`;
-  }
-  return '';
+  if (isPodcastTrack(track)) return '';
+  const videoId = playbackYoutubeId(track);
+  return videoId ? `https://www.youtube.com/watch?v=${videoId}` : '';
 }
 
 /**

@@ -3,7 +3,7 @@ import { createSignal } from 'solid-js';
 import { createSocket, type AppSocket, dispatchDiscoverSeed } from '../lib/socket';
 import { api, type DeviceRegistration, type RemotePlaybackState } from '../lib/api';
 import { audioEl, audioService } from '../lib/audio';
-import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers } from '../lib/media';
+import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers, playbackYoutubeId } from '../lib/media';
 import { prefetchPreviews, upcomingPreviewIds } from '../lib/prefetch';
 import { toast } from '../lib/toast';
 import { vibrate } from '../lib/haptics';
@@ -153,7 +153,8 @@ let librarySyncVersion = 0;
 let userPlaybackStartedThisSession = false;
 
 function trackUrl(track: Track): string {
-  return track.source === 'preview' ? previewUrl(track.id) : streamUrl(track.id);
+  const previewId = playbackYoutubeId(track);
+  return track.source === 'preview' && previewId ? previewUrl(previewId) : streamUrl(track.id);
 }
 
 /** Set when the user starts a track; consumed by the audio 'playing' event to
