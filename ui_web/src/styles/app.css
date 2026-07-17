@@ -26,6 +26,15 @@ body {
 
 #app {
   height: 100%;
+  transform-origin: center;
+  transition: transform 520ms var(--ease-out), filter 420ms var(--ease-out), opacity 420ms var(--ease-out);
+}
+
+html[data-auto-mode='active'] #app {
+  opacity: 0.42;
+  filter: blur(16px) saturate(0.75);
+  transform: scale(0.96);
+  pointer-events: none;
 }
 
 /* Global keyboard focus ring for interactive elements that don't define their

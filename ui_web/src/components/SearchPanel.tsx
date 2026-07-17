@@ -8,6 +8,7 @@ import { parseYouTubeInput } from '../lib/youtube';
 import { ensureDiscover, recentSaved, type RecentlySavedItem } from '../lib/discover';
 import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed } from '../lib/nodeDiscover';
 import { libraryTrackFor, queueIndexOf, resultToTrack } from '../lib/queueDiscovery';
+import { resolveTrackYoutubeId } from '../lib/relatedDiscovery';
 import { prefetchPreviews } from '../lib/prefetch';
 import { isPodcastTrack } from '../lib/track';
 import { artistPath, albumPath } from '../lib/artistRoute';
@@ -438,12 +439,8 @@ export function SearchPanel() {
   let similarReq = 0;
 
   const ytIdFor = async (track: Track): Promise<string | null> => {
-    if (track.youtube_id) return track.youtube_id;
-    if (track.source === 'preview') return track.id;
-    if (!track.artist || !track.title) return null;
     try {
-      const res = await api.resolveCatalogItem({ artist: track.artist, title: track.title, duration: track.duration });
-      return res.video_id ?? null;
+      return await resolveTrackYoutubeId(track);
     } catch {
       return null;
     }

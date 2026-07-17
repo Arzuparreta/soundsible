@@ -1,5 +1,11 @@
 import type { SearchResult, Track } from '../types/music';
 
+/** Canonical playback identity shared by queue/discovery features. A downloaded
+ * track and its online preview must be treated as the same song. */
+export function queueIdentity(track: Track): string {
+  return track.youtube_id || track.id;
+}
+
 /**
  * Position of `track` in the queue, matching across sources: a library track
  * and its preview twin (same YouTube id) count as the same queue entry.

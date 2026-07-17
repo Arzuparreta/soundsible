@@ -395,18 +395,32 @@ export function NowPlaying() {
       onPointerCancel={onSheetPointerCancel}
     >
       <header class={styles.head} ref={headEl}>
-        <button
-          classList={{ [styles.iconBtn]: true, [styles.panelToggle]: true, [styles.panelToggleOn]: panelOpen() }}
-          type="button"
-          aria-label={panelOpen() ? tr('nowPlaying.hideSearchPanel') : tr('nowPlaying.showSearchPanel')}
-          aria-pressed={panelOpen()}
-          onClick={togglePanel}
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M21 21l-4.3-4.3" />
-          </svg>
-        </button>
+        <div class={styles.headLeading}>
+          <button
+            classList={{ [styles.iconBtn]: true, [styles.panelToggle]: true, [styles.panelToggleOn]: panelOpen() }}
+            type="button"
+            aria-label={panelOpen() ? tr('nowPlaying.hideSearchPanel') : tr('nowPlaying.showSearchPanel')}
+            aria-pressed={panelOpen()}
+            onClick={togglePanel}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.3-4.3" />
+            </svg>
+          </button>
+          <Show when={t() && !isPodcast()}>
+            <button
+              class={styles.autoToggle}
+              type="button"
+              aria-label={tr('autoMode.enter')}
+              aria-pressed={state.autoMode.active}
+              onClick={() => actions.enterAutoMode()}
+            >
+              <span class={styles.autoGlyph} aria-hidden="true"><i /><i /><i /></span>
+              <span>AUTO</span>
+            </button>
+          </Show>
+        </div>
         <span class={styles.headLabel}>{tr('nowPlaying.playing')}</span>
         <button class={styles.iconBtn} type="button" aria-label={tr('common.close')} onClick={() => setNowPlayingOpen(false)}>
           <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">

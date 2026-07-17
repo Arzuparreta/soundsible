@@ -5,6 +5,7 @@ import { TabBar } from './components/TabBar';
 import { Sidebar } from './components/Sidebar';
 import { OmniBar } from './components/OmniBar';
 import { NowPlaying } from './components/NowPlaying';
+import { AutoMode } from './components/AutoMode';
 import { ResumeBanner } from './components/ResumeBanner';
 import { ContextMenuOutlet } from './lib/contextMenu';
 import styles from './app.module.css';
@@ -26,6 +27,7 @@ export default function Shell(props: RouteSectionProps) {
         </div>
       </div>
       <NowPlaying />
+      <AutoMode />
       <ResumeBanner />
       <ContextMenuOutlet />
       <OverlayOutlet />

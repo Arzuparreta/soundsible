@@ -59,6 +59,31 @@ export const zh: Dict = {
     stopRadioMsg: '当前曲目会继续播放，但电台的剩余列表将被清空。',
     stopRadioConfirm: '停止电台',
   },
+  autoMode: {
+    aria: 'Auto Mode 自动播放器',
+    label: 'AUTO',
+    enter: '进入 Auto Mode',
+    exit: '退出 Auto',
+    changeProfile: '切换模式。当前：{profile}',
+    profile: {
+      familiar: '熟悉',
+      balanced: '平衡',
+      explore: '探索',
+    },
+    reason: {
+      favorite: '来自你的收藏',
+      library: '来自你的音乐库',
+      related: '延续 {title} 的线索',
+      nodeArtist: '从 {artist} 开始探索',
+      node: '来自你的音乐地图',
+    },
+    agent: {
+      searching: '正在查找与《{title}》的关联…',
+      queued: '已添加：{tracks}（{count} 首）· 已分析 {related} 首相关歌曲、{node} 个节点和 {local} 首本地歌曲',
+      retrying: '在 {related} 首相关歌曲、{node} 个节点和 {local} 首本地歌曲中未找到新匹配 · 已安排重试',
+    },
+    upNext: '接下来播放',
+  },
   home: {
     title: '你的资料库',
     favourites: '收藏',

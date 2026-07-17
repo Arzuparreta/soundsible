@@ -591,8 +591,8 @@ export const api = {
     );
     return Array.isArray(data.suggestions) ? data.suggestions : [];
   },
-  resolveCatalogItem: (body: { artist: string; title: string; duration?: number }) =>
-    request<CatalogResolveResponse>('/api/catalog/resolve', { method: 'POST', body, timeoutMs: 30000 }),
+  resolveCatalogItem: (body: { artist: string; title: string; duration?: number }, signal?: AbortSignal) =>
+    request<CatalogResolveResponse>('/api/catalog/resolve', { method: 'POST', body, signal, timeoutMs: 30000 }),
   saveCatalogItem: (body: {
     catalog_item_id?: string;
     source?: string;

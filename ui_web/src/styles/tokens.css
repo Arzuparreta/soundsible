@@ -86,6 +86,7 @@
   --z-modal: 1100;
   --z-popover: 1200;
   --z-toast: 1300;
+  --z-auto: 1250; /* autonomous listening environment; toasts remain visible */
   --z-max: 9999;
 
   /* ── Motion ── */

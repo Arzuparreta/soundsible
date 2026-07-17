@@ -59,6 +59,31 @@ export const es: Dict = {
     stopRadioMsg: 'La canción actual seguirá sonando, pero se vaciará el resto de la mezcla de radio.',
     stopRadioConfirm: 'Detener radio',
   },
+  autoMode: {
+    aria: 'Reproductor autónomo de Auto Mode',
+    label: 'AUTO',
+    enter: 'Entrar en Auto Mode',
+    exit: 'Salir de Auto',
+    changeProfile: 'Cambiar perfil. Actual: {profile}',
+    profile: {
+      familiar: 'Familiar',
+      balanced: 'Equilibrado',
+      explore: 'Explorar',
+    },
+    reason: {
+      favorite: 'Desde tus favoritos',
+      library: 'Desde tu biblioteca',
+      related: 'Siguiendo el hilo de {title}',
+      nodeArtist: 'Explorando desde {artist}',
+      node: 'Desde tu mapa musical',
+    },
+    agent: {
+      searching: 'Buscando relaciones para «{title}»…',
+      queued: 'Añadidas: {tracks} ({count}) · analizadas {related} relacionadas, {node} nodos y {local} locales',
+      retrying: 'Sin coincidencias nuevas entre {related} relacionadas, {node} nodos y {local} locales · reintento programado',
+    },
+    upNext: 'A continuación',
+  },
   home: {
     title: 'Tu biblioteca',
     favourites: 'Favoritos',

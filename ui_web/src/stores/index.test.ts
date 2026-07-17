@@ -187,6 +187,52 @@ describe('Solid store library and playback resume', () => {
   });
 });
 
+describe('Auto Mode store contract', () => {
+  it('preserves the manual queue and play state while restoring playback preferences on exit', async () => {
+    const related = Array.from({ length: 10 }, (_, i) => ({
+      id: `auto-${i}`,
+      title: `Auto ${i}`,
+      channel: `Artist ${i}`,
+    }));
+    const { actions, state } = await loadStore({
+      relatedYouTube: vi.fn().mockResolvedValue(related),
+      searchYouTube: vi.fn().mockResolvedValue([{ id: 'yt-current' }]),
+    });
+    const paused: Track = { id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' };
+    const manual: Track = { id: 'manual', title: 'Manual next', artist: 'Listener' };
+    actions.playFrom([paused, manual], 0);
+    const wasPlaying = state.playback.isPlaying;
+    actions.toggleShuffle();
+    actions.cycleRepeat();
+    actions.cycleRepeat();
+
+    actions.enterAutoMode();
+    expect(state.autoMode.active).toBe(true);
+    expect(state.playback.isPlaying).toBe(wasPlaying);
+    expect(state.playback.shuffle).toBe(false);
+    expect(state.playback.repeat).toBe('off');
+    expect(state.playback.queue.slice(0, 2).map((track) => track.id)).toEqual(['current', 'manual']);
+
+    await vi.waitFor(() => expect(state.playback.queue.length).toBeGreaterThan(2));
+    expect(state.playback.queue.slice(0, 2).map((track) => track.id)).toEqual(['current', 'manual']);
+
+    actions.exitAutoMode();
+    expect(state.autoMode.active).toBe(false);
+    expect(state.playback.isPlaying).toBe(wasPlaying);
+    expect(state.playback.shuffle).toBe(true);
+    expect(state.playback.repeat).toBe('one');
+    expect(state.playback.queue.length).toBeGreaterThan(2);
+  });
+
+  it('does not enter Auto Mode for podcasts', async () => {
+    const { actions, state } = await loadStore();
+    const podcast: Track = { id: 'episode', title: 'Episode', artist: 'Show', media_kind: 'podcast_episode' };
+    actions.playFrom([podcast], 0);
+    actions.enterAutoMode();
+    expect(state.autoMode.active).toBe(false);
+  });
+});
+
 describe('Radio mode', () => {
   const seed: Track = { id: 'seed1', title: 'Seed Song', artist: 'Artist', youtube_id: 'yt111111111', source: 'preview' as const };
 

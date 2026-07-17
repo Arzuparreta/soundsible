@@ -8,7 +8,9 @@ import { prefetchPreviews, upcomingPreviewIds } from '../lib/prefetch';
 import { toast } from '../lib/toast';
 import { vibrate } from '../lib/haptics';
 import { isMusicTrack, isPodcastTrack, podcastEpisodeToTrack } from '../lib/track';
-import { queueIndexOf } from '../lib/queueDiscovery';
+import { libraryTrackFor, queueIdentity, queueIndexOf, resultToTrack } from '../lib/queueDiscovery';
+import { resolveTrackYoutubeId, relatedTracksFor } from '../lib/relatedDiscovery';
+import { AutopilotController, type AutoCandidate, type AutoModeState, type AutoProfile } from '../lib/autopilot';
 import { t as tr } from '../lib/i18n';
 import type { Track, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
@@ -70,7 +72,13 @@ export interface AppState {
   librarySettings: LibrarySettings;
   podcastSubscriptions: PodcastSubscription[];
   playback: PlaybackState;
+  autoMode: AutoModeState;
   downloads: DownloadsState;
+}
+
+function initialAutoProfile(): AutoProfile {
+  const value = localStorage.getItem('auto:profile');
+  return value === 'familiar' || value === 'explore' ? value : 'balanced';
 }
 
 /**
@@ -131,6 +139,13 @@ const [state, setState] = createStore<AppState>({
     radioLoading: false,
     radioSeedId: null,
   },
+  autoMode: {
+    active: false,
+    profile: initialAutoProfile(),
+    phase: 'idle',
+    activity: null,
+    plan: {},
+  },
   downloads: {
     queue: [],
     isProcessing: false,
@@ -151,6 +166,8 @@ let librarySyncInFlight = false;
 let librarySyncPending = false;
 let librarySyncVersion = 0;
 let userPlaybackStartedThisSession = false;
+let autopilot: AutopilotController | null = null;
+let autoPlaybackPrefs: { shuffle: boolean; repeat: RepeatMode } | null = null;
 
 function trackUrl(track: Track): string {
   const previewId = playbackYoutubeId(track);
@@ -398,6 +415,68 @@ export const actions = {
     api.toggleFavourite(id).catch(() => setState('favorites', prev)); // revert on failure
   },
 
+  /** Enter the autonomous listening environment without changing the current
+   * track or discarding any manually prepared queue. */
+  enterAutoMode(): void {
+    const current = state.playback.currentTrack;
+    if (!current || isPodcastTrack(current) || state.autoMode.active) return;
+    autoPlaybackPrefs = {
+      shuffle: state.playback.shuffle,
+      repeat: state.playback.repeat,
+    };
+    // Auto follows a visible, ordered plan. Adopt a running radio queue without
+    // invoking stopRadio(), whose contract intentionally truncates it.
+    setState('playback', {
+      shuffle: false,
+      repeat: 'off',
+      radioMode: false,
+      radioLoading: false,
+      radioSeedId: null,
+    });
+    ensureAutopilot().start();
+  },
+
+  /** Leave Auto while preserving playback and every track it prepared. */
+  exitAutoMode(): void {
+    autopilot?.stop();
+    if (autoPlaybackPrefs) {
+      setState('playback', {
+        shuffle: autoPlaybackPrefs.shuffle,
+        repeat: autoPlaybackPrefs.repeat,
+      });
+      autoPlaybackPrefs = null;
+    }
+  },
+
+  setAutoProfile(profile: AutoProfile): void {
+    try {
+      localStorage.setItem('auto:profile', profile);
+    } catch {
+      /* private mode / storage disabled */
+    }
+    setState('autoMode', 'profile', profile);
+    ensureAutopilot().setProfile(profile);
+  },
+
+  async autoSkip(): Promise<void> {
+    const canAdvance = () => state.playback.index < state.playback.queue.length - 1;
+    if (canAdvance()) {
+      void autopilot?.skipCurrent();
+      actions.next();
+      return;
+    }
+    await autopilot?.skipCurrent();
+    // A failed final URL can happen while a refill is already in flight. Wait
+    // briefly for that real plan instead of leaving Auto stopped on the error.
+    for (let attempt = 0; attempt < 28 && state.autoMode.active; attempt += 1) {
+      if (canAdvance()) {
+        actions.next();
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  },
+
   /** Play a list starting at index `i`; the list becomes the queue (next/prev work).
    * Pass `{ radio: true }` when the queue is the seed-only radio placeholder so
    * `radioMode`/`radioSeedId` are set; `radioLoading` is preserved (the caller
@@ -405,6 +484,7 @@ export const actions = {
    * flags are reset — `playTrack`/`playShuffled`/external callers therefore
    * cancel any active radio session. */
   playFrom(tracks: Track[], i: number, opts?: { radio?: boolean }): void {
+    if (state.autoMode.active && tracks[i] && isPodcastTrack(tracks[i])) actions.exitAutoMode();
     const isRadio = opts?.radio === true;
     setState('playback', {
       queue: tracks.slice(),
@@ -429,6 +509,7 @@ export const actions = {
 
   /** Play a podcast episode: queue = just this episode; stream via a minted token. */
   async playEpisode(ep: PodcastEpisode, showTitle?: string): Promise<void> {
+    if (state.autoMode.active) actions.exitAutoMode();
     const track = podcastEpisodeToTrack(ep, showTitle);
     userPlaybackStartedThisSession = true;
     setState('playback', {
@@ -635,17 +716,9 @@ export const actions = {
     // for library tracks without a stored id) — but it has to happen before we
     // can meaningfully claim "radio starting", so we keep it before the
     // radioMode activation.
-    let ytId = seed.youtube_id ?? (seed.source === 'preview' ? seed.id : null);
+    let ytId: string | null = null;
     try {
-      if (!ytId && seed.source !== 'preview') {
-        const query = `${seed.title} ${seed.artist}`.trim();
-        if (query) {
-          const found = await api.searchYouTube(query);
-          if (found.length > 0 && found[0].id) {
-            ytId = found[0].id;
-          }
-        }
-      }
+      ytId = await resolveTrackYoutubeId(seed);
       if (!ytId) {
         t.update('error', tr('toast.noYtForRadio'));
         return;
@@ -1087,6 +1160,59 @@ export const actions = {
   },
 };
 
+function ensureAutopilot(): AutopilotController {
+  if (autopilot) return autopilot;
+  autopilot = new AutopilotController(
+    {
+      snapshot: () => ({
+        currentTrack: state.playback.currentTrack,
+        queue: state.playback.queue.slice(),
+        index: state.playback.index,
+        library: state.library.filter(isMusicTrack),
+        favorites: state.favorites.slice(),
+      }),
+      patchState: (patch) => setState('autoMode', patch),
+      append: (candidates) => {
+        const plan = { ...state.autoMode.plan };
+        const accepted = candidates.filter((candidate) => queueIndexOf(state.playback.queue, candidate.track) === -1);
+        for (const candidate of accepted) {
+          const id = queueIdentity(candidate.track);
+          plan[id] = {
+            trackId: id,
+            source: candidate.source,
+            reasonKey: candidate.reasonKey,
+            reasonValues: candidate.reasonValues,
+          };
+        }
+        setState('playback', 'queue', (queue) => [...queue, ...accepted.map((candidate) => candidate.track)]);
+        setState('autoMode', 'plan', plan);
+        prefetchUpcoming();
+        return accepted;
+      },
+      removeGeneratedFuture: (ids) => {
+        const index = state.playback.index;
+        setState('playback', 'queue', (queue) =>
+          queue.filter((track, i) => i <= index || !ids.has(queueIdentity(track))),
+        );
+      },
+      getRelated: async (track, signal) => (await relatedTracksFor(track, state.library.filter(isMusicTrack), signal)).tracks,
+      getNodeCandidates: async () => {
+        const nodes = await import('../lib/nodeDiscover');
+        nodes.ensureNodeFeed();
+        const library = state.library.filter(isMusicTrack);
+        return nodes.nodeFeed().map((rec): AutoCandidate => ({
+          track: libraryTrackFor(library, rec) ?? resultToTrack(rec),
+          source: 'node',
+          reasonKey: rec.seedArtist ? 'autoMode.reason.nodeArtist' : 'autoMode.reason.node',
+          reasonValues: rec.seedArtist ? { artist: rec.seedArtist } : undefined,
+        }));
+      },
+    },
+    state.autoMode.profile,
+  );
+  return autopilot;
+}
+
 /** Apply the theme to the document (token overrides live in tokens.css) and
  * sync the mobile status-bar colour. */
 export function applyTheme(theme: Theme): void {
@@ -1118,6 +1244,9 @@ export function initStore(): void {
     pushPlaybackState();
   });
   a.addEventListener('ended', onEnded);
+  a.addEventListener('error', () => {
+    if (state.autoMode.active) void actions.autoSkip();
+  });
   // First 'playing' after a user-initiated load → click-to-sound latency.
   a.addEventListener('playing', () => {
     const timing = pendingPlayTiming;
@@ -1144,7 +1273,10 @@ export function initStore(): void {
     const ms = navigator.mediaSession;
     ms.setActionHandler('play', () => actions.togglePlay());
     ms.setActionHandler('pause', () => actions.togglePlay());
-    ms.setActionHandler('nexttrack', () => actions.next());
+    ms.setActionHandler('nexttrack', () => {
+      if (state.autoMode.active) void actions.autoSkip();
+      else actions.next();
+    });
     ms.setActionHandler('previoustrack', () => actions.prev());
     ms.setActionHandler('seekto', (d) => {
       if (typeof d.seekTime === 'number') actions.seek(d.seekTime);
@@ -1232,14 +1364,20 @@ export function initStore(): void {
       if (e.code === 'Space') {
         e.preventDefault();
         actions.togglePlay();
+      } else if (e.key === 'Escape' && state.autoMode.active) {
+        actions.exitAutoMode();
       } else if (e.code === 'ArrowRight' && e.shiftKey) {
-        actions.next();
+        if (state.autoMode.active) void actions.autoSkip();
+        else actions.next();
       } else if (e.code === 'ArrowLeft' && e.shiftKey) {
         actions.prev();
       } else if (e.code === 'ArrowRight') {
         actions.seek(state.playback.currentTime + 5);
       } else if (e.code === 'ArrowLeft') {
         actions.seek(Math.max(0, state.playback.currentTime - 5));
+      } else if (e.key.toLowerCase() === 'a' && nowPlayingOpen() && state.playback.currentTrack && !isPodcastTrack(state.playback.currentTrack)) {
+        if (state.autoMode.active) actions.exitAutoMode();
+        else actions.enterAutoMode();
       } else if (e.key === 'Escape' && nowPlayingOpen()) {
         setNowPlayingOpen(false);
       }

@@ -58,6 +58,31 @@ export const en = {
     stopRadioMsg: 'The current track will keep playing, but the rest of the radio mix will be cleared.',
     stopRadioConfirm: 'Stop radio',
   },
+  autoMode: {
+    aria: 'Auto Mode autonomous player',
+    label: 'AUTO',
+    enter: 'Enter Auto Mode',
+    exit: 'Exit Auto',
+    changeProfile: 'Change profile. Current: {profile}',
+    profile: {
+      familiar: 'Familiar',
+      balanced: 'Balanced',
+      explore: 'Explore',
+    },
+    reason: {
+      favorite: 'From your favourites',
+      library: 'From your library',
+      related: 'Following the thread of {title}',
+      nodeArtist: 'Exploring from {artist}',
+      node: 'From your music map',
+    },
+    agent: {
+      searching: 'Finding connections for “{title}”…',
+      queued: 'Added: {tracks} ({count}) · checked {related} related, {node} nodes and {local} local tracks',
+      retrying: 'No new match across {related} related, {node} nodes and {local} local tracks · retry scheduled',
+    },
+    upNext: 'Up next',
+  },
   home: {
     title: 'Your library',
     favourites: 'Favourites',
