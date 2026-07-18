@@ -209,10 +209,15 @@
   font-weight: var(--fw-bold);
   letter-spacing: 0.16em;
   text-transform: uppercase;
+  text-align: center;
 }
 
 .filmstrip {
   display: flex;
+  /* Centre the cards regardless of how many there are; `safe` degrades to
+     flex-start once the row overflows so the leading cards stay scroll-reachable
+     (plain `center` would push them off the left edge, unscrollable). */
+  justify-content: safe center;
   gap: 12px;
   min-width: 0;
   overflow-x: auto;
