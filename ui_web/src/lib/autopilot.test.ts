@@ -104,7 +104,7 @@ describe('AutopilotController queue ownership', () => {
         snapshot.queue.push(...items.map((item) => item.track));
         return items;
       },
-      removeGeneratedFuture: vi.fn(),
+      replaceUpcoming: vi.fn(),
       getRelated: vi.fn().mockResolvedValue([]),
       getNodeCandidates: vi.fn().mockResolvedValue([]),
     }, 'balanced');
@@ -148,7 +148,7 @@ describe('AutopilotController queue ownership', () => {
         snapshot.queue.push(...items.map((item) => item.track));
         return items;
       },
-      removeGeneratedFuture: vi.fn(),
+      replaceUpcoming: vi.fn(),
       getRelated: vi.fn().mockResolvedValue([]),
       getNodeCandidates: vi.fn().mockResolvedValue([]),
       getChartCandidates: vi.fn().mockResolvedValue([candidate('node', 'chart-1'), candidate('node', 'chart-2')]),
@@ -164,15 +164,20 @@ describe('AutopilotController queue ownership', () => {
     controller.stop();
   });
 
-  it('removes only generated future identities before rebuilding a profile', async () => {
+  it('replaces the upcoming tail with a fresh lookahead when the profile changes', async () => {
     const snapshot: AutoSnapshot = {
       currentTrack: track('current'),
       queue: [track('current')],
       index: 0,
-      library: Array.from({ length: 12 }, (_, i) => track(`library-${i}`)),
+      // Larger than 2×lookahead so the replan, which excludes the just-queued
+      // tail as "recent", still has enough fresh library tracks to fill.
+      library: Array.from({ length: 24 }, (_, i) => track(`library-${i}`)),
       favorites: [],
     };
-    const removeGeneratedFuture = vi.fn();
+    const replaceUpcoming = vi.fn((items: AutoCandidate[]) => {
+      snapshot.queue = [...snapshot.queue.slice(0, snapshot.index + 1), ...items.map((item) => item.track)];
+      return items;
+    });
     const controller = new AutopilotController({
       snapshot: () => snapshot,
       patchState: vi.fn(),
@@ -180,19 +185,24 @@ describe('AutopilotController queue ownership', () => {
         snapshot.queue.push(...items.map((item) => item.track));
         return items;
       },
-      removeGeneratedFuture,
+      replaceUpcoming,
       getRelated: vi.fn().mockResolvedValue([]),
       getNodeCandidates: vi.fn().mockResolvedValue([]),
     }, 'balanced');
 
     controller.start();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    controller.setProfile('explore');
+    expect(snapshot.queue).toHaveLength(9); // current + eight from the first plan
+    expect(replaceUpcoming).not.toHaveBeenCalled(); // start appends, never replaces
 
-    expect(removeGeneratedFuture).toHaveBeenCalledOnce();
-    const generated = removeGeneratedFuture.mock.calls[0][0] as Set<string>;
-    expect(generated.has('current')).toBe(false);
-    expect(generated.size).toBeGreaterThan(0);
+    controller.setProfile('explore');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // The current track is preserved and the tail is swapped for a full, fresh
+    // lookahead — so the very next track already reflects the new profile.
+    expect(replaceUpcoming).toHaveBeenCalledOnce();
+    expect(snapshot.queue[0].id).toBe('current');
+    expect(snapshot.queue).toHaveLength(9);
     controller.stop();
   });
 });

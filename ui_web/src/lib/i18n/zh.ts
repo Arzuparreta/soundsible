@@ -81,6 +81,8 @@ export const zh: Dict = {
     },
     agent: {
       searching: '正在查找与《{title}》的关联…',
+      recalibrating: '正在重新校准为 {profile}…',
+      steered: '{profile} · 从下一首开始改变方向',
       queued: '已添加：{tracks}（{count} 首）· 已分析 {related} 首相关歌曲、{node} 个节点和 {local} 首本地歌曲',
       retrying: '在 {related} 首相关歌曲、{node} 个节点和 {local} 首本地歌曲中未找到新匹配 · 已安排重试',
     },

@@ -46,7 +46,12 @@ export interface AutopilotDeps {
   snapshot: () => AutoSnapshot;
   patchState: (patch: Partial<AutoModeState>) => void;
   append: (candidates: AutoCandidate[]) => AutoCandidate[];
-  removeGeneratedFuture: (ids: Set<string>) => void;
+  /** Replace everything after the current track with `candidates`, in one commit.
+   * Used when the listener changes profile: the very next track must already
+   * reflect the new mix, so the whole upcoming tail is swapped atomically — the
+   * current track keeps playing, no empty-queue gap opens. Returns the accepted
+   * candidates (dedup against the retained prefix). */
+  replaceUpcoming: (candidates: AutoCandidate[]) => AutoCandidate[];
   getRelated: (track: Track, signal: AbortSignal) => Promise<Track[]>;
   getNodeCandidates: () => Promise<AutoCandidate[]>;
   /** Trending/charts candidates, tagged `node`. Optional supplementary pool. */
@@ -175,6 +180,7 @@ export class AutopilotController {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private aborter: AbortController | null = null;
   private refillInFlight = false;
+  private replanPending = false;
   private generated = new Set<string>();
   private recent: string[] = [];
   private activityId = 0;
@@ -204,6 +210,7 @@ export class AutopilotController {
     this.aborter?.abort();
     this.aborter = null;
     this.refillInFlight = false;
+    this.replanPending = false;
     this.generated.clear();
     this.deps.patchState({ active: false, phase: 'idle' });
   }
@@ -212,10 +219,13 @@ export class AutopilotController {
     this.profile = profile;
     this.deps.patchState({ profile });
     if (!this.active) return;
+    // Re-steer immediately: abort any in-flight refill, release the lock, and
+    // request a replan that *replaces* the upcoming tail — so the very next
+    // track already reflects the new mix while the current track keeps playing.
+    this.replanPending = true;
     this.aborter?.abort();
-    this.deps.removeGeneratedFuture(new Set(this.generated));
-    this.generated.clear();
-    this.deps.patchState({ plan: {} });
+    this.aborter = null;
+    this.refillInFlight = false;
     void this.sync(true);
   }
 
@@ -248,24 +258,32 @@ export class AutopilotController {
     }, delay);
   }
 
-  async sync(_force = false): Promise<void> {
+  async sync(force = false): Promise<void> {
     if (!this.active || this.refillInFlight) return;
     const snapshot = this.deps.snapshot();
     if (!snapshot.currentTrack) return;
     const remaining = Math.max(0, snapshot.queue.length - snapshot.index - 1);
-    if (remaining >= REFILL_THRESHOLD) {
+    const replace = this.replanPending;
+    if (!force && !replace && remaining >= REFILL_THRESHOLD) {
       this.deps.patchState({ phase: 'following_queue' });
       return;
     }
-    const needed = Math.max(0, TARGET_LOOKAHEAD - remaining);
+    // A profile switch rebuilds the whole tail so the next track flips too; a
+    // normal refill only tops the lookahead back up to target.
+    const needed = replace ? TARGET_LOOKAHEAD : Math.max(0, TARGET_LOOKAHEAD - remaining);
     if (needed === 0) return;
+    this.replanPending = false;
 
     this.refillInFlight = true;
     this.aborter?.abort();
     const aborter = new AbortController();
     this.aborter = aborter;
     this.deps.patchState({ phase: 'planning' });
-    this.report('working', 'autoMode.agent.searching', { title: snapshot.currentTrack.title });
+    if (replace) {
+      this.report('working', 'autoMode.agent.recalibrating', { profile: `autoMode.profile.${this.profile}` });
+    } else {
+      this.report('working', 'autoMode.agent.searching', { title: snapshot.currentTrack.title });
+    }
 
     try {
       const local = buildLocalCandidates(snapshot.library, snapshot.favorites);
@@ -309,8 +327,11 @@ export class AutopilotController {
       // the related quota (more of what's playing).
       const node = [...nodeBase, ...chart];
       const related = [...relatedBase, ...artist];
+      // On a replan the discarded tail is fair game again — exclude only the
+      // retained prefix (current track and anything before it) plus recents.
+      const kept = replace ? snapshot.queue.slice(0, snapshot.index + 1) : snapshot.queue;
       const excluded = new Set<string>([
-        ...snapshot.queue.map(queueIdentity),
+        ...kept.map(queueIdentity),
         ...this.recent,
       ]);
       const selected = selectAutoBatch({ local, related, node }, this.profile, needed, excluded);
@@ -327,7 +348,13 @@ export class AutopilotController {
       this.retryStep = 0;
       if (this.retryTimer) clearTimeout(this.retryTimer);
       this.retryTimer = null;
-      const appended = this.deps.append(selected);
+      let appended: AutoCandidate[];
+      if (replace) {
+        this.generated.clear();
+        appended = this.deps.replaceUpcoming(selected);
+      } else {
+        appended = this.deps.append(selected);
+      }
       for (const candidate of appended) {
         const id = queueIdentity(candidate.track);
         this.generated.add(id);
@@ -344,13 +371,23 @@ export class AutopilotController {
         return;
       }
       this.deps.patchState({ phase: 'ready' });
-      this.report('done', 'autoMode.agent.queued', {
-        count: appended.length,
-        tracks: appended.slice(0, 2).map(({ track }) => track.title).join(' · '),
-        related: related.length,
-        node: node.length,
-        local: local.length,
-      });
+      if (replace) {
+        this.report('done', 'autoMode.agent.steered', {
+          profile: `autoMode.profile.${this.profile}`,
+          count: appended.length,
+          related: related.length,
+          node: node.length,
+          local: local.length,
+        });
+      } else {
+        this.report('done', 'autoMode.agent.queued', {
+          count: appended.length,
+          tracks: appended.slice(0, 2).map(({ track }) => track.title).join(' · '),
+          related: related.length,
+          node: node.length,
+          local: local.length,
+        });
+      }
     } finally {
       if (this.aborter === aborter) {
         this.aborter = null;

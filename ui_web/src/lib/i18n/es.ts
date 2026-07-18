@@ -81,6 +81,8 @@ export const es: Dict = {
     },
     agent: {
       searching: 'Buscando relaciones para «{title}»…',
+      recalibrating: 'Recalibrando a {profile}…',
+      steered: '{profile} · el rumbo cambia desde la siguiente',
       queued: 'Añadidas: {tracks} ({count}) · analizadas {related} relacionadas, {node} nodos y {local} locales',
       retrying: 'Sin coincidencias nuevas entre {related} relacionadas, {node} nodos y {local} locales · reintento programado',
     },

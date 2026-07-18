@@ -80,6 +80,8 @@ export const en = {
     },
     agent: {
       searching: 'Finding connections for “{title}”…',
+      recalibrating: 'Retuning to {profile}…',
+      steered: '{profile} · new direction from the next track',
       queued: 'Added: {tracks} ({count}) · checked {related} related, {node} nodes and {local} local tracks',
       retrying: 'No new match across {related} related, {node} nodes and {local} local tracks · retry scheduled',
     },

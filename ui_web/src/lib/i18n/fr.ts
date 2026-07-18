@@ -81,6 +81,8 @@ export const fr: Dict = {
     },
     agent: {
       searching: 'Recherche de liens pour « {title} »…',
+      recalibrating: 'Recalibrage vers {profile}…',
+      steered: '{profile} · nouveau cap dès la piste suivante',
       queued: 'Ajoutés : {tracks} ({count}) · {related} associés, {node} nœuds et {local} titres locaux analysés',
       retrying: 'Aucun résultat parmi {related} associés, {node} nœuds et {local} titres locaux · nouvel essai programmé',
     },

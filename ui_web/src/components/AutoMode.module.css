@@ -386,6 +386,12 @@
   scroll-snap-align: start;
   backdrop-filter: blur(18px);
   transition: background var(--dur-short), border-color var(--dur-short), transform var(--dur-micro);
+  /* Entrance animation. On a normal refill only the freshly-appended cards are
+   * new nodes, so only they slide in; on a profile switch the whole tail is
+   * replaced, so every card re-enters — a clear "re-populating" signal that the
+   * new mix landed. No fill-mode, so the base :active press-scale still wins
+   * once the animation completes. */
+  animation: nextCardIn 300ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .nextCard:hover {
@@ -452,6 +458,11 @@
 
 @keyframes agentPulse {
   70%, 100% { box-shadow: 0 0 0 8px rgba(249, 122, 18, 0); }
+}
+
+@keyframes nextCardIn {
+  from { opacity: 0; transform: translateY(9px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @media (max-width: 899px), (max-aspect-ratio: 4 / 3) {
@@ -522,5 +533,6 @@
   .cover,
   .mark i,
   .agent,
-  .agentPulse { animation: none !important; }
+  .agentPulse,
+  .nextCard { animation: none !important; }
 }

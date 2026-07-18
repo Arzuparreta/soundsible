@@ -10,7 +10,7 @@ import { vibrate } from '../lib/haptics';
 import { isMusicTrack, isPodcastTrack, podcastEpisodeToTrack } from '../lib/track';
 import { libraryTrackFor, queueIdentity, queueIndexOf, resultToTrack } from '../lib/queueDiscovery';
 import { resolveTrackYoutubeId, relatedTracksFor } from '../lib/relatedDiscovery';
-import { AutopilotController, type AutoCandidate, type AutoModeState, type AutoProfile } from '../lib/autopilot';
+import { AutopilotController, type AutoCandidate, type AutoModeState, type AutoPlanItem, type AutoProfile } from '../lib/autopilot';
 import { t as tr } from '../lib/i18n';
 import type { Track, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
@@ -1197,11 +1197,24 @@ function ensureAutopilot(): AutopilotController {
         prefetchUpcoming();
         return accepted;
       },
-      removeGeneratedFuture: (ids) => {
-        const index = state.playback.index;
-        setState('playback', 'queue', (queue) =>
-          queue.filter((track, i) => i <= index || !ids.has(queueIdentity(track))),
-        );
+      replaceUpcoming: (candidates) => {
+        const prefix = state.playback.queue.slice(0, state.playback.index + 1);
+        const prefixIds = new Set(prefix.map(queueIdentity));
+        const accepted = candidates.filter((candidate) => !prefixIds.has(queueIdentity(candidate.track)));
+        const plan: Record<string, AutoPlanItem> = {};
+        for (const candidate of accepted) {
+          const id = queueIdentity(candidate.track);
+          plan[id] = {
+            trackId: id,
+            source: candidate.source,
+            reasonKey: candidate.reasonKey,
+            reasonValues: candidate.reasonValues,
+          };
+        }
+        setState('playback', 'queue', [...prefix, ...accepted.map((candidate) => candidate.track)]);
+        setState('autoMode', 'plan', plan);
+        prefetchUpcoming();
+        return accepted;
       },
       getRelated: async (track, signal) => (await relatedTracksFor(track, state.library.filter(isMusicTrack), signal)).tracks,
       getNodeCandidates: async () => {
