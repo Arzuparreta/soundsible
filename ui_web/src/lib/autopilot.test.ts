@@ -48,6 +48,30 @@ describe('Auto Mode selection core', () => {
     expect([count(explore, 'local'), count(explore, 'related'), count(explore, 'node')]).toEqual([1, 3, 4]);
   });
 
+  it('caps local tracks when external candidates exist so discovery is not crowded out', () => {
+    const pools = {
+      local: Array.from({ length: 8 }, (_, i) => candidate('local', `l${i}`)),
+      related: [candidate('related', 'r0'), candidate('related', 'r1')],
+      node: [],
+    };
+    const explore = selectAutoBatch(pools, 'explore', 8, new Set());
+    // explore permits ceil(8 * 1/8) = 1 local; the two related fill, the rest
+    // miss rather than silently becoming library tracks.
+    expect(explore.filter((item) => item.source === 'local').length).toBeLessThanOrEqual(1);
+    expect(explore.filter((item) => item.source === 'related')).toHaveLength(2);
+  });
+
+  it('lifts the local cap when no external candidates exist so playback still fills', () => {
+    const pools = {
+      local: Array.from({ length: 8 }, (_, i) => candidate('local', `l${i}`)),
+      related: [],
+      node: [],
+    };
+    const out = selectAutoBatch(pools, 'explore', 5, new Set());
+    expect(out).toHaveLength(5);
+    expect(out.every((item) => item.source === 'local')).toBe(true);
+  });
+
   it('deduplicates preview/local twins and caps an artist at two per batch', () => {
     const pools = {
       local: [candidate('local', 'local-a', 'Same')],
@@ -107,6 +131,37 @@ describe('AutopilotController queue ownership', () => {
     controller.stop();
     expect(snapshot.queue).toHaveLength(9);
     expect(patches.at(-1)).toEqual(expect.objectContaining({ active: false }));
+  });
+
+  it('folds chart candidates into the node pool and artist candidates into related', async () => {
+    const snapshot: AutoSnapshot = {
+      currentTrack: track('current'),
+      queue: [track('current')],
+      index: 0,
+      library: [],
+      favorites: [],
+    };
+    const controller = new AutopilotController({
+      snapshot: () => snapshot,
+      patchState: vi.fn(),
+      append: (items) => {
+        snapshot.queue.push(...items.map((item) => item.track));
+        return items;
+      },
+      removeGeneratedFuture: vi.fn(),
+      getRelated: vi.fn().mockResolvedValue([]),
+      getNodeCandidates: vi.fn().mockResolvedValue([]),
+      getChartCandidates: vi.fn().mockResolvedValue([candidate('node', 'chart-1'), candidate('node', 'chart-2')]),
+      getArtistCandidates: vi.fn().mockResolvedValue([candidate('related', 'artist-1')]),
+    }, 'explore');
+
+    controller.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const ids = snapshot.queue.map((item) => item.id);
+    expect(ids).toContain('chart-1');
+    expect(ids).toContain('artist-1');
+    controller.stop();
   });
 
   it('removes only generated future identities before rebuilding a profile', async () => {

@@ -76,6 +76,8 @@ export const zh: Dict = {
       related: '延续 {title} 的线索',
       nodeArtist: '从 {artist} 开始探索',
       node: '来自你的音乐地图',
+      chart: '当下热门',
+      artist: '更多 {artist} 的作品',
     },
     agent: {
       searching: '正在查找与《{title}》的关联…',

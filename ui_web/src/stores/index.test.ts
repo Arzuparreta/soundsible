@@ -224,6 +224,26 @@ describe('Auto Mode store contract', () => {
     expect(state.playback.queue.length).toBeGreaterThan(2);
   });
 
+  it('takes the wheel over a long manual queue, keeping only the next two manual tracks', async () => {
+    const related = Array.from({ length: 10 }, (_, i) => ({ id: `auto-${i}`, title: `Auto ${i}`, channel: `Artist ${i}` }));
+    const { actions, state } = await loadStore({
+      relatedYouTube: vi.fn().mockResolvedValue(related),
+      searchYouTube: vi.fn().mockResolvedValue([{ id: 'yt-current' }]),
+    });
+    const cur: Track = { id: 'current', title: 'Cur', artist: 'A', youtube_id: 'yt-current' };
+    const manuals: Track[] = Array.from({ length: 5 }, (_, i) => ({ id: `m${i}`, title: `M${i}`, artist: 'L' }));
+    actions.playFrom([cur, ...manuals], 0);
+
+    actions.enterAutoMode();
+    // Trimmed synchronously to current + two manual tracks — the pilot owns the rest.
+    expect(state.playback.queue.map((t) => t.id).slice(0, 3)).toEqual(['current', 'm0', 'm1']);
+    expect(state.playback.queue.some((t) => t.id === 'm2')).toBe(false);
+
+    await vi.waitFor(() => expect(state.playback.queue.length).toBeGreaterThan(3));
+    expect(state.playback.queue.slice(0, 3).map((t) => t.id)).toEqual(['current', 'm0', 'm1']);
+    actions.exitAutoMode();
+  });
+
   it('does not enter Auto Mode for podcasts', async () => {
     const { actions, state } = await loadStore();
     const podcast: Track = { id: 'episode', title: 'Episode', artist: 'Show', media_kind: 'podcast_episode' };

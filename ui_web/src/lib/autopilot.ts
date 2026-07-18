@@ -49,11 +49,34 @@ export interface AutopilotDeps {
   removeGeneratedFuture: (ids: Set<string>) => void;
   getRelated: (track: Track, signal: AbortSignal) => Promise<Track[]>;
   getNodeCandidates: () => Promise<AutoCandidate[]>;
+  /** Trending/charts candidates, tagged `node`. Optional supplementary pool. */
+  getChartCandidates?: (signal: AbortSignal) => Promise<AutoCandidate[]>;
+  /** Current artist's top tracks, tagged `related`. Optional supplementary pool. */
+  getArtistCandidates?: (track: Track, signal: AbortSignal) => Promise<AutoCandidate[]>;
 }
 
 const TARGET_LOOKAHEAD = 8;
 const REFILL_THRESHOLD = 4;
 const RECENT_MAX = 60;
+/** Related resolution can chain catalog-resolve → YouTube-search → related-mix.
+ * The old 5s ceiling routinely timed out on a library seed with no YouTube
+ * identity, leaving the related pool empty and the batch all-local. */
+const RELATED_DEADLINE_MS = 12_000;
+/** Ceiling for each supplementary catalog pool so a slow batch of
+ * catalog-resolve calls can't hold a plan open. The underlying fetch keeps
+ * running to warm the resolution cache for the next refill. */
+const SUPPLEMENTARY_DEADLINE_MS = 8_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let handle: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    handle = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([
+    promise.then((value) => value, () => fallback).finally(() => clearTimeout(handle)),
+    timeout,
+  ]);
+}
 const SOURCE_SEQUENCE: Record<AutoProfile, AutoSource[]> = {
   familiar: ['local', 'local', 'local', 'local', 'related', 'related', 'related', 'node'],
   balanced: ['local', 'local', 'related', 'related', 'related', 'node', 'node', 'node'],
@@ -84,7 +107,14 @@ export function buildLocalCandidates(
   }));
 }
 
-/** Select a mixed batch with canonical deduplication and a per-artist cap. */
+/** Select a mixed batch with canonical deduplication and a per-artist cap.
+ *
+ * When real discovery candidates exist (related/node non-empty), the number of
+ * `local` tracks is capped to the profile's local share so an unlucky source
+ * mix can't quietly refill the whole batch from the listener's library — that
+ * is what made every profile look identical and library-only. When there are no
+ * external candidates at all (e.g. offline), the cap is lifted so playback
+ * degrades gracefully to the library instead of stalling. */
 export function selectAutoBatch(
   pools: Record<AutoSource, AutoCandidate[]>,
   profile: AutoProfile,
@@ -100,13 +130,19 @@ export function selectAutoBatch(
   const artistCounts = new Map<string, number>();
   const selected: AutoCandidate[] = [];
   const sequence = SOURCE_SEQUENCE[profile];
+  const externalAvailable = pools.related.length + pools.node.length > 0;
+  const localShare = sequence.filter((s) => s === 'local').length;
+  const localCap = externalAvailable ? Math.ceil((limit * localShare) / sequence.length) : limit;
+  let localUsed = 0;
   let cursor = 0;
   let misses = 0;
 
   while (selected.length < limit && misses < sequence.length * 3) {
     const preferred = sequence[cursor % sequence.length];
     cursor += 1;
-    const order: AutoSource[] = [preferred, ...(['local', 'related', 'node'] as AutoSource[]).filter((x) => x !== preferred)];
+    const canLocal = localUsed < localCap;
+    const order = ([preferred, ...(['local', 'related', 'node'] as AutoSource[]).filter((x) => x !== preferred)])
+      .filter((source) => source !== 'local' || canLocal);
     let picked: AutoCandidate | null = null;
     for (const source of order) {
       while (queues[source].length > 0) {
@@ -116,6 +152,7 @@ export function selectAutoBatch(
         if (seen.has(id) || (artist && (artistCounts.get(artist) ?? 0) >= 2)) continue;
         picked = candidate;
         seen.add(id);
+        if (candidate.source === 'local') localUsed += 1;
         if (artist) artistCounts.set(artist, (artistCounts.get(artist) ?? 0) + 1);
         break;
       }
@@ -243,7 +280,7 @@ export class AutopilotController {
           relatedDeadline = setTimeout(() => {
             relatedAborter.abort();
             resolve([]);
-          }, 5000);
+          }, RELATED_DEADLINE_MS);
         }),
       ])
         .then((tracks) => tracks.map((track): AutoCandidate => ({
@@ -253,10 +290,25 @@ export class AutopilotController {
           reasonValues: { title: snapshot.currentTrack!.title },
         })))
         .catch(() => []);
-      const [node, related] = await Promise.all([nodePromise, relatedPromise]);
+      const chartPromise = this.deps.getChartCandidates
+        ? withTimeout(this.deps.getChartCandidates(aborter.signal), SUPPLEMENTARY_DEADLINE_MS, [])
+        : Promise.resolve<AutoCandidate[]>([]);
+      const artistPromise = this.deps.getArtistCandidates
+        ? withTimeout(this.deps.getArtistCandidates(snapshot.currentTrack, aborter.signal), SUPPLEMENTARY_DEADLINE_MS, [])
+        : Promise.resolve<AutoCandidate[]>([]);
+      const [nodeBase, relatedBase, chart, artist] = await Promise.all([
+        nodePromise,
+        relatedPromise,
+        chartPromise,
+        artistPromise,
+      ]);
       if (relatedDeadline) clearTimeout(relatedDeadline);
       aborter.signal.removeEventListener('abort', abortRelated);
       if (!this.active || aborter.signal.aborted) return;
+      // Charts share the node quota (broad discovery); artist top-tracks share
+      // the related quota (more of what's playing).
+      const node = [...nodeBase, ...chart];
+      const related = [...relatedBase, ...artist];
       const excluded = new Set<string>([
         ...snapshot.queue.map(queueIdentity),
         ...this.recent,
