@@ -366,6 +366,26 @@ export function ensureNodeFeed(): void {
   }
 }
 
+/**
+ * Like {@link ensureNodeFeed}, but resolves *with* the feed once it has
+ * candidates — waiting for the in-flight rebuild's first paint (or the timeout)
+ * instead of returning the current, possibly-empty, snapshot.
+ *
+ * Auto Mode awaits this so the node pool isn't dead on the first plan the way a
+ * fire-and-forget `ensureNodeFeed()` + immediate `nodeFeed()` read leaves it.
+ * When there is nothing to wait for (feed already populated, or no rebuild is
+ * possible because the library is empty), it returns immediately.
+ */
+export async function ensureNodeFeedReady(timeoutMs = 6000): Promise<NodeRec[]> {
+  ensureNodeFeed();
+  if (nodeFeed().length > 0 || inFlight === null) return nodeFeed();
+  const deadline = Date.now() + timeoutMs;
+  while (nodeFeed().length === 0 && inFlight !== null && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  return nodeFeed();
+}
+
 /** Explicit re-roll: new seeds, new feed (still coalesced while in flight). */
 export function refreshNodeFeed(): void {
   hydrate();

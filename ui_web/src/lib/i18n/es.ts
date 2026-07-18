@@ -76,6 +76,8 @@ export const es: Dict = {
       related: 'Siguiendo el hilo de {title}',
       nodeArtist: 'Explorando desde {artist}',
       node: 'Desde tu mapa musical',
+      chart: 'Tendencia ahora mismo',
+      artist: 'Más de {artist}',
     },
     agent: {
       searching: 'Buscando relaciones para «{title}»…',

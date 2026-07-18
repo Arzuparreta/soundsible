@@ -15,8 +15,12 @@ ambient, visibly autonomous and deliberately lower-input.
 - Auto Mode is available only while a music track is loaded. Podcasts are out
   of scope because the recommendation engines are music-specific.
 - Entry never starts or pauses audio. The current play state is preserved.
-- Existing upcoming tracks always play first. Auto adds to the tail only when
-  fewer than four tracks remain and fills the lookahead to eight.
+- Entry *takes the wheel*: it keeps the current track plus the next two manual
+  entries as runway and hands the rest of the queue to the pilot. Without this
+  a long album/playlist/radio queue left Auto idling in `following_queue` for
+  the whole session — nothing was added and switching profile did nothing.
+- After takeover, Auto refills the tail whenever fewer than four tracks remain
+  and fills the lookahead to eight.
 - Exit stops autonomous refilling but leaves playback and the generated queue
   untouched.
 - The experience is an in-app full-viewport overlay. It does not request the
@@ -31,15 +35,24 @@ ambient, visibly autonomous and deliberately lower-input.
 ## Autopilot contract
 
 The engine lives in `ui_web/src/lib/autopilot.ts` and is independent from the
-view. It consumes three candidate pools:
+view. It consumes two quota buckets fed by the platform's discovery
+capabilities:
 
-1. Local library and favourites.
-2. Tracks related to the current song.
-3. The assembled node-discovery feed.
+- **Related** — tracks related to the current song (YouTube related-mix) plus
+  the current artist's top tracks (`/api/catalog/artist`).
+- **Node** — the assembled node-discovery feed plus the trending music feed
+  (`/api/discovery/music/feed`).
+- **Local** — the listener's own library and favourites.
 
-The search/catalog infrastructure is used to resolve a local seed without a
-YouTube identity. Autopilot never calls `startRadio()`: classic Radio is allowed
-to replace its queue, while Auto Mode is not.
+Node and related identities are already playable video ids. Catalog rows
+(charts, artist top-tracks) carry Deezer metadata only, so `discoveryPools.ts`
+resolves a bounded number of them to video ids — bounded concurrency, a
+session-lived per-track resolution cache, short-TTL feed caches — and drops the
+unresolved and library-owned ones. The node feed is awaited to first paint
+(`ensureNodeFeedReady`) so it is not empty on the first plan. Related resolution
+is given a 12s ceiling because a library seed with no YouTube identity can chain
+catalog-resolve → search → related-mix. Autopilot never calls `startRadio()`:
+classic Radio is allowed to replace its queue, while Auto Mode is not.
 
 Profiles define the source mix for each eight-slot batch:
 
@@ -51,8 +64,12 @@ Profiles define the source mix for each eight-slot batch:
 
 Selection deduplicates downloaded/preview twins, excludes the active queue and
 the last 60 session identities, and permits at most two tracks by one artist in
-a batch. If a source is unavailable, the other real sources fill its slots.
-Charts and generic filler are not used.
+a batch. When discovery candidates exist, the number of local tracks is capped
+to the profile's local share so an unlucky source mix can't quietly refill the
+whole batch from the library (which made every profile look identical and
+library-only). The cap is lifted only when no external candidate exists at all,
+so offline playback still degrades gracefully to the library instead of
+stalling. Generic filler is not used.
 
 Autopilot records ownership and reason metadata outside `Track`. Changing
 profile removes only future Auto-owned entries, preserves the current track and

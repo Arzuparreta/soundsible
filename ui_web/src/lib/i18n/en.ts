@@ -75,6 +75,8 @@ export const en = {
       related: 'Following the thread of {title}',
       nodeArtist: 'Exploring from {artist}',
       node: 'From your music map',
+      chart: 'Trending right now',
+      artist: 'More from {artist}',
     },
     agent: {
       searching: 'Finding connections for “{title}”…',

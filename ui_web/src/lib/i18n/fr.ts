@@ -76,6 +76,8 @@ export const fr: Dict = {
       related: 'Dans le sillage de {title}',
       nodeArtist: 'Exploration depuis {artist}',
       node: 'Depuis votre carte musicale',
+      chart: 'Tendance en ce moment',
+      artist: 'Plus de {artist}',
     },
     agent: {
       searching: 'Recherche de liens pour « {title} »…',

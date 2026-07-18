@@ -168,6 +168,8 @@ let librarySyncVersion = 0;
 let userPlaybackStartedThisSession = false;
 let autopilot: AutopilotController | null = null;
 let autoPlaybackPrefs: { shuffle: boolean; repeat: RepeatMode } | null = null;
+/** Manual upcoming tracks preserved as runway when Auto Mode takes over. */
+const AUTO_KEEP_MANUAL_ON_ENTER = 2;
 
 function trackUrl(track: Track): string {
   const previewId = playbackYoutubeId(track);
@@ -424,14 +426,20 @@ export const actions = {
       shuffle: state.playback.shuffle,
       repeat: state.playback.repeat,
     };
-    // Auto follows a visible, ordered plan. Adopt a running radio queue without
-    // invoking stopRadio(), whose contract intentionally truncates it.
+    // Take the wheel: keep the current track and the next couple of manual
+    // entries as runway, then let the pilot plan the rest. Without this trim a
+    // long album/playlist/radio queue kept Auto idling in `following_queue`
+    // for the whole session — the queue looked untouched and switching profile
+    // did nothing. Adopt a running radio queue without invoking stopRadio(),
+    // whose contract intentionally truncates it to the seed.
+    const keepUntil = state.playback.index + 1 + AUTO_KEEP_MANUAL_ON_ENTER;
     setState('playback', {
       shuffle: false,
       repeat: 'off',
       radioMode: false,
       radioLoading: false,
       radioSeedId: null,
+      queue: state.playback.queue.slice(0, keepUntil),
     });
     ensureAutopilot().start();
   },
@@ -1198,19 +1206,38 @@ function ensureAutopilot(): AutopilotController {
       getRelated: async (track, signal) => (await relatedTracksFor(track, state.library.filter(isMusicTrack), signal)).tracks,
       getNodeCandidates: async () => {
         const nodes = await import('../lib/nodeDiscover');
-        nodes.ensureNodeFeed();
+        const feed = await nodes.ensureNodeFeedReady();
         const library = state.library.filter(isMusicTrack);
-        return nodes.nodeFeed().map((rec): AutoCandidate => ({
+        return feed.map((rec): AutoCandidate => ({
           track: libraryTrackFor(library, rec) ?? resultToTrack(rec),
           source: 'node',
           reasonKey: rec.seedArtist ? 'autoMode.reason.nodeArtist' : 'autoMode.reason.node',
           reasonValues: rec.seedArtist ? { artist: rec.seedArtist } : undefined,
         }));
       },
+      getChartCandidates: async (signal) => {
+        const pools = await import('../lib/discoveryPools');
+        return excludeOwned(await pools.chartCandidates(6, signal));
+      },
+      getArtistCandidates: async (track, signal) => {
+        const pools = await import('../lib/discoveryPools');
+        return excludeOwned(await pools.artistCandidates(track, 6, signal));
+      },
     },
     state.autoMode.profile,
   );
   return autopilot;
+}
+
+/** Drop catalog-resolved candidates the listener already owns: Auto's discovery
+ * pools should surface music that is *not* in the library. */
+function excludeOwned(candidates: AutoCandidate[]): AutoCandidate[] {
+  const owned = new Set<string>();
+  for (const track of state.library) {
+    owned.add(track.id);
+    if (track.youtube_id) owned.add(track.youtube_id);
+  }
+  return candidates.filter((candidate) => !owned.has(candidate.track.id));
 }
 
 /** Apply the theme to the document (token overrides live in tokens.css) and
