@@ -177,13 +177,14 @@
    grid instead of per-section horizontal scrollers. */
 .discoverGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   gap: var(--space-md);
   padding: var(--space-2xs) 0 var(--space-sm);
 }
 
 .discoverGrid .discoverCard {
   width: auto;
+  min-width: 0;
 }
 
 .railTitle {
@@ -237,8 +238,8 @@
 }
 
 .discoverCardCover {
-  width: 132px;
-  height: 132px;
+  width: 100%;
+  aspect-ratio: 1;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
