@@ -166,6 +166,36 @@ export function AutoMode() {
         </header>
 
         <Show when={current()}>
+          <Show when={upcoming().length > 0}>
+            <section class={styles.upStrip} aria-label={t('autoMode.upNext')}>
+              <span class={styles.upHead}>{t('autoMode.upNext')}</span>
+              <div
+                class={styles.filmstrip}
+                tabIndex={0}
+                onWheel={(event) => {
+                  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+                  event.currentTarget.scrollLeft += event.deltaY;
+                  event.preventDefault();
+                }}
+              >
+                <For each={upcoming()}>
+                  {(track, index) => {
+                    const image = () => track.cover ?? coverUrl(track.id);
+                    return (
+                      <button class={styles.nextCard} type="button" onClick={() => actions.jumpTo(state.playback.index + index() + 1)}>
+                        <span class={styles.nextCover} style={{ 'background-image': `url("${image()}")` }} />
+                        <span class={styles.nextMeta}>
+                          <strong>{track.title}</strong>
+                          <span>{track.artist}</span>
+                        </span>
+                      </button>
+                    );
+                  }}
+                </For>
+              </div>
+            </section>
+          </Show>
+
           <main class={styles.stage}>
             <section class={styles.hero} aria-live="polite">
               <div class={styles.coverWrap}>
@@ -190,27 +220,30 @@ export function AutoMode() {
             </section>
           </main>
 
-          <footer class={styles.bottom}>
-            <div class={styles.transportBlock}>
+          <footer class={styles.dock}>
+            <div class={styles.seek}>
+              <span class={styles.time}>{fmt(state.playback.currentTime)}</span>
               <div class={styles.progress}>
                 <div class={styles.progressFill} style={{ width: `${progress()}%` }} />
               </div>
-              <div class={styles.timeRow}>
-                <span>{fmt(state.playback.currentTime)}</span>
-                <span>{fmt(state.playback.duration)}</span>
-              </div>
-              <div class={styles.transport}>
+              <span class={styles.time}>{fmt(state.playback.duration)}</span>
+            </div>
+            <div class={styles.transport}>
+              <span class={styles.transportSide} aria-hidden="true" />
+              <div class={styles.cluster}>
                 <button type="button" aria-label={t('common.prev')} onClick={() => actions.prev()}>
-                  <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg>
+                  <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg>
                 </button>
                 <button class={styles.play} type="button" aria-label={state.playback.isPlaying ? t('common.pause') : t('common.play')} onClick={() => actions.togglePlay()}>
-                  <Show when={state.playback.isPlaying} fallback={<svg viewBox="0 0 24 24" width="38" height="38" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z" /></svg>}>
-                    <svg viewBox="0 0 24 24" width="38" height="38" aria-hidden="true"><path fill="currentColor" d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+                  <Show when={state.playback.isPlaying} fallback={<svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z" /></svg>}>
+                    <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path fill="currentColor" d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
                   </Show>
                 </button>
                 <button type="button" aria-label={t('common.next')} onClick={() => void actions.autoSkip()}>
-                  <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path fill="currentColor" d="M16 6h2v12h-2zm-1.5 6L6 6v12z" /></svg>
+                  <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M16 6h2v12h-2zm-1.5 6L6 6v12z" /></svg>
                 </button>
+              </div>
+              <div class={styles.transportSide}>
                 <Show
                   when={current()!.source !== 'preview'}
                   fallback={
@@ -230,36 +263,6 @@ export function AutoMode() {
                 </Show>
               </div>
             </div>
-
-            <section class={styles.upNext} aria-label={t('autoMode.upNext')}>
-              <div class={styles.upNextHead}>
-                <span>{t('autoMode.upNext')}</span>
-              </div>
-              <div
-                class={styles.filmstrip}
-                tabIndex={upcoming().length > 0 ? 0 : undefined}
-                onWheel={(event) => {
-                  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-                  event.currentTarget.scrollLeft += event.deltaY;
-                  event.preventDefault();
-                }}
-              >
-                <For each={upcoming()}>
-                  {(track, index) => {
-                    const image = () => track.cover ?? coverUrl(track.id);
-                    return (
-                      <button class={styles.nextCard} type="button" onClick={() => actions.jumpTo(state.playback.index + index() + 1)}>
-                        <span class={styles.nextCover} style={{ 'background-image': `url("${image()}")` }} />
-                        <span class={styles.nextMeta}>
-                          <strong>{track.title}</strong>
-                          <span>{track.artist}</span>
-                        </span>
-                      </button>
-                    );
-                  }}
-                </For>
-              </div>
-            </section>
           </footer>
         </Show>
       </div>

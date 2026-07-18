@@ -86,24 +86,32 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  min-height: 44px;
-  padding: 0 13px;
-  color: var(--accent);
+  gap: 0;
+  /* Mobile: a bare header control that reads like the search/close icons — no
+     pill, no circle, no accent. Just the equalizer mark (the same glyph shown
+     inside Auto Mode), in the neutral header ink so it sits quietly on the page. */
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  color: var(--ink-secondary);
   font: inherit;
   font-size: 10px;
   font-weight: var(--fw-bold);
   letter-spacing: 0.14em;
-  background: var(--accent-soft);
-  border: 1px solid rgba(249, 122, 18, 0.28);
+  background: transparent;
+  border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
   transition: color var(--dur-short), background var(--dur-short), transform var(--dur-micro);
 }
 
 .autoToggle:hover {
-  color: var(--ink-on-accent);
-  background: var(--accent);
+  color: var(--ink-primary);
+  background: var(--bg-raised);
+}
+
+.autoWord {
+  display: none;
 }
 
 .autoToggle:active { transform: scale(0.96); }
@@ -111,9 +119,9 @@
 .autoGlyph {
   display: inline-flex;
   align-items: flex-end;
-  gap: 1px;
-  width: 12px;
-  height: 12px;
+  gap: 2px;
+  width: 16px;
+  height: 15px;
 }
 
 .autoGlyph i {
@@ -127,7 +135,6 @@
 .autoGlyph i:nth-child(3) { height: 68%; }
 
 @media (max-width: 420px) {
-  .autoToggle { padding-inline: 10px; }
   .headLabel { display: none; }
 }
 
@@ -146,11 +153,12 @@
   display: contents;
 }
 
-/* The search-panel toggle only exists where the panel can (≥1024px); below
-   that it keeps its header slot (so the title stays centered) but is inert. */
+/* The search-panel toggle only exists where the panel can (≥1024px). Below
+   that it's removed from the flow entirely so the AUTO control sits flush at the
+   left edge instead of being shoved in behind an invisible-but-spaced button.
+   The header grid (1fr auto 1fr) keeps the title centered without it. */
 .panelToggle {
-  visibility: hidden;
-  pointer-events: none;
+  display: none;
 }
 
 .panelToggleOn {
@@ -855,6 +863,27 @@
     border-bottom: 1px solid var(--hairline);
   }
 
+  /* Tablet & up: room for the labelled accent pill again. Height tracks the
+     header's icon buttons so the three header controls read as one weight. */
+  .autoToggle {
+    width: auto;
+    height: var(--control-h);
+    gap: 7px;
+    padding: 0 13px;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid rgba(249, 122, 18, 0.28);
+  }
+
+  .autoToggle:hover {
+    color: var(--ink-on-accent);
+    background: var(--accent);
+  }
+
+  .autoWord {
+    display: inline;
+  }
+
   .main {
     display: flex;
     flex: 1;
@@ -927,6 +956,7 @@
 
 @media (min-width: 1024px) {
   .panelToggle {
+    display: inline-flex;
     visibility: visible;
     pointer-events: auto;
   }

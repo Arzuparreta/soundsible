@@ -417,7 +417,7 @@ export function NowPlaying() {
               onClick={() => actions.enterAutoMode()}
             >
               <span class={styles.autoGlyph} aria-hidden="true"><i /><i /><i /></span>
-              <span>AUTO</span>
+              <span class={styles.autoWord}>AUTO</span>
             </button>
           </Show>
         </div>
