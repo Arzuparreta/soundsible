@@ -128,6 +128,7 @@ export const fr: Dict = {
     ytNoResults: 'Aucun résultat YouTube.',
     ytDirectSection: 'Vidéo détectée',
     ytResultsSection: 'Résultats YouTube',
+    ytFallbackCta: 'Pas ce que vous cherchiez ? Voir sur YouTube',
     catalogErrorHint: 'La recherche n’a pas pu aboutir.',
     catalogNoResults: 'Aucun résultat Musique.',
     searchInYt: 'Rechercher sur YouTube',

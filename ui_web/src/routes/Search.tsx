@@ -26,6 +26,14 @@ const tabs: Array<{ id: SearchTab; label: () => string }> = [
 const RECENTS_KEY = 'catalog_search_recents';
 const RECENTS_KEY_YOUTUBE = 'youtube_search_recents';
 
+// Power-user escape hatch: prefixing a query with `yt:` forces the plain-YouTube
+// engine (e.g. `yt: some rare bootleg`). Invisible to everyone else.
+const YT_PREFIX = /^yt:\s*/i;
+function parseSearchInput(raw: string): { query: string; forceYt: boolean } {
+  const forceYt = YT_PREFIX.test(raw);
+  return { query: forceYt ? raw.replace(YT_PREFIX, '') : raw, forceYt };
+}
+
 function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
 }
@@ -100,6 +108,8 @@ export default function Search() {
   const [youtubeDirect, setYoutubeDirect] = createSignal<SearchResult | null>(null);
   const [youtubeLoading, setYoutubeLoading] = createSignal(false);
   const [youtubeError, setYoutubeError] = createSignal(false);
+  // Inline YouTube fallback revealed under the music results (see expandYouTubeInline).
+  const [youtubeInline, setYoutubeInline] = createSignal(false);
   const [suggestions, setSuggestions] = createSignal<string[]>([]);
   const [showSuggest, setShowSuggest] = createSignal(false);
   const [recents, setRecents] = createSignal<string[]>(loadRecents('music'));
@@ -114,6 +124,10 @@ export default function Search() {
   let debounce: number | undefined;
   let suggestDebounce: number | undefined;
   let requestId = 0;
+  // Independent from the catalog aborter/requestId so the inline YouTube search
+  // never cancels or clobbers the music results it renders underneath.
+  let ytInlineAborter: AbortController | undefined;
+  let ytInlineRequestId = 0;
   let searchInput: HTMLInputElement | undefined;
   const youtubeCache = new Map<string, SearchResult[]>();
 
@@ -156,6 +170,10 @@ export default function Search() {
     setYoutubeDirect(null);
     setYoutubeResults([]);
     setYoutubeLoading(false);
+    // A fresh music query collapses any inline YouTube section from the last one.
+    ytInlineAborter?.abort();
+    ytInlineAborter = undefined;
+    setYoutubeInline(false);
     if (query.length < 2) {
       setItems([]);
       setSectionIds({});
@@ -181,6 +199,43 @@ export default function Search() {
       })
       .finally(() => {
         if (current === requestId) setLoading(false);
+      });
+  };
+
+  // Reveal plain-YouTube results underneath the music results, on demand. Runs
+  // its own search against the youtube* signals without disturbing the catalog
+  // state, so the user keeps their music results and gains YouTube reach in one
+  // scroll. Reuses youtubeCache (shared with the full YouTube view).
+  const expandYouTubeInline = () => {
+    const query = q().trim();
+    if (query.length < 2) return;
+    setYoutubeInline(true);
+    setYoutubeError(false);
+    const cached = youtubeCache.get(query);
+    if (cached) {
+      setYoutubeResults(cached);
+      setYoutubeLoading(false);
+      return;
+    }
+    const current = ++ytInlineRequestId;
+    ytInlineAborter?.abort();
+    ytInlineAborter = new AbortController();
+    setYoutubeResults([]);
+    setYoutubeLoading(true);
+    api
+      .searchYouTube(query, ytInlineAborter.signal)
+      .then((res) => {
+        if (current !== ytInlineRequestId) return;
+        youtubeCache.set(query, res);
+        setYoutubeResults(res);
+      })
+      .catch((e) => {
+        if (current !== ytInlineRequestId || isAbort(e)) return;
+        setYoutubeResults([]);
+        setYoutubeError(true);
+      })
+      .finally(() => {
+        if (current === ytInlineRequestId) setYoutubeLoading(false);
       });
   };
 
@@ -301,10 +356,11 @@ export default function Search() {
   };
 
   const commit = (value: string) => {
-    const query = value.trim();
-    const nextDomain = parseYouTubeInput(query) ? 'youtube' : domain();
+    const { query: parsed, forceYt } = parseSearchInput(value.trim());
+    const query = parsed.trim();
+    const nextDomain = forceYt || parseYouTubeInput(query) ? 'youtube' : domain();
     if (nextDomain !== domain()) setDomain(nextDomain);
-    setQ(query);
+    setQ(value.trim());
     setShowSuggest(false);
     setSuggestions([]);
     clearTimeout(debounce);
@@ -318,7 +374,8 @@ export default function Search() {
   };
 
   const onInput = (value: string) => {
-    const nextDomain = parseYouTubeInput(value) ? 'youtube' : domain();
+    const { query: parsed, forceYt } = parseSearchInput(value);
+    const nextDomain = forceYt || parseYouTubeInput(parsed) ? 'youtube' : domain();
     if (nextDomain !== domain()) {
       setDomain(nextDomain);
       setRecents(loadRecents(nextDomain));
@@ -327,8 +384,8 @@ export default function Search() {
     setShowSuggest(true);
     clearTimeout(debounce);
     clearTimeout(suggestDebounce);
-    debounce = window.setTimeout(() => runSearch(value, nextDomain), 220);
-    suggestDebounce = window.setTimeout(() => runSuggest(value), 120);
+    debounce = window.setTimeout(() => runSearch(parsed, nextDomain), 220);
+    suggestDebounce = window.setTimeout(() => runSuggest(parsed), 120);
   };
 
   const setActiveTab = (next: SearchTab) => {
@@ -538,7 +595,9 @@ export default function Search() {
 
   onCleanup(() => {
     requestId += 1;
+    ytInlineRequestId += 1;
     aborter?.abort();
+    ytInlineAborter?.abort();
     suggestAborter?.abort();
     clearTimeout(debounce);
     clearTimeout(suggestDebounce);
@@ -736,6 +795,55 @@ export default function Search() {
 
               <Show when={albums().length > 0}>
                 <CardSection title={tr('search.albumsSection')} items={albums()} coverStyle={coverStyle} onPick={playItem} />
+              </Show>
+
+              <Show when={q().trim().length >= 2}>
+                <section class={styles.ytFallback}>
+                  <Show
+                    when={youtubeInline()}
+                    fallback={
+                      <button class={styles.ytFallbackCta} type="button" onClick={expandYouTubeInline}>
+                        <span>{tr('search.ytFallbackCta')}</span>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M9 18l6-6-6-6" />
+                        </svg>
+                      </button>
+                    }
+                  >
+                    <h2 class={styles.sectionTitle}>{tr('search.ytResultsSection')}</h2>
+                    <Show when={youtubeLoading() && youtubeResults().length === 0}>
+                      <div class={styles.skeletonGrid}>
+                        <For each={Array.from({ length: 4 })}>{() => <div class={styles.skeleton} />}</For>
+                      </div>
+                    </Show>
+                    <Show when={!youtubeLoading() && youtubeResults().length === 0}>
+                      <p class={styles.hint}>
+                        {youtubeError() ? (
+                          <>
+                            {tr('search.ytErrorHint')}{' '}
+                            <button class={styles.retry} type="button" onClick={expandYouTubeInline}>
+                              {tr('common.retry')}
+                            </button>
+                          </>
+                        ) : (
+                          tr('search.ytNoResults')
+                        )}
+                      </p>
+                    </Show>
+                    <For each={youtubeResults()}>
+                      {(result) => (
+                        <SearchResultRow
+                          r={result}
+                          active={state.playback.currentTrack?.id === result.id}
+                          inLibrary={libYt().has(result.id)}
+                          enqueued={youtubeEnqueued().has(result.id)}
+                          onPreview={() => previewYouTube(result)}
+                          onAdd={() => void addYouTube(result)}
+                        />
+                      )}
+                    </For>
+                  </Show>
+                </section>
               </Show>
             </div>
           </Match>

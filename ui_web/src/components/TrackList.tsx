@@ -91,7 +91,6 @@ export default function TrackList(props: {
                     >
                       <SongRow
                         track={track!}
-                        index={vi.index + 1}
                         cover={coverUrl(track!.id)}
                         active={state.playback.currentTrack?.id === track!.id}
                         onPlay={() => actions.playFrom(props.tracks, vi.index)}

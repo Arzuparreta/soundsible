@@ -341,6 +341,14 @@ function applyDownloadEvent(detail: DownloadEvent): void {
       title: track?.title ?? finished?.display_title ?? finished?.podcast_title ?? tr('toast.trackFallback'),
       artist: track?.artist ?? finished?.display_artist ?? finished?.podcast_show_title ?? '',
     });
+    // A completed download is emitted by the server *after* it has written the
+    // new track to library.json (see shared/api/__init__.py), so the library is
+    // already authoritative here. Refresh it directly instead of waiting on the
+    // `library_updated` file-watcher event, which has a 2s debounce and can miss
+    // or coalesce filesystem events — that lag is why a freshly downloaded track
+    // wouldn't show up until the user re-entered the Library view. syncLibrary()
+    // coalesces concurrent calls, so bulk (album) completions collapse safely.
+    void actions.syncLibrary();
     return;
   }
   setState('downloads', 'queue', (q) => {

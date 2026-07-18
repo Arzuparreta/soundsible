@@ -2,7 +2,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 var(--space-sm) var(--space-lg);
+  padding: 0 0 var(--space-lg);
 }
 
 .empty {

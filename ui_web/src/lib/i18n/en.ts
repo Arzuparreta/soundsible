@@ -125,6 +125,7 @@ export const en = {
     ytNoResults: 'No YouTube results.',
     ytDirectSection: 'Detected video',
     ytResultsSection: 'YouTube results',
+    ytFallbackCta: "Not what you wanted? Look on YouTube",
     catalogErrorHint: 'The search could not be completed.',
     catalogNoResults: 'No Music results.',
     searchInYt: 'Search on YouTube',

@@ -126,6 +126,7 @@ export const zh: Dict = {
     ytNoResults: 'YouTube 无结果。',
     ytDirectSection: '检测到视频',
     ytResultsSection: 'YouTube 结果',
+    ytFallbackCta: '没找到？在 YouTube 上查找',
     catalogErrorHint: '无法完成搜索。',
     catalogNoResults: '音乐无结果。',
     searchInYt: '在 YouTube 搜索',
