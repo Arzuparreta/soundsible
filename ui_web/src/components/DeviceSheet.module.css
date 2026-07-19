@@ -65,7 +65,11 @@
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  padding: var(--space-sm) 0;
+  padding: var(--space-sm) var(--space-lg);
+}
+
+.deviceRow + .deviceRow {
+  border-top: 1px solid var(--hairline);
 }
 
 .controls {
@@ -91,8 +95,8 @@
 }
 
 .empty {
-  padding: var(--space-md);
-  color: var(--ink-secondary);
+  padding: var(--space-md) var(--space-lg);
+  color: var(--ink-tertiary);
   font-size: var(--text-label);
   text-align: center;
 }

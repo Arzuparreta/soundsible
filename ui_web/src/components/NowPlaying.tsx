@@ -645,12 +645,15 @@ export function NowPlaying() {
             <div class={styles.volume}>
               <button
                 class={styles.actBtn}
+                classList={{ [styles.actOn]: state.playback.muted }}
                 type="button"
                 aria-label={state.playback.muted ? tr('omnibar.unmute') : tr('omnibar.mute')}
+                aria-pressed={state.playback.muted}
+                title={state.playback.muted ? tr('omnibar.unmute') : tr('omnibar.mute')}
                 onClick={() => actions.toggleMute()}
               >
                 <Show
-                  when={!state.playback.muted && state.playback.volume > 0}
+                  when={!state.playback.muted}
                   fallback={
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6" />

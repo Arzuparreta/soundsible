@@ -1,32 +1,82 @@
-import { createSignal, onMount, For } from 'solid-js';
+import { createSignal, onMount, For, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
 import { state, actions } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
-import Button from '../components/Button';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/confirm';
 import { DevicesPanel } from '../components/DeviceSheet';
 import { PairedDevicesPanel } from '../components/PairDevice';
 import { t, locale, setLocale, LOCALES, type Locale } from '../lib/i18n';
+import { trackCount } from '../lib/format';
 import styles from './Settings.module.css';
+
+function Chevron() {
+  return (
+    <svg class={styles.chevron} viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <path d="M9 18l6-6-6-6" />
+    </svg>
+  );
+}
+
+function Group(props: { label: string; children: JSX.Element }) {
+  return (
+    <section class={styles.group}>
+      <h2 class={styles.groupLabel}>{props.label}</h2>
+      {props.children}
+    </section>
+  );
+}
 
 function Switch(props: { checked: boolean; onChange: () => void; label: string }) {
   return (
-    <label class={styles.switchRow}>
-      <span>{props.label}</span>
+    <div class={styles.row}>
+      <span class={styles.rowLabel}>{props.label}</span>
       <button
         type="button"
         class={styles.switch}
         classList={{ [styles.switchOn]: props.checked }}
         role="switch"
         aria-checked={props.checked}
+        aria-label={props.label}
         onClick={props.onChange}
       >
         <span class={styles.knob} />
       </button>
-    </label>
+    </div>
   );
+}
+
+function ActionRow(props: { label: string; onClick: () => void; disabled?: boolean; danger?: boolean }) {
+  return (
+    <button
+      type="button"
+      class={styles.rowBtn}
+      classList={{ [styles.rowBtnDanger]: props.danger }}
+      disabled={props.disabled}
+      onClick={props.onClick}
+    >
+      <span class={styles.rowLabel}>{props.label}</span>
+      <Chevron />
+    </button>
+  );
+}
+
+function NavRow(props: { href: string; label: string }) {
+  return (
+    <A href={props.href} class={styles.rowLink}>
+      <span class={styles.rowLabel}>{props.label}</span>
+      <Chevron />
+    </A>
+  );
+}
+
+const QUALITY_OPTIONS = ['low', 'normal', 'high'] as const;
+
+function qualityLabel(q: string): string {
+  if (q === 'low') return t('settings.qualityLow');
+  if (q === 'normal') return t('settings.qualityNormal');
+  return t('settings.qualityHigh');
 }
 
 export default function Settings() {
@@ -40,14 +90,14 @@ export default function Settings() {
       const d = await api.getDiscoverySettings();
       if (typeof d.learning_enabled === 'boolean') setLearning(d.learning_enabled);
     } catch {
-      /* leave defaults */
+      /* defaults */
     }
     try {
       const c = await api.getDownloaderConfig();
       if (c.quality) setQuality(c.quality);
       if (typeof c.auto_update_ytdlp === 'boolean') setAutoUpdate(c.auto_update_ytdlp);
     } catch {
-      /* leave defaults */
+      /* defaults */
     }
   });
 
@@ -56,6 +106,7 @@ export default function Settings() {
     await actions.syncLibrary();
     setBusy(false);
   };
+
   const rescan = async () => {
     setBusy(true);
     await actions.rescanLibrary();
@@ -152,147 +203,149 @@ export default function Settings() {
 
   return (
     <div class="view">
-      <ViewHeader title={t('settings.title')} />
+      <ViewHeader title={t('settings.title')} meta={trackCount(state.library.length)} />
+
       <div class={styles.scroll}>
-        <section class={styles.card}>
-          <h2 class={styles.cardTitle}>{t('settings.appearance')}</h2>
-          <div class={styles.row}>
-            <span>{t('settings.theme')}</span>
-            <div class={styles.segment}>
-              <button
-                class={styles.seg}
-                classList={{ [styles.segOn]: state.theme === 'dark' }}
-                type="button"
-                onClick={() => actions.setTheme('dark')}
+        <Group label={t('settings.appearance')}>
+          <div class={styles.panel}>
+            <div class={styles.row}>
+              <span class={styles.rowLabel}>{t('settings.theme')}</span>
+              <div class={styles.segment} role="group" aria-label={t('settings.theme')}>
+                <button
+                  type="button"
+                  class={styles.seg}
+                  classList={{ [styles.segOn]: state.theme === 'dark' }}
+                  aria-label={t('settings.themeDark')}
+                  aria-pressed={state.theme === 'dark'}
+                  onClick={() => actions.setTheme('dark')}
+                >
+                  <span class={styles.segIcon}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  class={styles.seg}
+                  classList={{ [styles.segOn]: state.theme === 'light' }}
+                  aria-label={t('settings.themeLight')}
+                  aria-pressed={state.theme === 'light'}
+                  onClick={() => actions.setTheme('light')}
+                >
+                  <span class={styles.segIcon}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <circle cx="12" cy="12" r="4" />
+                      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+                    </svg>
+                  </span>
+                </button>
+              </div>
+            </div>
+            <div class={styles.row}>
+              <span class={styles.rowLabel}>{t('settings.language')}</span>
+              <select
+                class={styles.select}
+                value={locale()}
+                aria-label={t('settings.language')}
+                onChange={(e) => setLocale(e.currentTarget.value as Locale)}
               >
-                {t('settings.themeDark')}
-              </button>
-              <button
-                class={styles.seg}
-                classList={{ [styles.segOn]: state.theme === 'light' }}
-                type="button"
-                onClick={() => actions.setTheme('light')}
-              >
-                {t('settings.themeLight')}
-              </button>
+                <For each={LOCALES}>
+                  {(l) => <option value={l.code}>{l.native}</option>}
+                </For>
+              </select>
+            </div>
+            <Switch
+              label={t('settings.haptics')}
+              checked={state.haptics}
+              onChange={() => actions.setHaptics(!state.haptics)}
+            />
+          </div>
+        </Group>
+
+        <Group label={t('settings.libraryCard')}>
+          <div class={styles.panel}>
+            <ActionRow label={t('settings.reload')} onClick={reload} disabled={busy()} />
+            <ActionRow label={t('settings.rescan')} onClick={rescan} disabled={busy()} />
+            <ActionRow label={t('settings.purgeFiles')} onClick={purge} />
+            <ActionRow label={t('settings.emptyLibrary')} onClick={wipe} danger />
+            <NavRow href="/import" label={t('settings.importFrom')} />
+          </div>
+        </Group>
+
+        <Group label={t('settings.downloads')}>
+          <div class={styles.panel}>
+            <div class={styles.row}>
+              <span class={styles.rowLabel}>{t('settings.quality')}</span>
+              <div class={styles.segment} role="group" aria-label={t('settings.quality')}>
+                <For each={QUALITY_OPTIONS}>
+                  {(q) => (
+                    <button
+                      type="button"
+                      class={styles.seg}
+                      classList={{ [styles.segOn]: quality() === q }}
+                      aria-pressed={quality() === q}
+                      onClick={() => changeQuality(q)}
+                    >
+                      {qualityLabel(q)}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </div>
+            <Switch label={t('settings.autoUpdateYtdlp')} checked={autoUpdate()} onChange={toggleAuto} />
+            <Switch label={t('settings.learnActivity')} checked={learning()} onChange={toggleLearning} />
+            <ActionRow label={t('settings.optimize')} onClick={optimize} />
+            <ActionRow label={t('settings.sync')} onClick={cloudSync} />
+          </div>
+        </Group>
+
+        <Group label={t('settings.device')}>
+          <div class={styles.panel}>
+            <div class={styles.row}>
+              <span class={styles.rowLabel}>{t('settings.device')}</span>
+              <input
+                class={styles.input}
+                value={state.device.device_name}
+                aria-label={t('settings.device')}
+                onInput={(e) => actions.setDeviceName(e.currentTarget.value)}
+              />
             </div>
           </div>
-          <Switch
-            label={t('settings.haptics')}
-            checked={state.haptics}
-            onChange={() => actions.setHaptics(!state.haptics)}
-          />
-          <div class={styles.row}>
-            <span>{t('settings.language')}</span>
-            <select
-              class={styles.select}
-              value={locale()}
-              onChange={(e) => setLocale(e.currentTarget.value as Locale)}
-            >
-              <For each={LOCALES}>
-                {(l) => <option value={l.code}>{l.native}</option>}
-              </For>
-            </select>
+        </Group>
+
+        <Group label={t('settings.pairedDevices')}>
+          <div class={styles.panel}>
+            <PairedDevicesPanel />
           </div>
-        </section>
+        </Group>
 
-        <section class={styles.card}>
-          <h2 class={styles.cardTitle}>{t('settings.discovery')}</h2>
-          <Switch label={t('settings.learnActivity')} checked={learning()} onChange={toggleLearning} />
-          <p class={styles.note}>{t('settings.learnActivityNote')}</p>
-        </section>
-
-        <section class={styles.card}>
-          <h2 class={styles.cardTitle}>{t('settings.downloads')}</h2>
-          <div class={styles.row}>
-            <span>{t('settings.quality')}</span>
-            <select class={styles.select} value={quality()} onChange={(e) => changeQuality(e.currentTarget.value)}>
-              <option value="low">{t('settings.qualityLow')}</option>
-              <option value="normal">{t('settings.qualityNormal')}</option>
-              <option value="high">{t('settings.qualityHigh')}</option>
-            </select>
+        <Group label={t('settings.devices')}>
+          <div class={styles.panel}>
+            <DevicesPanel />
           </div>
-          <Switch label={t('settings.autoUpdateYtdlp')} checked={autoUpdate()} onChange={toggleAuto} />
-          <div class={styles.actions}>
-            <Button variant="secondary" onClick={optimize}>
-              {t('settings.optimize')}
-            </Button>
-            <Button variant="secondary" onClick={cloudSync}>
-              {t('settings.sync')}
-            </Button>
+        </Group>
+
+        <Group label={t('settings.about')}>
+          <div class={styles.panel}>
+            <div class={styles.row}>
+              <span class={styles.rowLabel}>{t('settings.engineLabel')}</span>
+              <span class={styles.statusRow}>
+                <span
+                  class={styles.statusDot}
+                  classList={{ [styles.statusOn]: state.online, [styles.statusOff]: !state.online }}
+                  aria-hidden="true"
+                />
+                {state.online ? t('common.online') : t('common.offline')}
+              </span>
+            </div>
+            <div class={styles.row}>
+              <span class={styles.rowLabel}>{t('brand.soundsible')}</span>
+              <span class={styles.mono}>{t('settings.version')}</span>
+            </div>
+            <NavRow href="/preview" label={t('settings.viewDesign')} />
           </div>
-        </section>
-
-        <section class={styles.card}>
-          <h2 class={styles.cardTitle}>{t('settings.libraryCard')}</h2>
-          <p class={styles.row}>
-            <span>{t('settings.tracks')}</span>
-            <span class={styles.mono}>{state.library.length}</span>
-          </p>
-          <div class={styles.actions}>
-            <Button variant="secondary" disabled={busy()} onClick={reload}>
-              {t('settings.reload')}
-            </Button>
-            <Button variant="secondary" disabled={busy()} onClick={rescan}>
-              {t('settings.rescan')}
-            </Button>
-            <Button variant="secondary" onClick={purge}>
-              {t('settings.purgeFiles')}
-            </Button>
-          </div>
-          <button class={styles.dangerBtn} type="button" onClick={wipe}>
-            {t('settings.emptyLibrary')}
-          </button>
-        </section>
-
-        <section class={styles.card}>
-          <h2 class={styles.cardTitle}>{t('settings.importCard')}</h2>
-          <p class={styles.note}>{t('settings.importNote')}</p>
-          <A href="/import" class={styles.link}>
-            {t('settings.importFrom')}
-          </A>
-        </section>
-
-        <section class={styles.card}>
-          <h2 class={styles.cardTitle}>{t('settings.device')}</h2>
-          <input
-            class={styles.input}
-            value={state.device.device_name}
-            onInput={(e) => actions.setDeviceName(e.currentTarget.value)}
-          />
-        </section>
-
-        <section class={styles.card}>
-          <h2 class={styles.cardTitle}>{t('settings.devices')}</h2>
-          <DevicesPanel />
-        </section>
-
-        <section class={styles.card}>
-          <h2 class={styles.cardTitle}>{t('settings.pairedDevices')}</h2>
-          <p class={styles.note}>{t('settings.pairNote')}</p>
-          <PairedDevicesPanel />
-        </section>
-
-        <section class={styles.card}>
-          <h2 class={styles.cardTitle}>{t('settings.connection')}</h2>
-          <p class={styles.row}>
-            <span>{t('settings.engineLabel')}</span>
-            <span classList={{ [styles.ok]: state.online, [styles.bad]: !state.online }}>
-              {state.online ? t('common.online') : t('common.offline')}
-            </span>
-          </p>
-        </section>
-
-        <section class={styles.card}>
-          <h2 class={styles.cardTitle}>{t('settings.about')}</h2>
-          <p class={styles.row}>
-            <span>{t('brand.soundsible')}</span>
-            <span class={styles.mono}>{t('settings.version')}</span>
-          </p>
-          <A href="/preview" class={styles.link}>
-            {t('settings.viewDesign')}
-          </A>
-        </section>
+        </Group>
       </div>
     </div>
   );

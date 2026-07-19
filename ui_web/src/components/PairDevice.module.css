@@ -153,17 +153,21 @@
 
 /* ── Paired devices panel (in Settings) ── */
 .empty {
-  padding: var(--space-md) 0;
+  padding: var(--space-md) var(--space-lg);
   font-size: var(--text-label);
   color: var(--ink-tertiary);
+  text-align: center;
 }
 
 .deviceRow {
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  padding: var(--space-sm) 0;
-  border-bottom: 1px solid var(--hairline);
+  padding: var(--space-sm) var(--space-lg);
+}
+
+.deviceRow + .deviceRow {
+  border-top: 1px solid var(--hairline);
 }
 
 .deviceMeta {
@@ -185,7 +189,7 @@
 
 .deviceSub {
   font-size: var(--text-caption);
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
 }
 
 .revoke {
@@ -206,19 +210,24 @@
 }
 
 .pairBtn {
-  align-self: flex-start;
-  margin-top: var(--space-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-top: var(--space-sm);
   padding: var(--space-sm) var(--space-lg);
   font-size: var(--text-label);
   font-weight: var(--fw-semibold);
   color: var(--accent);
-  background: var(--accent-soft);
+  background: transparent;
   border: none;
-  border-radius: var(--radius-full);
+  border-top: 1px solid var(--hairline);
+  border-radius: 0;
   cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out);
 }
 .pairBtn:hover {
-  filter: brightness(1.05);
+  background: var(--bg-elevated);
 }
 
 @media (max-width: 520px) {
