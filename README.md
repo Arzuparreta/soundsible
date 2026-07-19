@@ -86,8 +86,9 @@ sudo apt install -y git ffmpeg python3 python3-venv python3-pip nodejs npm
 git clone https://github.com/Arzuparreta/soundsible.git
 cd soundsible
 
-# 3. Build the web player (one-time)
-cd ui_web && npm ci && npm run build && cd ..
+# 3. Install web player deps (one-time; dist builds on engine start)
+cd ui_web && npm ci && cd ..
+# or force a rebuild anytime: python3 scripts/ensure_ui_dist.py --force
 
 # 4. Run it
 python3 run.py
@@ -114,8 +115,9 @@ brew install git ffmpeg python node
 git clone https://github.com/Arzuparreta/soundsible.git
 cd soundsible
 
-# 3. Build the web player (one-time)
-cd ui_web && npm ci && npm run build && cd ..
+# 3. Install web player deps (one-time; dist builds on engine start)
+cd ui_web && npm ci && cd ..
+# or force a rebuild anytime: python3 scripts/ensure_ui_dist.py --force
 
 # 4. Run it
 python3 run.py
@@ -137,13 +139,12 @@ winget install Git.Git Python.Python.3.12 Gyan.FFmpeg OpenJS.NodeJS.LTS
 git clone https://github.com/Arzuparreta/soundsible.git
 cd soundsible
 
-# 3. Build the web player (one-time)
-cd ui_web; npm ci; npm run build; cd ..
+# 3. Install web player deps (one-time; dist builds on engine start)
+cd ui_web; npm ci; cd ..
 
 # 4. Run it
 python run.py
 ```
-
 No `winget`? Install [Git](https://git-scm.com/download/win), [Python](https://www.python.org/downloads/) (tick *"Add to PATH"*), [Node.js](https://nodejs.org/) (LTS), and [FFmpeg](https://ffmpeg.org/download.html) manually.
 
 </details>

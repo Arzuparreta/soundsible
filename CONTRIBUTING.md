@@ -25,12 +25,13 @@ Thanks for your interest in contributing – every bug report, idea, and pull re
    ./venv/bin/pip install -r requirements.txt
    ```
 
-3. **Build the web player** (one-time, or after frontend changes you want to serve from the engine)
+3. **Web player deps** (one-time). The engine rebuilds `ui_web/dist` automatically when sources change.
 
    ```bash
-   cd ui_web && npm ci && npm run build && cd ..
+   cd ui_web && npm ci && cd ..
    ```
 
+   Or build explicitly: `python3 scripts/ensure_ui_dist.py --force`
 4. **Run tests**
 
    ```bash

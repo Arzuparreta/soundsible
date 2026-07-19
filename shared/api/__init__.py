@@ -37,6 +37,7 @@ from shared.runtime import (
     runtime_with_overrides,
     RuntimeConfig,
 )
+from shared.ensure_ui_dist import ensure_ui_dist
 from shared.playback_state import (
     get_state as get_playback_state,
     put_state as put_playback_state,
@@ -329,6 +330,8 @@ def _inject_owner_token_bootstrap(html: str, token: Optional[str]) -> str:
 
 
 def _render_web_ui_html(filename: str, *, inject_owner_token: bool = False):
+    # Rebuild dist when sources changed while the engine was already running.
+    ensure_ui_dist(external_dist=get_runtime_config().ui_dist)
     root = _web_ui_root()
     path = os.path.join(root, filename)
     if not inject_owner_token:
@@ -1198,6 +1201,7 @@ def start_api(
     logger.info("Target Port: %s", runtime.port)
     logger.info("CWD: %s", os.getcwd())
     logger.info("For full startup (sync + watcher) use: python run.py --daemon")
+    ensure_ui_dist(external_dist=runtime.ui_dist)
 
     # Note: Set app config so path_resolver and security do not depend on odst_tool layout
     _out = _resolve_output_dir()

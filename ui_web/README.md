@@ -2,7 +2,7 @@
 
 The Station player: a responsive **SolidJS + TypeScript** app in `src/`, built with Vite. It is the only web frontend — used by browsers, mobile/PWA clients, and the Tauri desktop shell. Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`.
 
-The production bundle (`dist/`) is not committed. Build it before serving through the engine, or use the Vite dev server while developing.
+The production bundle (`dist/`) is not committed. The Station engine rebuilds it automatically when `src/` (or Vite config) is newer than `dist/` — on API boot and when serving `/player/`. You can still use the Vite dev server while developing, or force a rebuild with `python3 scripts/ensure_ui_dist.py`.
 
 ## Prerequisites
 
@@ -31,11 +31,13 @@ npm run build
 
 ## Running through the engine
 
-Build first, then start Soundsible normally:
+First-time setup still needs dependencies:
 
 ```bash
-npm ci && npm run build
+cd ui_web && npm ci && cd ..
 ```
+
+After that, starting the engine is enough — it runs `vite build` when `dist/` is missing or stale. Skip with `SOUNDSIBLE_SKIP_UI_BUILD=1`. Desktop builds that set `SOUNDSIBLE_UI_DIST` to a bundled tree are left alone.
 
 The API serves `ui_web/dist/index.html` at:
 
