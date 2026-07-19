@@ -14,7 +14,7 @@
         try {
           var stored = localStorage.getItem('theme');
           var preference =
-            stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'dark';
+            stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
           var resolved =
             preference === 'system'
               ? window.matchMedia('(prefers-color-scheme: dark)').matches

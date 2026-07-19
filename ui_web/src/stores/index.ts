@@ -119,7 +119,7 @@ function loadDevice(): DeviceRegistration {
 function loadTheme(): Theme {
   const raw = localStorage.getItem('theme');
   if (raw === 'dark' || raw === 'light' || raw === 'system') return raw;
-  return 'dark';
+  return 'system';
 }
 
 const [state, setState] = createStore<AppState>({

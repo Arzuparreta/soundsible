@@ -228,21 +228,6 @@ export default function Settings() {
                 <button
                   type="button"
                   class={styles.seg}
-                  classList={{ [styles.segOn]: state.theme === 'light' }}
-                  aria-label={t('settings.themeLight')}
-                  aria-pressed={state.theme === 'light'}
-                  onClick={() => actions.setTheme('light')}
-                >
-                  <span class={styles.segIcon}>
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                      <circle cx="12" cy="12" r="4" />
-                      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-                    </svg>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  class={styles.seg}
                   classList={{ [styles.segOn]: state.theme === 'system' }}
                   aria-label={t('settings.themeSystem')}
                   aria-pressed={state.theme === 'system'}
@@ -252,6 +237,21 @@ export default function Settings() {
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                       <rect x="2" y="3" width="20" height="14" rx="2" />
                       <path d="M8 21h8M12 17v4" />
+                    </svg>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  class={styles.seg}
+                  classList={{ [styles.segOn]: state.theme === 'light' }}
+                  aria-label={t('settings.themeLight')}
+                  aria-pressed={state.theme === 'light'}
+                  onClick={() => actions.setTheme('light')}
+                >
+                  <span class={styles.segIcon}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <circle cx="12" cy="12" r="4" />
+                      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
                     </svg>
                   </span>
                 </button>
