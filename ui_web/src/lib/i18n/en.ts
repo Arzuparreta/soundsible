@@ -156,6 +156,7 @@ export const en = {
     theme: 'Theme',
     themeDark: 'Dark',
     themeLight: 'Light',
+    themeSystem: 'System',
     haptics: 'Vibration (haptics)',
     discovery: 'Discovery',
     learnActivity: 'Learn from my activity',

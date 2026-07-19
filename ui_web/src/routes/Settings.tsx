@@ -240,6 +240,21 @@ export default function Settings() {
                     </svg>
                   </span>
                 </button>
+                <button
+                  type="button"
+                  class={styles.seg}
+                  classList={{ [styles.segOn]: state.theme === 'system' }}
+                  aria-label={t('settings.themeSystem')}
+                  aria-pressed={state.theme === 'system'}
+                  onClick={() => actions.setTheme('system')}
+                >
+                  <span class={styles.segIcon}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <rect x="2" y="3" width="20" height="14" rx="2" />
+                      <path d="M8 21h8M12 17v4" />
+                    </svg>
+                  </span>
+                </button>
               </div>
             </div>
             <div class={styles.row}>

@@ -157,6 +157,7 @@ export const es: Dict = {
     theme: 'Tema',
     themeDark: 'Oscuro',
     themeLight: 'Claro',
+    themeSystem: 'Sistema',
     haptics: 'Vibración (hápticos)',
     discovery: 'Descubrimiento',
     learnActivity: 'Aprender de mi actividad',

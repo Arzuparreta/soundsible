@@ -159,6 +159,7 @@ export const fr: Dict = {
     theme: 'Thème',
     themeDark: 'Sombre',
     themeLight: 'Clair',
+    themeSystem: 'Système',
     haptics: 'Vibration (haptiques)',
     discovery: 'Découverte',
     learnActivity: 'Apprendre de mon activité',

@@ -16,7 +16,10 @@ import type { Track, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
 import type { DownloadQueueItem, DownloadEvent, CompletedDownload } from '../types/download';
 
-export type Theme = 'dark' | 'light';
+/** User preference: explicit dark/light, or follow the OS via prefers-color-scheme. */
+export type Theme = 'dark' | 'light' | 'system';
+/** Concrete appearance applied to the document (never `system`). */
+export type ResolvedTheme = 'dark' | 'light';
 export type RepeatMode = 'off' | 'all' | 'one';
 
 export interface DownloadsState {
@@ -113,10 +116,16 @@ function loadDevice(): DeviceRegistration {
   };
 }
 
+function loadTheme(): Theme {
+  const raw = localStorage.getItem('theme');
+  if (raw === 'dark' || raw === 'light' || raw === 'system') return raw;
+  return 'dark';
+}
+
 const [state, setState] = createStore<AppState>({
   online: false,
   device: loadDevice(),
-  theme: (localStorage.getItem('theme') as Theme) ?? 'dark',
+  theme: loadTheme(),
   haptics: localStorage.getItem('haptics') !== 'off',
   loading: false,
   library: [],
@@ -1261,13 +1270,66 @@ function excludeOwned(candidates: AutoCandidate[]): AutoCandidate[] {
   return candidates.filter((candidate) => !owned.has(candidate.track.id));
 }
 
-/** Apply the theme to the document (token overrides live in tokens.css) and
- * sync the mobile status-bar colour. */
-export function applyTheme(theme: Theme): void {
+/** Whether the OS/browser currently prefers a dark colour scheme.
+ * Universal across desktop and mobile (iOS Safari, Android Chrome, etc.)
+ * via the CSS media query `prefers-color-scheme`. Falls back to dark when
+ * matchMedia is unavailable. */
+export function systemPrefersDark(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+/** Resolve a stored preference to the concrete dark/light tokens to apply. */
+export function resolveTheme(theme: Theme): ResolvedTheme {
+  if (theme === 'system') return systemPrefersDark() ? 'dark' : 'light';
+  return theme;
+}
+
+let systemMediaQuery: MediaQueryList | null = null;
+let systemMediaListener: ((event: MediaQueryListEvent) => void) | null = null;
+
+/** Keep following OS changes while the preference is `system`; detach otherwise. */
+function syncSystemThemeListener(theme: Theme): void {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+
+  if (systemMediaQuery && systemMediaListener) {
+    if (typeof systemMediaQuery.removeEventListener === 'function') {
+      systemMediaQuery.removeEventListener('change', systemMediaListener);
+    } else {
+      // Safari < 14
+      systemMediaQuery.removeListener(systemMediaListener);
+    }
+  }
+  systemMediaQuery = null;
+  systemMediaListener = null;
+
+  if (theme !== 'system') return;
+
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  systemMediaListener = () => {
+    if (state.theme === 'system') applyResolvedTheme(resolveTheme('system'));
+  };
+  systemMediaQuery = mq;
+  if (typeof mq.addEventListener === 'function') {
+    mq.addEventListener('change', systemMediaListener);
+  } else {
+    mq.addListener(systemMediaListener);
+  }
+}
+
+function applyResolvedTheme(resolved: ResolvedTheme): void {
   if (typeof document === 'undefined') return;
-  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.theme = resolved;
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', theme === 'light' ? '#f6f6f7' : '#0c0c0e');
+  if (meta) meta.setAttribute('content', resolved === 'light' ? '#f6f6f7' : '#0c0c0e');
+}
+
+/** Apply the theme to the document (token overrides live in tokens.css) and
+ * sync the mobile status-bar colour. When `system`, follows prefers-color-scheme
+ * and re-applies if the OS preference changes. */
+export function applyTheme(theme: Theme): void {
+  applyResolvedTheme(resolveTheme(theme));
+  syncSystemThemeListener(theme);
 }
 
 let socket: AppSocket | null = null;

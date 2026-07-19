@@ -157,6 +157,7 @@ export const zh: Dict = {
     theme: '主题',
     themeDark: '深色',
     themeLight: '浅色',
+    themeSystem: '系统',
     haptics: '振动（触感反馈）',
     discovery: '发现',
     learnActivity: '学习我的活动',
