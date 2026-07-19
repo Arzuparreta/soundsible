@@ -113,8 +113,7 @@ describe('Search route', () => {
 
     render(() => <Search />);
 
-    expect(await screen.findByText('Para ti')).toBeInTheDocument();
-    expect(screen.getByText('Novedades que parten de tu biblioteca — lo último que añadiste pesa más.')).toBeInTheDocument();
+    expect(await screen.findByText('Recomendaciones')).toBeInTheDocument();
     expect(screen.getByText('New Track')).toBeInTheDocument();
     expect(nodeMock.ensureNodeFeed).toHaveBeenCalled();
   });

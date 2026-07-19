@@ -514,8 +514,7 @@ export const fr: Dict = {
     notFound: 'Aucunes paroles trouvées pour ce titre.',
   },
   discoverNodes: {
-    title: 'Pour vous',
-    subtitle: 'Des découvertes issues de votre bibliothèque — vos derniers ajouts pèsent plus.',
+    title: 'Recommandations',
     refresh: 'Nouvelles recommandations',
   },
   searchPanel: {

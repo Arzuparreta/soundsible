@@ -194,13 +194,6 @@
   font-weight: var(--fw-bold);
 }
 
-.railReason {
-  max-width: 760px;
-  margin: var(--space-2xs) 0 0;
-  color: var(--ink-tertiary);
-  font-size: var(--text-caption);
-}
-
 .railRow {
   display: flex;
   gap: var(--space-md);

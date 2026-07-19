@@ -907,7 +907,6 @@ function StartPanel(props: {
           <div class={styles.railHead}>
             <div>
               <h2 class={styles.railTitle}>{tr('discoverNodes.title')}</h2>
-              <p class={styles.railReason}>{tr('discoverNodes.subtitle')}</p>
             </div>
             <button
               class={styles.railRefresh}

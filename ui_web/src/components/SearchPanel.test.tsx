@@ -111,7 +111,7 @@ describe('SearchPanel', () => {
     render(() => <SearchPanel />);
     fireEvent.click(screen.getByRole('tab', { name: 'Descubrir' }));
 
-    expect(await screen.findByText('Para ti')).toBeInTheDocument();
+    expect(await screen.findByText('Recomendaciones')).toBeInTheDocument();
     expect(screen.getByText('Fresh Track')).toBeInTheDocument();
     expect(screen.getByText('Radio de esta canción')).toBeInTheDocument();
     expect(nodeMock.ensureNodeFeed).toHaveBeenCalled();

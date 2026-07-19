@@ -495,8 +495,7 @@ export const zh: Dict = {
     notFound: '未找到这首歌的歌词。',
   },
   discoverNodes: {
-    title: '为你推荐',
-    subtitle: '从你的曲库延伸出的新音乐——最近添加的权重更高。',
+    title: '推荐',
     refresh: '换一批推荐',
   },
   searchPanel: {

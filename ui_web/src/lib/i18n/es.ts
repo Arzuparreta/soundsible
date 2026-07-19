@@ -509,8 +509,7 @@ export const es: Dict = {
     notFound: 'No se encontró letra para esta canción.',
   },
   discoverNodes: {
-    title: 'Para ti',
-    subtitle: 'Novedades que parten de tu biblioteca — lo último que añadiste pesa más.',
+    title: 'Recomendaciones',
     refresh: 'Nuevas recomendaciones',
   },
   searchPanel: {

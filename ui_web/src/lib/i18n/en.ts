@@ -502,8 +502,7 @@ export const en = {
     notFound: 'No lyrics found for this track.',
   },
   discoverNodes: {
-    title: 'For you',
-    subtitle: 'Fresh picks branching out from your library — your newest additions weigh more.',
+    title: 'Recommendations',
     refresh: 'New recommendations',
   },
   searchPanel: {
