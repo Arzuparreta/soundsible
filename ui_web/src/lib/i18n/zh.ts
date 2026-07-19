@@ -195,6 +195,8 @@ export const zh: Dict = {
     emptyLibraryTitle: '清空资料库',
     emptyLibraryMsg: '将删除整个资料库。此操作无法撤销。',
     emptyLibraryConfirm: '全部清空',
+    emptyLibraryCountMsg: '资料库中有 {count}。',
+    emptyLibraryCountLabel: '输入资料库中的曲目数量以确认',
     toast: {
       notSaved: '保存失败',
       qualityUpdated: '音质已更新',

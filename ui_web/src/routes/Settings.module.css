@@ -64,6 +64,18 @@
   color: var(--ink-primary);
 }
 
+.rowLabelWithIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+}
+
+.warnIcon {
+  flex-shrink: 0;
+  color: var(--warning);
+  opacity: 0.85;
+}
+
 .rowValue {
   flex-shrink: 0;
   font-size: var(--text-label);

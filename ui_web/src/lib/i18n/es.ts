@@ -199,6 +199,8 @@ export const es: Dict = {
     emptyLibraryTitle: 'Vaciar biblioteca',
     emptyLibraryMsg: 'Se borrará TODA la biblioteca. Esta acción no se puede deshacer.',
     emptyLibraryConfirm: 'Vaciar todo',
+    emptyLibraryCountMsg: 'Tienes {count} en tu biblioteca.',
+    emptyLibraryCountLabel: 'Introduce el número de canciones de tu biblioteca para confirmar',
     toast: {
       notSaved: 'No se pudo guardar',
       qualityUpdated: 'Calidad actualizada',

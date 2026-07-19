@@ -202,6 +202,9 @@ export const fr: Dict = {
     emptyLibraryMsg:
       'Toute la bibliothèque sera supprimée. Cette action est irréversible.',
     emptyLibraryConfirm: 'Tout vider',
+    emptyLibraryCountMsg: 'Vous avez {count} dans votre bibliothèque.',
+    emptyLibraryCountLabel:
+      'Saisissez le nombre de titres de votre bibliothèque pour confirmer',
     toast: {
       notSaved: "Impossible d'enregistrer",
       qualityUpdated: 'Qualité mise à jour',

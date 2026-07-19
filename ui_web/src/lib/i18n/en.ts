@@ -196,6 +196,8 @@ export const en = {
     emptyLibraryTitle: 'Empty library',
     emptyLibraryMsg: 'The ENTIRE library will be deleted. This cannot be undone.',
     emptyLibraryConfirm: 'Empty everything',
+    emptyLibraryCountMsg: 'You have {count} in your library.',
+    emptyLibraryCountLabel: 'Enter the number of tracks in your library to confirm',
     toast: {
       notSaved: 'Could not save',
       qualityUpdated: 'Quality updated',

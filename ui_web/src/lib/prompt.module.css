@@ -11,6 +11,25 @@
   color: var(--ink-primary);
 }
 
+.message {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: var(--lh-normal);
+  color: var(--ink-secondary);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.inputLabel {
+  font-size: var(--text-label);
+  line-height: var(--lh-normal);
+  color: var(--ink-secondary);
+}
+
 .input {
   width: 100%;
   padding: var(--space-sm) var(--space-md);
@@ -56,6 +75,14 @@
   border-color: transparent;
   color: var(--ink-on-accent);
 }
-.confirm:hover {
+.confirm:hover:not(:disabled) {
   background: var(--accent-hover);
+}
+.confirm.danger {
+  background: var(--danger);
+  color: #fff;
+}
+.confirm:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

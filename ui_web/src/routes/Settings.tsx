@@ -5,6 +5,7 @@ import { ViewHeader } from '../components/ViewHeader';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/confirm';
+import { promptDialog } from '../lib/prompt';
 import { DevicesPanel } from '../components/DeviceSheet';
 import { PairedDevicesPanel } from '../components/PairDevice';
 import { t, locale, setLocale, LOCALES, type Locale } from '../lib/i18n';
@@ -47,7 +48,24 @@ function Switch(props: { checked: boolean; onChange: () => void; label: string }
   );
 }
 
-function ActionRow(props: { label: string; onClick: () => void; disabled?: boolean; danger?: boolean }) {
+function WarnIcon() {
+  return (
+    <svg class={styles.warnIcon} viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 3.2L2.4 20.2a1 1 0 0 0 .88 1.5h17.44a1 1 0 0 0 .88-1.5L12 3.2zm0 5.3a.9.9 0 0 1 .9.9v4.4a.9.9 0 0 1-1.8 0V9.4a.9.9 0 0 1 .9-.9zm0 8.4a1.05 1.05 0 1 1 0-2.1 1.05 1.05 0 0 1 0 2.1z"
+      />
+    </svg>
+  );
+}
+
+function ActionRow(props: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+  warn?: boolean;
+}) {
   return (
     <button
       type="button"
@@ -56,7 +74,10 @@ function ActionRow(props: { label: string; onClick: () => void; disabled?: boole
       disabled={props.disabled}
       onClick={props.onClick}
     >
-      <span class={styles.rowLabel}>{props.label}</span>
+      <span class={styles.rowLabel} classList={{ [styles.rowLabelWithIcon]: props.warn }}>
+        {props.label}
+        {props.warn ? <WarnIcon /> : null}
+      </span>
       <Chevron />
     </button>
   );
@@ -191,6 +212,16 @@ export default function Settings() {
       danger: true,
     });
     if (!ok) return;
+    const count = state.library.length;
+    const typed = await promptDialog({
+      title: t('settings.emptyLibraryTitle'),
+      message: t('settings.emptyLibraryCountMsg', { count: trackCount(count) }),
+      inputLabel: t('settings.emptyLibraryCountLabel'),
+      confirmLabel: t('settings.emptyLibraryConfirm'),
+      danger: true,
+      match: String(count),
+    });
+    if (typed === null) return;
     const h = toast.loading(t('settings.toast.emptying'));
     try {
       await api.wipeLibrary();
@@ -283,8 +314,8 @@ export default function Settings() {
             <ActionRow label={t('settings.reload')} onClick={reload} disabled={busy()} />
             <ActionRow label={t('settings.rescan')} onClick={rescan} disabled={busy()} />
             <ActionRow label={t('settings.purgeFiles')} onClick={purge} />
-            <ActionRow label={t('settings.emptyLibrary')} onClick={wipe} danger />
             <NavRow href="/import" label={t('settings.importFrom')} />
+            <ActionRow label={t('settings.emptyLibrary')} onClick={wipe} danger warn />
           </div>
         </Group>
 
