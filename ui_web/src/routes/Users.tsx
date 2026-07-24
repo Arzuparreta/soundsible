@@ -3,9 +3,10 @@ import { useNavigate } from '@solidjs/router';
 import Button from '../components/Button';
 import { ViewHeader } from '../components/ViewHeader';
 import { confirmDialog } from '../lib/confirm';
-import { promptDialog } from '../lib/prompt';
+import { passwordDialog } from '../lib/passwordDialog';
 import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
+import PasswordFields from '../components/PasswordFields';
 import { invites, isAdmin, user, users, type Role, type User } from '../lib/session';
 import styles from './Users.module.css';
 
@@ -22,7 +23,7 @@ export default function Users_() {
   const [list, { refetch }] = createResource(async () => (await users.list()).users);
   const [username, setUsername] = createSignal('');
   const [displayName, setDisplayName] = createSignal('');
-  const [password, setPassword] = createSignal('');
+  const [password, setPassword] = createSignal<string | null>(null);
   const [role, setRole] = createSignal<Role>('member');
   const [error, setError] = createSignal('');
   const [busy, setBusy] = createSignal(false);
@@ -43,6 +44,7 @@ export default function Users_() {
         display_name: displayName().trim() || undefined,
         role: role(),
       });
+      setPassword(null);
       setUsername('');
       setDisplayName('');
       setPassword('');
@@ -76,7 +78,7 @@ export default function Users_() {
   };
 
   const resetPassword = async (person: User) => {
-    const next = await promptDialog({
+    const next = await passwordDialog({
       title: t('users.resetPasswordTitle', { name: person.display_name }),
       message: t('users.resetPasswordMsg'),
       confirmLabel: t('common.save'),
@@ -219,20 +221,7 @@ export default function Users_() {
             />
           </div>
 
-          <div class={styles.field}>
-            <label class={styles.label} for="new-password">
-              {t('users.password')}
-            </label>
-            <input
-              id="new-password"
-              class={styles.input}
-              type="password"
-              autocomplete="new-password"
-              value={password()}
-              onInput={(e) => setPassword(e.currentTarget.value)}
-              required
-            />
-          </div>
+          <PasswordFields onChange={setPassword} newLabel={t('users.password')} />
 
           <div class={styles.field}>
             <label class={styles.label} for="new-role">

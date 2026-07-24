@@ -1,5 +1,6 @@
 import { Match, Show, Switch, createResource, createSignal } from 'solid-js';
 import Button from '../components/Button';
+import PasswordFields from '../components/PasswordFields';
 import { t } from '../lib/i18n';
 import { invites } from '../lib/session';
 import styles from './Login.module.css';
@@ -16,17 +17,17 @@ export default function Invite(props: { token: string }) {
     (token) => invites.preview(token).catch(() => ({ valid: false })),
   );
   const [username, setUsername] = createSignal('');
-  const [password, setPassword] = createSignal('');
+  const [password, setPassword] = createSignal<string | null>(null);
   const [error, setError] = createSignal('');
   const [busy, setBusy] = createSignal(false);
 
   const submit = async (e: Event) => {
     e.preventDefault();
-    if (busy()) return;
+    if (busy() || !password()) return;
     setError('');
     setBusy(true);
     try {
-      await invites.accept(props.token, username().trim(), password());
+      await invites.accept(props.token, username().trim(), password()!);
       // Straight into the player, already signed in.
       window.location.hash = '#/';
       window.location.reload();
@@ -76,22 +77,10 @@ export default function Invite(props: { token: string }) {
               />
             </div>
 
-            <div class={styles.field}>
-              <label class={styles.label} for="invite-password">
-                {t('invite.password')}
-              </label>
-              <input
-                id="invite-password"
-                class={styles.input}
-                type="password"
-                autocomplete="new-password"
-                minLength={6}
-                value={password()}
-                onInput={(e) => setPassword(e.currentTarget.value)}
-                required
-              />
+            <PasswordFields onChange={setPassword} newLabel={t('invite.password')} />
+            <Show when={password() === null && !busy()}>
               <span class={styles.hint}>{t('invite.passwordHint')}</span>
-            </div>
+            </Show>
 
             <Show when={error()}>
               <p class={styles.error} role="alert">
@@ -99,7 +88,7 @@ export default function Invite(props: { token: string }) {
               </p>
             </Show>
 
-            <Button class={styles.submit} type="submit" disabled={busy()}>
+            <Button class={styles.submit} type="submit" disabled={busy() || !password()}>
               {busy() ? t('invite.creating') : t('invite.create')}
             </Button>
           </form>

@@ -77,6 +77,39 @@
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+.inputRow {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-sm);
+}
+
+.inputRow .input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.toggle {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  color: var(--ink-secondary);
+  background: var(--bg-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.toggle:hover {
+  color: var(--ink-primary);
+}
+
+.toggle:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
 .hint {
   font-size: var(--text-caption);
   color: var(--ink-tertiary);

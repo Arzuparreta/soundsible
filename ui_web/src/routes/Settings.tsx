@@ -5,6 +5,7 @@ import { ViewHeader } from '../components/ViewHeader';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/confirm';
+import { passwordDialog } from '../lib/passwordDialog';
 import { promptDialog } from '../lib/prompt';
 import { DevicesPanel } from '../components/DeviceSheet';
 import { PairedDevicesPanel } from '../components/PairDevice';
@@ -277,14 +278,13 @@ export default function Settings() {
       ? await promptDialog({
           title: t('account.changePassword'),
           inputLabel: t('account.currentPassword'),
-          confirmLabel: t('common.save'),
+          confirmLabel: t('common.continue'),
         })
       : '';
     if (current === null) return;
-    const next = await promptDialog({
+    const next = await passwordDialog({
       title: t('account.changePassword'),
       message: t('account.passwordHint'),
-      inputLabel: t('account.newPassword'),
       confirmLabel: t('common.save'),
     });
     if (!next) return;
@@ -292,8 +292,6 @@ export default function Settings() {
       await changePassword(current ?? '', next);
       toast.success(t('account.passwordChanged'));
     } catch {
-      // The most common causes are a too-short new password or a wrong current
-      // one; the generic toast never said which.
       toast.error(t('account.passwordFailedHint'));
     }
   };

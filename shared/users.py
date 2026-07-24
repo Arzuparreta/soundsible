@@ -49,7 +49,6 @@ SESSION_COOKIE_NAME = "sb_session"
 SESSION_TTL_DAYS = 90
 
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,31}$")
-MIN_PASSWORD_LENGTH = 6
 
 # Palette reused for generated avatars so a fresh account already looks placed
 # rather than grey. Matches the accent range in DESIGN.md.
@@ -105,9 +104,12 @@ def normalize_username(raw: str) -> str:
 
 
 def validate_password(raw: str) -> str:
+    # No length or complexity rules — this is a home instance and the owner's
+    # call. The only thing rejected is an empty password, which would be
+    # indistinguishable from "no password" (a separate, deliberate state).
     password = str(raw or "")
-    if len(password) < MIN_PASSWORD_LENGTH:
-        raise UserError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
+    if not password:
+        raise UserError("Password cannot be empty.")
     return password
 
 
