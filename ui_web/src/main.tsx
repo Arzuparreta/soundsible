@@ -94,6 +94,12 @@ function inviteToken(): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+/** When not signed in: redeem an invite if the URL carries one, else log in. */
+function InviteOrLogin() {
+  const token = inviteToken();
+  return token ? <Invite token={token} /> : <Login />;
+}
+
 /**
  * Nothing renders until the engine has told us who we are. Booting the stores
  * first would fire a burst of library requests as the wrong account — or as
@@ -101,18 +107,19 @@ function inviteToken(): string | null {
  */
 function App() {
   const authenticated = () => !requiresLogin() || Boolean(user());
-  // Read once at mount: redeeming replaces the hash and reloads.
-  const invite = inviteToken();
 
   createEffect(() => {
-    if (!invite && ready() && authenticated()) initStore();
+    if (!ready() || !authenticated()) return;
+    // A leftover `#/invite/<token>` — e.g. a home-screen icon saved on the
+    // invite page — must not strand a signed-in user on a dead-link screen.
+    // Once there is a session the token is irrelevant: drop it and go home.
+    if (inviteToken()) window.location.hash = '#/';
+    initStore();
   });
-
-  if (invite) return <Invite token={invite} />;
 
   return (
     <Show when={ready()} fallback={null}>
-      <Show when={authenticated()} fallback={<Login />}>
+      <Show when={authenticated()} fallback={<InviteOrLogin />}>
         <Player />
       </Show>
     </Show>

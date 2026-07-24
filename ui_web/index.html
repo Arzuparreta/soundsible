@@ -7,6 +7,14 @@
     <link rel="icon" type="image/svg+xml" href="assets/icons/logo-mark.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
+    <!-- Installable web app. The manifest gives Android/desktop Chrome a real
+         install (and a clean start_url, so a saved icon never carries a used
+         invite token). The apple-* metas give iOS the same full-screen launch. -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Soundsible" />
     <title>Soundsible</title>
     <!-- Apply stored theme before paint (incl. system → prefers-color-scheme). -->
     <script>

@@ -512,6 +512,11 @@ def serve_web_player_assets(path):
     lp = path.lower()
     if lp.endswith(".html"):
         resp.headers.setdefault("Cache-Control", "no-store")
+    elif lp.endswith(".webmanifest"):
+        # Some platforms won't treat it as a manifest without this type; its name
+        # is stable (not hashed) so it must revalidate rather than pin for a year.
+        resp.headers["Content-Type"] = "application/manifest+json"
+        resp.headers.setdefault("Cache-Control", "public, max-age=3600")
     elif "assets/" in lp and lp.split("?")[0].endswith((".js", ".css", ".woff", ".woff2", ".ttf", ".map")):
         resp.headers.setdefault("Cache-Control", "public, max-age=31536000, immutable")
     return resp

@@ -15,7 +15,9 @@ const root = __dirname;
 export default defineConfig(({ command }) => ({
   root,
   base: '/player/',
-  publicDir: false,
+  // Copied verbatim to dist/ (stable names, no hashing) so the manifest and its
+  // icons keep predictable URLs — a .webmanifest can't reference hashed assets.
+  publicDir: resolve(root, 'public'),
   plugins: [solid()],
   resolve: {
     alias: {
