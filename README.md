@@ -34,6 +34,7 @@ Soundsible is a music app you run on your **own** machine. Browse, stream, and s
 - 🧠 **Private recommendations** built from *your own* listening history
 - 📻 **Radio mode** for endless discovery without leaving your station
 - 🗂️ **Everything in one place** — discover, search, podcasts, favourites, playlists, downloads
+- 👥 **One server, everyone's music** — each person gets their own library, playlists and history; the files are shared, so nothing downloads twice
 - 🧹 **Resilient downloads** — failed items stay visible with retry/remove, queue self-heals on restart
 - 🔐 **It's your server** — your data never leaves it
 

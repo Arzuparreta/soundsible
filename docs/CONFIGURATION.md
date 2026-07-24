@@ -44,6 +44,9 @@ The current runtime layer supports these top-level environment variables:
 - `SOUNDSIBLE_OWNER_TOKEN_FILE`
 - `SOUNDSIBLE_LAN_ENABLED`
 - `SOUNDSIBLE_ADVANCED_MODE`
+- `SOUNDSIBLE_YT_SEARCH_SOURCE` — `ytmusic` (default) or `youtube`. YouTube Music
+  gives cleaner metadata but is not always reachable from a datacenter IP; set it
+  to `youtube` on a VPS whose searches come back empty.
 
 Notes:
 
@@ -145,7 +148,57 @@ At a high level, storage can be configured in three ways:
 
 The setup wizard and settings UI handle the common cases. If you need a custom backend, look for the storage abstraction layer in the code and implement the same interface that existing backends use.
 
-### 6. Pairing and admin auth
+### 6. Accounts (multi-user)
+
+One Soundsible instance serves several people. Each account gets its own
+library, playlists, favourites, queue, podcast subscriptions, listening history
+and preferences. The **audio files are shared**: track ids are content hashes, so
+a song someone already downloaded is added to your library instantly, without a
+second download or a second copy on disk.
+
+**Nothing changes for a single-user install.** On first boot after upgrading, your
+existing library is adopted by an `owner` admin account with no password, and the
+engine keeps behaving exactly as before — no login screen. The originals stay on
+disk renamed `*.singleuser.bak` in case you want to roll back.
+
+**Adding the second person turns authentication on.** Settings → Account → People →
+*Add someone*. You will be asked to set a password on your own account first;
+otherwise adding a second library would leave the instance open to anyone on the
+network. From then on everyone signs in.
+
+| Setting | Who controls it |
+|---------|-----------------|
+| Library, playlists, favourites, queue, podcasts, history, theme, language | Each person, for themselves |
+| Music folder, storage backend, download quality, yt-dlp cookies and auto-update, library optimization, cloud sync, accounts | Admin only |
+
+**Adding people remotely.** Settings → Account → People → *Create invite link*
+mints a single-use link valid for 7 days. Send it however you like; whoever opens
+it picks their own username and password and lands straight in their (empty)
+player. Nothing about the server or the other accounts is shown to them. From a
+shell there is `python run.py --users invite --display-name "…" --base-url http://…`.
+
+**Headless administration.** `python run.py --users <command>` manages accounts
+without a browser: `list`, `create`, `invite`, `invites`, `passwd`, `rename`,
+`role`, `disable`, `enable`, `logout`, `delete`. This is the way to set the first
+password after upgrading a single-user install, and the way back in if somebody
+forgets theirs.
+
+Endpoints:
+
+- `GET /api/auth/state` — public; tells the player whether to show a login screen.
+- `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`
+- `POST /api/auth/password` — change your own password.
+- `GET|POST /api/users`, `PATCH|DELETE /api/users/<id>`,
+  `POST /api/users/<id>/password`, `DELETE /api/users/<id>/sessions` — admin only.
+- `GET|POST /api/invites`, `DELETE /api/invites/<id>` — admin only.
+- `GET /api/invites/<token>/preview`, `POST /api/invites/<token>/accept` — public;
+  the token is the credential.
+
+Sessions are 90-day HttpOnly cookies (`sb_session`), stored server-side as hashes
+only and revocable per account from the People screen. Deleting an account removes
+that person's directories; shared music files are never touched.
+
+### 6A. Pairing and admin auth
 
 Current pairing/runtime auth surfaces:
 

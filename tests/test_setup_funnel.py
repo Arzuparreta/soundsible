@@ -12,9 +12,10 @@ import pytest
 
 from shared.api.routes.playback import playback_bp
 from shared.api.routes.setup import setup_bp
-from shared.database import DatabaseManager
+from shared.database import DatabaseManager, instance_db
 from shared.hardening import ALL_SCOPES, SCOPE_PLAYBACK_CONTROL
 from shared.models import LibraryMetadata, Track
+from tests.conftest import TEST_USER_ID
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 from shared.setup_session import reset_sessions_for_tests
 from shared.telemetry import init_telemetry, reset_telemetry
@@ -66,6 +67,7 @@ def _agent_play(db: DatabaseManager) -> str:
         scopes=[SCOPE_PLAYBACK_CONTROL],
         name="play",
         device_type="test",
+        user_id=TEST_USER_ID,
     )
     return token
 
@@ -112,7 +114,7 @@ def test_setup_session_and_music_dir_steps_emit(tmp_path, monkeypatch):
     app = Flask(__name__)
     app.register_blueprint(setup_bp)
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     owner = _owner_token(db)
 
     res = client.post("/api/setup/session", json={}, headers={"Authorization": f"Bearer {owner}"})
@@ -143,7 +145,7 @@ def test_setup_error_emitted_on_bad_path(tmp_path, monkeypatch):
     app = Flask(__name__)
     app.register_blueprint(setup_bp)
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     owner = _owner_token(db)
 
     res = client.post("/api/setup/session", json={}, headers={"Authorization": f"Bearer {owner}"})
@@ -181,7 +183,7 @@ def test_play_track_emits_setup_first_play(tmp_path):
     app = Flask(__name__)
     app.register_blueprint(playback_bp)
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     play_tok = _agent_play(db)
 
     sid = str(uuid.uuid4())
@@ -284,7 +286,7 @@ def test_setup_session_second_post_does_not_duplicate_started(tmp_path, monkeypa
     app = Flask(__name__)
     app.register_blueprint(setup_bp)
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     owner = _owner_token(db)
 
     r1 = client.post("/api/setup/session", json={}, headers={"Authorization": f"Bearer {owner}"})
@@ -305,7 +307,7 @@ def test_setup_first_play_endpoint(tmp_path):
     app = Flask(__name__)
     app.register_blueprint(setup_bp)
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     owner = _owner_token(db)
 
     r0 = client.post("/api/setup/session", json={}, headers={"Authorization": f"Bearer {owner}"})

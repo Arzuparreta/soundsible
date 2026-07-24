@@ -1,6 +1,9 @@
 """
-Playback state for cross-device resume (scoped for future multi-user).
+Playback state for cross-device resume, scoped per user.
 Persists last playback state and tracks active devices per scope.
+
+The scope *is* the user id: two people on the same LAN never see each other's
+devices, resume prompts, or handoff targets.
 """
 import json
 import threading
@@ -9,7 +12,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from shared.runtime import get_config_dir
+from shared.user_context import current_user_id, user_config_dir
 
 DEFAULT_SCOPE = "default"
 ACTIVE_DEVICE_TTL_SEC = 90
@@ -22,12 +25,17 @@ _registered_devices: dict[str, dict[str, dict[str, Any]]] = {}  # Note: Scope ->
 _socket_devices: dict[str, tuple[str, str]] = {}  # Note: Socket.IO sid -> (scope, device_id)
 
 
-def _config_dir() -> Path:
-    return get_config_dir()
-
-
 def _state_path(scope: str) -> Path:
-    return _config_dir() / f"playback_state_{scope}.json"
+    """Where a scope's persisted state lives.
+
+    A scope is a user id, so the file goes in that user's directory. The legacy
+    ``default`` scope only appears in tests and pre-account code paths.
+    """
+    if scope == DEFAULT_SCOPE:
+        from shared.runtime import get_config_dir
+
+        return get_config_dir() / f"playback_state_{scope}.json"
+    return user_config_dir(scope) / "playback_state.json"
 
 
 def _cleanup_scope(scope: str) -> None:
@@ -57,8 +65,12 @@ def _ensure_scope(scope: str) -> None:
 
 
 def get_scope_from_request() -> str:
-    """Resolve scope from request context. v1: always default; v2: from auth/session."""
-    return DEFAULT_SCOPE
+    """Resolve the playback scope for the caller — the bound user id.
+
+    Falls back to ``default`` only outside a bound context (tests, boot-time
+    warmup), which keeps the pre-account behaviour intact.
+    """
+    return current_user_id() or DEFAULT_SCOPE
 
 
 def register_device(

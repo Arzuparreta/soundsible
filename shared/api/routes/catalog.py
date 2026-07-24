@@ -15,11 +15,13 @@ try:
 except ImportError:  # pragma: no cover
     _HAS_GEVENT = False
 
-from shared.database import DatabaseManager
+from shared.database import instance_db
 from shared.hardening import rate_limit
 from shared.resolution_confidence import best_candidate, classify_confidence
 from shared.text_utils import sanitize_cli_message
 from shared.url_utils import validate_youtube_video_id
+
+from odst_tool.config import prefer_ytmusic
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,20 @@ _MUSICBRAINZ_HEADERS = {
 }
 
 
+def _scoped(key: str) -> str:
+    """Namespace a cache key by account.
+
+    These bodies blend public metadata with library state — what you own, what
+    is playable for you — so one person's cached response must never be served
+    to another.
+    """
+    from shared.user_context import current_user_id
+
+    return f"{current_user_id() or '-'}|{key}"
+
+
 def _cache_get(cache: dict[str, tuple[float, dict[str, Any]]], key: str) -> dict[str, Any] | None:
+    key = _scoped(key)
     entry = cache.get(key)
     if not entry:
         return None
@@ -60,6 +75,7 @@ def _cache_put(
     ttl_sec: int,
     body: dict[str, Any],
 ) -> None:
+    key = _scoped(key)
     now = time.time()
     cache[key] = (now + ttl_sec, dict(body))
     for expired in [k for k, (expires_at, _) in cache.items() if expires_at <= now]:
@@ -71,8 +87,11 @@ def _cache_put(
 def _get_api():
     import shared.api as api_mod
 
+    from shared.user_context import current_user_id
+
     return {
         "get_core": api_mod.get_core,
+        "user_id": current_user_id(),
         "get_downloader": api_mod.get_downloader,
         "queue_manager_dl": api_mod.queue_manager_dl,
         "start_downloader_pump": api_mod.start_downloader_pump,
@@ -566,14 +585,14 @@ def catalog_suggest():
 
 
 def _resolve_candidates(artist: str, title: str, duration_s: int | None = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    db = DatabaseManager()
+    db = instance_db()
     cached = db.get_cached_resolution(artist, title)
     if cached and cached.get("id"):
         return cached, cached.get("candidates") or [cached]
 
     api = _get_api()
     dl = api["get_downloader"](open_browser=False)
-    raw_results = dl.downloader.search_youtube(f"{title} {artist}".strip(), max_results=8, use_ytmusic=True)
+    raw_results = dl.downloader.search_youtube(f"{title} {artist}".strip(), max_results=8, use_ytmusic=prefer_ytmusic())
     if not raw_results:
         db.set_cached_resolution(artist, title, {"id": "", "failure_state": "not_found", "confidence": 0.0})
         return {}, []
@@ -704,7 +723,7 @@ def catalog_save():
     parsed["intake_payload_hash"] = hashlib.sha256(
         _json.dumps(parsed, sort_keys=True, default=str).encode("utf-8")
     ).hexdigest()
-    new_item = api["queue_manager_dl"].add(parsed)
+    new_item = api["queue_manager_dl"].add(parsed, user_id=api["user_id"])
     try:
         if not api["queue_manager_dl"].is_processing:
             api["start_downloader_pump"]()

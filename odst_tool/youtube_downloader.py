@@ -22,7 +22,8 @@ from .config import (
     QUALITY_PROFILES,
     TRACKS_DIR,
     MATCH_THRESHOLD_TITLE,
-    FORBIDDEN_KEYWORDS
+    FORBIDDEN_KEYWORDS,
+    prefer_ytmusic,
 )
 import difflib
 from .audio_utils import AudioProcessor
@@ -1142,7 +1143,7 @@ class YouTubeDownloader:
                     results = self.search_youtube(
                         query,
                         max_results=max_results,
-                        use_ytmusic=True,
+                        use_ytmusic=prefer_ytmusic(),
                         enrich_missing=enrich,
                     )
                     results = [r for r in results if str(r.get('id', '')) != seed_video_id]
@@ -1277,9 +1278,10 @@ class YouTubeDownloader:
         if not query:
             return None
         try:
-            results = self.search_youtube(query, max_results=1, use_ytmusic=True)
+            primary = prefer_ytmusic()
+            results = self.search_youtube(query, max_results=1, use_ytmusic=primary)
             if not results:
-                results = self.search_youtube(query, max_results=1, use_ytmusic=False)
+                results = self.search_youtube(query, max_results=1, use_ytmusic=not primary)
             if results and results[0].get("thumbnail"):
                 return results[0]["thumbnail"]
             return None

@@ -11,7 +11,14 @@ from pathlib import Path
 from flask import Blueprint, request, jsonify
 
 from shared.text_utils import sanitize_cli_message
-from shared.hardening import SCOPE_ADMIN_CONFIG, SCOPE_DOWNLOAD_ADD, SCOPE_LIBRARY_WRITE, rate_limit, require_scope
+from shared.hardening import (
+    SCOPE_ADMIN_CONFIG,
+    SCOPE_DOWNLOAD_ADD,
+    SCOPE_LIBRARY_WRITE,
+    rate_limit,
+    require_instance_admin,
+    require_scope,
+)
 from shared.url_utils import extract_youtube_video_id, normalize_youtube_url
 
 logger = logging.getLogger(__name__)
@@ -35,8 +42,11 @@ def _get_api():
         is_trusted_network,
         downloader_service,
     )
+    from shared.user_context import current_user_id
+
     return {
         "get_core": get_core,
+        "user_id": current_user_id(),
         "get_downloader": get_downloader,
         "queue_manager_dl": queue_manager_dl,
         "start_downloader_pump": start_downloader_pump,
@@ -52,7 +62,10 @@ def youtube_search():
     if not q:
         return jsonify({"results": []})
     limit = min(20, max(1, request.args.get("limit", 10, type=int)))
-    source = (request.args.get("source") or "ytmusic").strip().lower()
+    from odst_tool.config import prefer_ytmusic
+
+    default_source = "ytmusic" if prefer_ytmusic() else "youtube"
+    source = (request.args.get("source") or default_source).strip().lower()
     enrich = (request.args.get("enrich") or "1").strip().lower() not in ("0", "false", "no", "off")
     # Note: Canonical ytmusic, youtube. support 'music' as legacy alias for ytmusic.
     use_ytmusic = (source in ("ytmusic", "music"))
@@ -147,9 +160,9 @@ def youtube_related():
     if cached and now - cached[0] < _RELATED_CACHE_TTL_SEC:
         return jsonify({"results": cached[1]})
 
-    from shared.database import DatabaseManager
+    from shared.database import instance_db
 
-    db = DatabaseManager()
+    db = instance_db()
     # Note: The persistent cache stores the full related-mix list (untrimmed by
     # limit/enrich — those are presentation-time concerns). A hit here means the
     # yt-dlp extraction that the original call paid is reused for every future
@@ -226,7 +239,7 @@ def add_to_downloader_queue():
             parsed["intake_payload_hash"] = hashlib.sha256(
                 json.dumps(parsed, sort_keys=True, default=str).encode("utf-8")
             ).hexdigest()
-            new_item = api["queue_manager_dl"].add(parsed)
+            new_item = api["queue_manager_dl"].add(parsed, user_id=api["user_id"])
             added_ids.append(new_item["id"])
             accepted.append({"index": idx, "id": new_item["id"], "source_type": parsed.get("source_type")})
         status = "queued" if accepted else "error"
@@ -245,9 +258,16 @@ def add_to_downloader_queue():
 
 @downloader_bp.route("/api/downloader/queue/status", methods=["GET"])
 def get_downloader_status():
+    """Your slice of the queue. The pump is shared; the rows are not."""
     api = _get_api()
     q = api["queue_manager_dl"]
-    return jsonify({"is_processing": q.is_processing, "queue": q.queue, "logs": q.log_buffer})
+    return jsonify(
+        {
+            "is_processing": q.is_processing,
+            "queue": q.list_items(api["user_id"]),
+            "logs": q.logs_for(api["user_id"]),
+        }
+    )
 
 
 @downloader_bp.route("/api/downloader/queue/<item_id>", methods=["DELETE"])
@@ -255,7 +275,7 @@ def get_downloader_status():
 @rate_limit("downloader_queue_remove", limit=100, window_sec=60)
 def remove_from_downloader_queue(item_id):
     api = _get_api()
-    api["queue_manager_dl"].remove_item(item_id)
+    api["queue_manager_dl"].remove_item(item_id, user_id=api["user_id"])
     return jsonify({"status": "removed"})
 
 
@@ -264,7 +284,7 @@ def remove_from_downloader_queue(item_id):
 @rate_limit("downloader_queue_clear", limit=30, window_sec=60)
 def clear_downloader_queue():
     api = _get_api()
-    api["queue_manager_dl"].clear_queue()
+    api["queue_manager_dl"].clear_queue(user_id=api["user_id"])
     return jsonify({"status": "cleared"})
 
 
@@ -273,7 +293,7 @@ def clear_downloader_queue():
 @rate_limit("downloader_queue_retry", limit=30, window_sec=60)
 def retry_downloader_queue_item(item_id):
     api = _get_api()
-    item = api["queue_manager_dl"].retry_failed(item_id)
+    item = api["queue_manager_dl"].retry_failed(item_id, user_id=api["user_id"])
     if item is None:
         return jsonify({"status": "not_found", "message": "Item is not in a failed state."}), 404
     if not api["queue_manager_dl"].is_processing:
@@ -289,7 +309,7 @@ def retry_downloader_queue_item(item_id):
 @rate_limit("downloader_queue_clear_failed", limit=30, window_sec=60)
 def clear_downloader_queue_failed():
     api = _get_api()
-    removed = api["queue_manager_dl"].clear_failed()
+    removed = api["queue_manager_dl"].clear_failed(user_id=api["user_id"])
     return jsonify({"status": "cleared", "removed": removed})
 
 
@@ -305,8 +325,9 @@ def trigger_downloader():
     return jsonify({"status": "already_running"})
 
 
+# Re-encodes files in the shared pool and rewrites track ids for everyone.
 @downloader_bp.route("/api/downloader/optimize", methods=["POST"])
-@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@require_instance_admin()
 @rate_limit("downloader_optimize", limit=10, window_sec=300)
 def trigger_downloader_optimize():
     # run_optimization_task submits to the orchestrator and returns; no
@@ -317,8 +338,9 @@ def trigger_downloader_optimize():
     return jsonify({"status": "started"})
 
 
+# Talks to the instance's storage backend.
 @downloader_bp.route("/api/downloader/sync", methods=["POST"])
-@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@require_instance_admin()
 @rate_limit("downloader_sync", limit=10, window_sec=300)
 def trigger_downloader_sync():
     from shared.api import run_sync_task
@@ -335,7 +357,7 @@ def start_download_legacy():
     data = request.json
     url = data.get("url")
     if url:
-        api["queue_manager_dl"].add({"song_str": url})
+        api["queue_manager_dl"].add({"song_str": url}, user_id=api["user_id"])
         if not api["queue_manager_dl"].is_processing:
             api["start_downloader_pump"]()
         return jsonify({"status": "started"})
@@ -361,25 +383,38 @@ def get_downloader_config():
         return f"{s[:4]}...{s[-4:]}****"
 
     auto_update = (env_vars.get("YTDLP_AUTO_UPDATE", "") or "false").strip().lower() in ("true", "1")
+    config = {
+        "quality": env_vars.get("DEFAULT_QUALITY", "high"),
+        "auto_update_ytdlp": auto_update,
+    }
+
+    # Storage paths and bucket credentials describe the machine, not a library.
+    # A member reading them would learn where the server keeps its files — and
+    # over Tailscale `is_trusted_network` is True for everybody, so trust alone
+    # is not a gate here.
+    from shared.hardening import request_is_admin_user
+
+    if not request_is_admin_user():
+        return jsonify(config)
+
     output_dir_fallback = env_vars.get("OUTPUT_DIR", str(Path.home() / "Music" / "Soundsible"))
     dl = api["get_downloader"]()
-    config = {
+    config.update({
         "output_dir": str(dl.output_dir) if dl else output_dir_fallback,
-        "quality": env_vars.get("DEFAULT_QUALITY", "high"),
         "r2_account_id": env_vars.get("R2_ACCOUNT_ID", ""),
         "r2_access_key": mask(env_vars.get("R2_ACCESS_KEY_ID", "")),
         "r2_secret_key": mask(env_vars.get("R2_SECRET_ACCESS_KEY", "")),
         "r2_bucket": env_vars.get("R2_BUCKET_NAME", ""),
-        "auto_update_ytdlp": auto_update,
-    }
+    })
     if not is_trusted:
         for key in ["r2_account_id", "r2_access_key", "r2_secret_key", "r2_bucket"]:
             config[key] = "HIDDEN (Connect to Tailscale/LAN to view)"
     return jsonify(config)
 
 
+# Quality and cookies apply to the shared pool, not to one library.
 @downloader_bp.route("/api/downloader/config", methods=["POST"])
-@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
+@require_instance_admin()
 @rate_limit("downloader_config_update", limit=20, window_sec=60)
 def update_downloader_config():
     import os

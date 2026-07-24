@@ -8,11 +8,12 @@ from flask import Flask
 
 from shared.api.routes.migration import migration_bp
 from shared.api.routes.playback import playback_bp
-from shared.database import DatabaseManager
+from shared.database import DatabaseManager, instance_db
 from shared.hardening import SCOPE_LIBRARY_READ, SCOPE_LIBRARY_WRITE, SCOPE_PLAYBACK_CONTROL
 from shared.models import LibraryMetadata, Track
+from tests.conftest import TEST_USER_ID
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
-from shared.telemetry import init_telemetry, reset_telemetry
+from shared.telemetry import init_telemetry, reset_telemetry, user_telemetry_dir
 
 
 def _hash(token: str) -> str:
@@ -64,6 +65,7 @@ def _agent_read(db: DatabaseManager) -> str:
         scopes=[SCOPE_LIBRARY_READ],
         name="read",
         device_type="test",
+        user_id=TEST_USER_ID,
     )
     return token
 
@@ -77,6 +79,7 @@ def _agent_write(db: DatabaseManager) -> str:
         scopes=[SCOPE_LIBRARY_WRITE],
         name="write",
         device_type="test",
+        user_id=TEST_USER_ID,
     )
     return token
 
@@ -90,6 +93,7 @@ def _agent_play(db: DatabaseManager) -> str:
         scopes=[SCOPE_PLAYBACK_CONTROL],
         name="play",
         device_type="test",
+        user_id=TEST_USER_ID,
     )
     return token
 
@@ -118,7 +122,7 @@ def test_migration_preview_happy_path(tmp_path):
     app = Flask(__name__)
     app.register_blueprint(migration_bp)
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     read_tok = _agent_read(db)
 
     a = _sample_track("a")
@@ -159,7 +163,7 @@ def test_migration_import_playlist_writes_metadata(tmp_path):
     app = Flask(__name__)
     app.register_blueprint(migration_bp)
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     write_tok = _agent_write(db)
 
     a = _sample_track("a")
@@ -190,7 +194,7 @@ def test_migration_import_playlist_logs_batch_id(tmp_path):
     app = Flask(__name__)
     app.register_blueprint(migration_bp)
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     write_tok = _agent_write(db)
 
     a = _sample_track("a")
@@ -223,7 +227,7 @@ def test_migration_row_decision_logs(tmp_path):
     app = Flask(__name__)
     app.register_blueprint(migration_bp)
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     write_tok = _agent_write(db)
 
     res = client.post(
@@ -248,7 +252,7 @@ def test_play_timing_endpoint_writes_jsonl(tmp_path, monkeypatch):
     app = Flask(__name__)
     app.register_blueprint(playback_bp)
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     play_tok = _agent_play(db)
 
     res = client.post(
@@ -262,7 +266,7 @@ def test_play_timing_endpoint_writes_jsonl(tmp_path, monkeypatch):
         headers={"Authorization": f"Bearer {play_tok}"},
     )
     assert res.status_code == 200
-    log = (runtime.data_dir / "telemetry" / "play-timing.jsonl").read_text(encoding="utf-8").strip()
+    log = (user_telemetry_dir() / "play-timing.jsonl").read_text(encoding="utf-8").strip()
     row = json.loads(log.splitlines()[-1])
     assert row["event"] == "play_timing"
     assert row["segments"]["user_click_to_audio_ms"] == 120

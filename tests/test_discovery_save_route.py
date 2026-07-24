@@ -51,7 +51,7 @@ def _fake_parse_intake(item: dict):
         "metadata_evidence": item.get("metadata_evidence"),
         "output_dir": None,
     }, None
-from shared.database import DatabaseManager
+from shared.database import instance_db
 from shared.models import LibraryMetadata, Track
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 from shared.telemetry import init_telemetry, reset_telemetry
@@ -120,6 +120,7 @@ def _mock_api(search_results=None, queue_add_return=None, parse_fn=None):
 
     return {
         "get_downloader": MagicMock(return_value=mock_dl_service),
+        "user_id": "testuser",
         "queue_manager_dl": mock_qm,
         "start_downloader_pump": MagicMock(),
         "parse_intake_item": parse_fn or _fake_parse_intake,
@@ -284,7 +285,7 @@ def test_save_confirm_video_id_starts_pump_when_idle(tmp_path):
 def test_save_high_confidence_cache_hit_queues_without_search(tmp_path):
     runtime = _make_runtime(tmp_path)
     init_telemetry(runtime)
-    db = DatabaseManager()
+    db = instance_db()
     db.set_cached_resolution("Queen", "Bohemian Rhapsody", {
         "id": "cachedvideo01",
         "confidence": 0.92,
@@ -309,7 +310,7 @@ def test_save_high_confidence_cache_hit_queues_without_search(tmp_path):
 
 def test_save_medium_confidence_cache_hit_returns_needs_review(tmp_path):
     _make_runtime(tmp_path)
-    db = DatabaseManager()
+    db = instance_db()
     candidates = [{"id": "v1", "title": "Bohemian Rhapsody", "channel": "Queen", "duration": 354, "confidence": 0.55}]
     db.set_cached_resolution("Queen", "Bohemian Rhapsody", {
         "id": "v1",
@@ -357,7 +358,7 @@ def test_save_high_confidence_search_result_queues(tmp_path):
     mock_emit.assert_called_once()
 
     # Result must be cached
-    db = DatabaseManager()
+    db = instance_db()
     cached = db.get_cached_resolution("Queen", "Bohemian Rhapsody")
     assert cached is not None
     assert cached["id"] == "newvideo1234"
@@ -401,7 +402,7 @@ def test_save_empty_search_results_returns_not_found(tmp_path):
     assert body["reason"] == "not_found"
 
     # Failure must be cached to avoid repeated searches
-    db = DatabaseManager()
+    db = instance_db()
     cached = db.get_cached_resolution("Queen", "Bohemian Rhapsody")
     assert cached is not None
     assert cached.get("failure_state") == "not_found"
@@ -473,7 +474,7 @@ def test_queued_response_has_required_fields(tmp_path):
 
 def test_needs_review_response_has_required_fields(tmp_path):
     _make_runtime(tmp_path)
-    db = DatabaseManager()
+    db = instance_db()
     db.set_cached_resolution("Queen", "Bohemian Rhapsody", {
         "id": "v1", "confidence": 0.50, "confidence_reason": "title_only",
         "candidates": [{"id": "v1", "title": "Bohemian Rhapsody", "channel": "Cover Band", "duration": 354}],

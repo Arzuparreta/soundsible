@@ -13,6 +13,27 @@ from shared.runtime import get_config_dir
 
 logger = logging.getLogger(__name__)
 
+# The engine keeps two SQLite files. `instance.db` holds everything that belongs
+# to the machine — accounts, credentials, pairing, and the content-addressed
+# caches every user benefits from. `users/<id>/library.db` holds one person's
+# track index. Both files carry the full schema so an older single-user
+# `library.db` keeps working untouched while its instance rows are migrated out.
+INSTANCE_DB_FILENAME = "instance.db"
+USER_DB_FILENAME = "library.db"
+
+# Tables that live in `instance.db` and get copied out of a pre-multiuser
+# `library.db` on first boot (see shared/multiuser_migration.py).
+INSTANCE_TABLES = (
+    "users",
+    "invites",
+    "auth_tokens",
+    "agent_tokens",
+    "pairing_sessions",
+    "youtube_resolution_cache",
+    "related_mix_cache",
+    "track_lyrics",
+)
+
 # Note: Migration definitions for schema evolution
 _TRACKS_COLUMNS = {
     "musicbrainz_id": "TEXT",
@@ -33,18 +54,28 @@ _YT_CACHE_COLUMNS = {
 _PAIRING_COLUMNS = {
     "auto_confirm": "INTEGER NOT NULL DEFAULT 0",
     "display_active": "INTEGER NOT NULL DEFAULT 0",
+    # Whose device is being paired. The minted token inherits it, so a paired
+    # phone acts as its owner rather than borrowing somebody else's identity.
+    "user_id": "TEXT",
+}
+
+_AUTH_TOKEN_COLUMNS = {
+    "user_id": "TEXT",
 }
 
 
 class DatabaseManager:
     def __init__(self, db_path: Optional[str] = None):
+        """Open a database. With no path this is the bound user's library index;
+        use :func:`instance_db` for accounts, credentials, and shared caches."""
         if db_path is None:
-            db_dir = get_config_dir()
-            db_dir.mkdir(parents=True, exist_ok=True)
-            self.db_path = db_dir / "library.db"
+            from shared.user_context import user_config_dir
+
+            self.db_path = user_config_dir() / USER_DB_FILENAME
         else:
             self.db_path = Path(db_path)
-            
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
         self._init_db()
 
     def _get_connection(self):
@@ -193,6 +224,55 @@ class DatabaseManager:
         """)
 
     @staticmethod
+    def _create_users_table(conn):
+        """Accounts served by this instance.
+
+        ``password_hash`` is nullable on purpose: a fresh install migrated from
+        single-user has exactly one account with no password, which is what
+        keeps the login screen out of the way until a second person exists.
+        """
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                username_folded TEXT NOT NULL UNIQUE,
+                display_name TEXT,
+                avatar_color TEXT,
+                password_hash TEXT,
+                role TEXT NOT NULL DEFAULT 'member',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                disabled_at TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_users_role
+            ON users (role)
+        """)
+
+    @staticmethod
+    def _create_invites_table(conn):
+        """One-time links that let somebody create their own account.
+
+        Only the SHA-256 of the token is stored, so a leaked database does not
+        hand out working invitations.
+        """
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS invites (
+                id TEXT PRIMARY KEY,
+                token_hash TEXT NOT NULL UNIQUE,
+                display_name TEXT,
+                role TEXT NOT NULL DEFAULT 'member',
+                created_by TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP NOT NULL,
+                used_at TIMESTAMP,
+                created_user_id TEXT,
+                revoked_at TIMESTAMP
+            )
+        """)
+
+    @staticmethod
     def _create_auth_tables(conn):
         conn.execute("""
             CREATE TABLE IF NOT EXISTS agent_tokens (
@@ -212,6 +292,7 @@ class DatabaseManager:
                 kind TEXT NOT NULL,
                 device_type TEXT,
                 scopes TEXT NOT NULL,
+                user_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_used_at TIMESTAMP,
                 expires_at TIMESTAMP,
@@ -221,6 +302,17 @@ class DatabaseManager:
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_auth_tokens_kind
             ON auth_tokens (kind)
+        """)
+        # A pre-multiuser auth_tokens table has no user_id; add it before the
+        # index that depends on it.
+        cursor = conn.execute("PRAGMA table_info(auth_tokens)")
+        auth_columns = [row[1] for row in cursor.fetchall()]
+        for col, defn in _AUTH_TOKEN_COLUMNS.items():
+            if col not in auth_columns:
+                conn.execute(f"ALTER TABLE auth_tokens ADD COLUMN {col} {defn}")
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_auth_tokens_user
+            ON auth_tokens (user_id)
         """)
 
     @staticmethod
@@ -279,7 +371,12 @@ class DatabaseManager:
         """)
 
     def _init_db(self):
-        """Initialize the database schema."""
+        """Initialize the database schema.
+
+        Both files get the full schema. The unused tables cost nothing, and it
+        means a pre-multiuser `library.db` still answers auth queries while its
+        instance rows are being migrated into `instance.db`.
+        """
         with self._get_connection() as conn:
             try:
                 conn.execute("BEGIN TRANSACTION")
@@ -289,6 +386,8 @@ class DatabaseManager:
                 self._migrate_tracks_columns(conn)
                 self._create_youtube_cache_table(conn)
                 self._create_related_mix_cache_table(conn)
+                self._create_users_table(conn)
+                self._create_invites_table(conn)
                 self._create_auth_tables(conn)
                 self._create_pairing_table(conn)
                 self._create_lyrics_table(conn)
@@ -703,16 +802,26 @@ class DatabaseManager:
         name: Optional[str] = None,
         device_type: Optional[str] = None,
         expires_at: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         encoded_scopes = json.dumps(sorted({scope for scope in scopes if scope}))
         with self._get_connection() as conn:
             conn.execute("""
-                INSERT INTO auth_tokens (id, name, token_hash, kind, device_type, scopes, expires_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (token_id, name or None, token_hash, kind, device_type or None, encoded_scopes, expires_at))
+                INSERT INTO auth_tokens (id, name, token_hash, kind, device_type, scopes, expires_at, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                token_id,
+                name or None,
+                token_hash,
+                kind,
+                device_type or None,
+                encoded_scopes,
+                expires_at,
+                user_id or None,
+            ))
             conn.row_factory = sqlite3.Row
             row = conn.execute("""
-                SELECT id, name, kind, device_type, scopes, created_at, last_used_at, expires_at, revoked_at
+                SELECT id, name, kind, device_type, scopes, user_id, created_at, last_used_at, expires_at, revoked_at
                 FROM auth_tokens
                 WHERE id = ?
             """, (token_id,)).fetchone()
@@ -724,7 +833,8 @@ class DatabaseManager:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute("""
-                SELECT id, name, token_hash, kind, device_type, scopes, created_at, last_used_at, expires_at, revoked_at
+                SELECT id, name, token_hash, kind, device_type, scopes, user_id,
+                       created_at, last_used_at, expires_at, revoked_at
                 FROM auth_tokens
                 WHERE token_hash = ?
                   AND revoked_at IS NULL
@@ -760,22 +870,31 @@ class DatabaseManager:
                 WHERE kind = ? AND revoked_at IS NULL
             """, (kind,))
 
-    def list_auth_tokens(self, *, kind: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_auth_tokens(
+        self,
+        *,
+        kind: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        columns = (
+            "id, name, kind, device_type, scopes, user_id, "
+            "created_at, last_used_at, expires_at, revoked_at"
+        )
+        filters = []
+        params: list[Any] = []
+        if kind:
+            filters.append("kind = ?")
+            params.append(kind)
+        if user_id:
+            filters.append("user_id = ?")
+            params.append(user_id)
+        where = f"WHERE {' AND '.join(filters)}" if filters else ""
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
-            if kind:
-                rows = conn.execute("""
-                    SELECT id, name, kind, device_type, scopes, created_at, last_used_at, expires_at, revoked_at
-                    FROM auth_tokens
-                    WHERE kind = ?
-                    ORDER BY created_at DESC
-                """, (kind,)).fetchall()
-            else:
-                rows = conn.execute("""
-                    SELECT id, name, kind, device_type, scopes, created_at, last_used_at, expires_at, revoked_at
-                    FROM auth_tokens
-                    ORDER BY created_at DESC
-                """).fetchall()
+            rows = conn.execute(
+                f"SELECT {columns} FROM auth_tokens {where} ORDER BY created_at DESC",
+                tuple(params),
+            ).fetchall()
             records = [dict(row) for row in rows]
             for record in records:
                 record["scopes"] = self._decode_scopes(record.get("scopes"))
@@ -785,7 +904,8 @@ class DatabaseManager:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute("""
-                SELECT id, name, kind, device_type, scopes, created_at, last_used_at, expires_at, revoked_at
+                SELECT id, name, kind, device_type, scopes, user_id,
+                       created_at, last_used_at, expires_at, revoked_at
                 FROM auth_tokens
                 WHERE id = ?
             """, (token_id,)).fetchone()
@@ -812,12 +932,13 @@ class DatabaseManager:
         expires_at: str,
         auto_confirm: bool = False,
         display_active: bool = False,
+        user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             conn.execute("""
-                INSERT INTO pairing_sessions (id, code, status, requested_scopes, granted_scopes, auto_confirm, display_active, expires_at)
-                VALUES (?, ?, 'pending', ?, ?, ?, ?, ?)
+                INSERT INTO pairing_sessions (id, code, status, requested_scopes, granted_scopes, auto_confirm, display_active, expires_at, user_id)
+                VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?)
             """, (
                 session_id,
                 code,
@@ -826,6 +947,7 @@ class DatabaseManager:
                 1 if auto_confirm else 0,
                 1 if display_active else 0,
                 expires_at,
+                user_id,
             ))
             row = conn.execute("""
                 SELECT *
@@ -859,14 +981,22 @@ class DatabaseManager:
                 return None
             return self._decode_pairing_record(dict(row))
 
-    def list_pairing_sessions(self) -> List[Dict[str, Any]]:
+    def list_pairing_sessions(self, *, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
-            rows = conn.execute("""
-                SELECT *
-                FROM pairing_sessions
-                ORDER BY created_at DESC
-            """).fetchall()
+            if user_id:
+                rows = conn.execute("""
+                    SELECT *
+                    FROM pairing_sessions
+                    WHERE user_id = ?
+                    ORDER BY created_at DESC
+                """, (user_id,)).fetchall()
+            else:
+                rows = conn.execute("""
+                    SELECT *
+                    FROM pairing_sessions
+                    ORDER BY created_at DESC
+                """).fetchall()
             records = [dict(row) for row in rows]
             for record in records:
                 self._decode_pairing_record(record)
@@ -1004,3 +1134,182 @@ class DatabaseManager:
                 SET last_used_at = CURRENT_TIMESTAMP
                 WHERE id = ? AND revoked_at IS NULL
             """, (token_id,))
+
+    # Note: Accounts (instance database only)
+
+    _USER_COLUMNS = (
+        "id, username, username_folded, display_name, avatar_color, password_hash, "
+        "role, created_at, updated_at, disabled_at"
+    )
+
+    def create_user_row(
+        self,
+        user_id: str,
+        *,
+        username: str,
+        display_name: Optional[str] = None,
+        avatar_color: Optional[str] = None,
+        password_hash: Optional[str] = None,
+        role: str = "member",
+    ) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO users (id, username, username_folded, display_name, avatar_color, password_hash, role)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                user_id,
+                username,
+                username.casefold(),
+                display_name or username,
+                avatar_color or None,
+                password_hash or None,
+                role,
+            ))
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                f"SELECT {self._USER_COLUMNS} FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+            return dict(row)
+
+    def get_user_row(self, user_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                f"SELECT {self._USER_COLUMNS} FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_user_row_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                f"SELECT {self._USER_COLUMNS} FROM users WHERE username_folded = ?",
+                (str(username or "").casefold(),),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def list_user_rows(self, *, include_disabled: bool = True) -> List[Dict[str, Any]]:
+        clause = "" if include_disabled else "WHERE disabled_at IS NULL"
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                f"SELECT {self._USER_COLUMNS} FROM users {clause} ORDER BY created_at ASC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def update_user_row(self, user_id: str, **fields: Any) -> Optional[Dict[str, Any]]:
+        """Patch a user row. Only known columns are accepted."""
+        allowed = {"username", "display_name", "avatar_color", "password_hash", "role", "disabled_at"}
+        updates = {key: value for key, value in fields.items() if key in allowed}
+        if not updates:
+            return self.get_user_row(user_id)
+        if "username" in updates:
+            updates["username_folded"] = str(updates["username"]).casefold()
+        assignments = ", ".join(f"{key} = ?" for key in updates)
+        with self._get_connection() as conn:
+            conn.execute(
+                f"UPDATE users SET {assignments}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (*updates.values(), user_id),
+            )
+        return self.get_user_row(user_id)
+
+    def delete_user_row(self, user_id: str) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            conn.execute("""
+                UPDATE auth_tokens
+                SET revoked_at = CURRENT_TIMESTAMP
+                WHERE user_id = ? AND revoked_at IS NULL
+            """, (user_id,))
+            return cursor.rowcount > 0
+
+    # Note: Invitations (instance database only)
+
+    _INVITE_COLUMNS = (
+        "id, display_name, role, created_by, created_at, expires_at, used_at, "
+        "created_user_id, revoked_at"
+    )
+
+    def create_invite_row(
+        self,
+        invite_id: str,
+        token_hash: str,
+        *,
+        expires_at: str,
+        display_name: Optional[str] = None,
+        role: str = "member",
+        created_by: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO invites (id, token_hash, display_name, role, created_by, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (invite_id, token_hash, display_name or None, role, created_by, expires_at))
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                f"SELECT {self._INVITE_COLUMNS} FROM invites WHERE id = ?", (invite_id,)
+            ).fetchone()
+            return dict(row)
+
+    def get_invite_by_hash(self, token_hash: str) -> Optional[Dict[str, Any]]:
+        """Return a still-redeemable invite, or ``None``."""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(f"""
+                SELECT {self._INVITE_COLUMNS}
+                FROM invites
+                WHERE token_hash = ?
+                  AND used_at IS NULL
+                  AND revoked_at IS NULL
+                  AND expires_at > CURRENT_TIMESTAMP
+            """, (token_hash,)).fetchone()
+            return dict(row) if row else None
+
+    def consume_invite(self, invite_id: str, *, created_user_id: str) -> bool:
+        """Mark an invite used. Returns False if somebody got there first."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("""
+                UPDATE invites
+                SET used_at = CURRENT_TIMESTAMP, created_user_id = ?
+                WHERE id = ?
+                  AND used_at IS NULL
+                  AND revoked_at IS NULL
+                  AND expires_at > CURRENT_TIMESTAMP
+            """, (created_user_id, invite_id))
+            return cursor.rowcount > 0
+
+    def list_invite_rows(self) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                f"SELECT {self._INVITE_COLUMNS} FROM invites ORDER BY created_at DESC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def revoke_invite(self, invite_id: str) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.execute("""
+                UPDATE invites
+                SET revoked_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND revoked_at IS NULL AND used_at IS NULL
+            """, (invite_id,))
+            return cursor.rowcount > 0
+
+    def count_users(self, *, include_disabled: bool = False) -> int:
+        clause = "" if include_disabled else "WHERE disabled_at IS NULL"
+        with self._get_connection() as conn:
+            return int(conn.execute(f"SELECT COUNT(*) FROM users {clause}").fetchone()[0])
+
+
+def instance_db() -> DatabaseManager:
+    """Database holding accounts, credentials, pairing, and shared caches."""
+    config_dir = get_config_dir()
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return DatabaseManager(str(config_dir / INSTANCE_DB_FILENAME))
+
+
+def user_db(user_id: Optional[str] = None) -> DatabaseManager:
+    """Track index for ``user_id`` (default: the bound user)."""
+    from shared.user_context import user_config_dir
+
+    return DatabaseManager(str(user_config_dir(user_id) / USER_DB_FILENAME))

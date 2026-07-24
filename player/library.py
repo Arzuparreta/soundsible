@@ -48,21 +48,47 @@ def _output_dir_for_library() -> Optional[Path]:
     except Exception:
         pass
     return None
+
+
+def _music_dir_manifest_is_shared() -> bool:
+    """Whether OUTPUT_DIR/library.json belongs to the instance rather than to me.
+
+    Lazy import: this module is also loaded by CLI paths that never touch the
+    account tables.
+    """
+    try:
+        from shared.users import instance_has_multiple_users
+
+        return instance_has_multiple_users()
+    except Exception:
+        return False
 from setup_tool.audio import AudioProcessor
 from setup_tool.uploader import UploadEngine
-from shared.database import DatabaseManager
+from shared.database import USER_DB_FILENAME, DatabaseManager
+from shared.user_context import user_config_dir
 import shutil
 import tempfile
 
 class LibraryManager:
-    """Manages the music library and stream URLs."""
-    
+    """Manages one person's music library and stream URLs.
+
+    The audio files themselves are shared: they live in a content-addressed
+    pool under the instance's output directory, so two people who own the same
+    track point at the same file. What is private is this manifest — which
+    tracks are in *your* library, and the metadata you edited on them.
+    """
+
     def __init__(self, silent: bool = False):
         self.silent = silent
         self.metadata: Optional[LibraryMetadata] = None
         self.config: Optional[PlayerConfig] = None
         self.provider = None
-        self.db = DatabaseManager()
+        # Resolved once at construction. A manager belongs to one person, so
+        # its paths must not follow whichever user is bound when a background
+        # save fires.
+        self.user_config_dir = user_config_dir()
+        self.manifest_path = self.user_config_dir / LIBRARY_METADATA_FILENAME
+        self.db = DatabaseManager(str(self.user_config_dir / USER_DB_FILENAME))
         self._manifest_mtime = 0
         self._lock = threading.Lock()
         # Paths whose write failed once (e.g. read-only music mount). Logged once,
@@ -164,7 +190,7 @@ class LibraryManager:
                 json_str = self.metadata.to_json()
                 
                 # Note: 1. Local cache file
-                cache_path = get_config_dir() / LIBRARY_METADATA_FILENAME
+                cache_path = self.manifest_path
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 cache_path.write_text(json_str)
                 try:
@@ -172,8 +198,10 @@ class LibraryManager:
                 except OSError:
                     pass
 
-                # Note: 1b. Music output dir (same manifest as cache; ODST/downloader also use this path)
-                out_dir = _output_dir_for_library()
+                # Note: 1b. Music output dir (same manifest as cache; ODST/downloader also use this path).
+                # With several accounts that file is the instance catalog of everything
+                # on disk, so mirroring one person's manifest over it would erase the rest.
+                out_dir = None if _music_dir_manifest_is_shared() else _output_dir_for_library()
                 if out_dir:
                     music_lib = Path(out_dir).expanduser().resolve() / LIBRARY_METADATA_FILENAME
                     music_key = str(music_lib)
@@ -211,11 +239,13 @@ class LibraryManager:
         def _log_local(msg):
             if not is_silent: print(msg)
 
-        cache_path = get_config_dir() / LIBRARY_METADATA_FILENAME
+        cache_path = self.manifest_path
 
         # Note: Always prefer the path set in settings (output_dir) if it has library.JSON, use it first.
         # Note: This makes the webapp/player "music path" the single source of truth when that path has a library.
-        out_dir = _output_dir_for_library()
+        # With several accounts that manifest lists everyone's downloads, so adopting it
+        # wholesale would pull other people's tracks into this library.
+        out_dir = None if _music_dir_manifest_is_shared() else _output_dir_for_library()
         if out_dir:
             path_at_music = Path(out_dir).expanduser().resolve() / LIBRARY_METADATA_FILENAME
             if path_at_music.exists():
@@ -402,7 +432,7 @@ class LibraryManager:
 
     def refresh_if_stale(self):
         """Reload metadata from disk if the file has changed."""
-        cache_path = get_config_dir() / LIBRARY_METADATA_FILENAME
+        cache_path = self.manifest_path
         if cache_path.exists():
             mtime = cache_path.stat().st_mtime
             if mtime > self._manifest_mtime:
@@ -605,8 +635,12 @@ class LibraryManager:
                 # Note: Save changes everywhere
                 self._save_metadata()
                 
-                # Note: 5. Cleanup old remote file (if hash changed)
-                if new_track.id != track.id:
+                # Note: 5. Cleanup old remote file (if hash changed).
+                # Editing tags re-hashes the file, so the old object may still be
+                # what somebody else's manifest points at. With several accounts
+                # sharing the pool, leave it: an orphan file is cheap, a broken
+                # library is not.
+                if new_track.id != track.id and not _music_dir_manifest_is_shared():
                     self._log("Removing old file from storage...")
                     old_key = f"tracks/{track.id}.{track.format}"
                     self.provider.delete_file(old_key)
@@ -747,7 +781,7 @@ class LibraryManager:
                     self.cache.clear_cache()
                 
                 # Note: Remove local library.JSON
-                metadata_path = get_config_dir() / LIBRARY_METADATA_FILENAME
+                metadata_path = self.manifest_path
                 if metadata_path.exists():
                     os.remove(metadata_path)
 

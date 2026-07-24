@@ -15,7 +15,8 @@ from shared.discovery_intelligence import (
 )
 from shared.models import LibraryMetadata, Track
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
-from shared.telemetry import init_telemetry, reset_telemetry
+from shared.telemetry import init_telemetry, reset_telemetry, user_telemetry_dir
+from shared.user_context import user_config_dir, user_data_dir
 
 
 def _make_runtime(tmp_path: Path) -> RuntimeConfig:
@@ -72,7 +73,7 @@ def test_discovery_settings_default_and_persist(tmp_path):
     saved = save_discovery_settings({"learning_enabled": False})
 
     assert saved["learning_enabled"] is False
-    assert json.loads((runtime.config_dir / "discovery_settings.json").read_text())["learning_enabled"] is False
+    assert json.loads((user_config_dir() / "discovery_settings.json").read_text())["learning_enabled"] is False
 
 
 def test_emit_discovery_event_respects_local_opt_out(tmp_path):
@@ -94,7 +95,7 @@ def test_emit_discovery_event_respects_local_opt_out(tmp_path):
 
     events = [
         json.loads(line)
-        for line in (runtime.data_dir / "telemetry" / "listening-events.jsonl").read_text(encoding="utf-8").splitlines()
+        for line in (user_telemetry_dir() / "listening-events.jsonl").read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
     assert len(events) == 1
@@ -123,8 +124,9 @@ def test_music_recommendations_prioritize_favourites_and_playlists(tmp_path):
     assert result["sections"][0]["id"] == "made_for_your_library"
 
 
-def _write_jsonl_events(data_dir: Path, events: list[dict]) -> None:
-    tel_dir = data_dir / "telemetry"
+def _write_jsonl_events(_data_dir: Path, events: list[dict]) -> None:
+    """Seed listening history for the bound account."""
+    tel_dir = user_telemetry_dir()
     tel_dir.mkdir(parents=True, exist_ok=True)
     path = tel_dir / "listening-events.jsonl"
     with path.open("w", encoding="utf-8") as fh:

@@ -148,7 +148,7 @@ def test_feed_returns_cache_hits_immediately(monkeypatch):
     mock_db = MagicMock()
     mock_db.get_related_mix.return_value = cached_recs
     mock_db.get_cached_resolution.return_value = None
-    monkeypatch.setattr(_disc_routes, "DatabaseManager", lambda: mock_db)
+    monkeypatch.setattr(_disc_routes, "instance_db", lambda: mock_db)
 
     client = _make_app().test_client()
     res = client.get("/api/discover/feed?seeds=t1&limit=10")
@@ -182,7 +182,7 @@ def test_feed_schedules_async_expansion_for_cache_miss(monkeypatch):
     mock_db = MagicMock()
     mock_db.get_related_mix.return_value = None  # cache miss
     mock_db.get_cached_resolution.return_value = None
-    monkeypatch.setattr(_disc_routes, "DatabaseManager", lambda: mock_db)
+    monkeypatch.setattr(_disc_routes, "instance_db", lambda: mock_db)
 
     # Use a real (inline) executor so the expansion runs synchronously enough
     # to verify the side effects. We patch the executor to run inline.
@@ -234,7 +234,7 @@ def test_feed_inflight_dedup_does_not_double_extract(monkeypatch):
     mock_db = MagicMock()
     mock_db.get_related_mix.return_value = None
     mock_db.get_cached_resolution.return_value = None
-    monkeypatch.setattr(_disc_routes, "DatabaseManager", lambda: mock_db)
+    monkeypatch.setattr(_disc_routes, "instance_db", lambda: mock_db)
 
     # Simulate an already-in-flight future for this video_id.
     from concurrent.futures import Future
@@ -288,7 +288,7 @@ def test_feed_resolves_seed_without_youtube_id_via_resolution_cache(monkeypatch)
     mock_db = MagicMock()
     mock_db.get_related_mix.return_value = [{"id": "hit", "title": "Cached Rec"}]
     mock_db.get_cached_resolution.return_value = {"id": _VID4}
-    monkeypatch.setattr(_disc_routes, "DatabaseManager", lambda: mock_db)
+    monkeypatch.setattr(_disc_routes, "instance_db", lambda: mock_db)
 
     client = _make_app().test_client()
     res = client.get("/api/discover/feed?seeds=t1&limit=10")
@@ -315,7 +315,7 @@ def test_warm_endpoint_schedules_expansion_for_misses(monkeypatch):
     mock_db = MagicMock()
     mock_db.get_related_mix.return_value = None  # miss
     mock_db.get_cached_resolution.return_value = None
-    monkeypatch.setattr(_disc_routes, "DatabaseManager", lambda: mock_db)
+    monkeypatch.setattr(_disc_routes, "instance_db", lambda: mock_db)
 
     # Inline executor so we can verify the scheduling without real threads.
     from concurrent.futures import Future

@@ -33,7 +33,8 @@ def _get_api():
         _ensure_lib_metadata,
         socketio,
         get_downloader,
-        favourites_manager,
+        get_favourites_manager,
+        emit_to_user,
         is_trusted_network,
     )
     from shared.models import LibraryMetadata
@@ -43,8 +44,9 @@ def _get_api():
         "_mark_track_metadata_updated": _mark_track_metadata_updated,
         "_ensure_lib_metadata": _ensure_lib_metadata,
         "socketio": socketio,
+        "emit_to_user": emit_to_user,
         "get_downloader": get_downloader,
-        "favourites_manager": favourites_manager,
+        "favourites_manager": get_favourites_manager(),
         "is_trusted_network": is_trusted_network,
         "LibraryMetadata": LibraryMetadata,
     }
@@ -89,7 +91,7 @@ def sync_library():
     lib, _, _ = api["get_core"]()
     success = lib.sync_library()
     if success:
-        api["socketio"].emit("library_updated")
+        api["emit_to_user"]("library_updated")
     return jsonify({"status": "success" if success else "failed"})
 
 
@@ -115,7 +117,7 @@ def delete_track_from_library(track_id):
                 logger.info("API: Track %s also removed from ODST library.", track_id)
         except Exception as e:
             logger.warning("API: Could not remove track from ODST library (non-fatal): %s", e)
-        api["socketio"].emit("library_updated")
+        api["emit_to_user"]("library_updated")
         return jsonify({"status": "success"})
     return jsonify({"error": "Deletion failed"}), 500
 
@@ -140,7 +142,7 @@ def wipe_library():
             logger.info("API: ODST library wiped at %s", dl.output_dir)
         except Exception as e:
             logger.warning("API: ODST library wipe (non-fatal): %s", e)
-        api["socketio"].emit("library_updated")
+        api["emit_to_user"]("library_updated")
         return jsonify({"status": "success"})
     except Exception as e:
         logger.error("API: Library wipe error: %s", e)
@@ -176,7 +178,7 @@ def purge_missing_library_tracks():
         return jsonify({"error": "Library not loaded"}), 404
 
     summary = lib.purge_missing_tracks()
-    api["socketio"].emit("library_updated")
+    api["emit_to_user"]("library_updated")
     return jsonify({"status": "success", **summary})
 
 
@@ -185,7 +187,7 @@ def purge_missing_library_tracks():
 def get_track_lyrics(track_id):
     """Lyrics for a library track: served from the local cache when present,
     otherwise fetched from LRCLIB and cached (including not-found results)."""
-    from shared.database import DatabaseManager
+    from shared.database import instance_db
     from shared.lyrics import poll_lyrics
 
     api = _get_api()
@@ -194,7 +196,7 @@ def get_track_lyrics(track_id):
     if not track:
         return jsonify({"error": "Track not found"}), 404
 
-    db = DatabaseManager()
+    db = instance_db()
     refresh = request.args.get("refresh") in ("1", "true")
     if not refresh:
         cached = db.get_lyrics(track_id)
@@ -461,7 +463,7 @@ def create_playlist():
         return jsonify({"error": "Playlist already exists"}), 409
     metadata.create_playlist(name)
     lib._save_metadata()
-    api["socketio"].emit("library_updated")
+    api["emit_to_user"]("library_updated")
     return _playlist_mutation_response(metadata)
 
 
@@ -479,7 +481,7 @@ def reorder_playlists():
         return jsonify({"error": "order must be a list of playlist names"}), 400
     metadata.reorder_playlists(order)
     lib._save_metadata()
-    api["socketio"].emit("library_updated")
+    api["emit_to_user"]("library_updated")
     return _playlist_mutation_response(metadata)
 
 
@@ -501,7 +503,7 @@ def add_track_to_playlist(name):
     if not metadata.add_to_playlist(name, track_id):
         return jsonify({"error": "Add to playlist failed"}), 500
     lib._save_metadata()
-    api["socketio"].emit("library_updated")
+    api["emit_to_user"]("library_updated")
     return _playlist_mutation_response(metadata)
 
 
@@ -519,7 +521,7 @@ def remove_track_from_playlist(name, track_id):
     if not metadata.remove_from_playlist(name, track_id):
         return jsonify({"error": "Remove from playlist failed"}), 500
     lib._save_metadata()
-    api["socketio"].emit("library_updated")
+    api["emit_to_user"]("library_updated")
     return _playlist_mutation_response(metadata)
 
 
@@ -555,7 +557,7 @@ def update_playlist(name):
         if not metadata.set_playlist_cover_track_id(name, cover_tid):
             return jsonify({"error": "Invalid cover_track_id (not in playlist)"}), 400
     lib._save_metadata()
-    api["socketio"].emit("library_updated")
+    api["emit_to_user"]("library_updated")
     return _playlist_mutation_response(metadata)
 
 
@@ -571,5 +573,5 @@ def delete_playlist(name):
     if not metadata.delete_playlist(name):
         return jsonify({"error": "Playlist not found"}), 404
     lib._save_metadata()
-    api["socketio"].emit("library_updated")
+    api["emit_to_user"]("library_updated")
     return _playlist_mutation_response(metadata)

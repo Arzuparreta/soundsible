@@ -9,6 +9,7 @@ import { parseYouTubeInput } from '../lib/youtube';
 import { prefetchPreviews } from '../lib/prefetch';
 import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed, type NodeRec } from '../lib/nodeDiscover';
 import { t as tr } from '../lib/i18n';
+import { userKey } from '../lib/session';
 import SearchResultRow from '../components/SearchResultRow';
 import type { CatalogItem, CatalogSaveResponse, SearchResult, Track } from '../types/music';
 import styles from './Search.module.css';
@@ -52,7 +53,9 @@ function gradientFor(seed: string): string {
 }
 
 function recentsKey(domain: SearchDomain): string {
-  return domain === 'youtube' ? RECENTS_KEY_YOUTUBE : RECENTS_KEY;
+  // Search history is personal, and a browser profile can be shared by the
+  // whole household — namespace it by account so nobody reads anyone else's.
+  return userKey(domain === 'youtube' ? RECENTS_KEY_YOUTUBE : RECENTS_KEY);
 }
 
 function loadRecents(domain: SearchDomain): string[] {

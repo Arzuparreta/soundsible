@@ -117,15 +117,70 @@ The Flask application lives in `shared/api/__init__.py`. It:
 
 ### 5. Data and configuration (conceptual)
 
+One engine serves **several accounts**. State splits in two: what belongs to the
+machine, and what belongs to a person.
+
+**Instance-level** (one copy, admin-managed):
+
 | Location | Purpose |
 |----------|---------|
-| `~/.config/soundsible/config.json` | Primary user configuration (wizard / settings). |
-| `~/.config/soundsible/library.json` | Library metadata manifest (tracks, playlists). |
-| `~/.config/soundsible/library.db` | SQLite index for search and sync. |
-| `~/.config/soundsible/output_dir` | Written by the API so all components agree on music output path. |
-| `odst_tool/.env` | Optional overrides (e.g. `OUTPUT_DIR`, downloader tuning) used by ODST and API bootstrap. |
+| `<config>/instance.db` | Accounts, credentials (`auth_tokens`, `agent_tokens`), pairing sessions, and the content-addressed caches everyone shares (YouTube resolution, related mixes, lyrics). |
+| `<config>/config.json` | Storage backend and credentials (`PlayerConfig`). |
+| `<config>/output_dir`, `<config>/music_dir.json` | Where the shared music pool lives. |
+| `<config>/cookies.txt` | yt-dlp cookies. |
+| `<config>/download_queue.json` | One queue; each row carries `user_id`. |
+| `<music>/tracks/<hash>.<ext>` | **Shared audio pool.** The track id *is* the content hash, so two people who own the same song point at the same file — nothing is downloaded or stored twice. |
+| `<music>/library.json` | Instance catalog of what is physically on disk (written by ODST). |
+| `<cache>/previews/`, `<cache>/covers/` | Shared, content-addressed. |
+| `<data>/telemetry/` | `setup-events`, `migration-events`. |
+
+**Per account**, under `<config>/users/<user_id>/` and `<data>/users/<user_id>/`:
+
+| File | Purpose |
+|------|---------|
+| `library.json` | *Your* library: which tracks you own, plus any metadata you edited on them. |
+| `library.db` | SQLite index of that manifest. |
+| `favourites.json`, `playback_state.json`, `discovery_settings.json` | Favourites, cross-device resume, discovery opt-in. |
+| `queue_state.json` *(data dir)* | Playback queue. |
+| `telemetry/listening-events.jsonl`, `telemetry/play-timing.jsonl` *(data dir)* | Listening history — the input to *your* recommendations. |
+
+Editing a track's tags re-encodes the file and therefore changes its hash, which
+mints a new track id. That is what keeps metadata edits private: your manifest
+follows the new id while everyone else keeps the original.
 
 Exact filenames and fields may evolve; treat the code under `shared/` and `player/` as the source of truth.
+
+### 5A. Accounts, sessions, and the identity gate
+
+- **Accounts** live in `shared/users.py` (policy) over the `users` table. Roles are
+  `admin` and `member`. Passwords are scrypt hashes (`werkzeug.security`).
+- **Sessions** are opaque 32-byte tokens stored *only as SHA-256 hashes* in
+  `auth_tokens` with `kind='session'` and a `user_id`, delivered as an HttpOnly
+  `sb_session` cookie. The cookie rides along with the Socket.IO handshake, so
+  real-time auth is free.
+- **`instance_requires_login()`** is the switch. It is `False` in exactly one
+  case — a single account with no password, which is what a migrated single-user
+  install looks like — and `True` from the moment a second account exists or the
+  only account gets a password.
+- **One gate, not 126 decorators.** `before_request` in `shared/api/__init__.py`
+  resolves the caller, returns **401** for any `/api/*` outside a small public
+  allowlist (`/api/auth/state`, `/api/auth/login`, `/api/auth/logout`,
+  `/api/health`, `/api/pairing/sessions/claim`), and binds the user for the rest
+  of the request. Managers underneath resolve their paths through that binding
+  (`shared/user_context.py`), and asking for a user directory with nobody bound
+  raises rather than silently falling back.
+- **Scopes**: members hold `library:read`, `library:write`, `playback:control`,
+  `download:add`, `admin:config` (their own preferences). Admins additionally hold
+  **`admin:instance`** — music folder, storage backend, downloader tuning,
+  optimization, cloud sync, and account management — plus `admin:dangerous`.
+- **Real-time isolation**: each socket joins a `user:{user_id}` room;
+  `library_updated` and `downloader_*` are emitted there, never broadcast.
+  Playback rooms stay `playback:{scope}:{device_id}` where the scope is the user id.
+- **Migration** (`shared/multiuser_migration.py`) runs on every boot and is
+  idempotent. On a pre-multiuser install it creates the admin account, moves the
+  flat state under `users/<id>/`, copies the instance tables out of the old
+  `library.db` (so paired devices and warm caches survive), and leaves the
+  originals renamed `*.singleuser.bak`.
 
 ### 6. Security notes (brief)
 

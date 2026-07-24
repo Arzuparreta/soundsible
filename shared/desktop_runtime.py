@@ -15,7 +15,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from shared.database import DatabaseManager
+from shared.database import instance_db
 from shared.hardening import ALL_SCOPES
 from shared.runtime import RuntimeConfig
 
@@ -43,7 +43,7 @@ def ensure_owner_token(runtime: RuntimeConfig) -> tuple[RuntimeConfig, str]:
     token_file.parent.mkdir(parents=True, exist_ok=True)
 
     token = secrets.token_urlsafe(32)
-    db = DatabaseManager()
+    db = instance_db()
     db.revoke_auth_tokens_by_kind(OWNER_TOKEN_KIND)
     db.create_auth_token(
         str(uuid.uuid4()),

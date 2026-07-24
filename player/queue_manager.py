@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from shared.models import QueueItem, Track
-from shared.runtime import get_data_dir
+from shared.user_context import user_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,11 @@ class QueueManager:
     """
 
     def __init__(self, persist_path: Optional[Path] = None) -> None:
-        self._persist_path = persist_path
+        # Resolved once: this manager belongs to one person, so saves must not
+        # follow whichever user happens to be bound when a callback fires.
+        self._persist_path = (
+            Path(persist_path) if persist_path is not None else user_data_dir() / "queue_state.json"
+        )
         self._queue: List[QueueItem] = []
         self._history: List[QueueItem] = []
         self._repeat_mode = "off"  # Note: Off, all, one, once (web: one=infinite song, once=one extra play)
@@ -35,9 +39,7 @@ class QueueManager:
         self._restore_state()
 
     def _resolved_persist_path(self) -> Path:
-        if self._persist_path is not None:
-            return Path(self._persist_path)
-        return Path(get_data_dir()) / "queue_state.json"
+        return self._persist_path
 
     def _restore_state(self) -> None:
         path = self._resolved_persist_path()

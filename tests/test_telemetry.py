@@ -10,6 +10,7 @@ from shared.telemetry import (
     init_telemetry,
     is_telemetry_enabled,
     reset_telemetry,
+    user_telemetry_dir,
 )
 
 
@@ -83,7 +84,8 @@ def test_telemetry_survives_close_and_reinit(tmp_path, monkeypatch):
     init_telemetry(runtime)
     emit("play-timing", {"v": 1, "n": 3})
 
-    active = runtime.data_dir / "telemetry" / "play-timing.jsonl"
+    # Play timing describes a person, so it lands in that account's directory.
+    active = user_telemetry_dir() / "play-timing.jsonl"
     lines = [json.loads(line) for line in active.read_text(encoding="utf-8").strip().splitlines()]
     assert [row["n"] for row in lines] == [1, 2, 3]
 

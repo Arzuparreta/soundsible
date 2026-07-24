@@ -1,7 +1,11 @@
 """
 Local-only JSONL telemetry sinks under runtime data_dir/telemetry/.
 
-See docs/TELEMETRY_PRIVACY.md. No network egress from this module.
+Setup and migration events describe the instance and stay in the instance
+directory. Play timing and listening events describe a person — they feed that
+person's recommendations — so they are written under the bound user's data
+directory instead. See docs/TELEMETRY_PRIVACY.md. No network egress from this
+module.
 """
 
 from __future__ import annotations
@@ -30,6 +34,12 @@ _CATEGORY_FILENAMES = {
     "play-timing": "play-timing.jsonl",
     "listening-events": "listening-events.jsonl",
 }
+
+# Categories that belong to a person rather than to the instance. When a user is
+# bound these land in that user's data directory; with nobody bound they fall
+# back to the instance sink (data nobody reads, rather than data in the wrong
+# person's history).
+_USER_CATEGORIES = frozenset({"play-timing", "listening-events"})
 
 
 def _normalize_category(category: str) -> str:
@@ -203,40 +213,76 @@ class TelemetryWriter:
 
 _lock = threading.Lock()
 _writer: Optional[TelemetryWriter] = None
+_user_writers: dict[str, TelemetryWriter] = {}
+
+
+def _instance_telemetry_dir(runtime_config: Optional[RuntimeConfig] = None) -> Path:
+    runtime = runtime_config or get_runtime_config()
+    return runtime.data_dir / "telemetry"
 
 
 def init_telemetry(runtime_config: Optional[RuntimeConfig] = None) -> None:
     """Create telemetry sinks under ``data_dir/telemetry``. Safe to call again (replaces writer)."""
     global _writer
-    runtime = runtime_config or get_runtime_config()
-    telemetry_dir = runtime.data_dir / "telemetry"
+    telemetry_dir = _instance_telemetry_dir(runtime_config)
     with _lock:
         if _writer is not None:
             _writer.close()
+        for writer in _user_writers.values():
+            writer.close()
+        _user_writers.clear()
         telemetry_dir.mkdir(parents=True, exist_ok=True)
         _writer = TelemetryWriter(telemetry_dir)
 
 
 def reset_telemetry() -> None:
-    """Close sinks and clear the process-global writer (tests / process reload)."""
+    """Close sinks and clear the process-global writers (tests / process reload)."""
     global _writer
     with _lock:
         if _writer is not None:
             _writer.close()
         _writer = None
+        for writer in _user_writers.values():
+            writer.close()
+        _user_writers.clear()
+
+
+def user_telemetry_dir(user_id: Optional[str] = None) -> Path:
+    """Telemetry directory for ``user_id`` (default: the bound user)."""
+    from shared.user_context import user_data_dir
+
+    return user_data_dir(user_id) / "telemetry"
+
+
+def _writer_for(norm_category: str) -> TelemetryWriter:
+    """Resolve the sink for a category. Caller holds ``_lock``."""
+    global _writer
+    if norm_category in _USER_CATEGORIES:
+        from shared.user_context import current_user_id
+
+        user_id = current_user_id()
+        if user_id:
+            writer = _user_writers.get(user_id)
+            if writer is None:
+                directory = user_telemetry_dir(user_id)
+                directory.mkdir(parents=True, exist_ok=True)
+                writer = TelemetryWriter(directory)
+                _user_writers[user_id] = writer
+            return writer
+        logger.debug("telemetry: %s emitted with no user bound; using instance sink", norm_category)
+
+    if _writer is None:
+        telemetry_dir = _instance_telemetry_dir()
+        telemetry_dir.mkdir(parents=True, exist_ok=True)
+        _writer = TelemetryWriter(telemetry_dir)
+    return _writer
 
 
 def emit(category: str, event: Mapping[str, Any]) -> None:
     """Append one JSON object as a line to the category's JSONL sink."""
-    global _writer
     if not is_telemetry_enabled():
         return
     norm = _normalize_category(category)
     line = json.dumps(dict(event), ensure_ascii=False, separators=(",", ":")) + "\n"
     with _lock:
-        if _writer is None:
-            runtime = get_runtime_config()
-            telemetry_dir = runtime.data_dir / "telemetry"
-            telemetry_dir.mkdir(parents=True, exist_ok=True)
-            _writer = TelemetryWriter(telemetry_dir)
-        _writer.emit_line(norm, line)
+        _writer_for(norm).emit_line(norm, line)

@@ -254,6 +254,13 @@ interface RequestOptions {
   keepalive?: boolean;
 }
 
+/** Notified whenever the engine answers 401 — the app shows the login screen. */
+let onUnauthorized: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
+
 /** Typed fetch wrapper over the engine REST contract. Reuses the timeout/abort
  * pattern from the legacy http.js, adds JSON + owner-token handling. */
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
@@ -271,10 +278,13 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     const res = await fetch(`${apiOrigin()}${path}`, {
       method,
       headers,
+      // The session lives in an HttpOnly cookie, so every call has to carry it.
+      credentials: 'same-origin',
       body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
       signal: opts.signal ?? controller.signal,
       keepalive: opts.keepalive,
     });
+    if (res.status === 401 && !path.startsWith('/api/auth/')) onUnauthorized?.();
     if (!res.ok) throw new ApiError(res.status, `${method} ${path} → ${res.status}`);
     if (res.status === 204) return undefined as T;
     const text = await res.text();

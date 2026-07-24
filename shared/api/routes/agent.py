@@ -11,7 +11,7 @@ from typing import Optional
 
 from flask import Blueprint, g, jsonify, request
 
-from shared.database import DatabaseManager
+from shared.database import DatabaseManager, instance_db
 from shared.hardening import (
     LEGACY_AGENT_SCOPES,
     SCOPE_ADMIN_CONFIG,
@@ -21,6 +21,8 @@ from shared.hardening import (
     get_request_auth_context,
     require_scope,
 )
+
+from odst_tool.config import prefer_ytmusic
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +53,7 @@ def _get_api():
 
 
 def _db() -> DatabaseManager:
-    return DatabaseManager()
+    return instance_db()
 
 
 def _hash_token(token: str) -> str:
@@ -176,6 +178,8 @@ def create_agent_token():
     scopes = [scope for scope in (requested_scopes or sorted(LEGACY_AGENT_SCOPES)) if scope in {SCOPE_LIBRARY_READ, SCOPE_PLAYBACK_CONTROL, SCOPE_DOWNLOAD_ADD}]
     if not scopes:
         return jsonify({"error": "At least one supported scope is required"}), 400
+    from shared.user_context import current_user_id
+
     record = _db().create_auth_token(
         token_id,
         _hash_token(token),
@@ -184,6 +188,9 @@ def create_agent_token():
         name=data.get("name") or data.get("agent_name"),
         device_type=data.get("device_type") or "agent",
         expires_at=data.get("expires_at"),
+        # The agent acts as whoever minted it. Without this the token would
+        # carry no identity and be rejected on use.
+        user_id=current_user_id(),
     )
     return jsonify({
         "token": token,
@@ -232,7 +239,7 @@ def agent_play():
         else:
             try:
                 dl = api["get_downloader"](open_browser=False)
-                results = dl.downloader.search_youtube(query, max_results=1, use_ytmusic=True)
+                results = dl.downloader.search_youtube(query, max_results=1, use_ytmusic=prefer_ytmusic())
             except Exception as e:
                 logger.warning("API: Agent search failed: %s", e)
                 return jsonify({"error": "Search failed"}), 502

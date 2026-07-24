@@ -15,6 +15,7 @@ from shared.hardening import (
     SCOPE_PLAYBACK_CONTROL,
     rate_limit,
     require_any_scope,
+    require_instance_admin,
     require_scope,
 )
 from shared.runtime import (
@@ -98,7 +99,7 @@ def _resolve_music_dir(raw: str) -> Path:
 
 
 @setup_bp.route("/api/setup/music-dir", methods=["GET"])
-@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
+@require_instance_admin()
 @rate_limit("setup_music_dir_get", limit=60, window_sec=60)
 def get_music_dir_setting():
     runtime = get_runtime_config()
@@ -115,7 +116,7 @@ def get_music_dir_setting():
 
 
 @setup_bp.route("/api/setup/music-dir", methods=["POST"])
-@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
+@require_instance_admin()
 @rate_limit("setup_music_dir_post", limit=20, window_sec=60)
 def post_music_dir_setting():
     from shared.telemetry import emit

@@ -1,6 +1,6 @@
 /* SolidJS player entry point for mobile, desktop, PWA, and the desktop shell. */
 import { render } from 'solid-js/web';
-import { onMount } from 'solid-js';
+import { Show, createEffect, onMount } from 'solid-js';
 import { HashRouter, Route, useNavigate } from '@solidjs/router';
 import Shell from './app';
 import Home from './routes/Home';
@@ -15,10 +15,14 @@ import Downloads from './routes/Downloads';
 import Migrate from './routes/Migrate';
 import Artist from './routes/Artist';
 import Album from './routes/Album';
+import Login from './routes/Login';
+import Invite from './routes/Invite';
+import Users from './routes/Users';
 import { Placeholder } from './routes/Placeholder';
 import DesignPreview from './pages/DesignPreview';
 import { initStore } from './stores';
 import { initLocale, t } from './lib/i18n';
+import { installSessionGuard, ready, refreshSession, requiresLogin, user } from './lib/session';
 // Self-host the design-system typefaces (DESIGN.md) so they render for every
 // user, not only those who happen to have them installed locally. Subsets load
 // on demand via unicode-range. Plus Jakarta Sans 400/500/600/700, JetBrains
@@ -49,7 +53,8 @@ function installViewportHeightSync() {
 
 installViewportHeightSync();
 initLocale();
-initStore();
+installSessionGuard();
+void refreshSession();
 
 const root = document.getElementById('app');
 if (!root) throw new Error('#app mount point missing');
@@ -60,13 +65,14 @@ function DiscoverRedirect() {
   return <Search />;
 }
 
-render(
-  () => (
+function Player() {
+  return (
     <HashRouter root={Shell}>
       <Route path="/" component={Home} />
       <Route path="/favourites" component={Favourites} />
       <Route path="/search" component={Search} />
       <Route path="/settings" component={Settings} />
+      <Route path="/settings/users" component={Users} />
       <Route path="/discover" component={DiscoverRedirect} />
       <Route path="/playlists" component={Playlists} />
       <Route path="/playlists/:name" component={PlaylistDetail} />
@@ -79,6 +85,38 @@ render(
       <Route path="/preview" component={DesignPreview} />
       <Route path="*" component={() => <Placeholder title={t('placeholder.notFoundTitle')} blurb={t('placeholder.notFoundBlurb')} />} />
     </HashRouter>
-  ),
-  root,
-);
+  );
+}
+
+/** `#/invite/<token>` — the link someone is handed before they have an account. */
+function inviteToken(): string | null {
+  const match = /^#\/invite\/([^/?#]+)/.exec(window.location.hash || '');
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/**
+ * Nothing renders until the engine has told us who we are. Booting the stores
+ * first would fire a burst of library requests as the wrong account — or as
+ * nobody at all — and paint somebody else's data for a frame.
+ */
+function App() {
+  const authenticated = () => !requiresLogin() || Boolean(user());
+  // Read once at mount: redeeming replaces the hash and reloads.
+  const invite = inviteToken();
+
+  createEffect(() => {
+    if (!invite && ready() && authenticated()) initStore();
+  });
+
+  if (invite) return <Invite token={invite} />;
+
+  return (
+    <Show when={ready()} fallback={null}>
+      <Show when={authenticated()} fallback={<Login />}>
+        <Player />
+      </Show>
+    </Show>
+  );
+}
+
+render(() => <App />, root);

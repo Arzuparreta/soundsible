@@ -21,14 +21,14 @@ MAX_CAR_ITEMS = 200
 
 def _get_api():
     from shared.api import get_core, get_track_by_id, get_playback_state, get_scope_from_request
-    from shared.api import favourites_manager
+    from shared.api import get_favourites_manager
 
     return {
         "get_core": get_core,
         "get_track_by_id": get_track_by_id,
         "get_playback_state": get_playback_state,
         "get_scope_from_request": get_scope_from_request,
-        "favourites_manager": favourites_manager,
+        "favourites_manager": get_favourites_manager(),
     }
 
 

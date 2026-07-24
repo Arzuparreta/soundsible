@@ -17,8 +17,32 @@ from watchdog.events import FileSystemEventHandler
 from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, SourceType
 from shared.text_utils import sanitize_cli_message
 from shared.url_utils import normalize_youtube_url, extract_youtube_video_id
+from shared.user_context import current_user_id as _current_user_id
 
 logger = logging.getLogger(__name__)
+
+
+# Log lines produced with nobody bound (startup, admin jobs) go here and are
+# visible to everyone — they never name a track.
+_SHARED_LOG_KEY = "*"
+
+
+def _user_room(user_id: str) -> str:
+    """Local copy of the room name; importing shared.api here would be circular."""
+    return f"user:{user_id}"
+
+
+def _owns(item, user_id):
+    """Whether ``item`` belongs to ``user_id``.
+
+    Items queued before accounts existed carry no owner. They are shown to
+    whoever asks rather than orphaned — the migration tags them, so this only
+    covers rows written by an older process mid-upgrade.
+    """
+    if user_id is None:
+        return True
+    owner = item.get("user_id") if isinstance(item, dict) else None
+    return owner is None or owner == user_id
 
 
 def classify_download_error(error) -> tuple[str, str]:
@@ -241,24 +265,45 @@ def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
 
 
 class LibraryFileWatcher(FileSystemEventHandler):
-    """Watches library.json for changes and triggers SocketIO updates."""
+    """Watches every user's library.json and pushes a refresh to its owner.
 
-    def __init__(self, lib_manager, socketio=None):
-        self.lib_manager = lib_manager
+    Manifests now live in per-account directories, so the watcher runs
+    recursively over the users root and maps the changed path back to whoever
+    owns it — an external edit to one library must not refresh anybody else's.
+    """
+
+    def __init__(self, socketio=None, on_user_library_changed=None):
         self.socketio = socketio
-        self.last_sync = 0
+        self._on_user_library_changed = on_user_library_changed
+        self._last_sync: dict[str, float] = {}
 
     def on_modified(self, event):
-        if event.src_path.endswith(LIBRARY_METADATA_FILENAME):
-            now = time.time()
-            if now - self.last_sync < 2:
-                return
-            self.last_sync = now
+        if not str(event.src_path).endswith(LIBRARY_METADATA_FILENAME):
+            return
 
-            logger.info("API: Detected external change to %s. Refreshing...", LIBRARY_METADATA_FILENAME)
-            self.lib_manager.refresh_if_stale()
-            if self.socketio:
-                self.socketio.emit("library_updated")
+        from shared.user_context import user_id_from_path
+
+        user_id = user_id_from_path(Path(event.src_path))
+        if not user_id:
+            return
+
+        now = time.time()
+        if now - self._last_sync.get(user_id, 0) < 2:
+            return
+        self._last_sync[user_id] = now
+
+        logger.info(
+            "API: Detected external change to %s for user %s. Refreshing...",
+            LIBRARY_METADATA_FILENAME,
+            user_id,
+        )
+        if self._on_user_library_changed:
+            try:
+                self._on_user_library_changed(user_id)
+            except Exception as e:
+                logger.warning("API: library refresh for %s failed: %s", user_id, e)
+        if self.socketio:
+            self.socketio.emit("library_updated", room=_user_room(user_id))
 
 
 class DownloadQueueManager:
@@ -288,20 +333,36 @@ class DownloadQueueManager:
             self.save()
 
         self.is_processing = False
-        self.log_buffer = []
+        self.log_buffers: dict[str, list[str]] = {}
         self.max_logs = 50
         self._progress_emit_min_gap_sec = 0.3
         self._progress_emit_min_pct_delta = 2.0
 
-    def add_log(self, msg):
+    def add_log(self, msg, *, user_id=None):
         log_entry = f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
+        target = user_id or _current_user_id()
         with self.lock:
-            self.log_buffer.append(log_entry)
-            if len(self.log_buffer) > self.max_logs:
-                self.log_buffer.pop(0)
+            # Kept per account: these lines name tracks ("✅ Finished: Artist —
+            # Title"), so one shared buffer would show everyone what everyone
+            # else is downloading.
+            buffer = self.log_buffers.setdefault(target or _SHARED_LOG_KEY, [])
+            buffer.append(log_entry)
+            if len(buffer) > self.max_logs:
+                buffer.pop(0)
         logger.info("API: [Queue] %s", msg)
         if self.socketio:
-            self.socketio.emit("downloader_log", {"data": msg})
+            if target:
+                self.socketio.emit("downloader_log", {"data": msg}, room=_user_room(target))
+            else:
+                # Instance-wide work (startup, admin tasks) with nobody bound.
+                self.socketio.emit("downloader_log", {"data": msg})
+
+    def logs_for(self, user_id=None):
+        """Log lines this account may see: their own, plus instance-wide ones."""
+        with self.lock:
+            shared = list(self.log_buffers.get(_SHARED_LOG_KEY, []))
+            mine = list(self.log_buffers.get(user_id, [])) if user_id else []
+            return sorted(shared + mine)[-self.max_logs :]
 
     def _load(self):
         if self.storage_path.exists():
@@ -322,7 +383,7 @@ class DownloadQueueManager:
         except Exception as e:
             logger.warning("API: Error saving download queue: %s", e)
 
-    def add(self, item):
+    def add(self, item, *, user_id=None):
         with self.lock:
             if not isinstance(item, dict):
                 item = {"song_str": str(item)}
@@ -330,14 +391,22 @@ class DownloadQueueManager:
             item["id"] = item.get("id", str(uuid.uuid4()))
             item["status"] = "pending"
             item["added_at"] = utc_now_iso_z()
+            # Stamped at enqueue time: the pump runs long after the request is
+            # gone and needs to know whose library the result belongs in.
+            item.setdefault("user_id", user_id or _current_user_id())
             self.queue.append(item)
 
         self.save()
         return item
 
-    def get_pending(self):
+    def get_pending(self, user_id=None):
         with self.lock:
-            return [i for i in self.queue if i["status"] == "pending"]
+            return [i for i in self.queue if i["status"] == "pending" and _owns(i, user_id)]
+
+    def list_items(self, user_id=None):
+        """Queue rows visible to ``user_id`` (all of them when ``None``)."""
+        with self.lock:
+            return [dict(i) for i in self.queue if _owns(i, user_id)]
 
     def update_status(self, item_id, status, error=None):
         do_save = False
@@ -375,6 +444,7 @@ class DownloadQueueManager:
     ):
         """Update in-flight download progress; throttles socket emits (≥2% jump or ≥300ms)."""
         emit_payload = None
+        emit_owner = None
         now = time.time()
         found = False
         with self.lock:
@@ -382,6 +452,7 @@ class DownloadQueueManager:
                 if item["id"] != item_id:
                     continue
                 found = True
+                emit_owner = item.get("user_id")
                 if percent is not None:
                     try:
                         item["progress_percent"] = float(percent)
@@ -441,18 +512,24 @@ class DownloadQueueManager:
         self.save()
         if emit_payload and self.socketio:
             try:
-                self.socketio.emit("downloader_update", emit_payload)
+                self._emit_item_update({"user_id": emit_owner}, emit_payload)
             except Exception as e:
                 logger.warning("API: downloader_update emit failed: %s", e)
 
-    def remove_item(self, item_id):
+    def remove_item(self, item_id, *, user_id=None):
         with self.lock:
-            self.queue = [i for i in self.queue if i["id"] != item_id]
+            self.queue = [
+                i for i in self.queue if not (i["id"] == item_id and _owns(i, user_id))
+            ]
         self.save()
 
-    def clear_queue(self):
+    def clear_queue(self, *, user_id=None):
         with self.lock:
-            self.queue = [i for i in self.queue if i["status"] == "downloading"]
+            self.queue = [
+                i
+                for i in self.queue
+                if i["status"] == "downloading" or not _owns(i, user_id)
+            ]
         self.save()
 
     def _evict_failed_and_interrupted(self) -> int:
@@ -468,16 +545,16 @@ class DownloadQueueManager:
             self.queue = kept
         return evicted
 
-    def retry_failed(self, item_id):
+    def retry_failed(self, item_id, *, user_id=None):
         """Reset a failed item back to pending so the pump re-processes it.
 
-        Returns the updated item dict, or ``None`` if the id is unknown
-        or the item is not currently in ``failed`` state.
+        Returns the updated item dict, or ``None`` if the id is unknown, not
+        yours, or the item is not currently in ``failed`` state.
         """
         updated_item = None
         with self.lock:
             for item in self.queue:
-                if item.get("id") != item_id:
+                if item.get("id") != item_id or not _owns(item, user_id):
                     continue
                 if item.get("status") != "failed":
                     return None
@@ -499,8 +576,8 @@ class DownloadQueueManager:
             self.save()
             if self.socketio:
                 try:
-                    self.socketio.emit(
-                        "downloader_update",
+                    self._emit_item_update(
+                        updated_item,
                         {
                             "id": updated_item["id"],
                             "status": "pending",
@@ -511,12 +588,27 @@ class DownloadQueueManager:
                     logger.warning("API: downloader_update emit failed: %s", e)
         return updated_item
 
-    def clear_failed(self) -> int:
-        """Remove all failed/interrupted items from the queue. Returns count."""
+    def clear_failed(self, *, user_id=None) -> int:
+        """Remove your failed/interrupted items from the queue. Returns count."""
         with self.lock:
-            kept = [i for i in self.queue if i.get("status") not in ("failed", "interrupted")]
+            kept = [
+                i
+                for i in self.queue
+                if i.get("status") not in ("failed", "interrupted") or not _owns(i, user_id)
+            ]
             removed = len(self.queue) - len(kept)
             self.queue = kept
         if removed:
             self.save()
         return removed
+
+    def _emit_item_update(self, item, payload) -> None:
+        """Send a queue update to the owner of ``item`` only."""
+        if not self.socketio:
+            return
+        owner = (item or {}).get("user_id") if isinstance(item, dict) else None
+        owner = owner or _current_user_id()
+        if owner:
+            self.socketio.emit("downloader_update", payload, room=_user_room(owner))
+        else:
+            self.socketio.emit("downloader_update", payload)

@@ -4,7 +4,7 @@ import uuid
 from flask import Flask
 
 from shared.api.routes.setup import setup_bp
-from shared.database import DatabaseManager
+from shared.database import DatabaseManager, instance_db
 from shared.hardening import ALL_SCOPES
 from shared.runtime import RuntimeConfig, configure_runtime, get_runtime_config, reset_runtime
 
@@ -67,7 +67,7 @@ def test_get_and_post_music_dir_persists_and_updates_runtime(tmp_path, monkeypat
     _make_runtime(tmp_path)
     app = _make_app()
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     owner = _owner_token(db)
 
     chosen = tmp_path / "chosen_lib"
@@ -107,7 +107,7 @@ def test_post_music_dir_rejects_unsafe_path(tmp_path, monkeypatch):
     _make_runtime(tmp_path)
     app = _make_app()
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     owner = _owner_token(db)
 
     post = client.post(

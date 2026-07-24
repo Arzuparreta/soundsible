@@ -8,7 +8,7 @@ from pathlib import Path
 from flask import Blueprint, request, jsonify
 
 from shared.models import PlayerConfig
-from shared.hardening import SCOPE_ADMIN_CONFIG, rate_limit, require_scope
+from shared.hardening import rate_limit, require_instance_admin
 from shared.runtime import get_config_dir
 
 config_bp = Blueprint("config", __name__, url_prefix="")
@@ -20,7 +20,7 @@ def _get_api():
 
 
 @config_bp.route("/api/config", methods=["GET"])
-@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
+@require_instance_admin()
 @rate_limit("config_get", limit=60, window_sec=60)
 def get_config():
     api = _get_api()
@@ -31,7 +31,7 @@ def get_config():
 
 
 @config_bp.route("/api/config", methods=["POST"])
-@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
+@require_instance_admin()
 @rate_limit("config_update", limit=30, window_sec=60)
 def update_config():
     api = _get_api()
@@ -54,7 +54,8 @@ def update_config():
             f.write(config.to_json())
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+    # Storage backend changed: every account's library manager holds a provider
+    # built from this config, so drop them all and let them rebuild on demand.
     import shared.api as api_mod
-    api_mod.library_manager = None
-    api_mod.get_core()
+    api_mod.reset_user_cores()
     return jsonify({"status": "updated"})

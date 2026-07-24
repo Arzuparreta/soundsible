@@ -1,4 +1,4 @@
-import { createSignal, onMount, For, type JSX } from 'solid-js';
+import { createSignal, onMount, For, Show, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
 import { state, actions } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
@@ -10,6 +10,7 @@ import { DevicesPanel } from '../components/DeviceSheet';
 import { PairedDevicesPanel } from '../components/PairDevice';
 import { t, locale, setLocale, LOCALES, type Locale } from '../lib/i18n';
 import { trackCount } from '../lib/format';
+import { changePassword, isAdmin, logout, user } from '../lib/session';
 import styles from './Settings.module.css';
 
 function Chevron() {
@@ -232,11 +233,63 @@ export default function Settings() {
     }
   };
 
+  const updatePassword = async () => {
+    const me = user();
+    if (!me) return;
+    const current = me.has_password
+      ? await promptDialog({
+          title: t('account.changePassword'),
+          inputLabel: t('account.currentPassword'),
+          confirmLabel: t('common.save'),
+        })
+      : '';
+    if (current === null) return;
+    const next = await promptDialog({
+      title: t('account.changePassword'),
+      inputLabel: t('account.newPassword'),
+      confirmLabel: t('common.save'),
+    });
+    if (!next) return;
+    try {
+      await changePassword(current ?? '', next);
+      toast.success(t('account.passwordChanged'));
+    } catch {
+      toast.error(t('account.passwordFailed'));
+    }
+  };
+
+  const signOut = async () => {
+    const ok = await confirmDialog({
+      title: t('account.signOut'),
+      message: t('account.signOutConfirm'),
+      confirmLabel: t('account.signOut'),
+    });
+    if (ok) await logout();
+  };
+
   return (
     <div class="view">
       <ViewHeader title={t('settings.title')} meta={trackCount(state.library.length)} />
 
       <div class={styles.scroll}>
+        <Show when={user()}>
+          {(me) => (
+            <Group label={t('account.title')}>
+              <div class={styles.panel}>
+                <div class={styles.row}>
+                  <span class={styles.rowLabel}>{t('account.signedInAs', { name: me().display_name })}</span>
+                  <span class={styles.mono}>@{me().username}</span>
+                </div>
+                <ActionRow label={t('account.changePassword')} onClick={updatePassword} />
+                <Show when={isAdmin()}>
+                  <NavRow href="/settings/users" label={t('account.manageUsers')} />
+                </Show>
+                <ActionRow label={t('account.signOut')} onClick={signOut} />
+              </div>
+            </Group>
+          )}
+        </Show>
+
         <Group label={t('settings.appearance')}>
           <div class={styles.panel}>
             <div class={styles.row}>
@@ -315,34 +368,42 @@ export default function Settings() {
             <ActionRow label={t('settings.rescan')} onClick={rescan} disabled={busy()} />
             <ActionRow label={t('settings.purgeFiles')} onClick={purge} />
             <NavRow href="/import" label={t('settings.importFrom')} />
-            <ActionRow label={t('settings.emptyLibrary')} onClick={wipe} danger warn />
+            <Show when={isAdmin()}>
+              <ActionRow label={t('settings.emptyLibrary')} onClick={wipe} danger warn />
+            </Show>
           </div>
         </Group>
 
         <Group label={t('settings.downloads')}>
           <div class={styles.panel}>
-            <div class={styles.row}>
-              <span class={styles.rowLabel}>{t('settings.quality')}</span>
-              <div class={styles.segment} role="group" aria-label={t('settings.quality')}>
-                <For each={QUALITY_OPTIONS}>
-                  {(q) => (
-                    <button
-                      type="button"
-                      class={styles.seg}
-                      classList={{ [styles.segOn]: quality() === q }}
-                      aria-pressed={quality() === q}
-                      onClick={() => changeQuality(q)}
-                    >
-                      {qualityLabel(q)}
-                    </button>
-                  )}
-                </For>
+            {/* Quality, yt-dlp, optimization and cloud sync all act on the shared
+                music pool, so they belong to whoever runs the server. */}
+            <Show when={isAdmin()}>
+              <div class={styles.row}>
+                <span class={styles.rowLabel}>{t('settings.quality')}</span>
+                <div class={styles.segment} role="group" aria-label={t('settings.quality')}>
+                  <For each={QUALITY_OPTIONS}>
+                    {(q) => (
+                      <button
+                        type="button"
+                        class={styles.seg}
+                        classList={{ [styles.segOn]: quality() === q }}
+                        aria-pressed={quality() === q}
+                        onClick={() => changeQuality(q)}
+                      >
+                        {qualityLabel(q)}
+                      </button>
+                    )}
+                  </For>
+                </div>
               </div>
-            </div>
-            <Switch label={t('settings.autoUpdateYtdlp')} checked={autoUpdate()} onChange={toggleAuto} />
+              <Switch label={t('settings.autoUpdateYtdlp')} checked={autoUpdate()} onChange={toggleAuto} />
+            </Show>
             <Switch label={t('settings.learnActivity')} checked={learning()} onChange={toggleLearning} />
-            <ActionRow label={t('settings.optimize')} onClick={optimize} />
-            <ActionRow label={t('settings.sync')} onClick={cloudSync} />
+            <Show when={isAdmin()}>
+              <ActionRow label={t('settings.optimize')} onClick={optimize} />
+              <ActionRow label={t('settings.sync')} onClick={cloudSync} />
+            </Show>
           </div>
         </Group>
 

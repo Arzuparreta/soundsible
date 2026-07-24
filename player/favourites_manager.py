@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Set, List, Callable, Optional
 
 from shared.models import Track
-from shared.runtime import get_config_dir
+from shared.user_context import user_config_dir
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class FavouritesManager:
         self._favourites: Set[str] = set()
         self._lock = threading.RLock()  # Note: Use reentrant lock to prevent deadlocks with callbacks
         self._on_change_callbacks: List[Callable[[], None]] = []
-        self._favourites_file = get_config_dir() / "favourites.json"
+        self._favourites_file = user_config_dir() / "favourites.json"
         
         # Note: Load existing favourites
         self._load_from_file()

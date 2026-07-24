@@ -35,6 +35,20 @@ QUALITY_PROFILES = {
 DEFAULT_QUALITY = os.getenv("DEFAULT_QUALITY", "high")
 
 # Note: Search settings
+# Which YouTube surface to search first. YouTube Music gives cleaner metadata,
+# but it is not always reachable from a datacenter IP — a VPS may have to fall
+# back to plain YouTube. Set SOUNDSIBLE_YT_SEARCH_SOURCE=youtube there instead
+# of patching call sites.
+YT_SEARCH_SOURCE = (os.getenv("SOUNDSIBLE_YT_SEARCH_SOURCE") or "ytmusic").strip().lower()
+
+
+def prefer_ytmusic() -> bool:
+    """Default for ``search_youtube(use_ytmusic=...)``. Read at call time so the
+    environment can change without a reimport."""
+    raw = (os.getenv("SOUNDSIBLE_YT_SEARCH_SOURCE") or "ytmusic").strip().lower()
+    return raw not in ("youtube", "yt", "plain")
+
+
 SEARCH_STRATEGY_PRIMARY = "{artist} - {title} official audio"
 SEARCH_STRATEGY_FALLBACK = "{artist} - {title}"
 DURATION_TOLERANCE_SEC = 20

@@ -9,10 +9,15 @@ from .config import DEFAULT_OUTPUT_DIR, LIBRARY_FILENAME, TRACKS_DIR, DEFAULT_BI
 from .models import LibraryMetadata, Track
 from .audio_utils import AudioProcessor
 
-def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, progress_callback=None, library: Optional[LibraryMetadata] = None, save_callback=None):
+def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, progress_callback=None, library: Optional[LibraryMetadata] = None, save_callback=None) -> Dict[str, Any]:
     """
     Iterates through the library, finds tracks with bitrate > 128kbps (approx),
     and re-encodes them to 128kbps.
+
+    Returns a summary including ``id_map`` (old track id -> new track id).
+    Re-encoding changes the content hash, and the hash *is* the track id, so
+    callers must remap anything that referenced the old one: personal
+    manifests, playlists, favourites.
     """
     def log(msg):
         if progress_callback:
@@ -21,13 +26,14 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
             print(msg)
 
     log(f"Loading library from {library_path}..." + (" (DRY RUN)" if dry_run else ""))
-    
+
     json_path = library_path / LIBRARY_FILENAME
-    
+    summary: Dict[str, Any] = {"optimized": 0, "saved_bytes": 0, "id_map": {}, "dry_run": dry_run}
+
     if library is None:
         if not json_path.exists():
             log("Library not found!")
-            return
+            return summary
 
         try:
             with open(json_path, 'r') as f:
@@ -35,14 +41,15 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
                 library = LibraryMetadata.from_dict(data)
         except Exception as e:
             log(f"Error loading library: {e}")
-            return
+            return summary
     else:
         log("Using provided in-memory library metadata.")
 
     tracks_dir = library_path / TRACKS_DIR
     optimized_count = 0
     saved_space = 0
-    
+    id_map: Dict[str, str] = {}
+
     updated_tracks = []
     
     total_tracks = len(library.tracks)
@@ -123,6 +130,8 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
                         )
                         
                         updated_tracks.append(updated_track)
+                        if updated_track.id != track.id:
+                            id_map[track.id] = updated_track.id
                         saved_space += space_diff
                         optimized_count += 1
                         log(f"   -> Saved {space_diff / 1024 / 1024:.2f} MB")
@@ -139,11 +148,15 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
         else:
             updated_tracks.append(track)
 
+    summary["optimized"] = optimized_count
+    summary["saved_bytes"] = int(saved_space)
+    summary["id_map"] = id_map
+
     if dry_run:
         log(f"\nDry Run Complete!")
         log(f"Potential Tracks to Optimize: {optimized_count}")
         log(f"Estimated Space Savings: {saved_space / 1024 / 1024:.2f} MB")
-        return
+        return summary
 
     # Note: Save logic
     if optimized_count > 0:
@@ -158,6 +171,8 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
         log(f"\nOptimization Complete! Saved {saved_space / 1024 / 1024:.2f} MB")
     else:
         log("\nNo changes needed.")
+
+    return summary
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Optimize music library to 128kbps.")

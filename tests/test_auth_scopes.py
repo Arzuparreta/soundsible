@@ -3,7 +3,7 @@ import uuid
 
 from flask import Flask, jsonify
 
-from shared.database import DatabaseManager
+from shared.database import DatabaseManager, instance_db
 from shared.hardening import (
     SCOPE_ADMIN_CONFIG,
     SCOPE_LIBRARY_READ,
@@ -11,6 +11,7 @@ from shared.hardening import (
     SCOPE_PLAYBACK_CONTROL,
     require_scope,
 )
+from tests.conftest import TEST_USER_ID
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 
 
@@ -65,7 +66,7 @@ def test_auth_token_lookup_revocation_and_expiry(tmp_path):
     expired_id = str(uuid.uuid4())
     revoked_id = str(uuid.uuid4())
 
-    db.create_auth_token(active_id, _hash("active"), kind="agent", scopes=[SCOPE_PLAYBACK_CONTROL])
+    db.create_auth_token(active_id, _hash("active"), kind="agent", scopes=[SCOPE_PLAYBACK_CONTROL], user_id=TEST_USER_ID)
     db.create_auth_token(
         expired_id,
         _hash("expired"),
@@ -73,7 +74,7 @@ def test_auth_token_lookup_revocation_and_expiry(tmp_path):
         scopes=[SCOPE_LIBRARY_READ],
         expires_at="2000-01-01 00:00:00",
     )
-    db.create_auth_token(revoked_id, _hash("revoked"), kind="agent", scopes=[SCOPE_LIBRARY_READ])
+    db.create_auth_token(revoked_id, _hash("revoked"), kind="agent", scopes=[SCOPE_LIBRARY_READ], user_id=TEST_USER_ID)
     db.revoke_auth_token(revoked_id)
 
     active = db.get_auth_token_by_hash(_hash("active"))
@@ -87,9 +88,9 @@ def test_scope_enforcement_allows_only_matching_token(tmp_path):
     reset_runtime()
     _make_runtime(tmp_path, advanced_mode=False)
     app = _make_app()
-    db = DatabaseManager()
-    db.create_auth_token(str(uuid.uuid4()), _hash("play"), kind="agent", scopes=[SCOPE_PLAYBACK_CONTROL])
-    db.create_auth_token(str(uuid.uuid4()), _hash("read"), kind="agent", scopes=[SCOPE_LIBRARY_READ])
+    db = instance_db()
+    db.create_auth_token(str(uuid.uuid4()), _hash("play"), kind="agent", scopes=[SCOPE_PLAYBACK_CONTROL], user_id=TEST_USER_ID)
+    db.create_auth_token(str(uuid.uuid4()), _hash("read"), kind="agent", scopes=[SCOPE_LIBRARY_READ], user_id=TEST_USER_ID)
 
     client = app.test_client()
 

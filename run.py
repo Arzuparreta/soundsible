@@ -32,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lan-enabled", dest="lan_enabled", action="store_true", help="Enable LAN access in runtime config.")
     parser.add_argument("--no-lan", dest="lan_enabled", action="store_false", help="Disable LAN access in runtime config.")
     parser.add_argument("--advanced-mode", action="store_true", help="Enable advanced/headless runtime mode.")
+    parser.add_argument(
+        "--users",
+        nargs=argparse.REMAINDER,
+        help="Manage accounts, e.g. --users list. Run --users -h for the full set.",
+    )
     parser.set_defaults(lan_enabled=None)
     return parser
 
@@ -677,6 +682,12 @@ class SoundsibleLauncher:
 if __name__ == "__main__":
     args = build_parser().parse_args()
     _build_runtime_config(args, desktop_defaults=args.desktop_engine)
+    if args.users is not None:
+        # Account admin runs against the database directly — no engine, no
+        # browser, no account needed to get the first one created.
+        from shared.users_cli import main as users_cli_main
+
+        raise SystemExit(users_cli_main(args.users))
     if args.desktop_engine:
         raise SystemExit(run_desktop_engine_cli(sys.argv[1:]))
     if args.daemon:

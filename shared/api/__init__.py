@@ -15,7 +15,7 @@ import time
 from html import escape as html_escape
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify, send_file, send_from_directory, Response, stream_with_context, redirect, make_response
+from flask import Flask, g, request, jsonify, send_file, send_from_directory, Response, stream_with_context, redirect, make_response
 from flask_socketio import SocketIO, emit, join_room
 from flask_cors import CORS
 
@@ -227,6 +227,114 @@ def _set_security_headers(resp):
     return resp
 
 
+# ---------------------------------------------------------------------------
+# Identity gate
+#
+# Most read routes carry no scope decorator — they predate accounts, when every
+# caller was the same person. Rather than decorate ~126 endpoints and hope none
+# is missed, authentication happens once here: no request reaches a blueprint
+# without a resolved user, and every request runs with that user bound so the
+# managers underneath read the right directories.
+# ---------------------------------------------------------------------------
+
+# Endpoints reachable before you are anybody: the login itself, the check the
+# player uses to decide whether to show a login screen, health for the shell,
+# and the pairing claim a new device performs with only a visible code.
+PUBLIC_API_PATHS = frozenset({
+    "/api/auth/state",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/health",
+    "/api/pairing/sessions/claim",
+})
+
+# Redeeming an invitation happens before you have an account, so these two
+# cannot require one. The token itself is the credential.
+PUBLIC_API_PREFIXES = ("/api/invites/",)
+PUBLIC_API_SUFFIXES = ("/preview", "/accept")
+
+
+def _resolve_request_user_id() -> Optional[str]:
+    """Identity behind this request, or ``None`` when it is anonymous."""
+    from shared.users import sole_passwordless_user
+
+    context = get_request_auth_context(allow_trusted_network=True)
+    user_id = (context or {}).get("user_id")
+    if user_id:
+        return user_id
+    # One account, no password: the instance behaves exactly like it did before
+    # accounts existed, so the lone user is implied.
+    sole = sole_passwordless_user()
+    return sole["id"] if sole else None
+
+
+def _api_request_is_public() -> bool:
+    path = (request.path or "").rstrip("/")
+    if not path.startswith("/api/"):
+        return True
+    if request.method == "OPTIONS":
+        return True
+    if path in PUBLIC_API_PATHS:
+        return True
+    # `/api/invites/<token>/preview` and `/…/accept`, but never the admin
+    # collection routes that list or mint invitations.
+    return path.startswith(PUBLIC_API_PREFIXES) and path.endswith(PUBLIC_API_SUFFIXES)
+
+
+@app.before_request
+def _bind_request_user():
+    from shared.user_context import bind_user
+    from shared.users import instance_requires_login
+
+    g._soundsible_user_token = None
+    user_id = _resolve_request_user_id()
+
+    if user_id is None and instance_requires_login() and not _api_request_is_public():
+        return jsonify({"error": "Authentication required", "code": "login_required"}), 401
+
+    if user_id:
+        g._soundsible_user_token = bind_user(user_id)
+    return None
+
+
+@app.teardown_request
+def _unbind_request_user(_exc=None):
+    from shared.user_context import unbind_user
+
+    token = getattr(g, "_soundsible_user_token", None)
+    if token is not None:
+        unbind_user(token)
+        g._soundsible_user_token = None
+
+
+USER_ROOM_PREFIX = "user:"
+
+
+def user_room(user_id: str) -> str:
+    """Socket.IO room carrying one person's library and downloader events."""
+    return f"{USER_ROOM_PREFIX}{user_id}"
+
+
+def emit_to_user(event: str, payload: Any = None, *, user_id: Optional[str] = None) -> None:
+    """Emit a personal event to one account's sockets.
+
+    Library and downloader updates describe somebody's private library, so they
+    are never broadcast. With no account resolvable the event is dropped rather
+    than sent to everyone — a lost refresh beats a leak.
+    """
+    from shared.user_context import current_user_id
+
+    uid = user_id or current_user_id()
+    if not uid:
+        logger.debug("API: dropping %s emit with no user bound", event)
+        return
+    room = user_room(uid)
+    if payload is None:
+        socketio.emit(event, room=room)
+    else:
+        socketio.emit(event, payload, room=room)
+
+
 @socketio.on('playback_register')
 def on_playback_register(data):
     """Register this socket for playback stop requests. Join room playback:{scope}:{device_id}."""
@@ -245,17 +353,35 @@ def on_playback_register(data):
     mark_device_socket_active(scope, device_id, request.sid)
 
 
+def _join_user_room_for_socket() -> None:
+    """Subscribe this socket to its owner's personal event room."""
+    user_id = _resolve_request_user_id()
+    if user_id:
+        join_room(user_room(user_id), sid=request.sid)
+
+
 @socketio.on("connect")
 def on_socket_connect(auth=None):
+    from shared.users import instance_requires_login
+
     runtime = get_runtime_config()
     remote_addr = request.remote_addr or ""
-    if runtime.advanced_mode:
-        return True
-    if remote_addr in {"127.0.0.1", "::1"} and not runtime.lan_enabled:
-        return True
-    context = get_request_auth_context(allow_trusted_network=False)
+    context = get_request_auth_context(allow_trusted_network=True)
+
     if context and (context.get("kind") == "owner" or SCOPE_PLAYBACK_CONTROL in set(context.get("scopes") or [])):
+        _join_user_room_for_socket()
         return True
+
+    # Once the instance has accounts, a local or LAN address proves nothing
+    # about who is connecting — the socket carries library events.
+    if not instance_requires_login():
+        if runtime.advanced_mode:
+            _join_user_room_for_socket()
+            return True
+        if remote_addr in {"127.0.0.1", "::1"} and not runtime.lan_enabled:
+            _join_user_room_for_socket()
+            return True
+
     logger.warning("Socket.IO connect denied for remote=%s origin=%s", remote_addr, request.headers.get("Origin"))
     return False
 
@@ -391,39 +517,103 @@ def serve_web_player_assets(path):
     return resp
 
 # Note: Global instances
-library_manager = None
 playback_engine = None
-queue_manager = None
-favourites_manager = None
 downloader_service = None
 _downloader_lock = threading.Lock()  # Note: Prevent concurrent init when many discover/resolve requests hit at once
+# One queue for the whole instance: downloads land in a shared pool, and a single
+# pump keeps total concurrency bounded no matter how many people are queueing.
+# Each item carries `user_id`, and the routes only ever show you your own.
 queue_manager_dl = DownloadQueueManager(socketio=socketio)
 api_observer = None  # Note: Store observer reference for cleanup in daemon mode
 _api_shutdown_lock = threading.Lock()
 _api_shutdown_done = False
 
-def get_core():
-    global library_manager, playback_engine, queue_manager, favourites_manager
-    if not library_manager:
-        logger.info("API: Initializing Library Manager...")
-        library_manager = LibraryManager()
-        # Note: Ensure we have metadata loaded from local cache at minimum
-        if not library_manager.metadata:
-            logger.info("API: No metadata in memory, checking cache...")
-            cache_path = get_config_dir() / LIBRARY_METADATA_FILENAME
-            library_manager._load_from_cache(cache_path)
-            # Note: If cache looks like it's from a different path (e.g. old install), don't use it
-            if library_manager.metadata and library_manager._is_cache_likely_stale():
-                logger.info("API: Cached library does not match current music path; starting fresh.")
-                library_manager.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-                library_manager._save_metadata()
 
-        logger.info("API: Initializing Queue, Playback Engine and Favourites...")
-        queue_manager = QueueManager()
-        favourites_manager = FavouritesManager()
-        # Note: API server runs headless; web player uses browser for playback. skip MPV to avoid blocking on display/audio.
-        playback_engine = None
-    return library_manager, playback_engine, queue_manager
+class _UserCore:
+    """One person's library, queue, and favourites."""
+
+    __slots__ = ("library", "queue", "favourites")
+
+    def __init__(self, library, queue, favourites):
+        self.library = library
+        self.queue = queue
+        self.favourites = favourites
+
+
+_user_cores: dict[str, _UserCore] = {}
+_user_cores_lock = threading.RLock()
+
+
+def _build_user_core(user_id: str) -> _UserCore:
+    logger.info("API: Initializing core services for user %s...", user_id)
+    library = LibraryManager()
+    # Note: Ensure we have metadata loaded from local cache at minimum
+    if not library.metadata:
+        logger.info("API: No metadata in memory, checking cache...")
+        library._load_from_cache(library.manifest_path)
+        # Note: If cache looks like it's from a different path (e.g. old install), don't use it
+        if library.metadata and library._is_cache_likely_stale():
+            logger.info("API: Cached library does not match current music path; starting fresh.")
+            library.metadata = None
+
+    if not library.metadata:
+        # A new account has no manifest yet. Write an empty one now so its
+        # library reads as "empty", not "not loaded" — otherwise the first
+        # playlist or favourite would come back 404.
+        library.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+        library._save_metadata()
+
+    # Note: API server runs headless; web player uses browser for playback. skip MPV to avoid blocking on display/audio.
+    return _UserCore(library, QueueManager(), FavouritesManager())
+
+
+def get_user_core(user_id: Optional[str] = None) -> _UserCore:
+    """Core services for ``user_id`` (default: the user bound to this request).
+
+    Cores are cached per account. Building one reads that person's manifest, so
+    it must happen inside their context — hence the explicit rebind below rather
+    than trusting whatever is bound at call time.
+    """
+    from shared.user_context import require_user_id, user_context
+
+    uid = user_id or require_user_id()
+    with _user_cores_lock:
+        core = _user_cores.get(uid)
+        if core is None:
+            with user_context(uid):
+                core = _build_user_core(uid)
+            _user_cores[uid] = core
+        return core
+
+
+def drop_user_core(user_id: str) -> None:
+    """Forget a cached core (config change, account deleted)."""
+    with _user_cores_lock:
+        _user_cores.pop(user_id, None)
+
+
+def reset_user_cores() -> None:
+    """Forget every cached core (tests, storage reconfiguration)."""
+    with _user_cores_lock:
+        _user_cores.clear()
+
+
+def get_core():
+    """Legacy triple used across the blueprints: ``(library, playback, queue)``."""
+    core = get_user_core()
+    return core.library, playback_engine, core.queue
+
+
+def get_favourites_manager(user_id: Optional[str] = None):
+    return get_user_core(user_id).favourites
+
+
+def get_queue_manager(user_id: Optional[str] = None):
+    return get_user_core(user_id).queue
+
+
+def get_library_manager(user_id: Optional[str] = None):
+    return get_user_core(user_id).library
 
 def get_downloader(output_dir=None, open_browser=False, log_callback=None):
     global downloader_service
@@ -581,18 +771,33 @@ def _fill_youtube_runtime_hint(dl, song_str: str, item: dict, metadata_evidence:
 
 
 def _process_single_queue_item(item):
-    """Worker function for A single download queue item."""
+    """Worker function for A single download queue item.
+
+    Runs bound to whoever queued the item: the pump is a background thread, so
+    without that binding the finished track would have no library to land in.
+    """
+    from shared.user_context import user_context
+
+    with user_context(item.get("user_id")):
+        _process_single_queue_item_bound(item)
+
+
+def _process_single_queue_item_bound(item):
     global downloader_service, queue_manager_dl
     item_id = item['id']
     song_str = item.get('song_str')
     output_dir = item.get('output_dir')
     source_type = item.get('source_type') or 'manual'
+    item_user_id = item.get('user_id')
     metadata_evidence = item.get('metadata_evidence') if isinstance(item.get('metadata_evidence'), dict) else {}
+
+    def _emit_item(payload):
+        queue_manager_dl._emit_item_update(item, payload)
 
     queue_manager_dl.add_log(f"Preparing: {song_str or item_id}...")
     queue_manager_dl.update_status(item_id, 'downloading')
     with app.app_context():
-        socketio.emit('downloader_update', {'id': item_id, 'status': 'downloading'})
+        _emit_item({'id': item_id, 'status': 'downloading'})
 
     try:
         dl = get_downloader(output_dir, log_callback=queue_manager_dl.add_log)
@@ -617,8 +822,7 @@ def _process_single_queue_item(item):
                         queue_manager_dl.update_status(item_id, "completed")
                         with app.app_context():
                             queue_manager_dl.remove_item(item_id)
-                            socketio.emit(
-                                "downloader_update",
+                            _emit_item(
                                 {"id": item_id, "status": "completed", "track": td, "duplicate": True},
                             )
                         queue_manager_dl.add_log(f"Already in library: {t.title}")
@@ -752,12 +956,13 @@ def _process_single_queue_item(item):
                 except Exception as e:
                     logger.warning("API: Pre-cache cover failed: %s", e)
 
-            # Note: Sync to main soundsible core
-            _sync_odst_to_main_core()
-            
+            # Note: Add to the requesting user's library — and only theirs. The
+            # file itself lives in the pool everyone shares.
+            add_tracks_to_user_library([shared_track], user_id=item_user_id)
+
             with app.app_context():
                 queue_manager_dl.remove_item(item_id)
-                socketio.emit('downloader_update', {'id': item_id, 'status': 'completed', 'track': track_dict})
+                _emit_item({'id': item_id, 'status': 'completed', 'track': track_dict})
             queue_manager_dl.add_log(f"✅ Finished: {track.artist} - {track.title}")
         else:
             raise Exception("Downloader returned no track. Check logs for details.")
@@ -766,8 +971,7 @@ def _process_single_queue_item(item):
         logger.warning("API Downloader Error: %s", e)
         failed_item = queue_manager_dl.update_status(item_id, 'failed', error=str(e)) or {}
         with app.app_context():
-            socketio.emit(
-                'downloader_update',
+            _emit_item(
                 {
                     'id': item_id,
                     'status': 'failed',
@@ -907,7 +1111,7 @@ def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str]
     track.metadata_modified_by_user = True
     lib._save_metadata()
     _mirror_track_into_odst_downloader(track)
-    socketio.emit('library_updated')
+    emit_to_user('library_updated')
     return True
 
 
@@ -937,33 +1141,117 @@ def _warm_downloader():
         pass
 
 
-def _sync_odst_to_main_core():
-    """Helper to sync ODST library metadata back to the main Soundsible core."""
-    dl = get_downloader()
+def _loaded_user_library():
+    """Current user's library manager with metadata guaranteed to be present."""
     lib, _, _ = get_core()
-    
-    # Note: Ensure main library is loaded
-    cache_path = get_config_dir() / LIBRARY_METADATA_FILENAME
-    if not lib.metadata and cache_path.exists():
-        lib._load_from_cache(cache_path)
+    if not lib.metadata and lib.manifest_path.exists():
+        lib._load_from_cache(lib.manifest_path)
     if not lib.metadata:
         lib.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    
-    # Note: Merge all tracks from ODST to core
-    changed = False
-    for track in dl.library.tracks:
-        if not lib.metadata.get_track_by_id(track.id):
-            track_dict = track.to_dict()
-            track_dict.pop("local_path", None)
-            shared_track = Track.from_dict(track_dict)
-            lib.metadata.add_track(shared_track)
-            changed = True
-            
-    if changed:
+    return lib
+
+
+def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None) -> int:
+    """Put specific tracks into one person's library.
+
+    Downloads land in a pool everyone shares, so what makes a track *yours* is
+    this entry. Only the tracks you asked for are added — merging the whole
+    ODST catalog would hand you everybody else's downloads.
+    """
+    from shared.user_context import current_user_id
+
+    target = user_id or current_user_id()
+    if not target:
+        logger.debug("API: no user bound; not adding %d track(s) to a library", len(list(tracks)))
+        return 0
+
+    lib = get_user_core(target).library
+    if not lib.metadata:
+        _loaded_user_library()
+
+    added = 0
+    for track in tracks:
+        if lib.metadata.get_track_by_id(track.id):
+            continue
+        track_dict = track.to_dict()
+        track_dict.pop("local_path", None)
+        lib.metadata.add_track(Track.from_dict(track_dict))
+        added += 1
+
+    if added:
         def _emit_updated():
             with app.app_context():
-                socketio.emit('library_updated')
+                emit_to_user('library_updated', user_id=target)
         orchestrator.schedule_metadata_commit(lib._save_metadata, _emit_updated)
+    return added
+
+
+def _sync_odst_to_main_core():
+    """Merge the whole ODST catalog into the bound user's library.
+
+    Only correct for whole-catalog operations the admin runs, never for a single
+    download — see :func:`add_tracks_to_user_library`.
+    """
+    dl = get_downloader()
+    _loaded_user_library()
+    return add_tracks_to_user_library(dl.library.tracks)
+
+
+def remap_track_ids_for_all_users(id_map: dict) -> dict:
+    """Rewrite track ids across every account after files were re-encoded.
+
+    Optimization changes each file's content hash, and the hash is the track
+    id. Without this pass every manifest, playlist, and favourite that pointed
+    at the old id would go dead — for everyone, not just whoever ran it.
+    """
+    from shared.user_context import user_context
+    from shared.users import list_users
+
+    if not id_map:
+        return {}
+
+    touched: dict[str, int] = {}
+    for account in list_users():
+        user_id = account["id"]
+        try:
+            with user_context(user_id):
+                core = get_user_core(user_id)
+                lib = core.library
+                if not lib.metadata:
+                    lib._load_from_cache(lib.manifest_path)
+                if not lib.metadata:
+                    continue
+
+                changed = 0
+                for track in lib.metadata.tracks:
+                    new_id = id_map.get(track.id)
+                    if new_id:
+                        track.id = new_id
+                        track.file_hash = new_id
+                        changed += 1
+
+                for name, ids in list(lib.metadata.playlists.items()):
+                    lib.metadata.playlists[name] = [id_map.get(tid, tid) for tid in ids]
+
+                covers = (lib.metadata.settings or {}).get("playlist_covers")
+                if isinstance(covers, dict):
+                    for name, tid in list(covers.items()):
+                        if tid in id_map:
+                            covers[name] = id_map[tid]
+
+                for old_id, new_id in id_map.items():
+                    if core.favourites.is_favourite(old_id):
+                        core.favourites.remove(old_id)
+                        core.favourites.add(new_id)
+
+                if changed:
+                    lib.metadata.version += 1
+                    lib._save_metadata()
+                    touched[user_id] = changed
+                    emit_to_user("library_updated", user_id=user_id)
+        except Exception as e:
+            logger.warning("API: could not remap optimized track ids for user %s: %s", user_id, e)
+    return touched
 
 
 def run_optimization_task(dry_run):
@@ -973,26 +1261,46 @@ def run_optimization_task(dry_run):
             mode = "DRY RUN" if dry_run else "LIVE"
             queue_manager_dl.add_log(f"--- Starting Library Optimization ({mode}) ---")
             def cb(msg): queue_manager_dl.add_log(f"🔧 {msg}")
-            
-            optimize_library(
-                dl.output_dir, 
-                dry_run=dry_run, 
+
+            summary = optimize_library(
+                dl.output_dir,
+                dry_run=dry_run,
                 progress_callback=cb,
                 library=dl.library,
                 save_callback=dl.save_library
-            )
-            
+            ) or {}
+
             if not dry_run:
-                _sync_odst_to_main_core()
-                
+                touched = remap_track_ids_for_all_users(summary.get("id_map") or {})
+                if touched:
+                    queue_manager_dl.add_log(
+                        f"Updated track ids in {len(touched)} librar"
+                        f"{'y' if len(touched) == 1 else 'ies'}."
+                    )
+
             queue_manager_dl.add_log("--- Optimization Finished ---")
         except Exception as e:
             queue_manager_dl.add_log(f"❌ Optimization Error: {e}")
-            
+
     orchestrator.submit_task("optimization", _task)
 
 
 def run_sync_task():
+    # Cloud sync is an instance-level action and runs on a background thread, so
+    # capture who asked for it while we still have a request context. The tracks
+    # it pulls back land in that person's library.
+    from shared.user_context import current_user_id, user_context
+
+    requester_id = current_user_id()
+
+    def _task():
+        with user_context(requester_id):
+            _run_sync_task_bound()
+
+    orchestrator.submit_task("sync", _task)
+
+
+def _run_sync_task_bound():
     def _task():
         try:
             dl = get_downloader(log_callback=queue_manager_dl.add_log)
@@ -1023,7 +1331,7 @@ def run_sync_task():
             import traceback
             traceback.print_exc()
 
-    orchestrator.submit_task("sync", _task)
+    _task()
 
 
 # Note: Blueprints details
@@ -1039,6 +1347,7 @@ from shared.api.routes.pairing import pairing_bp
 from shared.api.routes.setup import setup_bp
 from shared.api.routes.migration import migration_bp
 from shared.api.routes.car import car_bp
+from shared.api.routes.auth import auth_bp
 app.register_blueprint(library_bp)
 app.register_blueprint(playback_bp)
 app.register_blueprint(downloader_bp)
@@ -1051,30 +1360,60 @@ app.register_blueprint(pairing_bp)
 app.register_blueprint(setup_bp)
 app.register_blueprint(migration_bp)
 app.register_blueprint(car_bp)
+app.register_blueprint(auth_bp)
 
 
 @app.route('/api/health')
 def health_check():
+    """Liveness probe.
+
+    Reachable without a session (the desktop shell and the player poll it before
+    they know who they are), so the anonymous payload is deliberately thin: no
+    server paths, no PID, no account count, no running job ids. Everything that
+    describes the machine — or hints that more than one person uses it — needs
+    ``admin:instance``.
+    """
+    from shared.ffmpeg_runtime import ffmpeg_status
+    from shared.hardening import request_is_admin_user
+
     runtime = get_runtime_config()
-    stats = {"tracks": 0, "local": 0, "cloud": 0}
-    config_exists = False
+    ffmpeg = ffmpeg_status()
+    payload = {
+        "status": "healthy",
+        "version": os.getenv("SOUNDSIBLE_VERSION", "0.0.0-dev"),
+        "ffmpeg": {"available": bool(ffmpeg.get("available"))},
+        "uptime_seconds": round(time.time() - API_STARTED_AT, 3),
+    }
+
+    # Your own library counts, once we know who you are.
     try:
-        stats = DatabaseManager().get_stats()
+        from shared.user_context import current_user_id
+
+        if current_user_id():
+            payload["library"] = DatabaseManager().get_stats()
     except Exception:
         logger.debug("Health: failed to collect library stats", exc_info=True)
+
+    if not request_is_admin_user():
+        return jsonify(payload)
+
+    config_exists = False
+    accounts = 0
     try:
         config_exists = (runtime.config_dir / "config.json").exists()
     except Exception:
         pass
-    from shared.ffmpeg_runtime import ffmpeg_status
+    try:
+        from shared.users import count_users
 
-    return jsonify(
+        accounts = count_users()
+    except Exception:
+        logger.debug("Health: failed to count accounts", exc_info=True)
+
+    payload.update(
         {
-            "status": "healthy",
-            "version": os.getenv("SOUNDSIBLE_VERSION", "0.0.0-dev"),
-            "ffmpeg": ffmpeg_status(),
+            "ffmpeg": ffmpeg,
             "pid": os.getpid(),
-            "uptime_seconds": round(time.time() - API_STARTED_AT, 3),
             "base_url": f"http://{runtime.host}:{runtime.port}",
             "host": runtime.host,
             "port": runtime.port,
@@ -1088,7 +1427,7 @@ def health_check():
             "advanced_mode": runtime.advanced_mode,
             "lan_enabled": runtime.lan_enabled,
             "config_exists": config_exists,
-            "library": stats,
+            "accounts": accounts,
             "jobs": {
                 "active_count": len(orchestrator.active_jobs),
                 "active_ids": sorted(orchestrator.active_jobs.keys()),
@@ -1096,6 +1435,7 @@ def health_check():
             },
         }
     )
+    return jsonify(payload)
 
 @app.route('/')
 def home():
@@ -1196,6 +1536,16 @@ def start_api(
     migrate_legacy_app_dirs(runtime)
     ensure_runtime_directories(runtime)
     init_telemetry(runtime)
+    # Accounts before anything else: every manager below resolves its paths
+    # through the bound user, so the instance needs at least one to exist.
+    from shared.multiuser_migration import ensure_multiuser_layout
+
+    _migration = ensure_multiuser_layout()
+    if _migration and _migration.get("adopted_existing_library"):
+        logger.info(
+            "API: Existing library adopted by account %r; originals kept as *.singleuser.bak",
+            _migration.get("username"),
+        )
     logger.info("--- Soundsible API Boot Sequence ---")
     logger.info("Target Host: %s", runtime.host)
     logger.info("Target Port: %s", runtime.port)
@@ -1220,9 +1570,17 @@ def start_api(
     _run_ytdlp_update = None
 
     try:
-        lib, _, _ = get_core()
+        # Warm the admin's core so the first request is not the one that pays
+        # for loading a manifest. Everyone else's is built on demand.
+        from shared.user_context import user_context
+        from shared.users import get_admin_user
+
+        _admin = get_admin_user()
+        if _admin:
+            with user_context(_admin["id"]):
+                get_core()
         logger.info("API: Core services initialized successfully.")
-        
+
         # Note: Optional auto-update yt-dlp in background if user enabled it (thread started after terminal message)
         try:
             from dotenv import dotenv_values
@@ -1278,15 +1636,23 @@ def start_api(
         except Exception:
             logger.debug("API: yt-dlp auto-update setup skipped due to error", exc_info=True)
 
-        # Note: Start library file watcher
-        config_dir = get_config_dir()
-        config_dir.mkdir(parents=True, exist_ok=True)
+        # Note: Start library file watcher. Manifests live one directory per
+        # account, so watch the users root recursively and let the handler map
+        # each changed path back to its owner.
+        from shared.user_context import users_config_root
 
-        event_handler = LibraryFileWatcher(lib, socketio)
+        users_root = users_config_root()
+        users_root.mkdir(parents=True, exist_ok=True)
+
+        def _refresh_user_library(user_id: str) -> None:
+            with user_context(user_id):
+                get_user_core(user_id).library.refresh_if_stale()
+
+        event_handler = LibraryFileWatcher(socketio, on_user_library_changed=_refresh_user_library)
         api_observer = Observer()
-        api_observer.schedule(event_handler, str(config_dir), recursive=False)
+        api_observer.schedule(event_handler, str(users_root), recursive=True)
         api_observer.start()
-        logger.info("API: Library File Watcher started on %s", config_dir)
+        logger.info("API: Library File Watcher started on %s", users_root)
 
         # Note: Auto-start the downloader pump so queued items begin processing
         # immediately without waiting for a manual trigger from the frontend.

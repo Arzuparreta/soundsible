@@ -9,7 +9,7 @@ import pytest
 from flask import Flask
 
 import shared.lyrics as lyrics_module
-from shared.database import DatabaseManager
+from shared.database import instance_db
 from shared.models import Track
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 
@@ -177,7 +177,7 @@ def test_lyrics_track_not_found(monkeypatch):
 
 
 def test_db_negative_cache_expires(tmp_path):
-    db = DatabaseManager()
+    db = instance_db()
     db.set_lyrics("t1", synced=None, plain=None, instrumental=False, source="lrclib:v2")
     assert db.get_lyrics("t1") is not None
     with db._get_connection() as conn:
@@ -195,7 +195,7 @@ def test_db_negative_cache_expires(tmp_path):
 
 
 def test_db_old_negative_cache_is_invalidated_immediately(tmp_path):
-    db = DatabaseManager()
+    db = instance_db()
     db.set_lyrics("old", synced=None, plain=None, instrumental=False, source="lrclib")
     assert db.get_lyrics("old") is None
 

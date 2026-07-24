@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, Future
 import requests
 from flask import Blueprint, Response, jsonify, request
 
-from shared.database import DatabaseManager
+from shared.database import instance_db
 from shared.discovery_intelligence import (
     POSITIVE_LISTENING_EVENTS,
     build_music_recommendations,
@@ -28,6 +28,8 @@ from shared.discovery_intelligence import (
 )
 from shared.hardening import SCOPE_ADMIN_CONFIG, require_scope
 from shared.hardening import rate_limit
+
+from odst_tool.config import prefer_ytmusic
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +87,11 @@ def _podcast_row_from_itunes_search(r: dict) -> dict | None:
 
 def _get_api():
     import shared.api as api_mod
+    from shared.user_context import current_user_id
+
     return {
         "get_core": api_mod.get_core,
+        "user_id": current_user_id(),
         "get_downloader": api_mod.get_downloader,
         "queue_manager_dl": api_mod.queue_manager_dl,
         "start_downloader_pump": api_mod.start_downloader_pump,
@@ -143,7 +148,7 @@ def discovery_save():
       {status: "failed",       reason, candidates: [...]}
     """
     from shared.resolution_confidence import best_candidate, classify_confidence, CONFIDENCE_HIGH
-    from shared.database import DatabaseManager
+    from shared.database import instance_db
 
     data = request.get_json(silent=True) or {}
     artist = (data.get("artist") or "").strip()
@@ -172,7 +177,7 @@ def discovery_save():
         )
 
     # — Check resolution cache —
-    db = DatabaseManager()
+    db = instance_db()
     cached = db.get_cached_resolution(artist, title)
     if cached and cached.get("confidence") is not None:
         score = cached["confidence"]
@@ -195,7 +200,7 @@ def discovery_save():
     try:
         dl = api["get_downloader"](open_browser=False)
         q = f"{title} {artist}".strip()
-        raw_results = dl.downloader.search_youtube(q, max_results=6, use_ytmusic=True)
+        raw_results = dl.downloader.search_youtube(q, max_results=6, use_ytmusic=prefer_ytmusic())
     except Exception as exc:
         logger.warning("discovery/save: YouTube search failed: %s", exc)
         return jsonify({"status": "failed", "reason": "search_error", "candidates": []}), 502
@@ -292,7 +297,7 @@ def _queue_confirmed(
         _json.dumps(parsed, sort_keys=True, default=str).encode()
     ).hexdigest()
 
-    new_item = api["queue_manager_dl"].add(parsed)
+    new_item = api["queue_manager_dl"].add(parsed, user_id=api["user_id"])
     try:
         if not api["queue_manager_dl"].is_processing:
             api["start_downloader_pump"]()
@@ -602,7 +607,7 @@ def discovery_music_recommendations():
         pass
     metadata = getattr(lib, "metadata", None)
     mod = api["_mod"]
-    fav_manager = getattr(mod, "favourites_manager", None)
+    fav_manager = mod.get_favourites_manager()
     fav_ids = fav_manager.get_all() if fav_manager is not None else []
     return jsonify(build_music_recommendations(metadata, fav_ids, limit=limit))
 
@@ -611,7 +616,11 @@ def discovery_music_recommendations():
 @rate_limit("discovery_music_feed", limit=120, window_sec=60)
 def discovery_music_feed():
     limit = min(50, max(1, request.args.get("limit", type=int) or 24))
-    cache_key = f"music-feed-v3:{limit}"
+    # The feed is built from your library, your favourites, and your listening
+    # history, so the cache key has to carry who "you" are.
+    from shared.user_context import current_user_id
+
+    cache_key = f"music-feed-v3:{current_user_id() or '-'}:{limit}"
     now = time.time()
     cached = _MUSIC_FEED_CACHE.get(cache_key)
     if cached and cached[0] > now:
@@ -627,7 +636,7 @@ def discovery_music_feed():
         pass
     metadata = getattr(lib, "metadata", None)
     mod = api["_mod"]
-    fav_manager = getattr(mod, "favourites_manager", None)
+    fav_manager = mod.get_favourites_manager()
     fav_ids = fav_manager.get_all() if fav_manager is not None else []
 
     try:
@@ -1005,7 +1014,7 @@ def _resolve_seed_yt_id(track) -> str:
     title = (getattr(track, "title", "") or "").strip()
     if not artist or not title:
         return ""
-    db = DatabaseManager()
+    db = instance_db()
     cached = db.get_cached_resolution(artist, title)
     if cached and cached.get("id"):
         return str(cached["id"])
@@ -1014,7 +1023,7 @@ def _resolve_seed_yt_id(track) -> str:
         api = _get_api()
         dl = api["get_downloader"](open_browser=False)
         raw = dl.downloader.search_youtube(
-            f"{title} {artist}".strip(), max_results=6, use_ytmusic=True
+            f"{title} {artist}".strip(), max_results=6, use_ytmusic=prefer_ytmusic()
         )
         if not raw:
             db.set_cached_resolution(artist, title, {
@@ -1052,7 +1061,7 @@ def _expand_seed(video_id: str, request_id: str | None, seed_track_id: str | Non
         results = dl.downloader.get_related_videos(
             video_id, max_results=_DISCOVER_RECS_PER_SEED, enrich=False
         )
-        DatabaseManager().set_related_mix(video_id, results)
+        instance_db().set_related_mix(video_id, results)
         if request_id and seed_track_id:
             mod = api["_mod"]
             sio = getattr(mod, "socketio", None)
@@ -1132,7 +1141,7 @@ def discover_feed():
     limit = min(50, max(1, request.args.get("limit", _DISCOVER_RECS_PER_SEED, type=int)))
     request_id = str(uuid.uuid4())
 
-    db = DatabaseManager()
+    db = instance_db()
     ready: list[dict] = []
     pending: list[str] = []
 
@@ -1180,7 +1189,7 @@ def discover_warm():
         vid = _resolve_seed_yt_id(track)
         if not vid:
             continue
-        if DatabaseManager().get_related_mix(vid) is None:
+        if instance_db().get_related_mix(vid) is None:
             _schedule_expand(vid)
             warmed += 1
     return jsonify({"status": "scheduled", "warmed": warmed})
@@ -1198,7 +1207,7 @@ def warm_discover_seeds(track_ids: list[str]) -> None:
             vid = _resolve_seed_yt_id(track)
             if not vid:
                 continue
-            if DatabaseManager().get_related_mix(vid) is None:
+            if instance_db().get_related_mix(vid) is None:
                 _schedule_expand(vid)
         except Exception as exc:
             logger.debug("discover warm: seed %s failed: %s", tid, exc)
@@ -1217,7 +1226,7 @@ def _top_warm_seed_ids(limit: int = _WARM_TOP_N) -> list[str]:
     # Note: Filter out podcasts (no artist/title or marked as podcast).
     tracks = [t for t in tracks if t.artist and t.title]
     mod = api["_mod"]
-    fav_manager = getattr(mod, "favourites_manager", None)
+    fav_manager = mod.get_favourites_manager()
     fav_ids = set(fav_manager.get_all() if fav_manager is not None else [])
     # Note: Favourites first, then newest additions. Favourites are the strongest
     # taste signal; recent additions are the most likely current picks.

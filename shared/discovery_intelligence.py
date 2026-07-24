@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from shared.models import LibraryMetadata, Track
-from shared.runtime import get_config_dir, get_runtime_config
-from shared.telemetry import emit
+from shared.telemetry import emit, user_telemetry_dir
+from shared.user_context import user_config_dir
 
 SETTINGS_VERSION = 1
 DEFAULT_SETTINGS = {
@@ -51,12 +51,15 @@ class ListeningRollup:
 
 
 def _listening_events_paths() -> list[Path]:
-    """Return candidate JSONL paths in newest-first order (base + up to 2 rotations)."""
+    """Return candidate JSONL paths in newest-first order (base + up to 2 rotations).
+
+    Listening history is per person, so this reads the bound user's telemetry
+    directory — recommendations must never be built from somebody else's plays.
+    """
     try:
-        data_dir = get_runtime_config().data_dir
+        base = user_telemetry_dir() / "listening-events.jsonl"
     except Exception:
         return []
-    base = data_dir / "telemetry" / "listening-events.jsonl"
     paths = [base]
     for i in (1, 2):
         rot = base.parent / f"{base.name}.{i}"
@@ -123,7 +126,7 @@ def load_listening_event_rollups(max_events: int = 2000) -> ListeningRollup:
 
 
 def _settings_path() -> Path:
-    return get_config_dir() / "discovery_settings.json"
+    return user_config_dir() / "discovery_settings.json"
 
 
 def load_discovery_settings() -> dict[str, Any]:

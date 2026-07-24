@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, g, jsonify, request
 
-from shared.database import DatabaseManager
+from shared.database import DatabaseManager, instance_db
 from shared.hardening import (
     SCOPE_ADMIN_CONFIG,
     SCOPE_DOWNLOAD_ADD,
@@ -37,7 +37,7 @@ PAIRING_ALLOWED_SCOPES = set(PAIRING_DEFAULT_SCOPES) | PAIRING_OPTIONAL_SCOPES
 
 
 def _db() -> DatabaseManager:
-    return DatabaseManager()
+    return instance_db()
 
 
 def _hash_token(token: str) -> str:
@@ -148,6 +148,27 @@ def _pairing_connect_payload(record: dict) -> dict:
     }
 
 
+def _caller_user_id():
+    """Account behind this request. Pairing is per person, never instance-wide."""
+    from shared.user_context import current_user_id
+
+    return current_user_id()
+
+
+def _own_session(session_id: str):
+    """Fetch a pairing session only if it belongs to the caller."""
+    session = _db().get_pairing_session(session_id)
+    if not session:
+        return None
+    caller = _caller_user_id()
+    owner = session.get("user_id")
+    # Sessions created before accounts existed have no owner; they stay visible
+    # while the instance still has a single account.
+    if owner and caller and owner != caller:
+        return None
+    return session
+
+
 def _mint_paired_device_token(*, session: dict) -> tuple[str, dict]:
     token = secrets.token_urlsafe(32)
     token_id = str(uuid.uuid4())
@@ -158,6 +179,8 @@ def _mint_paired_device_token(*, session: dict) -> tuple[str, dict]:
         scopes=session.get("granted_scopes") or list(PAIRING_DEFAULT_SCOPES),
         name=session.get("device_name") or "Paired device",
         device_type=session.get("device_type") or "phone",
+        # The phone acts as whoever started the pairing, not as the admin.
+        user_id=session.get("user_id"),
     )
     return token, record
 
@@ -198,7 +221,10 @@ def require_pairing_scope(*required_scopes: str):
 @require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("pairing_sessions_list", limit=60, window_sec=60)
 def list_pairing_sessions():
-    records = [_session_response(record) for record in _db().list_pairing_sessions()]
+    records = [
+        _session_response(record)
+        for record in _db().list_pairing_sessions(user_id=_caller_user_id())
+    ]
     return jsonify({"sessions": records})
 
 
@@ -228,6 +254,7 @@ def create_pairing_session():
         expires_at=expires_at,
         auto_confirm=auto_confirm,
         display_active=display_active,
+        user_id=_caller_user_id(),
     )
     return jsonify(_session_response(record)), 201
 
@@ -275,7 +302,7 @@ def claim_pairing_session():
 @require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("pairing_sessions_confirm", limit=20, window_sec=60)
 def confirm_pairing_session(session_id: str):
-    session = _db().get_pairing_session(session_id)
+    session = _own_session(session_id)
     if not session:
         return jsonify({"error": "Pairing session not found"}), 404
     if session["status"] != "claimed":
@@ -296,6 +323,8 @@ def confirm_pairing_session(session_id: str):
 @require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("pairing_sessions_display_open", limit=30, window_sec=60)
 def display_open_pairing_session(session_id: str):
+    if not _own_session(session_id):
+        return jsonify({"error": "Pairing session not found or already closed"}), 404
     data = request.get_json(silent=True) or {}
     auto_confirm = data.get("auto_confirm")
     if auto_confirm is not None:
@@ -314,6 +343,8 @@ def display_open_pairing_session(session_id: str):
 @require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("pairing_sessions_display_close", limit=30, window_sec=60)
 def display_close_pairing_session(session_id: str):
+    if not _own_session(session_id):
+        return jsonify({"error": "Pairing session not found or already closed"}), 404
     session = _db().set_pairing_session_display_state(
         session_id,
         display_active=False,
@@ -327,6 +358,8 @@ def display_close_pairing_session(session_id: str):
 @require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("pairing_sessions_cancel", limit=20, window_sec=60)
 def cancel_pairing_session(session_id: str):
+    if not _own_session(session_id):
+        return jsonify({"error": "Pairing session not found or already closed"}), 404
     session = _db().cancel_pairing_session(session_id)
     if not session:
         return jsonify({"error": "Pairing session not found or already closed"}), 404
@@ -339,7 +372,7 @@ def cancel_pairing_session(session_id: str):
 def list_paired_devices():
     tokens = [
         _paired_device_response(record)
-        for record in _db().list_auth_tokens(kind="paired_device")
+        for record in _db().list_auth_tokens(kind="paired_device", user_id=_caller_user_id())
         if record.get("revoked_at") is None
     ]
     return jsonify({"devices": tokens})
@@ -350,7 +383,12 @@ def list_paired_devices():
 @rate_limit("paired_devices_revoke", limit=20, window_sec=60)
 def revoke_paired_device(token_id: str):
     record = _db().get_auth_token(token_id)
+    caller = _caller_user_id()
     if not record or record.get("kind") != "paired_device":
+        return jsonify({"error": "Paired device not found"}), 404
+    if record.get("user_id") and caller and record["user_id"] != caller:
+        # Indistinguishable from a wrong id on purpose: revoking somebody
+        # else's phone must not even confirm that it exists.
         return jsonify({"error": "Paired device not found"}), 404
     if record.get("revoked_at") is None:
         _db().revoke_auth_token(token_id)

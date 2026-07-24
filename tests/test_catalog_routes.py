@@ -75,6 +75,7 @@ def _fake_api(metadata):
     return {
         "get_core": MagicMock(return_value=(_FakeLibrary(metadata), None, None)),
         "get_downloader": MagicMock(),
+        "user_id": "testuser",
         "queue_manager_dl": queue,
         "start_downloader_pump": MagicMock(),
         "parse_intake_item": lambda item: ({**item, "output_dir": None}, None),
@@ -214,7 +215,7 @@ def test_resolve_candidates_skips_warm_on_db_cache_hit(monkeypatch, tmp_path):
         "candidates": [],
     }
     fake_db.get_cached_resolution.return_value = cached_row
-    monkeypatch.setattr(catalog_routes, "DatabaseManager", lambda: fake_db)
+    monkeypatch.setattr(catalog_routes, "instance_db", lambda: fake_db)
 
     fake_api = _fake_api(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     monkeypatch.setattr(catalog_routes, "_get_api", lambda: fake_api)

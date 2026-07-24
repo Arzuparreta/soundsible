@@ -1,6 +1,6 @@
 import json
 
-from shared.database import DatabaseManager
+from shared.database import instance_db
 from shared.desktop_runtime import (
     OWNER_TOKEN_KIND,
     clear_runtime_state,
@@ -36,7 +36,7 @@ def _make_runtime(tmp_path) -> RuntimeConfig:
 def test_ensure_owner_token_rotates_to_single_owner_token(tmp_path):
     reset_runtime()
     runtime = _make_runtime(tmp_path)
-    db = DatabaseManager()
+    db = instance_db()
 
     runtime, token = ensure_owner_token(runtime)
     assert token

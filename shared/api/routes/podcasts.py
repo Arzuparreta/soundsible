@@ -29,9 +29,13 @@ _fetch_lock = threading.Lock()
 
 
 def _get_api():
-    from shared.api import _ensure_lib_metadata, socketio
+    from shared.api import _ensure_lib_metadata, emit_to_user, socketio
 
-    return {"_ensure_lib_metadata": _ensure_lib_metadata, "socketio": socketio}
+    return {
+        "_ensure_lib_metadata": _ensure_lib_metadata,
+        "socketio": socketio,
+        "emit_to_user": emit_to_user,
+    }
 
 
 def _subscription_by_id(metadata: LibraryMetadata, feed_id: str) -> Optional[Dict[str, Any]]:
@@ -120,7 +124,7 @@ def subscribe():
         "episodes": eps[:500],
     }
     lib._save_metadata()
-    api["socketio"].emit("library_updated")
+    api["emit_to_user"]("library_updated")
     return jsonify({"status": "success", "subscription": sub})
 
 
@@ -140,7 +144,7 @@ def unsubscribe(feed_id: str):
         return jsonify({"error": "Not found"}), 404
     metadata.podcast_episode_cache.pop(feed_id, None)
     lib._save_metadata()
-    api["socketio"].emit("library_updated")
+    api["emit_to_user"]("library_updated")
     return jsonify({"status": "success"})
 
 

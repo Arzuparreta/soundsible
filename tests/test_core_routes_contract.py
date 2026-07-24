@@ -12,9 +12,10 @@ from flask import Flask
 from shared.api.routes.library import library_bp
 from shared.api.routes.playback import playback_bp
 from shared.api.routes.downloader import downloader_bp
-from shared.database import DatabaseManager
+from shared.database import DatabaseManager, instance_db
 from shared.hardening import ALL_SCOPES
 from shared.models import LibraryMetadata, Track
+from tests.conftest import TEST_USER_ID
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 
 
@@ -103,6 +104,7 @@ def _owner_token(db: DatabaseManager) -> str:
         scopes=sorted(ALL_SCOPES),
         name="owner",
         device_type="desktop-shell",
+        user_id=TEST_USER_ID,
     )
     return token
 
@@ -128,6 +130,7 @@ def _patch_library_api(monkeypatch, metadata):
         "socketio": MagicMock(),
         "get_downloader": lambda **kw: MagicMock(),
         "favourites_manager": MagicMock(),
+        "emit_to_user": MagicMock(),
         "is_trusted_network": lambda: True,
         "LibraryMetadata": LibraryMetadata,
     })
@@ -163,7 +166,7 @@ def test_library_sync_returns_success(tmp_path, monkeypatch):
     app = Flask(__name__)
     app.register_blueprint(library_bp)
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     token = _owner_token(db)
 
     resp = client.post(
@@ -193,13 +196,14 @@ def test_library_favourites_toggle(tmp_path, monkeypatch):
         "get_track_by_id": lambda lib, tid: {t.id: t for t in metadata.tracks}.get(tid),
         "socketio": MagicMock(),
         "favourites_manager": fav,
+        "emit_to_user": MagicMock(),
         "is_trusted_network": lambda: True,
     })
 
     app = Flask(__name__)
     app.register_blueprint(library_bp)
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     token = _owner_token(db)
 
     resp = client.post(
@@ -328,9 +332,12 @@ def _patch_downloader_api(monkeypatch):
     fake_svc.is_processing = False
     fake_svc.log_buffer = []
     fake_svc.add.return_value = {"id": "dl1"}
+    fake_svc.list_items.return_value = []
+    fake_svc.logs_for.return_value = []
     monkeypatch.setattr("shared.api.routes.downloader._get_api", lambda: {
         "get_core": lambda: (_FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None),
         "get_downloader": lambda **kw: fake_dl,
+        "user_id": "testuser",
         "queue_manager_dl": fake_svc,
         "start_downloader_pump": lambda: None,
         "parse_intake_item": lambda item: (item, None),
@@ -347,7 +354,7 @@ def test_downloader_queue_add_and_status(tmp_path, monkeypatch):
     app = Flask(__name__)
     app.register_blueprint(downloader_bp)
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     token = _owner_token(db)
 
     resp = client.post(

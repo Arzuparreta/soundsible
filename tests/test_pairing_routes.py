@@ -4,7 +4,7 @@ import uuid
 from flask import Flask
 
 from shared.api.routes.pairing import pairing_bp
-from shared.database import DatabaseManager
+from shared.database import DatabaseManager, instance_db
 from shared.hardening import ALL_SCOPES
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 
@@ -57,7 +57,7 @@ def test_pairing_session_flow_claim_confirm_verify_and_revoke(tmp_path):
     _make_runtime(tmp_path)
     app = _make_app()
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     owner_token = _owner_token(db)
 
     created = client.post(
@@ -129,7 +129,7 @@ def test_pairing_claim_rejects_reuse_and_cancel_closes_session(tmp_path):
     _make_runtime(tmp_path)
     app = _make_app()
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     owner_token = _owner_token(db)
 
     created = client.post(
@@ -184,7 +184,7 @@ def test_pairing_connect_payload_and_auto_confirm_while_display_is_open(tmp_path
     configure_runtime(runtime)
     app = _make_app()
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     owner_token = _owner_token(db)
 
     monkeypatch.setattr("shared.api.get_active_endpoints", lambda: ["192.168.1.50"])
@@ -233,7 +233,7 @@ def test_display_close_disables_auto_confirm(tmp_path, monkeypatch):
     configure_runtime(runtime)
     app = _make_app()
     client = app.test_client()
-    db = DatabaseManager()
+    db = instance_db()
     owner_token = _owner_token(db)
 
     monkeypatch.setattr("shared.api.get_active_endpoints", lambda: ["192.168.1.50"])

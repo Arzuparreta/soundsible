@@ -123,9 +123,9 @@ def migration_import_playlist():
         lib.metadata.add_to_playlist(name, tid)
     lib._save_metadata()
 
-    from shared.api import socketio
+    from shared.api import emit_to_user
 
-    socketio.emit("library_updated")
+    emit_to_user("library_updated")
 
     batch_id = data.get("batch_id")
     apply_payload: dict[str, Any] = {
