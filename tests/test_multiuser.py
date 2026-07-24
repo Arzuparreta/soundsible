@@ -586,6 +586,40 @@ def test_users_cli_reports_a_missing_account_instead_of_crashing(capsys):
     assert "No account named" in capsys.readouterr().err
 
 
+def test_owner_can_rename_itself_over_http_without_login(client):
+    """The migrated account is named "owner"; nobody should be stuck with it.
+
+    A single passwordless account is bound automatically, so this works without
+    a login step — exactly the single-user case on the local machine.
+    """
+    from shared.users import get_user_by_username
+
+    ensure_multiuser_layout()
+
+    res = client.post("/api/auth/profile", json={"display_name": "Rubén", "username": "ruben"})
+    assert res.status_code == 200
+    body = res.get_json()["user"]
+    assert body["username"] == "ruben"
+    assert body["display_name"] == "Rubén"
+    assert get_user_by_username("owner") is None
+
+
+def test_profile_rename_is_self_service_but_rejects_a_taken_username(client):
+    summary = ensure_multiuser_layout()
+    set_password(summary["user_id"], "hunter22")
+    create_user("ana", password="secret123")
+    _login(client, "ana", "secret123")
+
+    # She can set her own display name.
+    assert client.post("/api/auth/profile", json={"display_name": "Ana"}).status_code == 200
+    assert client.get("/api/auth/me").get_json()["user"]["display_name"] == "Ana"
+
+    # But not steal the owner's username.
+    assert client.post("/api/auth/profile", json={"username": "owner"}).status_code == 400
+    # And it never touches anyone else: the owner is still the owner.
+    assert client.get("/api/auth/me").get_json()["user"]["username"] == "ana"
+
+
 def test_session_tokens_are_stored_hashed_only():
     summary = ensure_multiuser_layout()
     set_password(summary["user_id"], "hunter22")

@@ -10,7 +10,7 @@ import { DevicesPanel } from '../components/DeviceSheet';
 import { PairedDevicesPanel } from '../components/PairDevice';
 import { t, locale, setLocale, LOCALES, type Locale } from '../lib/i18n';
 import { trackCount } from '../lib/format';
-import { changePassword, isAdmin, logout, user } from '../lib/session';
+import { changePassword, isAdmin, logout, updateProfile, user } from '../lib/session';
 import styles from './Settings.module.css';
 
 function Chevron() {
@@ -233,6 +233,43 @@ export default function Settings() {
     }
   };
 
+  const editName = async () => {
+    const me = user();
+    if (!me) return;
+    const name = await promptDialog({
+      title: t('account.changeName'),
+      inputLabel: t('account.name'),
+      initial: me.display_name,
+      confirmLabel: t('common.save'),
+    });
+    if (!name || name.trim() === me.display_name) return;
+    try {
+      await updateProfile({ display_name: name.trim() });
+      toast.success(t('account.nameChanged'));
+    } catch {
+      toast.error(t('account.nameFailed'));
+    }
+  };
+
+  const editUsername = async () => {
+    const me = user();
+    if (!me) return;
+    const name = await promptDialog({
+      title: t('account.changeUsername'),
+      message: t('account.usernameHint'),
+      inputLabel: t('account.username'),
+      initial: me.username,
+      confirmLabel: t('common.save'),
+    });
+    if (!name || name.trim() === me.username) return;
+    try {
+      await updateProfile({ username: name.trim() });
+      toast.success(t('account.usernameChanged'));
+    } catch {
+      toast.error(t('account.usernameFailed'));
+    }
+  };
+
   const updatePassword = async () => {
     const me = user();
     if (!me) return;
@@ -246,6 +283,7 @@ export default function Settings() {
     if (current === null) return;
     const next = await promptDialog({
       title: t('account.changePassword'),
+      message: t('account.passwordHint'),
       inputLabel: t('account.newPassword'),
       confirmLabel: t('common.save'),
     });
@@ -254,7 +292,9 @@ export default function Settings() {
       await changePassword(current ?? '', next);
       toast.success(t('account.passwordChanged'));
     } catch {
-      toast.error(t('account.passwordFailed'));
+      // The most common causes are a too-short new password or a wrong current
+      // one; the generic toast never said which.
+      toast.error(t('account.passwordFailedHint'));
     }
   };
 
@@ -280,6 +320,8 @@ export default function Settings() {
                   <span class={styles.rowLabel}>{t('account.signedInAs', { name: me().display_name })}</span>
                   <span class={styles.mono}>@{me().username}</span>
                 </div>
+                <ActionRow label={t('account.changeName')} onClick={editName} />
+                <ActionRow label={t('account.changeUsername')} onClick={editUsername} />
                 <ActionRow label={t('account.changePassword')} onClick={updatePassword} />
                 <Show when={isAdmin()}>
                   <NavRow href="/settings/users" label={t('account.manageUsers')} />

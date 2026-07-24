@@ -138,6 +138,33 @@ def auth_logout():
     return response
 
 
+@auth_bp.route("/api/auth/profile", methods=["POST"])
+@rate_limit("auth_profile", limit=20, window_sec=60)
+def auth_update_profile():
+    """Change your own name — display name and/or the username you log in with.
+
+    Self-service, so no admin scope: it only ever touches the caller's own
+    account. (The migrated account is named "owner"; nobody should be stuck
+    with that.)
+    """
+    user_id = current_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        user = update_user(
+            user_id,
+            display_name=data.get("display_name"),
+            username=data.get("username"),
+        )
+    except UserError as e:
+        return jsonify({"error": str(e)}), 400
+    if user is None:
+        return jsonify({"error": "Account not found"}), 404
+    return jsonify({"user": user})
+
+
 @auth_bp.route("/api/auth/password", methods=["POST"])
 @rate_limit("auth_password", limit=10, window_sec=60)
 def auth_change_password():

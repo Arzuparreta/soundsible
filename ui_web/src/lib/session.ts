@@ -85,6 +85,13 @@ export async function logout(): Promise<void> {
   }
 }
 
+/** Change your own name — display name and/or login username. */
+export async function updateProfile(patch: { display_name?: string; username?: string }): Promise<User> {
+  const res = await request<{ user: User }>('/api/auth/profile', { method: 'POST', body: patch });
+  setUser(res.user);
+  return res.user;
+}
+
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
   await request<void>('/api/auth/password', {
     method: 'POST',
