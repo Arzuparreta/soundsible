@@ -287,7 +287,6 @@ def invites_create():
     role = str(data.get("role") or ROLE_MEMBER)
     try:
         token, invite = create_invite(
-            display_name=data.get("display_name"),
             role=role if role in (ROLE_ADMIN, ROLE_MEMBER) else ROLE_MEMBER,
             created_by=admin_id,
         )
@@ -312,7 +311,7 @@ def invites_peek(token: str):
     invite = peek_invite(token)
     if not invite:
         return jsonify({"valid": False}), 404
-    return jsonify({"valid": True, "display_name": invite.get("display_name")})
+    return jsonify({"valid": True})
 
 
 @auth_bp.route("/api/invites/<token>/accept", methods=["POST"])

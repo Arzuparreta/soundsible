@@ -638,7 +638,6 @@ export const zh: Dict = {
   },
   invite: {
     title: '设置你的播放器',
-    titleNamed: '欢迎，{name}',
     blurb: '选择一个用户名和密码即可开始。',
     username: '用户名',
     password: '密码',
@@ -654,9 +653,6 @@ export const zh: Dict = {
     intro: '每个人都有自己的音乐库、播放列表、队列和历史记录。音频文件共享存储，因此不会重复下载。',
     adminOnly: '只有管理员可以管理账户。',
     setYourPasswordFirst: '添加成员前请先为自己的账户设置密码，否则局域网内任何人都能访问此服务器。',
-    inviteTitle: '邀请成员',
-    inviteMsg: '可选：用于问候的名称。',
-    inviteConfirm: '创建链接',
     invite: '创建邀请链接',
     inviteCopied: '链接已复制 — 发送给对方',
     inviteReady: '链接已就绪 — 在下方复制',

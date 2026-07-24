@@ -469,7 +469,8 @@ def test_invited_person_creates_their_own_account_and_lands_signed_in(client):
     set_password(summary["user_id"], "hunter22")
     _login(client, "owner", "hunter22")
 
-    created = client.post("/api/invites", json={"display_name": "Mamá"})
+    # The invitation carries no name — the admin does not pre-label anyone.
+    created = client.post("/api/invites", json={})
     assert created.status_code == 201
     url = created.get_json()["url"]
     token = url.rsplit("/", 1)[-1]
@@ -477,24 +478,26 @@ def test_invited_person_creates_their_own_account_and_lands_signed_in(client):
 
     client.post("/api/auth/logout")
 
-    # She opens the link: it tells her who it is for, nothing about the server.
+    # The link says nothing about who it is for, or about the server.
     preview = client.get(f"/api/invites/{token}/preview")
     assert preview.status_code == 200
-    body = preview.get_json()
-    assert body == {"valid": True, "display_name": "Mamá"}
+    assert preview.get_json() == {"valid": True}
 
+    # She picks her own name (username) — the account is hers, not "Mamá".
     accepted = client.post(
         f"/api/invites/{token}/accept",
-        json={"username": "mama", "password": "sucontrasena"},
+        json={"username": "ana", "password": "sucontrasena"},
     )
     assert accepted.status_code == 201
-    assert accepted.get_json()["user"]["username"] == "mama"
-    assert accepted.get_json()["user"]["role"] == ROLE_MEMBER
+    user = accepted.get_json()["user"]
+    assert user["username"] == "ana"
+    assert user["display_name"] == "ana"
+    assert user["role"] == ROLE_MEMBER
 
     # Signed in already — no second login step.
     me = client.get("/api/auth/me")
     assert me.status_code == 200
-    assert me.get_json()["user"]["username"] == "mama"
+    assert me.get_json()["user"]["username"] == "ana"
 
     # And she is a member: no roster, no server settings.
     assert client.get("/api/users").status_code == 403
@@ -566,7 +569,7 @@ def test_users_cli_bootstraps_renames_and_invites(capsys):
     assert users_cli(["create", "mama", "--password", "sucontrasena"]) == 0
     capsys.readouterr()
 
-    assert users_cli(["invite", "--display-name", "Hermana", "--base-url", "http://10.0.0.2:5005"]) == 0
+    assert users_cli(["invite", "--base-url", "http://10.0.0.2:5005"]) == 0
     out = capsys.readouterr().out
     assert "http://10.0.0.2:5005/player/#/invite/" in out
 

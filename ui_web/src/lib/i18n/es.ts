@@ -652,7 +652,6 @@ export const es: Dict = {
   },
   invite: {
     title: 'Configura tu reproductor',
-    titleNamed: 'Bienvenida, {name}',
     blurb: 'Elige un nombre y una contraseña y ya está.',
     username: 'Usuario',
     password: 'Contraseña',
@@ -668,9 +667,6 @@ export const es: Dict = {
     intro: 'Cada persona tiene su biblioteca, sus playlists, su cola y su historial. Los ficheros de música se comparten, así que nada se descarga dos veces.',
     adminOnly: 'Solo un admin puede gestionar cuentas.',
     setYourPasswordFirst: 'Pon una contraseña a tu cuenta antes de añadir a nadie — si no, el servidor queda abierto a cualquiera de la red.',
-    inviteTitle: 'Invitar a alguien',
-    inviteMsg: 'Opcional: un nombre para saludarle.',
-    inviteConfirm: 'Crear enlace',
     invite: 'Crear enlace de invitación',
     inviteCopied: 'Enlace copiado — mándaselo',
     inviteReady: 'Enlace listo — cópialo abajo',

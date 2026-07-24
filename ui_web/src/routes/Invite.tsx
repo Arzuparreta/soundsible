@@ -11,7 +11,7 @@ import styles from './Login.module.css';
  * as "set up your player", which is all the person needs to know.
  */
 export default function Invite(props: { token: string }) {
-  const [preview] = createResource<{ valid: boolean; display_name?: string | null }, string>(
+  const [preview] = createResource<{ valid: boolean }, string>(
     () => props.token,
     (token) => invites.preview(token).catch(() => ({ valid: false })),
   );
@@ -51,11 +51,7 @@ export default function Invite(props: { token: string }) {
               <p class={styles.blurb}>{t('invite.invalidBlurb')}</p>
             </Match>
             <Match when={preview()?.valid}>
-              <h1 class={styles.title}>
-                {preview()?.display_name
-                  ? t('invite.titleNamed', { name: preview()!.display_name as string })
-                  : t('invite.title')}
-              </h1>
+              <h1 class={styles.title}>{t('invite.title')}</h1>
               <p class={styles.blurb}>{t('invite.blurb')}</p>
             </Match>
           </Switch>

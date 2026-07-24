@@ -112,7 +112,6 @@ export interface CreateUserInput {
 
 export interface Invite {
   id: string;
-  display_name?: string | null;
   role: Role;
   created_at?: string | null;
   expires_at?: string | null;
@@ -122,17 +121,16 @@ export interface Invite {
 
 export const invites = {
   list: () => request<{ invites: Invite[] }>('/api/invites'),
-  create: (displayName?: string) =>
+  // Anonymous by design: the person who redeems it chooses their own name.
+  create: () =>
     request<{ invite: Invite; token: string; url: string }>('/api/invites', {
       method: 'POST',
-      body: { display_name: displayName || undefined },
+      body: {},
     }),
   revoke: (id: string) => request<{ status: string }>(`/api/invites/${id}`, { method: 'DELETE' }),
-  /** Public: does this link still work, and who is it for? */
+  /** Public: does this link still work? Carries no identity. */
   preview: (token: string) =>
-    request<{ valid: boolean; display_name?: string | null }>(
-      `/api/invites/${encodeURIComponent(token)}/preview`,
-    ),
+    request<{ valid: boolean }>(`/api/invites/${encodeURIComponent(token)}/preview`),
   /** Public: create the account the link stands for and sign in. */
   accept: (token: string, username: string, password: string) =>
     request<{ user: User }>(`/api/invites/${encodeURIComponent(token)}/accept`, {

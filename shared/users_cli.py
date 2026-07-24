@@ -52,8 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--admin", action="store_true", help="Create as an admin.")
 
     invite = sub.add_parser("invite", help="Mint a one-time invitation link.")
-    invite.add_argument("--display-name", help="Name to greet the person by.")
-    invite.add_argument("--base-url", help="Address they can reach, e.g. http://100.85.98.18:5005")
+    invite.add_argument("--base-url", help="Address they can reach, e.g. http://84.247.161.82:5005")
     invite.add_argument("--admin", action="store_true", help="Invite as an admin.")
 
     sub.add_parser("invites", help="List invitations.")
@@ -148,7 +147,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         elif args.command == "invite":
             token, invite = create_invite(
-                display_name=args.display_name,
                 role=ROLE_ADMIN if args.admin else ROLE_MEMBER,
             )
             base = (args.base_url or "").rstrip("/")

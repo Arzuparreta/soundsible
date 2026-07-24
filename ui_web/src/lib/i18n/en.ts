@@ -645,7 +645,6 @@ export const en = {
   },
   invite: {
     title: 'Set up your player',
-    titleNamed: 'Welcome, {name}',
     blurb: 'Pick a name and a password and you are in.',
     username: 'Username',
     password: 'Password',
@@ -661,9 +660,6 @@ export const en = {
     intro: 'Everyone here gets their own library, playlists, queue and history. Music files are shared, so nothing is downloaded twice.',
     adminOnly: 'Only an admin can manage accounts.',
     setYourPasswordFirst: 'Set a password on your own account before adding people — otherwise the server stays open to anyone on the network.',
-    inviteTitle: 'Invite someone',
-    inviteMsg: 'Optional: a name to greet them by.',
-    inviteConfirm: 'Create link',
     invite: 'Create invite link',
     inviteCopied: 'Link copied — send it to them',
     inviteReady: 'Link ready — copy it below',

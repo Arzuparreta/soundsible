@@ -416,15 +416,15 @@ def _public_invite(row: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
 
 def create_invite(
     *,
-    display_name: Optional[str] = None,
     role: str = ROLE_MEMBER,
     created_by: Optional[str] = None,
     ttl_days: int = INVITE_TTL_DAYS,
 ) -> tuple[str, dict[str, Any]]:
     """Mint a one-time invitation. Returns ``(token, record)``.
 
-    The plaintext token is returned once — only its hash is stored, so the
-    link in somebody's chat history is the only copy.
+    Invitations carry no name: whoever redeems one picks their own. The
+    plaintext token is returned once — only its hash is stored, so the link in
+    somebody's chat history is the only copy.
     """
     if role not in (ROLE_ADMIN, ROLE_MEMBER):
         raise UserError(f"Unknown role: {role!r}")
@@ -437,7 +437,6 @@ def create_invite(
         uuid.uuid4().hex,
         _hash_token(token),
         expires_at=expires_at,
-        display_name=(display_name or "").strip() or None,
         role=role,
         created_by=created_by,
     )
@@ -478,10 +477,11 @@ def redeem_invite(token: str, *, username: str, password: str) -> dict[str, Any]
     if not db.consume_invite(row["id"], created_user_id=placeholder_id):
         raise UserError("This invitation has already been used.")
 
+    # The account's name is whatever the person chose — an invitation carries no
+    # identity, so nobody is greeted by a name the admin picked for them.
     return create_user(
         name,
         password=password,
-        display_name=row.get("display_name") or name,
         role=row.get("role") or ROLE_MEMBER,
         user_id=placeholder_id,
     )

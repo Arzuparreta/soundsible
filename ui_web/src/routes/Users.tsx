@@ -57,15 +57,10 @@ export default function Users_() {
   };
 
   const invite = async () => {
-    const name = await promptDialog({
-      title: t('users.inviteTitle'),
-      message: t('users.inviteMsg'),
-      inputLabel: t('users.displayName'),
-      confirmLabel: t('users.inviteConfirm'),
-    });
-    if (name === null) return;
+    // The link is anonymous — no name is attached. Whoever opens it picks their
+    // own. So this is one tap: generate and copy.
     try {
-      const { url } = await invites.create(name.trim() || undefined);
+      const { url } = await invites.create();
       setInviteLink(url);
       try {
         await navigator.clipboard.writeText(url);

@@ -658,7 +658,6 @@ export const fr: Dict = {
   },
   invite: {
     title: 'Configurez votre lecteur',
-    titleNamed: 'Bienvenue, {name}',
     blurb: 'Choisissez un nom et un mot de passe, c’est tout.',
     username: 'Identifiant',
     password: 'Mot de passe',
@@ -674,9 +673,6 @@ export const fr: Dict = {
     intro: 'Chacun a sa bibliothèque, ses playlists, sa file et son historique. Les fichiers audio sont partagés : rien n’est téléchargé deux fois.',
     adminOnly: 'Seul un admin peut gérer les comptes.',
     setYourPasswordFirst: 'Définissez un mot de passe sur votre compte avant d’ajouter quelqu’un — sinon le serveur reste ouvert à tout le réseau.',
-    inviteTitle: 'Inviter quelqu’un',
-    inviteMsg: 'Facultatif : un nom pour l’accueillir.',
-    inviteConfirm: 'Créer le lien',
     invite: 'Créer un lien d’invitation',
     inviteCopied: 'Lien copié — envoyez-le',
     inviteReady: 'Lien prêt — copiez-le ci-dessous',
