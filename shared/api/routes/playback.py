@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 
 playback_bp = Blueprint("playback", __name__, url_prefix="")
 
+#: How long a browser may reuse cover art without asking again. Long enough that
+#: scrolling a large library is free, short enough that artwork edited on
+#: another device shows up while the listener is still looking for it.
+COVER_CACHE_SEC = 900  # 15 minutes
+
 # Note: A preview *session* is one click, but a browser opens several requests
 # for it (the initial fetch plus range requests for seeks), and browsing
 # previews back-to-back is normal use — so this ceiling is deliberately well
@@ -392,10 +397,27 @@ def get_track_cover(track_id):
         is_trusted = api["is_trusted_network"](request.remote_addr)
         if not api["is_safe_path"](path, is_trusted=is_trusted):
             return jsonify({"error": "Unauthorized path"}), 403
-        return send_file(path, mimetype="image/jpeg")
+        response = send_file(path, mimetype="image/jpeg", conditional=True)
+        # Artwork is the most-requested thing in the app: one row of a library
+        # list is one cover, so scrolling a few thousand tracks and scrolling
+        # back is thousands of requests. Without a max-age every one of them is
+        # a revalidation round trip — cheap on localhost, painful on a phone
+        # over Tailscale, where six-connection limits turn it into a stall.
+        #
+        # The window is short because artwork is editable and the edit may
+        # happen on another device. The editing device doesn't wait for it:
+        # the player appends a cache-busting version to `coverUrl` the moment a
+        # cover changes. Everyone else picks it up within the window, and the
+        # ETag from `conditional` keeps the recheck a 304.
+        response.headers["Cache-Control"] = f"private, max-age={COVER_CACHE_SEC}"
+        return response
     placeholder = os.path.join(api["WEB_UI_PATH"], "assets/icons/icon-192.png")
     if os.path.exists(placeholder):
-        return send_file(placeholder, mimetype="image/png")
+        response = send_file(placeholder, mimetype="image/png", conditional=True)
+        # A shipped asset that never changes — and the answer for every track
+        # with no artwork at all, so it is worth pinning hard.
+        response.headers["Cache-Control"] = "public, max-age=86400"
+        return response
     return jsonify({"error": "Cover not ready"}), 404
 
 

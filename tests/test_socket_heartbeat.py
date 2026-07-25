@@ -14,6 +14,27 @@ import sys
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def restore_api_modules():
+    """Put the original ``shared.api`` modules back when the test is done.
+
+    Reading the heartbeat config means re-importing the package, which replaces
+    every ``shared.api*`` entry in ``sys.modules`` with a fresh object — and
+    with it ``shared.api.app`` and each route module. Test modules that bound
+    ``app`` (or a route helper) at *their* import time keep pointing at the
+    originals, so anything running afterwards was patching one module and
+    exercising another. It failed as a 404 from a route that looked correctly
+    stubbed, and only when the suite ran in the right order.
+    """
+    saved = {name: mod for name, mod in sys.modules.items() if name.startswith("shared.api")}
+    try:
+        yield
+    finally:
+        for name in [m for m in list(sys.modules) if m.startswith("shared.api")]:
+            del sys.modules[name]
+        sys.modules.update(saved)
+
+
 def _reload_api(monkeypatch, **env):
     for k, v in env.items():
         if v is None:

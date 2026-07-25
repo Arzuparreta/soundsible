@@ -11,6 +11,7 @@ import { isMusicTrack, isPodcastTrack, podcastEpisodeToTrack } from '../lib/trac
 import { libraryTrackFor, queueIdentity, queueIndexOf, resultToTrack } from '../lib/queueDiscovery';
 import { resolveTrackYoutubeId, relatedTracksFor } from '../lib/relatedDiscovery';
 import { AutopilotController, type AutoCandidate, type AutoModeState, type AutoPlanItem, type AutoProfile } from '../lib/autopilot';
+import { createShortcutHandler } from '../lib/shortcuts';
 import { t as tr } from '../lib/i18n';
 import type { Track, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
@@ -70,6 +71,10 @@ export interface AppState {
   theme: Theme;
   haptics: boolean;
   loading: boolean;
+  /** The last library sync did not complete. What is on screen is whatever we
+   * had before — possibly nothing. Lets the empty state say "couldn't reach
+   * your station" instead of the untrue "your library is empty". */
+  libraryError: boolean;
   library: Track[];
   favorites: string[];
   playlists: PlaylistMap;
@@ -129,6 +134,7 @@ const [state, setState] = createStore<AppState>({
   theme: loadTheme(),
   haptics: localStorage.getItem('haptics') !== 'off',
   loading: false,
+  libraryError: false,
   library: [],
   favorites: [],
   playlists: {},
@@ -205,14 +211,65 @@ function updateMediaSession(track: Track | null): void {
   if (!('mediaSession' in navigator)) return;
   if (!track) {
     navigator.mediaSession.metadata = null;
+    updatePositionState();
     return;
   }
   const art = track.cover ?? coverUrl(track.id);
   navigator.mediaSession.metadata = new MediaMetadata({
     title: track.title,
     artist: track.artist,
+    // Car head units and the macOS Now Playing panel have a dedicated album
+    // line; without this they show a blank one.
+    album: track.album ?? '',
     artwork: art ? [{ src: art, sizes: '512x512' }] : [],
   });
+  updatePositionState();
+}
+
+/**
+ * Publish the scrub position to the OS media controls.
+ *
+ * This is what turns a static lock-screen card into a real transport: the
+ * progress bar, the elapsed/remaining times, and the draggable scrubber on
+ * Android, iOS, macOS and most car head units all come from `positionState`.
+ * Without it those surfaces show the title and nothing else.
+ *
+ * Browsers extrapolate between updates using `playbackRate`, so this only has
+ * to run on the discrete events (metadata, seek, play/pause) — calling it from
+ * `timeupdate` would be four times a second of pure waste.
+ */
+function updatePositionState(): void {
+  if (!('mediaSession' in navigator)) return;
+  const ms = navigator.mediaSession;
+  if (typeof ms.setPositionState !== 'function') return;
+  const a = audioEl();
+  const duration = a.duration;
+  try {
+    if (!Number.isFinite(duration) || duration <= 0) {
+      // Nothing loaded, or a live/unknown-length stream: clear rather than
+      // publish a bar that would sit at zero forever.
+      ms.setPositionState();
+      return;
+    }
+    ms.setPositionState({
+      duration,
+      position: Math.min(Math.max(a.currentTime || 0, 0), duration),
+      // A rate of 0 is rejected by the spec; the element reports it while paused.
+      playbackRate: a.playbackRate > 0 ? a.playbackRate : 1,
+    });
+  } catch {
+    // Safari throws if the element is between loads. The next event re-publishes.
+  }
+}
+
+/** Fallback jump for the OS skip buttons, when the platform names no offset of
+ * its own. Podcast listeners expect a bigger hop than music listeners — a 10s
+ * nudge through a two-hour episode is useless — and a bigger one forward (skip
+ * the ad) than back (catch the sentence you missed). */
+function osSeekStep(direction: 'forward' | 'backward'): number {
+  const track = state.playback.currentTrack;
+  if (track && isPodcastTrack(track)) return direction === 'forward' ? 30 : 15;
+  return 10;
 }
 
 /**
@@ -481,9 +538,13 @@ export const actions = {
         librarySettings: lib.settings ?? {},
         podcastSubscriptions: lib.podcast_subscriptions ?? [],
         favorites,
+        libraryError: false,
       });
     } catch {
-      // Offline or engine down — keep whatever we have.
+      // Offline or engine down — keep whatever we have, but stop claiming it is
+      // the whole story. An empty list after a failed fetch is not an empty
+      // library, and the view says so.
+      if (syncVersion === librarySyncVersion) setState('libraryError', true);
     } finally {
       if (syncVersion === librarySyncVersion) setState('loading', false);
       librarySyncInFlight = false;
@@ -1480,11 +1541,13 @@ export function initStore(): void {
   a.addEventListener('play', () => {
     setState('playback', 'isPlaying', true);
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+    updatePositionState();
     pushPlaybackState();
   });
   a.addEventListener('pause', () => {
     setState('playback', 'isPlaying', false);
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+    updatePositionState();
     pushPlaybackState();
   });
   a.addEventListener('ended', onEnded);
@@ -1520,9 +1583,16 @@ export function initStore(): void {
       .catch(() => {});
   });
   a.addEventListener('timeupdate', () => setState('playback', 'currentTime', a.currentTime || 0));
-  const setDur = () => setState('playback', 'duration', Number.isFinite(a.duration) ? a.duration : 0);
+  const setDur = () => {
+    setState('playback', 'duration', Number.isFinite(a.duration) ? a.duration : 0);
+    updatePositionState();
+  };
   a.addEventListener('durationchange', setDur);
   a.addEventListener('loadedmetadata', setDur);
+  // A seek from anywhere — our transport, the lock screen, a car button — has
+  // to re-anchor the OS scrubber or it keeps counting from the old position.
+  a.addEventListener('seeked', updatePositionState);
+  a.addEventListener('ratechange', updatePositionState);
 
   if ('mediaSession' in navigator) {
     const ms = navigator.mediaSession;
@@ -1536,6 +1606,23 @@ export function initStore(): void {
     ms.setActionHandler('seekto', (d) => {
       if (typeof d.seekTime === 'number') actions.seek(d.seekTime);
     });
+    // Skip buttons on headphones, watches and car stereos. `seekOffset` is what
+    // the platform asks for when it has an opinion; `osSeekStep` is our answer
+    // when it does not. Not every browser exposes these actions — hence the
+    // guarded registration.
+    const setOptionalHandler = (action: MediaSessionAction, handler: MediaSessionActionHandler) => {
+      try {
+        ms.setActionHandler(action, handler);
+      } catch {
+        // Unsupported action: the platform simply won't offer that button.
+      }
+    };
+    setOptionalHandler('seekbackward', (d) =>
+      actions.seek(Math.max(0, state.playback.currentTime - (d.seekOffset ?? osSeekStep('backward')))),
+    );
+    setOptionalHandler('seekforward', (d) =>
+      actions.seek(state.playback.currentTime + (d.seekOffset ?? osSeekStep('forward'))),
+    );
   }
 
   socket = createSocket();
@@ -1609,33 +1696,45 @@ export function initStore(): void {
   // Warm the discovery feed so Search and Podcasts render cached rails instantly.
   void import('../lib/discover').then((m) => m.ensureDiscover());
 
-  // Global keyboard shortcuts (desktop): space = play/pause, arrows = seek,
-  // shift+arrows = prev/next, Escape closes the Now Playing sheet.
+  // Global keyboard shortcuts (desktop). The decision table lives in
+  // lib/shortcuts so it can be tested without a DOM; the store only supplies
+  // the context snapshot and the callbacks.
   if (typeof window !== 'undefined') {
-    window.addEventListener('keydown', (e) => {
-      const el = e.target as HTMLElement | null;
-      const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
-      if (typing) return;
-      if (e.code === 'Space') {
-        e.preventDefault();
-        actions.togglePlay();
-      } else if (e.key === 'Escape' && state.autoMode.active) {
-        actions.exitAutoMode();
-      } else if (e.code === 'ArrowRight' && e.shiftKey) {
-        if (state.autoMode.active) void actions.autoSkip();
-        else actions.next();
-      } else if (e.code === 'ArrowLeft' && e.shiftKey) {
-        actions.prev();
-      } else if (e.code === 'ArrowRight') {
-        actions.seek(state.playback.currentTime + 5);
-      } else if (e.code === 'ArrowLeft') {
-        actions.seek(Math.max(0, state.playback.currentTime - 5));
-      } else if (e.key.toLowerCase() === 'a' && nowPlayingOpen() && state.playback.currentTrack && !isPodcastTrack(state.playback.currentTrack)) {
-        if (state.autoMode.active) actions.exitAutoMode();
-        else actions.enterAutoMode();
-      } else if (e.key === 'Escape' && nowPlayingOpen()) {
-        setNowPlayingOpen(false);
-      }
-    });
+    window.addEventListener(
+      'keydown',
+      createShortcutHandler(
+        () => ({
+          autoModeActive: state.autoMode.active,
+          nowPlayingOpen: nowPlayingOpen(),
+          autoModeAvailable:
+            !!state.playback.currentTrack && !isPodcastTrack(state.playback.currentTrack),
+        }),
+        {
+          togglePlay: () => actions.togglePlay(),
+          // Auto Mode owns the queue: skipping has to go through the autopilot
+          // so it can pick a replacement, not walk a queue it is rewriting.
+          next: () => {
+            if (state.autoMode.active) void actions.autoSkip();
+            else actions.next();
+          },
+          prev: () => actions.prev(),
+          seekBy: (delta) => actions.seek(Math.max(0, state.playback.currentTime + delta)),
+          // `setVolume` clamps, and already lifts mute when the level goes
+          // above zero — turning it up is a request to hear something.
+          nudgeVolume: (delta) => actions.setVolume(state.playback.volume + delta),
+          toggleMute: () => actions.toggleMute(),
+          toggleShuffle: () => actions.toggleShuffle(),
+          cycleRepeat: () => actions.cycleRepeat(),
+          toggleFavourite: () => {
+            const track = state.playback.currentTrack;
+            // Previews are not in the library yet, so there is nothing to pin.
+            if (track && track.source !== 'preview') actions.toggleFavourite(track.id);
+          },
+          enterAutoMode: () => actions.enterAutoMode(),
+          exitAutoMode: () => actions.exitAutoMode(),
+          closeNowPlaying: () => setNowPlayingOpen(false),
+        },
+      ),
+    );
   }
 }

@@ -126,6 +126,33 @@
   color: var(--ink-secondary);
 }
 
+/* Inline retry inside the empty-state sentence: it reads as part of the
+   explanation rather than as a separate call to action. */
+.retry {
+  padding: 0;
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* The list below is real but may be behind the server. A quiet line, not an
+   alarm — nothing is broken, it is just not confirmed fresh. */
+.stale {
+  flex-shrink: 0;
+  margin: 0 var(--gutter) var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--text-label);
+  color: var(--ink-secondary);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+}
+
 /* Desktop: the sidebar already lists Favoritos/Listas/Podcasts/Descargas. */
 @media (min-width: 1024px) {
   .chips {

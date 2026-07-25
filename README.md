@@ -37,6 +37,9 @@ Soundsible is a music app you run on your **own** machine. Browse, stream, and s
 - 👥 **One server, everyone's music** — each person gets their own library, playlists and history; the files are shared, so nothing downloads twice
 - 🧹 **Resilient downloads** — failed items stay visible with retry/remove, queue self-heals on restart
 - ⚡ **Honest playback** — the row you tapped shows it is working, impatient taps cost nothing, and a dead track skips itself instead of leaving you at a silent play button
+- 🔒 **Real lock-screen controls** — title, album, artwork *and* a working scrubber on your phone, watch, laptop and car stereo
+- 📴 **Opens even when your station doesn't answer** — the installed app launches offline and says so, instead of showing a browser error page
+- ⌨️ **Keyboard-first on desktop** — play/pause, seek, skip, volume, mute, favourite, shuffle and repeat without touching the mouse; every song row is reachable by tab
 - 🔐 **It's your server** — your data never leaves it
 
 > *"I built Soundsible because I'm a musician who understands how predatory music streaming has become — and a sysadmin with the tools to build a private, free alternative that doesn't sacrifice a thing."* — **Arzuparreta**

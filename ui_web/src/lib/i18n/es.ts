@@ -103,6 +103,9 @@ export const es: Dict = {
     sortFavFirst: 'Favoritos primero',
     emptyArtists: 'No hay artistas todavía.',
     emptyLibrary: 'Tu biblioteca está vacía. Descarga algo desde Buscar.',
+    unreachable: 'No se pudo contactar con tu estación, puede que falte algo.',
+    unreachableEmpty: 'No se pudo contactar con tu estación. Tu biblioteca sigue ahí.',
+    retry: 'Reintentar',
   },
   favourites: {
     title: 'Favoritos',
@@ -559,6 +562,7 @@ export const es: Dict = {
     ariaInLibrary: 'En biblioteca',
   },
   songRow: {
+    ariaPlay: 'Reproducir {title} de {artist}',
     ariaMore: 'Más opciones',
   },
   trackList: {

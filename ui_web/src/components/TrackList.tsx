@@ -1,4 +1,4 @@
-import { createSignal, For, Show, onMount, type JSX } from 'solid-js';
+import { createEffect, createSignal, For, Show, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import { state, actions } from '../stores';
@@ -12,6 +12,15 @@ import { artistPath } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './TrackList.module.css';
+
+/** Current value of the `--row-h` design token, in pixels. Falls back to the
+ * mobile default when the stylesheet has not applied yet (SSR, tests). */
+function readRowHeight(): number {
+  if (typeof document === 'undefined') return 56;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--row-h');
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 56;
+}
 
 /**
  * Reusable virtualized song list. Shared by Home, Favourites and Search.
@@ -48,10 +57,17 @@ export default function TrackList(props: {
     );
 
   // Row height follows the adaptive --row-h token (56 mobile / 44 desktop).
-  const [rowH, setRowH] = createSignal(56);
+  // It has to be re-read when the viewport crosses that breakpoint — rotating a
+  // phone or dragging a desktop window narrow changes the token, and a
+  // virtualizer still positioning rows 56px apart inside 44px slots leaves the
+  // list visibly gapped (or overlapping, the other way round).
+  const [rowH, setRowH] = createSignal(readRowHeight());
   onMount(() => {
-    const v = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--row-h'), 10);
-    if (Number.isFinite(v) && v > 0) setRowH(v);
+    setRowH(readRowHeight());
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onChange = () => setRowH(readRowHeight());
+    mq.addEventListener('change', onChange);
+    onCleanup(() => mq.removeEventListener('change', onChange));
   });
 
   const virtualizer = createVirtualizer({
@@ -62,6 +78,10 @@ export default function TrackList(props: {
     estimateSize: () => rowH(),
     overscan: 10,
   });
+
+  // `estimateSize` is only consulted when the virtualizer measures, so a new
+  // row height has to ask for a re-measure explicitly.
+  createEffect(on(rowH, () => virtualizer.measure(), { defer: true }));
 
   return (
     <div ref={scrollRef} class={styles.scroll}>

@@ -510,15 +510,35 @@ def serve_branding(path):
 def serve_web_player_assets(path):
     resp = send_from_directory(_web_ui_root(), path)
     lp = path.lower()
-    if lp.endswith(".html"):
-        resp.headers.setdefault("Cache-Control", "no-store")
+    # Every branch assigns rather than defaults: `send_file` has already put
+    # `Cache-Control: no-cache` on the response (that is what it does when no
+    # max_age is given), so `setdefault` here was a no-op and the whole policy
+    # below never took effect — the player revalidated its entire bundle,
+    # fonts included, on every single load.
+    if lp == "sw.js":
+        # The one file that must never be served stale: a cached service worker
+        # is a worker that can never be replaced, and it would go on serving an
+        # old shell long after the app moved on. Browsers cap its freshness at
+        # 24h regardless; saying `no-store` makes every update land at once.
+        resp.headers["Cache-Control"] = "no-store"
+        # Scope is the directory the worker is served from, so it already covers
+        # exactly /player/ — but be explicit rather than rely on placement.
+        resp.headers["Service-Worker-Allowed"] = "/player/"
+    elif lp.endswith(".html"):
+        resp.headers["Cache-Control"] = "no-store"
     elif lp.endswith(".webmanifest"):
         # Some platforms won't treat it as a manifest without this type; its name
         # is stable (not hashed) so it must revalidate rather than pin for a year.
         resp.headers["Content-Type"] = "application/manifest+json"
-        resp.headers.setdefault("Cache-Control", "public, max-age=3600")
+        resp.headers["Cache-Control"] = "public, max-age=3600"
     elif "assets/" in lp and lp.split("?")[0].endswith((".js", ".css", ".woff", ".woff2", ".ttf", ".map")):
-        resp.headers.setdefault("Cache-Control", "public, max-age=31536000, immutable")
+        # Content-hashed by the build: the URL changes whenever the bytes do,
+        # so this can be pinned for as long as the spec allows.
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif lp.startswith("icons/"):
+        # Install icons: stable names (the manifest has to be able to point at
+        # them), so they revalidate rather than pin — but not on every launch.
+        resp.headers["Cache-Control"] = "public, max-age=86400"
     return resp
 
 # Note: Global instances

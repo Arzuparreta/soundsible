@@ -103,6 +103,9 @@ export const zh: Dict = {
     sortFavFirst: '收藏优先',
     emptyArtists: '还没有艺人。',
     emptyLibrary: '资料库为空。去搜索中下载点什么吧。',
+    unreachable: '无法连接到你的电台，显示的可能不完整。',
+    unreachableEmpty: '无法连接到你的电台。你的资料库还在。',
+    retry: '重试',
   },
   favourites: {
     title: '收藏',
@@ -545,6 +548,7 @@ export const zh: Dict = {
     ariaInLibrary: '已在资料库',
   },
   songRow: {
+    ariaPlay: '播放 {artist} 的《{title}》',
     ariaMore: '更多选项',
   },
   trackList: {

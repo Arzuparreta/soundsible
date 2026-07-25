@@ -104,6 +104,11 @@ export const fr: Dict = {
     emptyArtists: 'Aucun artiste pour le moment.',
     emptyLibrary:
       'Votre bibliothèque est vide. Téléchargez quelque chose depuis Rechercher.',
+    unreachable:
+      "Impossible de joindre votre station : il manque peut-être des titres.",
+    unreachableEmpty:
+      'Impossible de joindre votre station. Votre bibliothèque est toujours là.',
+    retry: 'Réessayer',
   },
   favourites: {
     title: 'Favoris',
@@ -565,6 +570,7 @@ export const fr: Dict = {
     ariaInLibrary: 'Dans la bibliothèque',
   },
   songRow: {
+    ariaPlay: 'Lire {title} par {artist}',
     ariaMore: "Plus d'options",
   },
   trackList: {

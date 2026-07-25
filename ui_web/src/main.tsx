@@ -22,6 +22,7 @@ import { Placeholder } from './routes/Placeholder';
 import DesignPreview from './pages/DesignPreview';
 import { initStore } from './stores';
 import { initLocale, t } from './lib/i18n';
+import { registerServiceWorker } from './lib/pwa';
 import { installSessionGuard, ready, refreshSession, requiresLogin, user } from './lib/session';
 // Self-host the design-system typefaces (DESIGN.md) so they render for every
 // user, not only those who happen to have them installed locally. Subsets load
@@ -54,6 +55,7 @@ function installViewportHeightSync() {
 installViewportHeightSync();
 initLocale();
 installSessionGuard();
+registerServiceWorker();
 void refreshSession();
 
 const root = document.getElementById('app');

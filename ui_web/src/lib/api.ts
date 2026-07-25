@@ -265,8 +265,18 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
  * pattern from the legacy http.js, adds JSON + owner-token handling. */
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, timeoutMs = 8000 } = opts;
+  // One controller drives the fetch so both reasons to give up work together.
+  // Handing the caller's signal straight to `fetch` (the old shape) meant any
+  // request that supplied one — every debounced search — silently lost its
+  // timeout and could hang until the browser gave up on its own.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const external = opts.signal;
+  const abortFromCaller = () => controller.abort();
+  if (external) {
+    if (external.aborted) controller.abort();
+    else external.addEventListener('abort', abortFromCaller, { once: true });
+  }
   const headers: Record<string, string> = {};
   // FormData sets its own multipart Content-Type (with boundary); JSON we set explicitly.
   const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
@@ -281,7 +291,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
       // The session lives in an HttpOnly cookie, so every call has to carry it.
       credentials: 'same-origin',
       body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
-      signal: opts.signal ?? controller.signal,
+      signal: controller.signal,
       keepalive: opts.keepalive,
     });
     if (res.status === 401 && !path.startsWith('/api/auth/')) onUnauthorized?.();
@@ -291,6 +301,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     return (text ? JSON.parse(text) : undefined) as T;
   } finally {
     clearTimeout(timer);
+    external?.removeEventListener('abort', abortFromCaller);
   }
 }
 
@@ -365,13 +376,16 @@ export const api = {
   revokePairedDevice: (tokenId: string) =>
     request<PairedDevice>(`/api/paired-devices/${encodeURIComponent(tokenId)}/revoke`, { method: 'POST' }),
 
+  /** The whole library in one payload. Deliberately past the default deadline:
+   * a few thousand tracks over a phone's link to a home server can outrun 8s,
+   * and giving up there is what turns a large library into an empty screen. */
   getLibrary: () =>
     request<{
       tracks?: Track[];
       playlists?: PlaylistMap;
       settings?: LibrarySettings;
       podcast_subscriptions?: PodcastSubscription[];
-    }>(`/api/library?t=${Date.now()}`),
+    }>(`/api/library?t=${Date.now()}`, { timeoutMs: 30000 }),
   /** Returns the list of favourite track ids. */
   getFavourites: () => request<string[]>(`/api/library/favourites?t=${Date.now()}`),
   toggleFavourite: (id: string) =>

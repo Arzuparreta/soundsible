@@ -62,10 +62,41 @@ export default function SongRow(props: SongRowProps) {
     openMenu(e);
   };
 
+  /** The row is the play button, so it has to answer the keys a button answers.
+   * Without this the whole library was mouse-only: nothing in a list of
+   * thousands of songs could be reached, let alone played, from the keyboard. */
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault(); // Space would scroll the list out from under the user
+      props.onPlay?.(props.track);
+      return;
+    }
+    // The context menu's keyboard equivalent, matching the ⋯ button and
+    // long-press. No cursor to anchor to, so it opens as the sheet.
+    if (props.onMenu && (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) {
+      e.preventDefault();
+      openMenu();
+    }
+  };
+
+  /** What a screen reader announces for the row: what it is, then what
+   * activating it does. The nested artist/menu buttons name themselves. */
+  const label = () =>
+    props.track.artist
+      ? t('songRow.ariaPlay', { title: props.track.title, artist: props.track.artist })
+      : props.track.title;
+
   return (
     <div
       classList={{ [styles.row]: true, [styles.active]: props.active }}
+      role="button"
+      tabindex="0"
+      aria-label={label()}
+      // Announces which row is the one currently playing, so a screen-reader
+      // user can find "where am I" without listening through the whole list.
+      aria-current={props.active ? 'true' : undefined}
       onClick={onRowClick}
+      onKeyDown={onKeyDown}
       onContextMenu={onContext}
       onTouchStart={startPress}
       onTouchEnd={cancelPress}

@@ -102,6 +102,9 @@ export const en = {
     sortFavFirst: 'Favourites first',
     emptyArtists: 'No artists yet.',
     emptyLibrary: 'Your library is empty. Download something from Search.',
+    unreachable: "Couldn't reach your station, so this may not be everything.",
+    unreachableEmpty: "Couldn't reach your station. Your library is still there.",
+    retry: 'Try again',
   },
   favourites: {
     title: 'Favourites',
@@ -552,6 +555,7 @@ export const en = {
     ariaInLibrary: 'In library',
   },
   songRow: {
+    ariaPlay: 'Play {title} by {artist}',
     ariaMore: 'More options',
   },
   trackList: {

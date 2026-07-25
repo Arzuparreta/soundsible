@@ -1,6 +1,6 @@
 import { createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { A } from '@solidjs/router';
-import { state, downloadCounts, musicLibrary } from '../stores';
+import { state, actions, downloadCounts, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import ArtistGrid from '../components/ArtistGrid';
@@ -16,6 +16,21 @@ export default function Home() {
   const songs = createMemo(() => musicLibrary());
   const sorted = createMemo(() => sortTracks(songs(), librarySort(), favSet()));
   const artists = createMemo(() => buildArtists(songs()));
+  /** The library never loaded, as opposed to being genuinely empty. */
+  const unreachable = createMemo(() => state.libraryError && songs().length === 0);
+
+  /** Empty-state copy that tells the truth about *why* the list is empty, and
+   * offers the only useful next step when the engine is the reason. */
+  const emptyState = (emptyMessage: string) => (
+    <Show when={unreachable()} fallback={<p class={styles.empty}>{emptyMessage}</p>}>
+      <p class={styles.empty}>
+        {t('home.unreachableEmpty')}{' '}
+        <button class={styles.retry} type="button" onClick={() => void actions.syncLibrary()}>
+          {t('home.retry')}
+        </button>
+      </p>
+    </Show>
+  );
 
   // Desktop breakpoint is 1024px (matches app.module.css / tokens.css). On
   // mobile the song row's subtitle is the same gesture as the row itself, so
@@ -78,13 +93,15 @@ export default function Home() {
         </Show>
       </div>
 
+      {/* Stale but not empty: the list below is real, just possibly behind. */}
+      <Show when={state.libraryError && songs().length > 0}>
+        <p class={styles.stale}>{t('home.unreachable')}</p>
+      </Show>
+
       <Show
         when={libraryTab() === 'songs'}
         fallback={
-          <Show
-            when={artists().length > 0}
-            fallback={<p class={styles.empty}>{t('home.emptyArtists')}</p>}
-          >
+          <Show when={artists().length > 0} fallback={emptyState(t('home.emptyArtists'))}>
             <div class={styles.artistsScroll}>
               <ArtistGrid artists={artists()} />
             </div>
@@ -94,7 +111,7 @@ export default function Home() {
         <TrackList
           tracks={sorted()}
           loading={state.loading}
-          empty={<p class={styles.empty}>{t('home.emptyLibrary')}</p>}
+          empty={emptyState(t('home.emptyLibrary'))}
           linkArtist={!isMobile()}
         />
       </Show>
