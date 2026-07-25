@@ -105,17 +105,45 @@ There is no persistent activity panel, phase copy or decorative history.
 
 The queue is a native horizontal rail rather than a fixed summary: every future
 entry is present, the next card peeks into view, trackpad/touch/mouse-wheel
-scrolling works, keyboard focus is visible, and a subtle scrollbar communicates
-overflow. Cards contain only artwork, title and artist; they do not explain
-their own presence or repeat visible counts.
+scrolling works, keyboard focus is visible, and a subtle scrollbar plus a soft
+right edge communicate overflow. Cards contain only artwork, title and artist;
+they do not explain their own presence or repeat visible counts.
 
-Desktop uses a spacious asymmetric cover/meta stage. Mobile uses the same
-information hierarchy in a portrait composition. Neither is a reduced
-fallback.
+## Layout contract
 
-After 12 seconds without input, navigation and queue chrome fade out,
-leaving the cover, metadata and ambient backdrop. Pointer, touch, keyboard input
-or a track change restores them. A downward swipe exits. Escape exits globally;
+The three places this screen actually runs — a desktop window, a phone clamped
+to a dashboard, a TV across a room — set two rules that outrank composition
+taste.
+
+**Content never changes the layout.** Titles run from 3 to 90 characters and the
+autopilot's status line appears and clears every few minutes; neither may move
+the artwork. The title lives in a fixed two-line well whose type size comes from
+a length tier (`titleFit`), clamped to two lines and ellipsised beyond; the
+status line has a reserved slot; the artwork is sized from the space that is
+left over, never the reverse. Size containment on the cover stage means it
+contributes nothing to intrinsic height, so on a viewport too short for
+everything the queue rail is pushed out of frame and the transport is not.
+
+**Landscape and portrait are two compositions, not one scaled.** In landscape
+(≥600px wide and wider than 5:4) height is the scarce axis, so artwork and text
+sit side by side and the title gets roughly half the screen's width. In portrait
+they stack. The 5:4 floor deliberately keeps 1280×1024 and 1400×1050 desktops
+out of the phone composition. Compact landscape (≤560px tall — a phone in a car
+mount) narrows the art column and drops the queue labels; below 400px tall the
+rail goes entirely.
+
+**Sizes are viewport-relative with ten-foot ceilings.** At 1080p the title
+reaches 76px, the play control 88px and the artwork ~610px, so a TV renders a
+readable-from-the-sofa composition rather than a desktop layout centred in a
+large window. Nothing in the chrome is smaller than 11px at any size.
+
+After 12 seconds without input the top chrome and the queue rail fade out,
+leaving cover, metadata and backdrop. The transport stays on screen at reduced
+opacity and stays interactive: pausing from a car mount has to cost one tap, not
+a wake-up tap plus an aim. Only opacity changes, so waking the surface never
+reflows it. Pointer, touch, keyboard input or a track change restores full
+chrome. A downward swipe over the backdrop exits — a swipe that starts on a
+control or inside the queue rail belongs to that control. Escape exits globally;
 Space and the existing media-session controls continue to work.
 
 Reduced-motion mode disables backdrop drift, cover breathing, equalizer motion

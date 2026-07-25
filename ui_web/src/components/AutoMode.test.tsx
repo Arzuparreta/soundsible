@@ -51,7 +51,7 @@ vi.mock('../lib/i18n', () => ({
     params ? `${key}:${Object.values(params).join(',')}` : key,
 }));
 
-import { AutoMode } from './AutoMode';
+import { AutoMode, titleFit } from './AutoMode';
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -76,6 +76,21 @@ describe('AutoMode environment', () => {
     expect(actions.exitAutoMode).toHaveBeenCalledOnce();
   });
 
+  it('exits on a swipe down over the backdrop, but not on one that scrolls the queue', () => {
+    render(() => <AutoMode />);
+    const root = screen.getByRole('region', { name: 'autoMode.aria' });
+    const rail = screen.getByRole('button', { name: /Next song/ }).parentElement!;
+
+    // Dragging the queue rail is scrolling, not leaving.
+    fireEvent.pointerDown(rail, { clientX: 200, clientY: 100 });
+    fireEvent.pointerUp(rail, { clientX: 200, clientY: 320 });
+    expect(actions.exitAutoMode).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(root, { clientX: 200, clientY: 100 });
+    fireEvent.pointerUp(root, { clientX: 200, clientY: 320 });
+    expect(actions.exitAutoMode).toHaveBeenCalledOnce();
+  });
+
   it('enters the ambient state after twelve idle seconds and wakes on input', async () => {
     vi.useFakeTimers();
     render(() => <AutoMode />);
@@ -87,6 +102,20 @@ describe('AutoMode environment', () => {
 
     fireEvent.pointerMove(root);
     expect(root.className).toBe(initialClass);
+  });
+
+  it('shrinks long titles instead of letting them grow the metadata block', () => {
+    // The artwork is sized from the space the metadata leaves over, so a title
+    // that grows a third line clips the composition. Length picks the type size;
+    // the two-line well never changes height.
+    expect(titleFit('Redbone')).toBe('lg');
+    expect(titleFit('Ain’t No Mountain High Enough')).toBe('md');
+    expect(titleFit('Ain’t No Mountain High Enough (Remastered 2019)')).toBe('sm');
+    expect(titleFit('Ain’t No Mountain High Enough (Remastered 2019 Deluxe Edition Version)')).toBe('xs');
+
+    render(() => <AutoMode />);
+    expect(screen.getByRole('heading', { name: 'Current song' }).parentElement).toBeInTheDocument();
+    expect(document.querySelector('[data-fit="lg"]')).toBeTruthy();
   });
 
   it('removes a completed agent report instead of keeping a status panel on screen', async () => {
