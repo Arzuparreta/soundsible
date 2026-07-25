@@ -1,10 +1,11 @@
-import { createMemo, createResource, createSignal, For, Show, type JSX } from 'solid-js';
+import { createMemo, createResource, createSignal, For, Show } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import { api } from '../lib/api';
 import { state, actions } from '../stores';
 import { t } from '../lib/i18n';
 import type { PodcastEpisode } from '../types/podcast';
 import styles from './PodcastShow.module.css';
+import { neutralCoverStyle } from '../lib/cover';
 
 function fmtDur(s?: number): string {
   if (s == null || !Number.isFinite(s) || s <= 0) return '';
@@ -16,11 +17,6 @@ function fmtDate(s?: string): string {
   if (!s) return '';
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString();
-}
-
-function coverBg(url?: string | null): JSX.CSSProperties {
-  const grad = 'linear-gradient(135deg, var(--bg-elevated), var(--bg-inset))';
-  return url ? { background: `url("${url}") center / cover no-repeat, ${grad}` } : { background: grad };
 }
 
 export default function PodcastShow() {
@@ -73,7 +69,7 @@ export default function PodcastShow() {
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
-        <div class={styles.cover} style={coverBg(image())} />
+        <div class={styles.cover} style={neutralCoverStyle(image())} />
         <div class={styles.info}>
           <h1 class={styles.title}>{title()}</h1>
           <span class={styles.author}>{sub()?.author ?? data()?.subscription?.author}</span>

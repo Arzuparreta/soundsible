@@ -513,7 +513,9 @@
   transform: scale(0.94);
 }
 
-/* Action bar: queue (mobile) · favourite · save · volume · share · more */
+/* Action bar. Deliberately short: queue (mobile) · favourite · save (previews)
+   · radio · volume (desktop) · more. Radio is here because it has state to
+   show; everything else lives in the ⋯ menu. */
 .actionsBar {
   display: flex;
   align-items: center;
@@ -539,11 +541,6 @@
 }
 .actOn {
   color: var(--accent);
-}
-
-/* Inline ⋯-menu shortcuts: desktop only — mobile keeps the compact bar. */
-.deskAct {
-  display: none;
 }
 
 .actPulse {
@@ -924,15 +921,11 @@
     gap: var(--space-xl);
   }
 
-  /* The action bar spreads across the full seek-bar width; the inlined
-     ⋯-menu shortcuts fill the free horizontal space. */
+  /* Fewer controls than before, so they read better grouped in the middle than
+     stretched across the full seek-bar width. */
   .actionsBar {
-    justify-content: space-between;
-    gap: var(--space-xs);
-  }
-
-  .deskAct {
-    display: inline-flex;
+    justify-content: center;
+    gap: var(--space-lg);
   }
 
   .title {

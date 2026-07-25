@@ -4,6 +4,18 @@ The Station player: a responsive **SolidJS + TypeScript** app in `src/`, built w
 
 The production bundle (`dist/`) is not committed. The Station engine rebuilds it automatically when `src/` (or Vite config) is newer than `dist/` — on API boot and when serving `/player/`. You can still use the Vite dev server while developing, or force a rebuild with `python3 scripts/ensure_ui_dist.py`.
 
+## Shared building blocks
+
+Reach for these before writing a local copy — each one used to be duplicated across half a dozen views, and the copies drifted:
+
+| Module | Owns |
+| --- | --- |
+| `lib/cover.ts` | `coverGradient` / `coverStyle` — the seeded placeholder artwork, layered under the cover so a 404 degrades instead of breaking. `neutralCoverStyle` for non-track artwork (playlists, podcast shows). |
+| `lib/format.ts` | `formatDuration` (list columns, blank when unknown), `clockTime` (transport readouts, never blank), `trackCount`. |
+| `lib/catalogItem.ts` | Catalog row → playable track, plus `playCatalogItem`: resolve-then-play with abort-on-newer-click and a `resolvingItemId` signal for per-row spinners. |
+| `components/Spinner.tsx` | The one indeterminate spinner, sized via a prop. |
+| `stores/index.ts` | `playback.isLoading` / `playback.loadError` — see the playback loading contract in [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md). |
+
 ## Prerequisites
 
 - **Node.js 20+** and **npm**

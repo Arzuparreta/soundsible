@@ -10,6 +10,7 @@ from pathlib import Path
 
 from flask import Blueprint, request, jsonify
 
+from shared.api.memo import Memo
 from shared.text_utils import sanitize_cli_message
 from shared.hardening import (
     SCOPE_ADMIN_CONFIG,
@@ -25,11 +26,15 @@ logger = logging.getLogger(__name__)
 
 downloader_bp = Blueprint("downloader", __name__, url_prefix="")
 
+# All three of these front a yt-dlp call. `Memo` gives them the two properties a
+# plain dict lacked: a size bound, and single-flight — so a burst of identical
+# requests (two devices searching the same thing, a retry landing on top of a
+# slow first attempt) pays for one extraction, not one each.
 _PEEK_CACHE_TTL_SEC = 60
-_peek_cache: dict[str, tuple[float, dict]] = {}
+_peek_memo: Memo[dict] = Memo(ttl_sec=_PEEK_CACHE_TTL_SEC, maxsize=256)
 
 _SEARCH_CACHE_TTL_SEC = 300
-_search_cache: dict[str, tuple[float, list]] = {}
+_search_memo: Memo[list] = Memo(ttl_sec=_SEARCH_CACHE_TTL_SEC, maxsize=256)
 
 
 def _get_api():
@@ -71,22 +76,24 @@ def youtube_search():
     use_ytmusic = (source in ("ytmusic", "music"))
     source_key = "ytmusic" if use_ytmusic else "youtube"
     cache_key = f"{source_key}:{limit}:{1 if enrich else 0}:{q.casefold()}"
-    now = time.time()
-    cached = _search_cache.get(cache_key)
-    if cached and now - cached[0] < _SEARCH_CACHE_TTL_SEC:
+    cached = _search_memo.get(cache_key)
+    if cached is not None:
         return jsonify({
-            "results": cached[1],
+            "results": cached,
             "meta": {"source": source_key, "cached": True, "enriched": enrich},
         })
-    try:
+
+    def search() -> list:
         dl = _get_api()["get_downloader"](open_browser=False)
-        results = dl.downloader.search_youtube(
+        return dl.downloader.search_youtube(
             q,
             max_results=limit,
             use_ytmusic=use_ytmusic,
             enrich_missing=enrich,
         )
-        _search_cache[cache_key] = (now, results)
+
+    try:
+        results = _search_memo.resolve(cache_key, search)
         return jsonify({
             "results": results,
             "meta": {"source": source_key, "cached": False, "enriched": enrich},
@@ -115,25 +122,30 @@ def youtube_peek():
     except Exception:
         cache_key = None
     cache_key = cache_key or raw
-    now = time.time()
-    cached = _peek_cache.get(cache_key)
-    if cached and now - cached[0] < _PEEK_CACHE_TTL_SEC:
-        return jsonify({"peek": cached[1]})
-    try:
+    cached = _peek_memo.get(cache_key)
+    if cached is not None:
+        return jsonify({"peek": cached})
+
+    def peek_brief() -> dict:
         dl = api["get_downloader"](open_browser=False)
         peek = dl.downloader.peek_brief(raw)
         if peek:
-            vid = peek.get("id")
-            ck = str(vid).strip() if vid is not None else cache_key
-            _peek_cache[ck] = (now, peek)
-        return jsonify({"peek": peek})
+            # Also key the result by the canonical video id, so a later request
+            # that arrives as an id rather than a URL hits this same entry.
+            vid = str(peek.get("id") or "").strip()
+            if vid and vid != cache_key:
+                _peek_memo.put(vid, peek)
+        return peek
+
+    try:
+        return jsonify({"peek": _peek_memo.resolve(cache_key, peek_brief)})
     except Exception as e:
         logger.warning("API: YouTube peek error: %s", e)
         return jsonify({"peek": None, "error": sanitize_cli_message(str(e))}), 500
 
 
 _RELATED_CACHE_TTL_SEC = 300
-_related_cache: dict[str, tuple[float, list]] = {}
+_related_memo: Memo[list] = Memo(ttl_sec=_RELATED_CACHE_TTL_SEC, maxsize=256)
 
 
 @downloader_bp.route("/api/downloader/youtube/related", methods=["GET"])
@@ -152,35 +164,37 @@ def youtube_related():
         return jsonify({"results": [], "error": "missing or invalid id"}), 400
     limit = min(50, max(1, request.args.get("limit", 25, type=int)))
     enrich = (request.args.get("enrich", "1") or "1").strip().lower() not in ("0", "false", "no", "off")
-    now = time.time()
     cache_key = f"{video_id}:{limit}:{int(enrich)}"
 
     # Note: Per-process hot loop (same call within a second → skip even SQLite).
-    cached = _related_cache.get(cache_key)
-    if cached and now - cached[0] < _RELATED_CACHE_TTL_SEC:
-        return jsonify({"results": cached[1]})
+    cached = _related_memo.get(cache_key)
+    if cached is not None:
+        return jsonify({"results": cached})
 
     from shared.database import instance_db
 
     db = instance_db()
-    # Note: The persistent cache stores the full related-mix list (untrimmed by
-    # limit/enrich — those are presentation-time concerns). A hit here means the
-    # yt-dlp extraction that the original call paid is reused for every future
-    # request for this seed, from any session.
-    persisted = db.get_related_mix(video_id)
-    if persisted is not None:
-        trimmed = persisted[:limit]
-        _related_cache[cache_key] = (now, trimmed)
-        return jsonify({"results": trimmed})
 
-    try:
-        dl = _get_api()["get_downloader"](open_browser=False)
-        results = dl.downloader.get_related_videos(video_id, max_results=limit, enrich=enrich)
-        _related_cache[cache_key] = (now, results)
+    def related() -> list:
+        # Note: The persistent cache stores the full related-mix list (untrimmed
+        # by limit/enrich — those are presentation-time concerns). A hit here
+        # means the yt-dlp extraction that the original call paid is reused for
+        # every future request for this seed, from any session. Re-checked inside
+        # the single-flight so a waiter released by the leader's write does not
+        # then go on to extract again.
+        persisted = db.get_related_mix(video_id)
+        if persisted is not None:
+            return persisted[:limit]
+        results = _get_api()["get_downloader"](open_browser=False).downloader.get_related_videos(
+            video_id, max_results=limit, enrich=enrich
+        )
         # Note: Persist the full-resolution list so future requests with a
         # different limit/enrich still hit the cache.
         db.set_related_mix(video_id, results)
-        return jsonify({"results": results})
+        return results
+
+    try:
+        return jsonify({"results": _related_memo.resolve(cache_key, related)})
     except Exception as e:
         logger.warning("API: YouTube related error: %s", e)
         return jsonify({"results": [], "error": sanitize_cli_message(str(e))}), 500

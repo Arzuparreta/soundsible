@@ -5,8 +5,14 @@
 - the proxy passes the upstream Content-Type through (it used to hardcode
   audio/mpeg while streaming mp4/webm), advertises Accept-Ranges, and tees
   full-body streams into the disk cache,
-- /api/preview/prefetch validates ids and hands them to the background worker.
+- /api/preview/prefetch validates ids and hands them to the background worker,
+- stream-URL resolution is single-flighted and negatively cached, so a listener
+  drumming on a preview row cannot fan out into N yt-dlp extractions.
 """
+
+import threading
+import time
+from types import SimpleNamespace
 
 from flask import Flask
 
@@ -212,13 +218,75 @@ def test_preview_prefetch_rejects_non_list_body(tmp_path, monkeypatch):
 def test_warm_preview_stream_cache_fills_ttl_entry():
     """Catalog/discovery resolve warms the in-process preview URL cache so the
     next /api/preview/stream/<id> request cannot pay the yt-dlp resolution."""
-    assert playback_routes._preview_stream_cache.get(VID) is None
-    playback_routes.warm_preview_stream_cache(VID, "https://rr.googlevideo.com/warmed")
-    entry = playback_routes._preview_stream_cache.get(VID)
-    assert entry is not None
-    assert entry["url"] == "https://rr.googlevideo.com/warmed"
-    assert entry["expires_at"] > 0
+    playback_routes._preview_stream_urls.clear()
     try:
-        playback_routes._preview_stream_cache.pop(VID, None)
+        assert playback_routes._preview_stream_urls.get(VID) is None
+        playback_routes.warm_preview_stream_cache(VID, "https://rr.googlevideo.com/warmed")
+        assert playback_routes._preview_stream_urls.get(VID) == "https://rr.googlevideo.com/warmed"
     finally:
-        pass
+        playback_routes._preview_stream_urls.clear()
+
+
+def test_preview_stream_url_resolution_is_single_flight(monkeypatch):
+    """Ten taps on the same preview must cost one yt-dlp extraction, not ten.
+
+    The resolution is seconds long, so the window where a naive TTL cache still
+    reads as a miss is exactly the window a user drums their finger in.
+    """
+    playback_routes._preview_stream_urls.clear()
+    started = threading.Event()
+    release = threading.Event()
+    calls = []
+
+    def slow_get_stream_url(video_id):
+        calls.append(video_id)
+        started.set()
+        release.wait(5)
+        return "https://rr.googlevideo.com/one"
+
+    downloader = SimpleNamespace(downloader=SimpleNamespace(get_stream_url=slow_get_stream_url))
+    api = {"get_downloader": lambda open_browser=False: downloader}
+
+    results: list[str] = []
+
+    def call():
+        results.append(playback_routes._get_preview_stream_url_cached(api, VID))
+
+    threads = [threading.Thread(target=call) for _ in range(10)]
+    threads[0].start()
+    assert started.wait(5), "leader never entered resolution"
+    for thread in threads[1:]:
+        thread.start()
+    # Give the waiters a moment to pile onto the in-flight call before it returns.
+    time.sleep(0.05)
+    release.set()
+    for thread in threads:
+        thread.join(5)
+
+    try:
+        assert calls == [VID]
+        assert results == ["https://rr.googlevideo.com/one"] * 10
+    finally:
+        playback_routes._preview_stream_urls.clear()
+
+
+def test_preview_stream_url_failure_is_negatively_cached(monkeypatch):
+    """An unresolvable id is remembered briefly so a retry storm cannot turn
+    into a yt-dlp storm — but not for as long as a success."""
+    playback_routes._preview_stream_urls.clear()
+    calls = []
+
+    def failing(video_id):
+        calls.append(video_id)
+        return None
+
+    downloader = SimpleNamespace(downloader=SimpleNamespace(get_stream_url=failing))
+    api = {"get_downloader": lambda open_browser=False: downloader}
+
+    try:
+        assert playback_routes._get_preview_stream_url_cached(api, VID) == ""
+        assert playback_routes._get_preview_stream_url_cached(api, VID) == ""
+        assert calls == [VID]
+        assert playback_routes.PREVIEW_STREAM_NEGATIVE_TTL_SEC < playback_routes.PREVIEW_STREAM_CACHE_TTL_SEC
+    finally:
+        playback_routes._preview_stream_urls.clear()

@@ -10,9 +10,13 @@ import { prefetchPreviews } from '../lib/prefetch';
 import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed, type NodeRec } from '../lib/nodeDiscover';
 import { t as tr } from '../lib/i18n';
 import { userKey } from '../lib/session';
+import { itemArtist, itemBusy, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import SearchResultRow from '../components/SearchResultRow';
+import { Spinner } from '../components/Spinner';
 import type { CatalogItem, CatalogSaveResponse, SearchResult, Track } from '../types/music';
 import styles from './Search.module.css';
+import { coverStyle } from '../lib/cover';
+import { formatDuration } from '../lib/format';
 
 type SearchDomain = 'music' | 'youtube';
 type SearchTab = 'all' | 'track,library_track' | 'artist' | 'album';
@@ -39,19 +43,6 @@ function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
 }
 
-function formatDuration(seconds?: number): string {
-  if (seconds == null || !Number.isFinite(seconds)) return '';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-function gradientFor(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 360;
-  return `linear-gradient(135deg, hsl(${h} 46% 31%), hsl(${(h + 42) % 360} 54% 18%))`;
-}
-
 function recentsKey(domain: SearchDomain): string {
   // Search history is personal, and a browser profile can be shared by the
   // whole household — namespace it by account so nobody reads anyone else's.
@@ -69,29 +60,6 @@ function loadRecents(domain: SearchDomain): string[] {
 
 function saveRecents(domain: SearchDomain, values: string[]): void {
   localStorage.setItem(recentsKey(domain), JSON.stringify(values.slice(0, 8)));
-}
-
-function itemArtist(item: CatalogItem): string {
-  return item.artist || item.subtitle || '';
-}
-
-function itemTrack(item: CatalogItem): Track | null {
-  if (item.track_id) {
-    const found = state.library.find((t) => t.id === item.track_id);
-    if (found) return found;
-  }
-  if (item.raw?.id && typeof item.raw.id === 'string') {
-    return {
-      id: item.raw.id,
-      title: String(item.raw.title || item.title),
-      artist: String(item.raw.artist || itemArtist(item)),
-      album: typeof item.raw.album === 'string' ? item.raw.album : item.album,
-      duration: typeof item.raw.duration === 'number' ? item.raw.duration : item.duration,
-      youtube_id: typeof item.raw.youtube_id === 'string' ? item.raw.youtube_id : undefined,
-      cover: item.cover,
-    };
-  }
-  return null;
 }
 
 function candidateVideoId(candidate: Record<string, unknown>): string {
@@ -404,45 +372,15 @@ export default function Search() {
     runSearch(q(), next);
   };
 
-  const coverStyle = (item: CatalogItem, round = false): JSX.CSSProperties => {
-    const grad = gradientFor(item.id);
-    const url = item.cover || (item.track_id ? coverUrl(item.track_id) : '');
-    return {
-      background: url ? `url("${url}") center / cover no-repeat, ${grad}` : grad,
-      'border-radius': round ? 'var(--radius-full)' : undefined,
-    };
-  };
-
-  const previewExternal = async (item: CatalogItem) => {
-    const artist = itemArtist(item);
-    if (!artist || !item.title) return;
-    const h = toast.loading(tr('search.looking'));
-    try {
-      const resolved = await api.resolveCatalogItem({ artist, title: item.title, duration: item.duration });
-      if (!resolved.video_id) throw new Error('not-found');
-      actions.playTrack({
-        id: resolved.video_id,
-        title: item.title,
-        artist,
-        album: item.album,
-        duration: item.duration,
-        cover: item.cover,
-        source: 'preview',
-      });
-      h.update('success', tr('search.playingPreview'));
-    } catch {
-      h.update('error', tr('search.noPreview'));
-    }
-  };
+  const itemCoverStyle = (item: CatalogItem, round = false): JSX.CSSProperties => ({
+    ...coverStyle(item.id, item.cover || (item.track_id ? coverUrl(item.track_id) : null)),
+    'border-radius': round ? 'var(--radius-full)' : undefined,
+  });
 
   const playItem = (item: CatalogItem) => {
-    const track = itemTrack(item);
-    if (track) {
-      actions.playTrack(track);
-      return;
-    }
-    if (item.type === 'track') void previewExternal(item);
-    else if (item.type === 'artist') {
+    if (item.type === 'track' || item.type === 'library_track') {
+      void playCatalogItem(item);
+    } else if (item.type === 'artist') {
       const artist = itemArtist(item) || item.title;
       const deezerId = item.external_ids?.deezer_artist_id
         ? String(item.external_ids.deezer_artist_id)
@@ -601,6 +539,7 @@ export default function Search() {
     ytInlineRequestId += 1;
     aborter?.abort();
     ytInlineAborter?.abort();
+    cancelCatalogResolve();
     suggestAborter?.abort();
     clearTimeout(debounce);
     clearTimeout(suggestDebounce);
@@ -763,9 +702,10 @@ export default function Search() {
                     <h2 class={styles.sectionTitle}>{tr('search.topResultSection')}</h2>
                     <TopResult
                       item={item()}
-                      coverStyle={coverStyle}
+                      coverStyle={itemCoverStyle}
                       saving={saving().has(item().id)}
                       saved={saved().has(item().id) || !!item().action_state?.in_library}
+                      busy={itemBusy(item())}
                       onPlay={() => playItem(item())}
                       onSave={() => saveItem(item())}
                     />
@@ -780,10 +720,11 @@ export default function Search() {
                     {(item) => (
                       <SongResult
                         item={item}
-                        coverStyle={coverStyle}
+                        coverStyle={itemCoverStyle}
                         active={state.playback.currentTrack?.id === (item.track_id || item.id)}
                         saving={saving().has(item.id)}
                         saved={saved().has(item.id) || !!item.action_state?.in_library}
+                        busy={itemBusy(item)}
                         onPlay={() => playItem(item)}
                         onSave={() => saveItem(item)}
                       />
@@ -793,11 +734,11 @@ export default function Search() {
               </Show>
 
               <Show when={artists().length > 0}>
-                <CardSection title={tr('search.artistsSection')} items={artists()} round coverStyle={coverStyle} onPick={playItem} />
+                <CardSection title={tr('search.artistsSection')} items={artists()} round coverStyle={itemCoverStyle} onPick={playItem} />
               </Show>
 
               <Show when={albums().length > 0}>
-                <CardSection title={tr('search.albumsSection')} items={albums()} coverStyle={coverStyle} onPick={playItem} />
+                <CardSection title={tr('search.albumsSection')} items={albums()} coverStyle={itemCoverStyle} onPick={playItem} />
               </Show>
 
               <Show when={q().trim().length >= 2}>
@@ -995,10 +936,7 @@ function DiscoveryCard(props: {
   saving: boolean;
   saved: boolean;
 }) {
-  const bg = (): JSX.CSSProperties => {
-    const grad = gradientFor(props.seedKey);
-    return props.cover ? { background: `url("${props.cover}") center / cover no-repeat, ${grad}` } : { background: grad };
-  };
+  const bg = (): JSX.CSSProperties => coverStyle(props.seedKey, props.cover);
   return (
     <div class={styles.discoverCard}>
       <button class={styles.discoverCardBtn} type="button" onClick={props.onPlay}>
@@ -1019,7 +957,7 @@ function DiscoveryCard(props: {
             }}
           >
             <Show when={props.saving} fallback={<PlusIcon />}>
-              <span class={styles.smallSpinner} />
+              <Spinner size={16} onAccent />
             </Show>
           </button>
         </Match>
@@ -1053,14 +991,21 @@ function TopResult(props: {
   coverStyle: (item: CatalogItem, round?: boolean) => JSX.CSSProperties;
   saving: boolean;
   saved: boolean;
+  busy: boolean;
   onPlay: () => void;
   onSave: () => void;
 }) {
   const canSave = () => props.item.type === 'track' && !props.saved;
   return (
     <div class={styles.topCard}>
-      <button class={styles.topMain} type="button" onClick={props.onPlay}>
-        <span class={styles.topCover} style={props.coverStyle(props.item, props.item.type === 'artist')} />
+      <button class={styles.topMain} type="button" aria-busy={props.busy} onClick={props.onPlay}>
+        <span class={styles.topCover} style={props.coverStyle(props.item, props.item.type === 'artist')}>
+          <Show when={props.busy}>
+            <span class={styles.coverBusy}>
+              <Spinner size={22} />
+            </span>
+          </Show>
+        </span>
         <span class={styles.topMeta}>
           <span class={styles.topTitle}>{props.item.title}</span>
           <span class={styles.topSub}>{props.item.subtitle || itemArtist(props.item)}</span>
@@ -1070,7 +1015,7 @@ function TopResult(props: {
       <Show when={canSave()}>
         <button class={styles.primaryIcon} type="button" disabled={props.saving} aria-label={tr('search.ariaSave')} onClick={props.onSave}>
           <Show when={props.saving} fallback={<PlusIcon />}>
-            <span class={styles.spinner} />
+            <Spinner size={17} />
           </Show>
         </button>
       </Show>
@@ -1084,13 +1029,24 @@ function SongResult(props: {
   active: boolean;
   saving: boolean;
   saved: boolean;
+  busy: boolean;
   onPlay: () => void;
   onSave: () => void;
 }) {
   const canSave = () => props.item.type === 'track' && !props.saved;
   return (
-    <div classList={{ [styles.songRow]: true, [styles.activeSong]: props.active }} onClick={props.onPlay}>
-      <span class={styles.songCover} style={props.coverStyle(props.item)} />
+    <div
+      classList={{ [styles.songRow]: true, [styles.activeSong]: props.active }}
+      aria-busy={props.busy}
+      onClick={props.onPlay}
+    >
+      <span class={styles.songCover} style={props.coverStyle(props.item)}>
+        <Show when={props.busy}>
+          <span class={styles.coverBusy}>
+            <Spinner size={18} />
+          </span>
+        </Show>
+      </span>
       <span class={styles.songMeta}>
         <span class={styles.songTitle}>{props.item.title}</span>
         <span class={styles.songSub}>{props.item.subtitle || itemArtist(props.item)}</span>
@@ -1114,7 +1070,7 @@ function SongResult(props: {
           }}
         >
           <Show when={props.saving} fallback={<PlusIcon />}>
-            <span class={styles.spinner} />
+            <Spinner size={17} />
           </Show>
         </button>
       </Show>

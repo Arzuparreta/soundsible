@@ -4,18 +4,13 @@ import { state, actions, downloadCounts } from '../stores';
 import { t } from '../lib/i18n';
 import type { DownloadQueueItem } from '../types/download';
 import styles from './Downloads.module.css';
+import { coverStyle } from '../lib/cover';
 
 function titleOf(i: DownloadQueueItem): string {
   return i.display_title || i.podcast_title || i.song_str || t('downloads.fallbackTitle');
 }
 function artistOf(i: DownloadQueueItem): string {
   return i.display_artist || i.podcast_show_title || '';
-}
-
-function gradientFor(id: string): string {
-  let h = 0;
-  for (let k = 0; k < id.length; k++) h = (h * 31 + id.charCodeAt(k)) % 360;
-  return `linear-gradient(135deg, hsl(${h} 45% 28%), hsl(${(h + 40) % 360} 50% 18%))`;
 }
 
 interface ProgressView {
@@ -145,13 +140,7 @@ export default function Downloads() {
 
 function DownloadRow(props: { item: DownloadQueueItem }) {
   const v = createMemo(() => progressView(props.item));
-  const coverBg = (): JSX.CSSProperties => {
-    const grad = gradientFor(props.item.id);
-    const url = props.item.thumbnail_url;
-    return url
-      ? { background: `url("${url}") center / cover no-repeat, ${grad}` }
-      : { background: grad };
-  };
+  const coverBg = (): JSX.CSSProperties => coverStyle(props.item.id, props.item.thumbnail_url);
 
   return (
     <div classList={{ [styles.row]: true, [styles.rowFailed]: v().failed }}>

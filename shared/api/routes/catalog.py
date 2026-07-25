@@ -15,6 +15,7 @@ try:
 except ImportError:  # pragma: no cover
     _HAS_GEVENT = False
 
+from shared.api.memo import Memo
 from shared.database import instance_db
 from shared.hardening import rate_limit
 from shared.resolution_confidence import best_candidate, classify_confidence
@@ -40,6 +41,17 @@ _ALBUM_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 # on write and the cache is capped by evicting whatever expires soonest.
 _CACHE_MAX_ENTRIES = 256
 _DEEZER_FANOUT_TIMEOUT_SEC = 12
+# Deezer/MusicBrainz rows carry no video id, so playing or saving one costs a
+# yt-dlp search. Two callers routinely want the same row at the same moment: the
+# speculative prefetch for the top results, and the click that follows. This
+# collapses them onto one search. The durable cache is SQLite
+# (`get_cached_resolution`); the short TTL here only covers the in-flight window
+# and the seconds right after it.
+_RESOLVE_MEMO_TTL_SEC = 30
+_resolve_memo: Memo[tuple[dict[str, Any], list[dict[str, Any]]]] = Memo(
+    ttl_sec=_RESOLVE_MEMO_TTL_SEC,
+    maxsize=128,
+)
 _MUSICBRAINZ_HEADERS = {
     "User-Agent": "Soundsible/1.0 (https://github.com/Arzuparreta/soundsible)",
     "Accept": "application/json",
@@ -585,11 +597,25 @@ def catalog_suggest():
 
 
 def _resolve_candidates(artist: str, title: str, duration_s: int | None = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Map a catalog row (artist + title) to the best YouTube match.
+
+    Cheap on a repeat: SQLite remembers every resolution forever, and concurrent
+    callers for the same row share one yt-dlp search rather than each running
+    their own.
+    """
     db = instance_db()
     cached = db.get_cached_resolution(artist, title)
     if cached and cached.get("id"):
         return cached, cached.get("candidates") or [cached]
 
+    key = f"{_norm(artist)}|{_norm(title)}|{duration_s or ''}"
+    return _resolve_memo.resolve(key, lambda: _resolve_candidates_uncached(artist, title, duration_s))
+
+
+def _resolve_candidates_uncached(
+    artist: str, title: str, duration_s: int | None
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    db = instance_db()
     api = _get_api()
     dl = api["get_downloader"](open_browser=False)
     raw_results = dl.downloader.search_youtube(f"{title} {artist}".strip(), max_results=8, use_ytmusic=prefer_ytmusic())
@@ -613,24 +639,33 @@ def _resolve_candidates(artist: str, title: str, duration_s: int | None = None) 
         },
     )
 
-    # Warm the preview stream URL cache so the upcoming
-    # `/api/preview/stream/<id>` request hit the in-process cache and skips
-    # the second yt-dlp resolution that the user's click would otherwise pay.
-    # This pre-resolution happens here (during the explicit resolve round-trip
-    # the user already tolerates); it does *not* add new state — it fills the
-    # same TTL cache the playback route already uses.
+    # Kick off stream-URL resolution for the winner in the background. The click
+    # that follows this resolve almost always plays exactly this id, and the
+    # playback route single-flights on the same key — so its request either
+    # finds the URL already warm or joins the extraction already running,
+    # instead of starting a second one. Deliberately *not* awaited: blocking the
+    # resolve response on it only moves the same wait earlier in the sequence.
     best_id = best.get("id")
     if best_id and validate_youtube_video_id(str(best_id)):
-        try:
-            stream_url = dl.downloader.get_stream_url(str(best_id))
-            if stream_url:
-                from shared.api.routes.playback import warm_preview_stream_cache
-
-                warm_preview_stream_cache(str(best_id), stream_url)
-        except Exception as warm_exc:
-            logger.debug("Catalog resolve: warm stream URL cache for %s failed: %s", best_id, warm_exc)
+        _warm_preview_stream_url(str(best_id))
 
     return {**best, "confidence": score, "confidence_reason": reason}, ranked
+
+
+def _warm_preview_stream_url(video_id: str) -> None:
+    """Queue background resolution of `video_id`'s googlevideo URL."""
+    from shared import preview_cache
+    from shared.api.routes.playback import _get_preview_stream_url_cached
+
+    api = _get_api()
+    try:
+        preview_cache.request_prefetch(
+            [video_id],
+            download=False,
+            resolver=lambda vid: _get_preview_stream_url_cached(api, vid),
+        )
+    except Exception as exc:  # pragma: no cover — best-effort warm-up
+        logger.debug("Catalog resolve: could not queue stream-URL warm for %s: %s", video_id, exc)
 
 
 @catalog_bp.route("/api/catalog/resolve", methods=["POST"])

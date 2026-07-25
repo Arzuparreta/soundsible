@@ -19,7 +19,9 @@ import { openPlayOnDevice } from './DeviceSheet';
 import { LyricsPanel } from './LyricsPanel';
 import { t } from '../lib/i18n';
 import type { CatalogItem, SearchResult, Track } from '../types/music';
+import { Spinner } from './Spinner';
 import styles from './SearchPanel.module.css';
+import { coverStyle } from '../lib/cover';
 
 export type PanelSide = 'left' | 'right';
 export type PanelTab = 'search' | 'discover' | 'lyrics';
@@ -89,12 +91,6 @@ function pushRecentQuery(query: string): void {
 
 function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
-}
-
-function gradientFor(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 360;
-  return `linear-gradient(135deg, hsl(${h} 46% 31%), hsl(${(h + 42) % 360} 54% 18%))`;
 }
 
 function itemArtist(item: CatalogItem): string {
@@ -427,10 +423,10 @@ export function SearchPanel() {
   const isQueued = (id: string | null) =>
     !!id && state.playback.queue.some((t) => t.id === id || t.youtube_id === id);
 
-  const coverStyle = (cover: string | undefined, seed: string): JSX.CSSProperties => {
-    const grad = gradientFor(seed);
-    return cover ? { background: `url("${cover}") center / cover no-repeat, ${grad}` } : { background: grad };
-  };
+  /** Panel rows carry (cover, seed) in that order; the shared helper takes the
+   * seed first. Thin adapter so the JSX below stays readable. */
+  const rowCoverStyle = (cover: string | undefined, seed: string): JSX.CSSProperties =>
+    coverStyle(seed, cover);
 
   // ── Discover: "similar to what's playing" (live, per-track cached) ──
   const [similar, setSimilar] = createSignal<SearchResult[]>([]);
@@ -631,7 +627,7 @@ export function SearchPanel() {
                     <PanelRow
                       title={r.title}
                       sub={r.channel ?? ''}
-                      coverStyle={coverStyle(r.thumbnail, r.id)}
+                      coverStyle={rowCoverStyle(r.thumbnail, r.id)}
                       inLibrary={!!libraryTrackFor(state.library, r)}
                       active={isActive(trackForResult(r).id)}
                       queued={isQueued(r.id)}
@@ -678,7 +674,7 @@ export function SearchPanel() {
                     <PanelRow
                       title={rec.title}
                       sub={rec.channel ?? ''}
-                      coverStyle={coverStyle(rec.thumbnail, rec.id)}
+                      coverStyle={rowCoverStyle(rec.thumbnail, rec.id)}
                       inLibrary={!!libraryTrackFor(state.library, rec)}
                       active={isActive(trackForResult(rec).id)}
                       queued={isQueued(rec.id)}
@@ -765,7 +761,7 @@ export function SearchPanel() {
                       <PanelRow
                         title={row.track.title}
                         sub={row.track.artist}
-                        coverStyle={coverStyle(
+                        coverStyle={rowCoverStyle(
                           row.item.in_library ? coverUrl(row.item.track_id) : row.item.cover,
                           row.item.track_id,
                         )}
@@ -815,7 +811,7 @@ export function SearchPanel() {
                           }
                         }}
                       >
-                        <span class={styles.chipCover} style={coverStyle(item.cover, item.id)} data-round={item.type === 'artist' ? '' : undefined} />
+                        <span class={styles.chipCover} style={rowCoverStyle(item.cover, item.id)} data-round={item.type === 'artist' ? '' : undefined} />
                         <span class={styles.chipMeta}>
                           <span class={styles.chipTitle}>{item.title}</span>
                           <span class={styles.chipSub}>{item.type === 'artist' ? t('searchPanel.chipArtist') : t('searchPanel.chipAlbum')}</span>
@@ -833,7 +829,7 @@ export function SearchPanel() {
                     <PanelRow
                       title={r().title}
                       sub={r().channel ?? ''}
-                      coverStyle={coverStyle(r().thumbnail, r().id)}
+                      coverStyle={rowCoverStyle(r().thumbnail, r().id)}
                       inLibrary={!!libraryTrackFor(state.library, r())}
                       active={isActive(trackForResult(r()).id)}
                       queued={isQueued(r().id)}
@@ -854,7 +850,7 @@ export function SearchPanel() {
                       <PanelRow
                         title={item.title}
                         sub={item.subtitle || itemArtist(item)}
-                        coverStyle={coverStyle(item.cover || (item.track_id ? coverUrl(item.track_id) : undefined), item.id)}
+                        coverStyle={rowCoverStyle(item.cover || (item.track_id ? coverUrl(item.track_id) : undefined), item.id)}
                         inLibrary={item.type === 'library_track' || !!item.action_state?.in_library}
                         active={isActive(knownId(item))}
                         queued={isQueued(knownId(item))}
@@ -880,7 +876,7 @@ export function SearchPanel() {
                       <PanelRow
                         title={r.title}
                         sub={r.channel ?? ''}
-                        coverStyle={coverStyle(r.thumbnail, r.id)}
+                        coverStyle={rowCoverStyle(r.thumbnail, r.id)}
                         inLibrary={!!libraryTrackFor(state.library, r)}
                         active={isActive(trackForResult(r).id)}
                         queued={isQueued(r.id)}
@@ -950,7 +946,7 @@ function PanelRow(props: {
         </span>
       </span>
       <Show when={props.resolving}>
-        <span class={styles.spinner} aria-label={t('searchPanel.ariaLoading')} />
+        <Spinner size={14} label={t('searchPanel.ariaLoading')} />
       </Show>
       <Show
         when={!props.queued}

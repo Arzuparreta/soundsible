@@ -86,6 +86,16 @@ The Flask application lives in `shared/api/__init__.py`. It:
 
 **Job orchestration** (`shared/api/orchestrator.py`): a small **JobOrchestrator** serializes metadata writes and runs bounded concurrent work (e.g. downloads) so heavy tasks do not stampede the library.
 
+**Caching and single-flight** (`shared/api/memo.py`): every slow path in the API is a yt-dlp call measured in seconds — text search, stream-URL resolution, related mixes. `Memo` gives them a **bounded** TTL cache plus **single-flight**: concurrent callers for one key collapse onto whichever arrived first and share its result. This matters because a TTL cache alone only helps *after* the first call returns; while it is in flight the entry is absent, so N simultaneous requests for the same thing each pay full price. That is exactly the shape of a listener tapping a preview repeatedly, or a speculative prefetch racing the click it was meant to make instant. Used by:
+
+| Path | TTL | Notes |
+|------|-----|-------|
+| `_get_preview_stream_url_cached` (playback) | 5 min, 20 s negative | An unresolvable video is remembered briefly so a retry storm is not a yt-dlp storm. |
+| `_resolve_candidates` (catalog) | 30 s | In-flight window only; the durable cache is SQLite `get_cached_resolution`. |
+| `youtube/search`, `youtube/peek`, `youtube/related` (downloader) | 5 min / 1 min / 5 min | `related` also re-checks the persistent SQLite cache inside the flight. |
+
+Catalog resolve queues the winner's stream-URL resolution on the **preview prefetch worker** rather than blocking the response on it: the click that follows either finds the URL warm or joins the extraction already running.
+
 **Download path**: queued items are processed in the background; completed tracks are merged into the main library metadata (`_sync_odst_to_main_core` and related helpers). FFmpeg and yt-dlp are used via `odst_tool/`.
 
 **Library path**: `player/library.py` loads **`library.json`** (see `LIBRARY_METADATA_FILENAME`) and **`~/.config/soundsible/config.json`** for `PlayerConfig`, talks to **SQLite** (`shared/database.py`) for fast search and manifest sync, and can use **storage providers** from `setup_tool/` for cloud-backed libraries.
@@ -114,6 +124,16 @@ The Flask application lives in `shared/api/__init__.py`. It:
   - **In-app preview** streams via **`GET /api/preview/stream/<video_id>`** (playback blueprint).
   - **Download queue** uses the resolved item like any other ODST search result.
 - Resolution can take a few seconds; the download-queue popover may show a short **“Finding YouTube match…”** state while that search runs.
+
+### 4A. Playback loading contract (client)
+
+The engine cannot make a cold preview instant — there is a yt-dlp extraction behind it — so the UI is built to make the wait *legible and idempotent* rather than pretend it is not there. Three rules, all in `ui_web/src/stores/index.ts` and `ui_web/src/lib/audio.ts`:
+
+- **Idempotent.** `loadIndex` treats a request for the entry that is already active as a no-op (or a resume, if paused). Repeated taps on a row cost nothing; only `{ restart: true }` replays from 0:00. `playCatalogItem` (`lib/catalogItem.ts`) does the same for rows that still need resolving.
+- **Last click wins.** Assigning `src` aborts the previous fetch, and `audio.ts` tags each attempt with a sequence number so the superseded `play()` rejection — an `AbortError` — is swallowed instead of being reported as the new track failing. `audioService.stop()` (teardown, not pause) clears `src` so the engine stops streaming bytes nobody is listening to.
+- **Visible.** `playback.isLoading` / `playback.loadError` drive a spinner and an indeterminate progress sweep in the OmniBar and the Now Playing transport, a retry affordance on failure, and a spinner on the specific row that was tapped. A failed track auto-advances, bounded to 3 consecutive skips.
+
+A failed load surfaces on two channels (`play()` rejects **and** the element fires `error`), so failure reporting is keyed by a load generation — the first report retires the attempt and the duplicate is ignored.
 
 ### 5. Data and configuration (conceptual)
 

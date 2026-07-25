@@ -1,6 +1,7 @@
 import { Show, type JSX } from 'solid-js';
 import type { SearchResult } from '../types/music';
 import { t } from '../lib/i18n';
+import { Spinner } from './Spinner';
 import styles from './SearchResultRow.module.css';
 
 function fmtDur(s?: number): string {
@@ -79,7 +80,7 @@ export default function SearchResultRow(props: SearchResultRowProps) {
               </button>
             }
           >
-            <span class={styles.spinner} aria-label={t('searchResultRow.ariaDownloading')} />
+            <Spinner size={18} class={styles.spinner} label={t('searchResultRow.ariaDownloading')} />
           </Show>
         }
       >

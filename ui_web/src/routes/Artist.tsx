@@ -8,43 +8,18 @@ import { toast } from '../lib/toast';
 import { artistKey, artistPath, albumPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { ArtistProfile, CatalogItem, Track } from '../types/music';
+import { Spinner } from '../components/Spinner';
+import { itemArtist, itemBusy, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import styles from './Artist.module.css';
+import { coverGradient, coverStyle } from '../lib/cover';
+import { formatDuration } from '../lib/format';
 
 type ViewMode = 'discover' | 'library';
-
-function gradientFor(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 360;
-  return `linear-gradient(135deg, hsl(${h} 50% 32%), hsl(${(h + 50) % 360} 55% 20%))`;
-}
 
 function formatFans(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
   return String(n);
-}
-
-function itemArtist(item: CatalogItem): string {
-  return item.artist || item.subtitle || '';
-}
-
-function itemToTrack(item: CatalogItem): Track | null {
-  if (item.track_id) {
-    const found = state.library.find((tr) => tr.id === item.track_id);
-    if (found) return found;
-  }
-  if (item.raw?.id && typeof item.raw.id === 'string') {
-    return {
-      id: item.raw.id,
-      title: String(item.raw.title || item.title),
-      artist: String(item.raw.artist || itemArtist(item)),
-      album: typeof item.raw.album === 'string' ? item.raw.album : item.album,
-      duration: typeof item.raw.duration === 'number' ? item.raw.duration : item.duration,
-      youtube_id: typeof item.raw.youtube_id === 'string' ? item.raw.youtube_id : undefined,
-      cover: item.cover,
-    };
-  }
-  return null;
 }
 
 /** Artist detail page with discover/library toggle.
@@ -78,7 +53,10 @@ export default function Artist() {
     (args) => fetchProfile(args.n, args.id),
   );
 
-  onCleanup(() => aborter?.abort());
+  onCleanup(() => {
+    aborter?.abort();
+    cancelCatalogResolve();
+  });
 
   const libraryTrackList = createMemo<Track[]>(() => {
     const n = artistKey(name());
@@ -98,7 +76,7 @@ export default function Artist() {
   const avatar = (): JSX.CSSProperties => {
     const pic = profile()?.metadata?.picture;
     if (pic) return { background: `url("${pic}") center / cover no-repeat` };
-    return { background: gradientFor(name()) };
+    return { background: coverGradient(name()) };
   };
 
   const showToggle = createMemo(() => inLibrary());
@@ -127,7 +105,7 @@ export default function Artist() {
     } else {
       const items = topTracks();
       if (items.length === 0) return;
-      void playExternalItem(items[0], items);
+      void playCatalogItem(items[0], items);
     }
   };
 
@@ -138,52 +116,7 @@ export default function Artist() {
       const items = topTracks();
       if (items.length === 0) return;
       const order = shuffled(items);
-      void playExternalItem(order[0], order);
-    }
-  };
-
-  const playExternalItem = async (item: CatalogItem, queue?: CatalogItem[]) => {
-    const artist = itemArtist(item);
-    if (!artist || !item.title) return;
-    const existing = itemToTrack(item);
-    if (existing) {
-      if (queue) {
-        const tracks = queue.map(itemToTrack).filter((tr): tr is Track => !!tr);
-        if (tracks.length) actions.playFrom(tracks, 0);
-      } else {
-        actions.playTrack(existing);
-      }
-      return;
-    }
-    const h = toast.loading(t('artist.looking'));
-    try {
-      const resolved = await api.resolveCatalogItem({ artist, title: item.title, duration: item.duration });
-      if (!resolved.video_id) throw new Error('not-found');
-      const track: Track = {
-        id: resolved.video_id,
-        title: item.title,
-        artist,
-        album: item.album,
-        duration: item.duration,
-        cover: item.cover,
-        source: 'preview',
-      };
-      if (queue) {
-        // Queue entries that are not in the library have no playable id yet and
-        // are dropped. The resolved track is prepended rather than written over
-        // index 0, which used to silently evict whichever owned track happened
-        // to sort first.
-        const rest = queue
-          .filter((q) => q !== item)
-          .map(itemToTrack)
-          .filter((tr): tr is Track => !!tr);
-        actions.playFrom([track, ...rest], 0);
-      } else {
-        actions.playTrack(track);
-      }
-      h.update('success', t('search.playingPreview'));
-    } catch {
-      h.update('error', t('search.noPreview'));
+      void playCatalogItem(order[0], order);
     }
   };
 
@@ -223,7 +156,7 @@ export default function Artist() {
   const relatedBg = (picture: string, seed: string): JSX.CSSProperties => ({
     background: picture
       ? `url("${picture}") center / cover no-repeat`
-      : gradientFor(seed),
+      : coverGradient(seed),
   });
 
   const handleAlbumClick = (album: { deezer_id: string; title: string }) => {
@@ -351,7 +284,7 @@ export default function Artist() {
                 loading={profile.loading}
                 saving={saving()}
                 saved={saved()}
-                onPlayItem={playExternalItem}
+                onPlayItem={playCatalogItem}
                 onSaveItem={saveItem}
                 onAlbumClick={handleAlbumClick}
                 onRelatedClick={handleRelatedClick}
@@ -404,7 +337,7 @@ function TrackListLite(props: { tracks: Track[] }) {
             onClick={() => actions.playFrom(props.tracks, i())}
           >
             <span class={styles.trackIndex}>{i() + 1}</span>
-            <span class={styles.trackCover} style={{ background: `url("${coverUrl(track.id)}") center / cover no-repeat, ${gradientFor(track.id)}` }} />
+            <span class={styles.trackCover} style={coverStyle(track.id, coverUrl(track.id))} />
             <span class={styles.trackMeta}>
               <span class={styles.trackTitle}>{track.title}</span>
               <span class={styles.trackAlbum}>{track.album}</span>
@@ -415,13 +348,6 @@ function TrackListLite(props: { tracks: Track[] }) {
       </For>
     </div>
   );
-}
-
-function formatDuration(seconds?: number): string {
-  if (seconds == null || !Number.isFinite(seconds)) return '';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 function DiscoverView(props: {
@@ -447,10 +373,17 @@ function DiscoverView(props: {
               {(item, i) => (
                 <div
                   classList={{ [styles.trackRow]: true, [styles.trackActive]: state.playback.currentTrack?.id === (item.track_id || item.id) }}
+                  aria-busy={itemBusy(item)}
                   onClick={() => props.onPlayItem(item, props.topTracks.slice(0, 10))}
                 >
                   <span class={styles.trackIndex}>{i() + 1}</span>
-                  <span class={styles.trackCover} style={{ background: item.cover ? `url("${item.cover}") center / cover no-repeat, ${gradientFor(item.id)}` : gradientFor(item.id) }} />
+                  <span class={styles.trackCover} style={coverStyle(item.id, item.cover)}>
+                    <Show when={itemBusy(item)}>
+                      <span class={styles.trackCoverBusy}>
+                        <Spinner size={16} />
+                      </span>
+                    </Show>
+                  </span>
                   <span class={styles.trackMeta}>
                     <span class={styles.trackTitle}>{item.title}</span>
                     <span class={styles.trackAlbum}>{item.album}</span>
@@ -475,7 +408,7 @@ function DiscoverView(props: {
                       }}
                     >
                       <Show when={props.saving.has(item.id)} fallback={<PlusIcon />}>
-                        <span class={styles.smallSpinner} />
+                        <Spinner size={14} />
                       </Show>
                     </button>
                   </Show>
@@ -493,7 +426,7 @@ function DiscoverView(props: {
             <For each={props.albums}>
               {(al) => (
                 <button class={styles.albumCard} type="button" onClick={() => props.onAlbumClick(al)}>
-                  <span class={styles.albumCover} style={{ background: al.cover ? `url("${al.cover}") center / cover no-repeat, ${gradientFor(al.title)}` : gradientFor(al.title) }} />
+                  <span class={styles.albumCover} style={coverStyle(al.title, al.cover)} />
                   <span class={styles.albumName}>{al.title}</span>
                   <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
                 </button>
@@ -510,7 +443,7 @@ function DiscoverView(props: {
             <For each={props.singlesEps}>
               {(al) => (
                 <button class={styles.albumCard} type="button" onClick={() => props.onAlbumClick(al)}>
-                  <span class={styles.albumCover} style={{ background: al.cover ? `url("${al.cover}") center / cover no-repeat, ${gradientFor(al.title)}` : gradientFor(al.title) }} />
+                  <span class={styles.albumCover} style={coverStyle(al.title, al.cover)} />
                   <span class={styles.albumName}>{al.title}</span>
                   <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
                 </button>
@@ -527,7 +460,7 @@ function DiscoverView(props: {
             <For each={props.related}>
               {(artist) => (
                 <button class={styles.albumCard} type="button" onClick={() => props.onRelatedClick(artist)}>
-                  <span classList={{ [styles.albumCover]: true, [styles.roundCover]: true }} style={{ background: artist.picture ? `url("${artist.picture}") center / cover no-repeat, ${gradientFor(artist.name)}` : gradientFor(artist.name) }} />
+                  <span classList={{ [styles.albumCover]: true, [styles.roundCover]: true }} style={coverStyle(artist.name, artist.picture)} />
                   <span class={styles.albumName}>{artist.name}</span>
                   <span class={styles.albumCount}>{formatFans(artist.nb_fans)} {t('artist.fans').replace('{n}', '').trim()}</span>
                 </button>

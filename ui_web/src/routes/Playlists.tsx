@@ -4,6 +4,7 @@ import { state, actions } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import { coverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
+import { neutralCoverStyle } from '../lib/cover';
 import { pickPlaylistCoverId } from '../lib/playlists';
 import { openPlaylistMenu, playlistMenuOptions } from '../components/playlistActions';
 import { attachContextMenu } from '../lib/contextMenu';
@@ -17,9 +18,8 @@ export default function Playlists() {
   const names = createMemo(() => Object.keys(state.playlists));
 
   const coverBg = (name: string, ids: string[]): JSX.CSSProperties => {
-    const grad = 'linear-gradient(135deg, var(--bg-elevated), var(--bg-inset))';
     const id = pickPlaylistCoverId(name, ids, byId() as Map<string, Track>, state.librarySettings);
-    return id ? { background: `url("${coverUrl(id)}") center / cover no-repeat, ${grad}` } : { background: grad };
+    return neutralCoverStyle(id ? coverUrl(id) : null);
   };
 
   const createNew = async () => {

@@ -20,8 +20,8 @@ export interface TrackMenuContext {
   playlistName?: string;
   onAddToPlaylist?: (track: Track) => void;
   onRemoveFromPlaylist?: (track: Track) => void;
+  /** Opens the metadata editor, which also owns cover art. */
   onEditMetadata?: (track: Track) => void;
-  onEditCover?: (track: Track) => void;
   onPlayOnDevice?: (track: Track) => void;
 }
 
@@ -44,13 +44,6 @@ const icons = {
   artist: () => sw('M16 19a4 4 0 00-8 0M12 11a3 3 0 100-6 3 3 0 000 6M12 2a10 10 0 100 20 10 10 0 000-20'),
   heart: () => sw('M12 21s-7-4.35-9.5-8.5C.9 9.6 2.2 6 5.5 6 7.6 6 9 7.5 12 10c3-2.5 4.4-4 6.5-4 3.3 0 4.6 3.6 3 6.5C19 16.65 12 21 12 21z'),
   edit: () => sw('M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z'),
-  image: () => (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <circle cx="8.5" cy="8.5" r="1.5" />
-      <path d="M21 15l-5-5L5 21" />
-    </svg>
-  ),
   share: () => sw('M4 12v8h16v-8M12 16V3M8 7l4-4 4 4'),
   device: () => (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -92,8 +85,6 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     });
   if (ctx.onEditMetadata && isLibrary)
     list.push({ icon: icons.edit(), label: t('trackActions.editData'), onSelect: () => ctx.onEditMetadata!(track) });
-  if (ctx.onEditCover && isLibrary)
-    list.push({ icon: icons.image(), label: t('trackActions.changeCover'), onSelect: () => ctx.onEditCover!(track) });
   list.push({ icon: icons.share(), label: t('trackActions.share'), onSelect: () => void shareTrack(track) });
   // Save to library for preview tracks (not yet downloaded).
   // Exclude podcast episodes — they use a different download flow.

@@ -297,15 +297,6 @@
   opacity: 1;
 }
 
-.smallSpinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
-  border-radius: var(--radius-full);
-  animation: spin 0.7s linear infinite;
-}
-
 .railTitleSkeleton {
   width: 180px;
   height: 22px;
@@ -448,6 +439,7 @@
 }
 
 .topCover {
+  position: relative;
   width: 96px;
   height: 96px;
   flex-shrink: 0;
@@ -512,10 +504,23 @@
 }
 
 .songCover {
+  position: relative;
   width: 44px;
   height: 44px;
   flex-shrink: 0;
   border-radius: var(--radius-xs);
+}
+
+/* "Working on it" sits on the artwork of the row that was tapped, so the
+   feedback is where the finger is instead of in a toast across the screen. */
+.coverBusy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  background: rgba(0, 0, 0, 0.55);
 }
 
 .songMeta {
@@ -595,15 +600,6 @@
 
 .done {
   color: var(--success);
-}
-
-.spinner {
-  width: 17px;
-  height: 17px;
-  border: 2px solid var(--hairline-strong);
-  border-top-color: var(--accent);
-  border-radius: var(--radius-full);
-  animation: spin 0.75s linear infinite;
 }
 
 .cardGrid {
@@ -793,8 +789,3 @@
   }
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}

@@ -205,11 +205,23 @@
 }
 
 .trackCover {
+  position: relative;
   flex: none;
   width: 40px;
   height: 40px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--hairline);
+}
+
+/* Resolving/buffering marker, on the artwork of the row that was tapped. */
+.trackCoverBusy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  background: rgba(0, 0, 0, 0.55);
 }
 
 .trackMeta {
@@ -276,22 +288,6 @@
 .iconBtn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.smallSpinner {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--ink-tertiary);
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .empty {

@@ -18,7 +18,10 @@ async function flush() {
   await Promise.resolve();
 }
 
-async function loadStore(apiOverrides: Record<string, unknown> = {}) {
+async function loadStore(
+  apiOverrides: Record<string, unknown> = {},
+  audioOverrides: Record<string, unknown> = {},
+) {
   vi.resetModules();
   localStorage.clear();
   localStorage.setItem('device_id', 'dev1');
@@ -38,15 +41,22 @@ async function loadStore(apiOverrides: Record<string, unknown> = {}) {
     load: vi.fn().mockResolvedValue(undefined),
     prime: vi.fn(),
     pause: vi.fn(),
+    stop: vi.fn(),
     resume: vi.fn().mockResolvedValue(undefined),
     seek: vi.fn(),
     setVolume: vi.fn(),
     setMuted: vi.fn(),
     getVolume: vi.fn(() => 1),
+    ...audioOverrides,
   };
 
   vi.doMock('../lib/api', () => ({ api }));
-  vi.doMock('../lib/audio', () => ({ audioEl: vi.fn(), audioService }));
+  vi.doMock('../lib/audio', () => ({
+    audioEl: vi.fn(),
+    audioService,
+    storedVolume: () => 1,
+    isCurrentLoad: () => true,
+  }));
   vi.doMock('../lib/media', () => ({
     streamUrl: (id: string) => `/stream/${id}`,
     previewUrl: (id: string) => `/preview/${id}`,
@@ -139,7 +149,9 @@ describe('Solid store library and playback resume', () => {
     expect(state.playlists).toEqual({ Mix: ['t2'] });
     expect(state.playback.currentTrack).toBeNull();
     expect(state.playback.queue.map((t) => t.id)).toEqual(['t2']);
-    expect(audioService.pause).toHaveBeenCalled();
+    // stop(), not pause(): the deleted track's stream must be released, not
+    // left buffering a file that no longer exists.
+    expect(audioService.stop).toHaveBeenCalled();
     expect(api.putPlaybackState).toHaveBeenCalledWith(expect.objectContaining({ track_id: null }), expect.anything());
   });
 
@@ -184,6 +196,104 @@ describe('Solid store library and playback resume', () => {
 
     expect(getLibrary).toHaveBeenCalledTimes(3);
     expect(state.library.map((t) => t.id)).toEqual(['t2']);
+  });
+});
+
+describe('Playback load coalescing', () => {
+  const preview: Track = { id: 'previewid01', title: 'Preview', artist: 'Chan', source: 'preview' };
+
+  it('collapses repeated taps on the entry already loading into one request', async () => {
+    const { actions, state, audioService } = await loadStore();
+
+    actions.playTrack(preview);
+    expect(state.playback.isLoading).toBe(true);
+    expect(audioService.load).toHaveBeenCalledTimes(1);
+
+    // A preview click costs the engine a yt-dlp resolution and a proxied
+    // stream; the impatient re-taps must not each buy another one.
+    actions.playTrack(preview);
+    actions.playTrack(preview);
+    actions.playNow(preview);
+    expect(audioService.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('switching to a different preview mid-load loads exactly the newest one', async () => {
+    const { actions, state, audioService } = await loadStore();
+    const other: Track = { id: 'previewid02', title: 'Other', artist: 'Chan', source: 'preview' };
+
+    actions.playTrack(preview);
+    actions.playTrack(other);
+
+    expect(audioService.load).toHaveBeenCalledTimes(2);
+    expect(audioService.load).toHaveBeenLastCalledWith('/preview/previewid02');
+    expect(state.playback.currentTrack?.id).toBe('previewid02');
+  });
+
+  it('resumes rather than restarting when the active entry is paused', async () => {
+    // The auto-restored (paused) track from the last session: tapping it must
+    // pick up at the saved position, not throw it away and start over.
+    const { actions, state, audioService } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({ tracks: [t1], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+      getPlaybackState: vi.fn().mockResolvedValue({
+        device_id: 'dev1',
+        track_id: 't1',
+        track: t1,
+        position_sec: 37,
+        is_playing: false,
+        updated_at: Date.now() / 1000,
+      }),
+    });
+
+    await actions.syncLibrary();
+    await actions.checkResume();
+    expect(state.playback.isPlaying).toBe(false);
+
+    actions.playTrack(t1);
+    expect(audioService.load).not.toHaveBeenCalled();
+    expect(audioService.resume).toHaveBeenCalledTimes(1);
+    expect(state.playback.currentTime).toBe(37);
+  });
+
+  it('skips to the next entry when a track cannot be played, then gives up', async () => {
+    const { actions, state, audioService } = await loadStore({}, { load: vi.fn().mockRejectedValue(new Error('502')) });
+
+    actions.playFrom([t1, t2], 0);
+    await flush();
+
+    // t1 failed → advanced to t2, which also failed → nothing left to try.
+    expect(audioService.load).toHaveBeenCalledTimes(2);
+    expect(state.playback.currentTrack?.id).toBe('t2');
+    expect(state.playback.loadError).toBe(true);
+    expect(state.playback.isPlaying).toBe(false);
+  });
+
+  it('reports one failure per attempt, not one per error channel', async () => {
+    // A failed load surfaces twice: play() rejects AND the element fires
+    // `error`. Counting both would skip two entries for one broken track — and
+    // blame the innocent one that just started.
+    const load = vi.fn().mockRejectedValueOnce(new Error('502')).mockResolvedValue(undefined);
+    const { actions, state, audioService } = await loadStore({}, { load });
+    const t3: Track = { id: 't3', title: 'Three', artist: 'Artist' };
+
+    actions.playFrom([t1, t2, t3], 0);
+    await flush();
+
+    expect(audioService.load).toHaveBeenCalledTimes(2);
+    expect(state.playback.currentTrack?.id).toBe('t2');
+    expect(state.playback.loadError).toBe(false);
+  });
+
+  it('retryCurrent re-requests the failed entry', async () => {
+    const load = vi.fn().mockRejectedValueOnce(new Error('502')).mockResolvedValue(undefined);
+    const { actions, state, audioService } = await loadStore({}, { load });
+
+    actions.playTrack(preview);
+    await flush();
+    expect(state.playback.loadError).toBe(true);
+
+    actions.retryCurrent();
+    expect(audioService.load).toHaveBeenCalledTimes(2);
+    expect(state.playback.loadError).toBe(false);
   });
 });
 

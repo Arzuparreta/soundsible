@@ -1,5 +1,6 @@
 import { createSignal, For, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
+import { Spinner } from '../components/Spinner';
 import styles from './toast.module.css';
 
 export type ToastKind = 'success' | 'error' | 'info' | 'loading';
@@ -65,7 +66,7 @@ export function ToastOutlet() {
           {(t) => (
             <div classList={{ [styles.toast]: true, [styles[t.kind]]: true }}>
               <Show when={t.kind === 'loading'}>
-                <span class={styles.spinner} aria-hidden="true" />
+                <Spinner size={14} />
               </Show>
               <span class={styles.msg}>{t.message}</span>
             </div>

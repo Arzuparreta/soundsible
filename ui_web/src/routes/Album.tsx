@@ -9,45 +9,13 @@ import { toast } from '../lib/toast';
 import { artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { AlbumProfile, CatalogItem, Track } from '../types/music';
+import { Spinner } from '../components/Spinner';
+import { itemArtist, itemBusy, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import styles from './Album.module.css';
+import { coverGradient, coverStyle } from '../lib/cover';
+import { formatDuration } from '../lib/format';
 
 type ViewMode = 'discover' | 'library';
-
-function gradientFor(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 360;
-  return `linear-gradient(135deg, hsl(${h} 50% 32%), hsl(${(h + 50) % 360} 55% 20%))`;
-}
-
-function itemArtist(item: CatalogItem): string {
-  return item.artist || item.subtitle || '';
-}
-
-function itemToTrack(item: CatalogItem): Track | null {
-  if (item.track_id) {
-    const found = state.library.find((tr) => tr.id === item.track_id);
-    if (found) return found;
-  }
-  if (item.raw?.id && typeof item.raw.id === 'string') {
-    return {
-      id: item.raw.id,
-      title: String(item.raw.title || item.title),
-      artist: String(item.raw.artist || itemArtist(item)),
-      album: typeof item.raw.album === 'string' ? item.raw.album : item.album,
-      duration: typeof item.raw.duration === 'number' ? item.raw.duration : item.duration,
-      youtube_id: typeof item.raw.youtube_id === 'string' ? item.raw.youtube_id : undefined,
-      cover: item.cover,
-    };
-  }
-  return null;
-}
-
-function formatDuration(seconds?: number): string {
-  if (seconds == null || !Number.isFinite(seconds)) return '';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
 
 /** Album detail page with discover/library toggle.
  * Reached by tapping an album card from the artist page or search. */
@@ -80,7 +48,10 @@ export default function Album() {
     (args) => fetchAlbum(args.t, args.a, args.id),
   );
 
-  onCleanup(() => aborter?.abort());
+  onCleanup(() => {
+    aborter?.abort();
+    cancelCatalogResolve();
+  });
 
   const libraryTrackList = createMemo<Track[]>(() => {
     // artistKey folds the same Unicode/casing differences on both sides; the
@@ -113,10 +84,12 @@ export default function Album() {
     resolveViewMode({ urlView: viewParams().view, override: viewOverride(), canToggle: showToggle() }),
   );
 
-  const coverStyle = (): JSX.CSSProperties => {
+  // Named apart from the shared `coverStyle` helper: this is the page hero,
+  // which fills edge to edge with no gradient underlay.
+  const heroCoverStyle = (): JSX.CSSProperties => {
     const cover = profile()?.cover;
     if (cover) return { background: `url("${cover}") center / cover no-repeat` };
-    return { background: gradientFor(title()) };
+    return { background: coverGradient(title()) };
   };
 
   const playAll = () => {
@@ -126,7 +99,7 @@ export default function Album() {
     } else {
       const items = tracklist();
       if (items.length === 0) return;
-      void playExternalItem(items[0], items);
+      void playCatalogItem(items[0], items);
     }
   };
 
@@ -137,50 +110,7 @@ export default function Album() {
       const items = tracklist();
       if (items.length === 0) return;
       const order = shuffled(items);
-      void playExternalItem(order[0], order);
-    }
-  };
-
-  const playExternalItem = async (item: CatalogItem, queue?: CatalogItem[]) => {
-    const artist = itemArtist(item);
-    if (!artist || !item.title) return;
-    const existing = itemToTrack(item);
-    if (existing) {
-      if (queue) {
-        const tracks = queue.map(itemToTrack).filter((tr): tr is Track => !!tr);
-        if (tracks.length) actions.playFrom(tracks, 0);
-      } else {
-        actions.playTrack(existing);
-      }
-      return;
-    }
-    const h = toast.loading(t('artist.looking'));
-    try {
-      const resolved = await api.resolveCatalogItem({ artist, title: item.title, duration: item.duration });
-      if (!resolved.video_id) throw new Error('not-found');
-      const track: Track = {
-        id: resolved.video_id,
-        title: item.title,
-        artist,
-        album: item.album,
-        duration: item.duration,
-        cover: item.cover,
-        source: 'preview',
-      };
-      if (queue) {
-        // See Artist.tsx: prepend the resolved track instead of overwriting
-        // index 0, which used to evict an owned track from the queue.
-        const rest = queue
-          .filter((q) => q !== item)
-          .map(itemToTrack)
-          .filter((tr): tr is Track => !!tr);
-        actions.playFrom([track, ...rest], 0);
-      } else {
-        actions.playTrack(track);
-      }
-      h.update('success', t('search.playingPreview'));
-    } catch {
-      h.update('error', t('search.noPreview'));
+      void playCatalogItem(order[0], order);
     }
   };
 
@@ -232,7 +162,7 @@ export default function Album() {
         </button>
 
         <div class={styles.hero}>
-          <div class={styles.cover} style={coverStyle()}>
+          <div class={styles.cover} style={heroCoverStyle()}>
             <Show when={!profile()?.cover}>
               <span class={styles.initial}>{(title()[0] ?? '?').toUpperCase()}</span>
             </Show>
@@ -291,7 +221,7 @@ export default function Album() {
                 tracklist={tracklist()}
                 saving={saving()}
                 saved={saved()}
-                onPlayItem={playExternalItem}
+                onPlayItem={playCatalogItem}
                 onSaveItem={saveItem}
               />
             </Show>
@@ -326,7 +256,7 @@ function TrackListLite(props: { tracks: Track[] }) {
             onClick={() => actions.playFrom(props.tracks, i())}
           >
             <span class={styles.trackIndex}>{i() + 1}</span>
-            <span class={styles.trackCover} style={{ background: `url("${coverUrl(track.id)}") center / cover no-repeat, ${gradientFor(track.id)}` }} />
+            <span class={styles.trackCover} style={coverStyle(track.id, coverUrl(track.id))} />
             <span class={styles.trackMeta}>
               <span class={styles.trackTitle}>{track.title}</span>
             </span>
@@ -353,10 +283,17 @@ function DiscoverView(props: {
             {(item, i) => (
               <div
                 classList={{ [styles.trackRow]: true, [styles.trackActive]: state.playback.currentTrack?.id === (item.track_id || item.id) }}
+                aria-busy={itemBusy(item)}
                 onClick={() => props.onPlayItem(item, props.tracklist)}
               >
                 <span class={styles.trackIndex}>{i() + 1}</span>
-                <span class={styles.trackCover} style={{ background: item.cover ? `url("${item.cover}") center / cover no-repeat, ${gradientFor(item.id)}` : gradientFor(item.id) }} />
+                <span class={styles.trackCover} style={coverStyle(item.id, item.cover)}>
+                  <Show when={itemBusy(item)}>
+                    <span class={styles.trackCoverBusy}>
+                      <Spinner size={16} />
+                    </span>
+                  </Show>
+                </span>
                 <span class={styles.trackMeta}>
                   <span class={styles.trackTitle}>{item.title}</span>
                   <Show when={item.artist && item.artist !== (item.subtitle || '')}>
@@ -383,7 +320,7 @@ function DiscoverView(props: {
                     }}
                   >
                     <Show when={props.saving.has(item.id)} fallback={<PlusIcon />}>
-                      <span class={styles.smallSpinner} />
+                      <Spinner size={14} />
                     </Show>
                   </button>
                 </Show>

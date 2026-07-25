@@ -11,6 +11,7 @@ import requests
 from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context, redirect
 
 from shared import preview_cache
+from shared.api.memo import Memo
 from shared.constants import DEFAULT_CACHE_DIR
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, rate_limit, require_scope
 from shared.path_resolver import resolve_local_track_path
@@ -20,17 +21,30 @@ logger = logging.getLogger(__name__)
 
 playback_bp = Blueprint("playback", __name__, url_prefix="")
 
-PREVIEW_STREAM_LIMIT = 30
+# Note: A preview *session* is one click, but a browser opens several requests
+# for it (the initial fetch plus range requests for seeks), and browsing
+# previews back-to-back is normal use — so this ceiling is deliberately well
+# above "one stream at a time". Disk-cache hits are not counted at all: those
+# cost a `send_file` and must never be what pushes a listener over the limit.
+PREVIEW_STREAM_LIMIT = 90
 PREVIEW_STREAM_WINDOW_SEC = 60
-_preview_stream_timestamps = {}
+#: Distinct client IPs tracked for rate limiting; oldest are dropped past this.
+PREVIEW_STREAM_MAX_CLIENTS = 512
+_preview_stream_timestamps: dict[str, list[float]] = {}
 _preview_stream_lock = threading.Lock()
 
-# Note: Small in-memory cache for preview stream URLs to avoid repeated expensive
-# resolution calls for the same video_id. This is intentionally short-lived and
-# process-local; ODST itself also has deeper caching at the downloader layer.
+# Preview stream URLs, single-flighted: resolution is a multi-second yt-dlp
+# extraction, and repeated taps on the same row (or a prefetch racing the click
+# it was meant to make instant) all collapse onto one call. Unresolvable ids
+# get a short negative TTL so a dead video is not re-extracted on every retry
+# but is also not written off for the full five minutes.
 PREVIEW_STREAM_CACHE_TTL_SEC = 300  # 5 minutes
-_preview_stream_cache = {}
-_preview_stream_cache_lock = threading.Lock()
+PREVIEW_STREAM_NEGATIVE_TTL_SEC = 20
+_preview_stream_urls: Memo[str] = Memo(
+    ttl_sec=PREVIEW_STREAM_CACHE_TTL_SEC,
+    negative_ttl_sec=PREVIEW_STREAM_NEGATIVE_TTL_SEC,
+    maxsize=512,
+)
 
 
 def _queue_snapshot(queue):
@@ -47,36 +61,37 @@ def _queue_snapshot(queue):
 def _preview_stream_rate_limit(ip: str) -> bool:
     now = time.time()
     with _preview_stream_lock:
-        timestamps = _preview_stream_timestamps.get(ip, [])
-        timestamps = [t for t in timestamps if now - t < PREVIEW_STREAM_WINDOW_SEC]
+        timestamps = [t for t in _preview_stream_timestamps.get(ip, []) if now - t < PREVIEW_STREAM_WINDOW_SEC]
         if len(timestamps) >= PREVIEW_STREAM_LIMIT:
+            _preview_stream_timestamps[ip] = timestamps
             return False
         timestamps.append(now)
         _preview_stream_timestamps[ip] = timestamps
+        if len(_preview_stream_timestamps) > PREVIEW_STREAM_MAX_CLIENTS:
+            # Bound the tracker: without this, one entry per client IP lives for
+            # the process lifetime. Windows already elapsed are dead weight.
+            for stale in [k for k, ts in _preview_stream_timestamps.items() if not ts or now - ts[-1] >= PREVIEW_STREAM_WINDOW_SEC]:
+                _preview_stream_timestamps.pop(stale, None)
     return True
 
 
 def _get_preview_stream_url_cached(api, video_id: str) -> str:
-    """
-    Resolve a preview stream URL with a small TTL cache to avoid repeated
-    calls into the downloader for the same video_id under bursty access.
-    """
-    now = time.time()
-    with _preview_stream_cache_lock:
-        entry = _preview_stream_cache.get(video_id)
-        if entry and entry["expires_at"] > now and entry.get("url"):
-            return entry["url"]
+    """Resolve a preview stream URL, at most once per video id at a time.
 
-    dl = api["get_downloader"](open_browser=False)
-    url = dl.downloader.get_stream_url(video_id)
-    if not url:
+    Concurrent callers for the same id — repeated taps, a range request landing
+    while the first fetch is still resolving, a prefetch racing a click — share
+    one yt-dlp extraction instead of each paying for their own.
+    """
+
+    def resolve() -> str:
+        dl = api["get_downloader"](open_browser=False)
+        return dl.downloader.get_stream_url(video_id) or ""
+
+    try:
+        return _preview_stream_urls.resolve(video_id, resolve)
+    except TimeoutError:
+        logger.warning("API: [Preview] Timed out waiting on in-flight resolution for %s", video_id)
         return ""
-
-    expires_at = now + PREVIEW_STREAM_CACHE_TTL_SEC
-    with _preview_stream_cache_lock:
-        _preview_stream_cache[video_id] = {"url": url, "expires_at": expires_at}
-
-    return url
 
 
 def warm_preview_stream_cache(video_id: str, url: str, ttl_sec: int = PREVIEW_STREAM_CACHE_TTL_SEC) -> None:
@@ -91,9 +106,7 @@ def warm_preview_stream_cache(video_id: str, url: str, ttl_sec: int = PREVIEW_ST
     """
     if not video_id or not isinstance(url, str) or not url:
         return
-    now = time.time()
-    with _preview_stream_cache_lock:
-        _preview_stream_cache[video_id] = {"url": url, "expires_at": now + ttl_sec}
+    _preview_stream_urls.put(video_id, url, ttl_sec=ttl_sec)
 
 
 def _get_api():
@@ -206,14 +219,21 @@ def preview_stream_proxy(video_id):
     api = _get_api()
     if not validate_youtube_video_id(video_id):
         return jsonify({"error": "Invalid video id"}), 400
-    if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
-        return jsonify({"error": "Too many requests"}), 429
 
-    # Fully cached preview: serve straight from disk (instant, seekable).
+    # Fully cached preview: serve straight from disk (instant, seekable). Checked
+    # before the rate limit on purpose — a disk hit costs nothing upstream, so
+    # replaying a cached preview must never be what trips the ceiling.
     cached = preview_cache.get_cached(video_id)
     if cached:
         path, content_type = cached
-        return send_file(str(path), mimetype=content_type, conditional=True)
+        response = send_file(str(path), mimetype=content_type, conditional=True)
+        # The bytes are content-addressed by video id and never change, so let
+        # the browser skip us entirely when the listener replays the track.
+        response.headers["Cache-Control"] = "private, max-age=86400"
+        return response
+
+    if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
+        return jsonify({"error": "Too many requests"}), 429
 
     try:
         stream_url = _get_preview_stream_url_cached(api, video_id)
@@ -330,7 +350,8 @@ def get_preview_stream_url(video_id):
         if not url:
             return jsonify({"error": "Stream URL unavailable"}), 404
         return jsonify({"url": url})
-    except Exception as e:
+    except Exception as exc:
+        logger.warning("API: [Preview stream-url] Error for %s: %s", video_id, exc)
         return jsonify({"error": "Preview unavailable"}), 502
 
 
@@ -338,7 +359,6 @@ def get_preview_stream_url(video_id):
 def preview_cover_redirect(video_id):
     if not validate_youtube_video_id(video_id):
         return jsonify({"error": "Invalid video id"}), 400
-    from flask import redirect
     return redirect(f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg", code=302)
 
 

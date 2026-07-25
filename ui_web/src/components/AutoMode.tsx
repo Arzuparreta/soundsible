@@ -5,14 +5,9 @@ import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import type { AutoActivity, AutoProfile } from '../lib/autopilot';
 import styles from './AutoMode.module.css';
+import { clockTime } from '../lib/format';
 
 const IDLE_MS = 12_000;
-
-function fmt(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
-}
 
 function translatedValues(values?: Record<string, string | number>): Record<string, string | number> | undefined {
   if (!values) return undefined;
@@ -222,11 +217,11 @@ export function AutoMode() {
 
           <footer class={styles.dock}>
             <div class={styles.seek}>
-              <span class={styles.time}>{fmt(state.playback.currentTime)}</span>
+              <span class={styles.time}>{clockTime(state.playback.currentTime)}</span>
               <div class={styles.progress}>
                 <div class={styles.progressFill} style={{ width: `${progress()}%` }} />
               </div>
-              <span class={styles.time}>{fmt(state.playback.duration)}</span>
+              <span class={styles.time}>{clockTime(state.playback.duration)}</span>
             </div>
             <div class={styles.transport}>
               <span class={styles.transportSide} aria-hidden="true" />

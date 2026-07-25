@@ -61,16 +61,6 @@
   --dot: var(--accent);
 }
 
-.spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--hairline-strong);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  flex: none;
-  animation: spin 0.7s linear infinite;
-}
-
 @keyframes toast-in {
   from {
     transform: translateY(-8px);
@@ -78,8 +68,3 @@
   }
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}

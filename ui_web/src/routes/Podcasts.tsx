@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Show, onMount, onCleanup, type JSX } from 'solid-js';
+import { createMemo, createSignal, For, Show, onMount, onCleanup } from 'solid-js';
 import { A } from '@solidjs/router';
 import { api } from '../lib/api';
 import { state, actions } from '../stores';
@@ -6,11 +6,7 @@ import { ensureDiscover, topPodcasts } from '../lib/discover';
 import { t } from '../lib/i18n';
 import type { PodcastSearchResult } from '../types/podcast';
 import styles from './Podcasts.module.css';
-
-function coverBg(url?: string | null): JSX.CSSProperties {
-  const grad = 'linear-gradient(135deg, var(--bg-elevated), var(--bg-inset))';
-  return url ? { background: `url("${url}") center / cover no-repeat, ${grad}` } : { background: grad };
-}
+import { neutralCoverStyle } from '../lib/cover';
 
 function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
@@ -105,7 +101,7 @@ export default function Podcasts() {
                   <For each={state.podcastSubscriptions}>
                     {(s) => (
                       <A href={`/podcasts/${encodeURIComponent(s.id)}`} class={styles.card}>
-                        <div class={styles.cover} style={coverBg(s.image_url)} />
+                        <div class={styles.cover} style={neutralCoverStyle(s.image_url)} />
                         <span class={styles.name}>{s.title}</span>
                         <span class={styles.author}>{s.author}</span>
                       </A>
@@ -125,7 +121,7 @@ export default function Podcasts() {
                         disabled={subscribedFeeds().has(p.feed_url) || subscribing().has(p.feed_url)}
                         onClick={() => subscribe(p)}
                       >
-                        <div class={styles.cover} style={coverBg(p.image_url)} />
+                        <div class={styles.cover} style={neutralCoverStyle(p.image_url)} />
                         <span class={styles.name}>{p.title}</span>
                         <span class={styles.author}>
                           {subscribedFeeds().has(p.feed_url) ? t('podcasts.subscribed') : p.author}
@@ -151,7 +147,7 @@ export default function Podcasts() {
           <For each={results()}>
             {(r) => (
               <div class={styles.row}>
-                <div class={styles.rowCover} style={coverBg(r.image_url)} />
+                <div class={styles.rowCover} style={neutralCoverStyle(r.image_url)} />
                 <div class={styles.meta}>
                   <span class={styles.title}>{r.title}</span>
                   <span class={styles.sub}>{r.author}</span>

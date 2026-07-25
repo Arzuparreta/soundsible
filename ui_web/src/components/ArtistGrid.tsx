@@ -7,18 +7,13 @@ import { artistPath } from '../lib/artistRoute';
 import { artistMenuOptions } from './artistActions';
 import type { ArtistEntry } from '../lib/libraryView';
 import styles from './ArtistGrid.module.css';
-
-function gradientFor(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 360;
-  return `linear-gradient(135deg, hsl(${h} 50% 32%), hsl(${(h + 50) % 360} 55% 20%))`;
-}
+import { coverBackground } from '../lib/cover';
 
 /** Grid of artist cards (round avatars) linking to each artist's detail view. */
 export default function ArtistGrid(props: { artists: ArtistEntry[] }) {
   const navigate = useNavigate();
   const bg = (a: ArtistEntry): JSX.CSSProperties => ({
-    background: `url("${coverUrl(a.coverId)}") center / cover no-repeat, ${gradientFor(a.name)}`,
+    background: coverBackground(a.name, coverUrl(a.coverId)),
   });
   return (
     <div class={styles.grid}>

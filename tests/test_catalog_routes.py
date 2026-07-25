@@ -158,9 +158,11 @@ def test_catalog_save_confirmed_video_queues_download(monkeypatch):
 
 
 def test_resolve_candidates_warms_preview_stream_cache_for_best_id(monkeypatch, tmp_path):
-    """Opción D: after catalog resolve selects a best video id, it pre-warms
-    the playback route's in-process stream URL cache so the upcoming preview
-    click never pays a second yt-dlp resolution."""
+    """After catalog resolve picks a best video id, it queues that id's
+    stream-URL resolution in the *background* so the click that follows finds it
+    warm (or joins the extraction already running) instead of starting a second
+    one. The resolve response itself must not block on that warm-up."""
+    catalog_routes._resolve_memo.clear()
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     fake_api = _fake_api(metadata)
     fake_dl = MagicMock()
@@ -179,22 +181,22 @@ def test_resolve_candidates_warms_preview_stream_cache_for_best_id(monkeypatch, 
     fake_api["get_downloader"] = MagicMock(return_value=fake_dl)
     monkeypatch.setattr(catalog_routes, "_get_api", lambda: fake_api)
 
-    warm_calls = []
+    prefetched = []
 
-    def fake_warm(video_id, url, ttl_sec=None):
-        warm_calls.append((video_id, url))
+    def fake_request_prefetch(video_ids, *, download, resolver):
+        prefetched.append((list(video_ids), download))
+        return list(video_ids)
 
-    monkeypatch.setattr(
-        "shared.api.routes.playback.warm_preview_stream_cache",
-        fake_warm,
-    )
+    monkeypatch.setattr("shared.preview_cache.request_prefetch", fake_request_prefetch)
 
     best, ranked = catalog_routes._resolve_candidates("Queen", "Bohemian Rhapsody", 354)
 
     assert best["id"] == "abcdefghijk"
     assert best["confidence"] > 0
-    fake_dl.downloader.get_stream_url.assert_called_once_with("abcdefghijk")
-    assert warm_calls == [("abcdefghijk", "https://rr.googlevideo.com/warmed-url")]
+    assert prefetched == [(["abcdefghijk"], False)]
+    # The warm runs on the prefetch worker, so the request thread never blocks
+    # on a second yt-dlp extraction.
+    fake_dl.downloader.get_stream_url.assert_not_called()
 
 
 def test_resolve_candidates_skips_warm_on_db_cache_hit(monkeypatch, tmp_path):
@@ -202,6 +204,7 @@ def test_resolve_candidates_skips_warm_on_db_cache_hit(monkeypatch, tmp_path):
     and must NOT trigger an extra yt-dlp call — the warm is a cold-path-only
     optimization. The first click falls back to the playback cold path, which
     is fine and self-warms on its own."""
+    catalog_routes._resolve_memo.clear()
     fake_db = MagicMock()
     cached_row = {
         "id": "cachedvideo_01",

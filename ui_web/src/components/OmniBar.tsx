@@ -1,13 +1,23 @@
-import { createMemo, Show, type JSX } from 'solid-js';
+import { createMemo, Match, Show, Switch, type JSX } from 'solid-js';
 import { state, actions, setNowPlayingOpen } from '../stores';
 import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import { RadioBadge } from './RadioBadge';
+import { Spinner } from './Spinner';
 import styles from './OmniBar.module.css';
 
 /** Persistent mini-player. Progress line + tap-to-expand + play/pause + next. */
 export function OmniBar() {
   const current = createMemo(() => state.playback.currentTrack);
+  const loading = createMemo(() => state.playback.isLoading);
+  const failed = createMemo(() => state.playback.loadError);
+  /** What the second line says: the artist normally, the playback state when
+   * there is something more urgent to report. */
+  const subtitle = createMemo(() => {
+    if (failed()) return t('omnibar.unavailable');
+    if (loading()) return t('omnibar.loading');
+    return current()?.artist ?? '';
+  });
   const audibleVolume = createMemo(() => (state.playback.muted ? 0 : state.playback.volume));
   const volumePct = createMemo(() => Math.round(audibleVolume() * 100));
   const pct = createMemo(() => {
@@ -32,8 +42,10 @@ export function OmniBar() {
 
   return (
     <div class={styles.omni}>
-      <div class={styles.progress}>
-        <div class={styles.progressFill} style={{ width: `${pct()}%` }} />
+      {/* While the stream is still being resolved there is no position to show,
+          so the line sweeps instead of sitting at 0% looking broken. */}
+      <div classList={{ [styles.progress]: true, [styles.progressIndeterminate]: loading() }}>
+        <div class={styles.progressFill} style={loading() ? undefined : { width: `${pct()}%` }} />
       </div>
 
       <button
@@ -57,7 +69,7 @@ export function OmniBar() {
               {current()!.title}
               <RadioBadge class={styles.radioBadge} loadingClass={styles.radioBadgeLoading} />
             </span>
-            <span class={styles.sub}>{current()!.artist}</span>
+            <span classList={{ [styles.sub]: true, [styles.subAlert]: failed() }}>{subtitle()}</span>
           </Show>
         </div>
       </button>
@@ -65,22 +77,31 @@ export function OmniBar() {
       <button
         class={styles.ctrl}
         type="button"
-        aria-label={state.playback.isPlaying ? t('common.pause') : t('common.play')}
+        aria-label={failed() ? t('common.retry') : state.playback.isPlaying ? t('common.pause') : t('common.play')}
+        aria-busy={loading()}
         disabled={!current()}
         onClick={() => actions.togglePlay()}
       >
-        <Show
-          when={state.playback.isPlaying}
-          fallback={
+        <Switch>
+          <Match when={failed()}>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 11-2.64-6.36M21 3v6h-6" />
+            </svg>
+          </Match>
+          <Match when={loading()}>
+            <Spinner size={20} />
+          </Match>
+          <Match when={state.playback.isPlaying}>
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+              <path fill="currentColor" d="M7 5h4v14H7zM13 5h4v14h-4z" />
+            </svg>
+          </Match>
+          <Match when={true}>
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
               <path fill="currentColor" d="M8 5v14l11-7z" />
             </svg>
-          }
-        >
-          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-            <path fill="currentColor" d="M7 5h4v14H7zM13 5h4v14h-4z" />
-          </svg>
-        </Show>
+          </Match>
+        </Switch>
       </button>
 
       <button

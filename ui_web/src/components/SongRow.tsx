@@ -2,6 +2,8 @@ import { Show, type JSX } from 'solid-js';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
 import styles from './SongRow.module.css';
+import { coverStyle } from '../lib/cover';
+import { formatDuration } from '../lib/format';
 
 export interface SongRowProps {
   track: Track;
@@ -18,27 +20,10 @@ export interface SongRowProps {
   onMenu?: (track: Track, ev?: MouseEvent) => void;
 }
 
-function formatDuration(seconds?: number): string {
-  if (seconds == null || !Number.isFinite(seconds)) return '';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-function gradientFor(id: string): string {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
-  return `linear-gradient(135deg, hsl(${h} 45% 28%), hsl(${(h + 40) % 360} 50% 18%))`;
-}
-
 /** Layered background: cover on top, deterministic gradient underneath, so a
  * missing/404 cover degrades gracefully instead of showing a broken image. */
-function coverStyle(props: SongRowProps): JSX.CSSProperties {
-  const grad = gradientFor(props.track.id);
-  const url = props.cover ?? props.track.cover;
-  return url
-    ? { background: `url("${url}") center / cover no-repeat, ${grad}` }
-    : { background: grad };
+function rowCoverStyle(props: SongRowProps): JSX.CSSProperties {
+  return coverStyle(props.track.id, props.cover ?? props.track.cover);
 }
 
 /**
@@ -90,7 +75,7 @@ export default function SongRow(props: SongRowProps) {
       <Show when={props.index != null}>
         <span class={styles.index}>{props.index}</span>
       </Show>
-      <div class={styles.cover} style={coverStyle(props)} />
+      <div class={styles.cover} style={rowCoverStyle(props)} />
       <div class={styles.meta}>
         <span class={styles.title}>{props.track.title}</span>
         <Show

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { state, actions, nowPlayingOpen, setNowPlayingOpen } from '../stores';
 import { coverUrl } from '../lib/media';
@@ -6,20 +6,14 @@ import { openTrackMenu } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
-import { shareTrack } from '../lib/share';
 import { artistPath } from '../lib/artistRoute';
 import { isPodcastTrack } from '../lib/track';
 import { t as tr } from '../lib/i18n';
 import { SearchPanel, panelOpen, panelSide, togglePanel } from './SearchPanel';
 import { RadioBadge, onStopRadio } from './RadioBadge';
+import { Spinner } from './Spinner';
 import styles from './NowPlaying.module.css';
-
-function fmt(s: number): string {
-  if (!Number.isFinite(s) || s < 0) return '0:00';
-  const m = Math.floor(s / 60);
-  const x = Math.floor(s % 60);
-  return `${m}:${x.toString().padStart(2, '0')}`;
-}
+import { clockTime } from '../lib/format';
 
 /** Full-screen Now Playing sheet. Slides up; controlled by the nowPlayingOpen signal. */
 export function NowPlaying() {
@@ -33,10 +27,8 @@ export function NowPlaying() {
     const c = t();
     return !!c && isPodcastTrack(c);
   });
-  const isLibrary = createMemo(() => {
-    const c = t();
-    return !!c && c.source !== 'preview';
-  });
+  const loading = createMemo(() => state.playback.isLoading);
+  const loadFailed = createMemo(() => state.playback.loadError);
   const [mobileQueueOpen, setMobileQueueOpen] = createSignal(false);
   let dragFrom: number | null = null;
   let bodyEl: HTMLDivElement | undefined;
@@ -466,8 +458,8 @@ export function NowPlaying() {
               onInput={(e) => actions.seek(Number(e.currentTarget.value))}
             />
             <div class={styles.times}>
-              <span>{fmt(state.playback.currentTime)}</span>
-              <span>{fmt(state.playback.duration)}</span>
+              <span>{clockTime(state.playback.currentTime)}</span>
+              <span>{clockTime(state.playback.duration)}</span>
             </div>
             </div>
 
@@ -490,19 +482,33 @@ export function NowPlaying() {
               </svg>
             </button>
 
-            <button class={styles.play} type="button" aria-label={state.playback.isPlaying ? tr('common.pause') : tr('common.play')} onClick={() => actions.togglePlay()}>
-              <Show
-                when={state.playback.isPlaying}
-                fallback={
+            <button
+              class={styles.play}
+              type="button"
+              aria-label={loadFailed() ? tr('common.retry') : state.playback.isPlaying ? tr('common.pause') : tr('common.play')}
+              aria-busy={loading()}
+              onClick={() => actions.togglePlay()}
+            >
+              <Switch>
+                <Match when={loadFailed()}>
+                  <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M21 12a9 9 0 11-2.64-6.36M21 3v6h-6" />
+                  </svg>
+                </Match>
+                <Match when={loading()}>
+                  <Spinner size={26} onAccent />
+                </Match>
+                <Match when={state.playback.isPlaying}>
+                  <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true">
+                    <path fill="currentColor" d="M7 5h4v14H7zM13 5h4v14h-4z" />
+                  </svg>
+                </Match>
+                <Match when={true}>
                   <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true">
                     <path fill="currentColor" d="M8 5v14l11-7z" />
                   </svg>
-                }
-              >
-                <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true">
-                  <path fill="currentColor" d="M7 5h4v14H7zM13 5h4v14h-4z" />
-                </svg>
-              </Show>
+                </Match>
+              </Switch>
             </button>
 
             <button class={styles.ctrl} type="button" aria-label={tr('common.next')} onClick={() => actions.next()}>
@@ -575,69 +581,27 @@ export function NowPlaying() {
               </button>
             </Show>
 
-            {/* Desktop-only: the most useful ⋯-menu actions, inlined into the
-                free horizontal space under the transport. The ⋯ menu keeps the
-                long tail (delete, cover, …). */}
+            {/* Radio earns a permanent slot because it is the only action here
+                that carries state — active, and loading while the mix resolves.
+                A menu item cannot show either. Everything else that used to sit
+                in this bar (playlist, edit, play-on-device, share) is one tap
+                away in ⋯, where it was duplicated from anyway. */}
             <Show when={!isPodcast()}>
               <button
                 classList={{
                   [styles.actBtn]: true,
-                  [styles.deskAct]: true,
                   [styles.actOn]: state.playback.radioMode,
                   [styles.actPulse]: state.playback.radioLoading,
                 }}
                 type="button"
-                aria-label={tr('trackActions.startRadio')}
-                title={tr('trackActions.startRadio')}
+                aria-label={state.playback.radioMode ? tr('nowPlaying.stopRadioTitle') : tr('trackActions.startRadio')}
+                title={state.playback.radioMode ? tr('nowPlaying.stopRadioTitle') : tr('trackActions.startRadio')}
                 aria-pressed={state.playback.radioMode}
                 onClick={() => (state.playback.radioMode ? void onStopRadio() : void actions.startRadio(t()!))}
               >
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <path d="M4 12a8 8 0 018-8M4 12a8 8 0 008 8M8 12a4 4 0 014-4" />
                   <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-                </svg>
-              </button>
-            </Show>
-
-            <Show when={!isPodcast()}>
-              <button
-                classList={{ [styles.actBtn]: true, [styles.deskAct]: true }}
-                type="button"
-                aria-label={tr('trackActions.addToPlaylist')}
-                title={tr('trackActions.addToPlaylist')}
-                onClick={() => openPlaylistPicker(t()!)}
-              >
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M3 6h13M3 12h9M3 18h7M17 12v7M21 14l-4-2v7" />
-                </svg>
-              </button>
-            </Show>
-
-            <Show when={isLibrary() && !isPodcast()}>
-              <button
-                classList={{ [styles.actBtn]: true, [styles.deskAct]: true }}
-                type="button"
-                aria-label={tr('trackActions.editData')}
-                title={tr('trackActions.editData')}
-                onClick={() => openMetadataEditor(t()!)}
-              >
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" />
-                </svg>
-              </button>
-            </Show>
-
-            <Show when={isLibrary()}>
-              <button
-                classList={{ [styles.actBtn]: true, [styles.deskAct]: true }}
-                type="button"
-                aria-label={tr('trackActions.playOnDevice')}
-                title={tr('trackActions.playOnDevice')}
-                onClick={() => openPlayOnDevice(t()!)}
-              >
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <rect x="2" y="4" width="20" height="13" rx="2" />
-                  <path d="M8 21h8M12 17v4" />
                 </svg>
               </button>
             </Show>
@@ -676,12 +640,6 @@ export function NowPlaying() {
                 onInput={(e) => actions.setVolume(Number(e.currentTarget.value) / 100)}
               />
             </div>
-
-            <button class={styles.actBtn} type="button" aria-label={tr('nowPlaying.share')} title={tr('nowPlaying.share')} onClick={() => void shareTrack(t()!)}>
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M4 12v8h16v-8M12 16V3M8 7l4-4 4 4" />
-              </svg>
-            </button>
 
             <button
               class={styles.actBtn}

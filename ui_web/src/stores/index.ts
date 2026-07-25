@@ -2,7 +2,7 @@ import { createStore } from 'solid-js/store';
 import { createSignal } from 'solid-js';
 import { createSocket, type AppSocket, dispatchDiscoverSeed } from '../lib/socket';
 import { api, type DeviceRegistration, type RemotePlaybackState } from '../lib/api';
-import { audioEl, audioService } from '../lib/audio';
+import { audioEl, audioService, storedVolume } from '../lib/audio';
 import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers, playbackYoutubeId } from '../lib/media';
 import { prefetchPreviews, upcomingPreviewIds } from '../lib/prefetch';
 import { toast } from '../lib/toast';
@@ -34,6 +34,14 @@ export interface DownloadsState {
 export interface PlaybackState {
   currentTrack: Track | null;
   isPlaying: boolean;
+  /** Audio for `currentTrack` is being resolved/buffered and no sound is out yet.
+   * Previews pay a multi-second yt-dlp resolution on the engine, so this is the
+   * difference between "the app ignored my tap" and "it is working on it". Also
+   * set when a playing track re-buffers mid-stream. */
+  isLoading: boolean;
+  /** The current track could not be played at all. Keeps the transport showing a
+   * retry instead of a dead play button. */
+  loadError: boolean;
   currentTime: number;
   duration: number;
   queue: Track[];
@@ -54,13 +62,6 @@ export interface PlaybackState {
   /** Track id of the seed used to start the current radio. Useful to
    * preserve the seed vs mix identity without inferring from the queue. */
   radioSeedId: string | null;
-}
-
-/** Read persisted volume without forcing the lazy <audio> element into existence. */
-function initialVolume(): number {
-  const raw = localStorage.getItem('volume');
-  const v = raw == null ? 1 : Number(raw);
-  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
 }
 
 export interface AppState {
@@ -136,13 +137,15 @@ const [state, setState] = createStore<AppState>({
   playback: {
     currentTrack: null,
     isPlaying: false,
+    isLoading: false,
+    loadError: false,
     currentTime: 0,
     duration: 0,
     queue: [],
     index: -1,
     shuffle: false,
     repeat: 'off',
-    volume: initialVolume(),
+    volume: storedVolume(),
     muted: false,
     radioMode: false,
     radioLoading: false,
@@ -212,20 +215,80 @@ function updateMediaSession(track: Track | null): void {
   });
 }
 
-/** Load + play the queue entry at index `i`. Computes the stream URL by source. */
-function loadIndex(i: number): void {
+/**
+ * Load + play the queue entry at index `i`. Computes the stream URL by source.
+ *
+ * Idempotent by default: asking for the entry that is already active is a no-op
+ * (or a resume, if it was paused) rather than a second request and a restart
+ * from 0:00. That is what makes drumming on a row harmless — a preview click
+ * costs the engine a yt-dlp resolution and a proxied stream, and the first tap
+ * has already paid for both. Pass `restart` for the deliberate replay.
+ */
+function loadIndex(i: number, opts: { restart?: boolean } = {}): void {
   const track = state.playback.queue[i];
   if (!track) return;
+  const pb = state.playback;
+  if (!opts.restart && !pb.loadError && i === pb.index && pb.currentTrack?.id === track.id) {
+    if (pb.isLoading || pb.isPlaying) return; // already on its way / already sounding
+    void audioService.resume().catch(() => {});
+    return;
+  }
   userPlaybackStartedThisSession = true;
-  setState('playback', { currentTrack: track, index: i, isPlaying: true, currentTime: 0 });
+  const generation = beginLoad();
+  setState('playback', {
+    currentTrack: track,
+    index: i,
+    isPlaying: true,
+    isLoading: true,
+    loadError: false,
+    currentTime: 0,
+  });
   updateMediaSession(track);
   pendingPlayTiming = {
     trackId: track.id,
     preview: track.source === 'preview',
     startedAt: performance.now(),
   };
-  void audioService.load(trackUrl(track)).catch(() => setState('playback', 'isPlaying', false));
+  void audioService.load(trackUrl(track)).catch(() => onPlaybackFailed(generation));
   prefetchUpcoming();
+}
+
+/**
+ * Which load attempt the store is currently on.
+ *
+ * A failed load reports itself twice — `play()` rejects *and* the element fires
+ * `error` — so without a generation the second report would land after the first
+ * already advanced the queue, and blame the innocent track that just started.
+ * Claim a generation per attempt; the first report to arrive retires it and the
+ * duplicate is ignored.
+ */
+let loadGeneration = 0;
+const beginLoad = (): number => ++loadGeneration;
+
+/** Consecutive unplayable tracks, so a broken stretch of the queue skips
+ * forward a few entries and then stops instead of racing to the end. */
+let consecutiveLoadFailures = 0;
+const MAX_CONSECUTIVE_SKIPS = 3;
+
+/** The current track cannot be played: surface it, then move on if that is the
+ * sane thing to do. Silence with a dead play button was the old behaviour. */
+function onPlaybackFailed(generation: number): void {
+  if (generation !== loadGeneration) return; // a later attempt already took over
+  loadGeneration += 1; // retire this attempt: further reports for it are stale
+  const pb = state.playback;
+  setState('playback', { isPlaying: false, isLoading: false, loadError: true });
+  if (state.autoMode.active) {
+    void actions.autoSkip();
+    return;
+  }
+  consecutiveLoadFailures += 1;
+  const hasNext = pb.index < pb.queue.length - 1 || (pb.repeat === 'all' && pb.queue.length > 1);
+  if (hasNext && consecutiveLoadFailures <= MAX_CONSECUTIVE_SKIPS) {
+    toast.error(tr('toast.trackUnavailableSkipping'));
+    actions.next();
+    return;
+  }
+  toast.error(tr('toast.trackUnavailable'));
 }
 
 function playbackStateBody(
@@ -278,10 +341,12 @@ function removeTrackReferences(id: string): void {
   }
 
   if (pb.currentTrack?.id === id) {
-    audioService.pause();
+    audioService.stop();
     setState('playback', {
       currentTrack: null,
       isPlaying: false,
+      isLoading: false,
+      loadError: false,
       currentTime: 0,
       duration: 0,
       queue: nextQueue,
@@ -307,6 +372,8 @@ function restoreSameDevicePlayback(remote: RemotePlaybackState): void {
   setState('playback', {
     currentTrack: track,
     isPlaying: false,
+    isLoading: false,
+    loadError: false,
     currentTime: pos,
     duration: track.duration ?? 0,
     queue: [track],
@@ -536,12 +603,19 @@ export const actions = {
   async playEpisode(ep: PodcastEpisode, showTitle?: string): Promise<void> {
     if (state.autoMode.active) actions.exitAutoMode();
     const track = podcastEpisodeToTrack(ep, showTitle);
+    // Tapping the same episode again while its token is still being minted must
+    // not mint a second one.
+    const pb = state.playback;
+    if (pb.currentTrack?.id === track.id && (pb.isLoading || pb.isPlaying)) return;
     userPlaybackStartedThisSession = true;
+    const generation = beginLoad();
     setState('playback', {
       currentTrack: track,
       queue: [track],
       index: 0,
       isPlaying: true,
+      isLoading: true,
+      loadError: false,
       currentTime: 0,
       duration: 0,
       radioMode: false,
@@ -554,7 +628,7 @@ export const actions = {
       if (!stream_token) throw new Error('no token');
       await audioService.load(podcastStreamUrl(stream_token));
     } catch {
-      setState('playback', 'isPlaying', false);
+      onPlaybackFailed(generation);
     }
   },
 
@@ -580,11 +654,28 @@ export const actions = {
   },
 
   togglePlay(): void {
-    if (!state.playback.currentTrack) return;
+    const pb = state.playback;
+    if (!pb.currentTrack) return;
     userPlaybackStartedThisSession = true;
     vibrate();
-    if (state.playback.isPlaying) audioService.pause();
-    else void audioService.resume().catch(() => {});
+    // A failed track's transport button is a retry, not a play button.
+    if (pb.loadError) {
+      actions.retryCurrent();
+      return;
+    }
+    if (pb.isPlaying) audioService.pause();
+    else {
+      const generation = beginLoad();
+      void audioService.resume().catch(() => onPlaybackFailed(generation));
+    }
+  },
+
+  /** Re-request the current entry after a failure (transport retry button). */
+  retryCurrent(): void {
+    const pb = state.playback;
+    if (!pb.currentTrack || pb.index < 0) return;
+    consecutiveLoadFailures = 0;
+    loadIndex(pb.index, { restart: true });
   },
 
   next(): void {
@@ -680,8 +771,14 @@ export const actions = {
     if (i === pb.index) {
       setState('playback', 'queue', next);
       if (next.length === 0) {
-        audioService.pause();
-        setState('playback', { currentTrack: null, index: -1, isPlaying: false });
+        audioService.stop();
+        setState('playback', {
+          currentTrack: null,
+          index: -1,
+          isPlaying: false,
+          isLoading: false,
+          loadError: false,
+        });
       } else {
         loadIndex(Math.min(i, next.length - 1));
       }
@@ -1392,10 +1489,21 @@ export function initStore(): void {
   });
   a.addEventListener('ended', onEnded);
   a.addEventListener('error', () => {
-    if (state.autoMode.active) void actions.autoSkip();
+    // `stop()` clears src, which some engines report as an error. Nothing is
+    // loaded and nothing is expected to be — not a playback failure.
+    if (!a.getAttribute('src') && !a.currentSrc) return;
+    onPlaybackFailed(loadGeneration);
   });
+  // Buffering, both cold (nothing has sounded yet) and mid-track. Either way the
+  // transport shows progress instead of a stuck play button.
+  a.addEventListener('waiting', () => {
+    if (state.playback.currentTrack) setState('playback', 'isLoading', true);
+  });
+  a.addEventListener('canplay', () => setState('playback', 'isLoading', false));
   // First 'playing' after a user-initiated load → click-to-sound latency.
   a.addEventListener('playing', () => {
+    setState('playback', { isLoading: false, loadError: false });
+    consecutiveLoadFailures = 0;
     const timing = pendingPlayTiming;
     if (!timing || state.playback.currentTrack?.id !== timing.trackId) return;
     pendingPlayTiming = null;
