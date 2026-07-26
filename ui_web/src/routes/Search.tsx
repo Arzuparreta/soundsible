@@ -22,6 +22,7 @@ import { trackMenuOptions } from '../components/trackActions';
 import type { ActionMenuOptions } from '../components/ActionMenu';
 import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
+import { sharedCapsuleFromHash, type TrackShareCapsuleV1 } from '../lib/trackShare';
 
 type SearchDomain = 'music' | 'youtube';
 type SearchTab = 'all' | 'track,library_track' | 'artist' | 'album';
@@ -92,6 +93,11 @@ export default function Search() {
   const [youtubeEnqueued, setYoutubeEnqueued] = createSignal<Set<string>>(new Set());
   const [review, setReview] = createSignal<{ item: CatalogItem; response: CatalogSaveResponse } | null>(null);
   const [nodeSaving, setNodeSaving] = createSignal<Set<string>>(new Set());
+  const [sharedCapsule, setSharedCapsule] = createSignal<TrackShareCapsuleV1 | null>(null);
+  const [sharedItem, setSharedItem] = createSignal<CatalogItem | null>(null);
+  const [sharedLoading, setSharedLoading] = createSignal(false);
+  const [sharedError, setSharedError] = createSignal(false);
+  const [sharedInvalid, setSharedInvalid] = createSignal(false);
 
   let aborter: AbortController | undefined;
   let suggestAborter: AbortController | undefined;
@@ -105,7 +111,86 @@ export default function Search() {
   const songs = createMemo(() =>
     items().filter((item) => ['track', 'library_track'].includes(item.type)),
   );
-  onMount(() => ensureNodeFeed());
+  const openSharedTrack = (capsule: TrackShareCapsuleV1) => {
+    const current = ++requestId;
+    aborter?.abort();
+    aborter = new AbortController();
+    setSharedCapsule(capsule);
+    setQ(`${capsule.title} — ${capsule.artist}`);
+    setDomain('music');
+    setItems([]);
+    setSharedItem(null);
+    setSharedError(false);
+    setSharedInvalid(false);
+    setSharedLoading(true);
+    setShowSuggest(false);
+    const local = state.library.find((track) => track.youtube_id === capsule.yt);
+    if (local) {
+      setSharedItem({
+        id: `library:${local.id}`,
+        type: 'library_track',
+        source: 'library',
+        title: local.title || capsule.title,
+        artist: local.artist || capsule.artist,
+        subtitle: local.artist || capsule.artist,
+        album: local.album || capsule.album,
+        duration: local.duration ?? capsule.duration,
+        cover: local.cover,
+        track_id: local.id,
+        external_ids: { youtube_id: capsule.yt },
+        action_state: { in_library: true, playable: true },
+      });
+      setSharedLoading(false);
+      return;
+    }
+    api
+      .peekYouTube(`https://www.youtube.com/watch?v=${capsule.yt}`, aborter.signal)
+      .then((result) => {
+        if (current !== requestId) return;
+        if (!result || result.id !== capsule.yt) throw new Error('shared-track-unavailable');
+        const title = result.title || capsule.title;
+        const artist = result.channel || capsule.artist;
+        setSharedItem({
+          id: `youtube:${capsule.yt}`,
+          type: 'track',
+          source: 'youtube',
+          title,
+          artist,
+          subtitle: artist,
+          album: capsule.album,
+          duration: result.duration ?? capsule.duration,
+          cover: result.thumbnail,
+          external_ids: { youtube_id: capsule.yt },
+          raw: {
+            id: capsule.yt,
+            title,
+            artist,
+            album: capsule.album,
+            duration: result.duration ?? capsule.duration,
+            youtube_id: capsule.yt,
+            source: 'preview',
+          },
+          action_state: { playable: true, downloadable: true },
+        });
+      })
+      .catch((error) => {
+        if (current !== requestId || isAbort(error)) return;
+        setSharedError(true);
+      })
+      .finally(() => {
+        if (current === requestId) setSharedLoading(false);
+      });
+  };
+
+  onMount(() => {
+    ensureNodeFeed();
+    const shared = sharedCapsuleFromHash(window.location.hash);
+    if (shared) openSharedTrack(shared.capsule);
+    else if (/[?&]shared=/.test(window.location.hash)) {
+      setQ(tr('search.sharedLink'));
+      setSharedInvalid(true);
+    }
+  });
 
   const runCatalog = (query: string, nextTab = tab()) => {
     query = query.trim();
@@ -278,6 +363,16 @@ export default function Search() {
   };
 
   const onInput = (value: string) => {
+    if (sharedCapsule() || sharedInvalid()) {
+      setSharedCapsule(null);
+      setSharedItem(null);
+      setSharedError(false);
+      setSharedInvalid(false);
+      setSharedLoading(false);
+      const clean = new URL(window.location.href);
+      clean.hash = '#/search';
+      window.history.replaceState(null, '', clean);
+    }
     const { query: parsed, forceYt } = parseSearchInput(value);
     const nextDomain = forceYt || parseYouTubeInput(parsed) ? 'youtube' : domain();
     if (nextDomain !== domain()) {
@@ -503,7 +598,7 @@ export default function Search() {
         </Show>
       </div>
 
-      <Show when={domain() === 'music' && q().trim().length >= 2}>
+      <Show when={!sharedCapsule() && !sharedInvalid() && domain() === 'music' && q().trim().length >= 2}>
         <div class={styles.tabs}>
           <For each={tabs}>
             {(t) => (
@@ -521,6 +616,48 @@ export default function Search() {
 
       <div class={styles.scroll}>
         <Switch>
+          <Match when={sharedInvalid()}>
+            <EmptyState compact tone="danger">{tr('search.sharedInvalid')}</EmptyState>
+          </Match>
+          <Match when={sharedCapsule()}>
+            <div class={styles.results}>
+              <Show when={sharedLoading()}>
+                <SkeletonRows count={1} compact />
+              </Show>
+              <Show when={!sharedLoading() && sharedError()}>
+                <EmptyState compact tone="danger">
+                  {tr('search.sharedUnavailable')}{' '}
+                  <button
+                    class={styles.retry}
+                    type="button"
+                    onClick={() => {
+                      const capsule = sharedCapsule();
+                      if (capsule) openSharedTrack(capsule);
+                    }}
+                  >
+                    {tr('common.retry')}
+                  </button>
+                </EmptyState>
+              </Show>
+              <Show when={sharedItem()}>
+                {(item) => (
+                  <section class={styles.section}>
+                    <h2 class={styles.sectionTitle}>{tr('search.sharedSection')}</h2>
+                    <SongResult
+                      item={item()}
+                      coverStyle={itemCoverStyle}
+                      active={state.playback.currentTrack?.id === (item().track_id || item().raw?.id)}
+                      saving={saving().has(item().id)}
+                      saved={!!item().track_id}
+                      busy={itemBusy(item())}
+                      onPlay={() => playItem(item())}
+                      onSave={() => saveItem(item())}
+                    />
+                  </section>
+                )}
+              </Show>
+            </div>
+          </Match>
           <Match when={!q().trim()}>
             <StartPanel
               recents={recents()}

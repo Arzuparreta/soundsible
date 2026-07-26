@@ -156,6 +156,10 @@ export const zh: Dict = {
     labelArtist: '艺人',
     labelAlbum: '专辑',
     labelPlaylist: '歌单',
+    sharedSection: '与你分享',
+    sharedUnavailable: '无法使用此共享歌曲的确切版本。',
+    sharedInvalid: '此 Soundsible 共享链接无效。',
+    sharedLink: '共享歌曲',
   },
   settings: {
     title: '设置',
@@ -198,6 +202,8 @@ export const zh: Dict = {
     version: 'Beta · Solid 界面',
     viewDesign: '查看设计系统',
     language: '语言',
+    sharedLinks: '共享链接',
+    openSharedLinks: '在此应用中打开 Soundsible 链接',
     purgeTitle: '清理丢失文件',
     purgeMsg: '从资料库中移除磁盘上已不存在的曲目。',
     purgeConfirm: '清理',
@@ -718,5 +724,6 @@ export const zh: Dict = {
   social: {
     copied: '已复制到剪贴板',
     shareFailed: '分享失败',
+    shareIdentityMissing: '此歌曲没有可分享的来源标识',
   },
 };

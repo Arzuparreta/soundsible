@@ -25,6 +25,13 @@
       "capabilities": ["default"]
     }
   },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["soundsible"]
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

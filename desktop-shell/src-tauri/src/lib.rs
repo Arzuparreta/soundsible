@@ -7,12 +7,15 @@ use engine::{EnginePhase, EngineSupervisor};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
+#[cfg(desktop)]
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
 
 pub struct AppState {
     pub engine: EngineSupervisor,
     selected_folder: Mutex<Option<PathBuf>>,
     skip_autostart_once: Mutex<bool>,
+    pending_track_capsule: Mutex<Option<String>>,
 }
 
 #[derive(serde::Serialize)]
@@ -215,9 +218,91 @@ fn navigate_main_window(app: &AppHandle, url: &str) -> Result<(), String> {
     window.navigate(parsed).map_err(|e| e.to_string())
 }
 
+fn track_capsule_from_deep_link(value: &str) -> Option<String> {
+    let parsed = url::Url::parse(value).ok()?;
+    if parsed.scheme() != "soundsible" || parsed.host_str() != Some("track") {
+        return None;
+    }
+    let capsule = parsed.path().trim_matches('/');
+    if capsule.is_empty()
+        || capsule.len() > 4096
+        || !capsule
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return None;
+    }
+    Some(capsule.to_string())
+}
+
+fn player_url_for_capsule(player_url: &str, capsule: &str) -> Option<String> {
+    if capsule.is_empty()
+        || capsule.len() > 4096
+        || !capsule
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return None;
+    }
+    let mut parsed = url::Url::parse(player_url).ok()?;
+    parsed.set_fragment(Some(&format!("/search?shared={capsule}")));
+    Some(parsed.into())
+}
+
+fn take_pending_player_url(app: &AppHandle, player_url: &str) -> String {
+    let Some(state) = app.try_state::<AppState>() else {
+        return player_url.to_string();
+    };
+    let capsule = state
+        .pending_track_capsule
+        .lock()
+        .ok()
+        .and_then(|mut pending| pending.take());
+    capsule
+        .and_then(|value| player_url_for_capsule(player_url, &value))
+        .unwrap_or_else(|| player_url.to_string())
+}
+
+fn handle_deep_link(app: &AppHandle, value: &str, start_if_idle: bool) {
+    let Some(capsule) = track_capsule_from_deep_link(value) else {
+        return;
+    };
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    if let Ok(mut pending) = state.pending_track_capsule.lock() {
+        *pending = Some(capsule);
+    }
+
+    let status = state.engine.status();
+    if status.phase == EnginePhase::Ready {
+        if let Some(player_url) = status.player_url {
+            let target = take_pending_player_url(app, &player_url);
+            let _ = navigate_main_window(app, &target);
+        }
+    } else if start_if_idle && status.phase == EnginePhase::Idle && state::has_consumer_config() {
+        if let Some(music_dir) = state::load_persisted_music_dir() {
+            if let Ok(mut selected) = state.selected_folder.lock() {
+                *selected = Some(music_dir.clone());
+            }
+            let _ = state.engine.start(app.clone(), music_dir);
+        }
+    }
+    tray::focus_main_window(app);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    let builder = builder
+        // Must be first so a second protocol launch is forwarded to this process.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            tray::focus_main_window(app);
+        }))
+        .plugin(tauri_plugin_deep_link::init());
+
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
@@ -229,6 +314,7 @@ pub fn run() {
             engine: EngineSupervisor::new(),
             selected_folder: Mutex::new(None),
             skip_autostart_once: Mutex::new(false),
+            pending_track_capsule: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             get_startup_profile,
@@ -258,6 +344,23 @@ pub fn run() {
             tray::build_tray(app.handle())?;
             tray::register_global_shortcuts(app.handle())?;
 
+            #[cfg(desktop)]
+            {
+                let app_handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        handle_deep_link(&app_handle, url.as_str(), true);
+                    }
+                });
+                if let Ok(Some(urls)) = app.deep_link().get_current() {
+                    for url in urls {
+                        // The shell's normal startup path will start the engine;
+                        // only queue the capsule here to avoid a double restart.
+                        handle_deep_link(app.handle(), url.as_str(), false);
+                    }
+                }
+            }
+
             if let Some(window) = app.get_webview_window("main") {
                 let app_handle = app.handle().clone();
                 window.on_window_event(move |event| {
@@ -278,4 +381,34 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{player_url_for_capsule, track_capsule_from_deep_link};
+
+    #[test]
+    fn parses_only_bounded_track_links() {
+        assert_eq!(
+            track_capsule_from_deep_link("soundsible://track/abc_DEF-123"),
+            Some("abc_DEF-123".into())
+        );
+        assert_eq!(track_capsule_from_deep_link("soundsible://album/abc"), None);
+        assert_eq!(
+            track_capsule_from_deep_link("https://example.com/track/abc"),
+            None
+        );
+        assert_eq!(
+            track_capsule_from_deep_link("soundsible://track/a%2Fb"),
+            None
+        );
+    }
+
+    #[test]
+    fn puts_shared_identity_in_the_player_fragment() {
+        assert_eq!(
+            player_url_for_capsule("http://127.0.0.1:5000/player/desktop/", "abc_DEF-123"),
+            Some("http://127.0.0.1:5000/player/desktop/#/search?shared=abc_DEF-123".into())
+        );
+    }
 }

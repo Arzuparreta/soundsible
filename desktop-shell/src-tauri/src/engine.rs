@@ -299,9 +299,10 @@ fn wait_for_ready(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>
                     guard.message = "Ready".into();
                     push_log(&mut guard, "engine: ready".into());
                 }
-                let _ = app.emit("engine-ready", player_url.clone());
+                let target_url = crate::take_pending_player_url(&app, &player_url);
+                let _ = app.emit("engine-ready", target_url.clone());
                 if let Some(window) = app.get_webview_window("main") {
-                    if let Ok(parsed) = player_url.parse() {
+                    if let Ok(parsed) = target_url.parse() {
                         let _ = window.navigate(parsed);
                     }
                 }

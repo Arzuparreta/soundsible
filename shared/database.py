@@ -36,6 +36,7 @@ INSTANCE_TABLES = (
 
 # Note: Migration definitions for schema evolution
 _TRACKS_COLUMNS = {
+    "youtube_id": "TEXT",
     "musicbrainz_id": "TEXT",
     "isrc": "TEXT",
     "album_artist": "TEXT",
@@ -115,7 +116,8 @@ class DatabaseManager:
                 isrc TEXT,
                 album_artist TEXT,
                 cover_source TEXT,
-                metadata_modified_by_user BOOLEAN DEFAULT 0
+                metadata_modified_by_user BOOLEAN DEFAULT 0,
+                youtube_id TEXT
             )
         """)
 
@@ -461,8 +463,8 @@ class DatabaseManager:
                             original_filename, compressed, file_size, bitrate, 
                             format, cover_art_key, year, genre, track_number, 
                             is_local, local_path, musicbrainz_id, isrc, album_artist,
-                            cover_source, metadata_modified_by_user
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            cover_source, metadata_modified_by_user, youtube_id
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             title=excluded.title,
                             artist=excluded.artist,
@@ -479,7 +481,8 @@ class DatabaseManager:
                             isrc=COALESCE(excluded.isrc, tracks.isrc),
                             album_artist=excluded.album_artist,
                             cover_source=COALESCE(excluded.cover_source, tracks.cover_source),
-                            metadata_modified_by_user=CASE WHEN excluded.metadata_modified_by_user THEN 1 ELSE tracks.metadata_modified_by_user END
+                            metadata_modified_by_user=CASE WHEN excluded.metadata_modified_by_user THEN 1 ELSE tracks.metadata_modified_by_user END,
+                            youtube_id=COALESCE(excluded.youtube_id, tracks.youtube_id)
                     """, (
                         track.id, track.title, track.artist, track.album,
                         track.duration, track.file_hash, track.original_filename, 
@@ -487,7 +490,7 @@ class DatabaseManager:
                         track.cover_art_key, track.year, track.genre, track.track_number, 
                         track.is_local, None,
                         track.musicbrainz_id, track.isrc, track.album_artist,
-                        track.cover_source, track.metadata_modified_by_user
+                        track.cover_source, track.metadata_modified_by_user, track.youtube_id
                     ))
                 conn.execute("COMMIT")
             except Exception as e:

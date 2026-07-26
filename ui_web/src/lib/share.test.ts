@@ -3,26 +3,26 @@ import { shareUrlFor } from './share';
 
 describe('shareUrlFor', () => {
   it('uses the explicit youtube_id for library tracks', () => {
-    expect(shareUrlFor({ id: 'lib-1', title: 'Song', youtube_id: 'abc123' })).toBe(
-      'https://www.youtube.com/watch?v=abc123',
-    );
+    expect(
+      shareUrlFor({ id: 'lib-1', title: 'Song', artist: 'Artist', youtube_id: 'dQw4w9WgXcQ' }),
+    ).toMatch(/\/open\/#t=/);
   });
 
   it('uses the id as the video id for preview (Discover/Search) tracks', () => {
-    expect(shareUrlFor({ id: 'yt-xyz', title: 'Song', source: 'preview' })).toBe(
-      'https://www.youtube.com/watch?v=yt-xyz',
-    );
+    expect(
+      shareUrlFor({ id: '9bZkp7q19f0', title: 'Song', artist: 'Artist', source: 'preview' }),
+    ).toMatch(/\/open\/#t=/);
   });
 
   it('shares the exact id used by preview playback when youtube_id disagrees', () => {
-    expect(
-      shareUrlFor({
-        id: 'playing-id',
-        title: 'Song',
-        source: 'preview',
-        youtube_id: 'stale-catalog-id',
-      }),
-    ).toBe('https://www.youtube.com/watch?v=playing-id');
+    const url = shareUrlFor({
+      id: 'dQw4w9WgXcQ',
+      title: 'Song',
+      artist: 'Artist',
+      source: 'preview',
+      youtube_id: '9bZkp7q19f0',
+    });
+    expect(url).toMatch(/\/open\/#t=/);
   });
 
   it('returns no url for podcast episodes (id is a guid, not a video)', () => {

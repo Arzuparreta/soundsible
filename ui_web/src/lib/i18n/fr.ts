@@ -160,6 +160,10 @@ export const fr: Dict = {
     labelArtist: 'Artiste',
     labelAlbum: 'Album',
     labelPlaylist: 'Liste',
+    sharedSection: 'Partagé avec vous',
+    sharedUnavailable: "Cette version exacte n'est plus disponible.",
+    sharedInvalid: "Ce lien Soundsible partagé n'est pas valide.",
+    sharedLink: 'Titre partagé',
   },
   settings: {
     title: 'Réglages',
@@ -205,6 +209,8 @@ export const fr: Dict = {
     version: 'Beta · UI Solid',
     viewDesign: 'Voir le design system',
     language: 'Langue',
+    sharedLinks: 'Liens partagés',
+    openSharedLinks: 'Ouvrir les liens Soundsible dans cette app',
     purgeTitle: 'Purger les fichiers manquants',
     purgeMsg:
       'Retire de la bibliothèque les pistes dont les fichiers n’existent plus sur le disque.',
@@ -740,5 +746,6 @@ export const fr: Dict = {
   social: {
     copied: 'Copié dans le presse-papiers',
     shareFailed: 'Impossible de partager',
+    shareIdentityMissing: "Cette chanson n'a pas de source partageable",
   },
 };

@@ -12,6 +12,7 @@ import { DevicesPanel } from '../components/DeviceSheet';
 import { PairedDevicesPanel } from '../components/PairDevice';
 import { t, locale, setLocale, LOCALES, type Locale } from '../lib/i18n';
 import { changePassword, isAdmin, logout, updateProfile, user } from '../lib/session';
+import { associationUrl } from '../lib/trackShare';
 import styles from './Settings.module.css';
 
 function Chevron() {
@@ -107,6 +108,7 @@ export default function Settings() {
   const [learning, setLearning] = createSignal(true);
   const [quality, setQuality] = createSignal('high');
   const [autoUpdate, setAutoUpdate] = createSignal(false);
+  const sharedLinkAssociation = associationUrl();
 
   onMount(async () => {
     try {
@@ -429,6 +431,17 @@ export default function Settings() {
             </Show>
           </div>
         </Group>
+
+        <Show when={sharedLinkAssociation}>
+          <Group label={t('settings.sharedLinks')}>
+            <div class={styles.panel}>
+              <ActionRow
+                label={t('settings.openSharedLinks')}
+                onClick={() => window.location.assign(sharedLinkAssociation!)}
+              />
+            </div>
+          </Group>
+        </Show>
 
         <Group label={t('settings.discovery')}>
           <div class={styles.panel}>

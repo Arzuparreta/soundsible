@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Search from './Search';
 import { setLocale } from '../lib/i18n';
+import { encodeTrackCapsule } from '../lib/trackShare';
 
 const apiMock = vi.hoisted(() => ({
   searchCatalog: vi.fn(),
@@ -21,6 +22,10 @@ const nodeMock = vi.hoisted(() => ({
   refreshNodeFeed: vi.fn(),
   items: [] as Array<Record<string, unknown>>,
   loading: false,
+}));
+const storeMock = vi.hoisted(() => ({
+  playTrack: vi.fn(),
+  library: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock('@solidjs/router', () => ({ useNavigate: () => vi.fn() }));
@@ -42,11 +47,13 @@ vi.mock('../lib/toast', () => ({
 }));
 vi.mock('../stores', () => ({
   actions: {
-    playTrack: vi.fn(),
+    playTrack: storeMock.playTrack,
     loadDownloads: vi.fn(),
   },
   state: {
-    library: [],
+    get library() {
+      return storeMock.library;
+    },
     playback: {},
     downloads: { queue: [] },
   },
@@ -58,6 +65,8 @@ describe('Search route', () => {
     vi.useFakeTimers();
     nodeMock.items = [];
     nodeMock.loading = false;
+    storeMock.library = [];
+    window.location.hash = '#/search';
     apiMock.searchCatalog.mockResolvedValue({ items: [], sections: [] });
     apiMock.suggestCatalog.mockResolvedValue([]);
     apiMock.searchYouTube.mockResolvedValue([
@@ -173,5 +182,74 @@ describe('Search route', () => {
     expect(await screen.findByText('Detected video')).toBeInTheDocument();
     expect(screen.getByText('Direct Video')).toBeInTheDocument();
     expect(apiMock.searchCatalog).not.toHaveBeenCalled();
+  });
+
+  it('opens a shared identity as the only result and plays the recipient preview', async () => {
+    const encoded = encodeTrackCapsule({
+      v: 1,
+      kind: 'music',
+      yt: 'dQw4w9WgXcQ',
+      title: 'Shared title',
+      artist: 'Shared artist',
+    });
+    window.location.hash = `#/search?shared=${encoded}`;
+
+    render(() => <Search />);
+
+    expect(await screen.findByText('Shared with you')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Shared title — Shared artist')).toBeInTheDocument();
+    expect(screen.getByText('Direct Video')).toBeInTheDocument();
+    expect(apiMock.searchCatalog).not.toHaveBeenCalled();
+    expect(apiMock.searchYouTube).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('Direct Video'));
+    expect(storeMock.playTrack).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'dQw4w9WgXcQ', source: 'preview' }),
+    );
+  });
+
+  it('reuses the local track only when youtube_id matches exactly', async () => {
+    storeMock.library = [
+      {
+        id: 'local-track',
+        title: 'My local title',
+        artist: 'My local artist',
+        youtube_id: 'dQw4w9WgXcQ',
+      },
+    ];
+    const encoded = encodeTrackCapsule({
+      v: 1,
+      kind: 'music',
+      yt: 'dQw4w9WgXcQ',
+      title: 'Shared title',
+      artist: 'Shared artist',
+    });
+    window.location.hash = `#/search?shared=${encoded}`;
+
+    render(() => <Search />);
+    fireEvent.click(await screen.findByText('My local title'));
+
+    expect(apiMock.peekYouTube).not.toHaveBeenCalled();
+    expect(storeMock.playTrack).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'local-track', youtube_id: 'dQw4w9WgXcQ' }),
+    );
+  });
+
+  it('shows an exact-version error without substituting search results', async () => {
+    apiMock.peekYouTube.mockResolvedValue(null);
+    const encoded = encodeTrackCapsule({
+      v: 1,
+      kind: 'music',
+      yt: 'dQw4w9WgXcQ',
+      title: 'Gone',
+      artist: 'Artist',
+    });
+    window.location.hash = `#/search?shared=${encoded}`;
+
+    render(() => <Search />);
+
+    expect(await screen.findByText(/exact shared version is unavailable/i)).toBeInTheDocument();
+    expect(apiMock.searchCatalog).not.toHaveBeenCalled();
+    expect(apiMock.searchYouTube).not.toHaveBeenCalled();
   });
 });

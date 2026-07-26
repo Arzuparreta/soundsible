@@ -155,6 +155,10 @@ export const en = {
     labelArtist: 'Artist',
     labelAlbum: 'Album',
     labelPlaylist: 'Playlist',
+    sharedSection: 'Shared with you',
+    sharedUnavailable: 'This exact shared version is unavailable.',
+    sharedInvalid: 'This shared Soundsible link is not valid.',
+    sharedLink: 'Shared song',
   },
   settings: {
     title: 'Settings',
@@ -199,6 +203,8 @@ export const en = {
     version: 'Beta · Solid UI',
     viewDesign: 'View design system',
     language: 'Language',
+    sharedLinks: 'Shared links',
+    openSharedLinks: 'Open Soundsible links in this app',
     purgeTitle: 'Purge missing files',
     purgeMsg: 'Removes library tracks whose files no longer exist on disk.',
     purgeConfirm: 'Purge',
@@ -725,6 +731,7 @@ export const en = {
   social: {
     copied: 'Copied to clipboard',
     shareFailed: 'Could not share',
+    shareIdentityMissing: 'This song has no shareable source identity',
   },
 };
 

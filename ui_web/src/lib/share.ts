@@ -1,7 +1,7 @@
 import { toast } from './toast';
 import { isPodcastTrack } from './track';
 import { t } from './i18n';
-import { playbackYoutubeId } from './media';
+import { shareUrlForTrack } from './trackShare';
 
 interface ShareableTrack {
   id: string;
@@ -14,24 +14,26 @@ interface ShareableTrack {
 }
 
 /**
- * Resolve the shareable YouTube URL from the same video identity playback
- * uses. Podcast episodes have no YouTube identity (their id is an episode
- * guid), so they share as text only.
+ * Resolve the Soundsible bridge URL from the same video identity playback
+ * uses. Podcast episodes keep their existing text-only sharing behaviour.
  */
 export function shareUrlFor(track: ShareableTrack): string {
   if (isPodcastTrack(track)) return '';
-  const videoId = playbackYoutubeId(track);
-  return videoId ? `https://www.youtube.com/watch?v=${videoId}` : '';
+  return shareUrlForTrack(track) || '';
 }
 
 /**
  * Share a track via the Web Share API, falling back to clipboard. Ports the
- * legacy `shared.js` share flow: a YouTube URL when the track has one, else the
- * "Title — Artist" text. A user-cancelled native share is a no-op (not an error).
+ * legacy `shared.js` share flow. Music gets a private-fragment Soundsible URL;
+ * podcasts remain text-only. A dismissed native share is a no-op.
  */
 export async function shareTrack(track: ShareableTrack): Promise<void> {
   const url = shareUrlFor(track);
   const text = track.artist ? `${track.title} — ${track.artist}` : track.title;
+  if (!isPodcastTrack(track) && !url) {
+    toast.error(t('social.shareIdentityMissing'));
+    return;
+  }
 
   if (navigator.share) {
     try {

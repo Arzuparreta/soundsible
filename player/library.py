@@ -13,6 +13,7 @@ from shared.constants import LIBRARY_METADATA_FILENAME
 from shared.path_resolver import resolve_local_track_path
 from shared.app_config import get_output_dir
 from shared.runtime import get_config_dir
+from shared.track_identity import preserve_track_identity
 from setup_tool.provider_factory import StorageProviderFactory
 
 def _output_dir_for_library() -> Optional[Path]:
@@ -68,6 +69,7 @@ from shared.database import USER_DB_FILENAME, DatabaseManager
 from shared.user_context import user_config_dir
 import shutil
 import tempfile
+
 
 class LibraryManager:
     """Manages one person's music library and stream URLs.
@@ -607,6 +609,7 @@ class LibraryManager:
             )
             
             if new_track:
+                preserve_track_identity(track, new_track)
                 # Note: Add the manually set album_artist if it was passed in new_metadata
                 if 'album_artist' in new_metadata:
                     new_track.album_artist = new_metadata['album_artist']
