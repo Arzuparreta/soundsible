@@ -11,25 +11,9 @@
 }
 
 .bone {
-  position: relative;
   display: block;
   overflow: hidden;
   background: var(--skeleton-base);
-}
-
-.bone::after {
-  position: absolute;
-  inset: 0;
-  content: '';
-  background: linear-gradient(
-    100deg,
-    transparent 20%,
-    var(--skeleton-highlight) 48%,
-    transparent 76%
-  );
-  transform: translateX(-105%);
-  animation: skeleton-sweep 1.45s var(--ease-in-out) infinite;
-  animation-delay: calc(var(--skeleton-index, 0) * 45ms);
 }
 
 .rows {
@@ -38,6 +22,7 @@
   gap: var(--list-gap);
   width: 100%;
   padding: 0 var(--space-md) var(--space-lg);
+  animation: skeleton-breathe 1.65s var(--ease-in-out) infinite;
 }
 
 .row {
@@ -106,6 +91,7 @@
   grid-template-columns: repeat(auto-fill, minmax(min(132px, 100%), 1fr));
   gap: var(--space-md);
   width: 100%;
+  animation: skeleton-breathe 1.65s var(--ease-in-out) infinite;
 }
 
 .card {
@@ -147,9 +133,13 @@
   gap: var(--space-sm);
 }
 
-@keyframes skeleton-sweep {
-  to {
-    transform: translateX(105%);
+@keyframes skeleton-breathe {
+  0%,
+  100% {
+    opacity: 0.64;
+  }
+  50% {
+    opacity: 1;
   }
 }
 
@@ -161,7 +151,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bone::after {
-    display: none;
+  .rows,
+  .cards {
+    animation: none;
   }
 }

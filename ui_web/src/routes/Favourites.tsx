@@ -17,7 +17,10 @@ export default function Favourites() {
 
   return (
     <div class="view">
-      <ViewHeader title={t('favourites.title')} meta={trackCount(favTracks().length)} />
+      <ViewHeader
+        title={t('favourites.title')}
+        meta={state.loading && favTracks().length === 0 ? t('common.loading') : trackCount(favTracks().length)}
+      />
       <TrackList
         tracks={favTracks()}
         loading={state.loading}

@@ -40,6 +40,17 @@
   color: var(--accent);
 }
 
+@media (max-width: 1023px) {
+  .active {
+    background: var(--accent-faint);
+    border-color: transparent;
+  }
+
+  .active::before {
+    display: none;
+  }
+}
+
 .index {
   width: 18px;
   flex-shrink: 0;

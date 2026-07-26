@@ -47,7 +47,10 @@ export default function Home() {
 
   return (
     <div class="view">
-      <ViewHeader title={t('home.title')} meta={trackCount(songs().length)} />
+      <ViewHeader
+        title={t('home.title')}
+        meta={state.loading && songs().length === 0 ? t('common.loading') : trackCount(songs().length)}
+      />
       <nav class={styles.chips}>
         <A href="/favourites" class={styles.chip}>
           {t('home.favourites')}

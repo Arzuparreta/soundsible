@@ -104,3 +104,19 @@ html[data-auto-mode='active'] #app {
   flex-direction: column;
   overflow: hidden;
 }
+
+/* A route change gets one short arrival cue. It is intentionally quieter than
+   sheets and dialogs: those move to explain hierarchy, while peer navigation
+   only needs to confirm that the surface changed. */
+@media (max-width: 1023px) {
+  .view {
+    animation: view-enter var(--dur-short) var(--ease-out) both;
+  }
+}
+
+@keyframes view-enter {
+  from {
+    opacity: 0.72;
+    transform: translateY(4px);
+  }
+}

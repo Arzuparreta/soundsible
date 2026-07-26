@@ -71,23 +71,6 @@
   padding: 0 var(--gutter) var(--space-sm);
 }
 
-@media (max-width: 380px) {
-  .toolbar {
-    align-items: stretch;
-    flex-direction: column;
-    gap: var(--space-sm);
-  }
-
-  .tabs,
-  .select {
-    width: 100%;
-  }
-
-  .tab {
-    flex: 1;
-  }
-}
-
 .tabs {
   display: inline-flex;
   gap: var(--space-2xs);

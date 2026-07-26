@@ -218,6 +218,13 @@
   font-weight: var(--fw-semibold);
 }
 
+@media (max-width: 1023px) {
+  .toggleTabActive {
+    color: var(--accent);
+    border-bottom-color: transparent;
+  }
+}
+
 .contentView {
   flex: 1;
   overflow-y: auto;
