@@ -425,7 +425,11 @@ export function NowPlaying() {
         <div class={styles.main} data-panel-side={panelSide()}>
         <div class={styles.body} ref={bodyEl}>
           <div class={styles.media}>
-            <div class={styles.visualSlot} data-queue-open={mobileQueueOpen() ? '' : undefined}>
+            <div
+              class={styles.visualSlot}
+              data-queue-open={mobileQueueOpen() ? '' : undefined}
+              data-now-playing-cover-slot=""
+            >
               <div class={styles.art} style={artBg()} />
               <Show when={state.playback.queue.length > 1 && mobileQueueOpen()}>
                 <QueueList className={styles.mobileQueue} setRef={(el) => { mobileQueueEl = el; }} />

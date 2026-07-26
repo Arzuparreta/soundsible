@@ -115,6 +115,14 @@ The three places this screen actually runs — a desktop window, a phone clamped
 to a dashboard, a TV across a room — set two rules that outrank composition
 taste.
 
+On mobile, continuity with Now Playing is an additional invariant. Entering Auto
+captures the live Now Playing artwork slot and anchors Auto's existing cover to
+that exact viewport rectangle. The cover therefore does not jump or resize
+during the handoff. Auto's own topbar, profile, metadata, transient activity,
+transport and complete horizontal cover queue remain unchanged; they replace
+the blurred Now Playing chrome through opacity and blur only. Desktop keeps its
+existing layout and receding-room transition.
+
 **Content never changes the layout.** Titles run from 3 to 90 characters and the
 autopilot's status line appears and clears every few minutes; neither may move
 the artwork. The title lives in a fixed two-line well whose type size comes from

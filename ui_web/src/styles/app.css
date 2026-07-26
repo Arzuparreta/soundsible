@@ -70,6 +70,15 @@ html[data-auto-mode='active'] #app {
   pointer-events: none;
 }
 
+/* On mobile, Now Playing supplies the shared cover geometry for Auto Mode.
+   Keep that geometry fixed while the underlying chrome recedes through blur;
+   desktop retains the established scale-and-depth transition. */
+@media (max-width: 767px) {
+  html[data-auto-mode='active'] #app {
+    transform: none;
+  }
+}
+
 /* Global keyboard focus ring for interactive elements that don't define their
    own (icon buttons, nav links, native selects). :where() keeps specificity 0,
    so components with a bespoke ring (e.g. Button) still win. Text inputs keep

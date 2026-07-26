@@ -740,6 +740,60 @@
   .extras { grid-column: 3; }
 }
 
+/* Mobile keeps the complete Auto environment and every one of its controls.
+   Only the current cover is anchored to the exact Now Playing rectangle. The
+   rest of Auto retains its own composition and enters through blur, so the
+   change of environment reads without a near-miss shared-element jump. */
+@media (max-width: 767px) {
+  .root {
+    transform: none;
+    transition:
+      opacity 360ms var(--ease-out),
+      visibility 0s linear 360ms;
+  }
+
+  .active {
+    transform: none;
+  }
+
+  .root[data-mobile-cover-anchor] .coverFrame {
+    position: fixed;
+    top: var(--auto-mobile-cover-top);
+    left: var(--auto-mobile-cover-left);
+    width: var(--auto-mobile-cover-width);
+    height: var(--auto-mobile-cover-height);
+  }
+
+  .topbar,
+  .panel,
+  .upStrip {
+    filter: none;
+    transition:
+      opacity 360ms var(--ease-out),
+      filter 420ms var(--ease-out);
+  }
+
+  .root:not(.active) .topbar,
+  .root:not(.active) .panel,
+  .root:not(.active) .upStrip {
+    opacity: 0;
+    filter: blur(12px);
+  }
+
+  .cover {
+    filter: none;
+    transition:
+      opacity 320ms var(--ease-out),
+      filter 420ms var(--ease-out),
+      box-shadow 420ms var(--ease-out);
+  }
+
+  .root:not(.active) .cover {
+    opacity: 0;
+    filter: blur(10px);
+  }
+}
+
 @keyframes autoDrift {
   from { transform: scale(1.18) translate3d(-1.5%, -1%, 0); }
   to { transform: scale(1.25) translate3d(1.5%, 1%, 0); }
@@ -776,4 +830,11 @@
   .agent,
   .agentPulse,
   .nextCard { animation: none !important; }
+
+  .topbar,
+  .panel,
+  .upStrip,
+  .cover {
+    filter: none !important;
+  }
 }

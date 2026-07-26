@@ -53,9 +53,12 @@ vi.mock('../lib/i18n', () => ({
 
 import { AutoMode, titleFit } from './AutoMode';
 
+const initialViewportWidth = window.innerWidth;
+
 afterEach(() => {
   vi.clearAllMocks();
   vi.useRealTimers();
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: initialViewportWidth });
 });
 
 describe('AutoMode environment', () => {
@@ -125,5 +128,32 @@ describe('AutoMode environment', () => {
 
     await vi.advanceTimersByTimeAsync(6_000);
     expect(screen.queryByText('autoMode.agent.queued:Next song,1,4,3,20')).not.toBeInTheDocument();
+  });
+
+  it('anchors the mobile Auto cover to the live Now Playing cover slot', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    const source = document.createElement('div');
+    source.dataset.nowPlayingCoverSlot = '';
+    source.getBoundingClientRect = vi.fn(() => ({
+      x: 16,
+      y: 92,
+      top: 92,
+      right: 374,
+      bottom: 450,
+      left: 16,
+      width: 358,
+      height: 358,
+      toJSON: () => ({}),
+    }));
+    document.body.append(source);
+
+    render(() => <AutoMode />);
+    const root = screen.getByRole('region', { name: 'autoMode.aria' });
+    expect(root).toHaveAttribute('data-mobile-cover-anchor');
+    expect(root.style.getPropertyValue('--auto-mobile-cover-left')).toBe('16px');
+    expect(root.style.getPropertyValue('--auto-mobile-cover-top')).toBe('92px');
+    expect(root.style.getPropertyValue('--auto-mobile-cover-width')).toBe('358px');
+    expect(root.style.getPropertyValue('--auto-mobile-cover-height')).toBe('358px');
+    source.remove();
   });
 });

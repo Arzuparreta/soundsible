@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { actions, state } from '../stores';
 import { coverUrl } from '../lib/media';
@@ -58,6 +58,33 @@ export function AutoMode() {
   let restoreFocus: HTMLElement | null = null;
   let wasActive = false;
 
+  const clearMobileCoverAnchor = () => {
+    if (!rootEl) return;
+    rootEl.removeAttribute('data-mobile-cover-anchor');
+    rootEl.style.removeProperty('--auto-mobile-cover-left');
+    rootEl.style.removeProperty('--auto-mobile-cover-top');
+    rootEl.style.removeProperty('--auto-mobile-cover-width');
+    rootEl.style.removeProperty('--auto-mobile-cover-height');
+  };
+
+  const captureMobileCoverAnchor = () => {
+    if (!rootEl || typeof window === 'undefined' || window.innerWidth >= 768) {
+      clearMobileCoverAnchor();
+      return;
+    }
+    const source = document.querySelector<HTMLElement>('[data-now-playing-cover-slot]');
+    const rect = source?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) {
+      clearMobileCoverAnchor();
+      return;
+    }
+    rootEl.style.setProperty('--auto-mobile-cover-left', `${rect.left}px`);
+    rootEl.style.setProperty('--auto-mobile-cover-top', `${rect.top}px`);
+    rootEl.style.setProperty('--auto-mobile-cover-width', `${rect.width}px`);
+    rootEl.style.setProperty('--auto-mobile-cover-height', `${rect.height}px`);
+    rootEl.setAttribute('data-mobile-cover-anchor', '');
+  };
+
   const armIdle = () => {
     if (idleTimer) clearTimeout(idleTimer);
     setChromeVisible(true);
@@ -72,6 +99,7 @@ export function AutoMode() {
       else delete document.documentElement.dataset.autoMode;
     }
     if (isActive && !wasActive) {
+      captureMobileCoverAnchor();
       restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       requestAnimationFrame(() => rootEl?.focus({ preventScroll: true }));
       armIdle();
@@ -83,6 +111,14 @@ export function AutoMode() {
       idleTimer = null;
     }
     wasActive = isActive;
+  });
+
+  onMount(() => {
+    const syncAnchor = () => {
+      if (active()) captureMobileCoverAnchor();
+    };
+    window.addEventListener('resize', syncAnchor);
+    onCleanup(() => window.removeEventListener('resize', syncAnchor));
   });
 
   createEffect(() => {
@@ -102,6 +138,7 @@ export function AutoMode() {
   onCleanup(() => {
     if (idleTimer) clearTimeout(idleTimer);
     if (agentTimer) clearTimeout(agentTimer);
+    clearMobileCoverAnchor();
     if (typeof document !== 'undefined') delete document.documentElement.dataset.autoMode;
   });
 
