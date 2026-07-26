@@ -14,6 +14,7 @@
 
 .chip {
   flex: none;
+  position: relative;
 }
 
 .chip {
@@ -80,6 +81,7 @@
 }
 
 .tab {
+  position: relative;
   min-height: var(--segment-h);
   padding: 0 var(--space-md);
   font-size: 12px;
@@ -90,6 +92,20 @@
   border-radius: var(--radius-full);
   cursor: pointer;
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .chip::before {
+    position: absolute;
+    inset: -5px 0;
+    content: '';
+  }
+
+  .tab::before {
+    position: absolute;
+    inset: -4px 0;
+    content: '';
+  }
 }
 .tabActive {
   color: var(--ink-on-accent);

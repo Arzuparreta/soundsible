@@ -781,9 +781,18 @@ function StartPanel(props: {
 
 function SeedSearch(props: { onFocusSearch: () => void }) {
   return (
-    <button class={styles.seedHint} type="button" onClick={props.onFocusSearch}>
-      {tr('search.seedHeading')}
-    </button>
+    <>
+      <div class={styles.seedState}>
+        <h2>{tr('search.seedHeading')}</h2>
+        <p>{tr('search.seedDesc')}</p>
+        <button class={styles.seedAction} type="button" onClick={props.onFocusSearch}>
+          {tr('search.seedAction')}
+        </button>
+      </div>
+      <button class={styles.seedHint} type="button" onClick={props.onFocusSearch}>
+        {tr('search.seedHeading')}
+      </button>
+    </>
   );
 }
 

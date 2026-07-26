@@ -103,6 +103,7 @@
 }
 
 .tab {
+  position: relative;
   height: var(--pill-h);
   padding: 0 11px;
   color: var(--ink-secondary);
@@ -119,6 +120,14 @@
     background var(--dur-short) var(--ease-out),
     border-color var(--dur-short) var(--ease-out),
     transform var(--dur-micro) var(--ease-out);
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .tab::before {
+    position: absolute;
+    inset: -5px 0;
+    content: '';
+  }
 }
 
 .tab:active {
@@ -333,7 +342,42 @@
   opacity: 1;
 }
 
+.seedState {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-sm);
+  max-width: 520px;
+  margin: var(--space-3xl) auto;
+  text-align: center;
+}
+
+.seedState h2 {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: var(--text-h1);
+}
+
+.seedState p {
+  margin: 0;
+  color: var(--ink-secondary);
+  line-height: var(--lh-normal);
+}
+
+.seedAction {
+  height: var(--control-h);
+  margin-top: var(--space-sm);
+  padding: 0 var(--space-lg);
+  color: var(--bg-base);
+  background: var(--ink-primary);
+  border: none;
+  border-radius: var(--radius-full);
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+
 .seedHint {
+  display: none;
   justify-self: center;
   margin: var(--space-xl) auto 0;
   padding: var(--space-sm) var(--space-md);
@@ -347,6 +391,16 @@
 
 .seedHint:hover {
   color: var(--ink-secondary);
+}
+
+@media (max-width: 1023px) {
+  .seedState {
+    display: none;
+  }
+
+  .seedHint {
+    display: block;
+  }
 }
 
 .recentGrid {

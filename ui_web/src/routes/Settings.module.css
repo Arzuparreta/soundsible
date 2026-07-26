@@ -183,6 +183,7 @@
 }
 
 .seg {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -197,6 +198,14 @@
   border-radius: var(--radius-full);
   cursor: pointer;
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .seg::before {
+    position: absolute;
+    inset: -4px 0;
+    content: '';
+  }
 }
 
 .seg:hover:not(.segOn) {
