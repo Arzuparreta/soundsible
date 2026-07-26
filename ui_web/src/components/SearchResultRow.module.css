@@ -6,11 +6,15 @@
   padding: 0 var(--space-md);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background var(--dur-micro) var(--ease-out);
+  border: 1px solid transparent;
+  transition:
+    background var(--dur-micro) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out);
 }
 
 .row:hover {
-  background: var(--bg-raised);
+  background: var(--bg-hover);
+  border-color: var(--hairline-soft);
 }
 
 .active {
@@ -66,8 +70,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--control-h);
+  height: var(--control-h);
   flex-shrink: 0;
   border-radius: var(--radius-full);
   border: none;
@@ -101,4 +105,13 @@
    the same box as the ＋ button it replaces. */
 .spinner {
   margin: 0 9px;
+}
+
+@media (min-width: 1024px) {
+  .iconBtn,
+  .addBtn,
+  .done {
+    width: 36px;
+    height: 36px;
+  }
 }

@@ -5,7 +5,8 @@
   gap: var(--space-sm);
   height: 64px;
   padding: 0 var(--space-sm) 0 var(--gutter);
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline-soft);
+  background: linear-gradient(180deg, var(--ambient-highlight), transparent);
 }
 
 .progress {
@@ -20,6 +21,7 @@
 .progressFill {
   height: 100%;
   background: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
   transition: width 0.25s linear;
 }
 
@@ -55,6 +57,12 @@
   border: none;
   cursor: pointer;
   text-align: left;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-short) var(--ease-out);
+}
+
+.openArea:not(:disabled):hover {
+  background: var(--ambient-highlight);
 }
 .openArea:disabled {
   cursor: default;
@@ -66,6 +74,8 @@
   flex-shrink: 0;
   border-radius: var(--radius-xs);
   background: var(--bg-raised);
+  border: 1px solid var(--hairline-soft);
+  box-shadow: var(--shadow-1);
 }
 
 .meta {
@@ -142,10 +152,17 @@
   border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
-  transition: color var(--dur-short) var(--ease-out);
+  transition:
+    color var(--dur-short) var(--ease-out),
+    background var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
 }
 .ctrl:hover {
   color: var(--accent);
+  background: var(--accent-faint);
+}
+.ctrl:active {
+  transform: scale(0.92);
 }
 .ctrl:disabled {
   color: var(--ink-tertiary);

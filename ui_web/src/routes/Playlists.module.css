@@ -19,9 +19,18 @@
   font-size: var(--text-body);
   font-weight: var(--fw-semibold);
   cursor: pointer;
+  transition:
+    color var(--dur-short) var(--ease-out),
+    background var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
 }
 .newBtn:hover {
   background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.newBtn:active {
+  transform: scale(0.985);
 }
 
 .cardWrap {
@@ -87,11 +96,16 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--hairline);
   box-shadow: var(--shadow-1);
-  transition: box-shadow var(--dur-short) var(--ease-out);
+  transition:
+    box-shadow var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    transform var(--dur-short) var(--ease-out);
 }
 
 .card:hover .cover {
   box-shadow: var(--shadow-2);
+  border-color: var(--hairline-strong);
+  transform: translateY(-3px);
 }
 
 .name {

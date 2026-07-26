@@ -16,7 +16,9 @@
   z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
-  background: var(--bg-base);
+  background:
+    radial-gradient(ellipse 58% 50% at 50% 26%, var(--ambient-accent), transparent 72%),
+    var(--bg-base);
   transform: translateY(100%);
   transition: transform var(--dur-medium) var(--ease-out);
   will-change: transform;
@@ -44,6 +46,10 @@
   align-items: center;
   padding: var(--space-md) var(--gutter);
   padding-top: max(var(--space-md), env(safe-area-inset-top, 0));
+  background: color-mix(in srgb, var(--bg-base) 86%, transparent);
+  border-bottom: 1px solid var(--hairline-soft);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
 .iconBtn {
@@ -222,7 +228,8 @@
   flex-shrink: 0;
   margin: 0 auto;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-2);
+  border: 1px solid var(--hairline-soft);
+  box-shadow: var(--shadow-3), 0 0 0 1px rgba(255, 255, 255, 0.025) inset;
 }
 
 .info {
@@ -249,8 +256,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   flex-shrink: 0;
   border: 1px solid var(--accent-soft);
@@ -457,10 +464,15 @@
 .ctrl {
   width: 48px;
   height: 48px;
-  transition: color var(--dur-short) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+  border-radius: var(--radius-full);
+  transition:
+    color var(--dur-short) var(--ease-out),
+    background var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
 }
 .ctrl:hover {
   color: var(--accent);
+  background: var(--accent-faint);
 }
 .ctrl:active {
   transform: scale(0.92);
@@ -471,10 +483,12 @@
   width: 40px;
   height: 40px;
   color: var(--ink-tertiary);
-  transition: color var(--dur-short) var(--ease-out);
+  border-radius: var(--radius-full);
+  transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
 }
 .toggle:hover {
   color: var(--ink-secondary);
+  background: var(--bg-hover);
 }
 .on {
   color: var(--accent);
@@ -503,11 +517,16 @@
   border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
-  box-shadow: var(--shadow-1);
-  transition: background var(--dur-short) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 14px 36px var(--accent-glow);
+  transition:
+    background var(--dur-short) var(--ease-out),
+    box-shadow var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
 }
 .play:hover {
   background: var(--accent-hover);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.22) inset, 0 18px 42px var(--accent-glow);
+  transform: scale(1.035);
 }
 .play:active {
   transform: scale(0.94);
@@ -527,17 +546,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: var(--control-h);
+  height: var(--control-h);
   color: var(--ink-secondary);
   background: transparent;
   border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
-  transition: color var(--dur-short) var(--ease-out);
+  transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
 }
 .actBtn:hover {
   color: var(--ink-primary);
+  background: var(--bg-hover);
 }
 .actOn {
   color: var(--accent);
@@ -590,7 +610,8 @@
   width: 100%;
   height: 100%;
   min-height: 0;
-  background: var(--bg-raised);
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-2);
 }
@@ -679,22 +700,25 @@
   gap: var(--space-xs);
   padding: var(--space-2xs) var(--space-2xs) var(--space-2xs) 0;
   border-radius: var(--radius-sm);
-  transition: background var(--dur-micro) var(--ease-out);
+  border: 1px solid transparent;
+  transition: background var(--dur-micro) var(--ease-out), border-color var(--dur-short) var(--ease-out);
 }
 .qRow:hover {
-  background: var(--bg-raised);
+  background: var(--bg-hover);
+  border-color: var(--hairline-soft);
 }
 
 .qActive,
 .qActive:hover {
-  background: var(--accent-soft);
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
+  border-color: rgba(249, 122, 18, 0.14);
 }
 
 .qHandle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
+  width: var(--control-h);
   flex-shrink: 0;
   color: var(--ink-tertiary);
   cursor: grab;
@@ -721,8 +745,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--control-h);
+  height: var(--control-h);
   flex-shrink: 0;
   color: var(--ink-tertiary);
   background: transparent;
@@ -937,13 +961,28 @@
     display: flex;
     width: clamp(280px, 24vw, 360px);
     flex-shrink: 0;
-    background: var(--bg-base);
-    border-left: 1px solid var(--hairline);
+    background: color-mix(in srgb, var(--bg-inset) 58%, var(--bg-base));
+    border-left: 1px solid var(--hairline-soft);
+    box-shadow: -12px 0 36px rgba(0, 0, 0, 0.12);
   }
 
   .mobileQueue,
   .mobileQueueToggle {
     display: none;
+  }
+
+  .qHandle {
+    width: 28px;
+  }
+
+  .qRemove {
+    width: 32px;
+    height: 32px;
+  }
+
+  .actBtn {
+    width: 40px;
+    height: 40px;
   }
 }
 

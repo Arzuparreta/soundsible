@@ -14,8 +14,9 @@
     flex-shrink: 0;
     width: clamp(300px, 26vw, 380px);
     min-height: 0;
-    background: var(--bg-base);
-    border-left: 1px solid var(--hairline);
+    background: color-mix(in srgb, var(--bg-inset) 58%, var(--bg-base));
+    border-left: 1px solid var(--hairline-soft);
+    box-shadow: 12px 0 36px rgba(0, 0, 0, 0.12);
   }
 
   /* Docked on the left instead: the hairline flips to the panel's right edge. */
@@ -60,7 +61,7 @@
 }
 
 .tab {
-  height: 28px;
+  height: 32px;
   padding: 0 var(--space-md);
   color: var(--ink-secondary);
   background: var(--bg-inset);
@@ -94,8 +95,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   color: var(--ink-tertiary);
   background: transparent;
   border: none;
@@ -117,10 +118,12 @@
   background: var(--bg-inset);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
-  transition: border-color var(--dur-short) var(--ease-out);
+  box-shadow: 0 1px 0 var(--hairline-soft) inset;
+  transition: border-color var(--dur-short) var(--ease-out), box-shadow var(--dur-short) var(--ease-out);
 }
 .searchBar:focus-within {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-faint);
 }
 
 .searchIcon {
@@ -149,8 +152,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   color: var(--ink-tertiary);
   background: transparent;

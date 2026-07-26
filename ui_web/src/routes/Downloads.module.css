@@ -10,8 +10,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--control-h);
+  height: var(--control-h);
   flex-shrink: 0;
   color: var(--ink-secondary);
   background: transparent;
@@ -55,6 +55,7 @@
   border: 1px solid var(--hairline);
   border-radius: var(--radius-full);
   cursor: pointer;
+  min-height: var(--control-h);
   transition: border-color var(--dur-short) var(--ease-out);
 }
 
@@ -82,8 +83,9 @@
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
   background: var(--accent-soft);
-  border: 1px solid transparent;
+  border: 1px solid rgba(249, 122, 18, 0.14);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
   animation: fadeIn var(--dur-medium) var(--ease-out);
 }
 
@@ -126,6 +128,17 @@
   background: var(--bg-raised);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  transition:
+    background var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    box-shadow var(--dur-short) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--bg-hover);
+  border-color: var(--hairline-strong);
+  box-shadow: var(--shadow-2);
 }
 
 .rowFailed {
@@ -234,8 +247,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: var(--control-h);
+  height: var(--control-h);
   color: var(--ink-tertiary);
   background: transparent;
   border: none;
@@ -332,5 +345,17 @@
 
   .actions {
     flex-direction: column;
+  }
+}
+
+@media (min-width: 1024px) {
+  .back,
+  .iconBtn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .clear {
+    min-height: 34px;
   }
 }

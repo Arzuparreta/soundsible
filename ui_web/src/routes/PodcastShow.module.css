@@ -12,6 +12,7 @@
 }
 
 .filter {
+  min-height: var(--control-h);
   padding: var(--space-2xs) var(--space-md);
   font-size: var(--text-label);
   font-weight: var(--fw-medium);
@@ -32,8 +33,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--control-h);
+  height: var(--control-h);
   flex-shrink: 0;
   background: transparent;
   border: none;
@@ -54,8 +55,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--control-h);
+  height: var(--control-h);
   flex-shrink: 0;
   color: var(--ink-secondary);
   background: transparent;
@@ -103,7 +104,7 @@
 
 .unsub {
   flex-shrink: 0;
-  min-height: 36px;
+  min-height: var(--control-h);
   padding: 0 var(--space-md);
   font: inherit;
   font-size: var(--text-caption);
@@ -127,30 +128,51 @@
 }
 
 .ep {
+  border: 1px solid transparent;
   display: flex;
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-md);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background var(--dur-micro) var(--ease-out);
+  transition: background var(--dur-micro) var(--ease-out), border-color var(--dur-short) var(--ease-out);
 }
 .ep:hover {
-  background: var(--bg-raised);
+  background: var(--bg-hover);
+  border-color: var(--hairline-soft);
 }
 
 .epPlay {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--control-h);
+  height: var(--control-h);
   flex-shrink: 0;
   color: var(--ink-on-accent);
   background: var(--accent);
   border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
+}
+
+@media (min-width: 1024px) {
+  .filter,
+  .epDownload,
+  .epDownloaded,
+  .back,
+  .unsub,
+  .epPlay {
+    min-height: 36px;
+    height: 36px;
+  }
+
+  .epDownload,
+  .epDownloaded,
+  .back,
+  .epPlay {
+    width: 36px;
+  }
 }
 .epPlay:hover {
   background: var(--accent-hover);

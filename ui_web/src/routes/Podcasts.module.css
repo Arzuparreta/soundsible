@@ -14,13 +14,15 @@
   border: 1px solid var(--hairline);
   border-radius: var(--radius-full);
   outline: none;
-  transition: border-color var(--dur-short) var(--ease-out);
+  box-shadow: 0 1px 0 var(--hairline-soft) inset;
+  transition: border-color var(--dur-short) var(--ease-out), box-shadow var(--dur-short) var(--ease-out);
 }
 .input::placeholder {
   color: var(--ink-tertiary);
 }
 .input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-faint), var(--shadow-1);
 }
 
 .scroll {
@@ -75,6 +77,17 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--hairline);
   box-shadow: var(--shadow-1);
+  transition:
+    box-shadow var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    transform var(--dur-short) var(--ease-out);
+}
+
+.card:hover .cover,
+.cardBtn:hover .cover {
+  border-color: var(--hairline-strong);
+  box-shadow: var(--shadow-2);
+  transform: translateY(-3px);
 }
 
 .name {
@@ -137,7 +150,7 @@
 
 .subBtn {
   flex-shrink: 0;
-  min-height: 36px;
+  min-height: var(--control-h);
   padding: 0 var(--space-md);
   font: inherit;
   font-size: var(--text-label);
@@ -147,6 +160,12 @@
   border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
+}
+
+@media (min-width: 1024px) {
+  .subBtn {
+    min-height: 36px;
+  }
 }
 .subBtn:disabled {
   opacity: 0.6;

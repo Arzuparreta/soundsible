@@ -19,7 +19,11 @@
   border: 1px solid var(--hairline);
   border-radius: var(--radius-full);
   outline: none;
-  transition: border-color var(--dur-short) var(--ease-out);
+  box-shadow: 0 1px 0 var(--hairline-soft) inset;
+  transition:
+    border-color var(--dur-short) var(--ease-out),
+    background var(--dur-short) var(--ease-out),
+    box-shadow var(--dur-short) var(--ease-out);
 }
 
 .input::placeholder {
@@ -28,6 +32,8 @@
 
 .input:focus {
   border-color: var(--accent);
+  background: var(--bg-raised);
+  box-shadow: 0 0 0 3px var(--accent-faint), var(--shadow-1);
 }
 
 .suggest {
@@ -39,7 +45,8 @@
   background: var(--bg-elevated);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-pop);
+  animation: search-pop var(--dur-short) var(--ease-out);
 }
 
 .suggestItem,
@@ -65,7 +72,7 @@
 
 .suggestItem:hover,
 .recent:hover {
-  background: var(--bg-raised);
+  background: var(--bg-hover);
 }
 
 .suggestItem span,
@@ -96,7 +103,7 @@
 }
 
 .tab {
-  height: 34px;
+  height: var(--control-h);
   padding: 0 var(--space-md);
   color: var(--ink-secondary);
   background: var(--bg-inset);
@@ -107,6 +114,15 @@
   font-weight: var(--fw-semibold);
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    color var(--dur-short) var(--ease-out),
+    background var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+
+.tab:active {
+  transform: scale(0.97);
 }
 
 .activeTab {
@@ -228,6 +244,8 @@
   border: none;
   text-align: left;
   cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: transform var(--dur-short) var(--ease-out);
 }
 
 .discoverCardCover {
@@ -236,11 +254,20 @@
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
-  transition: box-shadow var(--dur-short) var(--ease-out);
+  transition:
+    box-shadow var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out);
 }
 
 .discoverCardBtn:hover .discoverCardCover {
   box-shadow: var(--shadow-2), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  border-color: var(--hairline-strong);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .discoverCardBtn:hover {
+    transform: translateY(-3px);
+  }
 }
 
 .discoverCardTitle {
@@ -582,8 +609,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: var(--control-h);
+  height: var(--control-h);
   flex-shrink: 0;
   border: none;
   border-radius: var(--radius-full);
@@ -625,6 +652,8 @@
   border: none;
   text-align: left;
   cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: transform var(--dur-short) var(--ease-out);
 }
 
 .cardCover {
@@ -633,6 +662,16 @@
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-1);
+  transition: box-shadow var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+}
+
+.card:hover {
+  transform: translateY(-3px);
+}
+
+.card:hover .cardCover {
+  border-color: var(--hairline-strong);
+  box-shadow: var(--shadow-2);
 }
 
 .cardTitle {
@@ -710,8 +749,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: var(--control-h);
+  height: var(--control-h);
   color: var(--ink-secondary);
   background: transparent;
   border: none;
@@ -772,6 +811,19 @@
   }
 }
 
+@media (min-width: 1024px) {
+  .tab {
+    height: 34px;
+  }
+
+  .primaryIcon,
+  .iconBtn,
+  .done {
+    width: 38px;
+    height: 38px;
+  }
+}
+
 @media (hover: none) {
   .discoverSaveBtn,
   .discoverSavedBadge {
@@ -786,6 +838,13 @@
   }
   50% {
     opacity: 0.5;
+  }
+}
+
+@keyframes search-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.99);
   }
 }
 
