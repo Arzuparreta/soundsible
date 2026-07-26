@@ -31,6 +31,7 @@ export function itemToTrack(item: CatalogItem): Track | null {
       duration: typeof item.raw.duration === 'number' ? item.raw.duration : item.duration,
       youtube_id: typeof item.raw.youtube_id === 'string' ? item.raw.youtube_id : undefined,
       cover: item.cover,
+      source: item.source === 'youtube' ? 'preview' : undefined,
     };
   }
   return null;

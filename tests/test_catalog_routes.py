@@ -139,6 +139,64 @@ def test_catalog_search_returns_partial_failures(monkeypatch):
     assert body["partial_failures"] == [{"source": "deezer", "error": "down"}]
 
 
+def test_catalog_search_uses_public_creator_consensus_without_hiding_literal_results(monkeypatch):
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(
+        catalog_routes,
+        "_deezer_search",
+        lambda q, limit: [
+            catalog_routes._catalog_item(
+                item_id="deezer:track:literal",
+                item_type="track",
+                source="deezer",
+                title="Fari",
+                artist="Literal Artist",
+            )
+        ],
+    )
+    monkeypatch.setattr(catalog_routes, "_musicbrainz_search", lambda q, limit: [])
+    monkeypatch.setattr(
+        catalog_routes,
+        "_youtube_search",
+        lambda q, limit: [
+            catalog_routes._catalog_item(
+                item_id=f"youtube:track:{i}",
+                item_type="track",
+                source="youtube",
+                title=title,
+                artist="El Fary",
+                raw={"id": str(i), "title": title, "artist": "El Fary"},
+            )
+            for i, title in enumerate(("El Toro Guapo", "La Mandanga", "Apatrullando la Ciudad"))
+        ],
+    )
+
+    body = _make_app().test_client().get("/api/catalog/search?q=fari").get_json()
+
+    assert body["interpreted_as"] == "El Fary"
+    assert body["items"][0]["artist"] == "El Fary"
+    assert any(item["id"] == "deezer:track:literal" for item in body["items"])
+
+
+def test_catalog_rank_never_uses_library_ownership_for_ties():
+    public = catalog_routes._catalog_item(
+        item_id="deezer:track:1",
+        item_type="track",
+        source="deezer",
+        title="Neutral Song",
+        artist="Neutral Artist",
+        in_library=False,
+    )
+    owned = {**public, "action_state": {**public["action_state"], "in_library": True}}
+
+    assert catalog_routes._rank(public, "neutral song", 0) == catalog_routes._rank(
+        owned,
+        "neutral song",
+        0,
+    )
+
+
 def test_catalog_save_confirmed_video_queues_download(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     fake_api = _fake_api(metadata)

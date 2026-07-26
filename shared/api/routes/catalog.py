@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextvars import copy_context
 from typing import Any
 
 import requests
@@ -56,6 +58,7 @@ _MUSICBRAINZ_HEADERS = {
     "User-Agent": "Soundsible/1.0 (https://github.com/Arzuparreta/soundsible)",
     "Accept": "application/json",
 }
+_SEARCH_WORKERS = 4
 
 
 def _scoped(key: str) -> str:
@@ -185,7 +188,66 @@ def _catalog_item(
     }
 
 
-def _rank(item: dict[str, Any], query: str, index: int) -> float:
+def _intent_creator(results: list[dict[str, Any]], query: str) -> str:
+    """Infer one strong creator correction from the public result set.
+
+    This is deliberately query-only: no account state, history, favourites, or
+    recommendation profile is available to catalog ranking. A repeated creator
+    with a one-character spelling variation is enough to recover searches such
+    as ``fari`` -> ``El Fary`` without hiding the literal ``Fari`` matches.
+    """
+    q_tokens = [token for token in re.findall(r"[a-z0-9]+", _norm(query)) if len(token) >= 3]
+    if not q_tokens:
+        return ""
+
+    counts: dict[str, tuple[int, str]] = {}
+    for row in results[:10]:
+        creator = _clean(row.get("artist") or row.get("channel") or row.get("uploader"))
+        creator = re.sub(r"\s*-\s*topic$", "", creator, flags=re.IGNORECASE).strip()
+        if not creator:
+            continue
+        key = _norm(creator)
+        count, _ = counts.get(key, (0, creator))
+        counts[key] = (count + 1, creator)
+    if not counts:
+        return ""
+
+    _, (count, creator) = max(counts.items(), key=lambda entry: entry[1][0])
+    if count < 2:
+        return ""
+    creator_tokens = re.findall(r"[a-z0-9]+", _norm(creator))
+    for q_token in q_tokens:
+        if any(
+            q_token != token and _edit_distance_at_most_one(q_token, token)
+            for token in creator_tokens
+        ):
+            return creator
+    return ""
+
+
+def _edit_distance_at_most_one(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    if abs(len(left) - len(right)) > 1:
+        return False
+    if len(left) > len(right):
+        left, right = right, left
+    i = j = edits = 0
+    while i < len(left) and j < len(right):
+        if left[i] == right[j]:
+            i += 1
+            j += 1
+            continue
+        edits += 1
+        if edits > 1:
+            return False
+        if len(left) == len(right):
+            i += 1
+        j += 1
+    return edits + (len(right) - j) <= 1
+
+
+def _rank(item: dict[str, Any], query: str, index: int, intent_creator: str = "") -> float:
     q = _norm(query)
     title = _norm(item.get("title"))
     artist = _norm(item.get("artist") or item.get("subtitle"))
@@ -202,15 +264,22 @@ def _rank(item: dict[str, Any], query: str, index: int) -> float:
         score += 32
     elif q and q in artist:
         score += 18
-    if item.get("action_state", {}).get("in_library"):
-        score += 35
-    type_boost = {"library_track": 18, "track": 12, "artist": 7, "album": 5, "playlist": 4}
+    type_boost = {"library_track": 12, "track": 12, "artist": 7, "album": 5, "playlist": 4}
     score += type_boost.get(str(item.get("type")), 0)
     score += min(25.0, float(item.get("popularity") or 0) / 40000.0)
+    if intent_creator:
+        creator = _norm(item.get("artist") or item.get("subtitle"))
+        intent = _norm(intent_creator)
+        if creator == intent or creator.startswith(f"{intent} -") or intent in creator:
+            score += 135
     return score - index * 0.01
 
 
-def _dedupe(items: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+def _dedupe(
+    items: list[dict[str, Any]],
+    query: str,
+    intent_creator: str = "",
+) -> list[dict[str, Any]]:
     by_key: dict[str, dict[str, Any]] = {}
     for idx, item in enumerate(items):
         ids = item.get("external_ids") or {}
@@ -225,7 +294,7 @@ def _dedupe(items: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
         else:
             dedupe_key = f"{item.get('type')}:{_key(item.get('title'), item.get('artist') or item.get('subtitle'))}"
 
-        item["_rank"] = _rank(item, query, idx)
+        item["_rank"] = _rank(item, query, idx, intent_creator)
         existing = by_key.get(dedupe_key)
         if not existing or item["_rank"] > existing["_rank"]:
             by_key[dedupe_key] = item
@@ -404,90 +473,131 @@ def _deezer_search(query: str, limit: int) -> list[dict[str, Any]]:
 
 
 def _musicbrainz_search(query: str, limit: int) -> list[dict[str, Any]]:
+    """One MusicBrainz request, expanded into recording/artist/album rows.
+
+    MusicBrainz asks clients to stay near one request per second. A recording
+    search already embeds artist credits and releases, so one respectful call
+    yields all three catalog shapes without the old three-request latency.
+    """
+    resp = requests.get(
+        f"{_MUSICBRAINZ_HOST}/recording/",
+        params={"query": query, "limit": min(25, max(8, limit)), "fmt": "json"},
+        timeout=6,
+        headers=_MUSICBRAINZ_HEADERS,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    rows = data.get("recordings") if isinstance(data, dict) else []
+    if not isinstance(rows, list):
+        return []
+
     out: list[dict[str, Any]] = []
-    per_type = max(3, min(8, limit // 3))
-    for entity, item_type, params in (
-        ("recording", "track", {"query": query, "limit": per_type, "fmt": "json"}),
-        ("artist", "artist", {"query": query, "limit": per_type, "fmt": "json"}),
-        ("release-group", "album", {"query": query, "limit": per_type, "fmt": "json", "type": "album"}),
-    ):
-        resp = requests.get(
-            f"{_MUSICBRAINZ_HOST}/{entity}/",
-            params=params,
-            timeout=6,
-            headers=_MUSICBRAINZ_HEADERS,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        rows = data.get(f"{entity}s") if isinstance(data, dict) else []
-        if not isinstance(rows, list):
+    seen_artists: set[str] = set()
+    seen_albums: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict):
             continue
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            mbid = _clean(row.get("id"), 80)
-            if not mbid:
-                continue
-            if item_type == "track":
-                artist_credit = row.get("artist-credit") if isinstance(row.get("artist-credit"), list) else []
-                artist = _clean(artist_credit[0].get("name") if artist_credit and isinstance(artist_credit[0], dict) else "")
-                title = _clean(row.get("title"))
-                if not title:
-                    continue
-                out.append(
-                    _catalog_item(
-                        item_id=f"musicbrainz:track:{mbid}",
-                        item_type="track",
-                        source="musicbrainz",
-                        title=title,
-                        subtitle=artist,
-                        artist=artist,
-                        duration=_duration((row.get("length") or 0) / 1000 if row.get("length") else None),
-                        popularity=float(row.get("score") or 0),
-                        external_ids={"musicbrainz_id": mbid},
-                        attribution_url=f"https://musicbrainz.org/recording/{mbid}",
-                        raw={"musicbrainz_id": mbid},
-                    )
-                )
-            elif item_type == "artist":
-                name = _clean(row.get("name"))
-                if name:
-                    out.append(
-                        _catalog_item(
-                            item_id=f"musicbrainz:artist:{mbid}",
-                            item_type="artist",
-                            source="musicbrainz",
-                            title=name,
-                            subtitle=_clean(row.get("disambiguation")) or "Artist",
-                            artist=name,
-                            popularity=float(row.get("score") or 0),
-                            external_ids={"musicbrainz_artist_id": mbid},
-                            attribution_url=f"https://musicbrainz.org/artist/{mbid}",
-                            downloadable=False,
-                            raw={"musicbrainz_artist_id": mbid},
-                        )
-                    )
-            else:
-                title = _clean(row.get("title"))
-                artist_credit = row.get("artist-credit") if isinstance(row.get("artist-credit"), list) else []
-                artist = _clean(artist_credit[0].get("name") if artist_credit and isinstance(artist_credit[0], dict) else "")
-                if title:
-                    out.append(
-                        _catalog_item(
-                            item_id=f"musicbrainz:album:{mbid}",
-                            item_type="album",
-                            source="musicbrainz",
-                            title=title,
-                            subtitle=artist,
-                            artist=artist,
-                            album=title,
-                            popularity=float(row.get("score") or 0),
-                            external_ids={"musicbrainz_release_group_id": mbid},
-                            attribution_url=f"https://musicbrainz.org/release-group/{mbid}",
-                            downloadable=False,
-                            raw={"musicbrainz_release_group_id": mbid},
-                        )
-                    )
+        mbid = _clean(row.get("id"), 80)
+        title = _clean(row.get("title"))
+        credits = row.get("artist-credit") if isinstance(row.get("artist-credit"), list) else []
+        credit = credits[0] if credits and isinstance(credits[0], dict) else {}
+        artist_row = credit.get("artist") if isinstance(credit.get("artist"), dict) else {}
+        artist = _clean(credit.get("name") or artist_row.get("name"))
+        artist_id = _clean(artist_row.get("id"), 80)
+        if mbid and title:
+            out.append(_catalog_item(
+                item_id=f"musicbrainz:track:{mbid}",
+                item_type="track",
+                source="musicbrainz",
+                title=title,
+                subtitle=artist,
+                artist=artist,
+                duration=_duration((row.get("length") or 0) / 1000 if row.get("length") else None),
+                popularity=float(row.get("score") or 0),
+                external_ids={"musicbrainz_id": mbid},
+                attribution_url=f"https://musicbrainz.org/recording/{mbid}",
+                raw={"musicbrainz_id": mbid},
+            ))
+        if artist and artist_id and artist_id not in seen_artists:
+            seen_artists.add(artist_id)
+            out.append(_catalog_item(
+                item_id=f"musicbrainz:artist:{artist_id}",
+                item_type="artist",
+                source="musicbrainz",
+                title=artist,
+                subtitle=_clean(artist_row.get("disambiguation")) or "Artist",
+                artist=artist,
+                popularity=float(row.get("score") or 0),
+                external_ids={"musicbrainz_artist_id": artist_id},
+                attribution_url=f"https://musicbrainz.org/artist/{artist_id}",
+                downloadable=False,
+                raw={"musicbrainz_artist_id": artist_id},
+            ))
+        releases = row.get("releases") if isinstance(row.get("releases"), list) else []
+        release = releases[0] if releases and isinstance(releases[0], dict) else {}
+        album = _clean(release.get("title"))
+        album_id = _clean(release.get("id"), 80)
+        if album and album_id and album_id not in seen_albums:
+            seen_albums.add(album_id)
+            out.append(_catalog_item(
+                item_id=f"musicbrainz:album:{album_id}",
+                item_type="album",
+                source="musicbrainz",
+                title=album,
+                subtitle=artist,
+                artist=artist,
+                album=album,
+                popularity=float(row.get("score") or 0),
+                external_ids={"musicbrainz_release_id": album_id},
+                attribution_url=f"https://musicbrainz.org/release/{album_id}",
+                downloadable=False,
+                raw={"musicbrainz_release_id": album_id},
+            ))
+    return out
+
+
+def _youtube_search(query: str, limit: int) -> list[dict[str, Any]]:
+    """Fast public-video provider used by the universal catalog response."""
+    dl = _get_api()["get_downloader"](open_browser=False)
+    rows = dl.downloader.search_youtube(
+        query,
+        max_results=min(25, max(8, limit)),
+        use_ytmusic=False,
+        enrich_missing=False,
+    )
+    out: list[dict[str, Any]] = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        video_id = _clean(row.get("id") or row.get("video_id") or row.get("videoId"), 32)
+        title = _clean(row.get("title"))
+        artist = _clean(row.get("channel") or row.get("uploader") or row.get("artist"))
+        if not video_id or not title:
+            continue
+        thumbnail = _clean(row.get("thumbnail"), 500)
+        out.append(
+            _catalog_item(
+                item_id=f"youtube:track:{video_id}",
+                item_type="track",
+                source="youtube",
+                title=title,
+                subtitle=artist,
+                artist=artist,
+                duration=_duration(row.get("duration")),
+                cover=thumbnail or f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg",
+                popularity=max(0.0, float(row.get("view_count") or 0)),
+                external_ids={"youtube_id": video_id},
+                attribution_url=f"https://www.youtube.com/watch?v={video_id}",
+                playable=True,
+                raw={
+                    "id": video_id,
+                    "title": title,
+                    "artist": artist,
+                    "duration": _duration(row.get("duration")),
+                    "youtube_id": video_id,
+                },
+            )
+        )
     return out
 
 
@@ -523,21 +633,45 @@ def _cached_search(query: str, types: set[str], limit: int) -> tuple[dict[str, A
 
     items: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
-    providers = (
-        ("library", lambda: _local_catalog(query, limit)),
+    local_rows: list[dict[str, Any]] = []
+    try:
+        local_rows = _local_catalog(query, limit)
+    except Exception as exc:
+        logger.info("Catalog provider library failed: %s", exc)
+        failures.append({"source": "library", "error": sanitize_cli_message(str(exc))})
+
+    providers = [
         ("deezer", lambda: _deezer_search(query, limit)),
         ("musicbrainz", lambda: _musicbrainz_search(query, limit)),
-    )
-    for name, fn in providers:
-        try:
-            items.extend(fn())
-        except Exception as exc:
-            logger.info("Catalog provider %s failed: %s", name, exc)
-            failures.append({"source": name, "error": sanitize_cli_message(str(exc))})
+    ]
+    if not types or "all" in types or "track" in types or "library_track" in types:
+        providers.append(("youtube", lambda: _youtube_search(query, limit)))
 
-    ranked = _filter_types(_dedupe(items, query), types)[:limit]
+    provider_rows: dict[str, list[dict[str, Any]]] = {}
+    with ThreadPoolExecutor(max_workers=_SEARCH_WORKERS, thread_name_prefix="catalog-search") as executor:
+        futures = {
+            executor.submit(copy_context().run, fn): name
+            for name, fn in providers
+        }
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                rows = future.result()
+                provider_rows[name] = rows
+            except Exception as exc:
+                logger.info("Catalog provider %s failed: %s", name, exc)
+                failures.append({"source": name, "error": sanitize_cli_message(str(exc))})
+
+    # Provider completion order is timing-dependent. Merge in a fixed public
+    # order so even exact score ties cannot become account/device dependent.
+    for name in ("youtube", "deezer", "musicbrainz"):
+        items.extend(provider_rows.get(name, []))
+    items.extend(local_rows)
+    intent_creator = _intent_creator(provider_rows.get("youtube", []), query)
+    ranked = _filter_types(_dedupe(items, query, intent_creator), types)
     body = {
         "query": query,
+        "interpreted_as": intent_creator or None,
         "generated_at": int(now),
         "items": ranked,
         "sections": _build_sections(ranked),
@@ -569,30 +703,20 @@ def catalog_suggest():
     suggestions: list[str] = []
     seen: set[str] = set()
     try:
-        for item in _local_catalog(query, 12):
-            for value in (item.get("title"), item.get("artist"), item.get("album")):
+        resp = requests.get(
+            "http://suggestqueries.google.com/complete/search",
+            params={"client": "firefox", "ds": "yt", "q": query, "oe": "utf-8"},
+            timeout=2,
+        )
+        if resp.ok:
+            data = resp.json()
+            for value in data[1] if isinstance(data, list) and len(data) > 1 else []:
                 text = _clean(value)
-                if text and query.casefold() in text.casefold() and text.casefold() not in seen:
+                if text and text.casefold() not in seen:
                     seen.add(text.casefold())
                     suggestions.append(text)
     except Exception:
         pass
-    if len(suggestions) < 8:
-        try:
-            resp = requests.get(
-                "http://suggestqueries.google.com/complete/search",
-                params={"client": "firefox", "ds": "yt", "q": query, "oe": "utf-8"},
-                timeout=2,
-            )
-            if resp.ok:
-                data = resp.json()
-                for value in data[1] if isinstance(data, list) and len(data) > 1 else []:
-                    text = _clean(value)
-                    if text and text.casefold() not in seen:
-                        seen.add(text.casefold())
-                        suggestions.append(text)
-        except Exception:
-            pass
     return jsonify({"suggestions": suggestions[:8]})
 
 

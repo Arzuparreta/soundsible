@@ -381,6 +381,12 @@
   font-weight: var(--fw-bold);
 }
 
+.interpretation {
+  margin: calc(var(--space-xs) * -1) 0 var(--space-sm);
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+}
+
 /* Subordinate YouTube fallback: sits under the music results, visually quieter
    than a real section so it never competes with the catalog. */
 .ytFallback {
@@ -788,4 +794,3 @@
     background-position: -200% 0;
   }
 }
-

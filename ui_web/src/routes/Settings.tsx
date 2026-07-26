@@ -147,6 +147,22 @@ export default function Settings() {
     }
   };
 
+  const resetLearning = async () => {
+    const ok = await confirmDialog({
+      title: t('settings.resetLearning'),
+      message: t('settings.resetLearningConfirm'),
+      confirmLabel: t('settings.resetLearning'),
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.resetDiscoveryProfile();
+      toast.success(t('settings.resetLearningDone'));
+    } catch {
+      toast.error(t('settings.toast.notSaved'));
+    }
+  };
+
   const changeQuality = async (q: string) => {
     setQuality(q);
     try {
@@ -414,6 +430,13 @@ export default function Settings() {
           </div>
         </Group>
 
+        <Group label={t('settings.discovery')}>
+          <div class={styles.panel}>
+            <Switch label={t('settings.learnActivity')} checked={learning()} onChange={toggleLearning} />
+            <ActionRow label={t('settings.resetLearning')} onClick={resetLearning} />
+          </div>
+        </Group>
+
         <Group label={t('settings.downloads')}>
           <div class={styles.panel}>
             {/* Quality, yt-dlp, optimization and cloud sync all act on the shared
@@ -439,7 +462,6 @@ export default function Settings() {
               </div>
               <Switch label={t('settings.autoUpdateYtdlp')} checked={autoUpdate()} onChange={toggleAuto} />
             </Show>
-            <Switch label={t('settings.learnActivity')} checked={learning()} onChange={toggleLearning} />
             <Show when={isAdmin()}>
               <ActionRow label={t('settings.optimize')} onClick={optimize} />
               <ActionRow label={t('settings.sync')} onClick={cloudSync} />

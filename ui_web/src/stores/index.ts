@@ -13,6 +13,7 @@ import { resolveTrackYoutubeId, relatedTracksFor } from '../lib/relatedDiscovery
 import { AutopilotController, type AutoCandidate, type AutoModeState, type AutoPlanItem, type AutoProfile } from '../lib/autopilot';
 import { createShortcutHandler } from '../lib/shortcuts';
 import { t as tr } from '../lib/i18n';
+import { ListeningLearning } from '../lib/listeningLearning';
 import type { Track, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
 import type { DownloadQueueItem, DownloadEvent, CompletedDownload } from '../types/download';
@@ -559,7 +560,22 @@ export const actions = {
     const prev = state.favorites.slice();
     const has = prev.includes(id);
     setState('favorites', has ? prev.filter((f) => f !== id) : [id, ...prev]); // optimistic
-    api.toggleFavourite(id).catch(() => setState('favorites', prev)); // revert on failure
+    api.toggleFavourite(id)
+      .then(() => {
+        if (has) return;
+        const track = state.library.find((item) => item.id === id);
+        if (!track) return;
+        void api.emitDiscoveryEvent('music_favourited', {
+          media_type: 'music_track',
+          track_id: track.id,
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          youtube_id: track.youtube_id,
+          source: 'library',
+        }).catch(() => {});
+      })
+      .catch(() => setState('favorites', prev)); // revert on failure
   },
 
   /** Enter the autonomous listening environment without changing the current
@@ -661,9 +677,9 @@ export const actions = {
   },
 
   /** Play a podcast episode: queue = just this episode; stream via a minted token. */
-  async playEpisode(ep: PodcastEpisode, showTitle?: string): Promise<void> {
+  async playEpisode(ep: PodcastEpisode, showTitle?: string, feedId?: string): Promise<void> {
     if (state.autoMode.active) actions.exitAutoMode();
-    const track = podcastEpisodeToTrack(ep, showTitle);
+    const track = podcastEpisodeToTrack(ep, showTitle, feedId);
     // Tapping the same episode again while its token is still being minted must
     // not mint a second one.
     const pb = state.playback;
@@ -1248,6 +1264,19 @@ export const actions = {
     }
     try {
       applyPlaylistMutation(await api.addTrackToPlaylist(name, trackId));
+      const track = state.library.find((item) => item.id === trackId);
+      if (track) {
+        void api.emitDiscoveryEvent('music_added_to_playlist', {
+          media_type: 'music_track',
+          track_id: track.id,
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          youtube_id: track.youtube_id,
+          playlist_name: name,
+          source: 'library',
+        }).catch(() => {});
+      }
       toast.success(tr('toast.addedToPlaylist', { name }));
     } catch {
       toast.error(tr('toast.addToPlaylistFailed'));
@@ -1357,7 +1386,9 @@ function ensureAutopilot(): AutopilotController {
       patchState: (patch) => setState('autoMode', patch),
       append: (candidates) => {
         const plan = { ...state.autoMode.plan };
-        const accepted = candidates.filter((candidate) => queueIndexOf(state.playback.queue, candidate.track) === -1);
+        const accepted = candidates
+          .filter((candidate) => queueIndexOf(state.playback.queue, candidate.track) === -1)
+          .map(withAutoRecommendation);
         for (const candidate of accepted) {
           const id = queueIdentity(candidate.track);
           plan[id] = {
@@ -1375,7 +1406,9 @@ function ensureAutopilot(): AutopilotController {
       replaceUpcoming: (candidates) => {
         const prefix = state.playback.queue.slice(0, state.playback.index + 1);
         const prefixIds = new Set(prefix.map(queueIdentity));
-        const accepted = candidates.filter((candidate) => !prefixIds.has(queueIdentity(candidate.track)));
+        const accepted = candidates
+          .filter((candidate) => !prefixIds.has(queueIdentity(candidate.track)))
+          .map(withAutoRecommendation);
         const plan: Record<string, AutoPlanItem> = {};
         for (const candidate of accepted) {
           const id = queueIdentity(candidate.track);
@@ -1415,6 +1448,22 @@ function ensureAutopilot(): AutopilotController {
     state.autoMode.profile,
   );
   return autopilot;
+}
+
+function withAutoRecommendation(candidate: AutoCandidate): AutoCandidate {
+  const track = candidate.track;
+  const identity = track.youtube_id || (track.source === 'preview' ? track.id : track.id);
+  return {
+    ...candidate,
+    track: {
+      ...track,
+      recommendation: {
+        identity: `music:${track.source === 'preview' || track.youtube_id ? 'youtube' : 'track'}:${identity}`,
+        source: 'auto_mode',
+        reason: tr(candidate.reasonKey, candidate.reasonValues),
+      },
+    },
+  };
 }
 
 /** Drop catalog-resolved candidates the listener already owns: Auto's discovery
@@ -1529,6 +1578,9 @@ export function applyTheme(theme: Theme, animate = false): void {
 
 let socket: AppSocket | null = null;
 let _warmTimer: ReturnType<typeof setTimeout> | null = null;
+const listeningLearning = new ListeningLearning((event, payload) => {
+  void api.emitDiscoveryEvent(event, payload).catch(() => {});
+});
 
 /** Single source of truth bootstrap: wires audio + engine events, Media Session,
  * and pulls the initial library. */
@@ -1582,7 +1634,11 @@ export function initStore(): void {
       })
       .catch(() => {});
   });
-  a.addEventListener('timeupdate', () => setState('playback', 'currentTime', a.currentTime || 0));
+  a.addEventListener('timeupdate', () => {
+    const position = a.currentTime || 0;
+    setState('playback', 'currentTime', position);
+    listeningLearning.update(state.playback.currentTrack, position, !a.paused && !a.ended);
+  });
   const setDur = () => {
     setState('playback', 'duration', Number.isFinite(a.duration) ? a.duration : 0);
     updatePositionState();

@@ -23,7 +23,11 @@ export function isMusicTrack(track: Pick<Track, 'media_kind' | 'podcast_episode_
  * so the generic queue cannot re-load it). The id mirrors the episode key used
  * by {@link PodcastShow} so the "now playing" highlight lines up.
  */
-export function podcastEpisodeToTrack(ep: PodcastEpisode, showTitle?: string): Track {
+export function podcastEpisodeToTrack(
+  ep: PodcastEpisode,
+  showTitle?: string,
+  feedId?: string,
+): Track {
   const key = ep.guid || ep.enclosure_url;
   return {
     id: key,
@@ -34,5 +38,6 @@ export function podcastEpisodeToTrack(ep: PodcastEpisode, showTitle?: string): T
     source: 'preview',
     media_kind: 'podcast_episode',
     podcast_episode_guid: key,
+    podcast_feed_id: feedId,
   };
 }

@@ -83,9 +83,15 @@ All events are append-only JSON lines. Common fields: `v`, `event`, `ts` (Unix s
 |---------|----------------|---------|--------|
 | `play_timing` | `POST /api/playback/play-timing` | `segments` object (see [TELEMETRY_PRIVACY.md](./TELEMETRY_PRIVACY.md)); optional `track_id`, `device_id`, `phase` | **Implemented** |
 
-### 3.4 `listening-events.jsonl` (Layer 2 — writers disabled in Phase 1)
+### 3.4 `listening-events.jsonl` and `library.db` recommendation profile (Layer 2 — active)
 
-Planned shapes TBD; must respect [TELEMETRY_PRIVACY.md](./TELEMETRY_PRIVACY.md) and must not store PII payloads. Reserved for recommendation inputs/outcomes and control usage when Phase 3 tasks enable writers.
+Version 2 writers are per account and local only. Positive inputs are actual
+30-second playback plus explicit saves, playlist additions, and subscriptions.
+`not_interested` is an undoable, exact-item soft negative: repeated feedback
+reduces probability monotonically but never blacklists or removes a candidate.
+Skips are neutral. Search queries and search clicks are not stored, and search
+ranking never reads the profile. SQLite updates the aggregate profile and audit
+event atomically; JSONL remains the inspectable local event log.
 
 ---
 

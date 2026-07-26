@@ -31,6 +31,7 @@ export const en = {
     online: 'Connected',
     offline: 'Offline',
     continue: 'Continue',
+    undo: 'Undo',
   },
   omnibar: {
     nothingPlaying: 'Nothing playing',
@@ -133,6 +134,8 @@ export const en = {
     catalogNoResults: 'No Music results.',
     searchInYt: 'Search on YouTube',
     topResultSection: 'Top result',
+    resultsSection: 'Results',
+    interpretedAs: 'Showing results for {name}',
     songsSection: 'Songs',
     artistsSection: 'Artists',
     albumsSection: 'Albums',
@@ -165,6 +168,9 @@ export const en = {
     learnActivity: 'Learn from my activity',
     learnActivityNote:
       'Improves recommendations using your local history. Nothing is sent to third parties.',
+    resetLearning: 'Reset recommendation learning',
+    resetLearningConfirm: 'Your local recommendation history and feedback will be cleared.',
+    resetLearningDone: 'Recommendation learning reset',
     downloads: 'Downloads',
     quality: 'Quality',
     qualityLow: 'Low',
@@ -380,6 +386,9 @@ export const en = {
     deleteTitle: 'Delete track',
     deleteMsg: '“{title}” will be deleted from the library and from disk.',
     deleteConfirm: 'Delete',
+    notInterested: 'Not interested',
+    feedbackSaved: 'We’ll make this less likely',
+    feedbackFailed: 'Could not save that preference',
   },
   artistActions: {
     play: 'Play',
@@ -508,6 +517,7 @@ export const en = {
   discoverNodes: {
     title: 'Recommendations',
     refresh: 'New recommendations',
+    fromArtist: 'Because you listen to {artist}',
   },
   searchPanel: {
     fallbackTitle: 'YouTube video',

@@ -370,17 +370,6 @@ export function SearchPanel() {
   const playNow = (track: Track) => {
     if (panelTab() === 'search' && searching()) pushRecentQuery(q());
     actions.playNow(track);
-    if (track.source === 'preview') {
-      void api
-        .emitDiscoveryEvent('music_search_played', {
-          title: track.title,
-          artist: track.artist,
-          source: 'now_playing_panel',
-          youtube_id: track.id,
-          query: q().trim() || undefined,
-        })
-        .catch(() => {});
-    }
   };
 
   const addToQueue = (track: Track) => {
@@ -397,7 +386,6 @@ export function SearchPanel() {
           artist: track.artist,
           source: 'now_playing_panel',
           youtube_id: track.id,
-          query: q().trim() || undefined,
         })
         .catch(() => {});
     }

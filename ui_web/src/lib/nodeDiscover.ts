@@ -28,6 +28,7 @@ import { isPodcastTrack } from './track';
 import { prefetchPreviews } from './prefetch';
 import { setDiscoverSeedHandler } from './socket';
 import type { SearchResult } from '../types/music';
+import { user, userKey } from './session';
 
 export interface NodeRec extends SearchResult {
   /** Library track this recommendation branched from. */
@@ -63,7 +64,7 @@ const KEY = {
 
 function readJson<T>(key: string): T | null {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(userKey(key));
     return raw ? (JSON.parse(raw) as T) : null;
   } catch {
     return null;
@@ -72,7 +73,7 @@ function readJson<T>(key: string): T | null {
 
 function writeJson(key: string, data: unknown): void {
   try {
-    localStorage.setItem(key, JSON.stringify(data));
+    localStorage.setItem(userKey(key), JSON.stringify(data));
   } catch {
     /* storage full / disabled */
   }
@@ -192,10 +193,12 @@ const [nodeFeed, setNodeFeed] = createSignal<NodeRec[]>([]);
 const [nodeLoading, setNodeLoading] = createSignal(false);
 export { nodeFeed, nodeLoading };
 
-let hydrated = false;
+let hydratedFor: string | null = null;
 function hydrate(): void {
-  if (hydrated) return;
-  hydrated = true;
+  const account = user()?.id ?? '-';
+  if (hydratedFor === account) return;
+  hydratedFor = account;
+  setNodeFeed([]);
   const cached = readJson<{ ts: number; items: NodeRec[] }>(KEY.feed);
   if (cached && Array.isArray(cached.items)) setNodeFeed(cached.items);
 }

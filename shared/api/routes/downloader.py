@@ -169,7 +169,9 @@ def youtube_related():
     # Note: Per-process hot loop (same call within a second → skip even SQLite).
     cached = _related_memo.get(cache_key)
     if cached is not None:
-        return jsonify({"results": cached})
+        from shared.discovery_intelligence import rank_recommendation_rows
+
+        return jsonify({"results": rank_recommendation_rows(cached, source="radio")})
 
     from shared.database import instance_db
 
@@ -194,7 +196,10 @@ def youtube_related():
         return results
 
     try:
-        return jsonify({"results": _related_memo.resolve(cache_key, related)})
+        from shared.discovery_intelligence import rank_recommendation_rows
+
+        raw_results = _related_memo.resolve(cache_key, related)
+        return jsonify({"results": rank_recommendation_rows(raw_results, source="radio")})
     except Exception as e:
         logger.warning("API: YouTube related error: %s", e)
         return jsonify({"results": [], "error": sanitize_cli_message(str(e))}), 500

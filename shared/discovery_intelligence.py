@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import math
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
 from shared.models import LibraryMetadata, Track
+from shared.database import user_db
 from shared.telemetry import emit, user_telemetry_dir
 from shared.user_context import user_config_dir
 
@@ -21,14 +24,25 @@ DEFAULT_SETTINGS = {
 POSITIVE_LISTENING_EVENTS = {
     "music_played_30s",
     "music_saved_to_library",
+    "music_favourited",
     "music_added_to_playlist",
     "music_added_to_queue",
     "music_started_radio",
-    "music_search_played",
     "podcast_episode_played_30s",
     "podcast_subscribed",
     "podcast_episode_saved",
-    "podcast_search_opened",
+}
+
+_POSITIVE_WEIGHTS = {
+    "music_played_30s": 1.0,
+    "music_saved_to_library": 2.5,
+    "music_favourited": 2.0,
+    "music_added_to_playlist": 2.0,
+    "music_added_to_queue": 0.35,
+    "music_started_radio": 0.5,
+    "podcast_episode_played_30s": 1.0,
+    "podcast_subscribed": 2.5,
+    "podcast_episode_saved": 2.0,
 }
 
 
@@ -175,7 +189,7 @@ def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> b
 
     payload = payload if isinstance(payload, dict) else {}
     safe: dict[str, Any] = {
-        "v": 1,
+        "v": 2,
         "event": event_name,
         "ts": int(time.time()),
     }
@@ -189,7 +203,6 @@ def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> b
         "youtube_id",
         "deezer_id",
         "playlist_name",
-        "query",
         "podcast_feed_id",
         "podcast_episode_id",
         "podcast_show_title",
@@ -203,12 +216,191 @@ def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> b
             safe[key] = value
         else:
             safe[key] = _clean_str(value)
+    identity, media_type = canonical_identity(safe)
+    safe["identity"] = identity
+    safe["media_type"] = media_type
+    user_db().record_discovery_signal(
+        event_id=str(uuid.uuid4()),
+        event=event_name,
+        identity=identity,
+        media_type=media_type,
+        positive_delta=_POSITIVE_WEIGHTS[event_name],
+        negative_delta=0,
+        payload=safe,
+        created_at=int(safe["ts"]),
+    )
     emit("listening-events", safe)
     return True
 
 
 def _norm(value: Any) -> str:
     return str(value or "").strip().lower()
+
+
+def canonical_identity(payload: dict[str, Any]) -> tuple[str, str]:
+    """Stable, local identity for one exact track, episode, or show."""
+    media_type = _clean_str(payload.get("media_type"), 40)
+    is_podcast = media_type.startswith("podcast") or bool(
+        payload.get("podcast_feed_id")
+        or payload.get("podcast_episode_id")
+        or payload.get("itunes_collection_id")
+    )
+    if is_podcast:
+        feed = _clean_str(
+            payload.get("podcast_feed_id") or payload.get("itunes_collection_id"),
+            400,
+        )
+        episode = _clean_str(payload.get("podcast_episode_id"), 400)
+        if episode:
+            return f"podcast:episode:{_norm(feed)}:{_norm(episode)}", "podcast_episode"
+        if feed:
+            return f"podcast:show:{_norm(feed)}", "podcast_show"
+        return (
+            f"podcast:show:{_norm(payload.get('podcast_show_title') or payload.get('title'))}",
+            "podcast_show",
+        )
+
+    for key, prefix in (
+        ("youtube_id", "music:youtube"),
+        ("track_id", "music:track"),
+        ("isrc", "music:isrc"),
+        ("deezer_id", "music:deezer"),
+    ):
+        value = _clean_str(payload.get(key), 160)
+        if value:
+            return f"{prefix}:{_norm(value)}", "music_track"
+    return (
+        f"music:meta:{_norm(payload.get('artist'))}\x00{_norm(payload.get('title'))}",
+        "music_track",
+    )
+
+
+def record_not_interested(payload: dict[str, Any]) -> str:
+    """Record an explicit soft-negative signal and return its undo id."""
+    if not load_discovery_settings().get("learning_enabled", True):
+        return ""
+    safe = {
+        key: _clean_str(payload.get(key), 400)
+        for key in (
+            "media_type",
+            "track_id",
+            "title",
+            "artist",
+            "youtube_id",
+            "deezer_id",
+            "podcast_feed_id",
+            "podcast_episode_id",
+            "podcast_show_title",
+            "itunes_collection_id",
+            "source",
+        )
+        if payload.get(key) is not None
+    }
+    identity, media_type = canonical_identity(safe)
+    event_id = str(uuid.uuid4())
+    created_at = int(time.time())
+    user_db().record_discovery_signal(
+        event_id=event_id,
+        event="not_interested",
+        identity=identity,
+        media_type=media_type,
+        positive_delta=0,
+        negative_delta=1,
+        payload=safe,
+        created_at=created_at,
+    )
+    emit("listening-events", {
+        "v": 2,
+        "event": "not_interested",
+        "event_id": event_id,
+        "identity": identity,
+        "media_type": media_type,
+        "ts": created_at,
+        **safe,
+    })
+    return event_id
+
+
+def undo_discovery_feedback(event_id: str) -> bool:
+    return user_db().undo_discovery_signal(_clean_str(event_id, 80), int(time.time()))
+
+
+def reset_discovery_profile() -> None:
+    """Clear the bound account's aggregate, audit rows, and listening log."""
+    user_db().clear_discovery_signals()
+    for path in _listening_events_paths():
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            continue
+
+
+def recommendation_multiplier(identity: str) -> float:
+    """Soft learning multiplier. It can approach, but never reach, zero."""
+    if not load_discovery_settings().get("learning_enabled", True):
+        return 1.0
+    signal = user_db().get_discovery_signals().get(identity)
+    return _signal_multiplier(signal)
+
+
+def _signal_multiplier(signal: dict[str, Any] | None) -> float:
+    if not signal:
+        return 1.0
+    positive = max(0.0, float(signal.get("positive_weight") or 0))
+    negatives = max(0, int(signal.get("negative_count") or 0))
+    positive_factor = min(1.75, 1.0 + math.log1p(positive) * 0.18)
+    negative_factor = max(0.08, math.exp(-0.72 * negatives))
+    return positive_factor * negative_factor
+
+
+def rank_recommendation_rows(
+    rows: Iterable[dict[str, Any]],
+    *,
+    source: str,
+) -> list[dict[str, Any]]:
+    """Apply the shared profile to recommendation rows only.
+
+    Every input row remains in the output. Learning changes probability/order;
+    it never blacklists, filters, or affects explicit search/manual queues.
+    """
+    ranked: list[tuple[float, int, dict[str, Any]]] = []
+    fallback_reasons = {
+        "discover": ("Related to music in your library.", "library_graph"),
+        "radio": ("Related to what you're playing.", "radio_related"),
+        "auto_mode": ("Selected for Auto Mode.", "auto_mode_mix"),
+        "podcast": ("Recommended from your local podcast activity.", "podcast_activity"),
+    }
+    signals = (
+        user_db().get_discovery_signals()
+        if load_discovery_settings().get("learning_enabled", True)
+        else {}
+    )
+    for index, raw in enumerate(rows):
+        row = dict(raw)
+        identity = _clean_str(row.get("recommendation_identity"), 500)
+        if not identity:
+            identity_payload = dict(row)
+            if (
+                not identity_payload.get("youtube_id")
+                and not str(identity_payload.get("media_type") or "").startswith("podcast")
+            ):
+                identity_payload["youtube_id"] = (
+                    identity_payload.get("video_id") or identity_payload.get("id")
+                )
+            identity, _ = canonical_identity(identity_payload)
+        base = float(row.get("score") or max(0.001, 1.0 - index * 0.01))
+        row["recommendation_identity"] = identity
+        row["recommendation_source"] = source
+        fallback_reason, fallback_code = fallback_reasons.get(
+            source,
+            ("Recommended for you.", "local_recommendation"),
+        )
+        row["reason"] = _clean_str(row.get("reason")) or fallback_reason
+        row["reason_code"] = _clean_str(row.get("reason_code"), 80) or fallback_code
+        row["score"] = round(max(0.0001, base * _signal_multiplier(signals.get(identity))), 6)
+        ranked.append((float(row["score"]), index, row))
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    return [row for _, _, row in ranked]
 
 
 def _track_cover(track: Track) -> str:
@@ -236,6 +428,13 @@ def _music_item(
     in_library: bool = True,
     saved: bool = True,
 ) -> dict[str, Any]:
+    external_ids = _external_ids_for_track(track)
+    identity, _ = canonical_identity({
+        "track_id": track.id,
+        "youtube_id": external_ids.get("youtube_id"),
+        "title": track.title,
+        "artist": track.artist or track.album_artist,
+    })
     return {
         "id": f"music:{track.id}",
         "media_type": "music_track",
@@ -248,6 +447,7 @@ def _music_item(
         "source": source,
         "reason": reason,
         "reason_code": reason_code,
+        "recommendation_identity": identity,
         "score": round(float(score), 4),
         "confidence": 1.0 if in_library else 0.65,
         "action_state": {
@@ -257,7 +457,7 @@ def _music_item(
             "downloadable": not in_library,
             "needs_resolution": False,
         },
-        "external_ids": _external_ids_for_track(track),
+        "external_ids": external_ids,
     }
 
 
@@ -469,8 +669,9 @@ def build_music_recommendations(
     playlist_sections = _build_playlist_sections(tracks, by_id, playlists, rollup, seen, items)
     sections.extend(playlist_sections)
 
+    ranked_items = rank_recommendation_rows(items, source="discover")
     return {
-        "items": items[:limit],
+        "items": ranked_items[:limit],
         "sections": sections,
         "settings": load_discovery_settings(),
     }
@@ -528,6 +729,12 @@ def _podcast_item(row: dict[str, Any], *, reason: str, reason_code: str, score: 
     feed_url = _clean_str(row.get("rss_url") or row.get("feed_url"), 400)
     itunes_id = _clean_str(row.get("itunes_collection_id"))
     stable = row.get("id") or itunes_id or feed_url or row.get("title") or "podcast"
+    identity, _ = canonical_identity({
+        "media_type": "podcast_show",
+        "podcast_feed_id": feed_url,
+        "itunes_collection_id": itunes_id,
+        "podcast_show_title": row.get("title"),
+    })
     return {
         "id": f"podcast:{_clean_str(stable, 160)}",
         "media_type": "podcast_show",
@@ -537,6 +744,7 @@ def _podcast_item(row: dict[str, Any], *, reason: str, reason_code: str, score: 
         "source": "subscription" if row.get("rss_url") else "itunes_podcast",
         "reason": reason,
         "reason_code": reason_code,
+        "recommendation_identity": identity,
         "score": round(float(score), 4),
         "confidence": 1.0 if row.get("rss_url") else 0.7,
         "action_state": {
@@ -556,6 +764,7 @@ def build_podcast_recommendations(
     metadata: LibraryMetadata | None,
     limit: int = 24,
     rollup: ListeningRollup | None = None,
+    exploration_rows: Iterable[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if rollup is None:
         rollup = load_listening_event_rollups()
@@ -598,14 +807,35 @@ def build_podcast_recommendations(
             )
         )
 
+    subscribed_ids = {
+        _clean_str(sub.get("itunes_collection_id") or sub.get("rss_url") or sub.get("feed_url"))
+        for sub in subs
+    }
+    for index, row in enumerate(exploration_rows or []):
+        if len(items) >= limit:
+            break
+        stable = _clean_str(
+            row.get("itunes_collection_id") or row.get("feed_url") or row.get("rss_url")
+        )
+        if not stable or stable in subscribed_ids:
+            continue
+        subscribed_ids.add(stable)
+        items.append(_podcast_item(
+            row,
+            reason="A little exploration beyond your subscriptions.",
+            reason_code="podcast_exploration",
+            score=max(0.15, 0.55 - index * 0.01),
+        ))
+
+    ranked_items = rank_recommendation_rows(items, source="podcast")
     return {
-        "items": items,
+        "items": ranked_items,
         "sections": [
             {
                 "id": "your_shows",
                 "title": "Your Shows",
                 "reason": "Subscriptions ranked by recent listening.",
-                "item_ids": [item["id"] for item in items],
+                "item_ids": [item["id"] for item in ranked_items],
             }
         ],
         "settings": load_discovery_settings(),

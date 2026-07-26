@@ -50,7 +50,7 @@ export default function PodcastShow() {
   const playEp = (ep: PodcastEpisode) => {
     const local = localByGuid().get(ep.guid);
     if (local) actions.playTrack(local);
-    else void actions.playEpisode(ep, sub()?.title);
+    else void actions.playEpisode(ep, sub()?.title, sub()?.id);
   };
 
   const unsubscribe = async () => {

@@ -32,6 +32,7 @@ export const zh: Dict = {
     online: '已连接',
     offline: '离线',
     continue: '继续',
+    undo: '撤销',
   },
   omnibar: {
     nothingPlaying: '未在播放',
@@ -134,6 +135,8 @@ export const zh: Dict = {
     catalogNoResults: '音乐无结果。',
     searchInYt: '在 YouTube 搜索',
     topResultSection: '热门结果',
+    resultsSection: '搜索结果',
+    interpretedAs: '正在显示 {name} 的结果',
     songsSection: '歌曲',
     artistsSection: '艺人',
     albumsSection: '专辑',
@@ -165,6 +168,9 @@ export const zh: Dict = {
     discovery: '发现',
     learnActivity: '学习我的活动',
     learnActivityNote: '使用本地历史改进推荐。不会发送给第三方。',
+    resetLearning: '重置推荐学习',
+    resetLearningConfirm: '将清除本地推荐历史和偏好。',
+    resetLearningDone: '推荐学习已重置',
     downloads: '下载',
     quality: '音质',
     qualityLow: '低',
@@ -377,6 +383,9 @@ export const zh: Dict = {
     deleteTitle: '删除曲目',
     deleteMsg: '将从资料库和磁盘中删除“{title}”。',
     deleteConfirm: '删除',
+    notInterested: '不感兴趣',
+    feedbackSaved: '以后会减少出现',
+    feedbackFailed: '无法保存此偏好',
   },
   artistActions: {
     play: '播放',
@@ -501,6 +510,7 @@ export const zh: Dict = {
   discoverNodes: {
     title: '推荐',
     refresh: '换一批推荐',
+    fromArtist: '因为你常听 {artist}',
   },
   searchPanel: {
     fallbackTitle: 'YouTube 视频',

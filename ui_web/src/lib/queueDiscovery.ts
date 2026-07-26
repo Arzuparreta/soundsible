@@ -30,6 +30,21 @@ export function resultToTrack(result: SearchResult): Track {
     duration: result.duration,
     cover: result.thumbnail,
     source: 'preview',
+    recommendation: result.recommendation_identity
+      ? {
+          identity: result.recommendation_identity,
+          source:
+            result.recommendation_source === 'auto_mode'
+              ? 'auto_mode'
+              : result.recommendation_source === 'podcast'
+                ? 'podcast'
+                : result.recommendation_source === 'discover'
+                  ? 'discover'
+                  : 'radio',
+          reason: result.reason,
+          reason_code: result.reason_code,
+        }
+      : undefined,
   };
 }
 

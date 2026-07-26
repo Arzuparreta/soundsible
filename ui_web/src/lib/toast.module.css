@@ -48,6 +48,16 @@
   max-width: 340px;
 }
 
+.action {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+
 .success {
   --dot: var(--success);
 }
@@ -67,4 +77,3 @@
     opacity: 0;
   }
 }
-

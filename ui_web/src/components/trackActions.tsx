@@ -8,6 +8,8 @@ import { confirmDialog } from '../lib/confirm';
 import { artistPath } from '../lib/artistRoute';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
+import { api } from '../lib/api';
+import { toast } from '../lib/toast';
 
 /**
  * Context for building a track's action menu. Optional callbacks let later
@@ -54,6 +56,8 @@ const icons = {
   download: () => sw('M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3'),
   remove: () => sw('M5 12h14'),
   trash: () => sw('M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'),
+  feedback: () => sw('M17 14V4M9 18.5l1-4.5H4.5a2 2 0 01-1.9-2.6l2-6A2 2 0 016.5 4H17v10l-4 7a2 2 0 01-4-2.5z'),
+  info: () => sw('M12 17v-6M12 7h.01M12 2a10 10 0 100 20 10 10 0 000-20'),
 };
 
 /** Build the action list for a track, given its context. */
@@ -86,6 +90,21 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   if (ctx.onEditMetadata && isLibrary)
     list.push({ icon: icons.edit(), label: t('trackActions.editData'), onSelect: () => ctx.onEditMetadata!(track) });
   list.push({ icon: icons.share(), label: t('trackActions.share'), onSelect: () => void shareTrack(track) });
+  if (track.recommendation) {
+    if (track.recommendation.reason) {
+      list.push({
+        icon: icons.info(),
+        label: track.recommendation.reason,
+        disabled: true,
+        onSelect: () => {},
+      });
+    }
+    list.push({
+      icon: icons.feedback(),
+      label: t('trackActions.notInterested'),
+      onSelect: () => void sendNotInterested(track),
+    });
+  }
   // Save to library for preview tracks (not yet downloaded).
   // Exclude podcast episodes — they use a different download flow.
   if (track.source === 'preview' && !track.podcast_episode_guid) {
@@ -107,6 +126,30 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     list.push({ icon: icons.trash(), label: t('trackActions.deleteFromLibrary'), danger: true, onSelect: () => void confirmDelete(track) });
 
   return list;
+}
+
+async function sendNotInterested(track: Track): Promise<void> {
+  try {
+    const result = await api.sendDiscoveryFeedback({
+      media_type: isPodcastTrack(track) ? 'podcast_episode' : 'music_track',
+      track_id: track.source === 'preview' ? undefined : track.id,
+      title: track.title,
+      artist: track.artist,
+      youtube_id: !isPodcastTrack(track)
+        ? track.youtube_id || (track.source === 'preview' ? track.id : undefined)
+        : undefined,
+      podcast_feed_id: track.podcast_feed_id,
+      podcast_episode_id: track.podcast_episode_guid,
+      podcast_show_title: isPodcastTrack(track) ? track.artist : undefined,
+      source: track.recommendation?.source,
+    });
+    if (!result.recorded || !result.event_id) return;
+    toast.action(t('trackActions.feedbackSaved'), t('common.undo'), () => {
+      void api.undoDiscoveryFeedback(result.event_id!).catch(() => {});
+    });
+  } catch {
+    toast.error(t('trackActions.feedbackFailed'));
+  }
 }
 
 async function confirmDelete(track: Track): Promise<void> {

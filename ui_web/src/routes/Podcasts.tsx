@@ -7,6 +7,9 @@ import { t } from '../lib/i18n';
 import type { PodcastSearchResult } from '../types/podcast';
 import styles from './Podcasts.module.css';
 import { neutralCoverStyle } from '../lib/cover';
+import { attachContextMenu } from '../lib/contextMenu';
+import type { ActionMenuOptions } from '../components/ActionMenu';
+import { toast } from '../lib/toast';
 
 function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
@@ -20,6 +23,9 @@ export default function Podcasts() {
   const [subscribing, setSubscribing] = createSignal<Set<string>>(new Set());
 
   const subscribedFeeds = createMemo(() => new Set(state.podcastSubscriptions.map((s) => s.rss_url)));
+  const recommendedPodcasts = createMemo(() =>
+    topPodcasts().filter((podcast) => !subscribedFeeds().has(podcast.feed_url)),
+  );
 
   let aborter: AbortController | undefined;
   let debounce: number | undefined;
@@ -61,6 +67,14 @@ export default function Podcasts() {
         image_url: r.image_url,
         itunes_collection_id: r.itunes_collection_id,
       });
+      void api.emitDiscoveryEvent('podcast_subscribed', {
+        media_type: 'podcast_show',
+        podcast_feed_id: r.feed_url,
+        podcast_show_title: r.title,
+        podcast_author: r.author,
+        itunes_collection_id: r.itunes_collection_id,
+        source: 'podcast_directory',
+      }).catch(() => {});
       await actions.syncLibrary();
     } catch {
       // ignore
@@ -71,6 +85,35 @@ export default function Podcasts() {
         return n;
       });
     }
+  };
+
+  const recommendationMenu = (p: PodcastSearchResult): ActionMenuOptions | null => {
+    if (!p.recommendation_identity) return null;
+    return {
+      title: p.title,
+      subtitle: p.author,
+      actions: [
+        ...(p.reason ? [{ label: p.reason, disabled: true, onSelect: () => {} }] : []),
+        {
+          label: t('trackActions.notInterested'),
+          onSelect: () => {
+            void api.sendDiscoveryFeedback({
+              media_type: 'podcast_show',
+              podcast_feed_id: p.feed_url,
+              podcast_show_title: p.title,
+              podcast_author: p.author,
+              itunes_collection_id: p.itunes_collection_id,
+              source: 'podcast',
+            }).then((result) => {
+              if (!result.recorded || !result.event_id) return;
+              toast.action(t('trackActions.feedbackSaved'), t('common.undo'), () => {
+                void api.undoDiscoveryFeedback(result.event_id!).catch(() => {});
+              });
+            }).catch(() => toast.error(t('trackActions.feedbackFailed')));
+          },
+        },
+      ],
+    };
   };
 
   onCleanup(() => {
@@ -110,13 +153,14 @@ export default function Podcasts() {
                 </div>
               </Show>
 
-              <Show when={topPodcasts().length > 0}>
+              <Show when={recommendedPodcasts().length > 0}>
                 <h2 class={styles.sectionTitle}>{t('podcasts.top')}</h2>
                 <div class={styles.grid}>
-                  <For each={topPodcasts()}>
+                  <For each={recommendedPodcasts()}>
                     {(p) => (
                       <button
                         class={styles.cardBtn}
+                        ref={(el) => attachContextMenu(el, () => recommendationMenu(p))}
                         type="button"
                         disabled={subscribedFeeds().has(p.feed_url) || subscribing().has(p.feed_url)}
                         onClick={() => subscribe(p)}
@@ -132,7 +176,7 @@ export default function Podcasts() {
                 </div>
               </Show>
 
-              <Show when={state.podcastSubscriptions.length === 0 && topPodcasts().length === 0}>
+              <Show when={state.podcastSubscriptions.length === 0 && recommendedPodcasts().length === 0}>
                 <p class={styles.hint}>{t('podcasts.hint')}</p>
               </Show>
             </>

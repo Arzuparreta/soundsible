@@ -24,9 +24,12 @@ from shared.discovery_intelligence import (
     load_listening_event_rollups,
     load_discovery_settings,
     load_recently_saved_tracks,
+    rank_recommendation_rows,
+    record_not_interested,
+    reset_discovery_profile,
     save_discovery_settings,
+    undo_discovery_feedback,
 )
-from shared.hardening import SCOPE_ADMIN_CONFIG, require_scope
 from shared.hardening import rate_limit
 
 from odst_tool.config import prefer_ytmusic
@@ -64,6 +67,14 @@ _LOOKUP_CHUNK = 40
 # Short search terms — merged and deduped when RSS chart is unavailable.
 _ITUNES_TOP_FALLBACK_TERMS = ("podcast", "news", "comedy", "technology", "sports")
 _MAX_PERSONALIZED_SEEDS = 5
+
+
+def _invalidate_personalized_cache() -> None:
+    from shared.user_context import current_user_id
+
+    prefix = f"music-feed-v3:{current_user_id() or '-'}:"
+    for key in [key for key in _MUSIC_FEED_CACHE if key.startswith(prefix)]:
+        _MUSIC_FEED_CACHE.pop(key, None)
 
 
 def _podcast_row_from_itunes_search(r: dict) -> dict | None:
@@ -107,13 +118,22 @@ def discovery_settings_get():
 
 
 @discovery_bp.route("/api/discovery/settings", methods=["PATCH"])
-@require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("discovery_settings_patch", limit=30, window_sec=60)
 def discovery_settings_patch():
     data = request.get_json(silent=True) or {}
     if "learning_enabled" in data and not isinstance(data.get("learning_enabled"), bool):
         return jsonify({"error": "learning_enabled must be boolean"}), 400
-    return jsonify(save_discovery_settings(data))
+    saved = save_discovery_settings(data)
+    _invalidate_personalized_cache()
+    return jsonify(saved)
+
+
+@discovery_bp.route("/api/discovery/profile", methods=["DELETE"])
+@rate_limit("discovery_profile_reset", limit=6, window_sec=60)
+def discovery_profile_reset():
+    reset_discovery_profile()
+    _invalidate_personalized_cache()
+    return jsonify({"status": "reset"})
 
 
 @discovery_bp.route("/api/discovery/events", methods=["POST"])
@@ -125,7 +145,35 @@ def discovery_events_post():
     if event not in POSITIVE_LISTENING_EVENTS:
         return jsonify({"error": "Unsupported discovery event"}), 400
     recorded = emit_discovery_event(event, payload)
+    if recorded:
+        _invalidate_personalized_cache()
     return jsonify({"status": "recorded" if recorded else "disabled", "recorded": recorded})
+
+
+@discovery_bp.route("/api/discovery/feedback", methods=["POST"])
+@rate_limit("discovery_feedback", limit=120, window_sec=60)
+def discovery_feedback_post():
+    data = request.get_json(silent=True) or {}
+    if data.get("feedback") != "not_interested":
+        return jsonify({"error": "Unsupported feedback"}), 400
+    item = data.get("item") if isinstance(data.get("item"), dict) else {}
+    event_id = record_not_interested(item)
+    if event_id:
+        _invalidate_personalized_cache()
+    return jsonify({
+        "status": "recorded" if event_id else "disabled",
+        "recorded": bool(event_id),
+        "event_id": event_id or None,
+    })
+
+
+@discovery_bp.route("/api/discovery/feedback/<event_id>", methods=["DELETE"])
+@rate_limit("discovery_feedback_undo", limit=120, window_sec=60)
+def discovery_feedback_undo(event_id: str):
+    undone = undo_discovery_feedback(event_id)
+    if undone:
+        _invalidate_personalized_cache()
+    return jsonify({"status": "undone" if undone else "not_found", "undone": undone}), (200 if undone else 404)
 
 
 @discovery_bp.route("/api/discovery/save", methods=["POST"])
@@ -586,9 +634,10 @@ def _build_music_feed(metadata, fav_ids: list[str], limit: int) -> dict:
             if isinstance(section, dict) and section.get("item_ids"):
                 sections.append(section)
 
+    ranked_items = rank_recommendation_rows(items, source="discover")
     return {
         "generated_at": int(time.time()),
-        "items": items,
+        "items": ranked_items,
         "sections": sections,
         "settings": local_recs.get("settings") or load_discovery_settings(),
         "needs_seed": not bool(sections),
@@ -708,7 +757,16 @@ def discovery_podcast_recommendations():
     except Exception:
         pass
     metadata = getattr(lib, "metadata", None)
-    return jsonify(build_podcast_recommendations(metadata, limit=limit))
+    try:
+        exploration = _podcast_top_results("us", limit, "explicit")
+    except Exception as exc:
+        logger.info("Podcast recommendation exploration unavailable: %s", exc)
+        exploration = []
+    return jsonify(build_podcast_recommendations(
+        metadata,
+        limit=limit,
+        exploration_rows=exploration,
+    ))
 
 
 @discovery_bp.route("/api/discovery/podcasts/search", methods=["GET"])
@@ -915,32 +973,37 @@ def _top_podcasts_itunes_search_fallback(country: str, limit: int, allow_explici
     return out[:limit]
 
 
+def _podcast_top_results(country: str, limit: int, explicit_seg: str) -> list[dict]:
+    cache_key = f"{country}:{limit}:{explicit_seg}"
+    now = time.time()
+    cached = _PODCAST_TOP_CACHE.get(cache_key)
+    if cached and cached[0] > now:
+        return cached[1]
+    try:
+        results = _top_podcasts_from_rss_chart(country, limit, explicit_seg)
+    except Exception as exc:
+        logger.info("Podcast top chart RSS unavailable (%s); using iTunes search mix.", exc)
+        results = []
+    if not results:
+        results = _top_podcasts_itunes_search_fallback(
+            country,
+            limit,
+            explicit_seg == "explicit",
+        )
+    if results:
+        _PODCAST_TOP_CACHE[cache_key] = (now + _PODCAST_TOP_TTL_SEC, results)
+    return results
+
+
 @discovery_bp.route("/api/discovery/podcasts/top", methods=["GET"])
 @rate_limit("discovery_podcasts_top", limit=60, window_sec=60)
 def itunes_podcast_top():
     country = _country_code(request.args.get("country"))
     limit = min(50, max(1, request.args.get("limit", type=int) or 24))
     explicit_seg = _explicit_segment_from_request()
-    allow_explicit = explicit_seg == "explicit"
-    cache_key = f"{country}:{limit}:{explicit_seg}"
-    now = time.time()
-    cached = _PODCAST_TOP_CACHE.get(cache_key)
-    if cached and cached[0] > now:
-        return jsonify({"results": cached[1]})
-
-    results: list[dict] = []
-    try:
-        results = _top_podcasts_from_rss_chart(country, limit, explicit_seg)
-    except Exception as exc:
-        logger.info("Podcast top chart RSS unavailable (%s); using iTunes search mix.", exc)
-
-    if not results:
-        results = _top_podcasts_itunes_search_fallback(country, limit, allow_explicit)
-
+    results = _podcast_top_results(country, limit, explicit_seg)
     if not results:
         return jsonify({"error": "Directory unreachable", "results": []}), 502
-
-    _PODCAST_TOP_CACHE[cache_key] = (now + _PODCAST_TOP_TTL_SEC, results)
     return jsonify({"results": results})
 
 
@@ -1051,26 +1114,39 @@ def _resolve_seed_yt_id(track) -> str:
         return ""
 
 
-def _expand_seed(video_id: str, request_id: str | None, seed_track_id: str | None) -> None:
+def _expand_seed(
+    video_id: str,
+    request_id: str | None,
+    seed_track_id: str | None,
+    user_id: str | None,
+) -> None:
     """Extract related-mix for one seed, persist it, and emit socketio if this
     was an async (user-requested) expansion. Errors are logged and swallowed —
     a failed seed just contributes no recs."""
     try:
-        api = _get_api()
-        dl = api["get_downloader"](open_browser=False)
-        results = dl.downloader.get_related_videos(
-            video_id, max_results=_DISCOVER_RECS_PER_SEED, enrich=False
-        )
-        instance_db().set_related_mix(video_id, results)
-        if request_id and seed_track_id:
-            mod = api["_mod"]
-            sio = getattr(mod, "socketio", None)
-            if sio is not None:
-                sio.emit("discover_seed_ready", {
-                    "request_id": request_id,
-                    "seed_track_id": seed_track_id,
-                    "recs": results,
-                })
+        from shared.user_context import user_context
+
+        with user_context(user_id):
+            api = _get_api()
+            dl = api["get_downloader"](open_browser=False)
+            results = dl.downloader.get_related_videos(
+                video_id, max_results=_DISCOVER_RECS_PER_SEED, enrich=False
+            )
+            instance_db().set_related_mix(video_id, results)
+            if request_id and seed_track_id:
+                mod = api["_mod"]
+                sio = getattr(mod, "socketio", None)
+                if sio is not None:
+                    recs = (
+                        rank_recommendation_rows(results, source="discover")
+                        if user_id
+                        else results
+                    )
+                    sio.emit("discover_seed_ready", {
+                        "request_id": request_id,
+                        "seed_track_id": seed_track_id,
+                        "recs": recs,
+                    })
     except Exception as exc:
         logger.debug("discover: expand failed for %s: %s", video_id, exc)
         # Note: Still emit an empty result so the client can mark this seed as
@@ -1097,7 +1173,15 @@ def _schedule_expand(video_id: str, request_id: str | None = None, seed_track_id
             if request_id and seed_track_id:
                 _discover_request_seeds.setdefault(request_id, set()).add(seed_track_id)
             return
-        fut = _get_discover_executor().submit(_expand_seed, video_id, request_id, seed_track_id)
+        from shared.user_context import current_user_id
+
+        fut = _get_discover_executor().submit(
+            _expand_seed,
+            video_id,
+            request_id,
+            seed_track_id,
+            current_user_id(),
+        )
         _discover_inflight[video_id] = fut
         if request_id and seed_track_id:
             _discover_request_seeds.setdefault(request_id, set()).add(seed_track_id)
@@ -1154,7 +1238,10 @@ def discover_feed():
             continue
         cached = db.get_related_mix(vid)
         if cached is not None:
-            ready.append({"seed_track_id": tid, "recs": cached[:limit]})
+            ready.append({
+                "seed_track_id": tid,
+                "recs": rank_recommendation_rows(cached, source="discover")[:limit],
+            })
         else:
             pending.append(tid)
             _schedule_expand(vid, request_id=request_id, seed_track_id=tid)

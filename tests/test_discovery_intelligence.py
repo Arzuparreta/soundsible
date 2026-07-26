@@ -11,12 +11,17 @@ from shared.discovery_intelligence import (
     load_discovery_settings,
     load_listening_event_rollups,
     load_recently_saved_tracks,
+    recommendation_multiplier,
+    record_not_interested,
+    rank_recommendation_rows,
+    reset_discovery_profile,
     save_discovery_settings,
+    undo_discovery_feedback,
 )
 from shared.models import LibraryMetadata, Track
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 from shared.telemetry import init_telemetry, reset_telemetry, user_telemetry_dir
-from shared.user_context import user_config_dir, user_data_dir
+from shared.user_context import user_config_dir, user_context, user_data_dir
 
 
 def _make_runtime(tmp_path: Path) -> RuntimeConfig:
@@ -87,6 +92,7 @@ def test_emit_discovery_event_respects_local_opt_out(tmp_path):
             "title": "Saved Track",
             "artist": "Artist",
             "unsafe": "not persisted",
+            "query": "private search text",
         },
     )
     save_discovery_settings({"learning_enabled": False})
@@ -102,6 +108,79 @@ def test_emit_discovery_event_respects_local_opt_out(tmp_path):
     assert events[0]["event"] == "music_saved_to_library"
     assert events[0]["title"] == "Saved Track"
     assert "unsafe" not in events[0]
+    assert "query" not in events[0]
+
+
+def test_not_interested_is_monotonic_soft_and_undoable(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    item = {
+        "media_type": "music_track",
+        "youtube_id": "abcdefghijk",
+        "title": "Exact Song",
+        "artist": "Exact Artist",
+    }
+    identity = "music:youtube:abcdefghijk"
+    factors = [recommendation_multiplier(identity)]
+    event_ids = []
+    for _ in range(4):
+        event_ids.append(record_not_interested(item))
+        factors.append(recommendation_multiplier(identity))
+
+    assert all(left > right for left, right in zip(factors, factors[1:]))
+    assert factors[-1] > 0
+    ranked = rank_recommendation_rows(
+        [
+            {"id": "abcdefghijk", "title": "Exact Song", "artist": "Exact Artist", "score": 1.0},
+            {"id": "other123456", "title": "Other", "artist": "Other", "score": 0.7},
+        ],
+        source="radio",
+    )
+    assert len(ranked) == 2
+    assert {row["id"] for row in ranked} == {"abcdefghijk", "other123456"}
+
+    before_undo = recommendation_multiplier(identity)
+    assert undo_discovery_feedback(event_ids[-1]) is True
+    assert recommendation_multiplier(identity) > before_undo
+
+
+def test_reset_clears_profile_and_listening_log(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    identity = "music:youtube:abcdefghijk"
+    record_not_interested({
+        "media_type": "music_track",
+        "youtube_id": "abcdefghijk",
+        "title": "Exact Song",
+        "artist": "Exact Artist",
+    })
+    assert recommendation_multiplier(identity) < 1
+    assert (user_telemetry_dir() / "listening-events.jsonl").exists()
+
+    reset_discovery_profile()
+
+    assert recommendation_multiplier(identity) == 1
+    assert not (user_telemetry_dir() / "listening-events.jsonl").exists()
+
+
+def test_recommendation_profile_is_isolated_per_account(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    identity = "music:youtube:abcdefghijk"
+    item = {
+        "media_type": "music_track",
+        "youtube_id": "abcdefghijk",
+        "title": "Exact Song",
+        "artist": "Exact Artist",
+    }
+
+    with user_context("listener-a"):
+        record_not_interested(item)
+        assert recommendation_multiplier(identity) < 1
+    with user_context("listener-b"):
+        assert recommendation_multiplier(identity) == 1
+    with user_context("listener-a"):
+        assert recommendation_multiplier(identity) < 1
 
 
 def test_music_recommendations_prioritize_favourites_and_playlists(tmp_path):

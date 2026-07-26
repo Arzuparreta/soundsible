@@ -364,6 +364,39 @@ class DatabaseManager:
         """)
 
     @staticmethod
+    def _create_discovery_tables(conn):
+        """Per-account recommendation signals and an undoable local audit."""
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS discovery_signals (
+                identity TEXT PRIMARY KEY,
+                media_type TEXT NOT NULL,
+                title TEXT,
+                artist TEXT,
+                show_title TEXT,
+                positive_weight REAL NOT NULL DEFAULT 0,
+                negative_count INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS discovery_events (
+                id TEXT PRIMARY KEY,
+                event TEXT NOT NULL,
+                identity TEXT NOT NULL,
+                media_type TEXT NOT NULL,
+                positive_delta REAL NOT NULL DEFAULT 0,
+                negative_delta INTEGER NOT NULL DEFAULT 0,
+                payload_json TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                undone_at INTEGER
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_discovery_events_created
+            ON discovery_events (created_at DESC)
+        """)
+
+    @staticmethod
     def _create_performance_indexes(conn):
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_tracks_album_sort
@@ -391,6 +424,7 @@ class DatabaseManager:
                 self._create_auth_tables(conn)
                 self._create_pairing_table(conn)
                 self._create_lyrics_table(conn)
+                self._create_discovery_tables(conn)
                 self._create_performance_indexes(conn)
                 conn.execute("COMMIT")
             except Exception as e:
@@ -466,6 +500,118 @@ class DatabaseManager:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute("SELECT * FROM tracks ORDER BY artist, album, track_number")
             return [self._row_to_track(row) for row in cursor.fetchall()]
+
+    def record_discovery_signal(
+        self,
+        *,
+        event_id: str,
+        event: str,
+        identity: str,
+        media_type: str,
+        positive_delta: float,
+        negative_delta: int,
+        payload: Dict[str, Any],
+        created_at: int,
+    ) -> None:
+        """Atomically append an event and fold it into the current profile."""
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                """
+                INSERT INTO discovery_events (
+                    id, event, identity, media_type, positive_delta,
+                    negative_delta, payload_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_id,
+                    event,
+                    identity,
+                    media_type,
+                    float(positive_delta),
+                    int(negative_delta),
+                    json.dumps(payload, sort_keys=True, ensure_ascii=False),
+                    int(created_at),
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO discovery_signals (
+                    identity, media_type, title, artist, show_title,
+                    positive_weight, negative_count, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(identity) DO UPDATE SET
+                    media_type=excluded.media_type,
+                    title=COALESCE(NULLIF(excluded.title, ''), discovery_signals.title),
+                    artist=COALESCE(NULLIF(excluded.artist, ''), discovery_signals.artist),
+                    show_title=COALESCE(NULLIF(excluded.show_title, ''), discovery_signals.show_title),
+                    positive_weight=MAX(0, discovery_signals.positive_weight + excluded.positive_weight),
+                    negative_count=MAX(0, discovery_signals.negative_count + excluded.negative_count),
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    identity,
+                    media_type,
+                    str(payload.get("title") or "")[:220],
+                    str(payload.get("artist") or "")[:220],
+                    str(payload.get("podcast_show_title") or "")[:220],
+                    float(positive_delta),
+                    int(negative_delta),
+                    int(created_at),
+                ),
+            )
+            conn.execute("COMMIT")
+
+    def undo_discovery_signal(self, event_id: str, undone_at: int) -> bool:
+        """Undo one event exactly once and reverse its aggregate deltas."""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                """
+                SELECT identity, positive_delta, negative_delta
+                FROM discovery_events
+                WHERE id = ? AND undone_at IS NULL
+                """,
+                (event_id,),
+            ).fetchone()
+            if row is None:
+                conn.execute("ROLLBACK")
+                return False
+            conn.execute(
+                "UPDATE discovery_events SET undone_at = ? WHERE id = ?",
+                (int(undone_at), event_id),
+            )
+            conn.execute(
+                """
+                UPDATE discovery_signals
+                SET positive_weight=MAX(0, positive_weight - ?),
+                    negative_count=MAX(0, negative_count - ?),
+                    updated_at=?
+                WHERE identity=?
+                """,
+                (
+                    float(row["positive_delta"]),
+                    int(row["negative_delta"]),
+                    int(undone_at),
+                    str(row["identity"]),
+                ),
+            )
+            conn.execute("COMMIT")
+            return True
+
+    def get_discovery_signals(self) -> Dict[str, Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("SELECT * FROM discovery_signals").fetchall()
+            return {str(row["identity"]): dict(row) for row in rows}
+
+    def clear_discovery_signals(self) -> None:
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("DELETE FROM discovery_events")
+            conn.execute("DELETE FROM discovery_signals")
+            conn.execute("COMMIT")
 
     def search_tracks(self, query: str) -> List[Track]:
         """Fast search tracks using FTS5 or LIKE."""

@@ -8,8 +8,19 @@ export interface Track {
   youtube_id?: string | null;
   media_kind?: string | null;
   podcast_episode_guid?: string | null;
+  podcast_feed_id?: string | null;
+  podcast_rss_url?: string | null;
   cover?: string;
   source?: 'preview';
+  /** Present only when a recommendation surface created this playable item. */
+  recommendation?: RecommendationContext;
+}
+
+export interface RecommendationContext {
+  identity: string;
+  source: 'discover' | 'radio' | 'auto_mode' | 'podcast';
+  reason?: string;
+  reason_code?: string;
 }
 
 export interface LyricsResponse {
@@ -26,6 +37,10 @@ export interface SearchResult {
   channel?: string;
   duration?: number;
   thumbnail?: string;
+  recommendation_identity?: string;
+  recommendation_source?: string;
+  reason?: string;
+  reason_code?: string;
 }
 
 export type CatalogItemType = 'library_track' | 'track' | 'artist' | 'album' | 'playlist';
@@ -63,6 +78,7 @@ export interface CatalogSection {
 
 export interface CatalogSearchResponse {
   query: string;
+  interpreted_as?: string | null;
   generated_at?: number;
   cached?: boolean;
   items: CatalogItem[];

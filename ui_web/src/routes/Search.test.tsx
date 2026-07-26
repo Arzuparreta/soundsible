@@ -98,6 +98,47 @@ describe('Search route', () => {
     expect(screen.getByText('Oliver Heldens Live Set')).toBeInTheDocument();
   });
 
+  it('renders the complete neutral mixed response in one list', async () => {
+    apiMock.searchCatalog.mockResolvedValue({
+      items: [
+        {
+          id: 'youtube:track:one',
+          type: 'track',
+          source: 'youtube',
+          title: 'El Toro Guapo',
+          artist: 'El Fary',
+          raw: { id: 'video000001', title: 'El Toro Guapo', artist: 'El Fary' },
+        },
+        {
+          id: 'musicbrainz:artist:two',
+          type: 'artist',
+          source: 'musicbrainz',
+          title: 'El Fary',
+          subtitle: 'Artist',
+        },
+        {
+          id: 'deezer:track:three',
+          type: 'track',
+          source: 'deezer',
+          title: 'Fari',
+          artist: 'Literal Artist',
+        },
+      ],
+      sections: [],
+    });
+    render(() => <Search />);
+
+    fireEvent.input(screen.getByPlaceholderText('What do you want to play?'), {
+      target: { value: 'fari' },
+    });
+    await vi.advanceTimersByTimeAsync(230);
+
+    expect(await screen.findByText('El Toro Guapo')).toBeInTheDocument();
+    expect(screen.getByText('Literal Artist')).toBeInTheDocument();
+    expect(screen.getAllByText('El Fary')).toHaveLength(2);
+    expect(apiMock.searchYouTube).not.toHaveBeenCalled();
+  });
+
   it('renders the node feed as the empty search state', async () => {
     setLocale('es');
     nodeMock.items = [

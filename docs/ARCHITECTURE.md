@@ -125,6 +125,29 @@ Catalog resolve queues the winner's stream-URL resolution on the **preview prefe
   - **Download queue** uses the resolved item like any other ODST search result.
 - Resolution can take a few seconds; the download-queue popover may show a short **“Finding YouTube match…”** state while that search runs.
 
+**Universal search** (`shared/api/routes/catalog.py`):
+
+- `GET /api/catalog/search` runs library, Deezer, MusicBrainz, and plain
+  YouTube providers concurrently and returns one deterministically ranked mixed
+  list. Provider failures are reported as partial failures; surviving results
+  remain usable.
+- Ranking is query-only. It never reads recommendation signals, favourites, or
+  account preferences, including for tie-breaking. Ownership is an action-state
+  badge, not a rank boost.
+- Repeated public creator results may supply a one-edit intent correction
+  (`fari` → `El Fary`). Literal matches remain in the response.
+
+**Local recommendation profile** (`shared/discovery_intelligence.py`,
+`shared/database.py`):
+
+- Each account has transactional `discovery_events` and
+  `discovery_signals` tables in its own `library.db`, plus an inspectable local
+  `listening-events.jsonl`.
+- Discover, Radio, Auto Mode, and podcast recommendations use the same exact
+  identity multiplier. `not_interested` is soft, monotonic, undoable, and
+  bounded above zero; it never becomes a blacklist. Search and manual queues do
+  not call this ranker.
+
 ### 4A. Playback loading contract (client)
 
 The engine cannot make a cold preview instant — there is a yt-dlp extraction behind it — so the UI is built to make the wait *legible and idempotent* rather than pretend it is not there. Three rules, all in `ui_web/src/stores/index.ts` and `ui_web/src/lib/audio.ts`:

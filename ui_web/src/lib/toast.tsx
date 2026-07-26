@@ -9,6 +9,8 @@ interface ToastEntry {
   id: number;
   kind: ToastKind;
   message: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 const [toasts, setToasts] = createSignal<ToastEntry[]>([]);
@@ -18,9 +20,15 @@ function dismiss(id: number): void {
   setToasts((list) => list.filter((t) => t.id !== id));
 }
 
-function push(kind: ToastKind, message: string, ttl: number): number {
+function push(
+  kind: ToastKind,
+  message: string,
+  ttl: number,
+  actionLabel?: string,
+  onAction?: () => void,
+): number {
   const id = nextId++;
-  setToasts((list) => [...list, { id, kind, message }]);
+  setToasts((list) => [...list, { id, kind, message, actionLabel, onAction }]);
   if (ttl > 0) setTimeout(() => dismiss(id), ttl);
   return id;
 }
@@ -53,6 +61,8 @@ export const toast = {
   success: (m: string) => handle(push('success', m, 3000)),
   error: (m: string) => handle(push('error', m, 4500)),
   info: (m: string) => handle(push('info', m, 3000)),
+  action: (m: string, actionLabel: string, onAction: () => void) =>
+    handle(push('info', m, 6000, actionLabel, onAction)),
   /** Persists until you `.update()` or `.dismiss()` the returned handle. */
   loading: (m: string) => handle(push('loading', m, 0)),
 };
@@ -69,6 +79,18 @@ export function ToastOutlet() {
                 <Spinner size={14} />
               </Show>
               <span class={styles.msg}>{t.message}</span>
+              <Show when={t.actionLabel && t.onAction}>
+                <button
+                  class={styles.action}
+                  type="button"
+                  onClick={() => {
+                    t.onAction?.();
+                    dismiss(t.id);
+                  }}
+                >
+                  {t.actionLabel}
+                </button>
+              </Show>
             </div>
           )}
         </For>

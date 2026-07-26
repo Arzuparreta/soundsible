@@ -23,4 +23,7 @@ export interface PodcastSearchResult {
   feed_url: string;
   image_url?: string;
   itunes_collection_id?: string;
+  recommendation_identity?: string;
+  reason?: string;
+  reason_code?: string;
 }

@@ -32,6 +32,7 @@ export const es: Dict = {
     online: 'Conectado',
     offline: 'Sin conexión',
     continue: 'Continuar',
+    undo: 'Deshacer',
   },
   omnibar: {
     nothingPlaying: 'Nada sonando',
@@ -134,6 +135,8 @@ export const es: Dict = {
     catalogNoResults: 'Sin resultados en Música.',
     searchInYt: 'Buscar en YouTube',
     topResultSection: 'Top result',
+    resultsSection: 'Resultados',
+    interpretedAs: 'Mostrando resultados para {name}',
     songsSection: 'Canciones',
     artistsSection: 'Artistas',
     albumsSection: 'Albums',
@@ -166,6 +169,9 @@ export const es: Dict = {
     learnActivity: 'Aprender de mi actividad',
     learnActivityNote:
       'Mejora las recomendaciones usando tu historial local. No se envía a terceros.',
+    resetLearning: 'Reiniciar aprendizaje de recomendaciones',
+    resetLearningConfirm: 'Se borrarán tu historial local de recomendaciones y tus preferencias.',
+    resetLearningDone: 'Aprendizaje de recomendaciones reiniciado',
     downloads: 'Descargas',
     quality: 'Calidad',
     qualityLow: 'Baja',
@@ -385,6 +391,9 @@ export const es: Dict = {
     deleteTitle: 'Eliminar pista',
     deleteMsg: 'Se eliminará «{title}» de la biblioteca y del disco.',
     deleteConfirm: 'Eliminar',
+    notInterested: 'No me interesa',
+    feedbackSaved: 'Aparecerá con menos frecuencia',
+    feedbackFailed: 'No se pudo guardar la preferencia',
   },
   artistActions: {
     play: 'Reproducir',
@@ -515,6 +524,7 @@ export const es: Dict = {
   discoverNodes: {
     title: 'Recomendaciones',
     refresh: 'Nuevas recomendaciones',
+    fromArtist: 'Porque escuchas a {artist}',
   },
   searchPanel: {
     fallbackTitle: 'Video de YouTube',

@@ -1,6 +1,7 @@
 import { createSignal } from 'solid-js';
 import { request } from './api';
 import type { PodcastSearchResult } from '../types/podcast';
+import { user, userKey } from './session';
 
 /**
  * Lightweight discovery-adjacent data: the user's recently saved tracks and
@@ -33,7 +34,7 @@ const KEY = {
 
 function readCache<T>(key: string): T | null {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(userKey(key));
     return raw ? (JSON.parse(raw) as T) : null;
   } catch {
     return null;
@@ -42,16 +43,19 @@ function readCache<T>(key: string): T | null {
 
 function writeCache(key: string, data: unknown): void {
   try {
-    localStorage.setItem(key, JSON.stringify(data));
+    localStorage.setItem(userKey(key), JSON.stringify(data));
   } catch {
     /* storage full / disabled */
   }
 }
 
-let hydrated = false;
+let hydratedFor: string | null = null;
 function hydrate(): void {
-  if (hydrated) return;
-  hydrated = true;
+  const account = user()?.id ?? '-';
+  if (hydratedFor === account) return;
+  hydratedFor = account;
+  setRecentSaved([]);
+  setTopPodcasts([]);
   const r = readCache<RecentlySavedItem[]>(KEY.recent);
   const p = readCache<PodcastSearchResult[]>(KEY.podcasts);
   if (r) setRecentSaved(r);
@@ -74,6 +78,10 @@ interface RawPodcastRow {
   image_url?: string;
   itunes_collection_id?: string;
   collectionId?: number | string;
+  external_ids?: { rss_url?: string; itunes_collection_id?: string };
+  recommendation_identity?: string;
+  reason?: string;
+  reason_code?: string;
 }
 
 let inFlight: Promise<void> | null = null;
@@ -97,16 +105,21 @@ async function revalidate(): Promise<void> {
         writeCache(KEY.recent, items);
       })
       .catch(() => {});
-    const podcasts = request<{ results?: RawPodcastRow[] }>('/api/discovery/podcasts/top?limit=20', { timeoutMs: 20000 })
+    const podcasts = request<{ items?: RawPodcastRow[] }>('/api/discovery/podcasts/recommendations?limit=20', { timeoutMs: 20000 })
       .then((d) => {
-        const rows: PodcastSearchResult[] = (d.results ?? [])
+        const rows: PodcastSearchResult[] = (d.items ?? [])
           .map((r) => ({
             title: r.title ?? '',
             author: r.author,
-            feed_url: r.feed_url ?? r.rss_url ?? '',
+            feed_url: r.feed_url ?? r.rss_url ?? r.external_ids?.rss_url ?? '',
             image_url: r.image_url,
             itunes_collection_id:
-              r.itunes_collection_id ?? (r.collectionId != null ? String(r.collectionId) : undefined),
+              r.itunes_collection_id ??
+              r.external_ids?.itunes_collection_id ??
+              (r.collectionId != null ? String(r.collectionId) : undefined),
+            recommendation_identity: r.recommendation_identity,
+            reason: r.reason,
+            reason_code: r.reason_code,
           }))
           .filter((r) => r.feed_url);
         setTopPodcasts(rows);

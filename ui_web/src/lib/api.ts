@@ -35,6 +35,10 @@ interface RawResult {
   artist?: string;
   duration?: number;
   thumbnail?: string;
+  recommendation_identity?: string;
+  recommendation_source?: string;
+  reason?: string;
+  reason_code?: string;
 }
 
 function normalizeResult(r: RawResult): SearchResult {
@@ -44,6 +48,10 @@ function normalizeResult(r: RawResult): SearchResult {
     channel: r.channel ?? r.uploader ?? r.artist,
     duration: typeof r.duration === 'number' ? r.duration : undefined,
     thumbnail: r.thumbnail,
+    recommendation_identity: r.recommendation_identity,
+    recommendation_source: r.recommendation_source,
+    reason: r.reason,
+    reason_code: r.reason_code,
   };
 }
 
@@ -603,6 +611,18 @@ export const api = {
       body: { event, payload: payload ?? {} },
       timeoutMs: 5000,
     }),
+  sendDiscoveryFeedback: (item: Record<string, unknown>) =>
+    request<{ status?: string; recorded?: boolean; event_id?: string | null }>(
+      '/api/discovery/feedback',
+      { method: 'POST', body: { feedback: 'not_interested', item }, timeoutMs: 5000 },
+    ),
+  undoDiscoveryFeedback: (eventId: string) =>
+    request<{ status?: string; undone?: boolean }>(
+      `/api/discovery/feedback/${encodeURIComponent(eventId)}`,
+      { method: 'DELETE', timeoutMs: 5000 },
+    ),
+  resetDiscoveryProfile: () =>
+    request<{ status?: string }>('/api/discovery/profile', { method: 'DELETE', timeoutMs: 5000 }),
   searchCatalog: (q: string, signal?: AbortSignal, type = 'all') =>
     request<CatalogSearchResponse>(
       `/api/catalog/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}&limit=36`,

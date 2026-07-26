@@ -17,6 +17,9 @@ import type { CatalogItem, CatalogSaveResponse, SearchResult, Track } from '../t
 import styles from './Search.module.css';
 import { coverStyle } from '../lib/cover';
 import { formatDuration } from '../lib/format';
+import { attachContextMenu } from '../lib/contextMenu';
+import { trackMenuOptions } from '../components/trackActions';
+import type { ActionMenuOptions } from '../components/ActionMenu';
 
 type SearchDomain = 'music' | 'youtube';
 type SearchTab = 'all' | 'track,library_track' | 'artist' | 'album';
@@ -72,15 +75,13 @@ export default function Search() {
   const [q, setQ] = createSignal('');
   const [tab, setTab] = createSignal<SearchTab>('all');
   const [items, setItems] = createSignal<CatalogItem[]>([]);
-  const [sectionIds, setSectionIds] = createSignal<Record<string, string[]>>({});
+  const [interpretedAs, setInterpretedAs] = createSignal('');
   const [loading, setLoading] = createSignal(false);
   const [searchError, setSearchError] = createSignal(false);
   const [youtubeResults, setYoutubeResults] = createSignal<SearchResult[]>([]);
   const [youtubeDirect, setYoutubeDirect] = createSignal<SearchResult | null>(null);
   const [youtubeLoading, setYoutubeLoading] = createSignal(false);
   const [youtubeError, setYoutubeError] = createSignal(false);
-  // Inline YouTube fallback revealed under the music results (see expandYouTubeInline).
-  const [youtubeInline, setYoutubeInline] = createSignal(false);
   const [suggestions, setSuggestions] = createSignal<string[]>([]);
   const [showSuggest, setShowSuggest] = createSignal(false);
   const [recents, setRecents] = createSignal<string[]>(loadRecents('music'));
@@ -95,39 +96,12 @@ export default function Search() {
   let debounce: number | undefined;
   let suggestDebounce: number | undefined;
   let requestId = 0;
-  // Independent from the catalog aborter/requestId so the inline YouTube search
-  // never cancels or clobbers the music results it renders underneath.
-  let ytInlineAborter: AbortController | undefined;
-  let ytInlineRequestId = 0;
   let searchInput: HTMLInputElement | undefined;
   const youtubeCache = new Map<string, SearchResult[]>();
 
-  const byId = createMemo(() => new Map(items().map((item) => [item.id, item] as const)));
   const libYt = createMemo(() => new Set(state.library.map((t) => t.youtube_id).filter((x): x is string => !!x)));
-  const top = createMemo(() => items()[0]);
   const songs = createMemo(() =>
-    (sectionIds().songs ?? [])
-      .map((id) => byId().get(id))
-      .filter((item): item is CatalogItem => !!item)
-      .concat(items().filter((item) => ['track', 'library_track'].includes(item.type) && item.id !== top()?.id))
-      .filter((item, idx, arr) => arr.findIndex((x) => x.id === item.id) === idx)
-      .slice(0, 18),
-  );
-  const artists = createMemo(() =>
-    (sectionIds().artists ?? [])
-      .map((id) => byId().get(id))
-      .filter((item): item is CatalogItem => !!item)
-      .concat(items().filter((item) => item.type === 'artist' && item.id !== top()?.id))
-      .filter((item, idx, arr) => arr.findIndex((x) => x.id === item.id) === idx)
-      .slice(0, 12),
-  );
-  const albums = createMemo(() =>
-    (sectionIds().albums ?? [])
-      .map((id) => byId().get(id))
-      .filter((item): item is CatalogItem => !!item)
-      .concat(items().filter((item) => item.type === 'album' && item.id !== top()?.id))
-      .filter((item, idx, arr) => arr.findIndex((x) => x.id === item.id) === idx)
-      .slice(0, 12),
+    items().filter((item) => ['track', 'library_track'].includes(item.type)),
   );
   onMount(() => ensureNodeFeed());
 
@@ -137,17 +111,13 @@ export default function Search() {
     aborter?.abort();
     aborter = undefined;
     setSearchError(false);
+    setInterpretedAs('');
     setYoutubeError(false);
     setYoutubeDirect(null);
     setYoutubeResults([]);
     setYoutubeLoading(false);
-    // A fresh music query collapses any inline YouTube section from the last one.
-    ytInlineAborter?.abort();
-    ytInlineAborter = undefined;
-    setYoutubeInline(false);
     if (query.length < 2) {
       setItems([]);
-      setSectionIds({});
       setLoading(false);
       return;
     }
@@ -158,55 +128,16 @@ export default function Search() {
       .then((res) => {
         if (current !== requestId) return;
         setItems(res.items ?? []);
-        const nextSections: Record<string, string[]> = {};
-        for (const section of res.sections ?? []) nextSections[section.id] = section.item_ids ?? [];
-        setSectionIds(nextSections);
+        setInterpretedAs(res.interpreted_as ?? '');
       })
       .catch((e) => {
         if (current !== requestId || isAbort(e)) return;
         setItems([]);
-        setSectionIds({});
+        setInterpretedAs('');
         setSearchError(true);
       })
       .finally(() => {
         if (current === requestId) setLoading(false);
-      });
-  };
-
-  // Reveal plain-YouTube results underneath the music results, on demand. Runs
-  // its own search against the youtube* signals without disturbing the catalog
-  // state, so the user keeps their music results and gains YouTube reach in one
-  // scroll. Reuses youtubeCache (shared with the full YouTube view).
-  const expandYouTubeInline = () => {
-    const query = q().trim();
-    if (query.length < 2) return;
-    setYoutubeInline(true);
-    setYoutubeError(false);
-    const cached = youtubeCache.get(query);
-    if (cached) {
-      setYoutubeResults(cached);
-      setYoutubeLoading(false);
-      return;
-    }
-    const current = ++ytInlineRequestId;
-    ytInlineAborter?.abort();
-    ytInlineAborter = new AbortController();
-    setYoutubeResults([]);
-    setYoutubeLoading(true);
-    api
-      .searchYouTube(query, ytInlineAborter.signal)
-      .then((res) => {
-        if (current !== ytInlineRequestId) return;
-        youtubeCache.set(query, res);
-        setYoutubeResults(res);
-      })
-      .catch((e) => {
-        if (current !== ytInlineRequestId || isAbort(e)) return;
-        setYoutubeResults([]);
-        setYoutubeError(true);
-      })
-      .finally(() => {
-        if (current === ytInlineRequestId) setYoutubeLoading(false);
       });
   };
 
@@ -223,9 +154,9 @@ export default function Search() {
     aborter?.abort();
     aborter = undefined;
     setYoutubeError(false);
+    setInterpretedAs('');
     setLoading(false);
     setItems([]);
-    setSectionIds({});
     const direct = parseYouTubeInput(query);
     if (direct) {
       aborter = new AbortController();
@@ -407,7 +338,9 @@ export default function Search() {
         duration: item.duration,
         cover: item.cover,
         external_ids: item.external_ids,
-        confirm_video_id: confirmVideoId,
+        confirm_video_id:
+          confirmVideoId ||
+          (item.external_ids?.youtube_id ? String(item.external_ids.youtube_id) : undefined),
       });
       if (response.status === 'queued') {
         setReview(null);
@@ -438,13 +371,6 @@ export default function Search() {
       source: 'preview',
       cover: result.thumbnail,
     });
-    void api.emitDiscoveryEvent('music_search_played', {
-      title: result.title,
-      artist: result.channel ?? '',
-      source: 'youtube_search',
-      youtube_id: result.id,
-      query: q(),
-    }).catch(() => {});
   };
 
   const addYouTube = async (result: SearchResult) => {
@@ -479,7 +405,6 @@ export default function Search() {
         artist: result.channel ?? '',
         source: 'youtube_search',
         youtube_id: result.id,
-        query: q(),
       }).catch(() => {});
       toast.success(tr('search.addedToDownloads'));
     } catch {
@@ -501,18 +426,17 @@ export default function Search() {
     duration: rec.duration,
     cover: rec.thumbnail,
     source: 'preview',
+    recommendation: rec.recommendation_identity
+      ? {
+          identity: rec.recommendation_identity,
+          source: 'discover',
+          reason: rec.seedArtist ? tr('discoverNodes.fromArtist', { artist: rec.seedArtist }) : undefined,
+        }
+      : undefined,
   });
 
   const playNodeRec = (rec: NodeRec) => {
     actions.playTrack(nodeTrack(rec));
-    void api
-      .emitDiscoveryEvent('music_search_played', {
-        title: rec.title,
-        artist: rec.channel,
-        source: 'node_discover',
-        youtube_id: rec.id,
-      })
-      .catch(() => {});
   };
 
   const saveNodeRec = async (rec: NodeRec) => {
@@ -536,9 +460,7 @@ export default function Search() {
 
   onCleanup(() => {
     requestId += 1;
-    ytInlineRequestId += 1;
     aborter?.abort();
-    ytInlineAborter?.abort();
     cancelCatalogResolve();
     suggestAborter?.abort();
     clearTimeout(debounce);
@@ -610,6 +532,7 @@ export default function Search() {
               onSave={(rec) => void saveNodeRec(rec)}
               saving={(rec) => nodeSaving().has(rec.id)}
               saved={nodeSaved}
+              menu={(rec) => trackMenuOptions(nodeTrack(rec), { navigate })}
             />
           </Match>
           <Match when={domain() === 'youtube'}>
@@ -696,99 +619,41 @@ export default function Search() {
           </Match>
           <Match when={true}>
             <div class={styles.results}>
-              <Show when={top()}>
-                {(item) => (
-                  <section class={styles.topSection}>
-                    <h2 class={styles.sectionTitle}>{tr('search.topResultSection')}</h2>
-                    <TopResult
-                      item={item()}
-                      coverStyle={itemCoverStyle}
-                      saving={saving().has(item().id)}
-                      saved={saved().has(item().id) || !!item().action_state?.in_library}
-                      busy={itemBusy(item())}
-                      onPlay={() => playItem(item())}
-                      onSave={() => saveItem(item())}
-                    />
-                  </section>
-                )}
-              </Show>
-
-              <Show when={songs().length > 0}>
-                <section class={styles.section}>
-                  <h2 class={styles.sectionTitle}>{tr('search.songsSection')}</h2>
-                  <For each={songs()}>
-                    {(item) => (
-                      <SongResult
-                        item={item}
-                        coverStyle={itemCoverStyle}
-                        active={state.playback.currentTrack?.id === (item.track_id || item.id)}
-                        saving={saving().has(item.id)}
-                        saved={saved().has(item.id) || !!item.action_state?.in_library}
-                        busy={itemBusy(item)}
-                        onPlay={() => playItem(item)}
-                        onSave={() => saveItem(item)}
-                      />
-                    )}
-                  </For>
-                </section>
-              </Show>
-
-              <Show when={artists().length > 0}>
-                <CardSection title={tr('search.artistsSection')} items={artists()} round coverStyle={itemCoverStyle} onPick={playItem} />
-              </Show>
-
-              <Show when={albums().length > 0}>
-                <CardSection title={tr('search.albumsSection')} items={albums()} coverStyle={itemCoverStyle} onPick={playItem} />
-              </Show>
-
-              <Show when={q().trim().length >= 2}>
-                <section class={styles.ytFallback}>
-                  <Show
-                    when={youtubeInline()}
-                    fallback={
-                      <button class={styles.ytFallbackCta} type="button" onClick={expandYouTubeInline}>
-                        <span>{tr('search.ytFallbackCta')}</span>
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                          <path d="M9 18l6-6-6-6" />
-                        </svg>
-                      </button>
-                    }
-                  >
-                    <h2 class={styles.sectionTitle}>{tr('search.ytResultsSection')}</h2>
-                    <Show when={youtubeLoading() && youtubeResults().length === 0}>
-                      <div class={styles.skeletonGrid}>
-                        <For each={Array.from({ length: 4 })}>{() => <div class={styles.skeleton} />}</For>
-                      </div>
-                    </Show>
-                    <Show when={!youtubeLoading() && youtubeResults().length === 0}>
-                      <p class={styles.hint}>
-                        {youtubeError() ? (
-                          <>
-                            {tr('search.ytErrorHint')}{' '}
-                            <button class={styles.retry} type="button" onClick={expandYouTubeInline}>
-                              {tr('common.retry')}
-                            </button>
-                          </>
-                        ) : (
-                          tr('search.ytNoResults')
-                        )}
-                      </p>
-                    </Show>
-                    <For each={youtubeResults()}>
-                      {(result) => (
-                        <SearchResultRow
-                          r={result}
-                          active={state.playback.currentTrack?.id === result.id}
-                          inLibrary={libYt().has(result.id)}
-                          enqueued={youtubeEnqueued().has(result.id)}
-                          onPreview={() => previewYouTube(result)}
-                          onAdd={() => void addYouTube(result)}
+              <section class={styles.section}>
+                <h2 class={styles.sectionTitle}>{tr('search.resultsSection')}</h2>
+                <Show when={interpretedAs()}>
+                  {(name) => (
+                    <p class={styles.interpretation}>
+                      {tr('search.interpretedAs', { name: name() })}
+                    </p>
+                  )}
+                </Show>
+                <For each={items()}>
+                  {(item) => (
+                    <Switch>
+                      <Match when={item.type === 'track' || item.type === 'library_track'}>
+                        <SongResult
+                          item={item}
+                          coverStyle={itemCoverStyle}
+                          active={state.playback.currentTrack?.id === (item.track_id || item.id)}
+                          saving={saving().has(item.id)}
+                          saved={saved().has(item.id) || !!item.action_state?.in_library}
+                          busy={itemBusy(item)}
+                          onPlay={() => playItem(item)}
+                          onSave={() => saveItem(item)}
                         />
-                      )}
-                    </For>
-                  </Show>
-                </section>
-              </Show>
+                      </Match>
+                      <Match when={true}>
+                        <EntityResult
+                          item={item}
+                          coverStyle={itemCoverStyle}
+                          onPick={() => playItem(item)}
+                        />
+                      </Match>
+                    </Switch>
+                  )}
+                </For>
+              </section>
             </div>
           </Match>
         </Switch>
@@ -840,6 +705,7 @@ function StartPanel(props: {
   onSave: (rec: NodeRec) => void;
   saving: (rec: NodeRec) => boolean;
   saved: (rec: NodeRec) => boolean;
+  menu: (rec: NodeRec) => ActionMenuOptions;
 }) {
   return (
     <div class={styles.start}>
@@ -888,6 +754,7 @@ function StartPanel(props: {
                   onSave={props.saved(rec) ? undefined : () => props.onSave(rec)}
                   saving={props.saving(rec)}
                   saved={props.saved(rec)}
+                  menu={() => props.menu(rec)}
                 />
               )}
             </For>
@@ -935,10 +802,14 @@ function DiscoveryCard(props: {
   onSave?: () => void;
   saving: boolean;
   saved: boolean;
+  menu?: () => ActionMenuOptions | null;
 }) {
   const bg = (): JSX.CSSProperties => coverStyle(props.seedKey, props.cover);
   return (
-    <div class={styles.discoverCard}>
+    <div
+      class={styles.discoverCard}
+      ref={(el) => attachContextMenu(el, () => props.menu?.() ?? null)}
+    >
       <button class={styles.discoverCardBtn} type="button" onClick={props.onPlay}>
         <span class={styles.discoverCardCover} style={bg()} />
         <span class={styles.discoverCardTitle}>{props.title}</span>
@@ -983,43 +854,6 @@ function RailSkeletons() {
         </section>
       )}
     </For>
-  );
-}
-
-function TopResult(props: {
-  item: CatalogItem;
-  coverStyle: (item: CatalogItem, round?: boolean) => JSX.CSSProperties;
-  saving: boolean;
-  saved: boolean;
-  busy: boolean;
-  onPlay: () => void;
-  onSave: () => void;
-}) {
-  const canSave = () => props.item.type === 'track' && !props.saved;
-  return (
-    <div class={styles.topCard}>
-      <button class={styles.topMain} type="button" aria-busy={props.busy} onClick={props.onPlay}>
-        <span class={styles.topCover} style={props.coverStyle(props.item, props.item.type === 'artist')}>
-          <Show when={props.busy}>
-            <span class={styles.coverBusy}>
-              <Spinner size={22} />
-            </span>
-          </Show>
-        </span>
-        <span class={styles.topMeta}>
-          <span class={styles.topTitle}>{props.item.title}</span>
-          <span class={styles.topSub}>{props.item.subtitle || itemArtist(props.item)}</span>
-          <span class={styles.pill}>{labelFor(props.item)}</span>
-        </span>
-      </button>
-      <Show when={canSave()}>
-        <button class={styles.primaryIcon} type="button" disabled={props.saving} aria-label={tr('search.ariaSave')} onClick={props.onSave}>
-          <Show when={props.saving} fallback={<PlusIcon />}>
-            <Spinner size={17} />
-          </Show>
-        </button>
-      </Show>
-    </div>
   );
 }
 
@@ -1078,28 +912,24 @@ function SongResult(props: {
   );
 }
 
-function CardSection(props: {
-  title: string;
-  items: CatalogItem[];
-  round?: boolean;
+function EntityResult(props: {
+  item: CatalogItem;
   coverStyle: (item: CatalogItem, round?: boolean) => JSX.CSSProperties;
-  onPick: (item: CatalogItem) => void;
+  onPick: () => void;
 }) {
   return (
-    <section class={styles.section}>
-      <h2 class={styles.sectionTitle}>{props.title}</h2>
-      <div class={styles.cardGrid}>
-        <For each={props.items}>
-          {(item) => (
-            <button class={styles.card} type="button" onClick={() => props.onPick(item)}>
-              <span class={styles.cardCover} style={props.coverStyle(item, props.round)} />
-              <span class={styles.cardTitle}>{item.title}</span>
-              <span class={styles.cardSub}>{item.subtitle || itemArtist(item)}</span>
-            </button>
-          )}
-        </For>
-      </div>
-    </section>
+    <button class={styles.songRow} type="button" onClick={props.onPick}>
+      <span
+        class={styles.songCover}
+        style={props.coverStyle(props.item, props.item.type === 'artist')}
+      />
+      <span class={styles.songMeta}>
+        <span class={styles.songTitle}>{props.item.title}</span>
+        <span class={styles.songSub}>{props.item.subtitle || itemArtist(props.item)}</span>
+      </span>
+      <span class={styles.source}>{props.item.source}</span>
+      <span class={styles.pill}>{labelFor(props.item)}</span>
+    </button>
   );
 }
 
