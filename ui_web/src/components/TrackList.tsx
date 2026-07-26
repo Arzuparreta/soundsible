@@ -12,6 +12,8 @@ import { artistPath } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './TrackList.module.css';
+import { SkeletonRows } from './Skeleton';
+import { EmptyState } from './EmptyState';
 
 /** Current value of the `--row-h` design token, in pixels. Falls back to the
  * mobile default when the stylesheet has not applied yet (SSR, tests). */
@@ -87,11 +89,11 @@ export default function TrackList(props: {
     <div ref={scrollRef} class={styles.scroll}>
       <Show
         when={!(props.loading && props.tracks.length === 0)}
-        fallback={<For each={Array.from({ length: 10 })}>{() => <div class={styles.skeleton} />}</For>}
+        fallback={<SkeletonRows count={10} />}
       >
         <Show
           when={props.tracks.length > 0}
-          fallback={props.empty ?? <p class={styles.empty}>{t('trackList.defaultEmpty')}</p>}
+          fallback={props.empty ?? <EmptyState>{t('trackList.defaultEmpty')}</EmptyState>}
         >
           <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative', width: '100%' }}>
             <For each={virtualizer.getVirtualItems()}>

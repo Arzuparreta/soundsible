@@ -10,6 +10,8 @@ import { neutralCoverStyle } from '../lib/cover';
 import { attachContextMenu } from '../lib/contextMenu';
 import type { ActionMenuOptions } from '../components/ActionMenu';
 import { toast } from '../lib/toast';
+import { SkeletonRows } from '../components/Skeleton';
+import { EmptyState } from '../components/EmptyState';
 
 function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
@@ -177,16 +179,16 @@ export default function Podcasts() {
               </Show>
 
               <Show when={state.podcastSubscriptions.length === 0 && recommendedPodcasts().length === 0}>
-                <p class={styles.hint}>{t('podcasts.hint')}</p>
+                <EmptyState>{t('podcasts.hint')}</EmptyState>
               </Show>
             </>
           }
         >
           <Show when={loading() && results().length === 0}>
-            <For each={Array.from({ length: 6 })}>{() => <div class={styles.skeleton} />}</For>
+            <SkeletonRows count={6} compact />
           </Show>
           <Show when={!loading() && results().length === 0}>
-            <p class={styles.hint}>{t('podcasts.noResults')}</p>
+            <EmptyState compact>{t('podcasts.noResults')}</EmptyState>
           </Show>
           <For each={results()}>
             {(r) => (

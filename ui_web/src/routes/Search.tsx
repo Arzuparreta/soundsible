@@ -20,6 +20,8 @@ import { formatDuration } from '../lib/format';
 import { attachContextMenu } from '../lib/contextMenu';
 import { trackMenuOptions } from '../components/trackActions';
 import type { ActionMenuOptions } from '../components/ActionMenu';
+import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
+import { EmptyState } from '../components/EmptyState';
 
 type SearchDomain = 'music' | 'youtube';
 type SearchTab = 'all' | 'track,library_track' | 'artist' | 'album';
@@ -538,13 +540,11 @@ export default function Search() {
           <Match when={domain() === 'youtube'}>
             <div class={styles.results}>
               <Show when={youtubeLoading() && youtubeResults().length === 0 && !youtubeDirect()}>
-                <div class={styles.skeletonGrid}>
-                  <For each={Array.from({ length: 8 })}>{() => <div class={styles.skeleton} />}</For>
-                </div>
+                <SkeletonRows count={8} compact />
               </Show>
 
               <Show when={!youtubeLoading() && !youtubeDirect() && youtubeResults().length === 0 && q().trim().length >= 2}>
-                <p class={styles.hint}>
+                <EmptyState compact tone={youtubeError() ? 'danger' : 'neutral'}>
                   {youtubeError() ? (
                     <>
                       {tr('search.ytErrorHint')}{' '}
@@ -555,7 +555,7 @@ export default function Search() {
                   ) : (
                     tr('search.ytNoResults')
                   )}
-                </p>
+                </EmptyState>
               </Show>
 
               <Show when={youtubeDirect()}>
@@ -594,12 +594,10 @@ export default function Search() {
             </div>
           </Match>
           <Match when={loading() && items().length === 0}>
-            <div class={styles.skeletonGrid}>
-              <For each={Array.from({ length: 8 })}>{() => <div class={styles.skeleton} />}</For>
-            </div>
+            <SkeletonRows count={8} compact />
           </Match>
           <Match when={!loading() && items().length === 0}>
-            <p class={styles.hint}>
+            <EmptyState compact tone={searchError() ? 'danger' : 'neutral'}>
               {searchError() ? (
                 <>
                   {tr('search.catalogErrorHint')}{' '}
@@ -615,7 +613,7 @@ export default function Search() {
                   </button>
                 </>
               )}
-            </p>
+            </EmptyState>
           </Match>
           <Match when={true}>
             <div class={styles.results}>
@@ -843,18 +841,7 @@ function DiscoveryCard(props: {
 }
 
 function RailSkeletons() {
-  return (
-    <For each={Array.from({ length: 3 })}>
-      {() => (
-        <section class={styles.rail}>
-          <div class={styles.railTitleSkeleton} />
-          <div class={styles.railRow}>
-            <For each={Array.from({ length: 6 })}>{() => <div class={styles.discoverCardSkeleton} />}</For>
-          </div>
-        </section>
-      )}
-    </For>
-  );
+  return <SkeletonCards count={12} />;
 }
 
 function SongResult(props: {

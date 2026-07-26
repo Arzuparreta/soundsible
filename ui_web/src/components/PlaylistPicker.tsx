@@ -5,6 +5,7 @@ import { promptDialog } from '../lib/prompt';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './PlaylistPicker.module.css';
+import { EmptyState } from './EmptyState';
 
 /** Sheet to add a track to an existing playlist, or create a new one inline. */
 export function openPlaylistPicker(track: Track): void {
@@ -38,7 +39,7 @@ export function openPlaylistPicker(track: Track): void {
           </svg>
           {t('playlistPicker.new')}
         </button>
-        <Show when={names().length > 0} fallback={<p class={styles.empty}>{t('playlistPicker.empty')}</p>}>
+        <Show when={names().length > 0} fallback={<EmptyState compact>{t('playlistPicker.empty')}</EmptyState>}>
           <div class={styles.list}>
             <For each={names()}>
               {(name) => (

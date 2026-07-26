@@ -177,18 +177,3 @@
   font-size: var(--text-label);
   color: var(--ink-tertiary);
 }
-
-.skeleton {
-  height: 68px;
-  margin: var(--space-xs) 0;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(90deg, var(--bg-raised), var(--bg-elevated), var(--bg-raised));
-  background-size: 200% 100%;
-  animation: shimmer 1.2s ease-in-out infinite;
-}
-
-@keyframes shimmer {
-  to {
-    background-position: -200% 0;
-  }
-}

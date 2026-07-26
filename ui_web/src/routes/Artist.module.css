@@ -510,27 +510,3 @@
   text-align: center;
   color: var(--ink-secondary);
 }
-
-/* ── Skeleton ── */
-.skeletonScroll {
-  padding: var(--space-md) var(--gutter);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.skeletonRow {
-  height: 56px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}

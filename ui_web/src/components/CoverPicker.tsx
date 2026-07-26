@@ -5,6 +5,7 @@ import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './CoverPicker.module.css';
+import { EmptyState } from './EmptyState';
 
 /**
  * Choose a playlist's cover from one of its own tracks, or clear it (auto).
@@ -36,7 +37,7 @@ export function openPlaylistCoverPicker(name: string): void {
         <button class={styles.none} type="button" onClick={() => pick(null)}>
           {t('coverPicker.none')}
         </button>
-        <Show when={tracks().length > 0} fallback={<p class={styles.empty}>{t('coverPicker.empty')}</p>}>
+        <Show when={tracks().length > 0} fallback={<EmptyState compact>{t('coverPicker.empty')}</EmptyState>}>
           <div class={styles.grid}>
             <For each={tracks()}>
               {(t) => (

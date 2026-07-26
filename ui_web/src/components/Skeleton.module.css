@@ -1,0 +1,167 @@
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.bone {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: var(--skeleton-base);
+}
+
+.bone::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    var(--skeleton-highlight) 48%,
+    transparent 76%
+  );
+  transform: translateX(-105%);
+  animation: skeleton-sweep 1.45s var(--ease-in-out) infinite;
+  animation-delay: calc(var(--skeleton-index, 0) * 45ms);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--list-gap);
+  width: 100%;
+  padding: 0 var(--space-md) var(--space-lg);
+}
+
+.row {
+  --skeleton-index: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-height: var(--row-h);
+  padding: 0 var(--space-md);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.cover {
+  width: var(--cover-sm);
+  height: var(--cover-sm);
+  flex: 0 0 var(--cover-sm);
+  border-radius: var(--radius-xs);
+}
+
+.rowCopy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.title {
+  width: min(58%, 320px);
+  height: 11px;
+  border-radius: var(--radius-full);
+}
+
+.subtitle {
+  width: min(34%, 190px);
+  height: 8px;
+  border-radius: var(--radius-full);
+}
+
+.trailing {
+  width: 30px;
+  height: 8px;
+  flex: 0 0 30px;
+  border-radius: var(--radius-full);
+}
+
+.row:nth-of-type(3n + 1) .title {
+  width: min(44%, 240px);
+}
+
+.row:nth-of-type(3n + 2) .subtitle {
+  width: min(26%, 150px);
+}
+
+.compactRows {
+  padding-inline: 0;
+}
+
+.compactRows .row {
+  padding-inline: var(--space-xs);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(132px, 100%), 1fr));
+  gap: var(--space-md);
+  width: 100%;
+}
+
+.card {
+  --skeleton-index: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.cardCover {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+}
+
+.cardTitle {
+  width: 76%;
+  height: 10px;
+  border-radius: var(--radius-full);
+}
+
+.cardSubtitle {
+  width: 48%;
+  height: 8px;
+  border-radius: var(--radius-full);
+}
+
+.card:nth-of-type(3n + 2) .cardTitle {
+  width: 58%;
+}
+
+.card:nth-of-type(3n) .cardSubtitle {
+  width: 64%;
+}
+
+.compactCards {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+@keyframes skeleton-sweep {
+  to {
+    transform: translateX(105%);
+  }
+}
+
+@media (min-width: 1024px) {
+  .cards {
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+    gap: var(--space-lg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bone::after {
+    display: none;
+  }
+}

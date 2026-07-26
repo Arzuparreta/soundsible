@@ -5,6 +5,7 @@ import TrackList from '../components/TrackList';
 import { trackCount } from '../lib/format';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
+import { EmptyState } from '../components/EmptyState';
 
 /** Favourites = music library tracks whose id is in `favorites`, in favourites
  * order. Podcasts are excluded — they live under their own section. */
@@ -20,11 +21,7 @@ export default function Favourites() {
       <TrackList
         tracks={favTracks()}
         loading={state.loading}
-        empty={
-          <p style={{ padding: '48px 16px', 'text-align': 'center', color: 'var(--ink-secondary)' }}>
-            {t('favourites.empty')}
-          </p>
-        }
+        empty={<EmptyState>{t('favourites.empty')}</EmptyState>}
       />
     </div>
   );

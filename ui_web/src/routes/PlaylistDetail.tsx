@@ -8,6 +8,7 @@ import { trackCount } from '../lib/format';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './PlaylistDetail.module.css';
+import { EmptyState } from '../components/EmptyState';
 
 export default function PlaylistDetail() {
   const params = useParams();
@@ -64,11 +65,7 @@ export default function PlaylistDetail() {
           playlistName: name(),
           onRemoveFromPlaylist: (t) => void actions.removeFromPlaylist(name(), t.id),
         }}
-        empty={
-          <p style={{ padding: '48px 16px', 'text-align': 'center', color: 'var(--ink-secondary)' }}>
-            {t('playlistDetail.empty')}
-          </p>
-        }
+        empty={<EmptyState>{t('playlistDetail.empty')}</EmptyState>}
       />
     </div>
   );

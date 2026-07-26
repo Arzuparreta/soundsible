@@ -324,24 +324,6 @@
   opacity: 1;
 }
 
-.railTitleSkeleton {
-  width: 180px;
-  height: 22px;
-  margin-bottom: var(--space-sm);
-  border-radius: var(--radius-xs);
-  background: var(--bg-raised);
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
-.discoverCardSkeleton {
-  width: 132px;
-  height: 168px;
-  flex: none;
-  border-radius: var(--radius-md);
-  background: var(--bg-raised);
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
 .seedState {
   display: grid;
   justify-items: center;
@@ -697,19 +679,6 @@
   text-decoration: underline;
 }
 
-.skeletonGrid {
-  display: grid;
-  gap: var(--space-sm);
-}
-
-.skeleton {
-  height: 64px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(90deg, var(--bg-raised), var(--bg-elevated), var(--bg-raised));
-  background-size: 200% 100%;
-  animation: shimmer 1.2s ease-in-out infinite;
-}
-
 .modalBackdrop {
   position: fixed;
   inset: 0;
@@ -831,25 +800,9 @@
   }
 }
 
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
 @keyframes search-pop {
   from {
     opacity: 0;
     transform: translateY(-4px) scale(0.99);
-  }
-}
-
-@keyframes shimmer {
-  to {
-    background-position: -200% 0;
   }
 }

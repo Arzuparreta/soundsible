@@ -14,6 +14,8 @@ import { itemArtist, itemBusy, playCatalogItem, cancelCatalogResolve } from '../
 import styles from './Album.module.css';
 import { coverGradient, coverStyle } from '../lib/cover';
 import { formatDuration } from '../lib/format';
+import { SkeletonRows } from '../components/Skeleton';
+import { EmptyState } from '../components/EmptyState';
 
 type ViewMode = 'discover' | 'library';
 
@@ -214,7 +216,7 @@ export default function Album() {
         fallback={
           <Show
             when={profile()}
-            fallback={<p class={styles.empty}>{t('album.noTracklist')}</p>}
+            fallback={<EmptyState>{t('album.noTracklist')}</EmptyState>}
           >
             <Show when={view() === 'discover'} fallback={<LibraryView tracks={libraryTrackList()} />}>
               <DiscoverView
@@ -228,9 +230,7 @@ export default function Album() {
           </Show>
         }
       >
-        <div class={styles.skeletonScroll}>
-          <For each={Array.from({ length: 8 })}>{() => <div class={styles.skeletonRow} />}</For>
-        </div>
+        <SkeletonRows count={8} />
       </Show>
     </div>
   );
@@ -239,7 +239,7 @@ export default function Album() {
 function LibraryView(props: { tracks: Track[] }) {
   return (
     <div class={styles.contentView}>
-      <Show when={props.tracks.length > 0} fallback={<p class={styles.empty}>{t('album.empty')}</p>}>
+      <Show when={props.tracks.length > 0} fallback={<EmptyState>{t('album.empty')}</EmptyState>}>
         <TrackListLite tracks={props.tracks} />
       </Show>
     </div>
@@ -277,7 +277,7 @@ function DiscoverView(props: {
 }) {
   return (
     <div class={styles.contentView}>
-      <Show when={props.tracklist.length > 0} fallback={<p class={styles.empty}>{t('album.noTracklist')}</p>}>
+      <Show when={props.tracklist.length > 0} fallback={<EmptyState>{t('album.noTracklist')}</EmptyState>}>
         <div class={styles.trackList}>
           <For each={props.tracklist}>
             {(item, i) => (

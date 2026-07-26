@@ -22,6 +22,7 @@ import type { CatalogItem, SearchResult, Track } from '../types/music';
 import { Spinner } from './Spinner';
 import styles from './SearchPanel.module.css';
 import { coverStyle } from '../lib/cover';
+import { SkeletonRows } from './Skeleton';
 
 export type PanelSide = 'left' | 'right';
 export type PanelTab = 'search' | 'discover' | 'lyrics';
@@ -976,14 +977,6 @@ function PanelRow(props: {
           <circle cx="19" cy="12" r="1.8" />
         </svg>
       </button>
-    </div>
-  );
-}
-
-function SkeletonRows(props: { count: number }) {
-  return (
-    <div class={styles.skeletons} aria-hidden="true">
-      <For each={Array.from({ length: props.count })}>{() => <div class={styles.skeleton} />}</For>
     </div>
   );
 }

@@ -6,6 +6,8 @@ import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/confirm';
 import { t } from '../lib/i18n';
 import styles from './PairDevice.module.css';
+import { EmptyState } from './EmptyState';
+import { SkeletonRows } from './Skeleton';
 
 const POLL_MS = 2000;
 const ACTIVE = new Set(['pending', 'claimed']);
@@ -221,8 +223,8 @@ export function PairedDevicesPanel() {
 
   return (
     <>
-      <Show when={!loading()} fallback={<p class={styles.empty}>{t('pairDevice.loading')}</p>}>
-        <Show when={devices().length > 0} fallback={<p class={styles.empty}>{t('pairDevice.empty')}</p>}>
+      <Show when={!loading()} fallback={<SkeletonRows count={2} compact />}>
+        <Show when={devices().length > 0} fallback={<EmptyState compact>{t('pairDevice.empty')}</EmptyState>}>
           <For each={devices()}>
             {(d) => (
               <div class={styles.deviceRow}>

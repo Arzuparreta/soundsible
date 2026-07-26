@@ -8,6 +8,7 @@ import { trackCount } from '../lib/format';
 import { t } from '../lib/i18n';
 import { librarySort, setLibrarySort, libraryTab, setLibraryTab, sortTracks, buildArtists } from '../lib/libraryView';
 import styles from './Home.module.css';
+import { EmptyState } from '../components/EmptyState';
 
 /** Library view: songs (sortable, virtualized) or artists browser. */
 export default function Home() {
@@ -22,13 +23,13 @@ export default function Home() {
   /** Empty-state copy that tells the truth about *why* the list is empty, and
    * offers the only useful next step when the engine is the reason. */
   const emptyState = (emptyMessage: string) => (
-    <Show when={unreachable()} fallback={<p class={styles.empty}>{emptyMessage}</p>}>
-      <p class={styles.empty}>
+    <Show when={unreachable()} fallback={<EmptyState>{emptyMessage}</EmptyState>}>
+      <EmptyState tone="danger">
         {t('home.unreachableEmpty')}{' '}
         <button class={styles.retry} type="button" onClick={() => void actions.syncLibrary()}>
           {t('home.retry')}
         </button>
-      </p>
+      </EmptyState>
     </Show>
   );
 

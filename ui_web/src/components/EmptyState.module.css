@@ -1,0 +1,69 @@
+.state {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-md);
+  width: min(100% - calc(var(--gutter) * 2), 520px);
+  margin: var(--space-2xl) auto;
+  padding: clamp(28px, 7vw, 48px) var(--space-xl);
+  color: var(--ink-secondary);
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 0, var(--accent-faint), transparent 68%),
+    color-mix(in srgb, var(--bg-raised) 58%, transparent);
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius-lg);
+}
+
+.compact {
+  width: 100%;
+  margin: var(--space-lg) auto;
+  padding: var(--space-xl) var(--space-lg);
+  background: transparent;
+  border-color: transparent;
+}
+
+.glyph {
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  width: 42px;
+  height: 42px;
+  padding: 12px;
+  color: var(--ink-tertiary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-1);
+}
+
+.glyph i {
+  width: 3px;
+  min-height: 6px;
+  background: currentColor;
+  border-radius: var(--radius-full);
+}
+
+.glyph i:nth-child(2) {
+  height: 15px;
+}
+
+.glyph i:nth-child(3) {
+  height: 10px;
+}
+
+.copy {
+  max-width: 42ch;
+  font-size: var(--text-body);
+  line-height: var(--lh-normal);
+}
+
+.copy :where(p) {
+  margin: 0;
+}
+
+.danger .glyph {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-elevated));
+  border-color: color-mix(in srgb, var(--danger) 24%, var(--hairline));
+}

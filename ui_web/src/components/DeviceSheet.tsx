@@ -6,6 +6,8 @@ import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './DeviceSheet.module.css';
+import { EmptyState } from './EmptyState';
+import { SkeletonRows } from './Skeleton';
 
 const others = (devs: Device[]): Device[] => devs.filter((d) => d.device_id !== state.device.device_id);
 
@@ -55,8 +57,8 @@ export function openPlayOnDevice(track: Track): void {
         <header class={styles.head}>
           <span class={styles.title}>{t('deviceSheet.title')}</span>
         </header>
-        <Show when={!loading()} fallback={<p class={styles.empty}>{t('deviceSheet.searching')}</p>}>
-          <Show when={devs().length > 0} fallback={<p class={styles.empty}>{t('deviceSheet.emptyOthers')}</p>}>
+        <Show when={!loading()} fallback={<SkeletonRows count={3} compact />}>
+          <Show when={devs().length > 0} fallback={<EmptyState compact>{t('deviceSheet.emptyOthers')}</EmptyState>}>
             <For each={devs()}>
               {(d) => (
                 <button class={styles.item} type="button" onClick={() => play(d)}>
@@ -100,8 +102,8 @@ export function DevicesPanel() {
   };
 
   return (
-    <Show when={!loading()} fallback={<p class={styles.empty}>{t('deviceSheet.searchingShort')}</p>}>
-      <Show when={devs().length > 0} fallback={<p class={styles.empty}>{t('deviceSheet.empty')}</p>}>
+    <Show when={!loading()} fallback={<SkeletonRows count={3} compact />}>
+      <Show when={devs().length > 0} fallback={<EmptyState compact>{t('deviceSheet.empty')}</EmptyState>}>
         <For each={devs()}>
           {(d) => (
             <div class={styles.deviceRow}>

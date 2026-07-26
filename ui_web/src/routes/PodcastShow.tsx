@@ -6,6 +6,8 @@ import { t } from '../lib/i18n';
 import type { PodcastEpisode } from '../types/podcast';
 import styles from './PodcastShow.module.css';
 import { neutralCoverStyle } from '../lib/cover';
+import { SkeletonRows } from '../components/Skeleton';
+import { EmptyState } from '../components/EmptyState';
 
 function fmtDur(s?: number): string {
   if (s == null || !Number.isFinite(s) || s <= 0) return '';
@@ -95,9 +97,9 @@ export default function PodcastShow() {
       <div class={styles.scroll}>
         <Show
           when={!data.loading}
-          fallback={<For each={Array.from({ length: 8 })}>{() => <div class={styles.skeleton} />}</For>}
+          fallback={<SkeletonRows count={8} compact />}
         >
-          <For each={episodes()} fallback={<p class={styles.hint}>{t('podcastShow.empty')}</p>}>
+          <For each={episodes()} fallback={<EmptyState>{t('podcastShow.empty')}</EmptyState>}>
             {(ep) => {
               const id = ep.guid || ep.enclosure_url;
               const downloaded = () => isDownloaded(ep);

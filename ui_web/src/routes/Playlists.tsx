@@ -12,6 +12,7 @@ import { promptDialog } from '../lib/prompt';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './Playlists.module.css';
+import { EmptyState } from '../components/EmptyState';
 
 export default function Playlists() {
   const byId = createMemo(() => new Map(state.library.map((t) => [t.id, t] as const)));
@@ -43,7 +44,7 @@ export default function Playlists() {
           </svg>
           {t('playlists.new')}
         </button>
-        <Show when={names().length > 0} fallback={<p class={styles.empty}>{t('playlists.empty')}</p>}>
+        <Show when={names().length > 0} fallback={<EmptyState>{t('playlists.empty')}</EmptyState>}>
           <div class={styles.grid}>
             <For each={names()}>
               {(name) => {
