@@ -21,6 +21,7 @@
   align-items: center;
   gap: var(--space-xs);
   padding: var(--space-xs) var(--space-md);
+  min-height: var(--control-h);
   font-size: var(--text-label);
   font-weight: var(--fw-medium);
   color: var(--ink-secondary);
@@ -28,12 +29,22 @@
   background: var(--bg-raised);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-full);
-  transition: color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+  box-shadow: var(--shadow-1);
+  transition:
+    color var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    background var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
 }
 
 .chip:hover {
   color: var(--ink-primary);
   border-color: var(--hairline-strong);
+  background: var(--bg-hover);
+}
+
+.chip:active {
+  transform: scale(0.97);
 }
 
 .badge {
@@ -87,6 +98,7 @@
 }
 
 .tab {
+  min-height: var(--control-h);
   padding: var(--space-2xs) var(--space-md);
   font-size: var(--text-label);
   font-weight: var(--fw-semibold);
@@ -103,7 +115,7 @@
 }
 
 .select {
-  height: 32px;
+  height: var(--control-h);
   padding: 0 var(--space-sm);
   font: inherit;
   font-size: var(--text-label);
@@ -157,5 +169,13 @@
 @media (min-width: 1024px) {
   .chips {
     display: none;
+  }
+
+  .tab {
+    min-height: 32px;
+  }
+
+  .select {
+    height: 32px;
   }
 }

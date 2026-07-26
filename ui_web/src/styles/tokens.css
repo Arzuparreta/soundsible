@@ -11,8 +11,11 @@
   --bg-raised: #141417; /* cards, list-row hover */
   --bg-elevated: #1b1b1f; /* popovers, sheets, modals */
   --bg-inset: #08080a; /* inputs, wells, log panes */
+  --bg-hover: #202025; /* deliberate pointer feedback, one step above raised */
+  --bg-active: #27272d; /* pressed controls / selected neutral surfaces */
   --hairline: #26262b; /* default borders */
   --hairline-strong: #34343a; /* emphasized dividers */
+  --hairline-soft: rgba(255, 255, 255, 0.055);
 
   /* ── Ink ── */
   --ink-primary: #f2f2f5;
@@ -25,6 +28,8 @@
   --accent-hover: #ff8d2e;
   --accent-press: #d8630a;
   --accent-soft: rgba(249, 122, 18, 0.14); /* tints, active row wash */
+  --accent-faint: rgba(249, 122, 18, 0.075);
+  --accent-glow: rgba(249, 122, 18, 0.24);
   --brand-gold: #e0bc00; /* badge/mark only — never a primary fill */
 
   /* ── Status ── */
@@ -40,6 +45,7 @@
   --text-display: 32px;
   --text-h1: 24px;
   --text-h2: 20px;
+  --text-h3: 18px;
   --text-title: 16px;
   --text-body: 15px;
   --text-label: 13px;
@@ -71,11 +77,24 @@
   --radius-md: 14px;
   --radius-lg: 20px;
   --radius-full: 999px;
+  /* Compatibility alias used by older player modules. */
+  --radius-pill: var(--radius-full);
 
   /* ── Elevation (subtle — "pro" restraint) ── */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 18px 48px rgba(0, 0, 0, 0.58);
   --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --shadow-accent: 0 8px 24px rgba(249, 122, 18, 0.2);
+
+  /* ── Atmosphere + loading ── */
+  --ambient-accent: rgba(249, 122, 18, 0.055);
+  --ambient-highlight: rgba(255, 255, 255, 0.025);
+  --skeleton-base: #17171b;
+  --skeleton-highlight: #24242a;
+
+  /* Compatibility alias retained for modules authored before tokens.css settled. */
+  --accent-primary: var(--accent);
 
   /* ── Z-index scale (replaces legacy hard-coded chaos: 9999/1280/220…) ── */
   --z-base: 1;
@@ -112,18 +131,30 @@
   --bg-raised: #ffffff;
   --bg-elevated: #ffffff;
   --bg-inset: #ececee;
+  --bg-hover: #f1f1f3;
+  --bg-active: #e8e8eb;
   --hairline: #e3e3e7;
   --hairline-strong: #d2d2d8;
+  --hairline-soft: rgba(0, 0, 0, 0.055);
 
   --ink-primary: #16161a;
   --ink-secondary: #55555f;
   --ink-tertiary: #88888f;
 
   --accent-soft: rgba(249, 122, 18, 0.12);
+  --accent-faint: rgba(249, 122, 18, 0.065);
+  --accent-glow: rgba(249, 122, 18, 0.18);
+
+  --ambient-accent: rgba(249, 122, 18, 0.045);
+  --ambient-highlight: rgba(255, 255, 255, 0.6);
+  --skeleton-base: #e8e8eb;
+  --skeleton-highlight: #f6f6f7;
 
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.08);
   --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-3: 0 18px 48px rgba(0, 0, 0, 0.16);
   --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.16);
+  --shadow-accent: 0 8px 22px rgba(249, 122, 18, 0.16);
 }
 
 /* Theme cross-fade. `data-theme-transition` is set on <html> for the duration of a

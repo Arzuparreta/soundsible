@@ -14,7 +14,9 @@ body {
 }
 
 body {
-  background: var(--bg-base);
+  background:
+    radial-gradient(ellipse 80% 55% at 78% -15%, var(--ambient-accent), transparent 62%),
+    var(--bg-base);
   color: var(--ink-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -22,6 +24,37 @@ body {
   /* The app shell owns all scrolling; the page itself never scrolls. */
   overflow: hidden;
   overscroll-behavior: none;
+}
+
+::selection {
+  color: var(--ink-primary);
+  background: var(--accent-glow);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  background: var(--hairline-strong);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: var(--radius-full);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ink-tertiary);
 }
 
 #app {
@@ -48,6 +81,7 @@ html[data-auto-mode='active'] #app {
 
 :where(a, button, [role='button']) {
   touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* iOS Safari auto-zooms focused form controls below 16px. Keep dense text tokens

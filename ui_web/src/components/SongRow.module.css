@@ -1,4 +1,5 @@
 .row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-md);
@@ -7,15 +8,33 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   user-select: none;
-  transition: background var(--dur-micro) var(--ease-out);
+  border: 1px solid transparent;
+  transition:
+    background var(--dur-micro) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
 }
 
 .row:hover {
-  background: var(--bg-raised);
+  background: var(--bg-hover);
+  border-color: var(--hairline-soft);
 }
 
 .active {
-  background: var(--accent-soft);
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
+  border-color: rgba(249, 122, 18, 0.16);
+}
+
+.active::before {
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: 0;
+  width: 2px;
+  content: '';
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 10px var(--accent-glow);
 }
 .active .title {
   color: var(--accent);
@@ -38,6 +57,7 @@
   border-radius: var(--radius-xs);
   background-size: cover;
   background-position: center;
+  box-shadow: 0 0 0 1px var(--hairline-soft), var(--shadow-1);
 }
 
 .meta {
@@ -92,8 +112,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--control-h);
+  height: var(--control-h);
   flex-shrink: 0;
   padding: 0;
   color: var(--ink-tertiary);
@@ -106,6 +126,17 @@
   transition:
     color var(--dur-short) var(--ease-out),
     opacity var(--dur-short) var(--ease-out);
+}
+
+.row:active {
+  transform: scale(0.997);
+}
+
+@media (min-width: 1024px) {
+  .iconBtn {
+    width: 36px;
+    height: 36px;
+  }
 }
 
 /* Reveal-on-hover is a pointer-only nicety; touch devices always show the heart

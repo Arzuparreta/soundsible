@@ -5,6 +5,7 @@
   justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-xl) var(--gutter) var(--space-md);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-base) 86%, transparent), transparent);
 }
 
 .title {
@@ -13,9 +14,24 @@
   font-size: var(--text-h1);
   font-weight: var(--fw-bold);
   letter-spacing: -0.01em;
+  text-wrap: balance;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 420px) {
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding-top: var(--space-lg);
+  }
+
+  .title {
+    width: 100%;
+    white-space: normal;
+  }
 }
 
 .meta {

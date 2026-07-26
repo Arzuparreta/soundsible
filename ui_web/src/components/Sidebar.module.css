@@ -5,8 +5,10 @@
   flex-direction: column;
   gap: var(--space-2xs);
   padding: var(--space-lg) var(--space-md);
-  background: var(--bg-base);
-  border-right: 1px solid var(--hairline);
+  background:
+    linear-gradient(180deg, var(--ambient-highlight), transparent 220px),
+    var(--bg-base);
+  border-right: 1px solid var(--hairline-soft);
   overflow-y: auto;
 }
 
@@ -23,6 +25,12 @@
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md) var(--space-lg);
   text-decoration: none;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-short) var(--ease-out);
+}
+
+.brand:hover {
+  background: var(--bg-raised);
 }
 
 .mark {
@@ -55,6 +63,7 @@
 }
 
 .item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-md);
@@ -72,12 +81,25 @@
 
 .item:hover {
   color: var(--ink-primary);
-  background: var(--bg-raised);
+  background: var(--bg-hover);
 }
 
 .active {
   color: var(--ink-primary);
-  background: var(--accent-soft);
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
+  box-shadow: 0 0 0 1px rgba(249, 122, 18, 0.08) inset;
+}
+
+.active::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 2px;
+  content: '';
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 10px var(--accent-glow);
 }
 
 .active .icon {
@@ -120,4 +142,11 @@
 
 .spacer {
   flex: 1;
+}
+
+@media (min-width: 1280px) {
+  .sidebar {
+    padding-right: var(--space-lg);
+    padding-left: var(--space-lg);
+  }
 }

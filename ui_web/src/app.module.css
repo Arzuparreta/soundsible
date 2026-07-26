@@ -35,12 +35,20 @@
   padding-top: env(safe-area-inset-top, 0);
   padding-left: env(safe-area-inset-left, 0);
   padding-right: env(safe-area-inset-right, 0);
+  background:
+    radial-gradient(ellipse 68% 44% at 72% -12%, var(--ambient-accent), transparent 70%),
+    linear-gradient(180deg, var(--ambient-highlight), transparent 180px);
 }
 
 .dock {
+  position: relative;
+  z-index: var(--z-omni);
   flex-shrink: 0;
-  background: var(--bg-base);
-  border-top: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--bg-base) 92%, transparent);
+  border-top: 1px solid var(--hairline-soft);
+  box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
 }
 
 /* Desktop: two-pane layout — left rail + content, player spanning the bottom.
@@ -48,7 +56,7 @@
 @media (min-width: 1024px) {
   .app {
     display: grid;
-    grid-template-columns: 232px minmax(0, 1fr);
+    grid-template-columns: clamp(208px, 18vw, 248px) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
     grid-template-areas:
       'sidebar content'
@@ -61,6 +69,7 @@
 
   .dock {
     grid-area: dock;
+    box-shadow: 0 -1px 0 var(--hairline-soft);
   }
 
   /* The sidebar owns navigation on desktop; the bottom tab bar is redundant. */
