@@ -226,6 +226,7 @@
 
 .exit {
   width: clamp(40px, 3vw, 54px);
+  min-width: var(--control-h);
   padding: 0;
 }
 
