@@ -746,17 +746,13 @@
    change of environment reads without a near-miss shared-element jump. */
 @media (max-width: 767px) {
   .root {
-    opacity: 1;
-    background-color: transparent;
     transform: none;
     transition:
-      background-color 360ms var(--ease-out),
-      visibility 0s linear 640ms;
+      opacity 360ms var(--ease-out),
+      visibility 0s linear 360ms;
   }
 
   .active {
-    opacity: 1;
-    background-color: #08080a;
     transform: none;
   }
 
@@ -766,14 +762,6 @@
     left: var(--auto-mobile-cover-left);
     width: var(--auto-mobile-cover-width);
     height: var(--auto-mobile-cover-height);
-  }
-
-  .backdrop,
-  .wash,
-  .grain {
-    transition:
-      opacity 360ms var(--ease-out),
-      filter 420ms var(--ease-out);
   }
 
   .topbar,
@@ -792,38 +780,17 @@
     filter: blur(12px);
   }
 
-  .root:not(.active) .backdrop,
-  .root:not(.active) .wash,
-  .root:not(.active) .grain {
-    opacity: 0;
-    filter: blur(12px);
-  }
-
-  .coverGlow {
-    transition: opacity 180ms var(--ease-out);
-  }
-
   .cover {
     filter: none;
     transition:
-      opacity 180ms var(--ease-out),
-      filter 180ms var(--ease-out),
+      opacity 320ms var(--ease-out),
+      filter 420ms var(--ease-out),
       box-shadow 420ms var(--ease-out);
-  }
-
-  /* Keep the shared artwork over the handoff until the underlying Now Playing
-     shell has finished restoring its own filter/layout, then cross-fade it.
-     This masks the transient one-frame/transition geometry reported on exit
-     without delaying the rest of Auto's chrome. */
-  .root:not(.active) .coverGlow {
-    opacity: 0;
-    transition-delay: 420ms;
   }
 
   .root:not(.active) .cover {
     opacity: 0;
     filter: blur(10px);
-    transition-delay: 420ms, 420ms, 0ms;
   }
 }
 

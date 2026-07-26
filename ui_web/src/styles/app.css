@@ -70,11 +70,14 @@ html[data-auto-mode='active'] #app {
   pointer-events: none;
 }
 
-/* On mobile, Now Playing supplies the shared cover geometry for Auto Mode.
-   Keep that geometry fixed while the underlying chrome recedes through blur;
-   desktop retains the established scale-and-depth transition. */
+/* A transform or filter on #app makes it the containing block for fixed
+   descendants. Now Playing is itself fixed, so either effect would temporarily
+   position the whole sheet against the app shell instead of the viewport and
+   make it jump when the transition ends. Mobile keeps only the opacity handoff;
+   Auto supplies its own blur and depth. Desktop retains the established effect. */
 @media (max-width: 767px) {
   html[data-auto-mode='active'] #app {
+    filter: none;
     transform: none;
   }
 }
