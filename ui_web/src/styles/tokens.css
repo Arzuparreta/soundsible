@@ -116,9 +116,14 @@
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* ── Density (ADAPTIVE) — mobile defaults: comfortable, touch-friendly ── */
+  /* ── Density (ADAPTIVE) ──
+     A touch target and a visible control are not the same thing. Mobile keeps
+     44px for primary controls while compact navigation choices use the denser
+     pill/segment tokens and receive breathing room from their parent rows. */
   --row-h: 56px; /* list row height */
   --control-h: 44px; /* min touch target */
+  --pill-h: 34px; /* chips and low-emphasis filters */
+  --segment-h: 36px; /* segmented navigation */
   --cover-sm: 44px; /* row thumbnail */
   --gutter: 16px; /* page horizontal padding */
   --list-gap: 2px; /* gap between rows */
@@ -179,6 +184,8 @@
   :root {
     --row-h: 44px;
     --control-h: 36px;
+    --pill-h: 34px;
+    --segment-h: 34px;
     --cover-sm: 36px;
     --gutter: 24px;
     --list-gap: 1px;

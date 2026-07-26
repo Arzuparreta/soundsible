@@ -67,3 +67,34 @@
   background: color-mix(in srgb, var(--danger) 8%, var(--bg-elevated));
   border-color: color-mix(in srgb, var(--danger) 24%, var(--hairline));
 }
+
+/* Mobile empty states should leave room for the thing the user came to do.
+   They remain intentional, but read as quiet inline guidance instead of a
+   second card nested inside every view. */
+@media (max-width: 1023px) {
+  .state {
+    gap: var(--space-sm);
+    width: auto;
+    margin: var(--space-xl) var(--gutter);
+    padding: var(--space-lg) var(--space-md);
+    background: transparent;
+    border-color: transparent;
+    border-radius: 0;
+  }
+
+  .compact {
+    margin-block: var(--space-md);
+    padding-block: var(--space-md);
+  }
+
+  .glyph {
+    width: 32px;
+    height: 32px;
+    padding: 9px;
+    box-shadow: none;
+  }
+
+  .copy {
+    font-size: var(--text-label);
+  }
+}

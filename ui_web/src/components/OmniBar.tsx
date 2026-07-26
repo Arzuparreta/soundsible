@@ -41,7 +41,7 @@ export function OmniBar() {
   };
 
   return (
-    <div class={styles.omni}>
+    <div classList={{ [styles.omni]: true, [styles.empty]: !current() }}>
       {/* While the stream is still being resolved there is no position to show,
           so the line sweeps instead of sitting at 0% looking broken. */}
       <div classList={{ [styles.progress]: true, [styles.progressIndeterminate]: loading() }}>

@@ -4,15 +4,14 @@
 }
 
 .tab {
-  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  min-height: var(--control-h);
-  padding: var(--space-sm) 0;
+  min-height: 56px;
+  padding: 6px 0 7px;
   color: var(--ink-tertiary);
   text-decoration: none;
   font-size: var(--text-caption);
@@ -27,19 +26,6 @@
   color: var(--accent);
 }
 
-.active::after {
-  position: absolute;
-  bottom: calc(env(safe-area-inset-bottom, 0) + 3px);
-  left: 50%;
-  width: 18px;
-  height: 2px;
-  content: '';
-  background: var(--accent);
-  border-radius: var(--radius-full);
-  box-shadow: 0 0 10px var(--accent-glow);
-  transform: translateX(-50%);
-}
-
 .label {
   font-weight: var(--fw-medium);
 }
@@ -47,6 +33,6 @@
 .tab svg {
   display: block;
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 21px;
+  height: 21px;
 }
