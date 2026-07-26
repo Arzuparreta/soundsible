@@ -132,6 +132,7 @@ export const fr: Dict = {
     notAddedDownloads: "Impossible d'ajouter aux téléchargements",
     ytErrorHint: 'La recherche YouTube n’a pas pu aboutir.',
     ytNoResults: 'Aucun résultat YouTube.',
+    ytPressEnter: 'Appuyez sur Entrée pour chercher sur YouTube.',
     ytDirectSection: 'Vidéo détectée',
     ytResultsSection: 'Résultats YouTube',
     ytFallbackCta: 'Pas ce que vous cherchiez ? Voir sur YouTube',

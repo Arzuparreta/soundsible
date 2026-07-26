@@ -6,7 +6,6 @@ import { encodeTrackCapsule } from '../lib/trackShare';
 
 const apiMock = vi.hoisted(() => ({
   searchCatalog: vi.fn(),
-  suggestCatalog: vi.fn(),
   searchYouTube: vi.fn(),
   suggest: vi.fn(),
   peekYouTube: vi.fn(),
@@ -68,7 +67,6 @@ describe('Search route', () => {
     storeMock.library = [];
     window.location.hash = '#/search';
     apiMock.searchCatalog.mockResolvedValue({ items: [], sections: [] });
-    apiMock.suggestCatalog.mockResolvedValue([]);
     apiMock.searchYouTube.mockResolvedValue([
       { id: 'abc12345678', title: 'Oliver Heldens Live Set', channel: 'Oliver Heldens', duration: 3600 },
     ]);

@@ -128,6 +128,7 @@ export const es: Dict = {
     notAddedDownloads: 'No se pudo añadir a descargas',
     ytErrorHint: 'No se pudo completar la búsqueda en YouTube.',
     ytNoResults: 'Sin resultados en YouTube.',
+    ytPressEnter: 'Pulsa Enter para buscar en YouTube.',
     ytDirectSection: 'Video detectado',
     ytResultsSection: 'Resultados en YouTube',
     ytFallbackCta: '¿No lo encuentras? Ver en YouTube',

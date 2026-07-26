@@ -628,13 +628,6 @@ export const api = {
       `/api/catalog/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}&limit=36`,
       { signal, timeoutMs: 15000 },
     ),
-  suggestCatalog: async (q: string, signal?: AbortSignal): Promise<string[]> => {
-    const data = await request<{ suggestions?: string[] }>(
-      `/api/catalog/suggest?q=${encodeURIComponent(q)}`,
-      { signal, timeoutMs: 5000 },
-    );
-    return Array.isArray(data.suggestions) ? data.suggestions : [];
-  },
   resolveCatalogItem: (body: { artist: string; title: string; duration?: number }, signal?: AbortSignal) =>
     request<CatalogResolveResponse>('/api/catalog/resolve', { method: 'POST', body, signal, timeoutMs: 30000 }),
   saveCatalogItem: (body: {

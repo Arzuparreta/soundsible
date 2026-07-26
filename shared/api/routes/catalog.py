@@ -694,32 +694,6 @@ def catalog_search():
     return jsonify(body)
 
 
-@catalog_bp.route("/api/catalog/suggest", methods=["GET"])
-@rate_limit("catalog_suggest", limit=120, window_sec=60)
-def catalog_suggest():
-    query = _clean(request.args.get("q", ""))
-    if len(query) < 2:
-        return jsonify({"suggestions": []})
-    suggestions: list[str] = []
-    seen: set[str] = set()
-    try:
-        resp = requests.get(
-            "http://suggestqueries.google.com/complete/search",
-            params={"client": "firefox", "ds": "yt", "q": query, "oe": "utf-8"},
-            timeout=2,
-        )
-        if resp.ok:
-            data = resp.json()
-            for value in data[1] if isinstance(data, list) and len(data) > 1 else []:
-                text = _clean(value)
-                if text and text.casefold() not in seen:
-                    seen.add(text.casefold())
-                    suggestions.append(text)
-    except Exception:
-        pass
-    return jsonify({"suggestions": suggestions[:8]})
-
-
 def _resolve_candidates(artist: str, title: str, duration_s: int | None = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Map a catalog row (artist + title) to the best YouTube match.
 

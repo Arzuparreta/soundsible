@@ -128,6 +128,7 @@ export const zh: Dict = {
     notAddedDownloads: '无法添加到下载',
     ytErrorHint: '无法完成 YouTube 搜索。',
     ytNoResults: 'YouTube 无结果。',
+    ytPressEnter: '按回车在 YouTube 上搜索。',
     ytDirectSection: '检测到视频',
     ytResultsSection: 'YouTube 结果',
     ytFallbackCta: '没找到？在 YouTube 上查找',

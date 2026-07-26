@@ -87,6 +87,7 @@ export default function Search() {
   const [youtubeError, setYoutubeError] = createSignal(false);
   const [suggestions, setSuggestions] = createSignal<string[]>([]);
   const [showSuggest, setShowSuggest] = createSignal(false);
+  const [lastRun, setLastRun] = createSignal('');
   const [recents, setRecents] = createSignal<string[]>(loadRecents('music'));
   const [saving, setSaving] = createSignal<Set<string>>(new Set());
   const [saved, setSaved] = createSignal<Set<string>>(new Set());
@@ -297,9 +298,17 @@ export default function Search() {
   };
 
   const runSearch = (query: string, nextDomain = domain(), nextTab = tab()) => {
+    setLastRun(query.trim());
     if (nextDomain === 'youtube') runYouTube(query);
     else runCatalog(query, nextTab);
   };
+
+  // True while the YouTube box holds a query nobody has confirmed yet. The
+  // results below are the previous search, so "no results" would be a lie.
+  const ytPending = createMemo(() => {
+    if (domain() !== 'youtube') return false;
+    return parseSearchInput(q()).query.trim() !== lastRun();
+  });
 
   // ── Speculative warm-up: resolve the top of the results in the background
   // while the user is still deciding, so the eventual play click starts
@@ -340,8 +349,7 @@ export default function Search() {
       return;
     }
     suggestAborter = new AbortController();
-    const suggest = domain() === 'youtube' ? api.suggest(query, suggestAborter.signal) : api.suggestCatalog(query, suggestAborter.signal);
-    suggest.then((s) => setSuggestions(s)).catch(() => {});
+    api.suggest(query, suggestAborter.signal).then((s) => setSuggestions(s)).catch(() => {});
   };
 
   const commit = (value: string) => {
@@ -380,11 +388,21 @@ export default function Search() {
       setRecents(loadRecents(nextDomain));
     }
     setQ(value);
-    setShowSuggest(true);
     clearTimeout(debounce);
     clearTimeout(suggestDebounce);
-    debounce = window.setTimeout(() => runSearch(parsed, nextDomain), 220);
-    suggestDebounce = window.setTimeout(() => runSuggest(parsed), 120);
+    // One model per domain, never both at once — a suggestion dropdown floating
+    // over live results is offering to ask a question that is already answered.
+    if (nextDomain === 'youtube' && !parseYouTubeInput(parsed)) {
+      // Unbounded external corpus: guess the query, search only on commit.
+      setShowSuggest(true);
+      suggestDebounce = window.setTimeout(() => runSuggest(parsed), 120);
+    } else {
+      // Finite local catalog (and pasted URLs, which are unambiguous): the live
+      // results are the prediction.
+      setShowSuggest(false);
+      setSuggestions([]);
+      debounce = window.setTimeout(() => runSearch(parsed, nextDomain), 220);
+    }
   };
 
   const setActiveTab = (next: SearchTab) => {
@@ -397,7 +415,7 @@ export default function Search() {
     setRecents(loadRecents(next));
     setShowSuggest(false);
     setSuggestions([]);
-    runSearch(q(), next);
+    runSearch(parseSearchInput(q()).query, next);
   };
 
   const itemCoverStyle = (item: CatalogItem, round = false): JSX.CSSProperties => ({
@@ -575,7 +593,7 @@ export default function Search() {
             value={q()}
             ref={searchInput}
             onInput={(e) => onInput(e.currentTarget.value)}
-            onFocus={() => setShowSuggest(true)}
+            onFocus={() => setShowSuggest(domain() === 'youtube')}
             onBlur={() => setShowSuggest(false)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') commit(e.currentTarget.value);
@@ -584,7 +602,7 @@ export default function Search() {
             autofocus
           />
         </div>
-        <Show when={showSuggest() && q().trim().length >= 2 && suggestions().length > 0}>
+        <Show when={domain() === 'youtube' && showSuggest() && q().trim().length >= 2 && suggestions().length > 0}>
           <div class={styles.suggest}>
             <For each={suggestions()}>
               {(value) => (
@@ -680,7 +698,11 @@ export default function Search() {
                 <SkeletonRows count={8} compact />
               </Show>
 
-              <Show when={!youtubeLoading() && !youtubeDirect() && youtubeResults().length === 0 && q().trim().length >= 2}>
+              <Show when={ytPending() && !youtubeLoading() && !youtubeDirect() && youtubeResults().length === 0 && q().trim().length >= 2}>
+                <EmptyState compact>{tr('search.ytPressEnter')}</EmptyState>
+              </Show>
+
+              <Show when={!ytPending() && !youtubeLoading() && !youtubeDirect() && youtubeResults().length === 0 && q().trim().length >= 2}>
                 <EmptyState compact tone={youtubeError() ? 'danger' : 'neutral'}>
                   {youtubeError() ? (
                     <>

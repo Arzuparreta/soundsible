@@ -127,6 +127,7 @@ export const en = {
     notAddedDownloads: 'Could not add to downloads',
     ytErrorHint: 'The YouTube search could not be completed.',
     ytNoResults: 'No YouTube results.',
+    ytPressEnter: 'Press Enter to search on YouTube.',
     ytDirectSection: 'Detected video',
     ytResultsSection: 'YouTube results',
     ytFallbackCta: "Not what you wanted? Look on YouTube",
