@@ -2,6 +2,7 @@ import { createSignal, onMount, For, Show, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
 import { state, actions } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
+import { trackCount } from '../lib/format';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/confirm';
@@ -10,7 +11,6 @@ import { promptDialog } from '../lib/prompt';
 import { DevicesPanel } from '../components/DeviceSheet';
 import { PairedDevicesPanel } from '../components/PairDevice';
 import { t, locale, setLocale, LOCALES, type Locale } from '../lib/i18n';
-import { trackCount } from '../lib/format';
 import { changePassword, isAdmin, logout, updateProfile, user } from '../lib/session';
 import styles from './Settings.module.css';
 
@@ -323,7 +323,7 @@ export default function Settings() {
 
   return (
     <div class="view">
-      <ViewHeader title={t('settings.title')} meta={trackCount(state.library.length)} />
+      <ViewHeader title={t('settings.title')} />
 
       <div class={styles.scroll}>
         <Show when={user()}>

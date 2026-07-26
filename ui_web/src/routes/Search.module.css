@@ -103,14 +103,14 @@
 }
 
 .tab {
-  height: var(--control-h);
-  padding: 0 var(--space-md);
+  height: var(--pill-h);
+  padding: 0 11px;
   color: var(--ink-secondary);
   background: var(--bg-inset);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-full);
   font: inherit;
-  font-size: var(--text-label);
+  font-size: 12px;
   font-weight: var(--fw-semibold);
   cursor: pointer;
   white-space: nowrap;
@@ -333,38 +333,20 @@
   opacity: 1;
 }
 
-.seedState {
-  display: grid;
-  justify-items: center;
-  gap: var(--space-sm);
-  max-width: 520px;
-  margin: var(--space-3xl) auto;
-  text-align: center;
-}
-
-.seedState h2 {
-  margin: 0;
-  color: var(--ink-primary);
-  font-size: var(--text-h1);
-}
-
-.seedState p {
-  margin: 0;
-  color: var(--ink-secondary);
-  line-height: 1.5;
-}
-
-.seedAction {
-  height: var(--control-h);
-  margin-top: var(--space-sm);
-  padding: 0 var(--space-lg);
-  color: var(--bg-base);
-  background: var(--ink-primary);
+.seedHint {
+  justify-self: center;
+  margin: var(--space-xl) auto 0;
+  padding: var(--space-sm) var(--space-md);
+  color: var(--ink-tertiary);
+  background: transparent;
   border: none;
-  border-radius: var(--radius-full);
   font: inherit;
-  font-weight: var(--fw-semibold);
+  font-size: var(--text-label);
   cursor: pointer;
+}
+
+.seedHint:hover {
+  color: var(--ink-secondary);
 }
 
 .recentGrid {

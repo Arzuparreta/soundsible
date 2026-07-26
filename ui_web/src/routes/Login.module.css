@@ -142,11 +142,24 @@
 @media (max-width: 420px) {
   .screen {
     place-items: start center;
-    padding-top: max(var(--space-xl), env(safe-area-inset-top, 0));
+    padding-top: max(var(--space-3xl), env(safe-area-inset-top, 0));
+    background: var(--bg-base);
   }
 
   .card {
-    padding: var(--space-xl) var(--space-lg);
+    max-width: 340px;
+    gap: var(--space-xl);
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .mark {
+    width: 48px;
+    height: 48px;
+    filter: none;
   }
 }
 

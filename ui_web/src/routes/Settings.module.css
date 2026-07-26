@@ -284,18 +284,23 @@
 }
 
 @media (max-width: 420px) {
+  .scroll {
+    gap: var(--space-lg);
+  }
+
   .row {
     flex-wrap: wrap;
     align-items: center;
   }
 
   .segment {
-    width: 100%;
-    justify-content: stretch;
+    margin-left: auto;
   }
 
   .seg {
-    flex: 1;
+    min-width: var(--segment-h);
+    height: var(--segment-h);
+    padding-inline: var(--space-sm);
   }
 
   .input {
