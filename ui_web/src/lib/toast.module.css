@@ -18,14 +18,16 @@
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   border-radius: var(--radius-full);
-  background: var(--bg-elevated);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
   border: 1px solid var(--hairline);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-pop);
   color: var(--ink-primary);
   font-size: var(--text-label);
   font-weight: var(--fw-medium);
   pointer-events: auto;
   animation: toast-in var(--dur-short) var(--ease-out);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .toast::before {
@@ -56,6 +58,27 @@
   font: inherit;
   font-weight: var(--fw-semibold);
   cursor: pointer;
+  min-height: 32px;
+}
+
+@media (max-width: 520px) {
+  .stack {
+    width: calc(100% - calc(var(--gutter) * 2));
+  }
+
+  .toast {
+    width: 100%;
+    border-radius: var(--radius-md);
+  }
+
+  .msg {
+    max-width: none;
+    white-space: normal;
+  }
+
+  .action {
+    min-height: var(--control-h);
+  }
 }
 
 .success {

@@ -31,7 +31,7 @@
   cursor: pointer;
 }
 .item:hover {
-  background: var(--bg-raised);
+  background: var(--bg-hover);
 }
 
 .icon {
@@ -81,13 +81,20 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--control-h);
+  height: var(--control-h);
   color: var(--ink-secondary);
   background: transparent;
   border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
+}
+
+@media (min-width: 1024px) {
+  .ctrl {
+    width: 32px;
+    height: 32px;
+  }
 }
 .ctrl:hover {
   color: var(--accent);

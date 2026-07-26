@@ -32,6 +32,7 @@
 }
 .new:hover {
   background: var(--accent-soft);
+  border-color: var(--accent);
 }
 
 .list {
@@ -59,7 +60,7 @@
   cursor: pointer;
 }
 .item:hover {
-  background: var(--bg-raised);
+  background: var(--bg-hover);
 }
 
 .itemName {

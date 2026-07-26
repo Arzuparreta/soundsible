@@ -102,8 +102,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: var(--control-h);
+  height: var(--control-h);
   padding: 0;
   flex-shrink: 0;
   border: 1px solid var(--accent-soft);
@@ -112,6 +112,13 @@
   color: var(--accent);
   cursor: pointer;
   transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+}
+
+@media (min-width: 1024px) {
+  .radioBadge {
+    width: 32px;
+    height: 32px;
+  }
 }
 
 .radioBadge:hover {

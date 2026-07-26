@@ -6,8 +6,9 @@
   align-items: flex-end;
   justify-content: center;
   padding: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(8px) saturate(0.82);
+  -webkit-backdrop-filter: blur(8px) saturate(0.82);
   animation: scrim-in var(--dur-short) var(--ease-out);
 }
 
@@ -15,13 +16,18 @@
   width: 100%;
   max-width: 560px;
   max-height: 85vh;
+  max-height: 85dvh;
   overflow-y: auto;
   padding: var(--space-xl);
-  background: var(--bg-elevated);
+  background:
+    linear-gradient(180deg, var(--ambient-highlight), transparent 160px),
+    var(--bg-elevated);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  box-shadow: var(--shadow-pop);
+  box-shadow: var(--shadow-3);
   animation: sheet-up var(--dur-medium) var(--ease-out);
+  overscroll-behavior: contain;
+  padding-bottom: max(var(--space-xl), env(safe-area-inset-bottom, 0));
 }
 
 @media (min-width: 1024px) {

@@ -49,7 +49,7 @@
 }
 
 .item:hover {
-  background: var(--bg-raised);
+  background: var(--bg-hover);
 }
 
 .item:disabled {

@@ -6,7 +6,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
-  max-width: 560px;
+  max-width: 640px;
   width: 100%;
   margin: 0 auto;
 }
@@ -34,6 +34,7 @@
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
   overflow: hidden;
+  box-shadow: var(--shadow-1);
 }
 
 .row {
@@ -55,7 +56,7 @@
 .rowLink + .row,
 .rowBtn + .rowLink,
 .rowLink + .rowBtn {
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--hairline-soft);
 }
 
 .rowLabel {
@@ -102,7 +103,7 @@
 }
 
 .rowBtn:hover:not(:disabled) {
-  background: var(--bg-elevated);
+  background: var(--bg-hover);
 }
 
 .rowBtn:disabled {
@@ -128,7 +129,7 @@
 }
 
 .rowLink:hover {
-  background: var(--bg-elevated);
+  background: var(--bg-hover);
 }
 
 .chevron {
@@ -138,7 +139,7 @@
 
 .input {
   width: 100%;
-  height: 36px;
+  height: var(--control-h);
   padding: 0 var(--space-md);
   font: inherit;
   font-size: var(--text-body);
@@ -158,7 +159,7 @@
 }
 
 .select {
-  height: 32px;
+  height: var(--control-h);
   padding: 0 var(--space-xl) 0 var(--space-sm);
   font: inherit;
   font-size: var(--text-label);
@@ -185,8 +186,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 36px;
-  height: 30px;
+  min-width: var(--control-h);
+  height: var(--control-h);
   padding: 0 var(--space-sm);
   font-size: var(--text-label);
   font-weight: var(--fw-semibold);
@@ -222,6 +223,12 @@
   border-radius: var(--radius-full);
   cursor: pointer;
   transition: background var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+}
+
+.switch::before {
+  position: absolute;
+  inset: -9px 0;
+  content: '';
 }
 
 .switchOn {
@@ -295,5 +302,20 @@
     width: 100%;
     text-align: left;
     margin-top: var(--space-2xs);
+  }
+}
+
+@media (min-width: 1024px) {
+  .input {
+    height: 36px;
+  }
+
+  .select {
+    height: 32px;
+  }
+
+  .seg {
+    min-width: 36px;
+    height: 30px;
   }
 }

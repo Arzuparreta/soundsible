@@ -63,7 +63,7 @@
 }
 
 .suggestItem {
-  min-height: 42px;
+  min-height: var(--control-h);
   padding: 0 var(--space-md);
   font: inherit;
   text-align: left;
@@ -160,8 +160,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: var(--control-h);
+  height: var(--control-h);
   flex-shrink: 0;
   color: var(--ink-secondary);
   background: var(--bg-inset);
@@ -309,6 +309,15 @@
 
 .discoverSaveBtn {
   cursor: pointer;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .discoverSaveBtn::before,
+  .discoverSavedBadge::before {
+    position: absolute;
+    inset: -7px;
+    content: '';
+  }
 }
 
 .discoverSaveBtn:hover {
@@ -682,7 +691,7 @@
 .modalBackdrop {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -790,6 +799,11 @@
   .done {
     width: 38px;
     height: 38px;
+  }
+
+  .railRefresh {
+    width: 34px;
+    height: 34px;
   }
 }
 

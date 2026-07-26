@@ -59,11 +59,28 @@
 
 .no,
 .yes {
+  min-height: var(--control-h);
   padding: var(--space-2xs) var(--space-md);
   font-size: var(--text-label);
   font-weight: var(--fw-semibold);
   border-radius: var(--radius-full);
   cursor: pointer;
+}
+
+@media (max-width: 520px) {
+  .banner {
+    flex-wrap: wrap;
+  }
+
+  .actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .no,
+  .yes {
+    flex: 1;
+  }
 }
 
 .no {

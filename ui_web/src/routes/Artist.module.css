@@ -78,8 +78,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--control-h);
+  height: var(--control-h);
   color: var(--ink-tertiary);
   background: transparent;
   border: none;
@@ -105,7 +105,7 @@
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-3);
-  z-index: 100;
+  z-index: var(--z-popover);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -288,6 +288,11 @@
 @media (min-width: 1024px) {
   .toggleTab {
     min-height: 34px;
+  }
+
+  .chevronBtn {
+    width: 36px;
+    height: 36px;
   }
 }
 

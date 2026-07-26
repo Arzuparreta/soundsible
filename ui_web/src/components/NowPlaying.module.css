@@ -256,8 +256,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--control-h);
+  height: var(--control-h);
   padding: 0;
   flex-shrink: 0;
   border: 1px solid var(--accent-soft);
@@ -480,8 +480,8 @@
 
 .toggle {
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: var(--control-h);
+  height: var(--control-h);
   color: var(--ink-tertiary);
   border-radius: var(--radius-full);
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
@@ -981,6 +981,16 @@
   }
 
   .actBtn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .radioBadge {
+    width: 36px;
+    height: 36px;
+  }
+
+  .toggle {
     width: 40px;
     height: 40px;
   }

@@ -28,7 +28,19 @@
   gap: var(--space-md);
   padding: var(--space-md);
   background: var(--bg-raised);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  transition:
+    background var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    box-shadow var(--dur-short) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--bg-hover);
+  border-color: var(--hairline-strong);
+  box-shadow: var(--shadow-2);
 }
 
 .avatar {
@@ -114,7 +126,9 @@
   gap: var(--space-md);
   padding: var(--space-lg);
   background: var(--bg-raised);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
 }
 
 .formTitle {

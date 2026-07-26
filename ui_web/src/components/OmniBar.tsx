@@ -67,12 +67,13 @@ export function OmniBar() {
           >
             <span class={styles.title}>
               {current()!.title}
-              <RadioBadge class={styles.radioBadge} loadingClass={styles.radioBadgeLoading} />
             </span>
             <span classList={{ [styles.sub]: true, [styles.subAlert]: failed() }}>{subtitle()}</span>
           </Show>
         </div>
       </button>
+
+      <RadioBadge class={styles.radioBadge} loadingClass={styles.radioBadgeLoading} />
 
       <button
         class={styles.ctrl}

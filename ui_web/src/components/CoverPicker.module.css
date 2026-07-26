@@ -44,6 +44,12 @@
   border: 2px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
+  transition:
+    border-color var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+.cell:hover {
+  transform: translateY(-2px);
 }
 .cell.selected {
   border-color: var(--accent);

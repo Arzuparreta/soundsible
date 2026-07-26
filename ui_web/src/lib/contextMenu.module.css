@@ -10,7 +10,9 @@
   min-width: 224px;
   max-width: min(280px, calc(100vw - 16px));
   padding: var(--space-2xs);
-  background: var(--bg-elevated);
+  background:
+    linear-gradient(180deg, var(--ambient-highlight), transparent 120px),
+    var(--bg-elevated);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-pop);

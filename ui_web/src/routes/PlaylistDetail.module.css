@@ -10,8 +10,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--control-h);
+  height: var(--control-h);
   flex-shrink: 0;
   color: var(--ink-secondary);
   background: transparent;
@@ -52,8 +52,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--control-h);
+  height: var(--control-h);
   flex-shrink: 0;
   color: var(--ink-secondary);
   background: transparent;
@@ -61,6 +61,14 @@
   border-radius: var(--radius-full);
   cursor: pointer;
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
+}
+
+@media (min-width: 1024px) {
+  .back,
+  .menu {
+    width: 36px;
+    height: 36px;
+  }
 }
 .menu:hover {
   color: var(--ink-primary);
