@@ -201,8 +201,8 @@
   }
 
   /* Token durations cover tokenized transitions, but infinite loaders (shimmer,
-     pulse, spinners, the OmniBar progress sweep) hard-code their own. Neutralize
-     all animation/transition for users who asked for less motion. */
+     pulse, spinners) hard-code their own. Neutralize all animation/transition
+     for users who asked for less motion. */
   *,
   *::before,
   *::after {

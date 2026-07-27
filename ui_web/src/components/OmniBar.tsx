@@ -42,10 +42,11 @@ export function OmniBar() {
 
   return (
     <div classList={{ [styles.omni]: true, [styles.empty]: !current() }}>
-      {/* While the stream is still being resolved there is no position to show,
-          so the line sweeps instead of sitting at 0% looking broken. */}
-      <div classList={{ [styles.progress]: true, [styles.progressIndeterminate]: loading() }}>
-        <div class={styles.progressFill} style={loading() ? undefined : { width: `${pct()}%` }} />
+      {/* The line only ever reports position. Loading is already said by the
+          transport spinner and the subtitle, so it stays quiet until there is a
+          real position to show. */}
+      <div class={styles.progress}>
+        <div class={styles.progressFill} style={{ width: `${pct()}%` }} />
       </div>
 
       <button
