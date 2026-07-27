@@ -147,6 +147,19 @@ describe('AutoMode environment', () => {
     source.remove();
   });
 
+  it('names the song on the artwork, without saying it twice to a screen reader', () => {
+    // Mobile puts the metadata on the cover (CSS decides where it shows). The
+    // panel's block stays as the live region, so the caption is decoration.
+    render(() => <AutoMode />);
+    const caption = screen.getByRole('img', { name: 'Current song' }).nextElementSibling!;
+
+    expect(caption).toHaveTextContent('Current song');
+    expect(caption).toHaveTextContent('Artist');
+    expect(caption).toHaveAttribute('aria-hidden', 'true');
+    expect(caption).toHaveAttribute('data-fit', 'lg');
+    expect(screen.getByRole('heading', { name: 'Current song' }).closest('[aria-live]')).toBeTruthy();
+  });
+
   it('lifts the autopilot line into the band above the pinned cover, and only when it fits', () => {
     // The pinned cover is not where the panel below it was laid out, so in flow
     // the status line lands on the artwork. It belongs in the empty band between

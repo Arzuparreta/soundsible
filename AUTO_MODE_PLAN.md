@@ -118,10 +118,23 @@ taste.
 On mobile, continuity with Now Playing is an additional invariant. Entering Auto
 captures the live Now Playing artwork slot and anchors Auto's existing cover to
 that exact viewport rectangle. The cover therefore does not jump or resize
-during the handoff. Auto's own topbar, profile, metadata, transient activity,
-transport and complete horizontal cover queue remain unchanged; they replace
-the blurred Now Playing chrome through opacity and blur only. Desktop keeps its
-existing layout and receding-room transition.
+during the handoff — and does not breathe once it lands, since drifting off the
+rectangle is the same broken promise, slower. Auto's own topbar, profile,
+transient activity, transport and complete horizontal cover queue remain
+unchanged; they replace the blurred Now Playing chrome through opacity and blur
+only. Desktop keeps its existing layout and receding-room transition.
+
+The pinned rectangle is a height budget the phone composition has to live
+inside: what Now Playing did not use is all the panel gets, and on a phone that
+is not enough for the panel's title. So the metadata moves onto the artwork it
+names — a short frosted band across the foot of the cover, its blur dissolving
+upward, holding the title (two lines at most, same `titleFit` tiers) and the
+artist. The autopilot's line moves the other way, into the band above the cover
+when one is tall enough to hold it. What is left in the panel is the transport.
+The panel's metadata block stays in the DOM, clipped, because it is the live
+region that announces a track change; the band on the cover is decoration and is
+hidden from assistive tech. Both are mobile-only: desktop and TV keep the title
+as the largest thing on screen.
 
 **Content never changes the layout.** Titles run from 3 to 90 characters and the
 autopilot's status line appears and clears every few minutes; neither may move

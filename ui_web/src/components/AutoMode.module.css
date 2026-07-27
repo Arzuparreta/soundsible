@@ -66,6 +66,7 @@
   --auto-card-artist: clamp(11px, 3vw, 13px);
   --auto-head: clamp(10px, 2.6vw, 12px);
   --auto-stage-gap: clamp(14px, 2.4vh, 26px);
+  --auto-cover-radius: clamp(14px, 1.6vw, 28px);
 }
 
 .active {
@@ -291,7 +292,7 @@
   inset: 0;
   background-position: center;
   background-size: cover;
-  border-radius: clamp(14px, 1.6vw, 28px);
+  border-radius: var(--auto-cover-radius);
 }
 
 .coverGlow {
@@ -308,6 +309,84 @@
 
 .active .cover {
   animation: autoBreathe 9s ease-in-out infinite;
+}
+
+/* ── Cover caption ──
+   Mobile only — it is switched on in the phone block at the foot of this file,
+   where the artwork is pinned to the Now Playing rectangle and the panel below
+   it no longer has the height for a 44px title. Desktop keeps its metadata in
+   the panel, where there is room for it to be the largest thing on screen.
+
+   The band is deliberately short: two lines of type and the padding around
+   them, never a third of the artwork. */
+.coverCaption {
+  --cap-fit: 1;
+  --cap-title: max(14px, calc(clamp(16px, 4.6vw, 21px) * var(--cap-fit)));
+
+  position: absolute;
+  inset: auto 0 0;
+  /* Stacking context so ::before can sit under the type without falling behind
+     the artwork — z-index rather than `isolation`, which would cut the frosted
+     layer off from the backdrop it is meant to be sampling. */
+  z-index: 0;
+  display: none;
+  flex-direction: column;
+  gap: 1px;
+  padding: 9px clamp(11px, 3.2vw, 15px) 10px;
+  border-radius: 0 0 var(--auto-cover-radius) var(--auto-cover-radius);
+  transition: opacity 320ms var(--ease-out);
+}
+
+/* The same length tiers as the panel title, gentler: this type is already
+   small, so it shrinks a little and wraps to a second line rather than
+   dwindling. Below 14px it stops and the clamp takes over. */
+.coverCaption[data-fit='md'] { --cap-fit: 0.88; }
+.coverCaption[data-fit='sm'] { --cap-fit: 0.78; }
+.coverCaption[data-fit='xs'] { --cap-fit: 0.7; }
+
+/* Frosted glass that dissolves upward. The mask fades the blur out with the
+   fill — a backdrop-filter is masked along with everything else the element
+   paints — so the band has no hard edge cutting across the artwork. It reaches
+   above the type block for the fade; where blur is unsupported the gradient
+   alone still carries the type. */
+.coverCaption::before {
+  content: '';
+  position: absolute;
+  inset: -20px 0 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(8, 8, 10, 0.1), rgba(8, 8, 10, 0.64));
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 46%);
+  mask-image: linear-gradient(180deg, transparent, #000 46%);
+}
+
+.capTitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  margin: 0;
+  font-size: var(--cap-title);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.45);
+}
+
+.capArtist {
+  margin: 0;
+  overflow: hidden;
+  color: rgba(242, 242, 245, 0.76);
+  font-size: clamp(11.5px, 3.2vw, 14px);
+  font-weight: var(--fw-medium);
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
 }
 
 /* ── Panel: title, artist, autopilot status, transport ── */
@@ -757,12 +836,55 @@
     transform: none;
   }
 
+  /* The anchor rectangle is in viewport coordinates, so the frame it drives has
+     to resolve against the viewport. Size containment is also *layout*
+     containment, which makes the stage the containing block for fixed
+     descendants and would offset the pinned cover by the stage's own origin —
+     roughly the height of the top bar, straight down. The containment is not
+     needed here anyway: the frame is out of flow and explicitly sized, so it
+     contributes nothing to the grid either way, and `cqmin` goes unused. */
+  .root[data-mobile-cover-anchor] .coverStage {
+    container-type: normal;
+  }
+
   .root[data-mobile-cover-anchor] .coverFrame {
     position: fixed;
     top: var(--auto-mobile-cover-top);
     left: var(--auto-mobile-cover-left);
     width: var(--auto-mobile-cover-width);
     height: var(--auto-mobile-cover-height);
+  }
+
+  /* The song's identity rides on the artwork it names. The pinned cover leaves
+     the panel whatever height Now Playing did not use, which on a phone is not
+     enough for the panel's title — so the title and artist come off the panel
+     and onto the foot of the cover, and the panel is left to the transport. */
+  .root[data-mobile-cover-anchor] .coverCaption {
+    display: flex;
+  }
+
+  .root:not(.active) .coverCaption {
+    opacity: 0;
+  }
+
+  /* The metadata stays in the DOM as the live region — it is what announces a
+     track change, and a `display: none` region announces nothing. */
+  .root[data-mobile-cover-anchor] .meta {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* Pinned means pinned: the breath would drift the artwork a couple of pixels
+     off the rectangle it is supposed to be holding, and slide the caption's
+     corners out from under the cover's. */
+  .root[data-mobile-cover-anchor] .cover {
+    animation: none;
   }
 
   /* The autopilot line rides in the empty band above the pinned artwork, in the

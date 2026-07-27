@@ -283,6 +283,13 @@ export function AutoMode() {
               <div class={styles.coverFrame}>
                 <div class={styles.coverGlow} style={backdropStyle()} aria-hidden="true" />
                 <div class={styles.cover} style={backdropStyle()} role="img" aria-label={current()!.title} />
+                {/* Mobile only, by CSS: the panel's metadata block is still the
+                    live region, so this is a second rendering of text that is
+                    already announced. */}
+                <div class={styles.coverCaption} data-fit={titleFit(current()!.title)} aria-hidden="true">
+                  <p class={styles.capTitle}>{current()!.title}</p>
+                  <p class={styles.capArtist}>{current()!.artist}</p>
+                </div>
               </div>
             </div>
 
