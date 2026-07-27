@@ -549,8 +549,9 @@ export function NowPlaying() {
                 aria-pressed={mobileQueueOpen()}
                 onClick={() => setMobileQueueOpen((open) => !open)}
               >
-                <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                  <path d="M4 7h11M4 12h11M4 17h7M18 14v6M21 17h-6" />
+                <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M11 17a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+                  <path d="M17 17V4h4M13 5H3M3 9h10M9 13H3" />
                 </svg>
               </button>
             </Show>
