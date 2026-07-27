@@ -85,5 +85,29 @@ def test_stop_owned_desktop_engine_cleans_stale_state(tmp_path):
     ok, message = stop_owned_desktop_engine(runtime.config_dir)
 
     assert ok is True
-    assert "not running" in message.lower()
+    assert "stale" in message.lower()
+    assert not state_path.exists()
+
+
+def test_stop_owned_desktop_engine_does_not_signal_foreign_state(tmp_path, monkeypatch):
+    reset_runtime()
+    runtime = _make_runtime(tmp_path)
+    state_path = runtime.config_dir / "desktop-engine-state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "pid": 1,
+                "mode": "desktop-engine",
+                "machine_fingerprint": "another-machine",
+            }
+        )
+    )
+    signalled = []
+    monkeypatch.setattr("shared.desktop_runtime.os.kill", lambda *args: signalled.append(args))
+
+    ok, message = stop_owned_desktop_engine(runtime.config_dir)
+
+    assert ok is True
+    assert "stale" in message.lower()
+    assert signalled == []
     assert not state_path.exists()

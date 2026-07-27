@@ -310,8 +310,18 @@ class DownloadQueueManager:
     """Manages the download queue for the Station Engine."""
 
     def __init__(self, storage_path=None, socketio=None):
+        from shared.runtime import get_runtime_config
+
+        self._portable = storage_path is None and get_runtime_config().instance_dir is not None
+        self._state_db = None
         if storage_path is None:
-            storage_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "download_queue.json"
+            if self._portable:
+                from shared.database import instance_db
+
+                self._state_db = instance_db()
+                storage_path = get_runtime_config().data_dir / "legacy-download-queue.json"
+            else:
+                storage_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "download_queue.json"
         self.storage_path = Path(storage_path)
         self.socketio = socketio
 
@@ -365,6 +375,9 @@ class DownloadQueueManager:
             return sorted(shared + mine)[-self.max_logs :]
 
     def _load(self):
+        if self._portable:
+            rows = self._state_db.get_instance_state("download_queue", [])
+            return rows if isinstance(rows, list) else []
         if self.storage_path.exists():
             try:
                 with open(self.storage_path, "r") as f:
@@ -375,6 +388,9 @@ class DownloadQueueManager:
         return []
 
     def save(self):
+        if self._portable:
+            self._state_db.set_instance_state("download_queue", self.queue)
+            return
         try:
             self.storage_path.parent.mkdir(parents=True, exist_ok=True)
             with self.lock:

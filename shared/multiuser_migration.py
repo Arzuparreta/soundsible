@@ -179,6 +179,25 @@ def ensure_multiuser_layout() -> Optional[dict]:
     was already in shape.
     """
     from shared.users import ROLE_ADMIN, create_user
+    from shared.runtime import get_runtime_config
+
+    if get_runtime_config().instance_dir is not None:
+        db = instance_db()
+        if db.count_users(include_disabled=True) > 0:
+            return None
+        user = create_user(DEFAULT_ADMIN_USERNAME, role=ROLE_ADMIN, display_name="Owner")
+        logger.info(
+            "multiuser migration: created first portable account %r (%s)",
+            user["username"],
+            user["id"],
+        )
+        return {
+            "user_id": user["id"],
+            "username": user["username"],
+            "adopted_existing_library": False,
+            "moved": [],
+            "download_queue_items_tagged": 0,
+        }
 
     config_dir = get_config_dir()
     config_dir.mkdir(parents=True, exist_ok=True)

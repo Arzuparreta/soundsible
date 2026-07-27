@@ -12,6 +12,7 @@ import signal
 import subprocess
 import time
 import uuid
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -26,15 +27,29 @@ OWNER_TOKEN_FILENAME = "desktop-owner-token"
 RUNTIME_STATE_FILENAME = "desktop-engine-state.json"
 
 
+def _machine_fingerprint() -> str:
+    from shared.crypto import CredentialManager
+
+    return hashlib.sha256(CredentialManager.generate_machine_key()).hexdigest()
+
+
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def default_owner_token_file(runtime: RuntimeConfig) -> Path:
+    if runtime.instance_dir is not None:
+        from shared.instance_layout import InstanceLayout
+
+        return (InstanceLayout.at(runtime.instance_dir).runtime_dir / OWNER_TOKEN_FILENAME).resolve()
     return (runtime.config_dir / OWNER_TOKEN_FILENAME).resolve()
 
 
 def runtime_state_file(runtime: RuntimeConfig) -> Path:
+    if runtime.instance_dir is not None:
+        from shared.instance_layout import InstanceLayout
+
+        return (InstanceLayout.at(runtime.instance_dir).runtime_dir / RUNTIME_STATE_FILENAME).resolve()
     return (runtime.config_dir / RUNTIME_STATE_FILENAME).resolve()
 
 
@@ -59,19 +74,7 @@ def ensure_owner_token(runtime: RuntimeConfig) -> tuple[RuntimeConfig, str]:
     except OSError:
         pass
 
-    runtime = RuntimeConfig(
-        host=runtime.host,
-        port=runtime.port,
-        config_dir=runtime.config_dir,
-        data_dir=runtime.data_dir,
-        cache_dir=runtime.cache_dir,
-        log_dir=runtime.log_dir,
-        music_dir=runtime.music_dir,
-        ui_dist=runtime.ui_dist,
-        owner_token_file=token_file,
-        lan_enabled=runtime.lan_enabled,
-        advanced_mode=runtime.advanced_mode,
-    )
+    runtime = replace(runtime, owner_token_file=token_file)
     return runtime, token
 
 
@@ -90,6 +93,8 @@ def write_runtime_state(runtime: RuntimeConfig, *, version: str, health_path: st
         "cache_dir": str(runtime.cache_dir),
         "log_dir": str(runtime.log_dir),
         "music_dir": str(runtime.music_dir),
+        "instance_dir": str(runtime.instance_dir) if runtime.instance_dir else None,
+        "machine_fingerprint": _machine_fingerprint(),
         "started_at": int(time.time()),
     }
     runtime_state_file(runtime).write_text(json.dumps(state, indent=2))
@@ -105,7 +110,10 @@ def clear_runtime_state(runtime: RuntimeConfig) -> None:
 
 
 def load_runtime_state(config_dir: str | Path) -> Optional[Dict[str, Any]]:
-    path = Path(config_dir).expanduser().resolve() / RUNTIME_STATE_FILENAME
+    root = Path(config_dir).expanduser().resolve()
+    path = root / RUNTIME_STATE_FILENAME
+    if (root / "soundsible.instance.json").is_file():
+        path = root / "runtime" / RUNTIME_STATE_FILENAME
     if not path.exists():
         return None
     try:
@@ -137,12 +145,30 @@ def stop_owned_desktop_engine(config_dir: str | Path, *, timeout_sec: float = 8.
     if not state:
         return True, "Desktop engine was not running."
 
+    root = Path(config_dir).expanduser().resolve()
+    state_instance = state.get("instance_dir")
+    if state.get("machine_fingerprint") != _machine_fingerprint() or (
+        state_instance and Path(state_instance).expanduser().resolve() != root
+    ):
+        state_path = root / RUNTIME_STATE_FILENAME
+        if (root / "soundsible.instance.json").is_file():
+            state_path = root / "runtime" / RUNTIME_STATE_FILENAME
+        try:
+            state_path.unlink()
+        except FileNotFoundError:
+            pass
+        return True, "Removed stale desktop engine state from another location or machine."
+
     pid = int(state.get("pid") or 0)
     if pid <= 0:
         return False, "Desktop engine state file is invalid."
     if not _pid_exists(pid):
         try:
-            (Path(config_dir).expanduser().resolve() / RUNTIME_STATE_FILENAME).unlink()
+            root = Path(config_dir).expanduser().resolve()
+            state_path = root / RUNTIME_STATE_FILENAME
+            if (root / "soundsible.instance.json").is_file():
+                state_path = root / "runtime" / RUNTIME_STATE_FILENAME
+            state_path.unlink()
         except FileNotFoundError:
             pass
         return True, "Desktop engine was not running."
@@ -159,7 +185,11 @@ def stop_owned_desktop_engine(config_dir: str | Path, *, timeout_sec: float = 8.
     while time.time() < deadline:
         if not _pid_exists(pid):
             try:
-                (Path(config_dir).expanduser().resolve() / RUNTIME_STATE_FILENAME).unlink()
+                root = Path(config_dir).expanduser().resolve()
+                state_path = root / RUNTIME_STATE_FILENAME
+                if (root / "soundsible.instance.json").is_file():
+                    state_path = root / "runtime" / RUNTIME_STATE_FILENAME
+                state_path.unlink()
             except FileNotFoundError:
                 pass
             return True, "Desktop engine stopped."
@@ -174,7 +204,11 @@ def stop_owned_desktop_engine(config_dir: str | Path, *, timeout_sec: float = 8.
         return False, f"Desktop engine did not stop cleanly: {exc}"
 
     try:
-        (Path(config_dir).expanduser().resolve() / RUNTIME_STATE_FILENAME).unlink()
+        root = Path(config_dir).expanduser().resolve()
+        state_path = root / RUNTIME_STATE_FILENAME
+        if (root / "soundsible.instance.json").is_file():
+            state_path = root / "runtime" / RUNTIME_STATE_FILENAME
+        state_path.unlink()
     except FileNotFoundError:
         pass
     return True, "Desktop engine stopped."

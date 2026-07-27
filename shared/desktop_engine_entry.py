@@ -42,6 +42,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--music-dir", help="Runtime music directory override.")
     parser.add_argument("--ui-dist", help="UI dist directory override.")
     parser.add_argument("--owner-token-file", help="Owner token file path override.")
+    parser.add_argument("--instance-dir", help="Portable Soundsible instance directory.")
+    parser.add_argument("--create-instance", metavar="DIR", help="Create a portable instance and exit.")
+    parser.add_argument("--instance-doctor", metavar="DIR", help="Validate a portable instance and exit.")
+    parser.add_argument("--instance-backup", metavar="DIR", help="Create a SQLite backup and exit.")
+    parser.add_argument("--migrate-instance", metavar="DIR", help="Copy legacy data into a portable instance.")
     parser.add_argument("--lan-enabled", dest="lan_enabled", action="store_true")
     parser.add_argument("--no-lan", dest="lan_enabled", action="store_false")
     parser.add_argument("--advanced-mode", action="store_true")
@@ -58,6 +63,7 @@ def seed_runtime_env_from_args(args: argparse.Namespace) -> None:
         "music_dir": "SOUNDSIBLE_MUSIC_DIR",
         "ui_dist": "SOUNDSIBLE_UI_DIST",
         "owner_token_file": "SOUNDSIBLE_OWNER_TOKEN_FILE",
+        "instance_dir": "SOUNDSIBLE_INSTANCE_DIR",
     }
     for attr, env_key in mappings.items():
         value = getattr(args, attr, None)
@@ -88,6 +94,7 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         music_dir=args.music_dir,
         ui_dist=args.ui_dist,
         owner_token_file=args.owner_token_file,
+        instance_dir=args.instance_dir,
         lan_enabled=args.lan_enabled if args.lan_enabled is not None else False,
         advanced_mode=False,
     )
@@ -118,6 +125,12 @@ def run_desktop_engine(args: argparse.Namespace) -> None:
 
     configure_ffmpeg()
     runtime = build_runtime_config(args)
+    instance_lock = None
+    if runtime.instance_dir is not None:
+        from shared.instance_layout import InstanceLayout, InstanceLock
+
+        instance_lock = InstanceLock(InstanceLayout.at(runtime.instance_dir))
+        instance_lock.acquire()
     runtime, _ = ensure_owner_token(runtime)
     configure_runtime(runtime)
 
@@ -136,6 +149,19 @@ def run_desktop_engine(args: argparse.Namespace) -> None:
         )
     finally:
         clear_runtime_state(runtime)
+        if runtime.instance_dir is not None:
+            import sqlite3
+            from shared.instance_layout import InstanceLayout
+
+            database = InstanceLayout.at(runtime.instance_dir).database
+            if database.is_file():
+                try:
+                    with sqlite3.connect(database) as conn:
+                        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                except sqlite3.Error:
+                    pass
+        if instance_lock is not None:
+            instance_lock.release()
 
 
 def bootstrap_only(music_dir: str) -> int:
@@ -148,6 +174,31 @@ def run(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     seed_runtime_env_from_args(args)
+
+    if args.create_instance:
+        from shared.instance_layout import create_instance
+
+        layout = create_instance(args.create_instance)
+        print(json.dumps({"instance_dir": str(layout.root), "instance_id": layout.instance_id}))
+        return 0
+    if args.instance_doctor:
+        from shared.instance_layout import inspect_instance
+
+        report = inspect_instance(args.instance_doctor)
+        print(json.dumps(report, indent=2))
+        return 0 if report.get("ok") else 1
+    if args.instance_backup:
+        from shared.instance_layout import backup_database
+
+        path = backup_database(args.instance_backup)
+        print(json.dumps({"backup": str(path)}))
+        return 0
+    if args.migrate_instance:
+        from shared.portable_migration import migrate_legacy_instance
+
+        report = migrate_legacy_instance(args.migrate_instance)
+        print(json.dumps(report, indent=2))
+        return 0
 
     if args.bootstrap:
         return bootstrap_only(args.bootstrap)

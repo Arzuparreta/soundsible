@@ -261,8 +261,18 @@ def delete_user(user_id: str, *, purge_files: bool = True) -> bool:
     if current.get("role") == ROLE_ADMIN and _admin_count(db) <= 1:
         raise UserError("The instance needs at least one admin.")
 
+    from shared.runtime import get_runtime_config
+
+    runtime = get_runtime_config()
+    if runtime.instance_dir is not None:
+        # FTS5 virtual tables do not support foreign keys, so clear the user's
+        # search rows before the relational tables cascade from users.
+        from shared.database import user_db
+
+        user_db(user_id).clear_all()
     db.delete_user_row(user_id)
-    if purge_files:
+
+    if purge_files and runtime.instance_dir is None:
         from shared.user_context import user_config_dir, user_data_dir
 
         for path in (user_config_dir(user_id, create=False), user_data_dir(user_id, create=False)):

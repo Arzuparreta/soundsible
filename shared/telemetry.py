@@ -187,10 +187,12 @@ class TelemetryWriter:
         *,
         max_bytes: Optional[int] = None,
         max_rotated: Optional[int] = None,
+        filename_prefix: str = "",
     ) -> None:
         self._telemetry_dir = telemetry_dir
         self._max_bytes = max_bytes if max_bytes is not None else _max_file_bytes()
         self._max_rotated = max_rotated if max_rotated is not None else _max_rotated()
+        self._filename_prefix = filename_prefix
         self._sinks: dict[str, _CategorySink] = {}
 
     def close(self) -> None:
@@ -203,7 +205,7 @@ class TelemetryWriter:
         if sink is None:
             sink = _CategorySink(
                 self._telemetry_dir,
-                _CATEGORY_FILENAMES[norm_category],
+                f"{self._filename_prefix}{_CATEGORY_FILENAMES[norm_category]}",
                 self._max_bytes,
                 self._max_rotated,
             )
@@ -249,9 +251,21 @@ def reset_telemetry() -> None:
 
 def user_telemetry_dir(user_id: Optional[str] = None) -> Path:
     """Telemetry directory for ``user_id`` (default: the bound user)."""
+    runtime = get_runtime_config()
+    if runtime.instance_dir is not None:
+        return _instance_telemetry_dir(runtime)
     from shared.user_context import user_data_dir
 
     return user_data_dir(user_id) / "telemetry"
+
+
+def user_telemetry_file(category: str, user_id: Optional[str] = None) -> Path:
+    from shared.user_context import current_user_id
+
+    norm = _normalize_category(category)
+    uid = user_id or current_user_id()
+    prefix = f"{uid}-" if uid and get_runtime_config().instance_dir is not None else ""
+    return user_telemetry_dir(uid) / f"{prefix}{_CATEGORY_FILENAMES[norm]}"
 
 
 def _writer_for(norm_category: str) -> TelemetryWriter:
@@ -266,7 +280,8 @@ def _writer_for(norm_category: str) -> TelemetryWriter:
             if writer is None:
                 directory = user_telemetry_dir(user_id)
                 directory.mkdir(parents=True, exist_ok=True)
-                writer = TelemetryWriter(directory)
+                prefix = f"{user_id}-" if get_runtime_config().instance_dir is not None else ""
+                writer = TelemetryWriter(directory, filename_prefix=prefix)
                 _user_writers[user_id] = writer
             return writer
         logger.debug("telemetry: %s emitted with no user bound; using instance sink", norm_category)

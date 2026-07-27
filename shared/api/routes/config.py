@@ -49,9 +49,9 @@ def update_config():
         except Exception:
             pass
     try:
-        config = PlayerConfig.from_dict(data)
-        with open(config_path, "w") as f:
-            f.write(config.to_json())
+        from shared.config_store import save_config_dict
+
+        save_config_dict(config_path, data)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
     # Storage backend changed: every account's library manager holds a provider

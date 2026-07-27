@@ -9,7 +9,7 @@ Soundsible is a **self-hosted music environment**: a Python **Station Engine** e
 At runtime you typically have one of these engine modes:
 
 - **Legacy daemon** — one process listening on **port 5005** by default (`STATION_PORT` in `shared/constants.py`). It runs Flask, Socket.IO (async mode **gevent**), and background work (download queue, file watchers, optional library sync).
-- **Desktop engine** — one process started with `run.py --desktop-engine` or `soundsible_engine.py`. It binds to **`127.0.0.1` on a random free port by default**, writes runtime state under the app config dir, and emits a single JSON readiness line on stdout before normal startup logs.
+- **Desktop engine** — one process started with `run.py --desktop-engine` or `soundsible_engine.py`. It binds to **`127.0.0.1` on a random free port by default**, writes runtime state under the app config dir (or `<instance>/runtime/` in portable mode), and emits a single JSON readiness line on stdout before normal startup logs.
 - **Web launcher** — optional Flask app on **port 5099** (`start_launcher.py` / `launcher_web/`). It does **not** serve the player; it only helps start or stop the engine and run first-time setup UI.
 
 The **Station** UI is a responsive SolidJS application under `ui_web/`, served by the engine at **`/player/`** and **`/player/desktop/`**. Both routes use the same frontend; the desktop route additionally receives the owner-token bootstrap required by the desktop shell. The UI talks to the engine over REST and WebSocket (Socket.IO).
@@ -54,7 +54,7 @@ flowchart LR
 ```
 
 - **Starting the legacy daemon**: `shared/daemon_launcher.py` spawns `venv` Python with `run.py --daemon`, which calls `shared.api.start_api()` and binds **0.0.0.0:5005**.
-- **Starting the desktop engine**: `soundsible_engine.py` or `run.py --desktop-engine` builds a `RuntimeConfig`, creates a short owner token file plus matching scoped auth token, writes `desktop-engine-state.json` under the config dir, and then starts `shared.api.start_api()` on loopback.
+- **Starting the desktop engine**: `soundsible_engine.py` or `run.py --desktop-engine` builds a `RuntimeConfig`, creates a short owner token file plus matching scoped auth token, writes `desktop-engine-state.json`, and then starts `shared.api.start_api()` on loopback. Portable mode keeps both runtime files under `<instance>/runtime/`.
 - **CORS**: REST CORS defaults allow localhost, private LAN, and Tailscale-style ranges unless overridden by `SOUNDSIBLE_ALLOWED_ORIGINS`. Socket.IO CORS can be tightened with `SOUNDSIBLE_SOCKET_CORS_ORIGINS`.
 
 ### 4. Station Engine internals
@@ -69,7 +69,7 @@ The Flask application lives in `shared/api/__init__.py`. It:
 **Desktop sidecar contract**:
 
 - The desktop engine emits one newline-delimited JSON readiness event on stdout with `base_url`, `host`, `port`, `pid`, `version`, `health`, and `owner_token_file`.
-- Runtime state is mirrored to `desktop-engine-state.json` in the config dir so a future desktop shell can stop only the owned process by PID instead of killing by port.
+- Runtime state is mirrored to `desktop-engine-state.json` so the desktop shell can stop only the owned process by PID instead of killing by port.
 - `GET /api/health` returns runtime directories, uptime, owner token file path, library stats, and active background-job state for shell diagnostics.
 - `/player/desktop/` now receives the owner token through HTML bootstrap injection (`meta` + `window.__SOUNDSIBLE_OWNER_TOKEN__`) so the desktop player can call owner-protected routes without query-string hacks.
 
@@ -98,7 +98,10 @@ Catalog resolve queues the winner's stream-URL resolution on the **preview prefe
 
 **Download path**: queued items are processed in the background; completed tracks are merged into the main library metadata (`_sync_odst_to_main_core` and related helpers). FFmpeg and yt-dlp are used via `odst_tool/`.
 
-**Library path**: `player/library.py` loads **`library.json`** (see `LIBRARY_METADATA_FILENAME`) and **`~/.config/soundsible/config.json`** for `PlayerConfig`, talks to **SQLite** (`shared/database.py`) for fast search and manifest sync, and can use **storage providers** from `setup_tool/` for cloud-backed libraries.
+**Library path**: legacy mode loads **`library.json`** and uses SQLite as its
+search index. Portable mode makes **`soundsible.db` canonical** and derives JSON
+views from it. `player/library.py` supports both and can use storage providers
+from `setup_tool/` for cloud-backed libraries.
 
 **Device registry and handoff**:
 
@@ -140,9 +143,9 @@ Catalog resolve queues the winner's stream-URL resolution on the **preview prefe
 **Local recommendation profile** (`shared/discovery_intelligence.py`,
 `shared/database.py`):
 
-- Each account has transactional `discovery_events` and
-  `discovery_signals` tables in its own `library.db`, plus an inspectable local
-  `listening-events.jsonl`.
+- Each account has transactional `discovery_events` and `discovery_signals`.
+  They live in the unified database in portable mode and in the account
+  `library.db` in legacy mode. Listening telemetry remains inspectable JSONL.
 - Discover, Radio, Auto Mode, and podcast recommendations use the same exact
   identity multiplier. `not_interested` is soft, monotonic, undoable, and
   bounded above zero; it never becomes a blacklist. Search and manual queues do
@@ -162,6 +165,13 @@ A failed load surfaces on two channels (`play()` rejects **and** the element fir
 
 One engine serves **several accounts**. State splits in two: what belongs to the
 machine, and what belongs to a person.
+
+In portable mode these logical boundaries share one transactional
+`<instance>/soundsible.db`; user-owned tables carry `user_id` foreign keys and
+shared tables do not. Audio is always under `<instance>/media/tracks`. No
+per-user directories are created. See [PORTABLE_INSTANCE.md](PORTABLE_INSTANCE.md).
+
+The following is the compatible legacy split-directory layout:
 
 **Instance-level** (one copy, admin-managed):
 

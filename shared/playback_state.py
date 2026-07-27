@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from shared.user_context import current_user_id, user_config_dir
+from shared.runtime import get_runtime_config
 
 DEFAULT_SCOPE = "default"
 ACTIVE_DEVICE_TTL_SEC = 90
@@ -36,6 +37,14 @@ def _state_path(scope: str) -> Path:
 
         return get_config_dir() / f"playback_state_{scope}.json"
     return user_config_dir(scope) / "playback_state.json"
+
+
+def _portable_state_db(scope: str):
+    if scope == DEFAULT_SCOPE or get_runtime_config().instance_dir is None:
+        return None
+    from shared.database import user_db
+
+    return user_db(scope)
 
 
 def _cleanup_scope(scope: str) -> None:
@@ -274,14 +283,20 @@ def get_state(
                 return best
 
         # Note: Fall back to persisted file (same device or other; client decides dialog vs auto-restore)
-        path = _state_path(scope)
-        if not path.exists():
-            return None
-        try:
-            raw = path.read_text(encoding="utf-8")
-            state = json.loads(raw)
-        except (json.JSONDecodeError, OSError):
-            return None
+        portable_db = _portable_state_db(scope)
+        if portable_db is not None:
+            state = portable_db.get_state("playback", None)
+            if not isinstance(state, dict):
+                return None
+        else:
+            path = _state_path(scope)
+            if not path.exists():
+                return None
+            try:
+                raw = path.read_text(encoding="utf-8")
+                state = json.loads(raw)
+            except (json.JSONDecodeError, OSError):
+                return None
         updated = state.get("updated_at") or 0
         if STATE_TTL_SEC and (now - updated) > STATE_TTL_SEC:
             return None
@@ -319,9 +334,13 @@ def put_state(scope: str, payload: dict[str, Any]) -> None:
             "device_type": registered.get("device_type") if registered else payload.get("device_type"),
             "last_seen_ts": now,
         }
-    path = _state_path(scope)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        path.write_text(json.dumps(state, indent=2), encoding="utf-8")
-    except OSError:
-        pass
+    portable_db = _portable_state_db(scope)
+    if portable_db is not None:
+        portable_db.set_state("playback", state)
+    else:
+        path = _state_path(scope)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        except OSError:
+            pass

@@ -91,16 +91,28 @@ class RuntimeConfig:
     owner_token_file: Optional[Path]
     lan_enabled: bool
     advanced_mode: bool
+    instance_dir: Optional[Path] = None
 
     @classmethod
     def default(cls, env: Optional[Mapping[str, str]] = None) -> "RuntimeConfig":
         environment = env or os.environ
         dirs = _platform_dirs()
-        config_dir = _optional_path(environment.get("SOUNDSIBLE_CONFIG_DIR")) or Path(dirs.user_config_path).resolve()
-        data_dir = _optional_path(environment.get("SOUNDSIBLE_DATA_DIR")) or Path(dirs.user_data_path).resolve()
-        cache_dir = _optional_path(environment.get("SOUNDSIBLE_CACHE_DIR")) or Path(dirs.user_cache_path).resolve()
-        log_dir = _optional_path(environment.get("SOUNDSIBLE_LOG_DIR")) or Path(dirs.user_log_path).resolve()
-        music_dir = _optional_path(environment.get("SOUNDSIBLE_MUSIC_DIR"))
+        instance_dir = _optional_path(environment.get("SOUNDSIBLE_INSTANCE_DIR"))
+        if instance_dir is not None:
+            from shared.instance_layout import open_instance
+
+            layout = open_instance(instance_dir)
+            config_dir = layout.root
+            data_dir = layout.data_dir
+            cache_dir = layout.cache_dir
+            log_dir = layout.log_dir
+            music_dir = layout.media_dir
+        else:
+            config_dir = _optional_path(environment.get("SOUNDSIBLE_CONFIG_DIR")) or Path(dirs.user_config_path).resolve()
+            data_dir = _optional_path(environment.get("SOUNDSIBLE_DATA_DIR")) or Path(dirs.user_data_path).resolve()
+            cache_dir = _optional_path(environment.get("SOUNDSIBLE_CACHE_DIR")) or Path(dirs.user_cache_path).resolve()
+            log_dir = _optional_path(environment.get("SOUNDSIBLE_LOG_DIR")) or Path(dirs.user_log_path).resolve()
+            music_dir = _optional_path(environment.get("SOUNDSIBLE_MUSIC_DIR"))
         if music_dir is None:
             persisted = load_persisted_music_dir(config_dir)
             music_dir = persisted if persisted is not None else _default_music_dir()
@@ -126,6 +138,7 @@ class RuntimeConfig:
             owner_token_file=owner_token_file,
             lan_enabled=lan_enabled,
             advanced_mode=advanced_mode,
+            instance_dir=instance_dir,
         )
 
     def resolved_bind(self) -> tuple[str, int]:
@@ -170,21 +183,39 @@ def runtime_with_overrides(
     owner_token_file: Optional[str | Path] = None,
     lan_enabled: Optional[bool] = None,
     advanced_mode: Optional[bool] = None,
+    instance_dir: Optional[str | Path] = None,
 ) -> RuntimeConfig:
     current = base or get_runtime_config()
+    resolved_instance = _optional_path(instance_dir) if instance_dir is not None else current.instance_dir
+    if resolved_instance is not None:
+        from shared.instance_layout import open_instance
+
+        layout = open_instance(resolved_instance)
+        derived_config = layout.root
+        derived_data = layout.data_dir
+        derived_cache = layout.cache_dir
+        derived_log = layout.log_dir
+        derived_music = layout.media_dir
+    else:
+        derived_config = current.config_dir
+        derived_data = current.data_dir
+        derived_cache = current.cache_dir
+        derived_log = current.log_dir
+        derived_music = current.music_dir
     return replace(
         current,
         host=host if host is not None else current.host,
         port=port if port is not None else current.port,
-        config_dir=_optional_path(config_dir) or current.config_dir,
-        data_dir=_optional_path(data_dir) or current.data_dir,
-        cache_dir=_optional_path(cache_dir) or current.cache_dir,
-        log_dir=_optional_path(log_dir) or current.log_dir,
-        music_dir=_optional_path(music_dir) or current.music_dir,
+        config_dir=_optional_path(config_dir) or derived_config,
+        data_dir=_optional_path(data_dir) or derived_data,
+        cache_dir=_optional_path(cache_dir) or derived_cache,
+        log_dir=_optional_path(log_dir) or derived_log,
+        music_dir=_optional_path(music_dir) or derived_music,
         ui_dist=_optional_path(ui_dist) if ui_dist is not None else current.ui_dist,
         owner_token_file=_optional_path(owner_token_file) if owner_token_file is not None else current.owner_token_file,
         lan_enabled=current.lan_enabled if lan_enabled is None else lan_enabled,
         advanced_mode=current.advanced_mode if advanced_mode is None else advanced_mode,
+        instance_dir=resolved_instance,
     )
 
 

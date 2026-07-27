@@ -8,6 +8,7 @@ from .config import DEFAULT_WORKERS, LIBRARY_FILENAME, DEFAULT_COOKIE_BROWSER, D
 from .models import LibraryMetadata
 from .youtube_downloader import YouTubeDownloader
 from .cloud_sync import CloudSync
+from shared.runtime import get_runtime_config
 
 
 class ODSTDownloader:
@@ -28,12 +29,23 @@ class ODSTDownloader:
 
         self.cloud = CloudSync(self.output_dir)
         self.library_path = self.output_dir / LIBRARY_FILENAME
+        self._portable = get_runtime_config().instance_dir is not None
+        self._state_db = None
+        if self._portable:
+            from shared.database import instance_db
+
+            self._state_db = instance_db()
         self.library = self._load_library()
         self.downloader = YouTubeDownloader(
             self.output_dir, cookie_browser=cookie_browser, cookie_file=cookie_file, quality=quality
         )
 
     def _load_library(self) -> LibraryMetadata:
+        if self._portable:
+            raw = self._state_db.get_instance_state("physical_catalog", None)
+            if isinstance(raw, dict):
+                return LibraryMetadata.from_dict(raw)
+            return LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
         if self.library_path.exists():
             try:
                 with open(self.library_path, "r") as f:
@@ -49,6 +61,20 @@ class ODSTDownloader:
 
     def save_library(self) -> None:
         with self._lock:
+            if self._portable:
+                self._state_db.set_instance_state(
+                    "physical_catalog",
+                    {
+                        "version": self.library.version,
+                        "tracks": [track.to_dict() for track in self.library.tracks],
+                        "playlists": self.library.playlists,
+                        "settings": self.library.settings,
+                        "last_updated": self.library.last_updated,
+                        "podcast_subscriptions": self.library.podcast_subscriptions,
+                        "podcast_episode_cache": self.library.podcast_episode_cache,
+                    },
+                )
+                return
             # Preserve podcast subscription metadata written by the Station API (same library.json).
             if self.library_path.exists():
                 try:

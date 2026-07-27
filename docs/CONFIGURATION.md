@@ -44,6 +44,9 @@ The current runtime layer supports these top-level environment variables:
 - `SOUNDSIBLE_OWNER_TOKEN_FILE`
 - `SOUNDSIBLE_LAN_ENABLED`
 - `SOUNDSIBLE_ADVANCED_MODE`
+- `SOUNDSIBLE_INSTANCE_DIR` — opens a portable instance and derives every runtime
+  path from it. This takes precedence over the separate config/data/cache/log/music
+  directories.
 - `SOUNDSIBLE_YT_SEARCH_SOURCE` — `ytmusic` (default) or `youtube`. YouTube Music
   gives cleaner metadata but is not always reachable from a datacenter IP; set it
   to `youtube` on a VPS whose searches come back empty.
@@ -61,7 +64,19 @@ Desktop-engine mode creates and uses:
 - `desktop-owner-token` in the Soundsible config directory by default
 - `desktop-engine-state.json` in the Soundsible config directory
 
+For a portable instance both files live under `<instance>/runtime/`.
+
 `desktop-owner-token` is the current owner credential for the local desktop UI and appliance shell work. `desktop-engine-state.json` records the owned process/runtime details so a future shell can stop the correct PID without killing by port.
+
+### 2C. Portable instance mode
+
+Portable mode fixes the shared music location to `<instance>/media`; the setup
+API will not accept an external music directory. All durable user and instance
+state is stored in `<instance>/soundsible.db`. Cloud credentials remain
+machine-local and must be entered again after moving to another computer.
+
+See [PORTABLE_INSTANCE.md](PORTABLE_INSTANCE.md) for layout, migration, backup,
+locking, and network-filesystem constraints.
 
 ### 3. Downloader / ODST settings
 
@@ -196,7 +211,8 @@ Endpoints:
 
 Sessions are 90-day HttpOnly cookies (`sb_session`), stored server-side as hashes
 only and revocable per account from the People screen. Deleting an account removes
-that person's directories; shared music files are never touched.
+that person's database rows; shared music files are never touched. Legacy
+split-directory installs also remove that account's legacy state directories.
 
 ### 6A. Pairing and admin auth
 

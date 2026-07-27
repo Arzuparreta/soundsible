@@ -12,7 +12,7 @@ from typing import Any, Iterable
 
 from shared.models import LibraryMetadata, Track
 from shared.database import user_db
-from shared.telemetry import emit, user_telemetry_dir
+from shared.telemetry import emit, user_telemetry_file
 from shared.user_context import user_config_dir
 
 SETTINGS_VERSION = 1
@@ -71,7 +71,7 @@ def _listening_events_paths() -> list[Path]:
     directory — recommendations must never be built from somebody else's plays.
     """
     try:
-        base = user_telemetry_dir() / "listening-events.jsonl"
+        base = user_telemetry_file("listening-events")
     except Exception:
         return []
     paths = [base]
@@ -144,6 +144,16 @@ def _settings_path() -> Path:
 
 
 def load_discovery_settings() -> dict[str, Any]:
+    from shared.runtime import get_runtime_config
+
+    if get_runtime_config().instance_dir is not None:
+        from shared.database import user_db
+
+        data = user_db().get_state("discovery_settings", {})
+        out = dict(DEFAULT_SETTINGS)
+        if isinstance(data, dict) and isinstance(data.get("learning_enabled"), bool):
+            out["learning_enabled"] = data["learning_enabled"]
+        return out
     path = _settings_path()
     data: dict[str, Any] = {}
     try:
@@ -164,6 +174,13 @@ def save_discovery_settings(patch: dict[str, Any]) -> dict[str, Any]:
     if "learning_enabled" in patch:
         current["learning_enabled"] = bool(patch["learning_enabled"])
     current["v"] = SETTINGS_VERSION
+    from shared.runtime import get_runtime_config
+
+    if get_runtime_config().instance_dir is not None:
+        from shared.database import user_db
+
+        user_db().set_state("discovery_settings", current)
+        return current
     path = _settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(current, indent=2, sort_keys=True), encoding="utf-8")

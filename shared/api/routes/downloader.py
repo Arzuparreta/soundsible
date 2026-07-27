@@ -387,6 +387,14 @@ def start_download_legacy():
 def get_downloader_config():
     api = _get_api()
     is_trusted = api["is_trusted_network"](request.remote_addr)
+    from shared.runtime import get_runtime_config
+
+    runtime = get_runtime_config()
+    portable_config = None
+    if runtime.instance_dir is not None:
+        from shared.config_store import load_portable_downloader_config
+
+        portable_config = load_portable_downloader_config()
     from dotenv import dotenv_values
     # Note: Resolve .env from the project root so config and startup use the same file regardless of CWD.
     env_path = Path(__file__).resolve().parents[3] / "odst_tool" / ".env"
@@ -401,6 +409,18 @@ def get_downloader_config():
             return "****"
         return f"{s[:4]}...{s[-4:]}****"
 
+    if portable_config is not None:
+        env_vars = {
+            "DEFAULT_QUALITY": portable_config.get("quality", "high"),
+            "YTDLP_AUTO_UPDATE": (
+                "true" if portable_config.get("auto_update_ytdlp") else "false"
+            ),
+            "OUTPUT_DIR": str(runtime.music_dir),
+            "R2_ACCOUNT_ID": portable_config.get("r2_account_id", ""),
+            "R2_ACCESS_KEY_ID": portable_config.get("r2_access_key", ""),
+            "R2_SECRET_ACCESS_KEY": portable_config.get("r2_secret_key", ""),
+            "R2_BUCKET_NAME": portable_config.get("r2_bucket", ""),
+        }
     auto_update = (env_vars.get("YTDLP_AUTO_UPDATE", "") or "false").strip().lower() in ("true", "1")
     config = {
         "quality": env_vars.get("DEFAULT_QUALITY", "high"),
@@ -438,7 +458,40 @@ def get_downloader_config():
 def update_downloader_config():
     import os
     api = _get_api()
-    data = request.json
+    data = request.json or {}
+    from shared.runtime import get_runtime_config
+
+    runtime = get_runtime_config()
+    if runtime.instance_dir is not None:
+        from shared.config_store import save_portable_downloader_config
+
+        config = save_portable_downloader_config(data)
+        env_map = {
+            "quality": "DEFAULT_QUALITY",
+            "r2_account_id": "R2_ACCOUNT_ID",
+            "r2_access_key": "R2_ACCESS_KEY_ID",
+            "r2_secret_key": "R2_SECRET_ACCESS_KEY",
+            "r2_bucket": "R2_BUCKET_NAME",
+        }
+        for key, env_key in env_map.items():
+            value = config.get(key)
+            if value is not None:
+                os.environ[env_key] = str(value)
+        os.environ["OUTPUT_DIR"] = str(runtime.music_dir)
+        os.environ["YTDLP_AUTO_UPDATE"] = (
+            "true" if config.get("auto_update_ytdlp") else "false"
+        )
+        import shared.api as api_mod
+
+        api_mod.downloader_service = None
+        return jsonify(
+            {
+                "status": "updated",
+                "output_dir": str(runtime.music_dir),
+                "portable": True,
+            }
+        )
+
     # Note: Keep writer in sync with reader and API startup: always use repo-root-based .env.
     env_path = Path(__file__).resolve().parents[3] / "odst_tool" / ".env"
     from dotenv import set_key, dotenv_values

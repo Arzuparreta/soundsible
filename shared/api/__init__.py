@@ -652,6 +652,22 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
     from dotenv import dotenv_values
     _env_path = Path(_REPO_ROOT) / "odst_tool" / ".env"
     env_vars = dotenv_values(_env_path) if _env_path.exists() else {}
+    runtime = get_runtime_config()
+    if runtime.instance_dir is not None:
+        from shared.config_store import load_portable_downloader_config
+
+        portable = load_portable_downloader_config()
+        env_vars = {
+            "OUTPUT_DIR": str(runtime.music_dir),
+            "DEFAULT_QUALITY": str(portable.get("quality") or "high"),
+            "YTDLP_AUTO_UPDATE": (
+                "true" if portable.get("auto_update_ytdlp") else "false"
+            ),
+            "R2_ACCOUNT_ID": str(portable.get("r2_account_id") or ""),
+            "R2_ACCESS_KEY_ID": str(portable.get("r2_access_key") or ""),
+            "R2_SECRET_ACCESS_KEY": str(portable.get("r2_secret_key") or ""),
+            "R2_BUCKET_NAME": str(portable.get("r2_bucket") or ""),
+        }
 
     # Note: 1. Determine the target output directory (prefer app_config set at startup)
     from shared.app_config import get_output_dir
@@ -1460,6 +1476,23 @@ def health_check():
             },
         }
     )
+    if runtime.instance_dir is not None:
+        try:
+            import sqlite3
+            from shared.instance_layout import FORMAT_VERSION, InstanceLayout
+
+            layout = InstanceLayout.at(runtime.instance_dir)
+            with sqlite3.connect(layout.database) as conn:
+                schema_version = conn.execute("PRAGMA user_version").fetchone()[0]
+            payload["instance"] = {
+                "id": layout.instance_id,
+                "root": str(layout.root),
+                "format_version": FORMAT_VERSION,
+                "schema_version": schema_version,
+                "portable": True,
+            }
+        except Exception as exc:
+            payload["instance"] = {"portable": True, "error": str(exc)}
     return jsonify(payload)
 
 @app.route('/')
@@ -1474,6 +1507,9 @@ def home():
 
 def _resolve_output_dir():
     """Resolve OUTPUT_DIR once at startup (only place that may read odst_tool/.env)."""
+    runtime = get_runtime_config()
+    if runtime.instance_dir is not None:
+        return runtime.music_dir
     target = os.getenv("OUTPUT_DIR")
     if not target:
         try:
@@ -1583,13 +1619,14 @@ def start_api(
     if _out:
         set_app_output_dir(_out)
         logger.info("API: Output dir set to %s", _out)
-        # Note: So desktop player finds path when it reads the runtime config dir output_dir file
-        try:
-            cfg = get_config_dir()
-            cfg.mkdir(parents=True, exist_ok=True)
-            (cfg / "output_dir").write_text(str(_out))
-        except Exception:
-            pass
+        if runtime.instance_dir is None:
+            # Legacy installs persist this path for the standalone player.
+            try:
+                cfg = get_config_dir()
+                cfg.mkdir(parents=True, exist_ok=True)
+                (cfg / "output_dir").write_text(str(_out))
+            except Exception:
+                pass
 
     _defer_ytdlp_thread = False
     _run_ytdlp_update = None

@@ -12,7 +12,7 @@ from shared.models import LibraryMetadata, Track, PlayerConfig, StorageProvider,
 from shared.constants import LIBRARY_METADATA_FILENAME
 from shared.path_resolver import resolve_local_track_path
 from shared.app_config import get_output_dir
-from shared.runtime import get_config_dir
+from shared.runtime import get_config_dir, get_runtime_config
 from shared.track_identity import preserve_track_identity
 from setup_tool.provider_factory import StorageProviderFactory
 
@@ -65,8 +65,8 @@ def _music_dir_manifest_is_shared() -> bool:
         return False
 from setup_tool.audio import AudioProcessor
 from setup_tool.uploader import UploadEngine
-from shared.database import USER_DB_FILENAME, DatabaseManager
-from shared.user_context import user_config_dir
+from shared.database import USER_DB_FILENAME, DatabaseManager, user_db
+from shared.user_context import require_user_id, user_config_dir
 import shutil
 import tempfile
 
@@ -88,9 +88,17 @@ class LibraryManager:
         # Resolved once at construction. A manager belongs to one person, so
         # its paths must not follow whichever user is bound when a background
         # save fires.
-        self.user_config_dir = user_config_dir()
-        self.manifest_path = self.user_config_dir / LIBRARY_METADATA_FILENAME
-        self.db = DatabaseManager(str(self.user_config_dir / USER_DB_FILENAME))
+        self.user_id = require_user_id()
+        runtime = get_runtime_config()
+        self.portable = runtime.instance_dir is not None
+        if self.portable:
+            self.user_config_dir = runtime.config_dir
+            self.manifest_path = runtime.data_dir / f"library-export-{self.user_id}.json"
+            self.db = user_db(self.user_id)
+        else:
+            self.user_config_dir = user_config_dir()
+            self.manifest_path = self.user_config_dir / LIBRARY_METADATA_FILENAME
+            self.db = DatabaseManager(str(self.user_config_dir / USER_DB_FILENAME))
         self._manifest_mtime = 0
         self._lock = threading.Lock()
         # Paths whose write failed once (e.g. read-only music mount). Logged once,
@@ -117,13 +125,14 @@ class LibraryManager:
         try:
             config_path = get_config_dir() / "config.json"
             if config_path.exists():
-                with open(config_path, 'r') as f:
-                    data = json.load(f)
+                from shared.config_store import load_config_dict
+
+                data = load_config_dict(config_path)
                     
                 self.config = PlayerConfig.from_dict(data)
                 
                 # Note: Migration if it was plain text on disk, save it back encrypted
-                if not data.get('is_encrypted', False):
+                if not self.portable and not data.get('is_encrypted', False):
                     self._log("Migrating config to encrypted format...")
                     with open(config_path, 'w') as f:
                         f.write(self.config.to_json())
@@ -150,7 +159,10 @@ class LibraryManager:
                 except Exception:
                     pass
             elif self.config.provider == StorageProvider.LOCAL:
-                creds = {'base_path': self.config.endpoint}
+                if self.portable:
+                    creds = {'base_path': str(get_runtime_config().music_dir)}
+                else:
+                    creds = {'base_path': self.config.endpoint}
             elif self.config.provider == StorageProvider.BACKBLAZE_B2:
                 # Note: B2 uses application_key_id/application_key
                 creds = {
@@ -189,6 +201,9 @@ class LibraryManager:
             
         with self._lock:
             try:
+                if self.portable:
+                    self.db.sync_from_metadata(self.metadata)
+                    return True
                 json_str = self.metadata.to_json()
                 
                 # Note: 1. Local cache file
@@ -236,6 +251,15 @@ class LibraryManager:
         2. Merge with any local deep-scanned tracks
         3. Save unified manifest to cloud and local cache
         """
+        if self.portable:
+            stored = self.db.load_metadata()
+            if stored is None:
+                stored = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+                self.metadata = stored
+                return self._save_metadata()
+            self.metadata = stored
+            return True
+
         # Note: Allow override or use class default
         is_silent = silent if silent is not None else self.silent
         def _log_local(msg):
@@ -434,6 +458,14 @@ class LibraryManager:
 
     def refresh_if_stale(self):
         """Reload metadata from disk if the file has changed."""
+        if self.portable:
+            stored = self.db.load_metadata()
+            if stored is None:
+                return False
+            if self.metadata is None or stored.last_updated != self.metadata.last_updated:
+                self.metadata = stored
+                return True
+            return False
         cache_path = self.manifest_path
         if cache_path.exists():
             mtime = cache_path.stat().st_mtime
@@ -486,6 +518,12 @@ class LibraryManager:
         Returns:
             True if cache loaded successfully, False otherwise
         """
+        if self.portable:
+            stored = self.db.load_metadata()
+            if stored is None:
+                return False
+            self.metadata = stored
+            return True
         try:
             if cache_path.exists():
                 json_str = cache_path.read_text()

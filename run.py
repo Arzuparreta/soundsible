@@ -29,6 +29,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--music-dir", help="Runtime music directory override.")
     parser.add_argument("--ui-dist", help="UI dist directory override.")
     parser.add_argument("--owner-token-file", help="Owner token file path override.")
+    parser.add_argument("--instance-dir", help="Portable Soundsible instance directory.")
+    parser.add_argument("--create-instance", metavar="DIR", help="Create a portable instance and exit.")
+    parser.add_argument("--instance-doctor", metavar="DIR", help="Validate a portable instance and exit.")
+    parser.add_argument("--instance-backup", metavar="DIR", help="Create an online SQLite backup and exit.")
+    parser.add_argument("--migrate-instance", metavar="DIR", help="Copy the current installation into a portable instance.")
     parser.add_argument("--lan-enabled", dest="lan_enabled", action="store_true", help="Enable LAN access in runtime config.")
     parser.add_argument("--no-lan", dest="lan_enabled", action="store_false", help="Disable LAN access in runtime config.")
     parser.add_argument("--advanced-mode", action="store_true", help="Enable advanced/headless runtime mode.")
@@ -50,6 +55,7 @@ def _seed_runtime_env_from_args(args: argparse.Namespace) -> None:
         "music_dir": "SOUNDSIBLE_MUSIC_DIR",
         "ui_dist": "SOUNDSIBLE_UI_DIST",
         "owner_token_file": "SOUNDSIBLE_OWNER_TOKEN_FILE",
+        "instance_dir": "SOUNDSIBLE_INSTANCE_DIR",
     }
     for attr, env_key in mappings.items():
         value = getattr(args, attr, None)
@@ -320,6 +326,7 @@ def _build_runtime_config(args: argparse.Namespace, *, desktop_defaults: bool) -
         music_dir=args.music_dir,
         ui_dist=args.ui_dist,
         owner_token_file=args.owner_token_file,
+        instance_dir=args.instance_dir,
         lan_enabled=args.lan_enabled,
         advanced_mode=advanced_mode,
     )
@@ -348,10 +355,30 @@ def _run_legacy_daemon(args: argparse.Namespace) -> None:
     console.print("[bold green]Soundsible Daemon is running.[/bold green]")
     from shared.api import start_api
 
-    try:
-        start_api(host=runtime.host, port=runtime.port, runtime_config=runtime)
-    except (KeyboardInterrupt, SystemExit):
-        console.print("[yellow]Shutting down...[/yellow]")
+    if runtime.instance_dir is None:
+        try:
+            start_api(host=runtime.host, port=runtime.port, runtime_config=runtime)
+        except (KeyboardInterrupt, SystemExit):
+            console.print("[yellow]Shutting down...[/yellow]")
+        return
+
+    from shared.instance_layout import InstanceLayout, InstanceLock
+
+    with InstanceLock(InstanceLayout.at(runtime.instance_dir)):
+        try:
+            start_api(host=runtime.host, port=runtime.port, runtime_config=runtime)
+        except (KeyboardInterrupt, SystemExit):
+            console.print("[yellow]Shutting down...[/yellow]")
+        finally:
+            import sqlite3
+
+            database = InstanceLayout.at(runtime.instance_dir).database
+            if database.is_file():
+                try:
+                    with sqlite3.connect(database) as conn:
+                        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                except sqlite3.Error:
+                    pass
 
 
 def _run_desktop_engine(args: argparse.Namespace) -> None:
@@ -681,6 +708,34 @@ class SoundsibleLauncher:
 
 if __name__ == "__main__":
     args = build_parser().parse_args()
+    if args.create_instance:
+        import json
+        from shared.instance_layout import create_instance
+
+        _layout = create_instance(args.create_instance)
+        print(json.dumps({"instance_dir": str(_layout.root), "instance_id": _layout.instance_id}))
+        raise SystemExit(0)
+    if args.instance_doctor:
+        import json
+        from shared.instance_layout import inspect_instance
+
+        _report = inspect_instance(args.instance_doctor)
+        print(json.dumps(_report, indent=2))
+        raise SystemExit(0 if _report.get("ok") else 1)
+    if args.instance_backup:
+        import json
+        from shared.instance_layout import backup_database
+
+        _backup = backup_database(args.instance_backup)
+        print(json.dumps({"backup": str(_backup)}))
+        raise SystemExit(0)
+    if args.migrate_instance:
+        import json
+        from shared.portable_migration import migrate_legacy_instance
+
+        _report = migrate_legacy_instance(args.migrate_instance)
+        print(json.dumps(_report, indent=2))
+        raise SystemExit(0)
     _build_runtime_config(args, desktop_defaults=args.desktop_engine)
     if args.users is not None:
         # Account admin runs against the database directly — no engine, no

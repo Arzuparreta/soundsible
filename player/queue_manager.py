@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from shared.models import QueueItem, Track
+from shared.database import user_db
+from shared.runtime import get_runtime_config
+from shared.user_context import require_user_id
 from shared.user_context import user_data_dir
 
 logger = logging.getLogger(__name__)
@@ -27,8 +30,16 @@ class QueueManager:
     def __init__(self, persist_path: Optional[Path] = None) -> None:
         # Resolved once: this manager belongs to one person, so saves must not
         # follow whichever user happens to be bound when a callback fires.
+        self._portable = persist_path is None and get_runtime_config().instance_dir is not None
+        self._db = user_db(require_user_id()) if self._portable else None
         self._persist_path = (
-            Path(persist_path) if persist_path is not None else user_data_dir() / "queue_state.json"
+            Path(persist_path)
+            if persist_path is not None
+            else (
+                get_runtime_config().data_dir / "legacy-queue-state.json"
+                if self._portable
+                else user_data_dir() / "queue_state.json"
+            )
         )
         self._queue: List[QueueItem] = []
         self._history: List[QueueItem] = []
@@ -42,13 +53,16 @@ class QueueManager:
         return self._persist_path
 
     def _restore_state(self) -> None:
-        path = self._resolved_persist_path()
-        if not path.is_file():
-            return
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return
+        if self._portable:
+            raw = self._db.get_state("queue", {})
+        else:
+            path = self._resolved_persist_path()
+            if not path.is_file():
+                return
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return
         if not isinstance(raw, dict) or raw.get("version") != QUEUE_STATE_VERSION:
             return
         rm = raw.get("repeat_mode") or "off"
@@ -79,6 +93,9 @@ class QueueManager:
                 "queue": [item.to_dict() for item in self._queue],
                 "queue_revision": self._revision,
             }
+        if self._portable:
+            self._db.set_state("queue", payload)
+            return
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")

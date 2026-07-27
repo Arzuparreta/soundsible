@@ -6,6 +6,7 @@ from flask import Flask
 from shared.api.routes.setup import setup_bp
 from shared.database import DatabaseManager, instance_db
 from shared.hardening import ALL_SCOPES
+from shared.instance_layout import create_instance
 from shared.runtime import RuntimeConfig, configure_runtime, get_runtime_config, reset_runtime
 
 
@@ -116,3 +117,31 @@ def test_post_music_dir_rejects_unsafe_path(tmp_path, monkeypatch):
         headers={"Authorization": f"Bearer {owner}"},
     )
     assert post.status_code == 400
+
+
+def test_portable_instance_keeps_music_inside_capsule(tmp_path):
+    reset_runtime()
+    layout = create_instance(tmp_path / "instance")
+    configure_runtime(
+        RuntimeConfig.default({"SOUNDSIBLE_INSTANCE_DIR": str(layout.root)})
+    )
+    app = _make_app()
+    client = app.test_client()
+    owner = _owner_token(instance_db())
+
+    get_response = client.get(
+        "/api/setup/music-dir",
+        headers={"Authorization": f"Bearer {owner}"},
+    )
+    assert get_response.status_code == 200
+    assert get_response.get_json()["effective_source"] == "instance"
+    assert get_response.get_json()["music_dir"] == str(layout.media_dir)
+
+    post_response = client.post(
+        "/api/setup/music-dir",
+        json={"music_dir": str(tmp_path / "external")},
+        headers={"Authorization": f"Bearer {owner}"},
+    )
+    assert post_response.status_code == 409
+    assert post_response.get_json()["code"] == "portable_media_is_fixed"
+    assert not (tmp_path / "external").exists()

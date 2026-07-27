@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Set, List, Callable, Optional
 
 from shared.models import Track
+from shared.database import user_db
+from shared.runtime import get_runtime_config
+from shared.user_context import require_user_id
 from shared.user_context import user_config_dir
 
 logger = logging.getLogger(__name__)
@@ -25,7 +28,13 @@ class FavouritesManager:
         self._favourites: Set[str] = set()
         self._lock = threading.RLock()  # Note: Use reentrant lock to prevent deadlocks with callbacks
         self._on_change_callbacks: List[Callable[[], None]] = []
-        self._favourites_file = user_config_dir() / "favourites.json"
+        self._portable = get_runtime_config().instance_dir is not None
+        self._db = user_db(require_user_id()) if self._portable else None
+        self._favourites_file = (
+            get_runtime_config().data_dir / "legacy-favourites.json"
+            if self._portable
+            else user_config_dir() / "favourites.json"
+        )
         
         # Note: Load existing favourites
         self._load_from_file()
@@ -110,6 +119,9 @@ class FavouritesManager:
     
     def _save_to_file(self) -> None:
         """Save favourites to JSON file."""
+        if self._portable:
+            self._db.set_state("favourites", {"version": 1, "favourites": sorted(self._favourites)})
+            return
         try:
             # Note: Ensure config directory exists
             self._favourites_file.parent.mkdir(parents=True, exist_ok=True)
@@ -128,6 +140,11 @@ class FavouritesManager:
     
     def _load_from_file(self) -> None:
         """Load favourites from JSON file."""
+        if self._portable:
+            data = self._db.get_state("favourites", {})
+            rows = data.get("favourites", []) if isinstance(data, dict) else []
+            self._favourites = {str(row) for row in rows if row}
+            return
         try:
             if not self._favourites_file.exists():
                 logger.debug("No favourites file found at %s, starting fresh", self._favourites_file)

@@ -78,6 +78,8 @@ def _env_music_dir_active() -> bool:
 
 
 def _effective_source() -> str:
+    if get_runtime_config().instance_dir is not None:
+        return "instance"
     if _env_music_dir_active():
         return "env"
     if load_persisted_music_dir(get_config_dir()) is not None:
@@ -103,6 +105,16 @@ def _resolve_music_dir(raw: str) -> Path:
 @rate_limit("setup_music_dir_get", limit=60, window_sec=60)
 def get_music_dir_setting():
     runtime = get_runtime_config()
+    if runtime.instance_dir is not None:
+        return jsonify(
+            {
+                "music_dir": str(runtime.music_dir),
+                "persisted_path": None,
+                "effective_source": "instance",
+                "env_override": False,
+                "portable": True,
+            }
+        )
     cfg = get_config_dir()
     persisted = load_persisted_music_dir(cfg)
     return jsonify(
@@ -120,6 +132,16 @@ def get_music_dir_setting():
 @rate_limit("setup_music_dir_post", limit=20, window_sec=60)
 def post_music_dir_setting():
     from shared.telemetry import emit
+
+    runtime = get_runtime_config()
+    if runtime.instance_dir is not None:
+        return jsonify(
+            {
+                "error": "Portable instances always store music inside their media directory.",
+                "music_dir": str(runtime.music_dir),
+                "code": "portable_media_is_fixed",
+            }
+        ), 409
 
     data = request.json or {}
     raw = data.get("music_dir") or data.get("path")

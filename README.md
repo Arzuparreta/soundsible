@@ -35,6 +35,7 @@ Soundsible is a music app you run on your **own** machine. Browse, stream, and s
 - 📻 **Radio mode** for endless discovery without leaving your station
 - 🗂️ **Everything in one place** — discover, search, podcasts, favourites, playlists, downloads
 - 👥 **One server, everyone's music** — each person gets their own library, playlists and history; the files are shared, so nothing downloads twice
+- 📦 **Move the whole station as one folder** — users, state, database, cache and music can live in one portable instance directory
 - 🧹 **Resilient downloads** — failed items stay visible with retry/remove, queue self-heals on restart
 - ⚡ **Honest playback** — the row you tapped shows it is working, impatient taps cost nothing, and a dead track skips itself instead of leaving you at a silent play button
 - 🔒 **Real lock-screen controls** — title, album, artwork *and* a working scrubber on your phone, watch, laptop and car stereo
@@ -197,6 +198,7 @@ Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`
 | ----------------------------------------------------------------------- | ------------------------------------------------------------- |
 | [Install & Deployment](docs/INSTALL.md) | Servers, headless/SSH, Tailscale, reverse proxy, storage, security |
 | [Configuration](docs/CONFIGURATION.md) | Settings, environment variables, downloads, cookies |
+| [Portable instances](docs/PORTABLE_INSTANCE.md) | One-directory instances, migration, backup and move semantics |
 | [Architecture](docs/ARCHITECTURE.md) | How Soundsible works, and how data flows |
 | [Legal & Acceptable Use](docs/LEGAL.md) | Disclaimer and your responsibilities |
 | [Contributing](CONTRIBUTING.md) | Dev setup and pull-request workflow |
