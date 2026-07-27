@@ -7,11 +7,13 @@ import ArtistGrid from '../components/ArtistGrid';
 import { trackCount } from '../lib/format';
 import { t } from '../lib/i18n';
 import { librarySort, setLibrarySort, libraryTab, setLibraryTab, sortTracks, buildArtists } from '../lib/libraryView';
+import { createTopSwipeReveal } from '../lib/topSwipeReveal';
 import styles from './Home.module.css';
 import { EmptyState } from '../components/EmptyState';
 
 /** Library view: songs (sortable, virtualized) or artists browser. */
 export default function Home() {
+  let viewRef: HTMLDivElement | undefined;
   const active = createMemo(() => downloadCounts().active);
   const favSet = createMemo(() => new Set(state.favorites));
   const songs = createMemo(() => musicLibrary());
@@ -37,16 +39,86 @@ export default function Home() {
   // mobile the song row's subtitle is the same gesture as the row itself, so
   // we render the artist as plain text and let the row click play the track.
   const [isMobile, setIsMobile] = createSignal(true);
+  const [toolbarProgress, setToolbarProgress] = createSignal(0);
+  const [toolbarDragging, setToolbarDragging] = createSignal(false);
+  const swipeReveal = createTopSwipeReveal();
+
   onMount(() => {
     const mq = window.matchMedia('(max-width: 1023px)');
     setIsMobile(mq.matches);
-    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    const onChange = (e: MediaQueryListEvent) => {
+      setIsMobile(e.matches);
+      if (!e.matches) {
+        setToolbarProgress(1);
+        setToolbarDragging(false);
+      } else {
+        setToolbarProgress(0);
+      }
+    };
     mq.addEventListener('change', onChange);
-    onCleanup(() => mq.removeEventListener('change', onChange));
+
+    const scrollSurface = (target: EventTarget | null) =>
+      target instanceof HTMLElement ? target.closest<HTMLElement>('[data-library-scroll]') : null;
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1 || toolbarProgress() > 0) return;
+      const surface = scrollSurface(event.target);
+      const touch = event.touches[0];
+      swipeReveal.begin(touch.clientX, touch.clientY, event.timeStamp, !!surface && surface.scrollTop <= 1, isMobile());
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (event.touches.length !== 1 || (toolbarProgress() >= 1 && !toolbarDragging())) return;
+      const touch = event.touches[0];
+      const frame = swipeReveal.move(touch.clientX, touch.clientY, event.timeStamp);
+      if (!frame.captured) return;
+      event.preventDefault();
+      setToolbarDragging(true);
+      setToolbarProgress(frame.progress);
+    };
+    const finishTouch = (event: TouchEvent) => {
+      if (toolbarProgress() >= 1 && !toolbarDragging()) return;
+      const frame = swipeReveal.end(event.timeStamp);
+      if (frame.captured) event.preventDefault();
+      setToolbarDragging(false);
+      setToolbarProgress(frame.progress);
+    };
+    const cancelTouch = () => {
+      const frame = swipeReveal.cancel();
+      setToolbarDragging(false);
+      if (frame.captured) setToolbarProgress(0);
+    };
+    const onScroll = (event: Event) => {
+      const surface = scrollSurface(event.target);
+      if (isMobile() && toolbarProgress() === 1 && surface && surface.scrollTop > 24) {
+        setToolbarProgress(0);
+      }
+    };
+
+    const view = viewRef;
+    view?.addEventListener('touchstart', onTouchStart, { passive: true });
+    view?.addEventListener('touchmove', onTouchMove, { passive: false });
+    view?.addEventListener('touchend', finishTouch, { passive: false });
+    view?.addEventListener('touchcancel', cancelTouch, { passive: true });
+    view?.addEventListener('scroll', onScroll, true);
+
+    onCleanup(() => {
+      mq.removeEventListener('change', onChange);
+      view?.removeEventListener('touchstart', onTouchStart);
+      view?.removeEventListener('touchmove', onTouchMove);
+      view?.removeEventListener('touchend', finishTouch);
+      view?.removeEventListener('touchcancel', cancelTouch);
+      view?.removeEventListener('scroll', onScroll, true);
+    });
   });
 
+  const toolbarStyle = () =>
+    isMobile()
+      ? `height:${toolbarProgress() * 44}px;--toolbar-reveal:${toolbarProgress()};--toolbar-offset:${(1 - toolbarProgress()) * -8}px`
+      : undefined;
+  const toolbarHidden = () => isMobile() && toolbarProgress() === 0;
+
   return (
-    <div class="view">
+    <div ref={viewRef} class="view">
       <ViewHeader
         title={t('home.title')}
         meta={state.loading && songs().length === 0 ? t('common.loading') : trackCount(songs().length)}
@@ -69,32 +141,40 @@ export default function Home() {
         </A>
       </nav>
 
-      <div class={styles.toolbar}>
-        <div class={styles.tabs}>
-          <button
-            class={styles.tab}
-            classList={{ [styles.tabActive]: libraryTab() === 'songs' }}
-            type="button"
-            onClick={() => setLibraryTab('songs')}
-          >
-            {t('home.songs')}
-          </button>
-          <button
-            class={styles.tab}
-            classList={{ [styles.tabActive]: libraryTab() === 'artists' }}
-            type="button"
-            onClick={() => setLibraryTab('artists')}
-          >
-            {t('home.artists')}
-          </button>
+      <div
+        class={styles.toolbarReveal}
+        classList={{ [styles.toolbarDragging]: toolbarDragging() }}
+        style={toolbarStyle()}
+        aria-hidden={toolbarHidden() ? 'true' : undefined}
+        inert={toolbarHidden()}
+      >
+        <div class={styles.toolbar}>
+          <div class={styles.tabs}>
+            <button
+              class={styles.tab}
+              classList={{ [styles.tabActive]: libraryTab() === 'songs' }}
+              type="button"
+              onClick={() => setLibraryTab('songs')}
+            >
+              {t('home.songs')}
+            </button>
+            <button
+              class={styles.tab}
+              classList={{ [styles.tabActive]: libraryTab() === 'artists' }}
+              type="button"
+              onClick={() => setLibraryTab('artists')}
+            >
+              {t('home.artists')}
+            </button>
+          </div>
+          <Show when={libraryTab() === 'songs'}>
+            <select class={styles.select} value={librarySort()} onChange={(e) => setLibrarySort(e.currentTarget.value)}>
+              <option value="recent">{t('home.sortRecent')}</option>
+              <option value="az">{t('home.sortAZ')}</option>
+              <option value="fav">{t('home.sortFavFirst')}</option>
+            </select>
+          </Show>
         </div>
-        <Show when={libraryTab() === 'songs'}>
-          <select class={styles.select} value={librarySort()} onChange={(e) => setLibrarySort(e.currentTarget.value)}>
-            <option value="recent">{t('home.sortRecent')}</option>
-            <option value="az">{t('home.sortAZ')}</option>
-            <option value="fav">{t('home.sortFavFirst')}</option>
-          </select>
-        </Show>
       </div>
 
       {/* Stale but not empty: the list below is real, just possibly behind. */}
@@ -106,7 +186,7 @@ export default function Home() {
         when={libraryTab() === 'songs'}
         fallback={
           <Show when={artists().length > 0} fallback={emptyState(t('home.emptyArtists'))}>
-            <div class={styles.artistsScroll}>
+            <div class={styles.artistsScroll} data-library-scroll>
               <ArtistGrid artists={artists()} />
             </div>
           </Show>

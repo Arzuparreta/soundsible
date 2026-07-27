@@ -63,6 +63,11 @@
   border-radius: var(--radius-full);
 }
 
+.toolbarReveal {
+  flex-shrink: 0;
+  overflow: clip;
+}
+
 .toolbar {
   flex-shrink: 0;
   display: flex;
@@ -70,6 +75,31 @@
   justify-content: space-between;
   gap: var(--space-md);
   padding: 0 var(--gutter) var(--space-sm);
+}
+
+@media (max-width: 1023px) {
+  .toolbarReveal {
+    height: 0;
+    transition: height 240ms var(--ease-out);
+    will-change: height;
+  }
+
+  .toolbarDragging {
+    transition: none;
+  }
+
+  .toolbar {
+    height: 44px;
+    opacity: var(--toolbar-reveal, 0);
+    transform: translateY(var(--toolbar-offset, -8px));
+    transition:
+      opacity var(--dur-short) var(--ease-out),
+      transform 240ms var(--ease-out);
+  }
+
+  .toolbarDragging .toolbar {
+    transition: none;
+  }
 }
 
 .tabs {
@@ -175,5 +205,9 @@
 
   .select {
     height: var(--segment-h);
+  }
+
+  .toolbarReveal {
+    height: auto !important;
   }
 }
