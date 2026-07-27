@@ -11,9 +11,10 @@ export interface SwipeRevealFrame {
 /**
  * Small, DOM-free state machine for Home's concealed mobile controls.
  *
- * The first upward gesture at the top of the library is consumed by the
- * controls instead of moving the first song. Horizontal/diagonal gestures and
- * taps are deliberately rejected so row actions remain predictable.
+ * The first gesture towards the top of the library is consumed by the controls
+ * instead of overscrolling the first song. Touch coordinates move down while
+ * the scroll position is being pushed back towards zero. Horizontal/diagonal
+ * gestures and taps are deliberately rejected so row actions stay predictable.
  */
 export function createTopSwipeReveal() {
   let tracking = false;
@@ -41,21 +42,21 @@ export function createTopSwipeReveal() {
   const move = (x: number, y: number, time: number): SwipeRevealFrame => {
     if (!tracking || cancelled) return { captured: false, progress };
 
-    const upward = startY - y;
+    const revealDelta = y - startY;
     const horizontal = Math.abs(x - startX);
 
     if (!captured) {
-      if (horizontal > ACTIVATION_SLOP && horizontal >= Math.abs(upward)) {
+      if (horizontal > ACTIVATION_SLOP && horizontal >= Math.abs(revealDelta)) {
         cancelled = true;
         return { captured: false, progress };
       }
-      if (upward <= ACTIVATION_SLOP || upward <= horizontal * 1.2) {
+      if (revealDelta <= ACTIVATION_SLOP || revealDelta <= horizontal * 1.2) {
         return { captured: false, progress };
       }
       captured = true;
     }
 
-    progress = Math.min(1, Math.max(0, (upward - ACTIVATION_SLOP) / OPEN_DISTANCE));
+    progress = Math.min(1, Math.max(0, (revealDelta - ACTIVATION_SLOP) / OPEN_DISTANCE));
     lastY = y;
     lastTime = time;
     return { captured, progress };
@@ -63,7 +64,7 @@ export function createTopSwipeReveal() {
 
   const end = (time: number): SwipeRevealFrame & { open: boolean } => {
     const duration = Math.max(1, time - Math.max(startTime, lastTime - 80));
-    const velocity = captured ? Math.max(0, (startY - lastY) / duration) : 0;
+    const velocity = captured ? Math.max(0, (lastY - startY) / duration) : 0;
     const open = captured && (progress >= COMMIT_PROGRESS || velocity >= FLICK_VELOCITY);
     const result = { captured, progress: open ? 1 : 0, open };
     tracking = false;
