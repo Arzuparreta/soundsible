@@ -98,28 +98,40 @@ export default function TrackList(props: {
           <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative', width: '100%' }}>
             <For each={virtualizer.getVirtualItems()}>
               {(vi) => {
-                const track = props.tracks[vi.index];
+                // The row's content must be *read* reactively, not captured.
+                // The virtualizer reconciles its items by index, so a slot that
+                // stays on screen keeps the exact same `{index, start, size}` —
+                // and therefore the same row component — when the list behind it
+                // changes. Reading `props.tracks[vi.index]` once froze whatever
+                // was there at creation: a finished download prepended a track
+                // to the library and every visible row kept rendering the old
+                // one until the view was remounted. As an accessor, the row
+                // follows the list instead, and a shrinking list (a deleted
+                // track) empties its slot rather than rendering a hole.
+                const track = () => props.tracks[vi.index] as Track | undefined;
                 return (
-                  <Show when={track}>
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: `${vi.size}px`,
-                        transform: `translateY(${vi.start}px)`,
-                      }}
-                    >
-                      <SongRow
-                        track={track!}
-                        cover={coverUrl(track!.id)}
-                        active={isPlayingTrack(track!)}
-                        onPlay={() => actions.playFrom(props.tracks, vi.index)}
-                        onArtist={props.linkArtist === false ? undefined : goArtist}
-                        onMenu={openMenu}
-                      />
-                    </div>
+                  <Show when={track()}>
+                    {(t) => (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: `${vi.size}px`,
+                          transform: `translateY(${vi.start}px)`,
+                        }}
+                      >
+                        <SongRow
+                          track={t()}
+                          cover={coverUrl(t().id)}
+                          active={isPlayingTrack(t())}
+                          onPlay={() => actions.playFrom(props.tracks, vi.index)}
+                          onArtist={props.linkArtist === false ? undefined : goArtist}
+                          onMenu={openMenu}
+                        />
+                      </div>
+                    )}
                   </Show>
                 );
               }}
