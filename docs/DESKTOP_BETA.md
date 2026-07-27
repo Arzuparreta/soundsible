@@ -1,6 +1,8 @@
 # Soundsible Desktop (Beta)
 
-Consumer path: **Tauri shell** + **PyInstaller engine sidecar** on loopback. No terminal, no `run.py`, no manual port config for normal users.
+Consumer path: **Tauri shell** + **PyInstaller engine sidecar** on loopback. The
+user creates or opens one portable Soundsible directory containing the complete
+instance. No terminal, no `run.py`, no manual port config for normal users.
 
 Aligns with [Consumer Democratization plan](https://github.com/Arzuparreta/soundsible/blob/main/docs/appliance-rework-plan.md) (Approach D) and [Premium Quality Contract](./PREMIUM_QUALITY_CONTRACT.md) outcome **#1 — Setup**.
 
@@ -10,7 +12,7 @@ Aligns with [Consumer Democratization plan](https://github.com/Arzuparreta/sound
 
 | Area | Status |
 |------|--------|
-| First-run folder picker + live scan preview | Done (`desktop-shell/shell-ui/`) |
+| Portable instance create/open picker | Done (`desktop-shell/shell-ui/`) |
 | Engine loading / error screens (log-forward) | Done |
 | Health watchdog (3× fail @ 5s, PID kill tree) | Done |
 | PyInstaller sidecar + Tauri CI (Linux + Windows) | Done |
@@ -76,9 +78,9 @@ Run on a **fresh** VM with **no** Python, git, or FFmpeg on `PATH`. Use only the
 
 1. Install `.deb` or run `.AppImage` from the release.
 2. Launch **Soundsible (Beta)**.
-3. **Choose folder…** → pick a directory with at least one playable audio file (`.mp3`, `.flac`, …).
-4. Confirm scan preview appears (track count / size).
-5. **Continue** → wait for engine log → webview opens.
+3. **Create or open instance…** → choose a new empty directory.
+4. Wait for the engine log → webview opens.
+5. Download or migrate a track into the instance.
 6. Play one track from Library; confirm audio.
 7. Close window → tray remains → **Open** from tray → player still works.
 8. **Quit** from tray → app exits.

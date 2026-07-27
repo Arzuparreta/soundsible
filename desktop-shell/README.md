@@ -1,6 +1,8 @@
 # Soundsible Desktop Shell
 
-Tauri consumer wrapper for Soundsible (T4/T6). First-run folder picker, engine supervisor, tray menu, webview handoff to `/player/desktop/`.
+Tauri consumer wrapper for Soundsible. The picker creates or opens a complete
+portable instance directory, then supervises the engine and hands the webview to
+`/player/desktop/`.
 
 ## Dev workflow
 
@@ -20,12 +22,13 @@ Optional overrides:
 
 - `SOUNDSIBLE_PYTHON` — Python binary (default: `venv/bin/python3`)
 - `SOUNDSIBLE_ENGINE_BIN` — PyInstaller sidecar for packaged builds
-- `SOUNDSIBLE_CONFIG_DIR` — config directory (default: platform `soundsible` config dir)
+- `SOUNDSIBLE_INSTANCE_DIR` — portable instance to open (normally selected by the shell)
 
 ## Architecture
 
 ```
-Tauri (Rust)  →  spawn soundsible_engine.py  →  poll desktop-engine-state.json
+Tauri (Rust)  →  open instance  →  spawn soundsible_engine.py --instance-dir
+              →  poll <instance>/runtime/desktop-engine-state.json
               →  health watchdog (3× fail @ 5s)  →  navigate webview to player
 Tray: Open | Pair phone… | Restart engine | Stop engine | Quit
 ```
@@ -97,10 +100,12 @@ Sidecar flags used by the shell:
 
 | Flag | Purpose |
 |------|---------|
-| `--bootstrap MUSIC_DIR` | Write consumer `config.json` before first start |
-| `--music-dir MUSIC_DIR` | Runtime library path (also auto-bootstraps if config missing) |
+| `--create-instance DIR` | Initialize a new, marked portable instance |
+| `--instance-dir DIR` | Run using that directory as the complete instance |
 
-**Returning users:** if `config.json` and `music_dir.json` already exist, the shell skips first-run and auto-starts the engine on launch.
+**Returning users:** the shell remembers the last instance path in the platform
+config directory. The instance itself contains all application data; cloud
+credentials are machine-bound and require reauthentication after a move.
 
 **Start at login:** optional checkbox on first-run (uses platform autostart APIs via `tauri-plugin-autostart`).
 

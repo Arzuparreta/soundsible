@@ -81,22 +81,26 @@ impl EngineSupervisor {
         }
     }
 
-    pub fn start(&self, app: AppHandle, music_dir: PathBuf) -> Result<(), String> {
+    pub fn start(&self, app: AppHandle, instance_dir: PathBuf) -> Result<(), String> {
         self.stop_flag.store(false, Ordering::SeqCst);
-        bootstrap_config(&music_dir)?;
+        ensure_instance(&instance_dir)?;
+        crate::state::remember_instance_dir(&instance_dir)?;
         self.stop_child()?;
 
         {
             let mut guard = self.inner.lock().expect("engine lock");
-            guard.music_dir = Some(music_dir.clone());
+            guard.music_dir = Some(instance_dir.clone());
             guard.phase = EnginePhase::Booting;
             guard.message = "Starting Soundsible…".into();
             guard.log_lines.clear();
-            push_log(&mut guard, format!("engine: music_dir={}", music_dir.display()));
+            push_log(
+                &mut guard,
+                format!("engine: instance_dir={}", instance_dir.display()),
+            );
         }
         self.emit_status(&app);
 
-        let child = spawn_engine(&music_dir, &mut self.inner.lock().expect("engine lock"))?;
+        let child = spawn_engine(&instance_dir, &mut self.inner.lock().expect("engine lock"))?;
         {
             let mut guard = self.inner.lock().expect("engine lock");
             guard.child = Some(child);
@@ -121,7 +125,7 @@ impl EngineSupervisor {
             guard
                 .music_dir
                 .clone()
-                .ok_or_else(|| "Choose a music folder first.".to_string())?
+                .ok_or_else(|| "Choose an instance folder first.".to_string())?
         };
         self.start(app, music_dir)
     }
@@ -147,9 +151,6 @@ impl EngineSupervisor {
             terminate_child_process(&mut child);
         } else if let Some(runtime) = guard.runtime.as_ref() {
             terminate_pid(runtime.pid);
-        } else if let Some(state) = load_runtime_state() {
-            terminate_pid(state.pid);
-            let _ = std::fs::remove_file(state_file_path());
         }
         guard.runtime = None;
         guard.health_failures = 0;
@@ -170,10 +171,10 @@ fn push_log(guard: &mut SupervisorInner, line: String) {
     }
 }
 
-fn bootstrap_config(music_dir: &PathBuf) -> Result<(), String> {
+fn ensure_instance(instance_dir: &PathBuf) -> Result<(), String> {
     if let Some(sidecar) = sidecar_binary() {
         let output = Command::new(&sidecar)
-            .args(["--bootstrap", &music_dir.to_string_lossy()])
+            .args(["--create-instance", &instance_dir.to_string_lossy()])
             .output()
             .map_err(|e| format!("Failed to bootstrap via sidecar: {e}"))?;
         if output.status.success() {
@@ -185,13 +186,17 @@ fn bootstrap_config(music_dir: &PathBuf) -> Result<(), String> {
 
     let root = repo_root();
     let python = python_executable(&root);
-    if !root.join("shared/desktop_bootstrap.py").exists() && !root.join("shared").join("desktop_bootstrap.py").exists() {
-        return Err(format!("Missing shared/desktop_bootstrap.py under {}", root.display()));
+    let entry = root.join("soundsible_engine.py");
+    if !entry.exists() {
+        return Err(format!(
+            "Missing soundsible_engine.py under {}",
+            root.display()
+        ));
     }
     let output = Command::new(&python)
         .current_dir(&root)
-        .args(["-m", "shared.desktop_bootstrap"])
-        .arg(music_dir)
+        .arg(&entry)
+        .args(["--create-instance", &instance_dir.to_string_lossy()])
         .output()
         .map_err(|e| format!("Failed to bootstrap config: {e}"))?;
     if !output.status.success() {
@@ -201,12 +206,15 @@ fn bootstrap_config(music_dir: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-fn spawn_engine(music_dir: &PathBuf, guard: &mut SupervisorInner) -> Result<Child, String> {
+fn spawn_engine(instance_dir: &PathBuf, guard: &mut SupervisorInner) -> Result<Child, String> {
     let root = repo_root();
     let mut command = if let Some(sidecar) = sidecar_binary() {
-        push_log(guard, format!("engine: spawning sidecar {}", sidecar.display()));
+        push_log(
+            guard,
+            format!("engine: spawning sidecar {}", sidecar.display()),
+        );
         let mut cmd = Command::new(sidecar);
-        cmd.arg("--music-dir").arg(music_dir);
+        cmd.arg("--instance-dir").arg(instance_dir);
         cmd
     } else {
         let python = python_executable(&root);
@@ -220,7 +228,7 @@ fn spawn_engine(music_dir: &PathBuf, guard: &mut SupervisorInner) -> Result<Chil
         );
         let mut cmd = Command::new(&python);
         cmd.current_dir(&root).arg(&entry);
-        cmd.arg("--music-dir").arg(music_dir);
+        cmd.arg("--instance-dir").arg(instance_dir);
         cmd
     };
 
@@ -327,10 +335,7 @@ fn wait_for_ready(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>
         );
     }
     drop(guard);
-    let supervisor = EngineSupervisor {
-        inner,
-        stop_flag,
-    };
+    let supervisor = EngineSupervisor { inner, stop_flag };
     supervisor.emit_status(&app);
 }
 

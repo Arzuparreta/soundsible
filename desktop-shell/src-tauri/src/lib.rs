@@ -21,6 +21,7 @@ pub struct AppState {
 #[derive(serde::Serialize)]
 struct FolderPreview {
     path: String,
+    mode: String,
     track_count: u64,
     size_bytes: u64,
     scan_ms: u64,
@@ -74,7 +75,7 @@ fn start_configured_engine(app: AppHandle, state: State<'_, AppState>) -> Result
         return Err("Soundsible is not configured yet.".into());
     }
     let music_dir = state::load_persisted_music_dir().ok_or_else(|| {
-        "Configured music folder is missing. Choose a folder again from first-run.".to_string()
+        "Configured Soundsible instance is missing. Locate it again from first-run.".to_string()
     })?;
     if let Ok(mut slot) = state.selected_folder.lock() {
         *slot = Some(music_dir.clone());
@@ -100,7 +101,7 @@ fn get_selected_folder(state: State<'_, AppState>) -> Option<String> {
 async fn pick_music_folder() -> Result<Option<String>, String> {
     let path = tauri::async_runtime::spawn_blocking(move || {
         rfd::FileDialog::new()
-            .set_title("Choose your music folder")
+            .set_title("Create or open a Soundsible instance")
             .pick_folder()
     })
     .await
@@ -115,10 +116,30 @@ fn preview_music_folder(path: String) -> Result<FolderPreview, String> {
     if !root.is_dir() {
         return Err("Folder does not exist".into());
     }
+    let marker = root.join(state::INSTANCE_MARKER);
+    let mode = if marker.is_file() {
+        "existing"
+    } else {
+        let occupied = std::fs::read_dir(&root)
+            .map_err(|e| e.to_string())?
+            .filter_map(Result::ok)
+            .any(|entry| entry.file_name() != ".DS_Store");
+        if occupied {
+            return Err("Choose an empty directory or an existing Soundsible instance.".into());
+        }
+        "new"
+    };
+    let scan_root = if marker.is_file() {
+        root.join("media").join("tracks")
+    } else {
+        root.clone()
+    };
     let mut track_count = 0u64;
     let mut size_bytes = 0u64;
-    let extensions = ["mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "aiff", "aif"];
-    for entry in walkdir::WalkDir::new(&root)
+    let extensions = [
+        "mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "aiff", "aif",
+    ];
+    for entry in walkdir::WalkDir::new(&scan_root)
         .follow_links(false)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -131,13 +152,18 @@ fn preview_music_folder(path: String) -> Result<FolderPreview, String> {
             .extension()
             .and_then(|e| e.to_str())
             .map(|e| e.to_ascii_lowercase());
-        if ext.as_deref().map(|e| extensions.contains(&e)).unwrap_or(false) {
+        if ext
+            .as_deref()
+            .map(|e| extensions.contains(&e))
+            .unwrap_or(false)
+        {
             track_count += 1;
             size_bytes += entry.metadata().map(|m| m.len()).unwrap_or(0);
         }
     }
     Ok(FolderPreview {
         path,
+        mode: mode.into(),
         track_count,
         size_bytes,
         scan_ms: started.elapsed().as_millis() as u64,
@@ -151,12 +177,16 @@ fn start_engine(app: AppHandle, state: State<'_, AppState>) -> Result<(), String
         .lock()
         .map_err(|_| "State lock poisoned".to_string())?
         .clone()
-        .ok_or_else(|| "Choose a music folder first.".to_string())?;
+        .ok_or_else(|| "Choose an instance folder first.".to_string())?;
     state.engine.start(app, music_dir)
 }
 
 #[tauri::command]
-fn start_engine_with_path(app: AppHandle, path: String, state: State<'_, AppState>) -> Result<(), String> {
+fn start_engine_with_path(
+    app: AppHandle,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     if let Ok(mut slot) = state.selected_folder.lock() {
         *slot = Some(PathBuf::from(&path));
     }
@@ -172,6 +202,7 @@ fn restart_engine(app: AppHandle, state: State<'_, AppState>) -> Result<(), Stri
 fn open_logs(app: AppHandle) -> Result<(), String> {
     let log_dir = state::load_runtime_state()
         .map(|s| PathBuf::from(s.log_dir))
+        .or_else(|| state::load_persisted_music_dir().map(|root| root.join("logs")))
         .unwrap_or_else(|| state::config_dir().join("logs"));
     app.opener()
         .open_path(log_dir.to_string_lossy(), None::<&str>)

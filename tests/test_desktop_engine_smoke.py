@@ -8,13 +8,11 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from unittest.mock import patch
-
 import pytest
 import requests
 
-from shared.desktop_bootstrap import ensure_consumer_config
-from shared.desktop_runtime import load_runtime_state, stop_owned_desktop_engine
+from shared.instance_layout import create_instance
+from shared.desktop_runtime import load_runtime_state
 from shared.runtime import reset_runtime
 
 
@@ -23,20 +21,17 @@ ENGINE_ENTRY = REPO_ROOT / "soundsible_engine.py"
 STARTUP_TIMEOUT_SEC = 120
 
 
-def _runtime_env(tmp_path: Path) -> dict[str, str]:
+def _runtime_env(instance_dir: Path) -> dict[str, str]:
     return {
-        "SOUNDSIBLE_CONFIG_DIR": str(tmp_path / "cfg"),
-        "SOUNDSIBLE_DATA_DIR": str(tmp_path / "data"),
-        "SOUNDSIBLE_CACHE_DIR": str(tmp_path / "cache"),
-        "SOUNDSIBLE_LOG_DIR": str(tmp_path / "logs"),
+        "SOUNDSIBLE_INSTANCE_DIR": str(instance_dir),
         "PYTHONPATH": str(REPO_ROOT),
     }
 
 
-def _wait_for_health(config_dir: Path) -> str:
+def _wait_for_health(instance_dir: Path) -> str:
     deadline = time.time() + STARTUP_TIMEOUT_SEC
     while time.time() < deadline:
-        state = load_runtime_state(config_dir)
+        state = load_runtime_state(instance_dir)
         if state and state.get("base_url"):
             health_url = state["base_url"].rstrip("/") + state.get("health", "/api/health")
             try:
@@ -58,28 +53,15 @@ def _engine_command(engine_bin: Path | None) -> list[str]:
     return [str(python), str(ENGINE_ENTRY)]
 
 
-def _ensure_isolated_consumer_config(music: Path, env: dict[str, str]) -> None:
-    """Bootstrap only inside the test runtime directories, never the user's config."""
-    with patch.dict(os.environ, env, clear=True):
-        reset_runtime()
-        ensure_consumer_config(music)
-    reset_runtime()
-
-
 def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
     reset_runtime()
+    layout = create_instance(tmp_path / "instance")
     env = os.environ.copy()
-    env.update(_runtime_env(tmp_path))
-
-    music = tmp_path / "music"
-    music.mkdir()
-    (music / "sample.flac").write_bytes(b"fake")
-
-    _ensure_isolated_consumer_config(music, env)
-    config_dir = Path(env["SOUNDSIBLE_CONFIG_DIR"])
+    env.update(_runtime_env(layout.root))
+    (layout.tracks_dir / "sample.flac").write_bytes(b"fake")
 
     cmd = _engine_command(engine_bin)
-    cmd.extend(["--music-dir", str(music)])
+    cmd.extend(["--instance-dir", str(layout.root)])
 
     proc = subprocess.Popen(
         cmd,
@@ -92,7 +74,7 @@ def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
     )
 
     try:
-        health_url = _wait_for_health(config_dir)
+        health_url = _wait_for_health(layout.root)
         payload = requests.get(health_url, timeout=5).json()
         assert isinstance(payload, dict)
         ff = payload.get("ffmpeg") or {}
@@ -100,8 +82,9 @@ def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
             assert ff.get("available") is True, (
                 f"sidecar health missing bundled ffmpeg: {ff!r}"
             )
-        state = load_runtime_state(config_dir)
+        state = load_runtime_state(layout.root)
         assert state is not None
+        assert state["instance_dir"] == str(layout.root)
         player_base = payload.get("base_url") or state["base_url"]
         desktop = requests.get(f"{player_base.rstrip('/')}/player/desktop/", timeout=10)
         assert desktop.status_code == 200
@@ -124,24 +107,21 @@ def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
                 except subprocess.TimeoutExpired:
                     os.killpg(proc.pid, signal.SIGKILL)
                     proc.wait(timeout=5)
-        stop_owned_desktop_engine(config_dir)
+        state_file = layout.runtime_dir / "desktop-engine-state.json"
+        if state_file.exists():
+            state_file.unlink()
 
 
 def test_desktop_engine_sigterm_exits_cleanly(tmp_path):
     """SIGTERM should stop the engine within a few seconds (no hang after 'Shutting down...')."""
     reset_runtime()
+    layout = create_instance(tmp_path / "instance")
     env = os.environ.copy()
-    env.update(_runtime_env(tmp_path))
-
-    music = tmp_path / "music"
-    music.mkdir()
-    (music / "sample.flac").write_bytes(b"fake")
-
-    _ensure_isolated_consumer_config(music, env)
-    config_dir = Path(env["SOUNDSIBLE_CONFIG_DIR"])
+    env.update(_runtime_env(layout.root))
+    (layout.tracks_dir / "sample.flac").write_bytes(b"fake")
 
     cmd = _engine_command(None)
-    cmd.extend(["--music-dir", str(music)])
+    cmd.extend(["--instance-dir", str(layout.root)])
 
     proc = subprocess.Popen(
         cmd,
@@ -154,7 +134,7 @@ def test_desktop_engine_sigterm_exits_cleanly(tmp_path):
     )
 
     try:
-        _wait_for_health(config_dir)
+        _wait_for_health(layout.root)
         if os.name == "nt":
             proc.terminate()
         else:
@@ -168,7 +148,9 @@ def test_desktop_engine_sigterm_exits_cleanly(tmp_path):
             else:
                 os.killpg(proc.pid, signal.SIGKILL)
             proc.wait(timeout=5)
-        stop_owned_desktop_engine(config_dir)
+        state_file = layout.runtime_dir / "desktop-engine-state.json"
+        if state_file.exists():
+            state_file.unlink()
 
 
 def test_desktop_engine_smoke_python(tmp_path):
@@ -177,12 +159,8 @@ def test_desktop_engine_smoke_python(tmp_path):
 
 def test_desktop_engine_smoke_sidecar(tmp_path):
     sidecar = os.environ.get("SOUNDSIBLE_ENGINE_BIN")
-    if sidecar:
-        engine_bin = Path(sidecar)
-    else:
-        binaries = REPO_ROOT / "desktop-shell" / "src-tauri" / "binaries"
-        matches = sorted(p for p in binaries.glob("soundsible-engine*") if p.is_file())
-        if not matches:
-            pytest.skip("Sidecar binary not built; run desktop-shell/scripts/build-sidecar.sh")
-        engine_bin = matches[0]
-    _run_smoke(tmp_path, engine_bin=engine_bin)
+    if not sidecar:
+        pytest.skip(
+            "Set SOUNDSIBLE_ENGINE_BIN to the sidecar built for this source tree"
+        )
+    _run_smoke(tmp_path, engine_bin=Path(sidecar))

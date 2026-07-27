@@ -67,10 +67,14 @@ function formatBytes(bytes) {
 async function refreshPreview(path) {
   try {
     const preview = await invoke('preview_music_folder', { path });
-    scanPreview.textContent = `${preview.track_count.toLocaleString()} tracks · ${formatBytes(preview.size_bytes)} · scanned in ${(preview.scan_ms / 1000).toFixed(1)}s`;
+    const prefix = preview.mode === 'existing' ? 'Existing instance' : 'New instance';
+    scanPreview.textContent = `${prefix} · ${preview.track_count.toLocaleString()} tracks · ${formatBytes(preview.size_bytes)}`;
     scanPreview.classList.remove('hidden');
-  } catch {
-    scanPreview.classList.add('hidden');
+    return true;
+  } catch (err) {
+    scanPreview.textContent = err && err.message ? err.message : String(err);
+    scanPreview.classList.remove('hidden');
+    return false;
   }
 }
 
@@ -129,7 +133,7 @@ btnChoose.addEventListener('click', async () => {
 
     const path = await pickMusicFolder();
     if (!path) {
-      pathDisplay.textContent = 'No folder selected';
+      pathDisplay.textContent = 'No instance selected';
       pathDisplay.classList.remove('filled');
       return;
     }
@@ -137,8 +141,9 @@ btnChoose.addEventListener('click', async () => {
     selectedPath = path;
     pathDisplay.textContent = path;
     pathDisplay.classList.add('filled');
-    setContinueEnabled(true);
-    await refreshPreview(path);
+    const valid = await refreshPreview(path);
+    if (!valid) selectedPath = null;
+    setContinueEnabled(valid);
   } catch (err) {
     console.error('Folder picker failed:', err);
     pathDisplay.style.color = '#ff453a';
@@ -152,7 +157,7 @@ btnChoose.addEventListener('click', async () => {
 btnContinue.addEventListener('click', async () => {
   if (!selectedPath) return;
   showView('loading');
-  renderLog(logLoading, ['engine: binding loopback', `engine: music_dir=${selectedPath}`]);
+  renderLog(logLoading, ['engine: binding loopback', `engine: instance_dir=${selectedPath}`]);
   try {
     await applyAutostartPreference();
     await invoke('start_engine_with_path', { path: selectedPath });
@@ -214,7 +219,7 @@ async function resumeReturningUser() {
   showView('loading');
   renderLog(logLoading, [
     'engine: resuming your library',
-    `engine: music_dir=${profile.music_dir}`,
+    `engine: instance_dir=${profile.music_dir}`,
   ]);
 
   try {

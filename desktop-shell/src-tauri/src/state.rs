@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 pub const STATE_FILENAME: &str = "desktop-engine-state.json";
+pub const INSTANCE_MARKER: &str = "soundsible.instance.json";
+const LAST_INSTANCE_FILENAME: &str = "last-instance.json";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -40,6 +42,9 @@ pub fn config_dir() -> PathBuf {
 }
 
 pub fn state_file_path() -> PathBuf {
+    if let Some(root) = load_persisted_music_dir() {
+        return root.join("runtime").join(STATE_FILENAME);
+    }
     config_dir().join(STATE_FILENAME)
 }
 
@@ -66,7 +71,7 @@ pub fn read_owner_token() -> Result<String, String> {
 }
 
 pub fn has_consumer_config() -> bool {
-    config_dir().join("config.json").is_file()
+    load_persisted_music_dir().is_some_and(|root| root.join(INSTANCE_MARKER).is_file())
 }
 
 #[derive(Debug, Deserialize)]
@@ -76,13 +81,30 @@ struct MusicDirPrefs {
 }
 
 pub fn load_persisted_music_dir() -> Option<PathBuf> {
-    let prefs_path = config_dir().join("music_dir.json");
+    if let Ok(raw_path) = std::env::var("SOUNDSIBLE_INSTANCE_DIR") {
+        let path = PathBuf::from(raw_path);
+        if path.join(INSTANCE_MARKER).is_file() {
+            return Some(path);
+        }
+    }
+    let prefs_path = config_dir().join(LAST_INSTANCE_FILENAME);
     let raw = std::fs::read_to_string(prefs_path).ok()?;
     let data: MusicDirPrefs = serde_json::from_str(&raw).ok()?;
     data.path
         .or(data.music_dir)
         .map(PathBuf::from)
-        .filter(|p| p.is_dir())
+        .filter(|p| p.join(INSTANCE_MARKER).is_file())
+}
+
+pub fn remember_instance_dir(path: &Path) -> Result<(), String> {
+    let config = config_dir();
+    std::fs::create_dir_all(&config).map_err(|e| e.to_string())?;
+    let payload = serde_json::json!({"path": path.to_string_lossy()});
+    std::fs::write(
+        config.join(LAST_INSTANCE_FILENAME),
+        serde_json::to_vec_pretty(&payload).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Clone, Serialize)]
