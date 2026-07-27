@@ -13,6 +13,10 @@ const IDLE_MS = 12_000;
 const SWIPE_MIN_Y = 110;
 const SWIPE_MAX_MS = 900;
 
+/** Breathing room the autopilot line keeps from the artwork and the top bar. */
+const STATUS_GAP = 12;
+const STATUS_MIN_GAP = 6;
+
 /**
  * Type-size tier for a track title.
  *
@@ -54,17 +58,49 @@ export function AutoMode() {
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let agentTimer: ReturnType<typeof setTimeout> | null = null;
   let rootEl: HTMLDivElement | undefined;
+  let topbarEl: HTMLElement | undefined;
+  let statusEl: HTMLDivElement | undefined;
+  let mobileCover: DOMRect | null = null;
   let swipe: { x: number; y: number; at: number } | null = null;
   let restoreFocus: HTMLElement | null = null;
   let wasActive = false;
 
+  const clearMobileStatusSlot = () => {
+    if (!rootEl) return;
+    rootEl.removeAttribute('data-mobile-status-above');
+    rootEl.style.removeProperty('--auto-mobile-status-top');
+  };
+
+  /**
+   * On mobile the artwork is pinned to the Now Playing rectangle, so the panel
+   * below it is laid out against the cover's *flow* position rather than the one
+   * it is actually drawn at — which is how the autopilot line ended up sitting
+   * over the bottom edge of the artwork. There is nothing to reclaim below the
+   * cover, but the band between the top bar and the pinned cover is empty on
+   * every phone, so the line moves up into it. On a viewport where that band is
+   * too short the line stays in its reserved slot in the panel: a status line
+   * crossing the top bar would be worse than one grazing the cover.
+   */
+  const placeMobileStatus = () => {
+    if (!rootEl || !statusEl || !topbarEl || !mobileCover) return;
+    clearMobileStatusSlot();
+    const height = statusEl.getBoundingClientRect().height;
+    const ceiling = topbarEl.getBoundingClientRect().bottom + STATUS_MIN_GAP;
+    const top = Math.max(ceiling, mobileCover.top - STATUS_GAP - height);
+    if (height <= 0 || top + height > mobileCover.top - STATUS_MIN_GAP) return;
+    rootEl.style.setProperty('--auto-mobile-status-top', `${Math.round(top)}px`);
+    rootEl.setAttribute('data-mobile-status-above', '');
+  };
+
   const clearMobileCoverAnchor = () => {
+    mobileCover = null;
     if (!rootEl) return;
     rootEl.removeAttribute('data-mobile-cover-anchor');
     rootEl.style.removeProperty('--auto-mobile-cover-left');
     rootEl.style.removeProperty('--auto-mobile-cover-top');
     rootEl.style.removeProperty('--auto-mobile-cover-width');
     rootEl.style.removeProperty('--auto-mobile-cover-height');
+    clearMobileStatusSlot();
   };
 
   const captureMobileCoverAnchor = () => {
@@ -78,11 +114,13 @@ export function AutoMode() {
       clearMobileCoverAnchor();
       return;
     }
+    mobileCover = rect;
     rootEl.style.setProperty('--auto-mobile-cover-left', `${rect.left}px`);
     rootEl.style.setProperty('--auto-mobile-cover-top', `${rect.top}px`);
     rootEl.style.setProperty('--auto-mobile-cover-width', `${rect.width}px`);
     rootEl.style.setProperty('--auto-mobile-cover-height', `${rect.height}px`);
     rootEl.setAttribute('data-mobile-cover-anchor', '');
+    placeMobileStatus();
   };
 
   const armIdle = () => {
@@ -123,7 +161,11 @@ export function AutoMode() {
 
   createEffect(() => {
     current()?.id;
-    if (active()) armIdle();
+    if (!active()) return;
+    armIdle();
+    // The panel only exists while there is a track, so the first one to arrive
+    // is the first chance to place the status line above the artwork.
+    placeMobileStatus();
   });
 
   createEffect(() => {
@@ -210,7 +252,7 @@ export function AutoMode() {
         <div class={styles.wash} aria-hidden="true" />
         <div class={styles.grain} aria-hidden="true" />
 
-        <header class={styles.topbar}>
+        <header class={styles.topbar} ref={topbarEl}>
           <div class={styles.brandBlock}>
             <span class={styles.mark} aria-hidden="true"><i /><i /><i /></span>
             <span class={styles.autoLabel}>{t('autoMode.label')}</span>
@@ -252,7 +294,7 @@ export function AutoMode() {
                 <p class={styles.artist} title={current()!.artist}>{current()!.artist}</p>
               </div>
 
-              <div class={styles.status}>
+              <div class={styles.status} ref={statusEl}>
                 <Show when={state.autoMode.activity && agentVisible()}>
                   <div
                     class={styles.agent}

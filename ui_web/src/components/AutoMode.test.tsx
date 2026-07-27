@@ -134,17 +134,7 @@ describe('AutoMode environment', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
     const source = document.createElement('div');
     source.dataset.nowPlayingCoverSlot = '';
-    source.getBoundingClientRect = vi.fn(() => ({
-      x: 16,
-      y: 92,
-      top: 92,
-      right: 374,
-      bottom: 450,
-      left: 16,
-      width: 358,
-      height: 358,
-      toJSON: () => ({}),
-    }));
+    source.getBoundingClientRect = vi.fn(() => rect({ top: 92, left: 16, width: 358, height: 358 }));
     document.body.append(source);
 
     render(() => <AutoMode />);
@@ -156,4 +146,48 @@ describe('AutoMode environment', () => {
     expect(root.style.getPropertyValue('--auto-mobile-cover-height')).toBe('358px');
     source.remove();
   });
+
+  it('lifts the autopilot line into the band above the pinned cover, and only when it fits', () => {
+    // The pinned cover is not where the panel below it was laid out, so in flow
+    // the status line lands on the artwork. It belongs in the empty band between
+    // the top bar and the cover — but never on top of the top bar.
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    let coverTop = 300;
+    const source = document.createElement('div');
+    source.dataset.nowPlayingCoverSlot = '';
+    source.getBoundingClientRect = vi.fn(() => rect({ top: coverTop, left: 16, width: 358, height: 358 }));
+    document.body.append(source);
+
+    render(() => <AutoMode />);
+    const root = screen.getByRole('region', { name: 'autoMode.aria' });
+    const status = screen.getByText('autoMode.agent.queued:Next song,1,4,3,20').parentElement!.parentElement!;
+    root.querySelector('header')!.getBoundingClientRect = vi.fn(() => rect({ top: 20, left: 0, width: 390, height: 80 }));
+    status.getBoundingClientRect = vi.fn(() => rect({ top: 0, left: 16, width: 358, height: 18 }));
+
+    fireEvent(window, new Event('resize'));
+    expect(root).toHaveAttribute('data-mobile-status-above');
+    // 12px clear of the artwork, well below the top bar's 100px bottom edge.
+    expect(root.style.getPropertyValue('--auto-mobile-status-top')).toBe('270px');
+
+    // A band too short for the line: it stays in the panel's reserved slot.
+    coverTop = 118;
+    fireEvent(window, new Event('resize'));
+    expect(root).not.toHaveAttribute('data-mobile-status-above');
+    expect(root.style.getPropertyValue('--auto-mobile-status-top')).toBe('');
+    source.remove();
+  });
 });
+
+function rect({ top, left, width, height }: { top: number; left: number; width: number; height: number }): DOMRect {
+  return {
+    x: left,
+    y: top,
+    top,
+    left,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height,
+    toJSON: () => ({}),
+  };
+}

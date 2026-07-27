@@ -765,8 +765,26 @@
     height: var(--auto-mobile-cover-height);
   }
 
+  /* The autopilot line rides in the empty band above the pinned artwork, in the
+     artwork's own column, so it reads as its caption. The panel below is laid
+     out against the cover's flow position, not the pinned one, which is what put
+     this line on top of the cover's bottom edge. The top comes from JS and is
+     only supplied when the band is tall enough; without the attribute the line
+     stays in its reserved slot in the panel. */
+  .root[data-mobile-status-above] .status {
+    position: fixed;
+    top: var(--auto-mobile-status-top);
+    left: var(--auto-mobile-cover-left);
+    width: var(--auto-mobile-cover-width);
+  }
+
+  /* The enter transition is applied to the panel's blocks rather than the panel
+     itself: a filter on an ancestor would make it the containing block for the
+     status line, which is positioned against the viewport. */
   .topbar,
-  .panel,
+  .meta,
+  .status,
+  .controls,
   .upStrip {
     filter: none;
     transition:
@@ -775,7 +793,9 @@
   }
 
   .root:not(.active) .topbar,
-  .root:not(.active) .panel,
+  .root:not(.active) .meta,
+  .root:not(.active) .status,
+  .root:not(.active) .controls,
   .root:not(.active) .upStrip {
     opacity: 0;
     filter: blur(12px);
@@ -834,6 +854,9 @@
 
   .topbar,
   .panel,
+  .meta,
+  .status,
+  .controls,
   .upStrip,
   .cover {
     filter: none !important;
