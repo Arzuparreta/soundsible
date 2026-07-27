@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, onCleanup, onMount, untrack, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { api } from '../lib/api';
-import { actions, state } from '../stores';
+import { actions, state, isPlayingItem, isPlayingResult, ownedTrackForItem, ownedTrackForResult } from '../stores';
 import { coverUrl } from '../lib/media';
 import { artistPath, albumPath } from '../lib/artistRoute';
 import { toast } from '../lib/toast';
@@ -108,7 +108,6 @@ export default function Search() {
   let searchInput: HTMLInputElement | undefined;
   const youtubeCache = new Map<string, SearchResult[]>();
 
-  const libYt = createMemo(() => new Set(state.library.map((t) => t.youtube_id).filter((x): x is string => !!x)));
   const songs = createMemo(() =>
     items().filter((item) => ['track', 'library_track'].includes(item.type)),
   );
@@ -460,6 +459,10 @@ export default function Search() {
       if (response.status === 'queued') {
         setReview(null);
         setSaved((s) => new Set(s).add(item.id));
+        // The row and the download now share a video id. Recording it is what
+        // lets this row flip to ✓ — and light up if it is what's playing — the
+        // moment the download lands, instead of waiting for a fresh search.
+        if (response.video_id) actions.linkCatalogItem(item.id, response.video_id);
         toast.success(tr('search.addedToDownloads'));
       } else if (response.status === 'needs_review') {
         setReview({ item, response });
@@ -489,7 +492,7 @@ export default function Search() {
   };
 
   const addYouTube = async (result: SearchResult) => {
-    if (libYt().has(result.id)) {
+    if (ownedTrackForResult(result)) {
       toast.info(tr('search.alreadyInLibrary'));
       return;
     }
@@ -664,9 +667,9 @@ export default function Search() {
                     <SongResult
                       item={item()}
                       coverStyle={itemCoverStyle}
-                      active={state.playback.currentTrack?.id === (item().track_id || item().raw?.id)}
+                      active={isPlayingItem(item())}
                       saving={saving().has(item().id)}
-                      saved={!!item().track_id}
+                      saved={!!ownedTrackForItem(item())}
                       busy={itemBusy(item())}
                       onPlay={() => playItem(item())}
                       onSave={() => saveItem(item())}
@@ -723,8 +726,8 @@ export default function Search() {
                     <h2 class={styles.sectionTitle}>{tr('search.ytDirectSection')}</h2>
                     <SearchResultRow
                       r={result()}
-                      active={state.playback.currentTrack?.id === result().id}
-                      inLibrary={libYt().has(result().id)}
+                      active={isPlayingResult(result())}
+                      inLibrary={!!ownedTrackForResult(result())}
                       enqueued={youtubeEnqueued().has(result().id)}
                       onPreview={() => previewYouTube(result())}
                       onAdd={() => void addYouTube(result())}
@@ -740,8 +743,8 @@ export default function Search() {
                     {(result) => (
                       <SearchResultRow
                         r={result}
-                        active={state.playback.currentTrack?.id === result.id}
-                        inLibrary={libYt().has(result.id)}
+                        active={isPlayingResult(result)}
+                        inLibrary={!!ownedTrackForResult(result)}
                         enqueued={youtubeEnqueued().has(result.id)}
                         onPreview={() => previewYouTube(result)}
                         onAdd={() => void addYouTube(result)}
@@ -792,9 +795,9 @@ export default function Search() {
                         <SongResult
                           item={item}
                           coverStyle={itemCoverStyle}
-                          active={state.playback.currentTrack?.id === (item.track_id || item.id)}
+                          active={isPlayingItem(item)}
                           saving={saving().has(item.id)}
-                          saved={saved().has(item.id) || !!item.action_state?.in_library}
+                          saved={saved().has(item.id) || !!ownedTrackForItem(item)}
                           busy={itemBusy(item)}
                           onPlay={() => playItem(item)}
                           onSave={() => saveItem(item)}
@@ -1021,7 +1024,8 @@ function SongResult(props: {
   const canSave = () => props.item.type === 'track' && !props.saved;
   return (
     <div
-      classList={{ [styles.songRow]: true, [styles.activeSong]: props.active }}
+      class={styles.songRow}
+      data-now-playing={props.active ? '' : undefined}
       aria-busy={props.busy}
       onClick={props.onPlay}
     >

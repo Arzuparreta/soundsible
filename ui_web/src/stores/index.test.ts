@@ -466,3 +466,71 @@ describe('Radio mode', () => {
     expect(state.playback.queue.map((t) => t.id)).toEqual(['seed1']);
   });
 });
+
+describe('Solid store playback identity', () => {
+  /** The Deezer row, the preview it resolves to, and the file it downloads as —
+   * three ids for one song, which is exactly what used to break the highlight. */
+  const row = {
+    id: 'deezer:track:12345',
+    type: 'track' as const,
+    source: 'deezer',
+    title: 'Song A',
+    artist: 'Artist A',
+    external_ids: { deezer_id: '12345' },
+  };
+  const preview: Track = { id: 'vid123', title: 'Song A', artist: 'Artist A', source: 'preview' };
+  const downloaded: Track = { id: 'sha256', title: 'Song A', artist: 'Artist A', youtube_id: 'vid123' };
+
+  it('marks the search row that started playback, with no id in common', async () => {
+    const { actions, isPlayingItem } = await loadStore();
+    expect(isPlayingItem(row)).toBe(false);
+    actions.playTrack({ ...preview, originKeys: ['cat:deezer:track:12345', 'deezer:12345'] });
+    expect(isPlayingItem(row)).toBe(true);
+  });
+
+  it('adopts the library twin identity the moment a download lands mid-song', async () => {
+    const owned: Track = { ...downloaded, isrc: 'USRC12345678' };
+    const getLibrary = vi
+      .fn()
+      .mockResolvedValueOnce({ tracks: [], playlists: {}, settings: {}, podcast_subscriptions: [] })
+      .mockResolvedValue({ tracks: [owned], playlists: {}, settings: {}, podcast_subscriptions: [] });
+    const { actions, playingKeys, isPlayingItem } = await loadStore({ getLibrary });
+
+    actions.playTrack(preview);
+    await actions.syncLibrary();
+    // Streaming, nothing owned: the song answers to its video id and no more.
+    expect(playingKeys().has('lib:sha256')).toBe(false);
+    expect(playingKeys().has('isrc:USRC12345678')).toBe(false);
+
+    // The download completes. `downloader_update` already calls syncLibrary();
+    // the new library invalidates the index, which invalidates the key set —
+    // playback is not touched and no extra request is made.
+    await actions.syncLibrary();
+    expect(playingKeys().has('lib:sha256')).toBe(true);
+    // The twin's other identities come along, so a catalog row that only knows
+    // the recording code now matches too.
+    const byIsrc = { ...row, id: 'mb:abc', source: 'musicbrainz', external_ids: { isrc: 'us-rc1-23-45678' } };
+    expect(isPlayingItem(byIsrc)).toBe(true);
+  });
+
+  it('recognises the downloaded copy as owned once the resolution is linked', async () => {
+    const { actions, ownedTrackForItem } = await loadStore({
+      getLibrary: vi
+        .fn()
+        .mockResolvedValue({ tracks: [downloaded], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+    });
+    await actions.syncLibrary();
+    // The row shares no id with the file it produced…
+    expect(ownedTrackForItem(row)).toBeNull();
+    // …until the catalog→video resolution is recorded.
+    actions.linkCatalogItem(row.id, 'vid123');
+    expect(ownedTrackForItem(row)?.id).toBe('sha256');
+  });
+
+  it('stops marking rows when playback stops', async () => {
+    const { actions, isPlayingResult } = await loadStore();
+    actions.playTrack(preview);
+    expect(isPlayingResult({ id: 'vid123', title: 'Song A' })).toBe(true);
+    expect(isPlayingResult({ id: 'othervid', title: 'Song A' })).toBe(false);
+  });
+});

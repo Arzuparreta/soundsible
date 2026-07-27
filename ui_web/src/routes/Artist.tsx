@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, Show, type JSX, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
-import { state, actions, musicLibrary } from '../stores';
+import { actions, musicLibrary, isPlayingItem, isPlayingTrack } from '../stores';
 import { api } from '../lib/api';
 import { coverUrl } from '../lib/media';
 import { shuffled } from '../lib/shuffle';
@@ -333,7 +333,8 @@ function TrackListLite(props: { tracks: Track[] }) {
       <For each={props.tracks}>
         {(track, i) => (
           <div
-            classList={{ [styles.trackRow]: true, [styles.trackActive]: state.playback.currentTrack?.id === track.id }}
+            class={styles.trackRow}
+            data-now-playing={isPlayingTrack(track) ? '' : undefined}
             onClick={() => actions.playFrom(props.tracks, i())}
           >
             <span class={styles.trackIndex}>{i() + 1}</span>
@@ -372,7 +373,8 @@ function DiscoverView(props: {
             <For each={props.topTracks.slice(0, 10)}>
               {(item, i) => (
                 <div
-                  classList={{ [styles.trackRow]: true, [styles.trackActive]: state.playback.currentTrack?.id === (item.track_id || item.id) }}
+                  class={styles.trackRow}
+                  data-now-playing={isPlayingItem(item) ? '' : undefined}
                   aria-busy={itemBusy(item)}
                   onClick={() => props.onPlayItem(item, props.topTracks.slice(0, 10))}
                 >

@@ -88,7 +88,8 @@ export default function SongRow(props: SongRowProps) {
 
   return (
     <div
-      classList={{ [styles.row]: true, [styles.active]: props.active }}
+      class={styles.row}
+      data-now-playing={props.active ? '' : undefined}
       role="button"
       tabindex="0"
       aria-label={label()}

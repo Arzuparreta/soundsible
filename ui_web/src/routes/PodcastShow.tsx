@@ -1,7 +1,7 @@
 import { createMemo, createResource, createSignal, For, Show } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import { api } from '../lib/api';
-import { state, actions } from '../stores';
+import { state, actions, isPlayingEpisode } from '../stores';
 import { t } from '../lib/i18n';
 import type { PodcastEpisode } from '../types/podcast';
 import styles from './PodcastShow.module.css';
@@ -104,7 +104,11 @@ export default function PodcastShow() {
               const id = ep.guid || ep.enclosure_url;
               const downloaded = () => isDownloaded(ep);
               return (
-                <div class={styles.ep} onClick={() => playEp(ep)}>
+                <div
+                  class={styles.ep}
+                  data-now-playing={isPlayingEpisode(id) ? '' : undefined}
+                  onClick={() => playEp(ep)}
+                >
                   <button
                     class={styles.epPlay}
                     type="button"
@@ -119,12 +123,7 @@ export default function PodcastShow() {
                     </svg>
                   </button>
                   <div class={styles.epMeta}>
-                    <span
-                      class={styles.epTitle}
-                      classList={{ [styles.active]: state.playback.currentTrack?.id === id }}
-                    >
-                      {ep.title}
-                    </span>
+                    <span class={styles.epTitle}>{ep.title}</span>
                     <span class={styles.epSub}>
                       {[fmtDate(ep.published), fmtDur(ep.duration_sec)].filter(Boolean).join(' · ')}
                     </span>

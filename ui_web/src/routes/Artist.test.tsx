@@ -3,7 +3,7 @@ import { Route, Router } from '@solidjs/router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Artist from './Artist';
 import { setLocale } from '../lib/i18n';
-import type { ArtistProfile } from '../types/music';
+import type { ArtistProfile, Track } from '../types/music';
 
 const apiMock = vi.hoisted(() => ({
   getArtistProfile: vi.fn(),
@@ -27,20 +27,25 @@ vi.mock('../lib/toast', () => ({
     loading: vi.fn(() => ({ update: vi.fn() })),
   },
 }));
-vi.mock('../stores', () => ({
-  actions: {
-    playFrom: (...args: unknown[]) => storeMock.playFrom(...args),
-    playShuffled: (...args: unknown[]) => storeMock.playShuffled(...args),
-    playTrack: (...args: unknown[]) => storeMock.playTrack(...args),
-  },
-  state: {
-    get library() {
-      return storeMock.library;
+vi.mock('../stores', async () => {
+  const { identityMock } = await import('../lib/identityMock');
+  return {
+    actions: {
+      playFrom: (...args: unknown[]) => storeMock.playFrom(...args),
+      playShuffled: (...args: unknown[]) => storeMock.playShuffled(...args),
+      playTrack: (...args: unknown[]) => storeMock.playTrack(...args),
+      linkCatalogItem: vi.fn(),
     },
-    playback: { currentTrack: null },
-  },
-  musicLibrary: () => storeMock.library,
-}));
+    state: {
+      get library() {
+        return storeMock.library;
+      },
+      playback: { currentTrack: null, queue: [] },
+    },
+    musicLibrary: () => storeMock.library,
+    ...identityMock({ currentTrack: () => null, library: () => storeMock.library as unknown as Track[] }),
+  };
+});
 
 function profileFor(name: string, inLibrary: boolean): ArtistProfile {
   return {

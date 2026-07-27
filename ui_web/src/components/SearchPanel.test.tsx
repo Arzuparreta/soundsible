@@ -47,6 +47,7 @@ const storeMock = vi.hoisted(() => {
       enqueue: vi.fn(),
       playTrack: vi.fn(),
       startRadio: vi.fn(),
+      linkCatalogItem: vi.fn(),
     },
   };
 });
@@ -65,7 +66,18 @@ vi.mock('../lib/nodeDiscover', () => ({
   nodeFeed: () => nodeMock.items,
   nodeLoading: () => nodeMock.loading,
 }));
-vi.mock('../stores', () => ({ state: storeMock.state, actions: storeMock.actions }));
+vi.mock('../stores', async () => {
+  const { identityMock } = await import('../lib/identityMock');
+  return {
+    state: storeMock.state,
+    actions: storeMock.actions,
+    ...identityMock({
+      currentTrack: () => storeMock.state.playback.currentTrack,
+      library: () => storeMock.state.library,
+      queue: () => storeMock.state.playback.queue,
+    }),
+  };
+});
 vi.mock('./trackActions', () => ({ openTrackMenu: vi.fn() }));
 vi.mock('./PlaylistPicker', () => ({ openPlaylistPicker: vi.fn() }));
 vi.mock('./MetadataEditor', () => ({ openMetadataEditor: vi.fn() }));

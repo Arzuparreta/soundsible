@@ -357,8 +357,9 @@
   background: var(--bg-raised);
 }
 
-.trackActive {
-  background: var(--bg-elevated);
+/* Wash and marker rail: app.css, [data-now-playing]. */
+[data-now-playing] .trackTitle {
+  color: var(--accent);
 }
 
 .trackIndex {

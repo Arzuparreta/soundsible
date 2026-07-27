@@ -132,3 +132,41 @@ html[data-auto-mode='active'] #app {
     transform: translateY(4px);
   }
 }
+
+/* ── Now playing, one treatment everywhere ──
+   A row that is the song currently sounding looks the same whether it sits in
+   the library, a search result list, an album, an artist page or a podcast
+   show. Declared once as an attribute so every row type opts in with
+   `data-now-playing`, instead of each stylesheet inventing its own accent —
+   which is how the search list ended up with a wash so faint it read as
+   "nothing is playing here". */
+[data-now-playing] {
+  position: relative;
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
+  border-color: rgba(249, 122, 18, 0.16);
+}
+
+[data-now-playing]::before {
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: 0;
+  width: 2px;
+  content: '';
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* Phones render the rows edge to edge, so the marker rail would sit against the
+   screen border. The wash alone carries it there. */
+@media (max-width: 1023px) {
+  [data-now-playing] {
+    background: var(--accent-faint);
+    border-color: transparent;
+  }
+
+  [data-now-playing]::before {
+    display: none;
+  }
+}

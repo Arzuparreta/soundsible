@@ -2,7 +2,8 @@ import { createSignal } from 'solid-js';
 import { api } from './api';
 import { toast } from './toast';
 import { t } from './i18n';
-import { actions, state } from '../stores';
+import { actions, isPlayingItem, state } from '../stores';
+import { catalogItemKeys } from './playbackIdentity';
 import type { CatalogItem, Track } from '../types/music';
 
 /** Artist name for a catalog row, wherever the source put it. */
@@ -32,6 +33,7 @@ export function itemToTrack(item: CatalogItem): Track | null {
       youtube_id: typeof item.raw.youtube_id === 'string' ? item.raw.youtube_id : undefined,
       cover: item.cover,
       source: item.source === 'youtube' ? 'preview' : undefined,
+      originKeys: catalogItemKeys(item),
     };
   }
   return null;
@@ -96,6 +98,7 @@ export async function playCatalogItem(item: CatalogItem, queue?: CatalogItem[]):
     );
     if (signal.aborted) return;
     if (!resolved.video_id) throw new Error('not-found');
+    actions.linkCatalogItem(item.id, resolved.video_id);
     const track: Track = {
       id: resolved.video_id,
       title: item.title,
@@ -104,6 +107,10 @@ export async function playCatalogItem(item: CatalogItem, queue?: CatalogItem[]):
       duration: item.duration,
       cover: item.cover,
       source: 'preview',
+      // Carry the row's identity along: the video id shares nothing with the
+      // Deezer/MusicBrainz row that picked it, so without this the row could
+      // not tell that the thing it just started is the thing now playing.
+      originKeys: catalogItemKeys(item),
     };
     if (queue) {
       const rest = queue
@@ -126,6 +133,5 @@ export async function playCatalogItem(item: CatalogItem, queue?: CatalogItem[]):
  * Both read the same to a listener: it is working. */
 export function itemBusy(item: CatalogItem): boolean {
   if (resolvingItemId() === item.id) return true;
-  const playing = state.playback.currentTrack?.id;
-  return state.playback.isLoading && !!playing && playing === (item.track_id || item.id);
+  return state.playback.isLoading && isPlayingItem(item);
 }

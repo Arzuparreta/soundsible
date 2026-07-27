@@ -36,7 +36,11 @@ export default function SearchResultRow(props: SearchResultRowProps) {
       : { background: 'var(--bg-raised)' };
 
   return (
-    <div classList={{ [styles.row]: true, [styles.active]: props.active }} onClick={props.onPreview}>
+    <div
+      class={styles.row}
+      data-now-playing={props.active ? '' : undefined}
+      onClick={props.onPreview}
+    >
       <div class={styles.cover} style={bg()} />
       <div class={styles.meta}>
         <span class={styles.title}>{props.r.title}</span>

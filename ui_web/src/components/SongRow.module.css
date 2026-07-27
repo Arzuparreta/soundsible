@@ -20,35 +20,11 @@
   border-color: var(--hairline-soft);
 }
 
-.active {
-  background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
-  border-color: rgba(249, 122, 18, 0.16);
-}
-
-.active::before {
-  position: absolute;
-  top: 20%;
-  bottom: 20%;
-  left: 0;
-  width: 2px;
-  content: '';
-  background: var(--accent);
-  border-radius: var(--radius-full);
-  box-shadow: 0 0 10px var(--accent-glow);
-}
-.active .title {
+/* The row wash and marker rail live in app.css under [data-now-playing], so
+   every list paints "this is sounding" identically. Only the title accent is
+   local, because the class it colours is module-scoped. */
+[data-now-playing] .title {
   color: var(--accent);
-}
-
-@media (max-width: 1023px) {
-  .active {
-    background: var(--accent-faint);
-    border-color: transparent;
-  }
-
-  .active::before {
-    display: none;
-  }
 }
 
 .index {

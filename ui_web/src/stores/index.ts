@@ -1,5 +1,5 @@
 import { createStore } from 'solid-js/store';
-import { createSignal } from 'solid-js';
+import { createMemo, createRoot, createSignal } from 'solid-js';
 import { createSocket, type AppSocket, dispatchDiscoverSeed } from '../lib/socket';
 import { api, type DeviceRegistration, type RemotePlaybackState } from '../lib/api';
 import { audioEl, audioService, storedVolume } from '../lib/audio';
@@ -9,12 +9,23 @@ import { toast } from '../lib/toast';
 import { vibrate } from '../lib/haptics';
 import { isMusicTrack, isPodcastTrack, podcastEpisodeToTrack } from '../lib/track';
 import { libraryTrackFor, queueIdentity, queueIndexOf, resultToTrack } from '../lib/queueDiscovery';
+import {
+  buildIdentityIndex,
+  catalogItemKeys,
+  collectIdentityKeys,
+  keysMatch,
+  podcastEpisodeKeys,
+  resolvePlayingKeys,
+  searchResultKeys,
+  trackKeys,
+  withLinkedKeys,
+} from '../lib/playbackIdentity';
 import { resolveTrackYoutubeId, relatedTracksFor } from '../lib/relatedDiscovery';
 import { AutopilotController, type AutoCandidate, type AutoModeState, type AutoPlanItem, type AutoProfile } from '../lib/autopilot';
 import { createShortcutHandler } from '../lib/shortcuts';
 import { t as tr } from '../lib/i18n';
 import { ListeningLearning } from '../lib/listeningLearning';
-import type { Track, PlaylistMap, LibrarySettings } from '../types/music';
+import type { Track, CatalogItem, SearchResult, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
 import type { DownloadQueueItem, DownloadEvent, CompletedDownload } from '../types/download';
 
@@ -518,6 +529,83 @@ export function downloadCounts(): { active: number; failed: number } {
   return { active, failed };
 }
 
+/* ── Playback identity ──
+ *
+ * One definition of "this is the thing that is playing", shared by every
+ * surface. See `lib/playbackIdentity.ts` for why identity is a set of keys and
+ * not an id.
+ *
+ * Two derived values, and nothing else moves:
+ *
+ * - `libraryIndex` maps every key the library answers to → its track. Rebuilt
+ *   only when `state.library` actually changes.
+ * - `playingKeys` is the current track's keys *plus* the keys of its library
+ *   twin, looked up through that index.
+ *
+ * That second union is what closes the download case. Finishing a download
+ * emits `downloader_update`, which already calls `syncLibrary()`; the new
+ * library array invalidates `libraryIndex`, which invalidates `playingKeys`,
+ * which now contains the freshly minted `lib:` id — and the row in the library
+ * lights up on its own. Socket event → store write → memo → one class toggle.
+ * No polling, no extra request, no timer.
+ */
+
+/** Catalog row id → YouTube video id, learned when a row is resolved or saved.
+ * The engine's search response cannot know this (the resolution happens after
+ * the search), so a Deezer row you just downloaded would otherwise keep
+ * offering "＋ add" until the query was run again. */
+const [catalogLinks, setCatalogLinks] = createSignal<ReadonlyMap<string, string>>(new Map());
+
+const identity = createRoot(() => {
+  const libraryIndex = createMemo(() => buildIdentityIndex(state.library));
+  const playingKeys = createMemo(() =>
+    resolvePlayingKeys(state.playback.currentTrack, libraryIndex(), catalogLinks()),
+  );
+  // Queue membership has the same identity problem as the playing highlight: a
+  // Deezer row already lined up must say so, whatever id the row holds.
+  const queuedKeys = createMemo(() => collectIdentityKeys(state.playback.queue));
+  return { libraryIndex, playingKeys, queuedKeys };
+});
+
+/** Keys the playing track answers to. Reactive: read in a tracking scope. */
+export const playingKeys = identity.playingKeys;
+
+/** Does anything with these identity keys own the transport right now? */
+export const isPlayingKeys = (keys: string[]): boolean =>
+  keysMatch(keys, identity.playingKeys(), catalogLinks());
+
+/** The row currently playing — whatever id the surface happens to hold. */
+export const isPlayingTrack = (track: Track): boolean => isPlayingKeys(trackKeys(track));
+export const isPlayingItem = (item: CatalogItem): boolean => isPlayingKeys(catalogItemKeys(item));
+export const isPlayingResult = (result: SearchResult): boolean =>
+  isPlayingKeys(searchResultKeys(result));
+export const isPlayingEpisode = (episodeKey: string): boolean =>
+  isPlayingKeys(podcastEpisodeKeys(episodeKey));
+
+/** Is anything with these identity keys sitting in the playback queue? */
+export const isQueuedKeys = (keys: string[]): boolean =>
+  keysMatch(keys, identity.queuedKeys(), catalogLinks());
+
+export const isQueuedTrack = (track: Track): boolean => isQueuedKeys(trackKeys(track));
+export const isQueuedItem = (item: CatalogItem): boolean => isQueuedKeys(catalogItemKeys(item));
+export const isQueuedResult = (result: SearchResult): boolean =>
+  isQueuedKeys(searchResultKeys(result));
+
+/** The library track this identity is owned as, if it is owned at all. */
+export function ownedTrackForKeys(keys: string[]): Track | null {
+  const index = identity.libraryIndex();
+  for (const key of withLinkedKeys(keys, catalogLinks())) {
+    const owned = index.get(key);
+    if (owned) return owned;
+  }
+  return null;
+}
+
+export const ownedTrackForItem = (item: CatalogItem): Track | null =>
+  ownedTrackForKeys(catalogItemKeys(item));
+export const ownedTrackForResult = (result: SearchResult): Track | null =>
+  ownedTrackForKeys(searchResultKeys(result));
+
 export const actions = {
   async syncLibrary(): Promise<void> {
     if (librarySyncInFlight) {
@@ -553,6 +641,19 @@ export const actions = {
       librarySyncPending = false;
       if (runAgain) queueMicrotask(() => void actions.syncLibrary());
     }
+  },
+
+  /** Record that a catalog row resolved to this video. Cheap, local, and the
+   * only way a Deezer row can know it is the song that just finished
+   * downloading — the two share no id until this link exists. */
+  linkCatalogItem(itemId: string, videoId: string): void {
+    if (!itemId || !videoId) return;
+    setCatalogLinks((prev) => {
+      if (prev.get(itemId) === videoId) return prev; // no write, no invalidation
+      const next = new Map(prev);
+      next.set(itemId, videoId);
+      return next;
+    });
   },
 
   toggleFavourite(id: string): void {

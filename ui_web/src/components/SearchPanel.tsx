@@ -1,13 +1,25 @@
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, onCleanup, untrack, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { api } from '../lib/api';
-import { actions, state } from '../stores';
+import {
+  actions,
+  state,
+  isPlayingItem,
+  isPlayingResult,
+  isPlayingTrack,
+  isQueuedItem,
+  isQueuedResult,
+  isQueuedTrack,
+  ownedTrackForItem,
+  ownedTrackForResult,
+} from '../stores';
 import { coverUrl } from '../lib/media';
 import { toast } from '../lib/toast';
 import { parseYouTubeInput } from '../lib/youtube';
 import { ensureDiscover, recentSaved, type RecentlySavedItem } from '../lib/discover';
 import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed } from '../lib/nodeDiscover';
 import { libraryTrackFor, queueIndexOf, resultToTrack } from '../lib/queueDiscovery';
+import { catalogItemKeys } from '../lib/playbackIdentity';
 import { resolveTrackYoutubeId } from '../lib/relatedDiscovery';
 import { prefetchPreviews } from '../lib/prefetch';
 import { isPodcastTrack } from '../lib/track';
@@ -309,6 +321,7 @@ export function SearchPanel() {
     if (!artist || !item.title) return null;
     const res = await api.resolveCatalogItem({ artist, title: item.title, duration: item.duration });
     if (!res.video_id) return null;
+    actions.linkCatalogItem(item.id, res.video_id);
     const track: Track = {
       id: res.video_id,
       title: item.title,
@@ -317,6 +330,7 @@ export function SearchPanel() {
       duration: item.duration,
       cover: item.cover,
       source: 'preview',
+      originKeys: catalogItemKeys(item),
     };
     resolvedCache.set(item.id, track);
     return track;
@@ -403,14 +417,6 @@ export function SearchPanel() {
       },
       ev,
     );
-
-  // Known ids let rows show live "playing / queued" state without resolving.
-  const knownId = (item: CatalogItem): string | null =>
-    item.track_id ?? (typeof item.raw?.id === 'string' ? item.raw.id : null) ?? resolvedCache.get(item.id)?.id ?? null;
-
-  const isActive = (id: string | null) => !!id && state.playback.currentTrack?.id === id;
-  const isQueued = (id: string | null) =>
-    !!id && state.playback.queue.some((t) => t.id === id || t.youtube_id === id);
 
   /** Panel rows carry (cover, seed) in that order; the shared helper takes the
    * seed first. Thin adapter so the JSX below stays readable. */
@@ -617,9 +623,9 @@ export function SearchPanel() {
                       title={r.title}
                       sub={r.channel ?? ''}
                       coverStyle={rowCoverStyle(r.thumbnail, r.id)}
-                      inLibrary={!!libraryTrackFor(state.library, r)}
-                      active={isActive(trackForResult(r).id)}
-                      queued={isQueued(r.id)}
+                      inLibrary={!!ownedTrackForResult(r)}
+                      active={isPlayingResult(r)}
+                      queued={isQueuedResult(r)}
                       resolving={false}
                       onPlay={() => playNow(trackForResult(r))}
                       onQueue={() => addToQueue(trackForResult(r))}
@@ -664,9 +670,9 @@ export function SearchPanel() {
                       title={rec.title}
                       sub={rec.channel ?? ''}
                       coverStyle={rowCoverStyle(rec.thumbnail, rec.id)}
-                      inLibrary={!!libraryTrackFor(state.library, rec)}
-                      active={isActive(trackForResult(rec).id)}
-                      queued={isQueued(rec.id)}
+                      inLibrary={!!ownedTrackForResult(rec)}
+                      active={isPlayingResult(rec)}
+                      queued={isQueuedResult(rec)}
                       resolving={false}
                       onPlay={() => playNow(trackForResult(rec))}
                       onQueue={() => addToQueue(trackForResult(rec))}
@@ -755,8 +761,8 @@ export function SearchPanel() {
                           row.item.track_id,
                         )}
                         inLibrary={row.item.in_library}
-                        active={isActive(row.track.id)}
-                        queued={isQueued(row.track.id)}
+                        active={isPlayingTrack(row.track)}
+                        queued={isQueuedTrack(row.track)}
                         resolving={false}
                         onPlay={() => playNow(row.track)}
                         onQueue={() => addToQueue(row.track)}
@@ -819,9 +825,9 @@ export function SearchPanel() {
                       title={r().title}
                       sub={r().channel ?? ''}
                       coverStyle={rowCoverStyle(r().thumbnail, r().id)}
-                      inLibrary={!!libraryTrackFor(state.library, r())}
-                      active={isActive(trackForResult(r()).id)}
-                      queued={isQueued(r().id)}
+                      inLibrary={!!ownedTrackForResult(r())}
+                      active={isPlayingResult(r())}
+                      queued={isQueuedResult(r())}
                       resolving={false}
                       onPlay={() => playNow(trackForResult(r()))}
                       onQueue={() => addToQueue(trackForResult(r()))}
@@ -840,9 +846,9 @@ export function SearchPanel() {
                         title={item.title}
                         sub={item.subtitle || itemArtist(item)}
                         coverStyle={rowCoverStyle(item.cover || (item.track_id ? coverUrl(item.track_id) : undefined), item.id)}
-                        inLibrary={item.type === 'library_track' || !!item.action_state?.in_library}
-                        active={isActive(knownId(item))}
-                        queued={isQueued(knownId(item))}
+                        inLibrary={item.type === 'library_track' || !!ownedTrackForItem(item)}
+                        active={isPlayingItem(item)}
+                        queued={isQueuedItem(item)}
                         resolving={resolving().has(item.id)}
                         onPlay={() => void withTrack(item.id, () => trackForCatalog(item), playNow)}
                         onQueue={() => void withTrack(item.id, () => trackForCatalog(item), addToQueue)}
@@ -866,9 +872,9 @@ export function SearchPanel() {
                         title={r.title}
                         sub={r.channel ?? ''}
                         coverStyle={rowCoverStyle(r.thumbnail, r.id)}
-                        inLibrary={!!libraryTrackFor(state.library, r)}
-                        active={isActive(trackForResult(r).id)}
-                        queued={isQueued(r.id)}
+                        inLibrary={!!ownedTrackForResult(r)}
+                        active={isPlayingResult(r)}
+                        queued={isQueuedResult(r)}
                         resolving={false}
                         onPlay={() => playNow(trackForResult(r))}
                         onQueue={() => addToQueue(trackForResult(r))}

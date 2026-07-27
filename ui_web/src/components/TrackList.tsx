@@ -1,7 +1,7 @@
 import { createEffect, createSignal, For, Show, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { createVirtualizer } from '@tanstack/solid-virtual';
-import { state, actions } from '../stores';
+import { actions, isPlayingTrack } from '../stores';
 import SongRow from './SongRow';
 import { openTrackMenu, type TrackMenuContext } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
@@ -114,7 +114,7 @@ export default function TrackList(props: {
                       <SongRow
                         track={track!}
                         cover={coverUrl(track!.id)}
-                        active={state.playback.currentTrack?.id === track!.id}
+                        active={isPlayingTrack(track!)}
                         onPlay={() => actions.playFrom(props.tracks, vi.index)}
                         onArtist={props.linkArtist === false ? undefined : goArtist}
                         onMenu={openMenu}

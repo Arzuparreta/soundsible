@@ -10,8 +10,15 @@ export interface Track {
   podcast_episode_guid?: string | null;
   podcast_feed_id?: string | null;
   podcast_rss_url?: string | null;
+  isrc?: string | null;
+  musicbrainz_id?: string | null;
   cover?: string;
   source?: 'preview';
+  /** Identity keys of the row this track was resolved from (see
+   * `lib/playbackIdentity.ts`). Set when a catalog row resolves into a playable
+   * video, so the row keeps recognising itself as "playing" even though the two
+   * share no id. Library tracks never carry it. */
+  originKeys?: string[];
   /** Present only when a recommendation surface created this playable item. */
   recommendation?: RecommendationContext;
 }

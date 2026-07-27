@@ -559,8 +559,9 @@
   background: var(--bg-raised);
 }
 
-.activeSong {
-  background: var(--accent-soft);
+/* Wash and marker rail: app.css, [data-now-playing]. */
+[data-now-playing] .songTitle {
+  color: var(--accent);
 }
 
 .songCover {

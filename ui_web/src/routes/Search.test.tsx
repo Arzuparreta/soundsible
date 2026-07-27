@@ -1,3 +1,4 @@
+import type { Track } from '../types/music';
 import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Search from './Search';
@@ -44,19 +45,24 @@ vi.mock('../lib/toast', () => ({
     loading: vi.fn(() => ({ update: vi.fn() })),
   },
 }));
-vi.mock('../stores', () => ({
-  actions: {
-    playTrack: storeMock.playTrack,
-    loadDownloads: vi.fn(),
-  },
-  state: {
-    get library() {
-      return storeMock.library;
+vi.mock('../stores', async () => {
+  const { identityMock } = await import('../lib/identityMock');
+  return {
+    actions: {
+      playTrack: storeMock.playTrack,
+      loadDownloads: vi.fn(),
+      linkCatalogItem: vi.fn(),
     },
-    playback: {},
-    downloads: { queue: [] },
-  },
-}));
+    state: {
+      get library() {
+        return storeMock.library;
+      },
+      playback: { currentTrack: null, queue: [] },
+      downloads: { queue: [] },
+    },
+    ...identityMock({ currentTrack: () => null, library: () => storeMock.library as unknown as Track[] }),
+  };
+});
 
 describe('Search route', () => {
   beforeEach(() => {

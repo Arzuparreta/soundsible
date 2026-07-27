@@ -17,10 +17,8 @@
   border-color: var(--hairline-soft);
 }
 
-.active {
-  background: var(--accent-soft);
-}
-.active .title {
+/* Wash and marker rail: app.css, [data-now-playing]. */
+[data-now-playing] .title {
   color: var(--accent);
 }
 
