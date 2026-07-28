@@ -56,6 +56,8 @@ export const zh: Dict = {
     removeFav: '从收藏中移除',
     addFav: '添加到收藏',
     saveToLibrary: '保存到资料库',
+    showLyrics: '显示歌词',
+    showCover: '显示封面',
     queue: '播放队列',
     clearQueue: '清空',
     removeFromQueue: '从队列中移除',

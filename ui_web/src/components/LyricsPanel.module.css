@@ -2,7 +2,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-md) var(--space-sm) var(--space-xl) var(--space-md);
+  padding: var(--space-md) var(--lyrics-overlay-clearance, var(--space-sm)) var(--space-xl) var(--space-md);
   overscroll-behavior: contain;
 }
 
@@ -32,7 +32,7 @@
   margin: 0;
   padding: 0 var(--space-2xs);
   font: inherit;
-  font-size: var(--text-body);
+  font-size: var(--lyrics-plain-size, var(--text-body));
   line-height: 1.7;
   color: var(--ink-primary);
   white-space: pre-wrap;
@@ -43,8 +43,9 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  /* Breathing room so the first/last lines can still centre on scroll. */
-  padding: 30% 0 40%;
+  /* The first line starts at the top of the view. Bottom room still lets the
+     final lines reach the centre while playback follows them. */
+  padding: 0 0 40%;
 }
 
 .line {
@@ -53,7 +54,7 @@
   background: none;
   text-align: left;
   font: inherit;
-  font-size: var(--text-title);
+  font-size: var(--lyrics-line-size, var(--text-title));
   font-weight: var(--fw-semibold);
   line-height: 1.45;
   color: var(--ink-tertiary);

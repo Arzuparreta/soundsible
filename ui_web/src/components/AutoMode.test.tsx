@@ -50,6 +50,9 @@ vi.mock('../lib/i18n', () => ({
   t: (key: string, params?: Record<string, string | number>) =>
     params ? `${key}:${Object.values(params).join(',')}` : key,
 }));
+vi.mock('./LyricsPanel', () => ({
+  LyricsPanel: () => <div data-testid="lyrics-panel" data-lyrics-scroll="">Lyrics content</div>,
+}));
 
 import { AutoMode, titleFit } from './AutoMode';
 
@@ -144,6 +147,33 @@ describe('AutoMode environment', () => {
     expect(root.style.getPropertyValue('--auto-mobile-cover-top')).toBe('92px');
     expect(root.style.getPropertyValue('--auto-mobile-cover-width')).toBe('358px');
     expect(root.style.getPropertyValue('--auto-mobile-cover-height')).toBe('358px');
+    source.remove();
+  });
+
+  it('opens Lyrics inside the anchored cover without changing handoff geometry or swipe ownership', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    const source = document.createElement('div');
+    source.dataset.nowPlayingCoverSlot = '';
+    source.getBoundingClientRect = vi.fn(() => rect({ top: 92, left: 16, width: 358, height: 358 }));
+    document.body.append(source);
+
+    render(() => <AutoMode />);
+    const root = screen.getByRole('region', { name: 'autoMode.aria' });
+    const showLyrics = screen.getByRole('button', { name: 'nowPlaying.showLyrics' });
+    fireEvent.click(showLyrics);
+
+    expect(screen.getByTestId('lyrics-panel')).toBeInTheDocument();
+    expect(showLyrics).toHaveAttribute('aria-pressed', 'true');
+    expect(showLyrics).toHaveAccessibleName('nowPlaying.showCover');
+    expect(root.style.getPropertyValue('--auto-mobile-cover-left')).toBe('16px');
+    expect(root.style.getPropertyValue('--auto-mobile-cover-top')).toBe('92px');
+    expect(root.style.getPropertyValue('--auto-mobile-cover-width')).toBe('358px');
+    expect(root.style.getPropertyValue('--auto-mobile-cover-height')).toBe('358px');
+
+    const lyrics = screen.getByTestId('lyrics-panel');
+    fireEvent.pointerDown(lyrics, { clientX: 200, clientY: 100 });
+    fireEvent.pointerUp(lyrics, { clientX: 200, clientY: 320 });
+    expect(actions.exitAutoMode).not.toHaveBeenCalled();
     source.remove();
   });
 

@@ -314,6 +314,86 @@
   animation: autoBreathe 9s ease-in-out infinite;
 }
 
+.lyricsSurface {
+  /* Auto is an intentionally dark environment even when the app underneath
+     uses its light theme. Keep the shared LyricsPanel legible without leaking
+     these overrides outside the cover. */
+  --ink-primary: #f2f2f5;
+  --ink-secondary: #a0a0a8;
+  --ink-tertiary: #6a6a72;
+  --hairline: #26262b;
+  --accent: #f97a12;
+  --lyrics-line-size: clamp(16px, 1.2vw, 24px);
+  --lyrics-plain-size: clamp(15px, 1vw, 21px);
+  --lyrics-overlay-clearance: clamp(66px, 5vw, 82px);
+
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--ink-primary);
+  background: color-mix(in srgb, #08080a 90%, var(--bg-raised));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--auto-cover-radius);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58);
+}
+
+.lyricsToggle {
+  position: absolute;
+  top: clamp(10px, 1.2vw, 18px);
+  right: clamp(10px, 1.2vw, 18px);
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(44px, 3.4vw, 56px);
+  height: clamp(44px, 3.4vw, 56px);
+  padding: 0;
+  color: var(--ink-primary);
+  background: rgba(8, 8, 10, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  cursor: pointer;
+  transition:
+    color var(--dur-short),
+    background var(--dur-short),
+    border-color var(--dur-short),
+    transform var(--dur-micro);
+}
+
+.lyricsToggle svg {
+  width: 48%;
+  height: 48%;
+}
+
+.lyricsToggleOn {
+  color: var(--ink-on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .lyricsToggle:hover {
+    color: var(--ink-on-accent);
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+}
+
+.lyricsToggle:active {
+  transform: scale(0.94);
+}
+
+.root .coverFrame[data-lyrics-open] .coverCaption {
+  display: none;
+}
+
 /* ── Cover caption ──
    Mobile only — it is switched on in the phone block at the foot of this file,
    where the artwork is pinned to the Now Playing rectangle and the panel below

@@ -12,8 +12,11 @@ import { t as tr } from '../lib/i18n';
 import { SearchPanel, panelOpen, panelSide, togglePanel } from './SearchPanel';
 import { RadioBadge, onStopRadio } from './RadioBadge';
 import { Spinner } from './Spinner';
+import { LyricsPanel } from './LyricsPanel';
 import styles from './NowPlaying.module.css';
 import { clockTime } from '../lib/format';
+
+type MobileVisualSurface = 'cover' | 'queue' | 'lyrics';
 
 /** Full-screen Now Playing sheet. Slides up; controlled by the nowPlayingOpen signal. */
 export function NowPlaying() {
@@ -29,17 +32,18 @@ export function NowPlaying() {
   });
   const loading = createMemo(() => state.playback.isLoading);
   const loadFailed = createMemo(() => state.playback.loadError);
-  const [mobileQueueOpen, setMobileQueueOpen] = createSignal(false);
+  const [mobileSurface, setMobileSurface] = createSignal<MobileVisualSurface>('cover');
   let dragFrom: number | null = null;
   let bodyEl: HTMLDivElement | undefined;
   let desktopQueueEl: HTMLDivElement | undefined;
   let mobileQueueEl: HTMLDivElement | undefined;
+  let mobileLyricsEl: HTMLDivElement | undefined;
   let sheetEl: HTMLDivElement | undefined;
   let headEl: HTMLElement | undefined;
   // Always (re)open at the top of the sheet.
   createEffect(() => {
     if (!nowPlayingOpen()) {
-      setMobileQueueOpen(false);
+      setMobileSurface('cover');
       return;
     }
     if (bodyEl) bodyEl.scrollTop = 0;
@@ -48,11 +52,19 @@ export function NowPlaying() {
   });
 
   createEffect(() => {
-    if (state.playback.queue.length <= 1) setMobileQueueOpen(false);
+    if (mobileSurface() === 'queue' && state.playback.queue.length <= 1) {
+      setMobileSurface('cover');
+    }
   });
 
   createEffect(() => {
-    if (mobileQueueOpen() && mobileQueueEl) mobileQueueEl.scrollTop = 0;
+    if (mobileSurface() === 'queue' && mobileQueueEl) mobileQueueEl.scrollTop = 0;
+  });
+
+  createEffect(() => {
+    // Auto's shared-cover handoff must always start and land on artwork. The
+    // rectangle itself stays unchanged; only the compact surface resets.
+    if (isPodcast() || state.autoMode.active) setMobileSurface('cover');
   });
 
   // Swipe-down-to-close. The queue is its own scroll container below the player,
@@ -87,6 +99,9 @@ export function NowPlaying() {
   const activeScrollAtTop = (target: EventTarget | null) => {
     if (target instanceof Node && mobileQueueEl?.contains(target)) {
       return mobileQueueEl.scrollTop <= 1;
+    }
+    if (target instanceof Node && mobileLyricsEl?.contains(target)) {
+      return mobileLyricsEl.scrollTop <= 1;
     }
     if (target instanceof Node && desktopQueueEl?.contains(target)) {
       return desktopQueueEl.scrollTop <= 1;
@@ -427,12 +442,34 @@ export function NowPlaying() {
           <div class={styles.media}>
             <div
               class={styles.visualSlot}
-              data-queue-open={mobileQueueOpen() ? '' : undefined}
+              data-queue-open={mobileSurface() === 'queue' ? '' : undefined}
+              data-lyrics-open={mobileSurface() === 'lyrics' ? '' : undefined}
               data-now-playing-cover-slot=""
             >
               <div class={styles.art} style={artBg()} />
-              <Show when={state.playback.queue.length > 1 && mobileQueueOpen()}>
+              <Show when={state.playback.queue.length > 1 && mobileSurface() === 'queue'}>
                 <QueueList className={styles.mobileQueue} setRef={(el) => { mobileQueueEl = el; }} />
+              </Show>
+              <Show when={!isPodcast() && mobileSurface() === 'lyrics'}>
+                <div class={styles.mobileLyrics}>
+                  <LyricsPanel scrollRef={(element) => { mobileLyricsEl = element; }} />
+                </div>
+              </Show>
+              <Show when={!isPodcast() && mobileSurface() !== 'queue'}>
+                <button
+                  classList={{
+                    [styles.mobileLyricsToggle]: true,
+                    [styles.mobileLyricsToggleOn]: mobileSurface() === 'lyrics',
+                  }}
+                  type="button"
+                  aria-label={mobileSurface() === 'lyrics' ? tr('nowPlaying.showCover') : tr('nowPlaying.showLyrics')}
+                  aria-pressed={mobileSurface() === 'lyrics'}
+                  onClick={() => setMobileSurface((surface) => surface === 'lyrics' ? 'cover' : 'lyrics')}
+                >
+                  <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M5 6h14M5 10h10M5 14h14M5 18h8" />
+                  </svg>
+                </button>
               </Show>
             </div>
             <div class={styles.info}>
@@ -542,12 +579,12 @@ export function NowPlaying() {
                 classList={{
                   [styles.actBtn]: true,
                   [styles.mobileQueueToggle]: true,
-                  [styles.actOn]: mobileQueueOpen(),
+                  [styles.actOn]: mobileSurface() === 'queue',
                 }}
                 type="button"
                 aria-label={tr('nowPlaying.queue')}
-                aria-pressed={mobileQueueOpen()}
-                onClick={() => setMobileQueueOpen((open) => !open)}
+                aria-pressed={mobileSurface() === 'queue'}
+                onClick={() => setMobileSurface((surface) => surface === 'queue' ? 'cover' : 'queue')}
               >
                 <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M11 17a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />

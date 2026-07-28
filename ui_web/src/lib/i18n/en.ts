@@ -55,6 +55,8 @@ export const en = {
     removeFav: 'Remove from favourites',
     addFav: 'Add to favourites',
     saveToLibrary: 'Save to library',
+    showLyrics: 'Show lyrics',
+    showCover: 'Show cover art',
     queue: 'Up next',
     clearQueue: 'Clear',
     removeFromQueue: 'Remove from queue',

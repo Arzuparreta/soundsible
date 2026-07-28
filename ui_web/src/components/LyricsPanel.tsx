@@ -14,7 +14,7 @@ import styles from './LyricsPanel.module.css';
  * current line is highlighted and kept centred as the song advances; a tap on
  * any line seeks there. Plain lyrics render as a static scrollable text.
  */
-export function LyricsPanel() {
+export function LyricsPanel(props: { scrollRef?: (element: HTMLDivElement) => void } = {}) {
   const current = createMemo(() => state.playback.currentTrack ?? null);
 
   // Refetch only when the playing track (not the position) changes.
@@ -85,7 +85,15 @@ export function LyricsPanel() {
   });
 
   return (
-    <div class={styles.body} ref={bodyEl} onScroll={onScroll}>
+    <div
+      class={styles.body}
+      data-lyrics-scroll=""
+      ref={(element) => {
+        bodyEl = element;
+        props.scrollRef?.(element);
+      }}
+      onScroll={onScroll}
+    >
       <Show when={current()} fallback={<p class={styles.hint}>{t('lyricsPanel.noTrack')}</p>}>
         <Show when={!lyrics.loading} fallback={<div class={styles.loading} aria-label={t('lyricsPanel.loading')} />}>
           <Show when={!lyrics.error} fallback={<p class={styles.hint}>{t('lyricsPanel.error')}</p>}>

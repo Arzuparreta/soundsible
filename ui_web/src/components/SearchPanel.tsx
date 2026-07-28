@@ -128,6 +128,15 @@ function itemArtist(item: CatalogItem): string {
  */
 export function SearchPanel() {
   const navigate = useNavigate();
+  const currentIsPodcast = createMemo(() => {
+    const current = state.playback.currentTrack;
+    return !!current && isPodcastTrack(current);
+  });
+  // A podcast temporarily projects the persisted Lyrics preference as Search.
+  // The stored tab remains untouched, so Lyrics returns when music does.
+  const visiblePanelTab = createMemo<PanelTab>(() =>
+    currentIsPodcast() && panelTab() === 'lyrics' ? 'search' : panelTab(),
+  );
   const [q, setQ] = createSignal('');
   const [items, setItems] = createSignal<CatalogItem[]>([]);
   const [sectionIds, setSectionIds] = createSignal<Record<string, string[]>>({});
@@ -519,32 +528,34 @@ export function SearchPanel() {
       <header class={styles.head}>
         <div class={styles.tabs} role="tablist">
           <button
-            classList={{ [styles.tab]: true, [styles.tabOn]: panelTab() === 'search' }}
+            classList={{ [styles.tab]: true, [styles.tabOn]: visiblePanelTab() === 'search' }}
             type="button"
             role="tab"
-            aria-selected={panelTab() === 'search'}
+            aria-selected={visiblePanelTab() === 'search'}
             onClick={() => selectPanelTab('search')}
           >
             {t('searchPanel.tabSearch')}
           </button>
           <button
-            classList={{ [styles.tab]: true, [styles.tabOn]: panelTab() === 'discover' }}
+            classList={{ [styles.tab]: true, [styles.tabOn]: visiblePanelTab() === 'discover' }}
             type="button"
             role="tab"
-            aria-selected={panelTab() === 'discover'}
+            aria-selected={visiblePanelTab() === 'discover'}
             onClick={() => selectPanelTab('discover')}
           >
             {t('searchPanel.tabDiscover')}
           </button>
-          <button
-            classList={{ [styles.tab]: true, [styles.tabOn]: panelTab() === 'lyrics' }}
-            type="button"
-            role="tab"
-            aria-selected={panelTab() === 'lyrics'}
-            onClick={() => selectPanelTab('lyrics')}
-          >
-            {t('searchPanel.tabLyrics')}
-          </button>
+          <Show when={!currentIsPodcast()}>
+            <button
+              classList={{ [styles.tab]: true, [styles.tabOn]: visiblePanelTab() === 'lyrics' }}
+              type="button"
+              role="tab"
+              aria-selected={visiblePanelTab() === 'lyrics'}
+              onClick={() => selectPanelTab('lyrics')}
+            >
+              {t('searchPanel.tabLyrics')}
+            </button>
+          </Show>
         </div>
         <div class={styles.headActions}>
           <button
@@ -567,9 +578,9 @@ export function SearchPanel() {
       </header>
 
       <Show
-        when={panelTab() === 'search'}
+        when={visiblePanelTab() === 'search'}
         fallback={
-          <Show when={panelTab() === 'discover'} fallback={<LyricsPanel />}>
+          <Show when={visiblePanelTab() === 'discover'} fallback={<LyricsPanel />}>
           {/* ── Discover: "I don't know what to play" ── */}
           <div class={styles.body}>
             <div class={styles.tiles}>

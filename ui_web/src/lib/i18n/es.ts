@@ -56,6 +56,8 @@ export const es: Dict = {
     removeFav: 'Quitar de favoritos',
     addFav: 'Añadir a favoritos',
     saveToLibrary: 'Guardar en biblioteca',
+    showLyrics: 'Mostrar letra',
+    showCover: 'Mostrar portada',
     queue: 'En cola',
     clearQueue: 'Vaciar',
     removeFromQueue: 'Quitar de la cola',

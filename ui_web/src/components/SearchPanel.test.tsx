@@ -9,6 +9,8 @@ const apiMock = vi.hoisted(() => ({
   resolveCatalogItem: vi.fn(),
   emitDiscoveryEvent: vi.fn(),
   prefetchPreviews: vi.fn(() => Promise.resolve({ status: 'queued' })),
+  getTrackLyrics: vi.fn(),
+  getLyricsByMetadata: vi.fn(),
 }));
 const toastMock = vi.hoisted(() => ({
   info: vi.fn(),
@@ -83,7 +85,7 @@ vi.mock('./PlaylistPicker', () => ({ openPlaylistPicker: vi.fn() }));
 vi.mock('./MetadataEditor', () => ({ openMetadataEditor: vi.fn() }));
 vi.mock('./DeviceSheet', () => ({ openPlayOnDevice: vi.fn() }));
 
-import { SearchPanel, selectPanelTab } from './SearchPanel';
+import { panelTab, SearchPanel, selectPanelTab } from './SearchPanel';
 import { setLocale } from '../lib/i18n';
 
 async function typeQuery(value: string) {
@@ -99,6 +101,7 @@ describe('SearchPanel', () => {
     selectPanelTab('search');
     storeMock.state.playback.queue = [];
     storeMock.state.playback.currentTrack = null;
+    storeMock.state.playback.currentTrack = null;
     discoverMock.saved = [];
     nodeMock.items = [];
     nodeMock.loading = false;
@@ -107,6 +110,8 @@ describe('SearchPanel', () => {
     apiMock.peekYouTube.mockResolvedValue(null);
     apiMock.resolveCatalogItem.mockResolvedValue({});
     apiMock.emitDiscoveryEvent.mockResolvedValue({ status: 'ok' });
+    apiMock.getTrackLyrics.mockResolvedValue({ synced: null, plain: null, instrumental: false, cached: true });
+    apiMock.getLyricsByMetadata.mockResolvedValue({ synced: null, plain: null, instrumental: false, cached: true });
   });
 
   afterEach(() => {
@@ -196,5 +201,27 @@ describe('SearchPanel', () => {
     expect(storeMock.actions.playNow).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'ytresult001', source: 'preview' }),
     );
+  });
+
+  it('hides Lyrics for podcasts without overwriting the persisted music tab', () => {
+    selectPanelTab('lyrics');
+    storeMock.state.playback.currentTrack = {
+      id: 'episode',
+      title: 'Episode',
+      artist: 'Show',
+      media_kind: 'podcast_episode',
+      podcast_episode_guid: 'episode-guid',
+    };
+
+    const { unmount } = render(() => <SearchPanel />);
+    expect(screen.queryByRole('tab', { name: 'Lyrics' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Search' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByPlaceholderText('Search on Soundsible')).toBeInTheDocument();
+    expect(panelTab()).toBe('lyrics');
+    unmount();
+
+    storeMock.state.playback.currentTrack = storeMock.libTrack;
+    render(() => <SearchPanel />);
+    expect(screen.getByRole('tab', { name: 'Lyrics' })).toHaveAttribute('aria-selected', 'true');
   });
 });

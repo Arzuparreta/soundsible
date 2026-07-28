@@ -4,6 +4,8 @@ import { actions, state } from '../stores';
 import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import type { AutoActivity, AutoProfile } from '../lib/autopilot';
+import { isPodcastTrack } from '../lib/track';
+import { LyricsPanel } from './LyricsPanel';
 import styles from './AutoMode.module.css';
 import { clockTime } from '../lib/format';
 
@@ -55,6 +57,7 @@ export function AutoMode() {
   const active = createMemo(() => state.autoMode.active);
   const [chromeVisible, setChromeVisible] = createSignal(true);
   const [agentVisible, setAgentVisible] = createSignal(false);
+  const [lyricsOpen, setLyricsOpen] = createSignal(false);
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let agentTimer: ReturnType<typeof setTimeout> | null = null;
   let rootEl: HTMLDivElement | undefined;
@@ -151,6 +154,13 @@ export function AutoMode() {
     wasActive = isActive;
   });
 
+  createEffect(() => {
+    const track = current();
+    // Reset before both sides of the shared-cover handoff. Track-to-track music
+    // changes keep Lyrics open, but podcasts can never expose the surface.
+    if (!active() || !track || isPodcastTrack(track)) setLyricsOpen(false);
+  });
+
   onMount(() => {
     const syncAnchor = () => {
       if (active()) captureMobileCoverAnchor();
@@ -229,7 +239,7 @@ export function AutoMode() {
           // that control. Without this, scrolling the rail — or any drag that
           // happened to travel downwards — exited Auto Mode.
           const target = event.target as HTMLElement | null;
-          swipe = target?.closest('button, [data-rail]')
+          swipe = target?.closest('button, [data-rail], [data-lyrics-scroll]')
             ? null
             : { x: event.clientX, y: event.clientY, at: event.timeStamp };
         }}
@@ -280,9 +290,14 @@ export function AutoMode() {
         <Show when={current()}>
           <main class={styles.stage}>
             <div class={styles.coverStage}>
-              <div class={styles.coverFrame}>
+              <div class={styles.coverFrame} data-lyrics-open={lyricsOpen() ? '' : undefined}>
                 <div class={styles.coverGlow} style={backdropStyle()} aria-hidden="true" />
                 <div class={styles.cover} style={backdropStyle()} role="img" aria-label={current()!.title} />
+                <Show when={lyricsOpen()}>
+                  <div class={styles.lyricsSurface}>
+                    <LyricsPanel />
+                  </div>
+                </Show>
                 {/* Mobile only, by CSS: the panel's metadata block is still the
                     live region, so this is a second rendering of text that is
                     already announced. */}
@@ -290,6 +305,22 @@ export function AutoMode() {
                   <p class={styles.capTitle}>{current()!.title}</p>
                   <p class={styles.capArtist}>{current()!.artist}</p>
                 </div>
+                <Show when={!isPodcastTrack(current()!)}>
+                  <button
+                    classList={{ [styles.lyricsToggle]: true, [styles.lyricsToggleOn]: lyricsOpen() }}
+                    type="button"
+                    aria-label={lyricsOpen() ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
+                    aria-pressed={lyricsOpen()}
+                    onClick={() => {
+                      setLyricsOpen((open) => !open);
+                      armIdle();
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                      <path d="M5 6h14M5 10h10M5 14h14M5 18h8" />
+                    </svg>
+                  </button>
+                </Show>
               </div>
             </div>
 
