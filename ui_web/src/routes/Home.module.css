@@ -273,6 +273,11 @@
 }
 
 @media (min-width: 1024px) {
+  /* Desktop already exposes both destinations in the permanent sidebar. */
+  .headerAction {
+    display: none;
+  }
+
   .searchReveal {
     height: auto !important;
   }
