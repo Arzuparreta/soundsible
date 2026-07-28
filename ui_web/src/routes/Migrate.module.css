@@ -142,8 +142,10 @@
   cursor: pointer;
 }
 
-.choice:hover {
-  background: var(--bg-hover);
+@media (hover: hover) and (pointer: fine) {
+  .choice:hover {
+    background: var(--bg-hover);
+  }
 }
 
 .choice input {
