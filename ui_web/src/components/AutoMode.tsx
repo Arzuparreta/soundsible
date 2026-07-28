@@ -5,6 +5,8 @@ import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import type { AutoActivity, AutoProfile } from '../lib/autopilot';
 import { isPodcastTrack } from '../lib/track';
+import { favouriteFromTrack } from '../lib/favourites';
+import { FavouriteButton } from './FavouriteButton';
 import { LyricsPanel } from './LyricsPanel';
 import styles from './AutoMode.module.css';
 import { clockTime } from '../lib/format';
@@ -369,21 +371,16 @@ export function AutoMode() {
                     </button>
                   </div>
                   <div class={styles.extras}>
-                    <Show
-                      when={current()!.source !== 'preview'}
-                      fallback={
-                        <button class={styles.secondaryAction} type="button" aria-label={t('nowPlaying.saveToLibrary')} onClick={() => void actions.downloadTrack(current()!)}>
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14" /></svg>
-                        </button>
-                      }
-                    >
-                      <button
-                        classList={{ [styles.secondaryAction]: true, [styles.liked]: state.favorites.includes(current()!.id) }}
-                        type="button"
-                        aria-label={state.favorites.includes(current()!.id) ? t('nowPlaying.removeFav') : t('nowPlaying.addFav')}
-                        onClick={() => actions.toggleFavourite(current()!.id)}
-                      >
-                        <svg viewBox="0 0 24 24" fill={state.favorites.includes(current()!.id) ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-7-4.35-9.5-8.5C.9 9.6 2.2 6 5.5 6 7.6 6 9 7.5 12 10c3-2.5 4.4-4 6.5-4 3.3 0 4.6 3.6 3 6.5C19 16.65 12 21 12 21z" /></svg>
+                    {/* Saving and downloading are separate acts, so the heart is
+                      * always here and the download only appears when there is
+                      * still something to download. */}
+                    <FavouriteButton
+                      favourite={favouriteFromTrack(current()!)}
+                      class={styles.secondaryAction}
+                    />
+                    <Show when={current()!.source === 'preview'}>
+                      <button class={styles.secondaryAction} type="button" aria-label={t('nowPlaying.saveToLibrary')} onClick={() => void actions.downloadTrack(current()!)}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14" /></svg>
                       </button>
                     </Show>
                   </div>

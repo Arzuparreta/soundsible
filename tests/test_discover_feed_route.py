@@ -107,6 +107,7 @@ def _mock_api(metadata, related_results=None):
     mod_mock.socketio = fake_socketio
     mod_mock.favourites_manager = MagicMock()
     mod_mock.favourites_manager.get_all.return_value = []
+    mod_mock.favourite_library_ids.return_value = []
 
     return {
         "get_core": MagicMock(return_value=(_FakeLibrary(metadata), None, None)),

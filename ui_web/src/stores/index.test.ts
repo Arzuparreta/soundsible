@@ -29,6 +29,7 @@ async function loadStore(
   const api = {
     getLibrary: vi.fn().mockResolvedValue({ tracks: [], playlists: {}, settings: {}, podcast_subscriptions: [] }),
     getFavourites: vi.fn().mockResolvedValue([]),
+    toggleFavourite: vi.fn().mockResolvedValue({ is_favourite: true }),
     getPlaybackState: vi.fn().mockResolvedValue(undefined),
     putPlaybackState: vi.fn().mockResolvedValue({ status: 'ok' }),
     deleteTrack: vi.fn().mockResolvedValue({ status: 'ok' }),
@@ -139,7 +140,10 @@ describe('Solid store library and playback resume', () => {
         .fn()
         .mockResolvedValueOnce({ tracks: [t1, t2], playlists: { Mix: ['t1', 't2'] }, settings: {}, podcast_subscriptions: [] })
         .mockResolvedValueOnce({ tracks: [t2], playlists: { Mix: ['t2'] }, settings: {}, podcast_subscriptions: [] }),
-      getFavourites: vi.fn().mockResolvedValueOnce(['t1']).mockResolvedValueOnce([]),
+      getFavourites: vi
+        .fn()
+        .mockResolvedValueOnce([{ keys: ['lib:t1'], title: 'One', artist: 'Artist' }])
+        .mockResolvedValueOnce([]),
     });
 
     await actions.syncLibrary();
@@ -147,7 +151,7 @@ describe('Solid store library and playback resume', () => {
     await actions.deleteTrack('t1');
 
     expect(state.library.map((t) => t.id)).toEqual(['t2']);
-    expect(state.favorites).toEqual([]);
+    expect(state.favourites).toEqual([]);
     expect(state.playlists).toEqual({ Mix: ['t2'] });
     expect(state.playback.currentTrack).toBeNull();
     expect(state.playback.queue.map((t) => t.id)).toEqual(['t2']);
@@ -717,3 +721,147 @@ describe('Solid store playback identity', () => {
     expect(isPlayingResult({ id: 'othervid', title: 'Song A' })).toBe(false);
   });
 });
+
+describe('Solid store favourites', () => {
+  const preview = {
+    id: 'dQw4w9WgXcQ',
+    title: 'Weightless',
+    artist: 'Marconi Union',
+    duration: 490,
+    source: 'preview' as const,
+  };
+
+  it('saves a song that is not downloaded, and lists it as playable', async () => {
+    const { actions, state, favouriteTracks, api } = await loadStore({
+      toggleFavourite: vi.fn().mockResolvedValue({ is_favourite: true }),
+    });
+
+    actions.toggleFavouriteTrack(preview);
+
+    expect(state.favourites[0].keys).toEqual(['yt:dQw4w9WgXcQ']);
+    expect(api.toggleFavourite).toHaveBeenCalledWith(
+      expect.objectContaining({ keys: ['yt:dQw4w9WgXcQ'], title: 'Weightless' }),
+    );
+    expect(favouriteTracks().map((t) => t.id)).toEqual(['dQw4w9WgXcQ']);
+  });
+
+  it('lights the heart for the same song under any of its ids', async () => {
+    const { actions, isFavouriteTrack, isFavouriteResult } = await loadStore({
+      toggleFavourite: vi.fn().mockResolvedValue({ is_favourite: true }),
+    });
+
+    actions.toggleFavouriteTrack(preview);
+
+    // Saved as a preview; recognised as the downloaded file, which shares only
+    // the video id, and as the search result it came from.
+    expect(
+      isFavouriteTrack({ id: 'hash9f2a', title: 'Weightless', artist: 'Marconi Union', youtube_id: 'dQw4w9WgXcQ' }),
+    ).toBe(true);
+    expect(isFavouriteResult({ id: 'dQw4w9WgXcQ', title: 'Weightless' })).toBe(true);
+    expect(isFavouriteTrack({ id: 'other', title: 'Something else', artist: 'X' })).toBe(false);
+  });
+
+  it('turns a saved preview into the owned track once the library has it', async () => {
+    const owned = {
+      id: 'hash9f2a',
+      title: 'Weightless',
+      artist: 'Marconi Union',
+      duration: 490,
+      youtube_id: 'dQw4w9WgXcQ',
+    };
+    const { actions, favouriteTracks, favouriteLibraryIds } = await loadStore({
+      toggleFavourite: vi.fn().mockResolvedValue({ is_favourite: true }),
+      getLibrary: vi
+        .fn()
+        .mockResolvedValueOnce({ tracks: [], playlists: {}, settings: {}, podcast_subscriptions: [] })
+        .mockResolvedValueOnce({ tracks: [owned], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+      // The engine stores the entry exactly as it was saved — it never learns
+      // the library id, because it does not need to.
+      getFavourites: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValue([{ keys: ['yt:dQw4w9WgXcQ'], title: 'Weightless', artist: 'Marconi Union', duration: 490 }]),
+    });
+
+    await actions.syncLibrary();
+    actions.toggleFavouriteTrack(preview);
+    expect(favouriteTracks()[0].source).toBe('preview');
+    expect(favouriteLibraryIds().size).toBe(0);
+
+    // The download lands; nothing about the favourite is rewritten.
+    await actions.syncLibrary();
+    expect(favouriteTracks()[0].id).toBe('hash9f2a');
+    expect(favouriteTracks()[0].source).toBeUndefined();
+    expect([...favouriteLibraryIds()]).toEqual(['hash9f2a']);
+  });
+
+  it('unsaves by identity, not by the id the surface happens to hold', async () => {
+    const { actions, state, isFavouriteTrack } = await loadStore({
+      toggleFavourite: vi.fn().mockResolvedValue({ is_favourite: true }),
+    });
+
+    actions.toggleFavouriteTrack(preview);
+    // Unsaved from the library row, which shares only the video id.
+    actions.toggleFavouriteTrack({
+      id: 'hash9f2a',
+      title: 'Weightless',
+      artist: 'Marconi Union',
+      youtube_id: 'dQw4w9WgXcQ',
+    });
+
+    expect(state.favourites).toEqual([]);
+    expect(isFavouriteTrack(preview)).toBe(false);
+  });
+
+  it('reverts the optimistic save when the engine rejects it', async () => {
+    const { actions, state } = await loadStore({
+      toggleFavourite: vi.fn().mockRejectedValue(new Error('offline')),
+    });
+
+    actions.toggleFavouriteTrack(preview);
+    expect(state.favourites).toHaveLength(1);
+
+    await flush();
+    expect(state.favourites).toEqual([]);
+  });
+
+  it('keeps a favourite when its file is deleted — that frees disk, it does not unsave', async () => {
+    const owned = { id: 't1', title: 'One', artist: 'Artist', duration: 180, youtube_id: 'dQw4w9WgXcQ' };
+    const { actions, state, favouriteTracks } = await loadStore({
+      toggleFavourite: vi.fn().mockResolvedValue({ is_favourite: true }),
+      getLibrary: vi
+        .fn()
+        .mockResolvedValueOnce({ tracks: [owned], playlists: {}, settings: {}, podcast_subscriptions: [] })
+        .mockResolvedValue({ tracks: [], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+      getFavourites: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValue(state_favourite_after_delete()),
+    });
+
+    await actions.syncLibrary();
+    actions.toggleFavouriteTrack(owned);
+    expect(favouriteTracks()[0].id).toBe('t1');
+
+    await actions.deleteTrack('t1');
+
+    expect(state.library).toEqual([]);
+    // Still saved, now as a stream rather than a file.
+    expect(state.favourites).toHaveLength(1);
+    expect(favouriteTracks()[0].source).toBe('preview');
+    expect(favouriteTracks()[0].id).toBe('dQw4w9WgXcQ');
+  });
+});
+
+/** What the engine returns after the track behind a favourite is deleted: the
+ * entry is untouched, it simply no longer resolves to anything local. */
+function state_favourite_after_delete() {
+  return [
+    {
+      keys: ['lib:t1', 'yt:dQw4w9WgXcQ'],
+      title: 'One',
+      artist: 'Artist',
+      duration: 180,
+    },
+  ];
+}

@@ -9,7 +9,8 @@ import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import { coverUrl } from '../lib/media';
 import { artistPath } from '../lib/artistRoute';
-import { t } from '../lib/i18n';
+import { isPodcastTrack } from '../lib/track';
+import { t as tr } from '../lib/i18n';
 import type { Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import styles from './TrackList.module.css';
@@ -43,6 +44,10 @@ export default function TrackList(props: {
    * bubbles to the row and plays the track instead of navigating. Useful on
    * mobile, where tapping the subtitle is the same gesture as tapping the row. */
   linkArtist?: boolean;
+  /** Override how a row starts playback. Defaults to `actions.playFrom` over
+   * the whole list; Favourites uses it to resolve a saved song that has no
+   * source attached yet before handing it to the queue. */
+  onPlay?: (tracks: Track[], index: number) => void;
 }) {
   let scrollRef: HTMLDivElement | undefined;
   const navigate = useNavigate();
@@ -107,7 +112,7 @@ export default function TrackList(props: {
       >
         <Show
           when={props.tracks.length > 0}
-          fallback={props.empty ?? <EmptyState>{t('trackList.defaultEmpty')}</EmptyState>}
+          fallback={props.empty ?? <EmptyState>{tr('trackList.defaultEmpty')}</EmptyState>}
         >
           <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative', width: '100%' }}>
             <For each={virtualizer.getVirtualItems()}>
@@ -138,9 +143,18 @@ export default function TrackList(props: {
                       >
                         <SongRow
                           track={t()}
-                          cover={coverUrl(t().id)}
+                          // A preview's artwork is the thumbnail it carries;
+                          // asking the engine for a cover it has no file for
+                          // just 404s into the placeholder gradient.
+                          cover={t().source === 'preview' ? t().cover : coverUrl(t().id)}
+                          badge={t().source === 'preview' ? tr('favourites.notDownloaded') : undefined}
+                          favouritable={!isPodcastTrack(t())}
                           active={isPlayingTrack(t())}
-                          onPlay={() => actions.playFrom(props.tracks, vi.index, { context: props.context })}
+                          onPlay={() =>
+                            props.onPlay
+                              ? props.onPlay(props.tracks, vi.index)
+                              : actions.playFrom(props.tracks, vi.index, { context: props.context })
+                          }
                           onArtist={props.linkArtist === false ? undefined : goArtist}
                           onMenu={openMenu}
                         />

@@ -7,6 +7,7 @@ export interface ServerToClientEvents {
   connect: () => void;
   disconnect: () => void;
   library_updated: () => void;
+  favourites_updated: () => void;
   downloader_log: (data: unknown) => void;
   downloader_update: (data: unknown) => void;
   discover_seed_ready: (data: { request_id: string; seed_track_id: string; recs: unknown[] }) => void;

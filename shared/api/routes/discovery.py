@@ -658,8 +658,7 @@ def discovery_music_recommendations():
         pass
     metadata = getattr(lib, "metadata", None)
     mod = api["_mod"]
-    fav_manager = mod.get_favourites_manager()
-    fav_ids = fav_manager.get_all() if fav_manager is not None else []
+    fav_ids = mod.favourite_library_ids()
     return jsonify(build_music_recommendations(metadata, fav_ids, limit=limit))
 
 
@@ -687,8 +686,7 @@ def discovery_music_feed():
         pass
     metadata = getattr(lib, "metadata", None)
     mod = api["_mod"]
-    fav_manager = mod.get_favourites_manager()
-    fav_ids = fav_manager.get_all() if fav_manager is not None else []
+    fav_ids = mod.favourite_library_ids()
 
     try:
         body = _build_music_feed(metadata, fav_ids, limit)
@@ -1315,8 +1313,7 @@ def _top_warm_seed_ids(limit: int = _WARM_TOP_N) -> list[str]:
     # Note: Filter out podcasts (no artist/title or marked as podcast).
     tracks = [t for t in tracks if t.artist and t.title]
     mod = api["_mod"]
-    fav_manager = mod.get_favourites_manager()
-    fav_ids = set(fav_manager.get_all() if fav_manager is not None else [])
+    fav_ids = set(mod.favourite_library_ids())
     # Note: Favourites first, then newest additions. Favourites are the strongest
     # taste signal; recent additions are the most likely current picks.
     fav_tracks = [t for t in tracks if t.id in fav_ids]

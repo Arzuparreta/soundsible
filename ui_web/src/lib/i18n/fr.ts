@@ -140,6 +140,7 @@ export const fr: Dict = {
     title: 'Favoris',
     empty:
       "Vous n'avez pas encore de favoris. Touchez le cœur sur n'importe quel titre.",
+    notDownloaded: 'Stream',
   },
   search: {
     placeholder: 'Que voulez-vous écouter ?',

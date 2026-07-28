@@ -21,7 +21,7 @@ MAX_CAR_ITEMS = 200
 
 def _get_api():
     from shared.api import get_core, get_track_by_id, get_playback_state, get_scope_from_request
-    from shared.api import get_favourites_manager
+    from shared.api import favourite_library_ids, get_favourites_manager
 
     return {
         "get_core": get_core,
@@ -29,6 +29,7 @@ def _get_api():
         "get_playback_state": get_playback_state,
         "get_scope_from_request": get_scope_from_request,
         "favourites_manager": get_favourites_manager(),
+        "favourite_library_ids": favourite_library_ids,
     }
 
 
@@ -189,7 +190,9 @@ def get_car_items(item_id: str):
         return jsonify({"id": item_id, "title": name, "items": items[:MAX_CAR_ITEMS], "status": "ok"})
 
     if item_id == "favourites":
-        favourite_ids = api["favourites_manager"].get_all()
+        # Only the ones we actually hold a file for — a head unit cannot stream
+        # a preview.
+        favourite_ids = api["favourite_library_ids"]()
         items = [_track_item(by_id[tid]) for tid in favourite_ids if tid in by_id]
         return jsonify({"id": item_id, "items": items[:MAX_CAR_ITEMS], "status": "ok"})
 

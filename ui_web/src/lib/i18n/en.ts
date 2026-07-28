@@ -135,6 +135,8 @@ export const en = {
   favourites: {
     title: 'Favourites',
     empty: "You don't have any favourites yet. Tap the heart on any song.",
+    /** Row badge: saved, but we hold no file for it — it plays from the internet. */
+    notDownloaded: 'Stream',
   },
   search: {
     placeholder: 'What do you want to play?',

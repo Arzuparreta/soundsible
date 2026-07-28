@@ -23,7 +23,7 @@
  */
 import { createSignal } from 'solid-js';
 import { api } from './api';
-import { state } from '../stores';
+import { favouriteLibraryIds, state } from '../stores';
 import { isPodcastTrack } from './track';
 import { prefetchPreviews } from './prefetch';
 import { setDiscoverSeedHandler } from './socket';
@@ -264,7 +264,7 @@ function startRebuild(): Promise<void> {
   setNodeLoading(true);
   const aborter = new AbortController();
 
-  const favs = new Set(state.favorites);
+  const favs = favouriteLibraryIds();
   const recentSeeds = readRecentSeeds();
   const total = library.length;
   const candidates = library.map((track, i) => ({

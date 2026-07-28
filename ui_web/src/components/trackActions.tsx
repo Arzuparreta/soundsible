@@ -2,7 +2,7 @@ import type { JSX } from 'solid-js';
 import { type MenuAction, type ActionMenuOptions } from './ActionMenu';
 import { openContextMenu } from '../lib/contextMenu';
 import type { Track } from '../types/music';
-import { actions, state } from '../stores';
+import { actions, isFavouriteTrack, state } from '../stores';
 import { shareTrack } from '../lib/share';
 import { confirmDialog } from '../lib/confirm';
 import { artistPath } from '../lib/artistRoute';
@@ -62,7 +62,7 @@ const icons = {
 
 /** Build the action list for a track, given its context. */
 export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAction[] {
-  const isFav = state.favorites.includes(track.id);
+  const isFav = isFavouriteTrack(track);
   const isLibrary = track.source !== 'preview';
   const isPodcast = isPodcastTrack(track);
   // A streamed podcast episode plays via a minted token, not a `previewUrl`, so
@@ -85,7 +85,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     list.push({
       icon: icons.heart(),
       label: isFav ? t('trackActions.removeFav') : t('trackActions.addFav'),
-      onSelect: () => actions.toggleFavourite(track.id),
+      onSelect: () => actions.toggleFavouriteTrack(track),
     });
   if (ctx.onEditMetadata && isLibrary)
     list.push({ icon: icons.edit(), label: t('trackActions.editData'), onSelect: () => ctx.onEditMetadata!(track) });

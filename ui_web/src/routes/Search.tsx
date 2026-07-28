@@ -12,6 +12,8 @@ import { t as tr } from '../lib/i18n';
 import { userKey } from '../lib/session';
 import { itemArtist, itemBusy, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import SearchResultRow from '../components/SearchResultRow';
+import { favouriteFromCatalogItem } from '../lib/favourites';
+import { FavouriteButton } from '../components/FavouriteButton';
 import { Spinner } from '../components/Spinner';
 import type { CatalogItem, CatalogSaveResponse, SearchResult, Track } from '../types/music';
 import styles from './Search.module.css';
@@ -1058,6 +1060,7 @@ function SongResult(props: {
       </span>
       <span class={styles.source}>{props.item.source}</span>
       <span class={styles.duration}>{formatDuration(props.item.duration)}</span>
+      <FavouriteButton favourite={favouriteFromCatalogItem(props.item)} compact />
       <Show when={props.saved}>
         <span class={styles.done} aria-label={tr('search.ariaInLibrary')}>
           <CheckIcon />

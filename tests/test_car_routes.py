@@ -39,6 +39,9 @@ class _FakeFavourites:
     def get_all(self):
         return list(self._ids)
 
+    def get_entries(self):
+        return [{"keys": [f"lib:{tid}"]} for tid in self._ids]
+
 
 def _make_runtime(tmp_path):
     runtime = RuntimeConfig(
@@ -68,6 +71,7 @@ def _make_app():
 def _patch_api(monkeypatch, metadata, *, favourites=None, playback_state=None):
     fake_lib = _FakeLibrary(metadata)
     by_id = {track.id: track for track in metadata.tracks}
+    fake_favourites = _FakeFavourites(favourites or [])
 
     def fake_get_api():
         return {
@@ -75,7 +79,11 @@ def _patch_api(monkeypatch, metadata, *, favourites=None, playback_state=None):
             "get_track_by_id": lambda _lib, track_id: by_id.get(track_id),
             "get_playback_state": lambda _scope: playback_state,
             "get_scope_from_request": lambda: "default",
-            "favourites_manager": _FakeFavourites(favourites or []),
+            "favourites_manager": fake_favourites,
+            # Only favourites we hold a file for reach a head unit.
+            "favourite_library_ids": lambda: [
+                tid for tid in fake_favourites.get_all() if tid in by_id
+            ],
         }
 
     monkeypatch.setattr(car_routes, "_get_api", fake_get_api)

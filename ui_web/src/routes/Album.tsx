@@ -11,6 +11,8 @@ import { t } from '../lib/i18n';
 import type { AlbumProfile, CatalogItem, Track } from '../types/music';
 import { Spinner } from '../components/Spinner';
 import { itemArtist, itemBusy, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
+import { favouriteFromCatalogItem, favouriteFromTrack } from '../lib/favourites';
+import { FavouriteButton } from '../components/FavouriteButton';
 import styles from './Album.module.css';
 import { coverGradient, coverStyle } from '../lib/cover';
 import { formatDuration } from '../lib/format';
@@ -270,6 +272,7 @@ function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
               <span class={styles.trackTitle}>{track.title}</span>
             </span>
             <span class={styles.trackDuration}>{formatDuration(track.duration)}</span>
+            <FavouriteButton favourite={favouriteFromTrack(track)} compact />
           </div>
         )}
       </For>
@@ -311,6 +314,7 @@ function DiscoverView(props: {
                   </Show>
                 </span>
                 <span class={styles.trackDuration}>{formatDuration(item.duration)}</span>
+                <FavouriteButton favourite={favouriteFromCatalogItem(item)} compact />
                 <Show when={item.action_state?.in_library || props.saved.has(item.id)}>
                   <span class={styles.libraryBadge} aria-label={t('search.ariaInLibrary')}>
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">

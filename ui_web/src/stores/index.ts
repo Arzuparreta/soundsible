@@ -20,6 +20,7 @@ import {
   trackKeys,
   withLinkedKeys,
 } from '../lib/playbackIdentity';
+import { favouriteFromTrack, favouriteToTrack, favouriteVideoId } from '../lib/favourites';
 import { resolveTrackYoutubeId, relatedTracksFor } from '../lib/relatedDiscovery';
 import { AutopilotController, type AutoCandidate, type AutoModeState, type AutoPlanItem, type AutoProfile } from '../lib/autopilot';
 import { createShortcutHandler } from '../lib/shortcuts';
@@ -37,7 +38,7 @@ import {
   type QueueSource,
 } from '../lib/playbackQueue';
 import { shuffled } from '../lib/shuffle';
-import type { Track, CatalogItem, SearchResult, PlaylistMap, LibrarySettings } from '../types/music';
+import type { Track, CatalogItem, FavouriteEntry, SearchResult, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
 import type { DownloadQueueItem, DownloadEvent, CompletedDownload } from '../types/download';
 import {
@@ -113,7 +114,9 @@ export interface AppState {
    * your station" instead of the untrue "your library is empty". */
   libraryError: boolean;
   library: Track[];
-  favorites: string[];
+  /** Saved songs, newest first — downloaded or not. Identity-keyed, so an entry
+   * follows its song across downloads instead of pointing at one id. */
+  favourites: FavouriteEntry[];
   playlists: PlaylistMap;
   librarySettings: LibrarySettings;
   podcastSubscriptions: PodcastSubscription[];
@@ -177,7 +180,7 @@ const [state, setState] = createStore<AppState>({
   loading: false,
   libraryError: false,
   library: [],
-  favorites: [],
+  favourites: [],
   playlists: {},
   librarySettings: {},
   podcastSubscriptions: [],
@@ -532,7 +535,10 @@ function invalidateLibrarySync(): void {
 
 function removeTrackReferences(id: string): void {
   setState('library', (l) => l.filter((t) => t.id !== id));
-  setState('favorites', (f) => f.filter((x) => x !== id));
+  // Favourites are deliberately left alone: deleting the file is not
+  // unfavouriting the song. The entry stops resolving to a library track and
+  // degrades to a preview on its own — and re-downloading the same audio mints
+  // the same content hash, so it silently becomes local again.
   setState(
     'playlists',
     Object.fromEntries(Object.entries(state.playlists).map(([n, ids]) => [n, ids.filter((x) => x !== id)])),
@@ -712,7 +718,38 @@ const identity = createRoot(() => {
   const queuedKeys = createMemo(() =>
     collectIdentityKeys(futureEntries(state.playback.queue, state.playback.index, 'manual')),
   );
-  return { libraryIndex, playingKeys, queuedKeys };
+  // Favourites have the same identity problem, one hop further out: the row you
+  // hearted in Search, the preview that played, and the file you downloaded are
+  // three ids for one song. Matching on keys is what makes the heart correct on
+  // every surface without any of them knowing where the song lives.
+  const favouriteKeys = createMemo(() => new Set(state.favourites.flatMap((f) => f.keys)));
+  // Each saved song as something playable: the owned track when we have it,
+  // a streaming preview when we don't. Resolved here rather than at save time,
+  // so a download promotes its favourite with no write and no reordering.
+  // The entry is kept alongside its track, because only the entry knows whether
+  // a source has been attached to it yet.
+  const favouriteRows = createMemo(() =>
+    state.favourites
+      .map((entry) => ({ entry, track: favouriteToTrack(entry, libraryIndex()) }))
+      .filter((row): row is { entry: FavouriteEntry; track: Track } => !!row.track),
+  );
+  // The subset that lives on disk, by library id — what the surfaces that only
+  // speak library ids (sort, radio seeds, Auto Mode) already expect.
+  const favouriteLibraryIds = createMemo(() => {
+    const owned = new Set<string>();
+    const index = libraryIndex();
+    for (const entry of state.favourites) {
+      for (const key of entry.keys) {
+        const track = index.get(key);
+        if (track) {
+          owned.add(track.id);
+          break;
+        }
+      }
+    }
+    return owned as ReadonlySet<string>;
+  });
+  return { libraryIndex, playingKeys, queuedKeys, favouriteKeys, favouriteRows, favouriteLibraryIds };
 });
 
 /** Keys the playing track answers to. Reactive: read in a tracking scope. */
@@ -754,6 +791,26 @@ export const ownedTrackForItem = (item: CatalogItem): Track | null =>
 export const ownedTrackForResult = (result: SearchResult): Track | null =>
   ownedTrackForKeys(searchResultKeys(result));
 
+/** Is anything with these identities a saved song? Downloaded or not. */
+export const isFavouriteKeys = (keys: string[]): boolean =>
+  keysMatch(keys, identity.favouriteKeys(), catalogLinks());
+
+export const isFavouriteTrack = (track: Track): boolean => isFavouriteKeys(trackKeys(track));
+export const isFavouriteItem = (item: CatalogItem): boolean =>
+  isFavouriteKeys(catalogItemKeys(item));
+export const isFavouriteResult = (result: SearchResult): boolean =>
+  isFavouriteKeys(searchResultKeys(result));
+
+/** Every saved song paired with the playable track it resolves to, newest
+ * first. Owned tracks play their file; the rest stream. */
+export const favouriteRows = identity.favouriteRows;
+
+/** Every saved song as a playable track, newest first. */
+export const favouriteTracks = (): Track[] => identity.favouriteRows().map((row) => row.track);
+
+/** Library ids of the saved songs we hold a file for. */
+export const favouriteLibraryIds = identity.favouriteLibraryIds;
+
 export const actions = {
   async syncLibrary(): Promise<void> {
     if (librarySyncInFlight) {
@@ -764,9 +821,9 @@ export const actions = {
     const syncVersion = ++librarySyncVersion;
     setState('loading', true);
     try {
-      const [lib, favorites] = await Promise.all([
+      const [lib, favourites] = await Promise.all([
         api.getLibrary(),
-        api.getFavourites().catch(() => state.favorites),
+        api.getFavourites().catch(() => state.favourites.slice()),
       ]);
       if (syncVersion !== librarySyncVersion) return;
       setState({
@@ -774,7 +831,7 @@ export const actions = {
         playlists: lib.playlists ?? {},
         librarySettings: lib.settings ?? {},
         podcastSubscriptions: lib.podcast_subscriptions ?? [],
-        favorites,
+        favourites,
         libraryError: false,
       });
     } catch {
@@ -804,27 +861,40 @@ export const actions = {
     });
   },
 
-  toggleFavourite(id: string): void {
+  /**
+   * Save or unsave a song. Whether it is downloaded never enters into it — the
+   * entry carries its own identity and snapshot, so the same call works from a
+   * library row, a YouTube result and a Deezer row alike.
+   */
+  toggleFavourite(entry: FavouriteEntry): void {
+    if (!entry.keys.length) return;
     vibrate();
-    const prev = state.favorites.slice();
-    const has = prev.includes(id);
-    setState('favorites', has ? prev.filter((f) => f !== id) : [id, ...prev]); // optimistic
-    api.toggleFavourite(id)
+    const prev = state.favourites.slice();
+    const has = isFavouriteKeys(entry.keys);
+    const next = has
+      ? prev.filter((f) => !f.keys.some((k) => entry.keys.includes(k)))
+      : [entry, ...prev];
+    setState('favourites', next); // optimistic
+    api.toggleFavourite(entry)
       .then(() => {
         if (has) return;
-        const track = state.library.find((item) => item.id === id);
-        if (!track) return;
+        const owned = ownedTrackForKeys(entry.keys);
         void api.emitDiscoveryEvent('music_favourited', {
           media_type: 'music_track',
-          track_id: track.id,
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
-          youtube_id: track.youtube_id,
-          source: 'library',
+          track_id: owned?.id,
+          title: entry.title ?? owned?.title,
+          artist: entry.artist ?? owned?.artist,
+          album: entry.album ?? owned?.album,
+          youtube_id: owned?.youtube_id ?? favouriteVideoId(entry) ?? undefined,
+          source: owned ? 'library' : 'preview',
         }).catch(() => {});
       })
-      .catch(() => setState('favorites', prev)); // revert on failure
+      .catch(() => setState('favourites', prev)); // revert on failure
+  },
+
+  /** Save or unsave the song this track is, whatever id the surface holds. */
+  toggleFavouriteTrack(track: Track): void {
+    actions.toggleFavourite(favouriteFromTrack(track));
   },
 
   /** Enter the autonomous listening environment without changing the current
@@ -1372,7 +1442,6 @@ export const actions = {
   /** Delete a track from the library (optimistic; reverts on failure). */
   async deleteTrack(id: string): Promise<void> {
     const prevLib = state.library.slice();
-    const prevFav = state.favorites.slice();
     const prevPlaylists = Object.fromEntries(Object.entries(state.playlists).map(([n, ids]) => [n, ids.slice()]));
     const prevPlayback = { ...state.playback, queue: state.playback.queue.slice() };
     invalidateLibrarySync();
@@ -1382,7 +1451,7 @@ export const actions = {
       await actions.syncLibrary();
       toast.success(tr('toast.trackDeleted'));
     } catch {
-      setState({ library: prevLib, favorites: prevFav, playlists: prevPlaylists });
+      setState({ library: prevLib, playlists: prevPlaylists });
       restorePlaybackSnapshot(prevPlayback);
       toast.error(tr('toast.deleteFailed'));
       void actions.syncLibrary();
@@ -1780,7 +1849,8 @@ function ensureAutopilot(): AutopilotController {
         queue: state.playback.queue.slice(),
         index: state.playback.index,
         library: state.library.filter(isMusicTrack),
-        favorites: state.favorites.slice(),
+        // Auto Mode seeds from files it can play, so only the downloaded ones.
+        favorites: [...favouriteLibraryIds()],
       }),
       patchState: (patch) => setState('autoMode', patch),
       append: (candidates) => {
@@ -2123,6 +2193,13 @@ export function initStore(): void {
     if (_warmTimer) clearTimeout(_warmTimer);
     _warmTimer = setTimeout(() => { void api.warmDiscoverSeeds([]).catch(() => {}); }, 4000);
   });
+  // Favourites change without the library changing — hearted on another device,
+  // or a catalog row that just finished resolving to a playable video.
+  socket.on('favourites_updated', () => {
+    void api.getFavourites()
+      .then((favourites) => setState('favourites', favourites))
+      .catch(() => {});
+  });
   socket.on('downloader_update', (data) => applyDownloadEvent((data ?? {}) as DownloadEvent));
   socket.on('discover_seed_ready', (data) => dispatchDiscoverSeed(data as { request_id: string; seed_track_id: string; recs: unknown[] }));
 
@@ -2208,8 +2285,9 @@ export function initStore(): void {
           cycleRepeat: () => actions.cycleRepeat(),
           toggleFavourite: () => {
             const track = state.playback.currentTrack;
-            // Previews are not in the library yet, so there is nothing to pin.
-            if (track && track.source !== 'preview') actions.toggleFavourite(track.id);
+            // Whatever is playing can be saved — owning the file is not a
+            // precondition, only being a song is (podcasts have their own shelf).
+            if (track && !isPodcastTrack(track)) actions.toggleFavouriteTrack(track);
           },
           enterAutoMode: () => actions.enterAutoMode(),
           exitAutoMode: () => actions.exitAutoMode(),

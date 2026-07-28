@@ -3,6 +3,8 @@ import type { SearchResult } from '../types/music';
 import { t } from '../lib/i18n';
 import { Spinner } from './Spinner';
 import { createResponsiveTap } from '../lib/responsiveTap';
+import { favouriteFromSearchResult } from '../lib/favourites';
+import { FavouriteButton } from './FavouriteButton';
 import styles from './SearchResultRow.module.css';
 
 function fmtDur(s?: number): string {
@@ -57,6 +59,9 @@ export default function SearchResultRow(props: SearchResultRowProps) {
         <span class={styles.sub}>{props.r.channel}</span>
       </div>
       <span class={styles.dur}>{fmtDur(props.r.duration)}</span>
+      {/* Saving is independent of owning: the heart works here exactly as it
+        * does on a library row, and ＋ still downloads. */}
+      <FavouriteButton favourite={favouriteFromSearchResult(props.r)} compact />
       <Show when={props.onRadio}>
         <button
           class={styles.iconBtn}

@@ -136,6 +136,7 @@ export const es: Dict = {
   favourites: {
     title: 'Favoritos',
     empty: 'Aún no tienes favoritos. Toca el corazón en cualquier canción.',
+    notDownloaded: 'Stream',
   },
   search: {
     placeholder: 'Qué quieres escuchar?',

@@ -8,7 +8,8 @@ import {
   searchResultKeys,
   trackKeys,
 } from './playbackIdentity';
-import type { CatalogItem, SearchResult, Track } from '../types/music';
+import { favouriteToTrack } from './favourites';
+import type { CatalogItem, FavouriteEntry, SearchResult, Track } from '../types/music';
 
 /**
  * Test-only: the store's identity predicates over a hand-built state snapshot.
@@ -26,10 +27,13 @@ export function identityMock(read: {
   library: () => Track[];
   queue?: () => Track[];
   links?: () => ReadonlyMap<string, string>;
+  favourites?: () => FavouriteEntry[];
 }) {
   const links = () => read.links?.() ?? new Map<string, string>();
   const playing = () => resolvePlayingKeys(read.currentTrack(), buildIdentityIndex(read.library()), links());
   const queued = () => collectIdentityKeys(read.queue?.() ?? []);
+  const favourites = () => read.favourites?.() ?? [];
+  const favouriteKeys = () => new Set(favourites().flatMap((f) => f.keys));
   const owned = (keys: string[]) => {
     const index = buildIdentityIndex(read.library());
     for (const key of keys) {
@@ -52,5 +56,28 @@ export function identityMock(read: {
     ownedTrackForKeys: owned,
     ownedTrackForItem: (item: CatalogItem) => owned(catalogItemKeys(item)),
     ownedTrackForResult: (result: SearchResult) => owned(searchResultKeys(result)),
+    isFavouriteKeys: (keys: string[]) => keysMatch(keys, favouriteKeys(), links()),
+    isFavouriteTrack: (track: Track) => keysMatch(trackKeys(track), favouriteKeys(), links()),
+    isFavouriteItem: (item: CatalogItem) => keysMatch(catalogItemKeys(item), favouriteKeys(), links()),
+    isFavouriteResult: (result: SearchResult) =>
+      keysMatch(searchResultKeys(result), favouriteKeys(), links()),
+    favouriteTracks: () =>
+      favourites()
+        .map((entry) => favouriteToTrack(entry, buildIdentityIndex(read.library())))
+        .filter((track): track is Track => !!track),
+    favouriteLibraryIds: () => {
+      const index = buildIdentityIndex(read.library());
+      const ids = new Set<string>();
+      for (const entry of favourites()) {
+        for (const key of entry.keys) {
+          const track = index.get(key);
+          if (track) {
+            ids.add(track.id);
+            break;
+          }
+        }
+      }
+      return ids as ReadonlySet<string>;
+    },
   };
 }

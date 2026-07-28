@@ -1,0 +1,67 @@
+.heart {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  flex-shrink: 0;
+  padding: 0;
+  color: var(--ink-tertiary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  /* Visible and tappable by default (touch). Surfaces that reveal on hover opt
+   * in through their own `.row:hover` rule — the heart never hides itself once
+   * it is filled, or you could not tell a saved song from an unsaved one
+   * without hovering it. */
+  transition:
+    color var(--dur-short) var(--ease-out),
+    transform var(--dur-short) var(--ease-out);
+}
+
+.heart[data-saved] {
+  color: var(--accent);
+}
+
+.heart:active {
+  transform: scale(0.9);
+}
+
+/* Not yet resolvable to anything playable — saved, but still being matched to a
+ * source. Reads as "in progress", not as broken. */
+.heart[data-pending] {
+  opacity: 0.6;
+}
+
+.heart svg {
+  width: 20px;
+  height: 20px;
+}
+
+.compact {
+  width: 32px;
+  height: 32px;
+}
+
+.compact svg {
+  width: 17px;
+  height: 17px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .heart:hover {
+    color: var(--accent-hover);
+    background: var(--bg-elevated);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heart {
+    transition: none;
+  }
+
+  .heart:active {
+    transform: none;
+  }
+}

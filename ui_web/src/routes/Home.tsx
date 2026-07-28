@@ -1,6 +1,6 @@
 import { createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { A } from '@solidjs/router';
-import { state, actions, downloadCounts, musicLibrary } from '../stores';
+import { state, actions, downloadCounts, favouriteLibraryIds, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import ArtistGrid from '../components/ArtistGrid';
@@ -18,7 +18,8 @@ import { EmptyState } from '../components/EmptyState';
 export default function Home() {
   let viewRef: HTMLDivElement | undefined;
   const active = createMemo(() => downloadCounts().active);
-  const favSet = createMemo(() => new Set(state.favorites));
+  // Sorting the library by favourites only concerns the tracks in it.
+  const favSet = createMemo(() => new Set(favouriteLibraryIds()));
   const songs = createMemo(() => musicLibrary());
   const sorted = createMemo(() => sortTracks(songs(), librarySort(), favSet()));
   const artists = createMemo(() => buildArtists(songs()));

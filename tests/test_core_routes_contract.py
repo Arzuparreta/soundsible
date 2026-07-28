@@ -130,6 +130,7 @@ def _patch_library_api(monkeypatch, metadata):
         "socketio": MagicMock(),
         "get_downloader": lambda **kw: MagicMock(),
         "favourites_manager": MagicMock(),
+        "favourite_library_ids": lambda: [],
         "emit_to_user": MagicMock(),
         "is_trusted_network": lambda: True,
         "LibraryMetadata": LibraryMetadata,
@@ -190,21 +191,7 @@ def test_library_favourites_toggle(tmp_path, monkeypatch):
     fav.get_all.return_value = ["t1"]
     fav.toggle.return_value = True
 
-    fake_lib = _FakeLibrary(metadata)
-    monkeypatch.setattr("shared.api.routes.library._get_api", lambda: {
-        "get_core": lambda: (fake_lib, None, None),
-        "get_track_by_id": lambda lib, tid: {t.id: t for t in metadata.tracks}.get(tid),
-        "socketio": MagicMock(),
-        "favourites_manager": fav,
-        "emit_to_user": MagicMock(),
-        "is_trusted_network": lambda: True,
-    })
-
-    app = Flask(__name__)
-    app.register_blueprint(library_bp)
-    client = app.test_client()
-    db = instance_db()
-    token = _owner_token(db)
+    client, token, _ = _favourites_client(monkeypatch, metadata, fav)
 
     resp = client.post(
         "/api/library/favourites/toggle",
@@ -215,6 +202,100 @@ def test_library_favourites_toggle(tmp_path, monkeypatch):
     body = resp.get_json()
     assert "is_favourite" in body
     assert body["is_favourite"] is True
+    fav.toggle.assert_called_once_with("t1")
+
+
+def _favourites_client(monkeypatch, metadata, fav, library_ids=None):
+    """Library blueprint wired to a stub favourites manager. Returns (client, token, emit)."""
+    fake_lib = _FakeLibrary(metadata)
+    emit = MagicMock()
+    monkeypatch.setattr("shared.api.routes.library._get_api", lambda: {
+        "get_core": lambda: (fake_lib, None, None),
+        "get_track_by_id": lambda lib, tid: {t.id: t for t in metadata.tracks}.get(tid),
+        "socketio": MagicMock(),
+        "favourites_manager": fav,
+        "favourite_library_ids": lambda: list(library_ids or []),
+        "emit_to_user": emit,
+        "is_trusted_network": lambda: True,
+    })
+
+    app = Flask(__name__)
+    app.register_blueprint(library_bp)
+    return app.test_client(), _owner_token(instance_db()), emit
+
+
+def test_library_favourites_toggle_accepts_an_identity_entry(tmp_path, monkeypatch):
+    """A song that is not downloaded is favourited by identity, not by library id."""
+    reset_runtime()
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    fav = MagicMock()
+    fav.toggle_entry.return_value = True
+
+    client, token, emit = _favourites_client(monkeypatch, metadata, fav)
+
+    entry = {"keys": ["yt:vid123"], "title": "Weightless", "artist": "Marconi Union", "duration": 490}
+    resp = client.post(
+        "/api/library/favourites/toggle",
+        json={"favourite": entry},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    assert resp.get_json()["is_favourite"] is True
+    fav.toggle_entry.assert_called_once_with(entry)
+    fav.toggle.assert_not_called()
+    # Other devices on this account have to learn about it.
+    emit.assert_called_once_with("favourites_updated")
+
+
+def test_library_favourites_toggle_rejects_an_entry_without_identity(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    fav = MagicMock()
+    fav.toggle_entry.side_effect = ValueError("no keys")
+
+    client, token, _ = _favourites_client(monkeypatch, metadata, fav)
+
+    resp = client.post(
+        "/api/library/favourites/toggle",
+        json={"favourite": {"keys": [], "title": "Nameless"}},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 400
+
+
+def test_library_favourites_get_keeps_returning_library_ids(tmp_path, monkeypatch):
+    """The documented contract agents and the car UI depend on."""
+    reset_runtime()
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(version=1, tracks=[_track("t1", "One")], playlists={}, settings={})
+    fav = MagicMock()
+
+    client, _, _ = _favourites_client(monkeypatch, metadata, fav, library_ids=["t1"])
+
+    resp = client.get("/api/library/favourites")
+    assert resp.status_code == 200
+    assert resp.get_json() == ["t1"]
+
+
+def test_library_favourite_entries_expose_snapshots(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    fav = MagicMock()
+    fav.get_entries.return_value = [
+        {"keys": ["yt:vid123"], "title": "Weightless", "artist": "Marconi Union"}
+    ]
+
+    client, _, _ = _favourites_client(monkeypatch, metadata, fav)
+
+    resp = client.get("/api/library/favourites/entries")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["version"] == 2
+    assert body["favourites"][0]["keys"] == ["yt:vid123"]
+    assert body["favourites"][0]["title"] == "Weightless"
 
 
 # ---------------------------------------------------------------------------

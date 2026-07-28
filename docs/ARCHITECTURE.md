@@ -189,13 +189,33 @@ machine, and what belongs to a person.
 |------|---------|
 | `library.json` | *Your* library: which tracks you own, plus any metadata you edited on them. |
 | `library.db` | SQLite index of that manifest. |
-| `favourites.json`, `playback_state.json`, `discovery_settings.json` | Favourites, cross-device resume, discovery opt-in. |
+| `favourites.json`, `playback_state.json`, `discovery_settings.json` | Saved songs, cross-device resume, discovery opt-in. |
 | `queue_state.json` *(data dir)* | Playback queue. |
 | `telemetry/listening-events.jsonl`, `telemetry/play-timing.jsonl` *(data dir)* | Listening history — the input to *your* recommendations. |
 
 Editing a track's tags re-encodes the file and therefore changes its hash, which
 mints a new track id. That is what keeps metadata edits private: your manifest
 follows the new id while everyone else keeps the original.
+
+**Favourites are identity-keyed, not id-keyed.** `favourites.json` (v2) holds
+ordered entries, newest first:
+
+```json
+{"version": "2.0", "favourites": [
+  {"keys": ["lib:9f2a…", "yt:dQw4w9WgXcQ"], "title": "…", "artist": "…",
+   "duration": 355, "thumbnail": null, "added_at": "…"}
+]}
+```
+
+`keys` is the set of namespaced identities the song answers to — the same
+namespaces the player uses to track a song across hops (`lib:`, `yt:`, `isrc:`,
+`mb:`, `deezer:`, `cat:`; see `ui_web/src/lib/playbackIdentity.ts`). Two entries
+are the same song when their key sets intersect. That is what lets you save a
+song you have not downloaded: the snapshot renders and streams it on its own,
+and the entry is resolved against the library *at read time*, so downloading it
+later promotes the same entry to the owned track with nothing rewritten. v1
+files (a flat array of track ids) migrate on load. Key derivation lives in the
+client; `player/favourites_manager.py` only stores, orders and intersects.
 
 Exact filenames and fields may evolve; treat the code under `shared/` and `player/` as the source of truth.
 

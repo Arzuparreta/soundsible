@@ -283,8 +283,9 @@ Useful library routes:
 |---|---|---|
 | `GET` | `/api/library` | Full library metadata |
 | `GET` | `/api/library/search?q=...` | Search local library |
-| `GET` | `/api/library/favourites` | Favorite track IDs |
-| `POST` | `/api/library/favourites/toggle` | Toggle favorite, body `{"track_id":"..."}` |
+| `GET` | `/api/library/favourites` | Favorite track IDs (only the ones you own a file for) |
+| `GET` | `/api/library/favourites/entries` | All saved songs, downloaded or not: `{"version":2,"favourites":[{"keys":[...],"title","artist",...}]}` |
+| `POST` | `/api/library/favourites/toggle` | Toggle favorite, body `{"track_id":"..."}` or `{"favourite":{"keys":["yt:<video_id>"],"title":"...","artist":"..."}}` |
 | `POST` | `/api/library/playlists` | Create playlist, body `{"name":"..."}` |
 | `POST` | `/api/library/playlists/<name>/tracks` | Add track to playlist, body `{"track_id":"..."}` |
 | `DELETE` | `/api/library/playlists/<name>/tracks/<track_id>` | Remove track from playlist |
@@ -747,6 +748,7 @@ GET  /api/agent/debug/socketio agent token
 GET  /api/library
 GET  /api/library/search?q=
 GET  /api/library/favourites
+GET  /api/library/favourites/entries
 POST /api/library/favourites/toggle
 POST /api/library/playlists
 POST /api/library/playlists/<name>/tracks

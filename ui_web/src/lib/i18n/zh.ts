@@ -136,6 +136,7 @@ export const zh: Dict = {
   favourites: {
     title: '收藏',
     empty: '还没有收藏。在任意歌曲上点一下心形即可收藏。',
+    notDownloaded: '在线',
   },
   search: {
     placeholder: '想听什么？',

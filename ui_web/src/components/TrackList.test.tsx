@@ -10,9 +10,10 @@ vi.mock('./PlaylistPicker', () => ({ openPlaylistPicker: vi.fn() }));
 vi.mock('./MetadataEditor', () => ({ openMetadataEditor: vi.fn() }));
 vi.mock('./DeviceSheet', () => ({ openPlayOnDevice: vi.fn() }));
 vi.mock('../stores', () => ({
-  actions: { playFrom: vi.fn() },
+  actions: { playFrom: vi.fn(), toggleFavourite: vi.fn() },
   state: { interfaceSize: 'normal' },
   isPlayingTrack: () => false,
+  isFavouriteKeys: () => false,
 }));
 
 import TrackList from './TrackList';

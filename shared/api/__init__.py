@@ -633,6 +633,50 @@ def get_favourites_manager(user_id: Optional[str] = None):
     return get_user_core(user_id).favourites
 
 
+def favourite_library_ids(user_id: Optional[str] = None) -> list:
+    """
+    Favourites resolved against this account's library, newest first.
+
+    A favourite carries every identity its song answers to, so one saved as a
+    YouTube preview and downloaded later is *the same entry* — it just starts
+    resolving to a library track. Callers that only speak library ids (car,
+    discovery seeds) go through here so that promotion is visible to them too,
+    rather than reading the stored `lib:` keys directly.
+    """
+    from player.favourites_manager import LIB_PREFIX
+
+    core = get_user_core(user_id)
+    favourites = core.favourites
+    if favourites is None:
+        return []
+
+    metadata = getattr(core.library, "metadata", None)
+    tracks = getattr(metadata, "tracks", None) or []
+    owned = set()
+    by_youtube = {}
+    for track in tracks:
+        owned.add(track.id)
+        yt_id = getattr(track, "youtube_id", None)
+        if yt_id:
+            by_youtube.setdefault(yt_id, track.id)
+
+    ids = []
+    seen = set()
+    for entry in favourites.get_entries():
+        track_id = None
+        for key in entry.get("keys") or []:
+            if key.startswith(LIB_PREFIX) and key[len(LIB_PREFIX):] in owned:
+                track_id = key[len(LIB_PREFIX):]
+                break
+            if key.startswith("yt:") and key[3:] in by_youtube:
+                track_id = by_youtube[key[3:]]
+                break
+        if track_id and track_id not in seen:
+            seen.add(track_id)
+            ids.append(track_id)
+    return ids
+
+
 def get_queue_manager(user_id: Optional[str] = None):
     return get_user_core(user_id).queue
 
@@ -1265,9 +1309,9 @@ def remap_track_ids_for_all_users(id_map: dict) -> dict:
                             covers[name] = id_map[tid]
 
                 for old_id, new_id in id_map.items():
-                    if core.favourites.is_favourite(old_id):
-                        core.favourites.remove(old_id)
-                        core.favourites.add(new_id)
+                    # Keeps the entry's snapshot and `added_at`, which a
+                    # remove()+add() pair would silently reset.
+                    core.favourites.remap_library_id(old_id, new_id)
 
                 if changed:
                     lib.metadata.version += 1

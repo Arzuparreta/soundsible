@@ -3,6 +3,7 @@ import type {
   CatalogResolveResponse,
   CatalogSaveResponse,
   CatalogSearchResponse,
+  FavouriteEntry,
   Track,
   PlaylistMap,
   LibrarySettings,
@@ -394,12 +395,15 @@ export const api = {
       settings?: LibrarySettings;
       podcast_subscriptions?: PodcastSubscription[];
     }>(`/api/library?t=${Date.now()}`, { timeoutMs: 30000 }),
-  /** Returns the list of favourite track ids. */
-  getFavourites: () => request<string[]>(`/api/library/favourites?t=${Date.now()}`),
-  toggleFavourite: (id: string) =>
-    request<{ is_fav?: boolean }>('/api/library/favourites/toggle', {
+  /** Saved songs — identity plus snapshot, newest first, downloaded or not. */
+  getFavourites: () =>
+    request<{ version?: number; favourites?: FavouriteEntry[] }>(
+      `/api/library/favourites/entries?t=${Date.now()}`,
+    ).then((res) => res.favourites ?? []),
+  toggleFavourite: (favourite: FavouriteEntry) =>
+    request<{ is_favourite?: boolean }>('/api/library/favourites/toggle', {
       method: 'POST',
-      body: { track_id: id },
+      body: { favourite },
     }),
   /** Trigger a server-side rescan of the library files. */
   rescanLibrary: () =>

@@ -34,6 +34,7 @@ def _get_api():
         socketio,
         get_downloader,
         get_favourites_manager,
+        favourite_library_ids,
         emit_to_user,
         is_trusted_network,
     )
@@ -47,6 +48,7 @@ def _get_api():
         "emit_to_user": emit_to_user,
         "get_downloader": get_downloader,
         "favourites_manager": get_favourites_manager(),
+        "favourite_library_ids": favourite_library_ids,
         "is_trusted_network": is_trusted_network,
         "LibraryMetadata": LibraryMetadata,
     }
@@ -428,23 +430,102 @@ def clear_track_cover(track_id):
 
 @library_bp.route("/api/library/favourites", methods=["GET"])
 def get_favourites():
+    """Favourite **library** track ids. Stable contract for agents and the car UI.
+
+    Resolved against the library rather than read straight off the stored `lib:`
+    keys, so a song favourited as a preview and downloaded later shows up here
+    the moment it lands.
+    """
     api = _get_api()
     api["get_core"]()
-    return jsonify(api["favourites_manager"].get_all())
+    return jsonify(api["favourite_library_ids"]())
+
+
+@library_bp.route("/api/library/favourites/entries", methods=["GET"])
+def get_favourite_entries():
+    """The full favourites list — identity keys plus the snapshot needed to render
+    and stream a song that is not downloaded. Newest first."""
+    api = _get_api()
+    api["get_core"]()
+    return jsonify({"version": 2, "favourites": api["favourites_manager"].get_entries()})
 
 
 @library_bp.route("/api/library/favourites/toggle", methods=["POST"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_toggle_favourite", limit=120, window_sec=60)
 def toggle_favourite():
+    """Toggle a favourite, by identity (`favourite`) or by library id (`track_id`)."""
     api = _get_api()
     api["get_core"]()
-    data = request.json
-    track_id = data.get("track_id")
-    if not track_id:
-        return jsonify({"error": "No track_id provided"}), 400
-    is_fav = api["favourites_manager"].toggle(track_id)
-    return jsonify({"status": "success", "is_favourite": is_fav})
+    data = request.json or {}
+    favourite = data.get("favourite")
+    manager = api["favourites_manager"]
+
+    if isinstance(favourite, dict):
+        try:
+            is_fav = manager.toggle_entry(favourite)
+        except ValueError:
+            return jsonify({"error": "favourite needs at least one identity key"}), 400
+        if is_fav:
+            _schedule_favourite_resolve(favourite)
+    else:
+        track_id = data.get("track_id")
+        if not track_id:
+            return jsonify({"error": "No track_id provided"}), 400
+        is_fav = manager.toggle(track_id)
+
+    # Other devices on this account would otherwise not see the change until a
+    # full library sync — every other mutating route here already emits.
+    api["emit_to_user"]("favourites_updated")
+    return jsonify({"status": "success", "is_favourite": is_fav, "is_fav": is_fav})
+
+
+def _schedule_favourite_resolve(favourite: dict) -> None:
+    """
+    Give a favourite a playable identity in the background.
+
+    A Deezer/MusicBrainz row saved without ever being played carries no `yt:`
+    key, so nothing can stream it. Resolving it here — off the request, through
+    the same permanently-cached resolver the catalog uses — means the heart stays
+    instant while the song quietly becomes playable a moment later.
+    """
+    keys = [k for k in (favourite.get("keys") or []) if isinstance(k, str)]
+    if not keys or any(k.startswith("yt:") for k in keys):
+        return
+    artist = (favourite.get("artist") or "").strip()
+    title = (favourite.get("title") or "").strip()
+    if not artist or not title:
+        return
+
+    from shared.user_context import current_user_id
+
+    user_id = current_user_id()
+    duration = favourite.get("duration")
+    duration_s = int(duration) if isinstance(duration, (int, float)) and duration > 0 else None
+
+    def _resolve():
+        from shared.api import emit_to_user, get_favourites_manager
+        from shared.api.routes.catalog import _resolve_candidates
+        from shared.user_context import user_context
+
+        try:
+            best, _ = _resolve_candidates(artist, title, duration_s)
+            video_id = (best or {}).get("id")
+            if not video_id:
+                return
+            with user_context(user_id):
+                manager = get_favourites_manager(user_id)
+                if manager.update_keys(keys, [f"yt:{video_id}"]):
+                    emit_to_user("favourites_updated", user_id=user_id)
+        except Exception as exc:  # pragma: no cover — best-effort enrichment
+            logger.debug("Favourite resolve failed for %s — %s: %s", artist, title, exc)
+
+    try:
+        from shared.api.orchestrator import orchestrator
+
+        orchestrator.submit_background(f"fav_resolve_{keys[0]}", _resolve)
+    except Exception as exc:  # pragma: no cover — never block the toggle
+        logger.debug("Could not queue favourite resolve: %s", exc)
 
 
 @library_bp.route("/api/library/playlists", methods=["POST"])

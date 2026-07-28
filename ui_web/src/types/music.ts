@@ -23,6 +23,24 @@ export interface Track {
   recommendation?: RecommendationContext;
 }
 
+/**
+ * A saved song, downloaded or not.
+ *
+ * Identity is the `keys` set (see `lib/playbackIdentity.ts`), never a single id
+ * — a song changes id at every hop, so storing one would mean the favourite
+ * survives exactly one of them. The rest is a snapshot: enough to render and
+ * stream the song when the library has never heard of it.
+ */
+export interface FavouriteEntry {
+  keys: string[];
+  title?: string;
+  artist?: string;
+  album?: string;
+  duration?: number;
+  thumbnail?: string;
+  added_at?: string | null;
+}
+
 export interface RecommendationContext {
   identity: string;
   source: 'discover' | 'radio' | 'auto_mode' | 'autoplay' | 'podcast';

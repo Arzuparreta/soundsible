@@ -147,13 +147,26 @@
   }
 }
 
+.rowHeart {
+  transition: opacity var(--dur-short) var(--ease-out);
+}
+
 /* Reveal-on-hover is a pointer-only nicety; touch devices always show the heart
  * so it stays tappable (no hover state to trigger). */
 @media (hover: hover) and (pointer: fine) {
-  .iconBtn {
+  .iconBtn,
+  .rowHeart {
     opacity: 0;
   }
-  .row:hover .iconBtn {
+  .row:hover .iconBtn,
+  .row:hover .rowHeart,
+  .iconBtn:focus-visible,
+  .rowHeart:focus-visible {
+    opacity: 1;
+  }
+  /* A saved song keeps its heart on: hiding it would make a list of favourites
+   * look exactly like a list of nothing until you moved the mouse across it. */
+  .rowHeart[data-saved] {
     opacity: 1;
   }
   .iconBtn:hover {

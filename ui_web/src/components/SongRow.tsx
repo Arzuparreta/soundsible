@@ -5,6 +5,8 @@ import styles from './SongRow.module.css';
 import { coverStyle } from '../lib/cover';
 import { formatDuration } from '../lib/format';
 import { createResponsiveTap } from '../lib/responsiveTap';
+import { favouriteFromTrack } from '../lib/favourites';
+import { FavouriteButton } from './FavouriteButton';
 
 export interface SongRowProps {
   track: Track;
@@ -15,6 +17,8 @@ export interface SongRowProps {
   /** Optional compact type marker used by mixed result lists. */
   badge?: string;
   active?: boolean;
+  /** When false, the row hides its heart (podcast episodes). */
+  favouritable?: boolean;
   onPlay?: (track: Track) => void;
   /** When set, the artist name becomes a tappable link (navigates to the artist). */
   onArtist?: (artist: string) => void;
@@ -118,6 +122,12 @@ export default function SongRow(props: SongRowProps) {
         <span class={styles.badge}>{props.badge}</span>
       </Show>
       <span class={styles.duration}>{formatDuration(props.track.duration)}</span>
+      {/* Every song gets a heart, downloaded or not — that is the whole point.
+        * `FavouriteButton` matches on identity, so it is already correct for a
+        * preview row without this component knowing anything about it. */}
+      <Show when={props.favouritable !== false}>
+        <FavouriteButton favourite={favouriteFromTrack(props.track)} class={styles.rowHeart} />
+      </Show>
       <Show when={props.onMenu}>
         <button
           class={styles.iconBtn}

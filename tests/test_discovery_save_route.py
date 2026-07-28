@@ -523,6 +523,7 @@ def test_music_feed_includes_taste_based_external_tracks_and_local_recs(tmp_path
     fav.get_all.return_value = ["t1"]
     mod = MagicMock()
     mod.favourites_manager = fav
+    mod.favourite_library_ids.return_value = ["t1"]
     api = {
         "get_core": MagicMock(return_value=(_FakeLibrary(metadata), None, None)),
         "_mod": mod,
@@ -579,6 +580,7 @@ def test_music_feed_uses_cache_when_fresh(tmp_path):
     mod = MagicMock()
     mod.favourites_manager = MagicMock()
     mod.favourites_manager.get_all.return_value = []
+    mod.favourite_library_ids.return_value = []
     api = {
         "get_core": MagicMock(return_value=(_FakeLibrary(metadata), None, None)),
         "_mod": mod,

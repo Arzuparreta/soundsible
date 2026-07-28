@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import {
   actions,
   state,
+  favouriteLibraryIds,
   isPlayingItem,
   isPlayingResult,
   isPlayingTrack,
@@ -488,7 +489,8 @@ export function SearchPanel() {
   /** Favourites make the best surprise seeds; fall back to the whole library
    * while the taste signal is still thin. */
   const surprisePool = createMemo(() => {
-    const favs = state.library.filter((tk) => state.favorites.includes(tk.id));
+    // Seeds have to be things we can build a radio from, so downloaded only.
+    const favs = state.library.filter((tk) => favouriteLibraryIds().has(tk.id));
     return favs.length >= 3 ? favs : state.library;
   });
 
