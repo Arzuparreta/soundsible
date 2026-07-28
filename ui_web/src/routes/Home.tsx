@@ -266,6 +266,7 @@ export default function Home() {
         >
           <TrackList
             tracks={sorted()}
+            context={{ id: 'library', kind: 'library', label: t('home.title') }}
             loading={state.loading}
             empty={emptyState(t('home.emptyLibrary'))}
             linkArtist={!isMobile()}

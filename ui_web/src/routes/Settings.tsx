@@ -106,6 +106,7 @@ function qualityLabel(q: string): string {
 export default function Settings() {
   const [busy, setBusy] = createSignal(false);
   const [learning, setLearning] = createSignal(true);
+  const [autoplay, setAutoplay] = createSignal(state.playback.autoplayEnabled);
   const [quality, setQuality] = createSignal('high');
   const [autoUpdate, setAutoUpdate] = createSignal(false);
   const sharedLinkAssociation = associationUrl();
@@ -114,6 +115,7 @@ export default function Settings() {
     try {
       const d = await api.getDiscoverySettings();
       if (typeof d.learning_enabled === 'boolean') setLearning(d.learning_enabled);
+      if (typeof d.autoplay_enabled === 'boolean') setAutoplay(d.autoplay_enabled);
     } catch {
       /* defaults */
     }
@@ -147,6 +149,12 @@ export default function Settings() {
       setLearning(!next);
       toast.error(t('settings.toast.notSaved'));
     }
+  };
+
+  const toggleAutoplay = async () => {
+    const next = !autoplay();
+    setAutoplay(next);
+    if (!(await actions.setAutoplayEnabled(next))) setAutoplay(!next);
   };
 
   const resetLearning = async () => {
@@ -445,6 +453,7 @@ export default function Settings() {
 
         <Group label={t('settings.discovery')}>
           <div class={styles.panel}>
+            <Switch label={t('settings.autoplay')} checked={autoplay()} onChange={toggleAutoplay} />
             <Switch label={t('settings.learnActivity')} checked={learning()} onChange={toggleLearning} />
             <ActionRow label={t('settings.resetLearning')} onClick={resetLearning} />
           </div>

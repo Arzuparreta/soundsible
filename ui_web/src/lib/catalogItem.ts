@@ -5,6 +5,7 @@ import { t } from './i18n';
 import { actions, isPlayingItem, state } from '../stores';
 import { catalogItemKeys } from './playbackIdentity';
 import type { CatalogItem, Track } from '../types/music';
+import type { PlaybackContextDescriptor } from './playbackQueue';
 
 /** Artist name for a catalog row, wherever the source put it. */
 export function itemArtist(item: CatalogItem): string {
@@ -70,7 +71,11 @@ export function cancelCatalogResolve(): void {
  * resolved track is *prepended* rather than written over index 0, which would
  * evict an owned track).
  */
-export async function playCatalogItem(item: CatalogItem, queue?: CatalogItem[]): Promise<void> {
+export async function playCatalogItem(
+  item: CatalogItem,
+  queue?: CatalogItem[],
+  context?: PlaybackContextDescriptor,
+): Promise<void> {
   const artist = itemArtist(item);
   if (!artist || !item.title) return;
 
@@ -78,7 +83,7 @@ export async function playCatalogItem(item: CatalogItem, queue?: CatalogItem[]):
   if (existing) {
     if (queue) {
       const tracks = queue.map(itemToTrack).filter((tr): tr is Track => !!tr);
-      if (tracks.length) actions.playFrom(tracks, 0);
+      if (tracks.length) actions.playFrom(tracks, 0, { context });
       else actions.playTrack(existing);
     } else {
       actions.playTrack(existing);
@@ -117,7 +122,7 @@ export async function playCatalogItem(item: CatalogItem, queue?: CatalogItem[]):
         .filter((q) => q !== item)
         .map(itemToTrack)
         .filter((tr): tr is Track => !!tr);
-      actions.playFrom([track, ...rest], 0);
+      actions.playFrom([track, ...rest], 0, { context });
     } else {
       actions.playTrack(track);
     }

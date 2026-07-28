@@ -30,14 +30,24 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
         label: t('playlistActions.play'),
         onSelect: () => {
           const t = playlistTracks(name);
-          if (t.length) actions.playFrom(t, 0);
+          if (t.length) {
+            actions.playFrom(t, 0, {
+              context: { id: `playlist:${name}`, kind: 'playlist', label: name },
+            });
+          }
         },
       },
       {
         label: t('playlistActions.shuffle'),
         onSelect: () => {
           const t = playlistTracks(name);
-          if (t.length) actions.playShuffled(t);
+          if (t.length) {
+            actions.playShuffled(t, {
+              id: `playlist:${name}`,
+              kind: 'playlist',
+              label: name,
+            });
+          }
         },
       },
       {

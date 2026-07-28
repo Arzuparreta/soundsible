@@ -75,10 +75,14 @@ def test_discovery_settings_default_and_persist(tmp_path):
     runtime = _make_runtime(tmp_path)
 
     assert load_discovery_settings()["learning_enabled"] is True
-    saved = save_discovery_settings({"learning_enabled": False})
+    assert load_discovery_settings()["autoplay_enabled"] is True
+    saved = save_discovery_settings({"learning_enabled": False, "autoplay_enabled": False})
 
     assert saved["learning_enabled"] is False
-    assert json.loads((user_config_dir() / "discovery_settings.json").read_text())["learning_enabled"] is False
+    assert saved["autoplay_enabled"] is False
+    persisted = json.loads((user_config_dir() / "discovery_settings.json").read_text())
+    assert persisted["learning_enabled"] is False
+    assert persisted["autoplay_enabled"] is False
 
 
 def test_emit_discovery_event_respects_local_opt_out(tmp_path):

@@ -26,7 +26,11 @@ export default function PlaylistDetail() {
   });
 
   const playAll = () => {
-    if (tracks().length > 0) actions.playFrom(tracks(), 0);
+    if (tracks().length > 0) {
+      actions.playFrom(tracks(), 0, {
+        context: { id: `playlist:${name()}`, kind: 'playlist', label: name() },
+      });
+    }
   };
 
   const openMenu = () =>
@@ -60,6 +64,7 @@ export default function PlaylistDetail() {
       </header>
       <TrackList
         tracks={tracks()}
+        context={{ id: `playlist:${name()}`, kind: 'playlist', label: name() }}
         loading={state.loading}
         menu={{
           playlistName: name(),

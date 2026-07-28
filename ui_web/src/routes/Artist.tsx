@@ -101,24 +101,26 @@ export default function Artist() {
   );
 
   const playAll = () => {
+    const context = { id: `artist:${name()}`, kind: 'artist' as const, label: name() };
     if (view() === 'library') {
       const tracks = libraryTrackList();
-      if (tracks.length > 0) actions.playFrom(tracks, 0);
+      if (tracks.length > 0) actions.playFrom(tracks, 0, { context });
     } else {
       const items = topTracks();
       if (items.length === 0) return;
-      void playCatalogItem(items[0], items);
+      void playCatalogItem(items[0], items, context);
     }
   };
 
   const shuffle = () => {
+    const context = { id: `artist:${name()}`, kind: 'artist' as const, label: name() };
     if (view() === 'library') {
-      actions.playShuffled(libraryTrackList());
+      actions.playShuffled(libraryTrackList(), context);
     } else {
       const items = topTracks();
       if (items.length === 0) return;
       const order = shuffled(items);
-      void playCatalogItem(order[0], order);
+      void playCatalogItem(order[0], order, context);
     }
   };
 
@@ -277,7 +279,7 @@ export default function Artist() {
             when={profile()}
             fallback={<EmptyState>{t('artist.noCatalogData')}</EmptyState>}
           >
-            <Show when={view() === 'discover'} fallback={<LibraryView tracks={libraryTrackList()} loading={false} />}>
+            <Show when={view() === 'discover'} fallback={<LibraryView tracks={libraryTrackList()} loading={false} contextLabel={name()} />}>
               <DiscoverView
                 topTracks={topTracks()}
                 albums={albums()}
@@ -286,7 +288,11 @@ export default function Artist() {
                 loading={profile.loading}
                 saving={saving()}
                 saved={saved()}
-                onPlayItem={playCatalogItem}
+                onPlayItem={(item, queue) => void playCatalogItem(item, queue, {
+                  id: `artist:${name()}`,
+                  kind: 'artist',
+                  label: name(),
+                })}
                 onSaveItem={saveItem}
                 onAlbumClick={handleAlbumClick}
                 onRelatedClick={handleRelatedClick}
@@ -317,17 +323,17 @@ function Button(props: { onClick: () => void; disabled?: boolean; variant?: 'pri
   );
 }
 
-function LibraryView(props: { tracks: Track[]; loading: boolean }) {
+function LibraryView(props: { tracks: Track[]; loading: boolean; contextLabel: string }) {
   return (
     <div class={styles.libraryView}>
       <Show when={props.tracks.length > 0} fallback={<EmptyState>{t('artist.empty')}</EmptyState>}>
-        <TrackListLite tracks={props.tracks} />
+        <TrackListLite tracks={props.tracks} contextLabel={props.contextLabel} />
       </Show>
     </div>
   );
 }
 
-function TrackListLite(props: { tracks: Track[] }) {
+function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
   return (
     <div class={styles.trackList}>
       <For each={props.tracks}>
@@ -335,7 +341,9 @@ function TrackListLite(props: { tracks: Track[] }) {
           <div
             class={styles.trackRow}
             data-now-playing={isPlayingTrack(track) ? '' : undefined}
-            onClick={() => actions.playFrom(props.tracks, i())}
+            onClick={() => actions.playFrom(props.tracks, i(), {
+              context: { id: `artist:${props.contextLabel}`, kind: 'artist', label: props.contextLabel },
+            })}
           >
             <span class={styles.trackIndex}>{i() + 1}</span>
             <span class={styles.trackCover} style={coverStyle(track.id, coverUrl(track.id))} />

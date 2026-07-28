@@ -21,14 +21,24 @@ export function artistMenuOptions(artist: string, ctx: ArtistMenuContext = {}): 
       label: t('artistActions.play'),
       onSelect: () => {
         const t = artistTracks(artist);
-        if (t.length) actions.playFrom(t, 0);
+        if (t.length) {
+          actions.playFrom(t, 0, {
+            context: { id: `artist:${artist}`, kind: 'artist', label: artist },
+          });
+        }
       },
     },
     {
       label: t('artistActions.shuffle'),
       onSelect: () => {
         const t = artistTracks(artist);
-        if (t.length) actions.playShuffled(t);
+        if (t.length) {
+          actions.playShuffled(t, {
+            id: `artist:${artist}`,
+            kind: 'artist',
+            label: artist,
+          });
+        }
       },
     },
   ];

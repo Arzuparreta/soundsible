@@ -158,6 +158,12 @@ The engine cannot make a cold preview instant — there is a yt-dlp extraction b
 
 A failed load surfaces on two channels (`play()` rejects **and** the element fires `error`), so failure reporting is keyed by a load generation — the first report retires the attempt and the duplicate is ignored.
 
+### 4B. Playback queue contract (client)
+
+The Solid player uses occurrence-based manual, context, and generated lanes.
+Their ordering, replacement, shuffle, Radio, Auto Mode, and Autoplay semantics
+are normative in [`PLAYBACK_QUEUE_CONTRACT.md`](PLAYBACK_QUEUE_CONTRACT.md).
+
 ### 5. Data and configuration (conceptual)
 
 One engine serves **several accounts**. State splits in two: what belongs to the

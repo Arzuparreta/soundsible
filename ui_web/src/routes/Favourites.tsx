@@ -23,6 +23,7 @@ export default function Favourites() {
       />
       <TrackList
         tracks={favTracks()}
+        context={{ id: 'favourites', kind: 'favourites', label: t('favourites.title') }}
         loading={state.loading}
         empty={<EmptyState>{t('favourites.empty')}</EmptyState>}
       />

@@ -805,6 +805,61 @@
   overscroll-behavior: contain;
 }
 
+.queueSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--list-gap);
+}
+
+.queueSection + .queueSection {
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--hairline-soft);
+}
+
+.queueSectionHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 22px;
+  padding: 0 var(--space-xs);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-tertiary);
+}
+
+.queueSectionCount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.queueExpand {
+  align-self: flex-start;
+  padding: var(--space-xs);
+  color: var(--ink-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .queueExpand:hover {
+    color: var(--accent);
+    background: var(--bg-hover);
+  }
+}
+
+.queueEmpty {
+  margin: var(--space-md) var(--space-xs);
+  color: var(--ink-tertiary);
+  font-size: var(--text-caption);
+}
+
 .qRow {
   display: flex;
   flex-shrink: 0;
@@ -860,6 +915,10 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
+}
+
+.qPlay:disabled {
+  cursor: default;
 }
 
 .qRemove {

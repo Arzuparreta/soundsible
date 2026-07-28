@@ -35,6 +35,8 @@ async function loadStore(
     searchYouTube: vi.fn(),
     relatedYouTube: vi.fn(),
     emitDiscoveryEvent: vi.fn().mockResolvedValue(undefined),
+    getDiscoverySettings: vi.fn().mockResolvedValue({ learning_enabled: true, autoplay_enabled: true }),
+    setAutoplayEnabled: vi.fn().mockResolvedValue({ autoplay_enabled: true }),
     ...apiOverrides,
   };
   const audioService = {
@@ -71,7 +73,7 @@ async function loadStore(
       success: vi.fn(),
       error: vi.fn(),
       info: vi.fn(),
-      loading: vi.fn(() => ({ update: vi.fn() })),
+      loading: vi.fn(() => ({ update: vi.fn(), dismiss: vi.fn() })),
     },
   }));
   vi.doMock('../lib/haptics', () => ({ vibrate: vi.fn() }));
@@ -165,13 +167,15 @@ describe('Solid store library and playback resume', () => {
     expect(state.playback.queue.map((t) => t.id)).toEqual(['t1', 't3', 't2']);
     expect(state.playback.currentTrack?.id).toBe('t3');
 
-    // Already queued (as its preview twin): jump to it, no duplicate.
+    // Re-requesting the current occurrence is coalesced across source identity.
     actions.playNow({ id: 'yt333yt333y', title: 'Three', artist: 'Chan', source: 'preview' });
     expect(state.playback.queue.map((t) => t.id)).toEqual(['t1', 't3', 't2']);
     expect(state.playback.currentTrack?.id).toBe('t3');
 
+    // A future occurrence does not consume the existing context occurrence:
+    // explicit requests allow duplicates and remain a separate lane.
     actions.playNow(t2);
-    expect(state.playback.queue.map((t) => t.id)).toEqual(['t1', 't3', 't2']);
+    expect(state.playback.queue.map((t) => t.id)).toEqual(['t1', 't3', 't2', 't2']);
     expect(state.playback.currentTrack?.id).toBe('t2');
   });
 
@@ -297,6 +301,149 @@ describe('Playback load coalescing', () => {
   });
 });
 
+describe('Playback queue lanes', () => {
+  it('keeps explicit requests ahead of a finite context with FIFO add and LIFO play-next', async () => {
+    const { actions, state } = await loadStore();
+    const context = [
+      { id: 'c0', title: 'Context 0', artist: 'A' },
+      { id: 'c1', title: 'Context 1', artist: 'A' },
+      { id: 'c2', title: 'Context 2', artist: 'A' },
+    ];
+    const add1 = { id: 'add-1', title: 'Add 1', artist: 'Me' };
+    const add2 = { id: 'add-2', title: 'Add 2', artist: 'Me' };
+    const next1 = { id: 'next-1', title: 'Next 1', artist: 'Me' };
+    const next2 = { id: 'next-2', title: 'Next 2', artist: 'Me' };
+
+    actions.playFrom(context, 0, {
+      context: { id: 'playlist:test', kind: 'playlist', label: 'Test' },
+    });
+    actions.enqueue(add1);
+    actions.enqueue(add2);
+    actions.playNext(next1);
+    actions.playNext(next2);
+
+    expect(state.playback.queue.map((track) => track.id)).toEqual([
+      'c0',
+      'next-2',
+      'next-1',
+      'add-1',
+      'add-2',
+      'c1',
+      'c2',
+    ]);
+    expect(state.playback.queue.slice(1, 5).every((entry) => entry.queueLane === 'manual')).toBe(true);
+    expect(state.playback.queue.slice(5).every((entry) => entry.queueLane === 'context')).toBe(true);
+  });
+
+  it('preserves manual occurrences when a new context is chosen and allows duplicates', async () => {
+    const { actions, state } = await loadStore();
+    const duplicate = { id: 'requested', title: 'Requested', artist: 'Me' };
+
+    actions.playFrom([t1, t2], 0);
+    actions.enqueue(duplicate);
+    actions.enqueue(duplicate);
+    actions.playFrom(
+      [
+        { id: 'fresh-0', title: 'Fresh 0', artist: 'B' },
+        { id: 'fresh-1', title: 'Fresh 1', artist: 'B' },
+      ],
+      0,
+      { context: { id: 'album:fresh', kind: 'album', label: 'Fresh' } },
+    );
+
+    expect(state.playback.queue.map((track) => track.id)).toEqual([
+      'fresh-0',
+      'requested',
+      'requested',
+      'fresh-1',
+    ]);
+    expect(state.playback.queue[1].queueId).not.toBe(state.playback.queue[2].queueId);
+    actions.clearManualQueue();
+    expect(state.playback.queue.map((track) => track.id)).toEqual(['fresh-0', 'fresh-1']);
+  });
+
+  it('does not shuffle or repeat manual requests as context', async () => {
+    const { actions, state } = await loadStore();
+    actions.playFrom(
+      [
+        { id: 'c0', title: 'Context 0', artist: 'A' },
+        { id: 'c1', title: 'Context 1', artist: 'A' },
+        { id: 'c2', title: 'Context 2', artist: 'A' },
+      ],
+      0,
+    );
+    actions.enqueue({ id: 'manual', title: 'Manual', artist: 'Me' });
+    actions.toggleShuffle();
+    expect(state.playback.queue[1].id).toBe('manual');
+
+    actions.cycleRepeat();
+    while (state.playback.index < state.playback.queue.length - 1) actions.next();
+    actions.next();
+    expect(state.playback.queue.every((entry) => entry.queueLane === 'context')).toBe(true);
+    expect(state.playback.currentTrack?.id).toBe('c0');
+  });
+});
+
+describe('Global Autoplay', () => {
+  it('prepares a small generated tail near the end and keeps manual requests first', async () => {
+    const relatedYouTube = vi.fn().mockResolvedValue(
+      Array.from({ length: 10 }, (_, index) => ({
+        id: `auto-${index}`,
+        title: `Auto ${index}`,
+        channel: 'Related',
+      })),
+    );
+    const { actions, state } = await loadStore({ relatedYouTube });
+    const context: Track[] = Array.from({ length: 4 }, (_, index) => ({
+      id: `context-${index}`,
+      title: `Context ${index}`,
+      artist: 'A',
+      youtube_id: `yt-context-${index}`,
+    }));
+
+    actions.playFrom(context, 0);
+    await flush();
+    expect(relatedYouTube).not.toHaveBeenCalled();
+
+    actions.next();
+    await vi.waitFor(() =>
+      expect(state.playback.queue.some((entry) => entry.queueSource === 'autoplay')).toBe(true),
+    );
+    expect(state.playback.queue.slice(0, 4).map((entry) => entry.id)).toEqual([
+      'context-0',
+      'context-1',
+      'context-2',
+      'context-3',
+    ]);
+
+    actions.enqueue({ id: 'manual', title: 'Manual', artist: 'Me' });
+    expect(state.playback.queue.map((entry) => entry.id)).toEqual([
+      'context-0',
+      'context-1',
+      'manual',
+      'context-2',
+      'context-3',
+    ]);
+    expect(state.playback.queue[2].queueLane).toBe('manual');
+  });
+
+  it('is account-configurable and never runs for podcasts', async () => {
+    const relatedYouTube = vi.fn().mockResolvedValue([
+      { id: 'auto-1', title: 'Auto 1', channel: 'Related' },
+    ]);
+    const { actions, state, api } = await loadStore({ relatedYouTube });
+    actions.playFrom([
+      { id: 'episode', title: 'Episode', artist: 'Show', media_kind: 'podcast_episode' },
+    ], 0);
+    await flush();
+    expect(relatedYouTube).not.toHaveBeenCalled();
+
+    await actions.setAutoplayEnabled(false);
+    expect(state.playback.autoplayEnabled).toBe(false);
+    expect(api.setAutoplayEnabled).toHaveBeenCalledWith(false);
+  });
+});
+
 describe('Auto Mode store contract', () => {
   it('preserves the manual queue and play state while restoring playback preferences on exit', async () => {
     const related = Array.from({ length: 10 }, (_, i) => ({
@@ -310,7 +457,8 @@ describe('Auto Mode store contract', () => {
     });
     const paused: Track = { id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' };
     const manual: Track = { id: 'manual', title: 'Manual next', artist: 'Listener' };
-    actions.playFrom([paused, manual], 0);
+    actions.playFrom([paused], 0);
+    actions.enqueue(manual);
     const wasPlaying = state.playback.isPlaying;
     actions.toggleShuffle();
     actions.cycleRepeat();
@@ -334,7 +482,7 @@ describe('Auto Mode store contract', () => {
     expect(state.playback.queue.length).toBeGreaterThan(2);
   });
 
-  it('takes the wheel over a long manual queue, keeping only the next two manual tracks', async () => {
+  it('keeps every explicit request ahead of Auto Mode generation', async () => {
     const related = Array.from({ length: 10 }, (_, i) => ({ id: `auto-${i}`, title: `Auto ${i}`, channel: `Artist ${i}` }));
     const { actions, state } = await loadStore({
       relatedYouTube: vi.fn().mockResolvedValue(related),
@@ -342,15 +490,28 @@ describe('Auto Mode store contract', () => {
     });
     const cur: Track = { id: 'current', title: 'Cur', artist: 'A', youtube_id: 'yt-current' };
     const manuals: Track[] = Array.from({ length: 5 }, (_, i) => ({ id: `m${i}`, title: `M${i}`, artist: 'L' }));
-    actions.playFrom([cur, ...manuals], 0);
+    actions.playFrom([cur], 0);
+    manuals.forEach((track) => actions.enqueue(track));
 
     actions.enterAutoMode();
-    // Trimmed synchronously to current + two manual tracks — the pilot owns the rest.
-    expect(state.playback.queue.map((t) => t.id).slice(0, 3)).toEqual(['current', 'm0', 'm1']);
-    expect(state.playback.queue.some((t) => t.id === 'm2')).toBe(false);
+    expect(state.playback.queue.map((t) => t.id).slice(0, 6)).toEqual([
+      'current',
+      'm0',
+      'm1',
+      'm2',
+      'm3',
+      'm4',
+    ]);
 
-    await vi.waitFor(() => expect(state.playback.queue.length).toBeGreaterThan(3));
-    expect(state.playback.queue.slice(0, 3).map((t) => t.id)).toEqual(['current', 'm0', 'm1']);
+    await vi.waitFor(() => expect(state.playback.queue.length).toBeGreaterThan(6));
+    expect(state.playback.queue.slice(0, 6).map((t) => t.id)).toEqual([
+      'current',
+      'm0',
+      'm1',
+      'm2',
+      'm3',
+      'm4',
+    ]);
     actions.exitAutoMode();
   });
 
@@ -392,7 +553,7 @@ describe('Radio mode', () => {
     expect(state.playback.radioLoading).toBe(false);
     expect(state.playback.radioSeedId).toBe(seed.id);
     expect(state.playback.queue.map((t) => t.id)).toEqual(['seed1', 'mix01']);
-    expect(api.relatedYouTube).toHaveBeenCalledWith('yt111111111', undefined, false);
+    expect(api.relatedYouTube).toHaveBeenCalledWith('yt111111111', expect.any(AbortSignal), false);
   });
 
   it('startRadio swaps audio immediately when the seed is not the current track', async () => {
@@ -443,6 +604,28 @@ describe('Radio mode', () => {
     // playNow a different track cancels radio.
     actions.playNow(t3);
     expect(state.playback.radioMode).toBe(false);
+  });
+
+  it('does not attach a stale radio mix after a new context is chosen', async () => {
+    const pending = deferred<Array<{ id: string; title: string; channel: string }>>();
+    const relatedYouTube = vi.fn().mockReturnValue(pending.promise);
+    const { actions, state } = await loadStore({ relatedYouTube });
+    actions.playFrom([seed], 0);
+
+    const starting = actions.startRadio(seed);
+    await vi.waitFor(() => expect(relatedYouTube).toHaveBeenCalled());
+    actions.playFrom(
+      [
+        { id: 'fresh', title: 'Fresh', artist: 'B' },
+        { id: 'fresh-next', title: 'Fresh next', artist: 'B' },
+      ],
+      0,
+    );
+    pending.resolve([{ id: 'stale-mix', title: 'Stale', channel: 'Radio' }]);
+    await starting;
+
+    expect(state.playback.radioMode).toBe(false);
+    expect(state.playback.queue.map((track) => track.id)).toEqual(['fresh', 'fresh-next']);
   });
 
   it('next/jumpTo keep radio active (navigating within the radio queue)', async () => {

@@ -15,6 +15,7 @@ import { Spinner } from './Spinner';
 import { LyricsPanel } from './LyricsPanel';
 import styles from './NowPlaying.module.css';
 import { clockTime } from '../lib/format';
+import type { PlaybackQueueEntry } from '../lib/playbackQueue';
 
 type MobileVisualSurface = 'cover' | 'queue' | 'lyrics';
 
@@ -320,73 +321,162 @@ export function NowPlaying() {
     return d > 0 ? Math.min(100, (state.playback.currentTime / d) * 100) : 0;
   };
   const volPct = () => Math.round((state.playback.muted ? 0 : state.playback.volume) * 100);
+  const [contextExpanded, setContextExpanded] = createSignal(false);
+  const [generatedExpanded, setGeneratedExpanded] = createSignal(false);
+  const currentQueueEntry = createMemo(() => state.playback.queue[state.playback.index]);
+  const manualQueue = createMemo(() =>
+    state.playback.queue.slice(state.playback.index + 1).filter((entry) => entry.queueLane === 'manual'),
+  );
+  const contextQueue = createMemo(() =>
+    state.playback.queue.slice(state.playback.index + 1).filter((entry) => entry.queueLane === 'context'),
+  );
+  const generatedQueue = createMemo(() =>
+    state.playback.queue.slice(state.playback.index + 1).filter((entry) => entry.queueLane === 'generated'),
+  );
+  const visibleContextQueue = createMemo(() => contextExpanded() ? contextQueue() : contextQueue().slice(0, 5));
+  const visibleGeneratedQueue = createMemo(() => generatedExpanded() ? generatedQueue() : generatedQueue().slice(0, 3));
+
+  const QueueRow = (props: { entry: PlaybackQueueEntry; current?: boolean; ordinal?: number }) => {
+    const queueIndex = () => state.playback.queue.findIndex((entry) => entry.queueId === props.entry.queueId);
+    return (
+      <div
+        classList={{ [styles.qRow]: true, [styles.qActive]: !!props.current }}
+        draggable={!props.current}
+        onDragStart={(e) => {
+          dragFrom = queueIndex();
+          if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+        }}
+        onDragOver={(e) => {
+          if (!props.current) e.preventDefault();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          const to = queueIndex();
+          if (dragFrom != null && dragFrom !== to) actions.moveInQueue(dragFrom, to);
+          dragFrom = null;
+        }}
+      >
+        <Show when={!props.current} fallback={<span class={styles.qHandle} aria-hidden="true" />}>
+          <span class={styles.qHandle} aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" />
+              <circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" />
+              <circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" />
+            </svg>
+          </span>
+        </Show>
+        <button
+          class={styles.qPlay}
+          type="button"
+          disabled={props.current}
+          onClick={() => actions.playQueueEntry(props.entry.queueId)}
+        >
+          <span class={styles.qIndex}>
+            <Show when={props.current} fallback={<>{props.ordinal ?? ''}</>}>
+              <span class={styles.eq} data-paused={state.playback.isPlaying ? undefined : ''} aria-hidden="true">
+                <i /><i /><i />
+              </span>
+            </Show>
+          </span>
+          <span class={styles.qMeta}>
+            <span class={styles.qTitle}>{props.entry.title}</span>
+            <span class={styles.qArtist}>{props.entry.artist}</span>
+          </span>
+        </button>
+        <Show when={!props.current}>
+          <button
+            class={styles.qRemove}
+            type="button"
+            aria-label={tr('nowPlaying.removeFromQueue')}
+            onClick={() => actions.removeQueueEntry(props.entry.queueId)}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </Show>
+      </div>
+    );
+  };
+
+  const QueueSection = (props: {
+    label: string;
+    entries: PlaybackQueueEntry[];
+    total: number;
+    expanded?: boolean;
+    toggle?: () => void;
+  }) => (
+    <Show when={props.total > 0}>
+      <section class={styles.queueSection}>
+        <div class={styles.queueSectionHead}>
+          <span>{props.label}</span>
+          <span class={styles.queueSectionCount}>{props.total}</span>
+        </div>
+        <For each={props.entries}>
+          {(entry, index) => <QueueRow entry={entry} ordinal={index() + 1} />}
+        </For>
+        <Show when={props.toggle && props.total > props.entries.length || (props.toggle && props.expanded)}>
+          <button class={styles.queueExpand} type="button" onClick={props.toggle}>
+            {props.expanded ? tr('nowPlaying.showLess') : tr('nowPlaying.showAll', { count: props.total })}
+          </button>
+        </Show>
+      </section>
+    </Show>
+  );
 
   const QueueList = (props: { className: string; setRef: (el: HTMLDivElement) => void }) => (
     <div class={`${styles.queue} ${props.className}`}>
       <div class={styles.queueHead}>
         <span class={styles.queueHeading}>
           <h2 class={styles.queueTitle}>{tr('nowPlaying.queue')}</h2>
-          <span class={styles.queueCount}>{state.playback.queue.length}</span>
+          <span class={styles.queueCount}>
+            {1 + manualQueue().length + contextQueue().length + generatedQueue().length}
+          </span>
         </span>
         <button
           class={styles.queueClear}
           type="button"
-          disabled={state.playback.queue.length <= 1}
-          onClick={() => actions.clearQueue()}
+          disabled={manualQueue().length === 0}
+          onClick={() => actions.clearManualQueue()}
         >
-          {tr('nowPlaying.clearQueue')}
+          {tr('nowPlaying.clearManualQueue')}
         </button>
       </div>
       <div class={styles.queueRows} ref={props.setRef}>
-      <For each={state.playback.queue}>
-        {(qt, i) => (
-          <div
-            classList={{ [styles.qRow]: true, [styles.qActive]: i() === state.playback.index }}
-            draggable={true}
-            onDragStart={(e) => {
-              dragFrom = i();
-              if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-            }}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (dragFrom != null && dragFrom !== i()) actions.moveInQueue(dragFrom, i());
-              dragFrom = null;
-            }}
-          >
-            <span class={styles.qHandle} aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                <circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" />
-                <circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" />
-                <circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" />
-              </svg>
-            </span>
-            <button class={styles.qPlay} type="button" onClick={() => actions.jumpTo(i())}>
-              <span class={styles.qIndex}>
-                <Show when={i() === state.playback.index} fallback={<>{i() + 1}</>}>
-                  <span class={styles.eq} data-paused={state.playback.isPlaying ? undefined : ''} aria-hidden="true">
-                    <i /><i /><i />
-                  </span>
-                </Show>
-              </span>
-              <span class={styles.qMeta}>
-                <span class={styles.qTitle}>{qt.title}</span>
-                <span class={styles.qArtist}>{qt.artist}</span>
-              </span>
-            </button>
-            <button
-              class={styles.qRemove}
-              type="button"
-              aria-label={tr('nowPlaying.removeFromQueue')}
-              onClick={() => actions.removeFromQueue(i())}
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                <path d="M6 6l12 12M18 6L6 18" />
-              </svg>
-            </button>
-          </div>
-        )}
-      </For>
+        <Show when={currentQueueEntry()}>
+          {(entry) => (
+            <section class={styles.queueSection}>
+              <div class={styles.queueSectionHead}>{tr('nowPlaying.nowPlayingSection')}</div>
+              <QueueRow entry={entry()} current />
+            </section>
+          )}
+        </Show>
+        <QueueSection
+          label={tr('nowPlaying.manualQueue')}
+          entries={manualQueue()}
+          total={manualQueue().length}
+        />
+        <QueueSection
+          label={contextQueue()[0]?.queueContext?.label || tr('nowPlaying.contextQueue')}
+          entries={visibleContextQueue()}
+          total={contextQueue().length}
+          expanded={contextExpanded()}
+          toggle={() => setContextExpanded((value) => !value)}
+        />
+        <QueueSection
+          label={state.playback.radioMode
+            ? tr('nowPlaying.radioQueue')
+            : state.autoMode.active
+              ? tr('nowPlaying.autoQueue')
+              : tr('nowPlaying.autoplayQueue')}
+          entries={visibleGeneratedQueue()}
+          total={generatedQueue().length}
+          expanded={generatedExpanded()}
+          toggle={() => setGeneratedExpanded((value) => !value)}
+        />
+        <Show when={manualQueue().length + contextQueue().length + generatedQueue().length === 0}>
+          <p class={styles.queueEmpty}>{tr('nowPlaying.queueEmpty')}</p>
+        </Show>
       </div>
     </div>
   );

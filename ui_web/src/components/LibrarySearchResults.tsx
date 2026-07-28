@@ -113,7 +113,11 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
                       cover={coverUrl((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track.id)}
                       badge={t('home.resultTrack')}
                       active={isPlayingTrack((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track)}
-                      onPlay={(track) => actions.playFrom(trackQueue(), trackPositions().get(track.id) ?? 0)}
+                      onPlay={(track) => actions.playFrom(
+                        trackQueue(),
+                        trackPositions().get(track.id) ?? 0,
+                        { context: { id: 'library-search', kind: 'search', label: t('home.searchLibrary') } },
+                      )}
                       onMenu={openMenu}
                     />
                   </Show>

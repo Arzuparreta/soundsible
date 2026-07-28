@@ -25,7 +25,7 @@ export interface Track {
 
 export interface RecommendationContext {
   identity: string;
-  source: 'discover' | 'radio' | 'auto_mode' | 'podcast';
+  source: 'discover' | 'radio' | 'auto_mode' | 'autoplay' | 'podcast';
   reason?: string;
   reason_code?: string;
 }

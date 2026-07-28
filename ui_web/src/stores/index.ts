@@ -25,6 +25,18 @@ import { AutopilotController, type AutoCandidate, type AutoModeState, type AutoP
 import { createShortcutHandler } from '../lib/shortcuts';
 import { t as tr } from '../lib/i18n';
 import { ListeningLearning } from '../lib/listeningLearning';
+import {
+  createQueueEntry,
+  defaultContext,
+  futureEntries,
+  manualInsertIndex,
+  sameQueueSection,
+  contextSource,
+  type PlaybackContextDescriptor,
+  type PlaybackQueueEntry,
+  type QueueSource,
+} from '../lib/playbackQueue';
+import { shuffled } from '../lib/shuffle';
 import type { Track, CatalogItem, SearchResult, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
 import type { DownloadQueueItem, DownloadEvent, CompletedDownload } from '../types/download';
@@ -57,7 +69,7 @@ export interface PlaybackState {
   loadError: boolean;
   currentTime: number;
   duration: number;
-  queue: Track[];
+  queue: PlaybackQueueEntry[];
   index: number;
   shuffle: boolean;
   repeat: RepeatMode;
@@ -75,6 +87,10 @@ export interface PlaybackState {
   /** Track id of the seed used to start the current radio. Useful to
    * preserve the seed vs mix identity without inferring from the queue. */
   radioSeedId: string | null;
+  /** Account preference. Generated similar music is always the final lane,
+   * behind explicit requests and the finite playback context. */
+  autoplayEnabled: boolean;
+  autoplayLoading: boolean;
 }
 
 export interface AppState {
@@ -168,6 +184,8 @@ const [state, setState] = createStore<AppState>({
     radioMode: false,
     radioLoading: false,
     radioSeedId: null,
+    autoplayEnabled: true,
+    autoplayLoading: false,
   },
   autoMode: {
     active: false,
@@ -198,9 +216,14 @@ let librarySyncVersion = 0;
 let userPlaybackStartedThisSession = false;
 let autopilot: AutopilotController | null = null;
 let autoPlaybackPrefs: { shuffle: boolean; repeat: RepeatMode } | null = null;
-/** Manual upcoming tracks preserved as runway when Auto Mode takes over. */
-const AUTO_KEEP_MANUAL_ON_ENTER = 2;
-
+let autoplayAborter: AbortController | null = null;
+let autoplayGeneration = 0;
+let autoplayInFlight: Promise<boolean> | null = null;
+let radioAborter: AbortController | null = null;
+let radioGeneration = 0;
+const AUTOPLAY_TARGET = 8;
+const AUTOPLAY_PREPARE_THRESHOLD = 2;
+const AUTOPLAY_REFILL_THRESHOLD = 3;
 function trackUrl(track: Track): string {
   const previewId = playbackYoutubeId(track);
   return track.source === 'preview' && previewId ? previewUrl(previewId) : streamUrl(track.id);
@@ -217,6 +240,105 @@ function prefetchUpcoming(): void {
   if (pb.shuffle) return;
   const ids = upcomingPreviewIds(pb.queue, pb.index, pb.repeat === 'all');
   if (ids.length > 0) prefetchPreviews(ids, { download: true });
+}
+
+function discardFutureAutoplay(): void {
+  autoplayGeneration += 1;
+  autoplayAborter?.abort();
+  autoplayAborter = null;
+  autoplayInFlight = null;
+  const pb = state.playback;
+  const queue = pb.queue.filter(
+    (entry, index) => index <= pb.index || !(entry.queueLane === 'generated' && entry.queueSource === 'autoplay'),
+  );
+  setState('playback', { queue, autoplayLoading: false });
+}
+
+function cancelPendingRadio(): void {
+  radioGeneration += 1;
+  radioAborter?.abort();
+  radioAborter = null;
+}
+
+function autoplayTrack(track: Track): Track {
+  const identity = track.youtube_id || track.id;
+  return {
+    ...track,
+    recommendation: {
+      identity: `music:${track.source === 'preview' || track.youtube_id ? 'youtube' : 'track'}:${identity}`,
+      source: 'autoplay',
+      reason: tr('autoplay.reason'),
+    },
+  };
+}
+
+/**
+ * Keep a small final lane of similar music warm. This is deliberately separate
+ * from Radio and Auto Mode: it only runs when a finite music session is about
+ * to end, and stale async results cannot attach to a newer session.
+ */
+async function ensureAutoplay(force = false): Promise<boolean> {
+  if (autoplayInFlight) return autoplayInFlight;
+  const pb = state.playback;
+  const current = pb.currentTrack;
+  if (
+    !pb.autoplayEnabled ||
+    !current ||
+    isPodcastTrack(current) ||
+    pb.radioMode ||
+    state.autoMode.active ||
+    pb.repeat !== 'off'
+  ) {
+    return false;
+  }
+
+  const upcoming = futureEntries(pb.queue, pb.index);
+  const generated = upcoming.filter(
+    (entry) => entry.queueLane === 'generated' && entry.queueSource === 'autoplay',
+  );
+  const deterministic = upcoming.filter(
+    (entry) => !(entry.queueLane === 'generated' && entry.queueSource === 'autoplay'),
+  );
+  if (!force && deterministic.length > AUTOPLAY_PREPARE_THRESHOLD) return false;
+  if (!force && generated.length >= AUTOPLAY_REFILL_THRESHOLD) return false;
+
+  const seed = generated.at(-1) ?? deterministic.at(-1) ?? current;
+  const needed = Math.max(0, AUTOPLAY_TARGET - generated.length);
+  if (needed === 0) return true;
+
+  const generation = ++autoplayGeneration;
+  autoplayAborter?.abort();
+  const aborter = new AbortController();
+  autoplayAborter = aborter;
+  setState('playback', 'autoplayLoading', true);
+  const task = (async () => {
+    try {
+      const related = await relatedTracksFor(seed, state.library.filter(isMusicTrack), aborter.signal);
+      if (generation !== autoplayGeneration || aborter.signal.aborted) return false;
+      const excluded = new Set(state.playback.queue.map(queueIdentity));
+      const accepted = related.tracks
+        .filter((track) => !excluded.has(queueIdentity(track)))
+        .slice(0, needed)
+        .map((track) => createQueueEntry(autoplayTrack(track), 'generated', 'autoplay'));
+      if (accepted.length === 0) return false;
+      setState('playback', 'queue', (queue) => [...queue, ...accepted]);
+      prefetchUpcoming();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      if (generation === autoplayGeneration) {
+        autoplayAborter = null;
+        setState('playback', 'autoplayLoading', false);
+      }
+    }
+  })();
+  autoplayInFlight = task;
+  try {
+    return await task;
+  } finally {
+    if (autoplayInFlight === task) autoplayInFlight = null;
+  }
 }
 
 function updateMediaSession(track: Track | null): void {
@@ -320,6 +442,7 @@ function loadIndex(i: number, opts: { restart?: boolean } = {}): void {
   };
   void audioService.load(trackUrl(track)).catch(() => onPlaybackFailed(generation));
   prefetchUpcoming();
+  queueMicrotask(() => void ensureAutoplay());
 }
 
 /**
@@ -445,7 +568,11 @@ function restoreSameDevicePlayback(remote: RemotePlaybackState): void {
     loadError: false,
     currentTime: pos,
     duration: track.duration ?? 0,
-    queue: [track],
+    queue: [createQueueEntry(track, 'context', isPodcastTrack(track) ? 'podcast' : 'single', {
+      id: 'resume',
+      kind: isPodcastTrack(track) ? 'podcast' : 'single',
+      label: track.artist,
+    })],
     index: 0,
   });
   updateMediaSession(track);
@@ -459,8 +586,14 @@ function onEnded(): void {
     void audioService.resume().catch(() => {});
     return;
   }
-  if (pb.shuffle || pb.index < pb.queue.length - 1 || pb.repeat === 'all') actions.next();
-  else setState('playback', 'isPlaying', false);
+  if (pb.index < pb.queue.length - 1 || pb.repeat === 'all') {
+    actions.next();
+    return;
+  }
+  void ensureAutoplay(true).then((ready) => {
+    if (ready && state.playback.index < state.playback.queue.length - 1) actions.next();
+    else setState('playback', 'isPlaying', false);
+  });
 }
 
 /** Push a "just finished" entry to the recent strip and auto-expire it. */
@@ -563,7 +696,9 @@ const identity = createRoot(() => {
   );
   // Queue membership has the same identity problem as the playing highlight: a
   // Deezer row already lined up must say so, whatever id the row holds.
-  const queuedKeys = createMemo(() => collectIdentityKeys(state.playback.queue));
+  const queuedKeys = createMemo(() =>
+    collectIdentityKeys(futureEntries(state.playback.queue, state.playback.index, 'manual')),
+  );
   return { libraryIndex, playingKeys, queuedKeys };
 });
 
@@ -688,20 +823,20 @@ export const actions = {
       shuffle: state.playback.shuffle,
       repeat: state.playback.repeat,
     };
-    // Take the wheel: keep the current track and the next couple of manual
-    // entries as runway, then let the pilot plan the rest. Without this trim a
-    // long album/playlist/radio queue kept Auto idling in `following_queue`
-    // for the whole session — the queue looked untouched and switching profile
-    // did nothing. Adopt a running radio queue without invoking stopRadio(),
-    // whose contract intentionally truncates it to the seed.
-    const keepUntil = state.playback.index + 1 + AUTO_KEEP_MANUAL_ON_ENTER;
+    discardFutureAutoplay();
+    cancelPendingRadio();
+    // Take the wheel: the finite context is replaceable, explicit requests are
+    // not. Keep the current occurrence plus every future manual request; Auto
+    // owns only the generated tail behind them.
+    const prefix = state.playback.queue.slice(0, state.playback.index + 1);
+    const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
     setState('playback', {
       shuffle: false,
       repeat: 'off',
       radioMode: false,
       radioLoading: false,
       radioSeedId: null,
-      queue: state.playback.queue.slice(0, keepUntil),
+      queue: [...prefix, ...manual],
     });
     ensureAutopilot().start();
   },
@@ -747,17 +882,44 @@ export const actions = {
     }
   },
 
-  /** Play a list starting at index `i`; the list becomes the queue (next/prev work).
+  /** Play a list starting at index `i`; its remaining tracks become the finite
+   * context. Explicitly queued tracks survive the context switch and are placed
+   * immediately after the selected track.
+   *
    * Pass `{ radio: true }` when the queue is the seed-only radio placeholder so
    * `radioMode`/`radioSeedId` are set; `radioLoading` is preserved (the caller
    * manages it through the async mix resolution). Without `radio`, all radio
    * flags are reset — `playTrack`/`playShuffled`/external callers therefore
    * cancel any active radio session. */
-  playFrom(tracks: Track[], i: number, opts?: { radio?: boolean }): void {
-    if (state.autoMode.active && tracks[i] && isPodcastTrack(tracks[i])) actions.exitAutoMode();
+  playFrom(
+    tracks: Track[],
+    i: number,
+    opts?: {
+      radio?: boolean;
+      context?: PlaybackContextDescriptor;
+      shuffled?: boolean;
+      preserveManual?: boolean;
+    },
+  ): void {
+    if (!tracks[i]) return;
+    discardFutureAutoplay();
     const isRadio = opts?.radio === true;
+    if (!isRadio) cancelPendingRadio();
+    if (!isRadio && state.autoMode.active) actions.exitAutoMode();
+    const context = opts?.context ?? defaultContext(tracks);
+    const source: QueueSource = isRadio ? 'radio' : contextSource(context.kind);
+    const contextQueue = tracks.map((track, contextIndex) =>
+      createQueueEntry(track, 'context', source, context, contextIndex));
+    const preservedManual =
+      opts?.preserveManual === false ? [] : futureEntries(state.playback.queue, state.playback.index, 'manual');
+    const queue = [
+      ...contextQueue.slice(0, i + 1),
+      ...preservedManual,
+      ...contextQueue.slice(i + 1),
+    ];
     setState('playback', {
-      queue: tracks.slice(),
+      queue,
+      shuffle: opts?.shuffled === true,
       radioMode: isRadio,
       radioLoading: isRadio ? state.playback.radioLoading : false,
       radioSeedId: isRadio ? (tracks[i]?.id ?? null) : null,
@@ -771,15 +933,16 @@ export const actions = {
   },
 
   /** Play a list with shuffle on, starting from a random entry. */
-  playShuffled(tracks: Track[]): void {
+  playShuffled(tracks: Track[], context?: PlaybackContextDescriptor): void {
     if (tracks.length === 0) return;
-    setState('playback', 'shuffle', true);
-    actions.playFrom(tracks, Math.floor(Math.random() * tracks.length));
+    actions.playFrom(shuffled(tracks), 0, { context, shuffled: true });
   },
 
   /** Play a podcast episode: queue = just this episode; stream via a minted token. */
   async playEpisode(ep: PodcastEpisode, showTitle?: string, feedId?: string): Promise<void> {
     if (state.autoMode.active) actions.exitAutoMode();
+    discardFutureAutoplay();
+    cancelPendingRadio();
     const track = podcastEpisodeToTrack(ep, showTitle, feedId);
     // Tapping the same episode again while its token is still being minted must
     // not mint a second one.
@@ -789,7 +952,11 @@ export const actions = {
     const generation = beginLoad();
     setState('playback', {
       currentTrack: track,
-      queue: [track],
+      queue: [createQueueEntry(track, 'context', 'podcast', {
+        id: feedId || ep.guid,
+        kind: 'podcast',
+        label: showTitle || track.artist,
+      })],
       index: 0,
       isPlaying: true,
       isLoading: true,
@@ -859,14 +1026,16 @@ export const actions = {
   next(): void {
     const pb = state.playback;
     if (pb.queue.length === 0) return;
-    if (pb.shuffle && pb.queue.length > 1) {
-      let r = pb.index;
-      while (r === pb.index) r = Math.floor(Math.random() * pb.queue.length);
-      loadIndex(r);
-      return;
-    }
     if (pb.index < pb.queue.length - 1) loadIndex(pb.index + 1);
-    else if (pb.repeat === 'all') loadIndex(0);
+    else if (pb.repeat === 'all') {
+      const cycle = pb.queue.filter(
+        (entry) => entry.queueLane !== 'manual' && entry.queueSource !== 'autoplay',
+      );
+      if (cycle.length > 0) {
+        setState('playback', { queue: cycle, index: 0 });
+        loadIndex(0);
+      }
+    }
   },
 
   prev(): void {
@@ -897,7 +1066,10 @@ export const actions = {
       actions.playTrack(track);
       return;
     }
-    setState('playback', 'queue', (q) => [...q, track]);
+    discardFutureAutoplay();
+    const at = manualInsertIndex(state.playback.queue, state.playback.index, 'last');
+    const entry = createQueueEntry(track, 'manual', 'add_to_queue');
+    setState('playback', 'queue', (q) => [...q.slice(0, at), entry, ...q.slice(at)]);
     toast.success(tr('toast.addedToQueue'));
     prefetchUpcoming();
   },
@@ -912,19 +1084,25 @@ export const actions = {
       actions.playTrack(track);
       return;
     }
-    // Explicitly requested a different track to play now: cancels any active radio.
+    if (pb.currentTrack && queueIndexOf([pb.currentTrack], track) === 0) {
+      if (pb.isLoading || pb.isPlaying) return;
+      if (pb.loadError) actions.retryCurrent();
+      else void audioService.resume();
+      return;
+    }
+    // Explicitly requested a different track to play now: cancel generators but
+    // preserve the manual/context runway behind the interruption.
+    discardFutureAutoplay();
+    cancelPendingRadio();
+    if (state.autoMode.active) actions.exitAutoMode();
     setState('playback', {
       radioMode: false,
       radioLoading: false,
       radioSeedId: null,
     });
-    const at = queueIndexOf(pb.queue, track);
-    if (at !== -1) {
-      loadIndex(at);
-      return;
-    }
     const insertAt = pb.index + 1;
-    setState('playback', 'queue', (q) => [...q.slice(0, insertAt), track, ...q.slice(insertAt)]);
+    const entry = createQueueEntry(track, 'manual', 'play_next');
+    setState('playback', 'queue', (q) => [...q.slice(0, insertAt), entry, ...q.slice(insertAt)]);
     loadIndex(insertAt);
   },
 
@@ -935,8 +1113,10 @@ export const actions = {
       actions.playTrack(track);
       return;
     }
-    const at = pb.index + 1;
-    setState('playback', 'queue', (q) => [...q.slice(0, at), track, ...q.slice(at)]);
+    discardFutureAutoplay();
+    const at = state.playback.index + 1;
+    const entry = createQueueEntry(track, 'manual', 'play_next');
+    setState('playback', 'queue', (q) => [...q.slice(0, at), entry, ...q.slice(at)]);
     toast.success(tr('toast.playNextConfirmed'));
     prefetchUpcoming();
   },
@@ -970,6 +1150,7 @@ export const actions = {
   moveInQueue(from: number, to: number): void {
     const pb = state.playback;
     if (from === to || from < 0 || to < 0 || from >= pb.queue.length || to >= pb.queue.length) return;
+    if (!sameQueueSection(pb.queue[from], pb.queue[to])) return;
     const q = pb.queue.slice();
     const [item] = q.splice(from, 1);
     q.splice(to, 0, item);
@@ -983,11 +1164,35 @@ export const actions = {
     prefetchUpcoming();
   },
 
-  /** Clear upcoming tracks, keeping the one currently playing. */
-  clearQueue(): void {
+  /** Clear explicit upcoming requests without touching context or generators. */
+  clearManualQueue(): void {
     const pb = state.playback;
-    if (pb.currentTrack && pb.index >= 0) setState('playback', { queue: [pb.currentTrack], index: 0 });
-    else setState('playback', { queue: [], index: -1 });
+    const queue = pb.queue.filter((entry, index) => index <= pb.index || entry.queueLane !== 'manual');
+    setState('playback', 'queue', queue);
+    prefetchUpcoming();
+  },
+
+  /** Backwards-compatible name for callers outside the queue panel. */
+  clearQueue(): void {
+    actions.clearManualQueue();
+  },
+
+  removeQueueEntry(queueId: string): void {
+    const index = state.playback.queue.findIndex((entry) => entry.queueId === queueId);
+    if (index !== -1) actions.removeFromQueue(index);
+  },
+
+  /** Play one occurrence now without silently discarding earlier manual requests. */
+  playQueueEntry(queueId: string): void {
+    const pb = state.playback;
+    const from = pb.queue.findIndex((entry) => entry.queueId === queueId);
+    if (from === -1 || from === pb.index) return;
+    const queue = pb.queue.slice();
+    const [entry] = queue.splice(from, 1);
+    const at = pb.index + 1;
+    queue.splice(at, 0, entry);
+    setState('playback', 'queue', queue);
+    loadIndex(at);
   },
 
   /** Start a radio station seeded from a track: plays it, then its YouTube mix.
@@ -1011,6 +1216,12 @@ export const actions = {
       return;
     }
     const t = toast.loading(tr('toast.startingRadio'));
+    discardFutureAutoplay();
+    cancelPendingRadio();
+    if (state.autoMode.active) actions.exitAutoMode();
+    const generation = ++radioGeneration;
+    const aborter = new AbortController();
+    radioAborter = aborter;
 
     // Resolve a youtube_id up front. This step CAN block (search round-trip
     // for library tracks without a stored id) — but it has to happen before we
@@ -1019,6 +1230,10 @@ export const actions = {
     let ytId: string | null = null;
     try {
       ytId = await resolveTrackYoutubeId(seed);
+      if (generation !== radioGeneration || aborter.signal.aborted) {
+        t.dismiss();
+        return;
+      }
       if (!ytId) {
         t.update('error', tr('toast.noYtForRadio'));
         return;
@@ -1041,10 +1256,18 @@ export const actions = {
       state.playback.currentTrack?.id === seed.id && state.playback.isPlaying;
 
     if (isCurrentPlaying) {
-      // Bug 2 fix: A is already playing the seed. Keep audio running; queue
-      // the seed as the only entry for now. The mix will be appended after.
+      // A is already playing the seed. Keep audio running, retain explicit
+      // requests, and let the radio mix sit behind them.
+      const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
       setState('playback', {
-        queue: [seed],
+        queue: [
+          createQueueEntry(seed, 'context', 'radio', {
+            id: `radio:${seed.id}`,
+            kind: 'single',
+            label: seed.title,
+          }),
+          ...manual,
+        ],
         index: 0,
         // currentTrack/isPlaying/currentTime intentionally NOT patched.
       });
@@ -1055,7 +1278,11 @@ export const actions = {
     }
 
     try {
-      const related = await api.relatedYouTube(ytId, undefined, false);
+      const related = await api.relatedYouTube(ytId, aborter.signal, false);
+      if (generation !== radioGeneration || aborter.signal.aborted) {
+        t.dismiss();
+        return;
+      }
       const mix = related
         .filter((r) => r.id !== ytId && (isCurrentPlaying || r.id !== seed.id))
         .map(
@@ -1073,7 +1300,10 @@ export const actions = {
       }
       // Append the mix after the seed (which is now queue[0]). Don't touch
       // index/currentTrack/currentTime — playback continues seamlessly.
-      setState('playback', 'queue', (q) => [...q, ...mix]);
+      setState('playback', 'queue', (q) => [
+        ...q,
+        ...mix.map((track) => createQueueEntry(track, 'generated', 'radio')),
+      ]);
       prefetchUpcoming();
       void api.emitDiscoveryEvent('music_started_radio', {
         track_id: seed.source === 'preview' ? undefined : seed.id,
@@ -1085,20 +1315,28 @@ export const actions = {
       }).catch(() => {});
       t.update('success', tr('toast.radioStarted'));
     } catch (err) {
+      if (generation !== radioGeneration || aborter.signal.aborted) {
+        t.dismiss();
+        return;
+      }
       console.error('[startRadio] mix generation error', err, 'seed:', seed.id, seed.youtube_id);
       t.update('error', tr('toast.radioFailed', { ytId: seed.youtube_id || tr('toast.radioFailedFallback') }));
       // Rollback: exit radio mode. Truncate queue to whatever is currently
       // playing (the seed in both branches; A in the Bug 2 branch).
-      const cur = state.playback.currentTrack;
+      const cur = state.playback.queue[state.playback.index];
+      const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
       setState('playback', {
         radioMode: false,
         radioLoading: false,
         radioSeedId: null,
-        queue: cur ? [cur] : [],
+        queue: cur ? [cur, ...manual] : manual,
         index: cur ? 0 : -1,
       });
     } finally {
-      setState('playback', 'radioLoading', false);
+      if (generation === radioGeneration) {
+        radioAborter = null;
+        setState('playback', 'radioLoading', false);
+      }
     }
   },
 
@@ -1106,12 +1344,14 @@ export const actions = {
    * rest of the pending mix is dropped from the queue. Invoked from the radio
    * badge popup in the player. */
   stopRadio(): void {
-    const cur = state.playback.currentTrack;
+    cancelPendingRadio();
+    const cur = state.playback.queue[state.playback.index];
+    const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
     setState('playback', {
       radioMode: false,
       radioLoading: false,
       radioSeedId: null,
-      queue: cur ? [cur] : [],
+      queue: cur ? [cur, ...manual] : manual,
       index: cur ? 0 : -1,
     });
   },
@@ -1183,7 +1423,21 @@ export const actions = {
   },
 
   toggleShuffle(): void {
-    setState('playback', 'shuffle', !state.playback.shuffle);
+    const pb = state.playback;
+    const nextShuffle = !pb.shuffle;
+    const prefix = pb.queue.slice(0, pb.index + 1);
+    const upcoming = futureEntries(pb.queue, pb.index);
+    const manual = upcoming.filter((entry) => entry.queueLane === 'manual');
+    const context = upcoming.filter((entry) => entry.queueLane === 'context');
+    const generated = upcoming.filter((entry) => entry.queueLane === 'generated');
+    const orderedContext = nextShuffle
+      ? shuffled(context)
+      : context.slice().sort((a, b) => (a.queueContextIndex ?? 0) - (b.queueContextIndex ?? 0));
+    setState('playback', {
+      shuffle: nextShuffle,
+      queue: [...prefix, ...manual, ...orderedContext, ...generated],
+    });
+    prefetchUpcoming();
   },
 
   setVolume(v: number): void {
@@ -1204,7 +1458,26 @@ export const actions = {
 
   cycleRepeat(): void {
     const next: RepeatMode = state.playback.repeat === 'off' ? 'all' : state.playback.repeat === 'all' ? 'one' : 'off';
+    if (next !== 'off') discardFutureAutoplay();
     setState('playback', 'repeat', next);
+    if (next === 'off') queueMicrotask(() => void ensureAutoplay());
+  },
+
+  async setAutoplayEnabled(enabled: boolean): Promise<boolean> {
+    const previous = state.playback.autoplayEnabled;
+    if (enabled === previous) return true;
+    setState('playback', 'autoplayEnabled', enabled);
+    if (enabled) queueMicrotask(() => void ensureAutoplay(true));
+    else discardFutureAutoplay();
+    try {
+      await api.setAutoplayEnabled(enabled);
+      return true;
+    } catch {
+      setState('playback', 'autoplayEnabled', previous);
+      if (previous) queueMicrotask(() => void ensureAutoplay(true));
+      toast.error(tr('toast.updateFailed'));
+      return false;
+    }
   },
 
   // ── Downloads ──
@@ -1499,13 +1772,17 @@ function ensureAutopilot(): AutopilotController {
             reasonValues: candidate.reasonValues,
           };
         }
-        setState('playback', 'queue', (queue) => [...queue, ...accepted.map((candidate) => candidate.track)]);
+        setState('playback', 'queue', (queue) => [
+          ...queue,
+          ...accepted.map((candidate) => createQueueEntry(candidate.track, 'generated', 'auto_mode')),
+        ]);
         setState('autoMode', 'plan', plan);
         prefetchUpcoming();
         return accepted;
       },
       replaceUpcoming: (candidates) => {
         const prefix = state.playback.queue.slice(0, state.playback.index + 1);
+        const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
         const prefixIds = new Set(prefix.map(queueIdentity));
         const accepted = candidates
           .filter((candidate) => !prefixIds.has(queueIdentity(candidate.track)))
@@ -1520,7 +1797,11 @@ function ensureAutopilot(): AutopilotController {
             reasonValues: candidate.reasonValues,
           };
         }
-        setState('playback', 'queue', [...prefix, ...accepted.map((candidate) => candidate.track)]);
+        setState('playback', 'queue', [
+          ...prefix,
+          ...manual,
+          ...accepted.map((candidate) => createQueueEntry(candidate.track, 'generated', 'auto_mode')),
+        ]);
         setState('autoMode', 'plan', plan);
         prefetchUpcoming();
         return accepted;
@@ -1689,6 +1970,20 @@ export function initStore(): void {
   if (socket) return;
 
   applyTheme(state.theme);
+  try {
+    void api
+      .getDiscoverySettings()
+      .then((settings) => {
+        if (typeof settings.autoplay_enabled === 'boolean') {
+          setState('playback', 'autoplayEnabled', settings.autoplay_enabled);
+          if (settings.autoplay_enabled) queueMicrotask(() => void ensureAutoplay());
+          else discardFutureAutoplay();
+        }
+      })
+      .catch(() => {});
+  } catch {
+    // Test doubles and older engines may not expose this setting yet.
+  }
 
   const a = audioEl();
   a.addEventListener('play', () => {

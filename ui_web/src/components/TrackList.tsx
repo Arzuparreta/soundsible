@@ -11,6 +11,7 @@ import { coverUrl } from '../lib/media';
 import { artistPath } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
+import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import styles from './TrackList.module.css';
 import { SkeletonRows } from './Skeleton';
 import { EmptyState } from './EmptyState';
@@ -37,6 +38,7 @@ export default function TrackList(props: {
   loading?: boolean;
   empty?: JSX.Element;
   menu?: Partial<TrackMenuContext>;
+  context?: PlaybackContextDescriptor;
   /** When false, the artist name is rendered as plain text so tapping it
    * bubbles to the row and plays the track instead of navigating. Useful on
    * mobile, where tapping the subtitle is the same gesture as tapping the row. */
@@ -126,7 +128,7 @@ export default function TrackList(props: {
                           track={t()}
                           cover={coverUrl(t().id)}
                           active={isPlayingTrack(t())}
-                          onPlay={() => actions.playFrom(props.tracks, vi.index)}
+                          onPlay={() => actions.playFrom(props.tracks, vi.index, { context: props.context })}
                           onArtist={props.linkArtist === false ? undefined : goArtist}
                           onMenu={openMenu}
                         />

@@ -123,6 +123,8 @@ def discovery_settings_patch():
     data = request.get_json(silent=True) or {}
     if "learning_enabled" in data and not isinstance(data.get("learning_enabled"), bool):
         return jsonify({"error": "learning_enabled must be boolean"}), 400
+    if "autoplay_enabled" in data and not isinstance(data.get("autoplay_enabled"), bool):
+        return jsonify({"error": "autoplay_enabled must be boolean"}), 400
     saved = save_discovery_settings(data)
     _invalidate_personalized_cache()
     return jsonify(saved)

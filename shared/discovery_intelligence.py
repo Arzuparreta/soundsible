@@ -19,6 +19,7 @@ SETTINGS_VERSION = 1
 DEFAULT_SETTINGS = {
     "v": SETTINGS_VERSION,
     "learning_enabled": True,
+    "autoplay_enabled": True,
 }
 
 POSITIVE_LISTENING_EVENTS = {
@@ -156,6 +157,8 @@ def load_discovery_settings() -> dict[str, Any]:
     out = dict(DEFAULT_SETTINGS)
     if isinstance(data.get("learning_enabled"), bool):
         out["learning_enabled"] = data["learning_enabled"]
+    if isinstance(data.get("autoplay_enabled"), bool):
+        out["autoplay_enabled"] = data["autoplay_enabled"]
     return out
 
 
@@ -163,6 +166,8 @@ def save_discovery_settings(patch: dict[str, Any]) -> dict[str, Any]:
     current = load_discovery_settings()
     if "learning_enabled" in patch:
         current["learning_enabled"] = bool(patch["learning_enabled"])
+    if "autoplay_enabled" in patch:
+        current["autoplay_enabled"] = bool(patch["autoplay_enabled"])
     current["v"] = SETTINGS_VERSION
     path = _settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)

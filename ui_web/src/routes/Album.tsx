@@ -95,24 +95,26 @@ export default function Album() {
   };
 
   const playAll = () => {
+    const context = { id: `album:${title()}`, kind: 'album' as const, label: title() };
     if (view() === 'library') {
       const tracks = libraryTrackList();
-      if (tracks.length > 0) actions.playFrom(tracks, 0);
+      if (tracks.length > 0) actions.playFrom(tracks, 0, { context });
     } else {
       const items = tracklist();
       if (items.length === 0) return;
-      void playCatalogItem(items[0], items);
+      void playCatalogItem(items[0], items, context);
     }
   };
 
   const shuffle = () => {
+    const context = { id: `album:${title()}`, kind: 'album' as const, label: title() };
     if (view() === 'library') {
-      actions.playShuffled(libraryTrackList());
+      actions.playShuffled(libraryTrackList(), context);
     } else {
       const items = tracklist();
       if (items.length === 0) return;
       const order = shuffled(items);
-      void playCatalogItem(order[0], order);
+      void playCatalogItem(order[0], order, context);
     }
   };
 
@@ -218,12 +220,16 @@ export default function Album() {
             when={profile()}
             fallback={<EmptyState>{t('album.noTracklist')}</EmptyState>}
           >
-            <Show when={view() === 'discover'} fallback={<LibraryView tracks={libraryTrackList()} />}>
+            <Show when={view() === 'discover'} fallback={<LibraryView tracks={libraryTrackList()} contextLabel={title()} />}>
               <DiscoverView
                 tracklist={tracklist()}
                 saving={saving()}
                 saved={saved()}
-                onPlayItem={playCatalogItem}
+                onPlayItem={(item, queue) => void playCatalogItem(item, queue, {
+                  id: `album:${title()}`,
+                  kind: 'album',
+                  label: title(),
+                })}
                 onSaveItem={saveItem}
               />
             </Show>
@@ -236,17 +242,17 @@ export default function Album() {
   );
 }
 
-function LibraryView(props: { tracks: Track[] }) {
+function LibraryView(props: { tracks: Track[]; contextLabel: string }) {
   return (
     <div class={styles.contentView}>
       <Show when={props.tracks.length > 0} fallback={<EmptyState>{t('album.empty')}</EmptyState>}>
-        <TrackListLite tracks={props.tracks} />
+        <TrackListLite tracks={props.tracks} contextLabel={props.contextLabel} />
       </Show>
     </div>
   );
 }
 
-function TrackListLite(props: { tracks: Track[] }) {
+function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
   return (
     <div class={styles.trackList}>
       <For each={props.tracks}>
@@ -254,7 +260,9 @@ function TrackListLite(props: { tracks: Track[] }) {
           <div
             class={styles.trackRow}
             data-now-playing={isPlayingTrack(track) ? '' : undefined}
-            onClick={() => actions.playFrom(props.tracks, i())}
+            onClick={() => actions.playFrom(props.tracks, i(), {
+              context: { id: `album:${props.contextLabel}`, kind: 'album', label: props.contextLabel },
+            })}
           >
             <span class={styles.trackIndex}>{i() + 1}</span>
             <span class={styles.trackCover} style={coverStyle(track.id, coverUrl(track.id))} />

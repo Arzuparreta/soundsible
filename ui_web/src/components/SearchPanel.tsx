@@ -18,7 +18,7 @@ import { toast } from '../lib/toast';
 import { parseYouTubeInput } from '../lib/youtube';
 import { ensureDiscover, recentSaved, type RecentlySavedItem } from '../lib/discover';
 import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed } from '../lib/nodeDiscover';
-import { libraryTrackFor, queueIndexOf, resultToTrack } from '../lib/queueDiscovery';
+import { libraryTrackFor, resultToTrack } from '../lib/queueDiscovery';
 import { catalogItemKeys } from '../lib/playbackIdentity';
 import { resolveTrackYoutubeId } from '../lib/relatedDiscovery';
 import { prefetchPreviews } from '../lib/prefetch';
@@ -397,10 +397,6 @@ export function SearchPanel() {
   };
 
   const addToQueue = (track: Track) => {
-    if (queueIndexOf(state.playback.queue, track) !== -1) {
-      toast.info(t('searchPanel.inQueue'));
-      return;
-    }
     if (panelTab() === 'search' && searching()) pushRecentQuery(q());
     actions.enqueue(track);
     if (track.source === 'preview') {
@@ -954,31 +950,27 @@ function PanelRow(props: {
       <Show when={props.resolving}>
         <Spinner size={14} label={t('searchPanel.ariaLoading')} />
       </Show>
-      <Show
-        when={!props.queued}
-        fallback={
-          <span class={styles.queuedMark} aria-label={t('searchPanel.ariaQueued')}>
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-              <path d="M5 12l5 5L20 7" />
-            </svg>
-          </span>
-        }
-      >
-        <button
-          class={styles.rowBtn}
-          type="button"
-          aria-label={t('searchPanel.ariaAddQueue')}
-          title={t('searchPanel.ariaAddQueue')}
-          onClick={(e) => {
-            e.stopPropagation();
-            props.onQueue();
-          }}
-        >
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" />
+      <Show when={props.queued}>
+        <span class={styles.queuedMark} aria-label={t('searchPanel.ariaQueued')}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+            <path d="M5 12l5 5L20 7" />
           </svg>
-        </button>
+        </span>
       </Show>
+      <button
+        class={styles.rowBtn}
+        type="button"
+        aria-label={t('searchPanel.ariaAddQueue')}
+        title={t('searchPanel.ariaAddQueue')}
+        onClick={(e) => {
+          e.stopPropagation();
+          props.onQueue();
+        }}
+      >
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </button>
       <button
         class={styles.rowBtn}
         type="button"

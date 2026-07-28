@@ -736,11 +736,17 @@ export const api = {
     }),
 
   // ── Settings / system ──
-  getDiscoverySettings: () => request<{ learning_enabled?: boolean }>('/api/discovery/settings'),
+  getDiscoverySettings: () =>
+    request<{ learning_enabled?: boolean; autoplay_enabled?: boolean }>('/api/discovery/settings'),
   setDiscoveryLearning: (enabled: boolean) =>
     request<{ learning_enabled?: boolean }>('/api/discovery/settings', {
       method: 'PATCH',
       body: { learning_enabled: enabled },
+    }),
+  setAutoplayEnabled: (enabled: boolean) =>
+    request<{ autoplay_enabled?: boolean }>('/api/discovery/settings', {
+      method: 'PATCH',
+      body: { autoplay_enabled: enabled },
     }),
   getDownloaderConfig: () =>
     request<{ output_dir?: string; quality?: string; auto_update_ytdlp?: boolean }>('/api/downloader/config'),
