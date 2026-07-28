@@ -23,6 +23,7 @@ import type { ActionMenuOptions } from '../components/ActionMenu';
 import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { sharedCapsuleFromHash, type TrackShareCapsuleV1 } from '../lib/trackShare';
+import { createResponsiveTap } from '../lib/responsiveTap';
 
 type SearchDomain = 'music' | 'youtube';
 type SearchTab = 'all' | 'track,library_track' | 'artist' | 'album';
@@ -189,6 +190,11 @@ export default function Search() {
     else if (/[?&]shared=/.test(window.location.hash)) {
       setQ(tr('search.sharedLink'));
       setSharedInvalid(true);
+    }
+    // Mobile navigation should land on Search without summoning the keyboard.
+    // Fine pointers retain the fast desktop workflow.
+    if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+      requestAnimationFrame(() => searchInput?.focus());
     }
   });
 
@@ -603,7 +609,6 @@ export default function Search() {
               if (e.key === 'Enter') commit(e.currentTarget.value);
               if (e.key === 'Escape') setShowSuggest(false);
             }}
-            autofocus
           />
         </div>
         <Show when={domain() === 'youtube' && showSuggest() && q().trim().length >= 2 && suggestions().length > 0}>
@@ -971,12 +976,13 @@ function DiscoveryCard(props: {
   menu?: () => ActionMenuOptions | null;
 }) {
   const bg = (): JSX.CSSProperties => coverStyle(props.seedKey, props.cover);
+  const tap = createResponsiveTap({ onTap: props.onPlay });
   return (
     <div
       class={styles.discoverCard}
       ref={(el) => attachContextMenu(el, () => props.menu?.() ?? null)}
     >
-      <button class={styles.discoverCardBtn} type="button" onClick={props.onPlay}>
+      <button class={styles.discoverCardBtn} type="button" data-pressable {...tap}>
         <span class={styles.discoverCardCover} style={bg()} />
         <span class={styles.discoverCardTitle}>{props.title}</span>
         <span class={styles.discoverCardSub}>{props.sub}</span>
@@ -1023,12 +1029,21 @@ function SongResult(props: {
   onSave: () => void;
 }) {
   const canSave = () => props.item.type === 'track' && !props.saved;
+  const tap = createResponsiveTap({ onTap: props.onPlay });
   return (
     <div
       class={styles.songRow}
+      data-pressable
       data-now-playing={props.active ? '' : undefined}
       aria-busy={props.busy}
-      onClick={props.onPlay}
+      role="button"
+      tabindex="0"
+      {...tap}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        props.onPlay();
+      }}
     >
       <span class={styles.songCover} style={props.coverStyle(props.item)}>
         <Show when={props.busy}>
@@ -1073,8 +1088,9 @@ function EntityResult(props: {
   coverStyle: (item: CatalogItem, round?: boolean) => JSX.CSSProperties;
   onPick: () => void;
 }) {
+  const tap = createResponsiveTap({ onTap: props.onPick });
   return (
-    <button class={styles.songRow} type="button" onClick={props.onPick}>
+    <button class={styles.songRow} type="button" data-pressable {...tap}>
       <span
         class={styles.songCover}
         style={props.coverStyle(props.item, props.item.type === 'artist')}

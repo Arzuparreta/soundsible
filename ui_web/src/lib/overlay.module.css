@@ -13,6 +13,7 @@
 }
 
 .sheet {
+  position: relative;
   width: 100%;
   max-width: 560px;
   max-height: 85vh;
@@ -30,6 +31,19 @@
   padding-bottom: max(var(--space-xl), env(safe-area-inset-bottom, 0));
 }
 
+/* A quiet native-sheet affordance also gives the first action breathing room
+   below the device edge. The sheet itself remains scrollable with native
+   momentum. */
+.sheet::before {
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: calc(var(--space-sm) * -1) auto var(--space-md);
+  content: '';
+  background: var(--hairline-strong);
+  border-radius: var(--radius-full);
+}
+
 @media (min-width: 1024px) {
   .scrim {
     align-items: center;
@@ -37,6 +51,10 @@
   .sheet {
     border-radius: var(--radius-lg);
     animation: sheet-pop var(--dur-short) var(--ease-out);
+  }
+
+  .sheet::before {
+    display: none;
   }
 }
 

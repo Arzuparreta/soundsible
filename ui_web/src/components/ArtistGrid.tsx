@@ -8,6 +8,7 @@ import { artistMenuOptions } from './artistActions';
 import type { ArtistEntry } from '../lib/libraryView';
 import styles from './ArtistGrid.module.css';
 import { coverBackground } from '../lib/cover';
+import { createResponsiveTap } from '../lib/responsiveTap';
 
 /** Grid of artist cards (round avatars) linking to each artist's detail view. */
 export default function ArtistGrid(props: { artists: ArtistEntry[] }) {
@@ -18,17 +19,28 @@ export default function ArtistGrid(props: { artists: ArtistEntry[] }) {
   return (
     <div class={styles.grid}>
       <For each={props.artists}>
-        {(a) => (
-          <A
-            href={artistPath(a.name, { view: 'library' })}
-            class={styles.card}
-            ref={(el) => attachContextMenu(el, () => artistMenuOptions(a.name, { navigate }))}
-          >
-            <div class={styles.avatar} style={bg(a)} />
-            <span class={styles.name}>{a.name}</span>
-            <span class={styles.count}>{trackCount(a.count)}</span>
-          </A>
-        )}
+        {(a) => {
+          const href = artistPath(a.name, { view: 'library' });
+          const tap = createResponsiveTap({
+            onTap: (event) => {
+              event.preventDefault();
+              navigate(href);
+            },
+          });
+          return (
+            <A
+              href={href}
+              class={styles.card}
+              data-pressable
+              ref={(el) => attachContextMenu(el, () => artistMenuOptions(a.name, { navigate }))}
+              {...tap}
+            >
+              <div class={styles.avatar} style={bg(a)} />
+              <span class={styles.name}>{a.name}</span>
+              <span class={styles.count}>{trackCount(a.count)}</span>
+            </A>
+          );
+        }}
       </For>
     </div>
   );

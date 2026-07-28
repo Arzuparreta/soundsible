@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, Show, onMount, onCleanup } from 'solid-js';
-import { A } from '@solidjs/router';
+import { A, useNavigate } from '@solidjs/router';
 import { api } from '../lib/api';
 import { state, actions } from '../stores';
 import { ensureDiscover, topPodcasts } from '../lib/discover';
@@ -12,6 +12,7 @@ import type { ActionMenuOptions } from '../components/ActionMenu';
 import { toast } from '../lib/toast';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
+import { createResponsiveTap } from '../lib/responsiveTap';
 
 function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
@@ -19,6 +20,7 @@ function isAbort(e: unknown): boolean {
 
 /** Podcasts: your subscriptions grid + iTunes directory search → subscribe. */
 export default function Podcasts() {
+  const navigate = useNavigate();
   const [q, setQ] = createSignal('');
   const [results, setResults] = createSignal<PodcastSearchResult[]>([]);
   const [loading, setLoading] = createSignal(false);
@@ -144,13 +146,22 @@ export default function Podcasts() {
                 <h2 class={styles.sectionTitle}>{t('podcasts.yourShows')}</h2>
                 <div class={styles.grid}>
                   <For each={state.podcastSubscriptions}>
-                    {(s) => (
-                      <A href={`/podcasts/${encodeURIComponent(s.id)}`} class={styles.card}>
-                        <div class={styles.cover} style={neutralCoverStyle(s.image_url)} />
-                        <span class={styles.name}>{s.title}</span>
-                        <span class={styles.author}>{s.author}</span>
-                      </A>
-                    )}
+                    {(s) => {
+                      const href = `/podcasts/${encodeURIComponent(s.id)}`;
+                      const tap = createResponsiveTap({
+                        onTap: (event) => {
+                          event.preventDefault();
+                          navigate(href);
+                        },
+                      });
+                      return (
+                        <A href={href} class={styles.card} data-pressable {...tap}>
+                          <div class={styles.cover} style={neutralCoverStyle(s.image_url)} />
+                          <span class={styles.name}>{s.title}</span>
+                          <span class={styles.author}>{s.author}</span>
+                        </A>
+                      );
+                    }}
                   </For>
                 </div>
               </Show>
@@ -159,21 +170,29 @@ export default function Podcasts() {
                 <h2 class={styles.sectionTitle}>{t('podcasts.top')}</h2>
                 <div class={styles.grid}>
                   <For each={recommendedPodcasts()}>
-                    {(p) => (
-                      <button
-                        class={styles.cardBtn}
-                        ref={(el) => attachContextMenu(el, () => recommendationMenu(p))}
-                        type="button"
-                        disabled={subscribedFeeds().has(p.feed_url) || subscribing().has(p.feed_url)}
-                        onClick={() => subscribe(p)}
-                      >
-                        <div class={styles.cover} style={neutralCoverStyle(p.image_url)} />
-                        <span class={styles.name}>{p.title}</span>
-                        <span class={styles.author}>
-                          {subscribedFeeds().has(p.feed_url) ? t('podcasts.subscribed') : p.author}
-                        </span>
-                      </button>
-                    )}
+                    {(p) => {
+                      const disabled = () => subscribedFeeds().has(p.feed_url) || subscribing().has(p.feed_url);
+                      const tap = createResponsiveTap({
+                        disabled,
+                        onTap: () => void subscribe(p),
+                      });
+                      return (
+                        <button
+                          class={styles.cardBtn}
+                          data-pressable
+                          ref={(el) => attachContextMenu(el, () => recommendationMenu(p))}
+                          type="button"
+                          disabled={disabled()}
+                          {...tap}
+                        >
+                          <div class={styles.cover} style={neutralCoverStyle(p.image_url)} />
+                          <span class={styles.name}>{p.title}</span>
+                          <span class={styles.author}>
+                            {subscribedFeeds().has(p.feed_url) ? t('podcasts.subscribed') : p.author}
+                          </span>
+                        </button>
+                      );
+                    }}
                   </For>
                 </div>
               </Show>
@@ -191,28 +210,36 @@ export default function Podcasts() {
             <EmptyState compact>{t('podcasts.noResults')}</EmptyState>
           </Show>
           <For each={results()}>
-            {(r) => (
-              <div class={styles.row}>
-                <div class={styles.rowCover} style={neutralCoverStyle(r.image_url)} />
-                <div class={styles.meta}>
-                  <span class={styles.title}>{r.title}</span>
-                  <span class={styles.sub}>{r.author}</span>
-                </div>
-                <Show
-                  when={!subscribedFeeds().has(r.feed_url)}
-                  fallback={<span class={styles.subbed}>{t('podcasts.subscribed')}</span>}
-                >
-                  <button
-                    class={styles.subBtn}
-                    type="button"
-                    disabled={subscribing().has(r.feed_url)}
-                    onClick={() => subscribe(r)}
+            {(r) => {
+              const disabled = () => subscribing().has(r.feed_url);
+              const tap = createResponsiveTap({
+                disabled,
+                onTap: () => void subscribe(r),
+              });
+              return (
+                <div class={styles.row}>
+                  <div class={styles.rowCover} style={neutralCoverStyle(r.image_url)} />
+                  <div class={styles.meta}>
+                    <span class={styles.title}>{r.title}</span>
+                    <span class={styles.sub}>{r.author}</span>
+                  </div>
+                  <Show
+                    when={!subscribedFeeds().has(r.feed_url)}
+                    fallback={<span class={styles.subbed}>{t('podcasts.subscribed')}</span>}
                   >
-                    {subscribing().has(r.feed_url) ? t('podcasts.subscribing') : t('podcasts.subscribe')}
-                  </button>
-                </Show>
-              </div>
-            )}
+                    <button
+                      class={styles.subBtn}
+                      data-pressable
+                      type="button"
+                      disabled={disabled()}
+                      {...tap}
+                    >
+                      {disabled() ? t('podcasts.subscribing') : t('podcasts.subscribe')}
+                    </button>
+                  </Show>
+                </div>
+              );
+            }}
           </For>
         </Show>
       </div>

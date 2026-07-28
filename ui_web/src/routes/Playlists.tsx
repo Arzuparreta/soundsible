@@ -1,5 +1,5 @@
 import { createMemo, For, Show, type JSX } from 'solid-js';
-import { A } from '@solidjs/router';
+import { A, useNavigate } from '@solidjs/router';
 import { state, actions } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import { coverUrl } from '../lib/media';
@@ -13,8 +13,10 @@ import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './Playlists.module.css';
 import { EmptyState } from '../components/EmptyState';
+import { createResponsiveTap } from '../lib/responsiveTap';
 
 export default function Playlists() {
+  const navigate = useNavigate();
   const byId = createMemo(() => new Map(state.library.map((t) => [t.id, t] as const)));
   const names = createMemo(() => Object.keys(state.playlists));
 
@@ -49,9 +51,16 @@ export default function Playlists() {
             <For each={names()}>
               {(name) => {
                 const ids = () => state.playlists[name] ?? [];
+                const href = `/playlists/${encodeURIComponent(name)}`;
+                const tap = createResponsiveTap({
+                  onTap: (event) => {
+                    event.preventDefault();
+                    navigate(href);
+                  },
+                });
                 return (
                   <div class={styles.cardWrap} ref={(el) => attachContextMenu(el, () => playlistMenuOptions(name))}>
-                    <A href={`/playlists/${encodeURIComponent(name)}`} class={styles.card}>
+                    <A href={href} class={styles.card} data-pressable {...tap}>
                       <div class={styles.cover} style={coverBg(name, ids())} />
                       <span class={styles.name}>{name}</span>
                       <span class={styles.count}>{trackCount(ids().length)}</span>
