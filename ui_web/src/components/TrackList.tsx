@@ -86,7 +86,7 @@ export default function TrackList(props: {
   createEffect(on(rowH, () => virtualizer.measure(), { defer: true }));
 
   return (
-    <div ref={scrollRef} class={styles.scroll} data-library-scroll>
+    <div ref={scrollRef} class={styles.scroll} data-library-scroll data-primary-scroll>
       <Show
         when={!(props.loading && props.tracks.length === 0)}
         fallback={<SkeletonRows count={10} />}

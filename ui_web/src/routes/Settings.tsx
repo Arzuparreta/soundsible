@@ -327,7 +327,7 @@ export default function Settings() {
     <div class="view">
       <ViewHeader title={t('settings.title')} />
 
-      <div class={styles.scroll}>
+      <div class={styles.scroll} data-primary-scroll>
         <Show when={user()}>
           {(me) => (
             <Group label={t('account.title')}>

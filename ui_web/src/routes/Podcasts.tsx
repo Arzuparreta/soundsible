@@ -135,7 +135,7 @@ export default function Podcasts() {
         />
       </div>
 
-      <div class={styles.scroll}>
+      <div class={styles.scroll} data-primary-scroll>
         <Show
           when={q().trim().length >= 2}
           fallback={

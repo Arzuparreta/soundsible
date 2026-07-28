@@ -5,6 +5,7 @@ export const en = {
     soundsibleWeb: 'Soundsible Web',
   },
   nav: {
+    mobile: 'Main navigation',
     home: 'Home',
     search: 'Search',
     favourites: 'Favourites',

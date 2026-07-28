@@ -1,6 +1,8 @@
 import { For, type JSX } from 'solid-js';
-import { A } from '@solidjs/router';
+import { A, useLocation, useNavigate } from '@solidjs/router';
 import { t } from '../lib/i18n';
+import { createResponsiveTap } from '../lib/responsiveTap';
+import { reselectPrimaryTab } from '../lib/tabNavigation';
 import styles from './TabBar.module.css';
 
 interface Tab {
@@ -13,11 +15,12 @@ interface Tab {
 const tabs: Tab[] = [
   {
     href: '/',
-    label: () => t('nav.home'),
+    label: () => t('nav.library'),
     end: true,
     icon: () => (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M3 11l9-8 9 8M5 10v10h14V10" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 19a2 2 0 012-2h12" />
+        <path d="M6 2h12v20H6a2 2 0 01-2-2V4a2 2 0 012-2z" />
       </svg>
     ),
   },
@@ -28,6 +31,25 @@ const tabs: Tab[] = [
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="7" />
         <path d="M21 21l-4.3-4.3" />
+      </svg>
+    ),
+  },
+  {
+    href: '/playlists',
+    label: () => t('nav.playlists'),
+    icon: () => (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9 6h11M9 12h11M9 18h7M5 6v.01M5 12v.01M5 18v.01" />
+      </svg>
+    ),
+  },
+  {
+    href: '/podcasts',
+    label: () => t('nav.podcasts'),
+    icon: () => (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="11" r="1" />
+        <path d="M17.7 17.7A8 8 0 1012 20v-5M15.5 14.5a5 5 0 10-7 0" />
       </svg>
     ),
   },
@@ -52,15 +74,37 @@ const tabs: Tab[] = [
 ];
 
 export function TabBar() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   return (
-    <nav class={styles.bar}>
+    <nav class={styles.bar} aria-label={t('nav.mobile')}>
       <For each={tabs}>
-        {(t) => (
-          <A href={t.href} end={t.end} class={styles.tab} activeClass={styles.active}>
-            {t.icon()}
-            <span class={styles.label}>{t.label()}</span>
-          </A>
-        )}
+        {(tab) => {
+          const tap = createResponsiveTap({
+            onTap: (event) => {
+              event.preventDefault();
+              if (location.pathname === tab.href) {
+                reselectPrimaryTab(tab.href);
+                return;
+              }
+              navigate(tab.href);
+            },
+          });
+          return (
+            <A
+              href={tab.href}
+              end={tab.end}
+              class={styles.tab}
+              activeClass={styles.active}
+              data-pressable
+              {...tap}
+            >
+              {tab.icon()}
+              <span class={styles.label}>{tab.label()}</span>
+            </A>
+          );
+        }}
       </For>
     </nav>
   );

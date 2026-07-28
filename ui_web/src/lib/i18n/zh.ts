@@ -6,6 +6,7 @@ export const zh: Dict = {
     soundsibleWeb: 'Soundsible Web',
   },
   nav: {
+    mobile: '主导航',
     home: '首页',
     search: '搜索',
     favourites: '收藏',

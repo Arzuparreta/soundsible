@@ -1,17 +1,18 @@
 .bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
 .tab {
-  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  min-height: 56px;
-  padding: 6px 0 7px;
+  min-height: 58px;
+  padding: 7px 2px 8px;
   color: var(--ink-tertiary);
   text-decoration: none;
   font-size: var(--text-caption);
@@ -30,7 +31,11 @@
 }
 
 .label {
+  max-width: 100%;
   font-weight: var(--fw-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tab svg {
@@ -38,4 +43,10 @@
   flex-shrink: 0;
   width: 21px;
   height: 21px;
+}
+
+@media (max-width: 360px) {
+  .tab {
+    font-size: 10px;
+  }
 }

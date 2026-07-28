@@ -591,6 +591,7 @@ export default function Search() {
         <div class={styles.bar}>
           <input
             class={styles.input}
+            data-global-search-input
             type="search"
             placeholder={tr('search.placeholder')}
             value={q()}
@@ -635,7 +636,7 @@ export default function Search() {
         </div>
       </Show>
 
-      <div class={styles.scroll}>
+      <div class={styles.scroll} data-primary-scroll>
         <Switch>
           <Match when={sharedInvalid()}>
             <EmptyState compact tone="danger">{tr('search.sharedInvalid')}</EmptyState>

@@ -186,7 +186,7 @@ export default function Home() {
         when={libraryTab() === 'songs'}
         fallback={
           <Show when={artists().length > 0} fallback={emptyState(t('home.emptyArtists'))}>
-            <div class={styles.artistsScroll} data-library-scroll>
+            <div class={styles.artistsScroll} data-library-scroll data-primary-scroll>
               <ArtistGrid artists={artists()} />
             </div>
           </Show>

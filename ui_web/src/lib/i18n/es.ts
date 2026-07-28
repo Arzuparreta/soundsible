@@ -6,6 +6,7 @@ export const es: Dict = {
     soundsibleWeb: 'Soundsible Web',
   },
   nav: {
+    mobile: 'Navegación principal',
     home: 'Inicio',
     search: 'Buscar',
     favourites: 'Favoritos',
