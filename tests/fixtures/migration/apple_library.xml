@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Major Version</key><integer>1</integer>
+  <key>Tracks</key>
+  <dict>
+    <key>1</key>
+    <dict>
+      <key>Track ID</key><integer>1</integer>
+      <key>Name</key><string>Alpha</string>
+      <key>Artist</key><string>Artist One</string>
+      <key>Album</key><string>Album One</string>
+      <key>Total Time</key><integer>181000</integer>
+      <key>Persistent ID</key><string>APPLEALPHA</string>
+      <key>Track Type</key><string>Remote</string>
+    </dict>
+    <key>2</key>
+    <dict>
+      <key>Track ID</key><integer>2</integer>
+      <key>Name</key><string>Talk episode</string>
+      <key>Artist</key><string>A podcast</string>
+      <key>Podcast</key><true/>
+    </dict>
+  </dict>
+  <key>Playlists</key>
+  <array>
+    <dict>
+      <key>Name</key><string>Library</string>
+      <key>Master</key><true/>
+      <key>Playlist Items</key><array><dict><key>Track ID</key><integer>1</integer></dict></array>
+    </dict>
+    <dict>
+      <key>Name</key><string>Focus</string>
+      <key>Playlist Persistent ID</key><string>APPLEPLAYLIST</string>
+      <key>Playlist Items</key><array><dict><key>Track ID</key><integer>1</integer></dict></array>
+    </dict>
+  </array>
+</dict>
+</plist>

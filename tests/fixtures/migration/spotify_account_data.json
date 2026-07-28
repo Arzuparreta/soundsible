@@ -1,0 +1,40 @@
+{
+  "playlists": [
+    {
+      "name": "Road trip",
+      "lastModifiedDate": "2026-07-01",
+      "items": [
+        {
+          "track": {
+            "trackName": "Alpha",
+            "artistName": "Artist One",
+            "albumName": "Album One",
+            "trackUri": "spotify:track:spotify-alpha"
+          },
+          "addedDate": "2026-01-10"
+        },
+        {
+          "localTrack": {
+            "trackName": "Home Demo",
+            "artistName": "Artist Local",
+            "albumName": "Demos"
+          },
+          "addedDate": "2026-01-11"
+        }
+      ]
+    },
+    {
+      "name": "Liked Songs",
+      "items": [
+        {
+          "track": {
+            "trackName": "Beta",
+            "artistName": "Artist Two",
+            "albumName": "Album Two",
+            "trackUri": "spotify:track:spotify-beta"
+          }
+        }
+      ]
+    }
+  ]
+}
