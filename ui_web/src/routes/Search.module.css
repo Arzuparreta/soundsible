@@ -70,9 +70,12 @@
   border-radius: var(--radius-sm);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .suggestItem:hover,
 .recent:hover {
   background: var(--bg-hover);
+}
 }
 
 .suggestItem span,
@@ -179,9 +182,11 @@
   cursor: pointer;
   transition: color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .railRefresh:hover:not(:disabled) {
   color: var(--ink-primary);
   border-color: var(--hairline-strong);
+}
 }
 .railRefresh:disabled {
   opacity: 0.5;
@@ -268,9 +273,12 @@
     border-color var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .discoverCardBtn:hover .discoverCardCover {
   box-shadow: var(--shadow-2), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
   border-color: var(--hairline-strong);
+}
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -329,17 +337,23 @@
   }
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .discoverSaveBtn:hover {
   background: var(--accent);
+}
 }
 
 .discoverSavedBadge {
   color: var(--success);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .discoverCard:hover .discoverSaveBtn,
 .discoverCard:hover .discoverSavedBadge {
   opacity: 1;
+}
 }
 
 .seedState {
@@ -389,8 +403,11 @@
   cursor: pointer;
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .seedHint:hover {
   color: var(--ink-secondary);
+}
 }
 
 @media (max-width: 1023px) {
@@ -463,10 +480,13 @@
   transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .ytFallbackCta:hover {
   color: var(--ink-primary);
   background: var(--bg-elevated);
   border-color: var(--ink-tertiary);
+}
 }
 
 .ytFallbackCta svg {
@@ -555,8 +575,11 @@
   transition: background var(--dur-micro) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .songRow:hover {
   background: var(--bg-raised);
+}
 }
 
 /* Wash and marker rail: app.css, [data-now-playing]. */
@@ -655,8 +678,11 @@
   background: var(--accent-soft);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .iconBtn:hover {
   background: var(--accent-soft);
+}
 }
 
 .done {
@@ -693,13 +719,19 @@
   transition: box-shadow var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .card:hover {
   transform: translateY(-3px);
 }
+}
+
+@media (hover: hover) and (pointer: fine) {
 
 .card:hover .cardCover {
   border-color: var(--hairline-strong);
   box-shadow: var(--shadow-2);
+}
 }
 
 .cardTitle {
@@ -787,8 +819,11 @@
   cursor: pointer;
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .candidate:hover {
   background: var(--bg-raised);
+}
 }
 
 .candidateTitle,

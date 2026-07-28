@@ -61,17 +61,28 @@
   transition: color var(--dur-short) var(--ease-out), transform var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .line:hover {
   color: var(--ink-secondary);
+}
 }
 
 .linePast {
   color: var(--ink-secondary);
 }
 
-.lineActive,
+.lineActive {
+  color: var(--ink-primary);
+  transform: scale(1.02);
+  transform-origin: left center;
+}
+
+@media (hover: hover) and (pointer: fine) {
+
 .lineActive:hover {
   color: var(--ink-primary);
   transform: scale(1.02);
   transform-origin: left center;
+}
 }

@@ -30,8 +30,10 @@
   text-align: left;
   cursor: pointer;
 }
+@media (hover: hover) and (pointer: fine) {
 .item:hover {
   background: var(--bg-hover);
+}
 }
 
 .icon {
@@ -96,9 +98,11 @@
     height: 32px;
   }
 }
+@media (hover: hover) and (pointer: fine) {
 .ctrl:hover {
   color: var(--accent);
   background: var(--bg-inset);
+}
 }
 
 .empty {

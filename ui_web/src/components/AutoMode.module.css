@@ -236,10 +236,13 @@
   height: 55%;
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .profile:hover,
 .exit:hover {
   color: var(--ink-primary);
   background: rgba(255, 255, 255, 0.14);
+}
 }
 
 .profile:active,
@@ -582,7 +585,10 @@
   height: 52%;
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .transport button:hover { color: var(--accent); background: rgba(255, 255, 255, 0.15); }
+}
 .transport button:active { transform: scale(0.92); }
 
 .transport .play {
@@ -595,8 +601,12 @@
 }
 
 .transport .play svg { width: 46%; height: 46%; }
+@media (hover: hover) and (pointer: fine) {
 .transport .play:hover { color: var(--ink-on-accent); background: var(--accent-hover); }
+}
+@media (hover: hover) and (pointer: fine) {
 .transport .secondaryAction:hover { color: var(--accent); }
+}
 .transport .liked { color: var(--accent); }
 
 /* ── Queue rail ── */
@@ -664,10 +674,13 @@
   animation: nextCardIn 300ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .nextCard:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.2);
   transform: translateY(-3px);
+}
 }
 
 .nextCard:active { transform: translateY(-1px) scale(0.98); }
@@ -719,7 +732,9 @@
 
 .ambient .status { opacity: 0; }
 .ambient .controls { opacity: 0.3; }
+@media (hover: hover) and (pointer: fine) {
 .ambient .controls:hover { opacity: 1; }
+}
 
 /* ── Landscape: artwork and text side by side ──
    The 5/4 floor keeps 1280×1024 and 1400×1050 desktops out of the phone

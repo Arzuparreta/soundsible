@@ -37,10 +37,13 @@
     transform var(--dur-micro) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .chip:hover {
   color: var(--ink-primary);
   border-color: var(--hairline-strong);
   background: var(--bg-hover);
+}
 }
 
 .chip:active {

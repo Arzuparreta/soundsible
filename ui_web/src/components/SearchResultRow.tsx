@@ -2,6 +2,7 @@ import { Show, type JSX } from 'solid-js';
 import type { SearchResult } from '../types/music';
 import { t } from '../lib/i18n';
 import { Spinner } from './Spinner';
+import { createResponsiveTap } from '../lib/responsiveTap';
 import styles from './SearchResultRow.module.css';
 
 function fmtDur(s?: number): string {
@@ -30,6 +31,7 @@ export interface SearchResultRowProps {
  * queued, ✓ once it's in the library), optional radio seed.
  */
 export default function SearchResultRow(props: SearchResultRowProps) {
+  const tap = createResponsiveTap({ onTap: props.onPreview });
   const bg = (): JSX.CSSProperties =>
     props.r.thumbnail
       ? { background: `url("${props.r.thumbnail}") center / cover no-repeat, var(--bg-raised)` }
@@ -38,8 +40,16 @@ export default function SearchResultRow(props: SearchResultRowProps) {
   return (
     <div
       class={styles.row}
+      data-pressable
       data-now-playing={props.active ? '' : undefined}
-      onClick={props.onPreview}
+      role="button"
+      tabindex="0"
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        props.onPreview();
+      }}
+      {...tap}
     >
       <div class={styles.cover} style={bg()} />
       <div class={styles.meta}>

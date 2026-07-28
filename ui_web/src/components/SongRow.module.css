@@ -15,9 +15,12 @@
     transform var(--dur-micro) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .row:hover {
   background: var(--bg-hover);
   border-color: var(--hairline-soft);
+}
 }
 
 /* The row wash and marker rail live in app.css under [data-now-playing], so
@@ -90,9 +93,12 @@
   transition: color var(--dur-micro) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .artistLink:hover {
   color: var(--accent);
   text-decoration: underline;
+}
 }
 
 .iconBtn {

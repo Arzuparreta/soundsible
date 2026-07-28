@@ -44,8 +44,10 @@
   color: var(--ink-tertiary);
   cursor: pointer;
 }
+@media (hover: hover) and (pointer: fine) {
 .epDownload:hover {
   color: var(--accent);
+}
 }
 .epDownloaded {
   color: var(--success);
@@ -64,9 +66,11 @@
   border-radius: var(--radius-full);
   cursor: pointer;
 }
+@media (hover: hover) and (pointer: fine) {
 .back:hover {
   color: var(--ink-primary);
   background: var(--bg-raised);
+}
 }
 
 .cover {
@@ -115,9 +119,11 @@
   border-radius: var(--radius-full);
   cursor: pointer;
 }
+@media (hover: hover) and (pointer: fine) {
 .unsub:hover {
   color: var(--danger);
   border-color: var(--danger);
+}
 }
 
 .scroll {
@@ -137,9 +143,11 @@
   cursor: pointer;
   transition: background var(--dur-micro) var(--ease-out), border-color var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .ep:hover {
   background: var(--bg-hover);
   border-color: var(--hairline-soft);
+}
 }
 
 .epPlay {
@@ -174,8 +182,10 @@
     width: 36px;
   }
 }
+@media (hover: hover) and (pointer: fine) {
 .epPlay:hover {
   background: var(--accent-hover);
+}
 }
 
 .epMeta {

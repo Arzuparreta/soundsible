@@ -18,8 +18,11 @@
   transition: color var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .tab:hover {
   color: var(--ink-secondary);
+}
 }
 
 .active {

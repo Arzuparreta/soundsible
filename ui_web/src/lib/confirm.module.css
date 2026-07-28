@@ -40,9 +40,12 @@
   color: var(--ink-secondary);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .cancel:hover {
   background: var(--bg-raised);
   color: var(--ink-primary);
+}
 }
 
 .confirm {
@@ -51,8 +54,11 @@
   color: var(--ink-on-accent);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .confirm:hover {
   background: var(--accent-hover);
+}
 }
 
 .confirm.danger {

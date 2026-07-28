@@ -48,8 +48,11 @@
   transition: background var(--dur-micro) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .item:hover {
   background: var(--bg-hover);
+}
 }
 
 .item:disabled {

@@ -21,9 +21,12 @@
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .back:hover {
   color: var(--ink-primary);
   background: var(--bg-raised);
+}
 }
 
 .titleWrap {
@@ -59,8 +62,11 @@
   transition: border-color var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .clear:hover {
   border-color: var(--danger);
+}
 }
 
 .scroll {
@@ -135,10 +141,13 @@
     box-shadow var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .row:hover {
   background: var(--bg-hover);
   border-color: var(--hairline-strong);
   box-shadow: var(--shadow-2);
+}
 }
 
 .rowFailed {
@@ -257,9 +266,12 @@
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .iconBtn:hover {
   color: var(--ink-primary);
   background: var(--bg-elevated);
+}
 }
 
 .clearAll {
@@ -276,9 +288,12 @@
   transition: color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .clearAll:hover {
   color: var(--ink-primary);
   border-color: var(--hairline-strong);
+}
 }
 
 /* ── Empty ── */

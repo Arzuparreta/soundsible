@@ -65,9 +65,11 @@
   background: transparent;
   color: var(--ink-secondary);
 }
+@media (hover: hover) and (pointer: fine) {
 .cancel:hover {
   background: var(--bg-raised);
   color: var(--ink-primary);
+}
 }
 
 .confirm {
@@ -75,8 +77,10 @@
   border-color: transparent;
   color: var(--ink-on-accent);
 }
+@media (hover: hover) and (pointer: fine) {
 .confirm:hover:not(:disabled) {
   background: var(--accent-hover);
+}
 }
 .confirm.danger {
   background: var(--danger);

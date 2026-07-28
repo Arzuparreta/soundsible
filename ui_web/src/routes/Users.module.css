@@ -37,10 +37,13 @@
     box-shadow var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .row:hover {
   background: var(--bg-hover);
   border-color: var(--hairline-strong);
   box-shadow: var(--shadow-2);
+}
 }
 
 .avatar {

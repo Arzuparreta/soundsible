@@ -13,6 +13,13 @@ body {
   text-size-adjust: 100%;
 }
 
+html {
+  /* WebKit's native grey tap wash is separate from our deliberate press
+     feedback. Keeping it off at the root also covers clickable containers that
+     are not native links/buttons (search and catalogue rows). */
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   background:
     radial-gradient(ellipse 80% 55% at 78% -15%, var(--ambient-accent), transparent 62%),
@@ -53,8 +60,11 @@ body {
   border-radius: var(--radius-full);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 *::-webkit-scrollbar-thumb:hover {
   background-color: var(--ink-tertiary);
+}
 }
 
 #app {
@@ -91,9 +101,16 @@ html[data-auto-mode='active'] #app {
   outline-offset: 2px;
 }
 
-:where(a, button, [role='button']) {
+:where(a, button, [role='button'], [data-pressable]) {
   touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
+}
+
+/* Touch gets one quiet, transient press cue. Native :active is cancelled when
+   the gesture becomes a pan, so scrolling never leaves a visual selection. */
+@media (hover: none) and (pointer: coarse) {
+  :where(a, button, [role='button'], [data-pressable]):not(:disabled):not([aria-disabled='true']):active {
+    opacity: 0.78;
+  }
 }
 
 /* iOS Safari auto-zooms focused form controls below 16px. Keep dense text tokens

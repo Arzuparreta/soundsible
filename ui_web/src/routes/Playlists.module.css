@@ -25,9 +25,11 @@
     border-color var(--dur-short) var(--ease-out),
     transform var(--dur-micro) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .newBtn:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
+}
 }
 .newBtn:active {
   transform: scale(0.985);
@@ -54,8 +56,10 @@
   opacity: 0;
   transition: opacity var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .cardWrap:hover .cardMenu {
   opacity: 1;
+}
 }
 @media (hover: none) {
   .cardMenu {
@@ -102,10 +106,13 @@
     transform var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .card:hover .cover {
   box-shadow: var(--shadow-2);
   border-color: var(--hairline-strong);
   transform: translateY(-3px);
+}
 }
 
 .name {

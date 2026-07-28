@@ -30,9 +30,11 @@
   font-weight: var(--fw-semibold);
   cursor: pointer;
 }
+@media (hover: hover) and (pointer: fine) {
 .new:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
+}
 }
 
 .list {
@@ -59,8 +61,10 @@
   text-align: left;
   cursor: pointer;
 }
+@media (hover: hover) and (pointer: fine) {
 .item:hover {
   background: var(--bg-hover);
+}
 }
 
 .itemName {

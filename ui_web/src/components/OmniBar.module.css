@@ -49,8 +49,11 @@
   transition: background var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .openArea:not(:disabled):hover {
   background: var(--ambient-highlight);
+}
 }
 .openArea:disabled {
   cursor: default;
@@ -109,9 +112,12 @@
   }
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .radioBadge:hover {
   background: var(--accent);
   color: var(--bg-raised, #fff);
+}
 }
 
 .radioBadgeLoading {
@@ -152,9 +158,11 @@
     background var(--dur-short) var(--ease-out),
     transform var(--dur-micro) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .ctrl:hover {
   color: var(--accent);
   background: var(--accent-faint);
+}
 }
 .ctrl:active {
   transform: scale(0.92);
@@ -193,7 +201,6 @@
       color var(--dur-short) var(--ease-out);
   }
 
-  .soundBlade:hover,
   .soundBlade:focus-within {
     width: 164px;
     color: var(--ink-primary);
@@ -221,7 +228,6 @@
       background var(--dur-short) var(--ease-out);
   }
 
-  .soundBtn:hover,
   .soundBtn:focus-visible {
     color: var(--accent);
     background: var(--accent-soft);
@@ -277,7 +283,6 @@
     transition: opacity var(--dur-short) var(--ease-out);
   }
 
-  .soundBlade:hover .soundRange,
   .soundBlade:focus-within .soundRange {
     opacity: 1;
   }
@@ -331,8 +336,43 @@
       opacity var(--dur-short) var(--ease-out);
   }
 
-  .soundBlade:hover .soundValue,
   .soundBlade:focus-within .soundValue {
+    width: 24px;
+    opacity: 1;
+  }
+}
+
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+
+  .soundBlade:hover {
+    width: 164px;
+    color: var(--ink-primary);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.055), transparent),
+      var(--bg-elevated);
+    border-color: var(--hairline-strong);
+  }
+}
+
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+
+  .soundBtn:hover {
+    color: var(--accent);
+    background: var(--accent-soft);
+    outline: none;
+  }
+}
+
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+
+  .soundBlade:hover .soundRange {
+    opacity: 1;
+  }
+}
+
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+
+  .soundBlade:hover .soundValue {
     width: 24px;
     opacity: 1;
   }
@@ -343,8 +383,14 @@
     width: 118px;
   }
 
-  .soundBlade:hover,
   .soundBlade:focus-within {
+    width: 138px;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1120px) and (hover: hover) and (pointer: fine) {
+
+  .soundBlade:hover {
     width: 138px;
   }
 }

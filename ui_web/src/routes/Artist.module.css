@@ -18,9 +18,12 @@
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .back:hover {
   color: var(--ink-primary);
   background: var(--bg-raised);
+}
 }
 
 .hero {
@@ -89,9 +92,12 @@
   transition: opacity var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .chevronBtn:hover {
   opacity: 1;
   color: var(--ink-primary);
+}
 }
 
 .disambigDropdown {
@@ -125,8 +131,11 @@
   transition: background var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .disambigItem:hover {
   background: var(--bg-elevated);
+}
 }
 
 .disambigAvatar {
@@ -190,9 +199,12 @@
     transform var(--dur-micro) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .btnPrimary:hover:not(:disabled) {
   background: var(--accent-hover);
   box-shadow: 0 12px 30px var(--accent-glow);
+}
 }
 
 .btnPrimary:disabled {
@@ -216,8 +228,11 @@
   transition: background var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .btnSecondary:hover:not(:disabled) {
   background: var(--bg-hover);
+}
 }
 
 .btnSecondary:disabled {
@@ -296,8 +311,11 @@
   }
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .toggleTab:hover {
   color: var(--ink-primary);
+}
 }
 
 .toggleTabActive {
@@ -353,8 +371,11 @@
   transition: background var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .trackRow:hover {
   background: var(--bg-raised);
+}
 }
 
 /* Wash and marker rail: app.css, [data-now-playing]. */
@@ -448,9 +469,12 @@
   transition: color var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .iconBtn:hover {
   color: var(--ink-primary);
   background: var(--bg-hover);
+}
 }
 
 .iconBtn:disabled {

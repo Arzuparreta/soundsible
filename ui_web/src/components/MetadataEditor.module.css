@@ -41,8 +41,10 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
+@media (hover: hover) and (pointer: fine) {
 .coverBtn:hover {
   border-color: var(--accent);
+}
 }
 .coverBtn:disabled {
   opacity: 0.5;
@@ -96,17 +98,21 @@
   background: transparent;
   color: var(--ink-secondary);
 }
+@media (hover: hover) and (pointer: fine) {
 .cancel:hover {
   background: var(--bg-raised);
   color: var(--ink-primary);
+}
 }
 .confirm {
   background: var(--accent);
   border-color: transparent;
   color: var(--ink-on-accent);
 }
+@media (hover: hover) and (pointer: fine) {
 .confirm:hover {
   background: var(--accent-hover);
+}
 }
 .confirm:disabled {
   opacity: 0.6;

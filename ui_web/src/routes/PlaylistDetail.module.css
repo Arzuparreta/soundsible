@@ -21,9 +21,12 @@
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .back:hover {
   color: var(--ink-primary);
   background: var(--bg-raised);
+}
 }
 
 .titleWrap {
@@ -70,7 +73,9 @@
     height: 36px;
   }
 }
+@media (hover: hover) and (pointer: fine) {
 .menu:hover {
   color: var(--ink-primary);
   background: var(--bg-raised);
+}
 }

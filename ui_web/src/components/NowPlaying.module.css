@@ -66,9 +66,11 @@
   cursor: pointer;
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .iconBtn:hover {
   color: var(--ink-primary);
   background: var(--bg-raised);
+}
 }
 
 .headLabel {
@@ -111,9 +113,12 @@
   transition: color var(--dur-short), background var(--dur-short), transform var(--dur-micro);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .autoToggle:hover {
   color: var(--ink-primary);
   background: var(--bg-raised);
+}
 }
 
 .autoWord {
@@ -268,9 +273,12 @@
   transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .radioBadge:hover {
   background: var(--accent);
   color: var(--bg-raised, #fff);
+}
 }
 
 .radioBadgeLoading {
@@ -298,9 +306,12 @@
   transition: color var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .artistLink:hover {
   color: var(--accent);
   text-decoration: underline;
+}
 }
 
 /* ── Seek + volume (custom ranges: thin track, accent fill, thumb on hover) ── */
@@ -365,14 +376,21 @@
   margin-top: -4px;
 }
 
-.seek:hover::-webkit-slider-thumb,
 .seek:active::-webkit-slider-thumb,
 .seek:focus-visible::-webkit-slider-thumb,
-.volRange:hover::-webkit-slider-thumb,
 .volRange:active::-webkit-slider-thumb,
 .volRange:focus-visible::-webkit-slider-thumb {
   opacity: 1;
   transform: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+
+.seek:hover::-webkit-slider-thumb,
+.volRange:hover::-webkit-slider-thumb {
+  opacity: 1;
+  transform: none;
+}
 }
 
 .seek::-moz-range-track,
@@ -411,13 +429,19 @@
   height: 12px;
 }
 
-.seek:hover::-moz-range-thumb,
 .seek:active::-moz-range-thumb,
 .seek:focus-visible::-moz-range-thumb,
-.volRange:hover::-moz-range-thumb,
 .volRange:active::-moz-range-thumb,
 .volRange:focus-visible::-moz-range-thumb {
   opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+
+.seek:hover::-moz-range-thumb,
+.volRange:hover::-moz-range-thumb {
+  opacity: 1;
+}
 }
 
 /* Touch: no hover — the thumb is always there. */
@@ -470,9 +494,11 @@
     background var(--dur-short) var(--ease-out),
     transform var(--dur-micro) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .ctrl:hover {
   color: var(--accent);
   background: var(--accent-faint);
+}
 }
 .ctrl:active {
   transform: scale(0.92);
@@ -486,15 +512,19 @@
   border-radius: var(--radius-full);
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .toggle:hover {
   color: var(--ink-secondary);
   background: var(--bg-hover);
 }
+}
 .on {
   color: var(--accent);
 }
+@media (hover: hover) and (pointer: fine) {
 .on:hover {
   color: var(--accent-hover);
+}
 }
 
 .repeatOne {
@@ -523,10 +553,12 @@
     box-shadow var(--dur-short) var(--ease-out),
     transform var(--dur-micro) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .play:hover {
   background: var(--accent-hover);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.22) inset, 0 18px 42px var(--accent-glow);
   transform: scale(1.035);
+}
 }
 .play:active {
   transform: scale(0.94);
@@ -555,9 +587,11 @@
   cursor: pointer;
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .actBtn:hover {
   color: var(--ink-primary);
   background: var(--bg-hover);
+}
 }
 .actOn {
   color: var(--accent);
@@ -673,8 +707,10 @@
   cursor: pointer;
   transition: color var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .queueClear:hover {
   color: var(--accent);
+}
 }
 .queueClear:disabled {
   color: var(--ink-tertiary);
@@ -703,15 +739,24 @@
   border: 1px solid transparent;
   transition: background var(--dur-micro) var(--ease-out), border-color var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .qRow:hover {
   background: var(--bg-hover);
   border-color: var(--hairline-soft);
 }
+}
 
-.qActive,
+.qActive {
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
+  border-color: rgba(249, 122, 18, 0.14);
+}
+
+@media (hover: hover) and (pointer: fine) {
+
 .qActive:hover {
   background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
   border-color: rgba(249, 122, 18, 0.14);
+}
 }
 
 .qHandle {
@@ -755,8 +800,10 @@
   cursor: pointer;
   transition: color var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .qRemove:hover {
   color: var(--danger);
+}
 }
 
 .qActive .qTitle {
@@ -896,11 +943,6 @@
     border: 1px solid rgba(249, 122, 18, 0.28);
   }
 
-  .autoToggle:hover {
-    color: var(--ink-on-accent);
-    background: var(--accent);
-  }
-
   .autoWord {
     display: inline;
   }
@@ -993,6 +1035,13 @@
   .toggle {
     width: 40px;
     height: 40px;
+  }
+}
+@media (min-width: 768px) and (hover: hover) and (pointer: fine) {
+
+  .autoToggle:hover {
+    color: var(--ink-on-accent);
+    background: var(--accent);
   }
 }
 

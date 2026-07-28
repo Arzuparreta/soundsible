@@ -83,11 +83,14 @@
     transform var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .card:hover .cover,
 .cardBtn:hover .cover {
   border-color: var(--hairline-strong);
   box-shadow: var(--shadow-2);
   transform: translateY(-3px);
+}
 }
 
 .name {

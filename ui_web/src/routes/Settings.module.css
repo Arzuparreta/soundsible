@@ -102,8 +102,11 @@
   transition: background var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .rowBtn:hover:not(:disabled) {
   background: var(--bg-hover);
+}
 }
 
 .rowBtn:disabled {
@@ -128,8 +131,11 @@
   transition: background var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .rowLink:hover {
   background: var(--bg-hover);
+}
 }
 
 .chevron {
@@ -208,8 +214,11 @@
   }
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .seg:hover:not(.segOn) {
   color: var(--ink-primary);
+}
 }
 
 .segOn {

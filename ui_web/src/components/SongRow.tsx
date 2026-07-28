@@ -4,6 +4,7 @@ import { t } from '../lib/i18n';
 import styles from './SongRow.module.css';
 import { coverStyle } from '../lib/cover';
 import { formatDuration } from '../lib/format';
+import { createResponsiveTap } from '../lib/responsiveTap';
 
 export interface SongRowProps {
   track: Track;
@@ -34,27 +35,15 @@ function rowCoverStyle(props: SongRowProps): JSX.CSSProperties {
  * (pointer) — restoring the action menu the legacy UI had on every row.
  */
 export default function SongRow(props: SongRowProps) {
-  let pressTimer: number | undefined;
-  let suppressClick = false;
-
   const openMenu = (ev?: MouseEvent) => props.onMenu?.(props.track, ev);
 
-  const startPress = () => {
-    if (!props.onMenu) return;
-    pressTimer = window.setTimeout(() => {
-      suppressClick = true;
-      openMenu(); // long-press → bottom sheet (no cursor anchor)
-    }, 450);
-  };
-  const cancelPress = () => clearTimeout(pressTimer);
-
   const onRowClick = () => {
-    if (suppressClick) {
-      suppressClick = false;
-      return;
-    }
     props.onPlay?.(props.track);
   };
+  const tap = createResponsiveTap({
+    onTap: onRowClick,
+    onLongPress: props.onMenu ? () => openMenu() : undefined,
+  });
 
   const onContext = (e: MouseEvent) => {
     if (!props.onMenu) return;
@@ -89,6 +78,7 @@ export default function SongRow(props: SongRowProps) {
   return (
     <div
       class={styles.row}
+      data-pressable
       data-now-playing={props.active ? '' : undefined}
       role="button"
       tabindex="0"
@@ -96,13 +86,9 @@ export default function SongRow(props: SongRowProps) {
       // Announces which row is the one currently playing, so a screen-reader
       // user can find "where am I" without listening through the whole list.
       aria-current={props.active ? 'true' : undefined}
-      onClick={onRowClick}
+      {...tap}
       onKeyDown={onKeyDown}
       onContextMenu={onContext}
-      onTouchStart={startPress}
-      onTouchEnd={cancelPress}
-      onTouchMove={cancelPress}
-      onTouchCancel={cancelPress}
     >
       <Show when={props.index != null}>
         <span class={styles.index}>{props.index}</span>

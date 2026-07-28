@@ -12,9 +12,12 @@
     border-color var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .row:hover {
   background: var(--bg-hover);
   border-color: var(--hairline-soft);
+}
 }
 
 /* Wash and marker rail: app.css, [data-now-playing]. */
@@ -81,17 +84,21 @@
   color: var(--ink-tertiary);
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .iconBtn:hover {
   color: var(--ink-primary);
   background: var(--bg-elevated);
+}
 }
 
 .addBtn {
   color: var(--accent);
   transition: background var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .addBtn:hover {
   background: var(--accent-soft);
+}
 }
 
 .done {

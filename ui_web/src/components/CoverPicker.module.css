@@ -25,9 +25,11 @@
   font-size: var(--text-body);
   cursor: pointer;
 }
+@media (hover: hover) and (pointer: fine) {
 .none:hover {
   background: var(--bg-raised);
   color: var(--ink-primary);
+}
 }
 
 .grid {
@@ -48,8 +50,10 @@
     border-color var(--dur-short) var(--ease-out),
     transform var(--dur-micro) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .cell:hover {
   transform: translateY(-2px);
+}
 }
 .cell.selected {
   border-color: var(--accent);

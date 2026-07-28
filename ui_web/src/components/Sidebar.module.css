@@ -29,8 +29,11 @@
   transition: background var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .brand:hover {
   background: var(--bg-raised);
+}
 }
 
 .mark {
@@ -79,9 +82,12 @@
     background var(--dur-short) var(--ease-out);
 }
 
+@media (hover: hover) and (pointer: fine) {
+
 .item:hover {
   color: var(--ink-primary);
   background: var(--bg-hover);
+}
 }
 
 .active {

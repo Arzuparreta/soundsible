@@ -88,8 +88,10 @@
   background: transparent;
   border: 1px solid var(--hairline);
 }
+@media (hover: hover) and (pointer: fine) {
 .no:hover {
   background: var(--bg-raised);
+}
 }
 
 .yes {
@@ -97,8 +99,10 @@
   background: var(--accent);
   border: 1px solid var(--accent);
 }
+@media (hover: hover) and (pointer: fine) {
 .yes:hover {
   background: var(--accent-hover);
+}
 }
 
 @keyframes drop-in {

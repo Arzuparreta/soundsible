@@ -147,8 +147,10 @@
   cursor: pointer;
   transition: background var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .btn:hover {
   background: var(--bg-raised);
+}
 }
 
 /* ── Paired devices panel (in Settings) ── */
@@ -204,9 +206,11 @@
   cursor: pointer;
   transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .revoke:hover {
   background: var(--danger);
   color: #fff;
+}
 }
 
 .pairBtn {
@@ -226,8 +230,10 @@
   cursor: pointer;
   transition: background var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .pairBtn:hover {
   background: var(--bg-elevated);
+}
 }
 
 @media (max-width: 520px) {

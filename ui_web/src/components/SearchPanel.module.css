@@ -74,15 +74,25 @@
   white-space: nowrap;
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .tab:hover {
   color: var(--ink-primary);
 }
+}
 
-.tabOn,
+.tabOn {
+  color: var(--bg-base);
+  background: var(--ink-primary);
+  border-color: var(--ink-primary);
+}
+
+@media (hover: hover) and (pointer: fine) {
+
 .tabOn:hover {
   color: var(--bg-base);
   background: var(--ink-primary);
   border-color: var(--ink-primary);
+}
 }
 
 .headActions {
@@ -103,9 +113,11 @@
   border-radius: var(--radius-full);
   cursor: pointer;
 }
+@media (hover: hover) and (pointer: fine) {
 .headBtn:hover {
   color: var(--ink-primary);
   background: var(--bg-raised);
+}
 }
 
 .searchBar {
@@ -161,8 +173,10 @@
   border-radius: var(--radius-full);
   cursor: pointer;
 }
+@media (hover: hover) and (pointer: fine) {
 .clearBtn:hover {
   color: var(--ink-primary);
+}
 }
 
 .body {
@@ -218,8 +232,10 @@
   text-align: left;
   transition: border-color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .tile:hover:not(:disabled) {
   border-color: var(--accent);
+}
 }
 .tile:disabled {
   opacity: 0.45;
@@ -285,9 +301,11 @@
   cursor: pointer;
   transition: color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .recentChip:hover {
   color: var(--ink-primary);
   border-color: var(--hairline-strong);
+}
 }
 
 .sectionTitle {
@@ -321,8 +339,10 @@
   cursor: pointer;
   text-align: left;
 }
+@media (hover: hover) and (pointer: fine) {
 .chip:hover {
   background: var(--bg-raised);
+}
 }
 
 .chipCover {
@@ -363,16 +383,22 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
+@media (hover: hover) and (pointer: fine) {
 .row:hover {
   background: var(--bg-raised);
+}
 }
 /* Row buttons stay out of the way until the row is hovered or focused. */
 .row .rowBtn {
   opacity: 0;
 }
-.row:hover .rowBtn,
 .row:focus-within .rowBtn {
   opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+.row:hover .rowBtn {
+  opacity: 1;
+}
 }
 
 .rowActive .rowTitle {
@@ -432,9 +458,11 @@
   cursor: pointer;
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out), opacity var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .rowBtn:hover {
   color: var(--accent);
   background: var(--accent-soft);
+}
 }
 
 .queuedMark {

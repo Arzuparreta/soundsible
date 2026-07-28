@@ -29,8 +29,10 @@
   box-shadow: var(--shadow-1);
   transition: box-shadow var(--dur-short) var(--ease-out);
 }
+@media (hover: hover) and (pointer: fine) {
 .card:hover .avatar {
   box-shadow: var(--shadow-2);
+}
 }
 
 .name {
