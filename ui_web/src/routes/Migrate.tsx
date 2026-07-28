@@ -32,6 +32,57 @@ const RESTORABLE_STATES = new Set([
   'failed',
 ]);
 
+type MigrationProvider = 'spotify' | 'apple';
+type AppleDevice = 'mac' | 'windows' | 'mobile';
+
+interface MigrationGuideState {
+  provider: MigrationProvider | null;
+  spotifyWaiting: boolean;
+}
+
+const GUIDE_STATE_KEY = 'soundsible.migration-guide';
+const SPOTIFY_PRIVACY_URL = 'https://www.spotify.com/account/privacy/';
+const SPOTIFY_DATA_HELP_URL = 'https://support.spotify.com/article/understanding-your-data/';
+const APPLE_MAC_HELP_URL =
+  'https://support.apple.com/guide/music/save-a-copy-of-a-playlist-mus27cd5060f/mac';
+const APPLE_WINDOWS_HELP_URL =
+  'https://support.apple.com/guide/itunes/save-a-copy-of-your-playlists-itns2998/windows';
+
+function readGuideState(): MigrationGuideState {
+  try {
+    const saved = JSON.parse(localStorage.getItem(GUIDE_STATE_KEY) ?? '{}') as Partial<MigrationGuideState>;
+    return {
+      provider: saved.provider === 'spotify' || saved.provider === 'apple' ? saved.provider : null,
+      spotifyWaiting: saved.spotifyWaiting === true,
+    };
+  } catch {
+    return { provider: null, spotifyWaiting: false };
+  }
+}
+
+function writeGuideState(state: MigrationGuideState): void {
+  try {
+    localStorage.setItem(GUIDE_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // The guide remains fully usable when browser storage is unavailable.
+  }
+}
+
+function clearGuideState(): void {
+  try {
+    localStorage.removeItem(GUIDE_STATE_KEY);
+  } catch {
+    // Nothing else depends on this optional convenience state.
+  }
+}
+
+function detectAppleDevice(): AppleDevice {
+  const platform = `${navigator.userAgent} ${navigator.platform}`.toLowerCase();
+  if (/iphone|ipad|ipod|android/.test(platform)) return 'mobile';
+  if (platform.includes('win')) return 'windows';
+  return 'mac';
+}
+
 function formatBytes(bytes: number): string {
   if (!bytes) return '0 MB';
   const mb = bytes / (1024 * 1024);
@@ -96,6 +147,7 @@ export default function Migrate() {
     setBusy(true);
     try {
       const { job: analyzed } = await migrationApi.upload(file);
+      clearGuideState();
       adoptJob(analyzed);
     } catch (error) {
       toast.error(error instanceof ApiError ? c().badFile : c().failed);
@@ -215,6 +267,10 @@ export default function Migrate() {
       ? Math.min(100, Math.round((processed() / job()!.selected_track_count) * 100))
       : 0,
   );
+  const resetImport = () => {
+    clearGuideState();
+    setJob(null);
+  };
 
   return (
     <div class="view">
@@ -245,7 +301,7 @@ export default function Migrate() {
                     }
                     onClear={() => setPlaylistIds(new Set())}
                     onStart={start}
-                    onReset={() => setJob(null)}
+                    onReset={resetImport}
                   />
                 }
               >
@@ -257,7 +313,7 @@ export default function Migrate() {
                   reviewTracks={reviewTracks()}
                   onControl={control}
                   onDecide={decide}
-                  onReset={() => setJob(null)}
+                  onReset={resetImport}
                   onOpen={() => navigate('/playlists')}
                 />
               </Show>
@@ -276,43 +332,260 @@ function UploadStep(props: {
   analyze: (file: File | undefined) => void;
 }) {
   const c = createMemo(migrateCopy);
+  const saved = readGuideState();
+  const [provider, setProvider] = createSignal<MigrationProvider | null>(saved.provider);
+  const [spotifyWaiting, setSpotifyWaiting] = createSignal(saved.spotifyWaiting);
+  const [appleDevice, setAppleDevice] = createSignal<AppleDevice>(detectAppleDevice());
+
+  const chooseProvider = (next: MigrationProvider | null) => {
+    setProvider(next);
+    if (!next) setSpotifyWaiting(false);
+    writeGuideState({ provider: next, spotifyWaiting: next === 'spotify' && spotifyWaiting() });
+  };
+
+  const markSpotifyRequested = () => {
+    setSpotifyWaiting(true);
+    writeGuideState({ provider: 'spotify', spotifyWaiting: true });
+  };
+
+  const copyStationAddress = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(window.location.href);
+      } else {
+        const helper = document.createElement('textarea');
+        helper.value = window.location.href;
+        helper.setAttribute('readonly', '');
+        helper.style.position = 'fixed';
+        helper.style.opacity = '0';
+        document.body.appendChild(helper);
+        helper.select();
+        const copied = document.execCommand('copy');
+        helper.remove();
+        if (!copied) throw new Error('copy rejected');
+      }
+      toast.success(c().addressCopied);
+    } catch {
+      toast.error(c().copyFailed);
+    }
+  };
+
   return (
     <>
       <section class={styles.hero}>
-        <span class={styles.eyebrow}>Spotify → Apple Music → Soundsible</span>
+        <span class={styles.eyebrow}>{c().eyebrow}</span>
         <h1>{c().title}</h1>
         <p>{c().intro}</p>
       </section>
-      <label
-        class={styles.drop}
-        classList={{ [styles.dropActive]: props.dragging }}
-        onDragEnter={(event) => {
-          event.preventDefault();
-          props.setDragging(true);
-        }}
-        onDragOver={(event) => event.preventDefault()}
-        onDragLeave={() => props.setDragging(false)}
-        onDrop={(event) => {
-          event.preventDefault();
-          props.analyze(event.dataTransfer?.files?.[0]);
-        }}
+      <Show
+        when={provider()}
+        fallback={
+          <section class={styles.providerPicker} aria-labelledby="migration-source-title">
+            <div class={styles.guideHeading}>
+              <h2 id="migration-source-title">{c().chooseSource}</h2>
+              <p>{c().chooseSourceHint}</p>
+            </div>
+            <div class={styles.providerGrid}>
+              <button class={styles.providerCard} type="button" onClick={() => chooseProvider('spotify')}>
+                <span class={`${styles.providerMark} ${styles.spotifyMark}`} aria-hidden="true">●</span>
+                <span>
+                  <strong>Spotify</strong>
+                  <small>{c().spotifySummary}</small>
+                </span>
+                <span class={styles.providerArrow} aria-hidden="true">→</span>
+              </button>
+              <button class={styles.providerCard} type="button" onClick={() => chooseProvider('apple')}>
+                <span class={`${styles.providerMark} ${styles.appleMark}`} aria-hidden="true">♪</span>
+                <span>
+                  <strong>Apple Music</strong>
+                  <small>{c().appleSummary}</small>
+                </span>
+                <span class={styles.providerArrow} aria-hidden="true">→</span>
+              </button>
+            </div>
+          </section>
+        }
       >
-        <input
-          class={styles.fileInput}
-          type="file"
-          accept=".zip,.json,.xml,.plist,.txt,.csv,application/zip,application/json,text/xml,text/csv,text/plain"
-          onChange={(event) => props.analyze(event.currentTarget.files?.[0])}
-        />
-        <span class={styles.uploadMark}>↓</span>
-        <strong>{props.busy ? c().analyzing : c().drop}</strong>
-        <span>{c().formats}</span>
-      </label>
-      <section class={styles.helpGrid}>
-        <p><strong>Spotify</strong>{c().spotifyHelp.replace(/^Spotify:\s*/, '')}</p>
-        <p><strong>Apple Music</strong>{c().appleHelp.replace(/^Apple Music:\s*/, '')}</p>
-      </section>
+        {(selected) => (
+          <section class={styles.guide}>
+            <button class={styles.back} type="button" onClick={() => chooseProvider(null)}>
+              ← {c().back}
+            </button>
+            <div class={styles.guideHeading}>
+              <span class={styles.provider}>{selected() === 'spotify' ? 'Spotify' : 'Apple Music'}</span>
+              <h2>
+                {selected() === 'spotify'
+                  ? spotifyWaiting()
+                    ? c().spotifyWaitingTitle
+                    : c().spotifyTitle
+                  : c().appleTitle}
+              </h2>
+              <p>
+                {selected() === 'spotify'
+                  ? spotifyWaiting()
+                    ? c().spotifyWaitingIntro
+                    : c().spotifyIntro
+                  : c().appleIntro}
+              </p>
+            </div>
+
+            <Show when={selected() === 'spotify'}>
+              <ol class={styles.steps}>
+                <li class={styles.step}>
+                  <span class={styles.stepNumber}>1</span>
+                  <span>
+                    <strong>{c().spotifyRequestTitle}</strong>
+                    <small>{c().spotifyRequestDetail}</small>
+                    <a
+                      class={styles.externalButton}
+                      href={SPOTIFY_PRIVACY_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={markSpotifyRequested}
+                    >
+                      {c().openSpotify} ↗
+                    </a>
+                  </span>
+                </li>
+                <li class={styles.step}>
+                  <span class={styles.stepNumber}>2</span>
+                  <span>
+                    <strong>{c().spotifyWaitTitle}</strong>
+                    <small>{c().spotifyWaitDetail}</small>
+                  </span>
+                </li>
+                <li class={styles.step}>
+                  <span class={styles.stepNumber}>3</span>
+                  <span>
+                    <strong>{c().spotifyReturnTitle}</strong>
+                    <small>{c().spotifyReturnDetail}</small>
+                  </span>
+                </li>
+              </ol>
+              <a
+                class={styles.supportLink}
+                href={SPOTIFY_DATA_HELP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {c().officialInstructions} ↗
+              </a>
+            </Show>
+
+            <Show when={selected() === 'apple'}>
+              <div class={styles.deviceTabs} role="group" aria-label={c().appleDeviceLabel}>
+                <button
+                  type="button"
+                  aria-pressed={appleDevice() === 'mac'}
+                  classList={{ [styles.deviceActive]: appleDevice() === 'mac' }}
+                  onClick={() => setAppleDevice('mac')}
+                >
+                  Mac
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={appleDevice() === 'windows'}
+                  classList={{ [styles.deviceActive]: appleDevice() === 'windows' }}
+                  onClick={() => setAppleDevice('windows')}
+                >
+                  Windows
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={appleDevice() === 'mobile'}
+                  classList={{ [styles.deviceActive]: appleDevice() === 'mobile' }}
+                  onClick={() => setAppleDevice('mobile')}
+                >
+                  {c().mobile}
+                </button>
+              </div>
+
+              <Show when={appleDevice() === 'mac'}>
+                <ol class={styles.steps}>
+                  <GuideStep number="1" title={c().appleOpenMusic} detail={c().appleOpenMusicMacDetail} />
+                  <GuideStep number="2" title={c().appleExportTitle} detail={c().appleExportMacDetail} />
+                  <GuideStep number="3" title={c().appleSaveTitle} detail={c().appleSaveDetail} />
+                </ol>
+                <a class={styles.supportLink} href={APPLE_MAC_HELP_URL} target="_blank" rel="noopener noreferrer">
+                  {c().officialInstructions} ↗
+                </a>
+              </Show>
+
+              <Show when={appleDevice() === 'windows'}>
+                <ol class={styles.steps}>
+                  <GuideStep number="1" title={c().appleOpenItunes} detail={c().appleOpenItunesDetail} />
+                  <GuideStep number="2" title={c().appleExportTitle} detail={c().appleExportWindowsDetail} />
+                  <GuideStep number="3" title={c().appleSaveTitle} detail={c().appleSaveDetail} />
+                </ol>
+                <p class={styles.notice}>{c().appleWindowsNotice}</p>
+                <a class={styles.supportLink} href={APPLE_WINDOWS_HELP_URL} target="_blank" rel="noopener noreferrer">
+                  {c().officialInstructions} ↗
+                </a>
+              </Show>
+
+              <Show when={appleDevice() === 'mobile'}>
+                <div class={styles.mobileHandoff}>
+                  <strong>{c().continueComputer}</strong>
+                  <p>{c().continueComputerDetail}</p>
+                  <div class={styles.addressRow}>
+                    <code>{window.location.href}</code>
+                    <Button variant="secondary" size="sm" onClick={copyStationAddress}>
+                      {c().copyAddress}
+                    </Button>
+                  </div>
+                </div>
+              </Show>
+            </Show>
+
+            <Show when={selected() === 'spotify' || appleDevice() !== 'mobile'}>
+              <label
+                class={styles.drop}
+                classList={{ [styles.dropActive]: props.dragging }}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  props.setDragging(true);
+                }}
+                onDragOver={(event) => event.preventDefault()}
+                onDragLeave={() => props.setDragging(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  props.analyze(event.dataTransfer?.files?.[0]);
+                }}
+              >
+                <input
+                  class={styles.fileInput}
+                  type="file"
+                  accept=".zip,.json,.xml,.plist,.txt,.csv,application/zip,application/json,text/xml,text/csv,text/plain"
+                  onChange={(event) => props.analyze(event.currentTarget.files?.[0])}
+                />
+                <span class={styles.uploadMark}>↓</span>
+                <strong>
+                  {props.busy
+                    ? c().analyzing
+                    : selected() === 'spotify'
+                      ? c().chooseSpotifyFile
+                      : c().chooseAppleFile}
+                </strong>
+                <span>{c().fileHint}</span>
+              </label>
+            </Show>
+          </section>
+        )}
+      </Show>
       <p class={styles.privacy}>{c().privacy}</p>
     </>
+  );
+}
+
+function GuideStep(props: { number: string; title: string; detail: string }) {
+  return (
+    <li class={styles.step}>
+      <span class={styles.stepNumber}>{props.number}</span>
+      <span>
+        <strong>{props.title}</strong>
+        <small>{props.detail}</small>
+      </span>
+    </li>
   );
 }
 

@@ -1,9 +1,50 @@
-# Moving a Spotify or Apple Music library to Soundsible
+# Moving from Spotify or Apple Music to Soundsible
 
 Soundsible imports account exports rather than requiring a paid streaming
 subscription or asking the Station owner to maintain third-party API keys.
 
-## Supported exports
+You do not need to know what kind of file the services create. Open **Move your
+music** in Soundsible, choose Spotify or Apple Music, and follow the instructions
+shown there. Keep the resulting file exactly as the service gives it to you:
+Soundsible opens it for you.
+
+The file is uploaded only to your own Soundsible Station. Soundsible does not
+send it, its contents, or migration analytics to a hosted Soundsible service or
+to a third party.
+
+## Spotify
+
+1. In Soundsible, choose **Spotify** and open the linked Spotify privacy page.
+2. Under **Download your data**, request **Account data**. Extended streaming
+   history is not required, and a free Spotify account is sufficient.
+3. Spotify will send an email when the download is ready. Download it without
+   opening or extracting it.
+4. Return to Soundsible and choose **Choose the file Spotify sent you**.
+
+Soundsible remembers locally that you are waiting, so returning to the migration
+page in the same browser takes you straight back to the final step.
+
+## Apple Music
+
+Apple provides the supported full-library export from its desktop library apps:
+
+- **Mac:** Open Music and choose **File → Library → Export Library**. Apple
+  documents the flow in
+  [Save a copy of a playlist in Music on Mac](https://support.apple.com/guide/music/save-a-copy-of-a-playlist-mus27cd5060f/mac).
+- **Windows:** Open the relevant library in iTunes and choose
+  **File → Library → Export Library**. Apple documents this flow in
+  [Save a copy of your playlists in iTunes on PC](https://support.apple.com/guide/itunes/save-a-copy-of-your-playlists-itns2998/windows).
+  Apple does not currently document an equivalent complete-library export in
+  the newer Apple Music app for Windows.
+- **Phone or tablet:** Continue on a Mac or PC. The mobile Apple Music app does
+  not provide the complete-library export needed by Soundsible. The guide lets
+  you copy your current Station address so it is easy to reopen on that
+  computer.
+
+After saving the export, return to Soundsible and choose **Choose the Apple
+Music file**. Do not open or modify it first.
+
+## Technical compatibility
 
 - Spotify account-data ZIP files and `Playlist*.json` files. Spotify documents
   that its account-data package contains playlist names and the songs, artists,

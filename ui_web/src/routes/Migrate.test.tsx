@@ -21,6 +21,7 @@ vi.mock('../lib/migrationApi', async (original) => {
 vi.mock('../lib/toast', () => ({
   toast: {
     error: vi.fn(),
+    success: vi.fn(),
   },
 }));
 
@@ -87,16 +88,86 @@ function analyzedJob(): MigrationJob {
 describe('Migrate route', () => {
   beforeEach(() => {
     setLocale('en');
+    window.localStorage.removeItem('soundsible.migration-guide');
     apiMock.list.mockReset().mockResolvedValue({ jobs: [] });
     apiMock.get.mockReset();
     apiMock.upload.mockReset();
     apiMock.start.mockReset();
   });
 
+  it('starts with a plain service choice and no file-format jargon', async () => {
+    render(() => <Migrate />);
+
+    expect(await screen.findByText('Where is your music now?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Spotify/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Apple Music/ })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\b(?:ZIP|JSON|XML|CSV)\b/);
+  });
+
+  it('guides Spotify users to the official request and remembers the waiting step', async () => {
+    const first = render(() => <Migrate />);
+    await fireEvent.click(await screen.findByRole('button', { name: /Spotify/ }));
+
+    expect(screen.getByText('Ask Spotify for your account data')).toBeInTheDocument();
+    expect(screen.getByText('Choose the file Spotify sent you')).toBeInTheDocument();
+    const spotifyLink = screen.getByRole('link', { name: /Open Spotify/ });
+    expect(spotifyLink).toHaveAttribute('href', 'https://www.spotify.com/account/privacy/');
+    await fireEvent.click(spotifyLink);
+    expect(screen.getByText('Waiting for Spotify?')).toBeInTheDocument();
+    first.unmount();
+
+    render(() => <Migrate />);
+    expect(await screen.findByText('Waiting for Spotify?')).toBeInTheDocument();
+    expect(screen.getByText('Choose the file Spotify sent you')).toBeInTheDocument();
+  });
+
+  it('shows honest Apple guidance for Mac, Windows and mobile', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    render(() => <Migrate />);
+    await fireEvent.click(await screen.findByRole('button', { name: /Apple Music/ }));
+
+    expect(screen.getByText('Open Music on your Mac')).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Windows' }));
+    expect(screen.getByText('Open iTunes on your PC')).toBeInTheDocument();
+    expect(screen.getByText(/not the newer Apple Music app/)).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Phone or tablet' }));
+    expect(screen.getByText('Continue on a computer')).toBeInTheDocument();
+    expect(screen.queryByText('Choose the Apple Music file')).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
+    expect(writeText).toHaveBeenCalledWith(window.location.href);
+  });
+
+  it('restores an unfinished import without sending the user through the guide again', async () => {
+    const running = {
+      ...analyzedJob(),
+      state: 'running' as const,
+      selection: { include_library: true, playlist_ids: ['road'] },
+    };
+    apiMock.list.mockResolvedValue({ jobs: [{ id: 'job-1', state: 'running' }] });
+    apiMock.get.mockResolvedValue({ job: running });
+
+    render(() => <Migrate />);
+
+    expect(await screen.findByText('Moving your music')).toBeInTheDocument();
+    expect(screen.queryByText('Where is your music now?')).not.toBeInTheDocument();
+  });
+
+  it('ships the migration guide in French instead of falling back to English', async () => {
+    setLocale('fr');
+    render(() => <Migrate />);
+
+    expect(await screen.findByText('Où se trouve votre musique actuellement ?')).toBeInTheDocument();
+    expect(screen.queryByText('Where is your music now?')).not.toBeInTheDocument();
+  });
+
   it('accepts one official export and offers library plus playlist selection', async () => {
     apiMock.upload.mockResolvedValue({ job: analyzedJob(), created: true });
     render(() => <Migrate />);
-    await screen.findByText('Choose your export');
+    await fireEvent.click(await screen.findByRole('button', { name: /Spotify/ }));
 
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(['{}'], 'Playlist1.json', { type: 'application/json' });
@@ -114,7 +185,7 @@ describe('Migrate route', () => {
     apiMock.upload.mockResolvedValue({ job: analyzed, created: true });
     apiMock.start.mockResolvedValue({ job: running });
     render(() => <Migrate />);
-    await screen.findByText('Choose your export');
+    await fireEvent.click(await screen.findByRole('button', { name: /Spotify/ }));
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await fireEvent.change(input, {
       target: { files: [new File(['{}'], 'Playlist1.json', { type: 'application/json' })] },
