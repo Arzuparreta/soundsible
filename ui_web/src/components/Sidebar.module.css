@@ -124,8 +124,8 @@
 }
 
 .icon svg {
-  width: 20px;
-  height: 20px;
+  width: var(--icon-md);
+  height: var(--icon-md);
 }
 
 .label {
@@ -144,7 +144,7 @@
   height: 18px;
   padding: 0 5px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-tiny);
   font-weight: var(--fw-bold);
   color: var(--ink-on-accent);
   background: var(--accent);
@@ -160,4 +160,18 @@
     padding-right: var(--space-lg);
     padding-left: var(--space-lg);
   }
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  :global(html[data-interface-size='large']) .sidebar {
+    display: none;
+  }
+}
+
+:global(html[data-interface-size='normal']) .item {
+  min-height: 44px;
+}
+
+:global(html[data-interface-size='large']) .item {
+  min-height: 48px;
 }

@@ -103,7 +103,7 @@
   padding: 0;
   color: var(--ink-secondary);
   font: inherit;
-  font-size: 10px;
+  font-size: var(--text-micro);
   font-weight: var(--fw-bold);
   letter-spacing: 0.14em;
   background: transparent;
@@ -306,6 +306,11 @@
   transition: color var(--dur-short) var(--ease-out);
 }
 
+:global(html[data-interface-size='normal']) .artistLink,
+:global(html[data-interface-size='large']) .artistLink {
+  min-height: 24px;
+}
+
 @media (hover: hover) and (pointer: fine) {
 
 .artistLink:hover {
@@ -339,6 +344,13 @@
 .volRange {
   width: 96px;
   height: 18px;
+}
+
+:global(html[data-interface-size='normal']) .seek,
+:global(html[data-interface-size='large']) .seek,
+:global(html[data-interface-size='normal']) .volRange,
+:global(html[data-interface-size='large']) .volRange {
+  min-height: 24px;
 }
 
 .seek::-webkit-slider-runnable-track,
@@ -531,7 +543,7 @@
   position: absolute;
   top: 2px;
   right: 4px;
-  font-size: 9px;
+  font-size: var(--text-nano);
   font-weight: var(--fw-bold);
   font-family: var(--font-mono);
 }
@@ -761,7 +773,7 @@
   min-width: 20px;
   padding: 1px 6px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-tiny);
   font-weight: var(--fw-medium);
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -782,6 +794,11 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: color var(--dur-short) var(--ease-out);
+}
+
+:global(html[data-interface-size='normal']) .queueClear,
+:global(html[data-interface-size='large']) .queueClear {
+  min-height: 24px;
 }
 @media (hover: hover) and (pointer: fine) {
 .queueClear:hover {
@@ -823,7 +840,7 @@
   gap: var(--space-xs);
   min-height: 22px;
   padding: 0 var(--space-xs);
-  font-size: 10px;
+  font-size: var(--text-micro);
   font-weight: var(--fw-semibold);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1202,6 +1219,41 @@
 
   .controlsPanel {
     gap: var(--space-md);
+  }
+}
+
+/* At large interface size an 8–10 inch tablet does not have enough effective
+   width for a permanent queue beside the stage. Reuse the proven single-stage
+   mobile interaction until desktop space is genuinely available. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  :global(html[data-interface-size='large']) .main {
+    display: contents;
+  }
+
+  :global(html[data-interface-size='large']) .body {
+    max-width: 620px;
+    margin: 0 auto;
+    padding: var(--space-sm) var(--gutter) calc(var(--space-md) + env(safe-area-inset-bottom, 0));
+  }
+
+  :global(html[data-interface-size='large']) .visualSlot {
+    width: min(100%, 400px, 42dvh);
+  }
+
+  :global(html[data-interface-size='large']) .desktopQueue {
+    display: none;
+  }
+
+  :global(html[data-interface-size='large']) .mobileQueueToggle {
+    display: inline-flex;
+  }
+
+  :global(html[data-interface-size='large']) .visualSlot[data-queue-open] .art {
+    display: none;
+  }
+
+  :global(html[data-interface-size='large']) .visualSlot[data-queue-open] .mobileQueue {
+    display: flex;
   }
 }
 

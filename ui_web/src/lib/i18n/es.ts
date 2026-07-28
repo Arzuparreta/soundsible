@@ -260,6 +260,19 @@ export const es: Dict = {
       emptyFailed: 'No se pudo vaciar',
     },
   },
+  accessibility: {
+    title: 'Accesibilidad',
+    open: 'Abrir ajustes de accesibilidad visual',
+    intro: 'Haz que textos, iconos y controles se vean mejor en este dispositivo.',
+    interfaceSize: 'Tamaño de interfaz',
+    size: {
+      compact: 'Compacta',
+      normal: 'Normal',
+      large: 'Grande',
+    },
+    highContrast: 'Contraste reforzado',
+    highContrastNote: 'Distingue mejor textos secundarios, iconos y límites.',
+  },
   downloads: {
     title: 'Descargas',
     fallbackTitle: 'Descarga',

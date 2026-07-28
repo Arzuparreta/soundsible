@@ -37,9 +37,19 @@ Vite serves the UI on `http://localhost:5173/player/` and proxies `/api` and `/s
 ```bash
 npm test
 npm run build
+npx playwright install chromium webkit  # first browser-test run
+npm run test:ui-scale
 ```
 
 `npm test` runs the TypeScript check and Vitest unit tests. `npm run build` typechecks and writes the production bundle to `dist/`.
+`npm run test:ui-scale` validates Compact, Normal and Large across Chromium and
+WebKit mobile/desktop projects, including overflow, target geometry, pre-login
+accessibility, key routes, edge viewports and reviewed screenshots. Only update
+the baselines after visually reviewing the rendered result:
+
+```bash
+npm run test:ui-scale:update
+```
 
 ## Running through the engine
 

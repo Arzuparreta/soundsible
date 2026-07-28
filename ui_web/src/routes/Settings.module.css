@@ -37,6 +37,11 @@
   box-shadow: var(--shadow-1);
 }
 
+.accessibilityPanel {
+  padding: var(--space-lg);
+  overflow: visible;
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -140,6 +145,8 @@
 
 .chevron {
   flex-shrink: 0;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
   color: var(--ink-tertiary);
 }
 
@@ -228,6 +235,11 @@
 
 .segIcon {
   display: inline-flex;
+}
+
+.segIcon svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
 }
 
 .switch {
@@ -340,5 +352,18 @@
   .seg {
     min-width: 36px;
     height: 30px;
+  }
+
+  :global(html[data-interface-size='normal']) .input,
+  :global(html[data-interface-size='normal']) .select,
+  :global(html[data-interface-size='large']) .input,
+  :global(html[data-interface-size='large']) .select {
+    height: var(--control-h);
+  }
+
+  :global(html[data-interface-size='normal']) .seg,
+  :global(html[data-interface-size='large']) .seg {
+    min-width: var(--segment-h);
+    height: var(--segment-h);
   }
 }

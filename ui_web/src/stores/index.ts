@@ -40,6 +40,13 @@ import { shuffled } from '../lib/shuffle';
 import type { Track, CatalogItem, SearchResult, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
 import type { DownloadQueueItem, DownloadEvent, CompletedDownload } from '../types/download';
+import {
+  applyVisualPreferences,
+  loadVisualPreferences,
+  persistHighContrast,
+  persistInterfaceSize,
+  type InterfaceSize,
+} from '../lib/visualPreferences';
 
 /** User preference: explicit dark/light, or follow the OS via prefers-color-scheme. */
 export type Theme = 'dark' | 'light' | 'system';
@@ -97,6 +104,8 @@ export interface AppState {
   online: boolean;
   device: DeviceRegistration;
   theme: Theme;
+  interfaceSize: InterfaceSize;
+  highContrast: boolean;
   haptics: boolean;
   loading: boolean;
   /** The last library sync did not complete. What is on screen is whatever we
@@ -156,10 +165,14 @@ function loadTheme(): Theme {
   return 'system';
 }
 
+const initialVisualPreferences = loadVisualPreferences();
+
 const [state, setState] = createStore<AppState>({
   online: false,
   device: loadDevice(),
   theme: loadTheme(),
+  interfaceSize: initialVisualPreferences.interfaceSize,
+  highContrast: initialVisualPreferences.highContrast,
   haptics: localStorage.getItem('haptics') !== 'off',
   loading: false,
   libraryError: false,
@@ -1696,6 +1709,18 @@ export const actions = {
     applyTheme(theme, true);
   },
 
+  setInterfaceSize(interfaceSize: InterfaceSize): void {
+    setState('interfaceSize', interfaceSize);
+    persistInterfaceSize(interfaceSize);
+    applyVisualPreferences({ interfaceSize, highContrast: state.highContrast });
+  },
+
+  setHighContrast(highContrast: boolean): void {
+    setState('highContrast', highContrast);
+    persistHighContrast(highContrast);
+    applyVisualPreferences({ interfaceSize: state.interfaceSize, highContrast });
+  },
+
   setHaptics(on: boolean): void {
     setState('haptics', on);
     localStorage.setItem('haptics', on ? 'on' : 'off');
@@ -1969,6 +1994,10 @@ const listeningLearning = new ListeningLearning((event, payload) => {
 export function initStore(): void {
   if (socket) return;
 
+  applyVisualPreferences({
+    interfaceSize: state.interfaceSize,
+    highContrast: state.highContrast,
+  });
   applyTheme(state.theme);
   try {
     void api

@@ -11,6 +11,7 @@ vi.mock('./MetadataEditor', () => ({ openMetadataEditor: vi.fn() }));
 vi.mock('./DeviceSheet', () => ({ openPlayOnDevice: vi.fn() }));
 vi.mock('../stores', () => ({
   actions: { playFrom: vi.fn() },
+  state: { interfaceSize: 'normal' },
   isPlayingTrack: () => false,
 }));
 

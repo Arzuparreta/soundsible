@@ -114,7 +114,7 @@
   border: 1px solid var(--hairline);
   border-radius: var(--radius-full);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-caption);
   font-weight: var(--fw-semibold);
   cursor: pointer;
   white-space: nowrap;

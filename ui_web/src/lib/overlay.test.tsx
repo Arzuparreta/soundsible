@@ -42,4 +42,19 @@ describe('overlay manager (anti-leak)', () => {
     close(); // don't leak into the next test
     await waitFor(() => expect(screen.queryByText('Sticky')).toBeNull());
   });
+
+  it('returns focus to the control that opened a dismissed overlay', async () => {
+    const trigger = document.createElement('button');
+    document.body.append(trigger);
+    trigger.focus();
+    render(() => <OverlayOutlet />);
+    openOverlay(() => <button type="button">Inside</button>, { ariaLabel: 'Focus check' });
+
+    expect(await screen.findByRole('dialog', { name: 'Focus check' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Inside' })).toHaveFocus());
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(trigger).toHaveFocus());
+    trigger.remove();
+  });
 });

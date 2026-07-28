@@ -17,8 +17,8 @@
 }
 
 .headerAction svg {
-  width: 20px;
-  height: 20px;
+  width: var(--icon-md);
+  height: var(--icon-md);
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -44,7 +44,7 @@
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  font-size: 10px;
+  font-size: var(--text-micro);
   font-weight: var(--fw-bold);
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -81,8 +81,8 @@
 }
 
 .localSearch > svg {
-  width: 20px;
-  height: 20px;
+  width: var(--icon-md);
+  height: var(--icon-md);
   flex: none;
   fill: none;
   stroke: currentColor;
@@ -122,8 +122,8 @@
 }
 
 .clearSearch svg {
-  width: 18px;
-  height: 18px;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -176,7 +176,7 @@
   position: relative;
   min-height: var(--segment-h);
   padding: 0 var(--space-md);
-  font-size: 12px;
+  font-size: var(--text-caption);
   font-weight: var(--fw-semibold);
   color: var(--ink-secondary);
   background: transparent;
@@ -202,7 +202,7 @@
   min-height: 40px;
   padding: 0 var(--space-sm);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-caption);
   font-weight: var(--fw-medium);
   color: var(--ink-secondary);
   background: transparent;
@@ -212,13 +212,39 @@
 }
 
 .sortButton svg {
-  width: 18px;
-  height: 18px;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
   flex: none;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
   stroke-linecap: round;
+}
+
+:global(html[data-interface-size='normal']) .headerAction {
+  width: 48px;
+  height: 48px;
+}
+
+:global(html[data-interface-size='large']) .headerAction,
+:global(html[data-interface-size='large']) .localSearch {
+  width: auto;
+  min-width: 56px;
+  height: 56px;
+}
+
+:global(html[data-interface-size='large']) .headerAction {
+  width: 56px;
+}
+
+:global(html[data-interface-size='normal']) .clearSearch {
+  width: 44px;
+  height: 44px;
+}
+
+:global(html[data-interface-size='large']) .clearSearch {
+  width: 48px;
+  height: 48px;
 }
 
 @media (hover: hover) and (pointer: fine) {

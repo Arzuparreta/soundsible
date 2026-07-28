@@ -256,6 +256,19 @@ export const zh: Dict = {
       emptyFailed: '清空失败',
     },
   },
+  accessibility: {
+    title: '无障碍',
+    open: '打开视觉无障碍设置',
+    intro: '让此设备上的文字、图标和控件更易看清。',
+    interfaceSize: '界面大小',
+    size: {
+      compact: '紧凑',
+      normal: '标准',
+      large: '大号',
+    },
+    highContrast: '增强对比度',
+    highContrastNote: '让次要文字、图标和边界更加清晰。',
+  },
   downloads: {
     title: '下载',
     fallbackTitle: '下载',

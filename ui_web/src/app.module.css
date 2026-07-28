@@ -87,3 +87,17 @@
     display: none;
   }
 }
+
+/* Large text needs more real width before the permanent rail becomes useful.
+   Keep the mobile composition through small desktop/Tauri windows instead of
+   squeezing labels and content into two undersized columns. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  :global(html[data-interface-size='large']) .app {
+    display: flex;
+    flex-direction: column;
+  }
+
+  :global(html[data-interface-size='large']) .tabbar {
+    display: block;
+  }
+}

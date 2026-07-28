@@ -51,6 +51,16 @@
   --text-label: 13px;
   --text-caption: 12px;
   --text-mono: 12.5px;
+  --text-nano: 9px;
+  --text-meter: 10.5px;
+  --text-micro: 10px;
+  --text-tiny: 11px;
+
+  /* Semantic icon sizes. Component-specific artwork may opt out, but interface
+     glyphs use these so text and controls never grow around a tiny icon. */
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
 
   --lh-tight: 1.15;
   --lh-snug: 1.3;
@@ -129,6 +139,78 @@
   --list-gap: 2px; /* gap between rows */
 }
 
+/* Normal is the product default. Compact is the exact pre-accessibility UI
+   above; these recipes deliberately scale categories rather than applying CSS
+   zoom, so layout can reflow instead of being magnified out of its viewport. */
+:root[data-interface-size='normal'] {
+  --text-display: 37px;
+  --text-h1: 28px;
+  --text-h2: 23px;
+  --text-h3: 20px;
+  --text-title: 18px;
+  --text-body: 17px;
+  --text-label: 15px;
+  --text-caption: 14px;
+  --text-mono: 14px;
+  --text-nano: 11px;
+  --text-meter: 12px;
+  --text-micro: 12px;
+  --text-tiny: 13px;
+
+  --icon-sm: 18px;
+  --icon-md: 22px;
+  --icon-lg: 27px;
+
+  --space-sm: 9px;
+  --space-md: 13px;
+  --space-lg: 18px;
+  --space-xl: 26px;
+  --space-2xl: 36px;
+  --space-3xl: 52px;
+
+  --row-h: 64px;
+  --control-h: 48px;
+  --pill-h: 40px;
+  --segment-h: 42px;
+  --cover-sm: 50px;
+  --gutter: 18px;
+}
+
+:root[data-interface-size='large'] {
+  --text-display: 42px;
+  --text-h1: 32px;
+  --text-h2: 27px;
+  --text-h3: 24px;
+  --text-title: 21px;
+  --text-body: 20px;
+  --text-label: 17px;
+  --text-caption: 16px;
+  --text-mono: 16px;
+  --text-nano: 13px;
+  --text-meter: 14px;
+  --text-micro: 14px;
+  --text-tiny: 15px;
+
+  --icon-sm: 20px;
+  --icon-md: 25px;
+  --icon-lg: 30px;
+
+  --space-sm: 10px;
+  --space-md: 14px;
+  --space-lg: 20px;
+  --space-xl: 28px;
+  --space-2xl: 38px;
+  --space-3xl: 56px;
+
+  --row-h: 72px;
+  --control-h: 56px;
+  --pill-h: 46px;
+  --segment-h: 48px;
+  --cover-sm: 60px;
+  --gutter: 20px;
+  --list-gap: 3px;
+}
+
 /* Light theme: token overrides only (every surface reads these vars). */
 :root[data-theme='light'] {
   color-scheme: light;
@@ -162,6 +244,38 @@
   --shadow-accent: 0 8px 22px rgba(249, 122, 18, 0.16);
 }
 
+/* Explicit low-vision palette. The regular themes remain visually untouched;
+   this mode spends subtlety on stronger text, control and focus separation. */
+:root[data-high-contrast='true'] {
+  --ink-primary: #ffffff;
+  --ink-secondary: #d2d2da;
+  --ink-tertiary: #b2b2bd;
+  --hairline: #5b5b66;
+  --hairline-strong: #858590;
+  --hairline-soft: rgba(255, 255, 255, 0.22);
+  --accent: #ff952f;
+  --accent-hover: #ffac61;
+  --accent-press: #e97616;
+  --accent-soft: rgba(255, 149, 47, 0.22);
+  --accent-faint: rgba(255, 149, 47, 0.13);
+  --ink-on-accent: #160b01;
+}
+
+:root[data-theme='light'][data-high-contrast='true'] {
+  --ink-primary: #050507;
+  --ink-secondary: #303038;
+  --ink-tertiary: #4b4b55;
+  --hairline: #9696a1;
+  --hairline-strong: #656570;
+  --hairline-soft: rgba(0, 0, 0, 0.2);
+  --accent: #a83e00;
+  --accent-hover: #8d3300;
+  --accent-press: #702900;
+  --accent-soft: rgba(168, 62, 0, 0.16);
+  --accent-faint: rgba(168, 62, 0, 0.09);
+  --ink-on-accent: #ffffff;
+}
+
 /* Theme cross-fade. `data-theme-transition` is set on <html> for the duration of a
    theme flip — manual or driven by the OS switching light/dark — so every surface
    eases between the two token sets instead of snapping. Uses --dur-short, which
@@ -190,6 +304,49 @@
     --gutter: 24px;
     --list-gap: 1px;
     --text-body: 14px;
+  }
+
+  :root[data-interface-size='normal'] {
+    --text-body: 16px;
+    --text-label: 14px;
+    --text-caption: 13px;
+    --text-mono: 13px;
+    --row-h: 52px;
+    --control-h: 44px;
+    --pill-h: 38px;
+    --segment-h: 38px;
+    --cover-sm: 44px;
+    --gutter: 26px;
+  }
+
+  :root[data-interface-size='large'] {
+    --text-body: 18px;
+    --text-label: 16px;
+    --text-caption: 15px;
+    --text-mono: 15px;
+    --row-h: 60px;
+    --control-h: 48px;
+    --pill-h: 42px;
+    --segment-h: 44px;
+    --cover-sm: 52px;
+    --gutter: 28px;
+  }
+}
+
+@media (forced-colors: active) {
+  :root {
+    --bg-base: Canvas;
+    --bg-raised: Canvas;
+    --bg-elevated: Canvas;
+    --bg-inset: Canvas;
+    --bg-hover: Highlight;
+    --ink-primary: CanvasText;
+    --ink-secondary: CanvasText;
+    --ink-tertiary: CanvasText;
+    --hairline: CanvasText;
+    --hairline-strong: CanvasText;
+    --accent: Highlight;
+    --ink-on-accent: HighlightText;
   }
 }
 

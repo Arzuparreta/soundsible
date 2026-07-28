@@ -1,7 +1,7 @@
 import { createEffect, createSignal, For, Show, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { createVirtualizer } from '@tanstack/solid-virtual';
-import { actions, isPlayingTrack } from '../stores';
+import { actions, isPlayingTrack, state } from '../stores';
 import SongRow from './SongRow';
 import { openTrackMenu, type TrackMenuContext } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
@@ -21,7 +21,7 @@ import { EmptyState } from './EmptyState';
 function readRowHeight(): number {
   if (typeof document === 'undefined') return 56;
   const raw = getComputedStyle(document.documentElement).getPropertyValue('--row-h');
-  const parsed = parseInt(raw, 10);
+  const parsed = parseFloat(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 56;
 }
 
@@ -67,11 +67,23 @@ export default function TrackList(props: {
   // list visibly gapped (or overlapping, the other way round).
   const [rowH, setRowH] = createSignal(readRowHeight());
   onMount(() => {
-    setRowH(readRowHeight());
+    const syncRowHeight = () => setRowH(readRowHeight());
+    syncRowHeight();
     const mq = window.matchMedia('(min-width: 1024px)');
-    const onChange = () => setRowH(readRowHeight());
-    mq.addEventListener('change', onChange);
-    onCleanup(() => mq.removeEventListener('change', onChange));
+    mq.addEventListener('change', syncRowHeight);
+    window.addEventListener('orientationchange', syncRowHeight);
+    onCleanup(() => {
+      mq.removeEventListener('change', syncRowHeight);
+      window.removeEventListener('orientationchange', syncRowHeight);
+    });
+  });
+
+  // Changing accessibility size updates CSS custom properties without crossing
+  // a media-query boundary. Read the reactive preference, then re-read the
+  // computed token after the root data attribute has been applied.
+  createEffect(() => {
+    void state.interfaceSize;
+    queueMicrotask(() => setRowH(readRowHeight()));
   });
 
   const virtualizer = createVirtualizer({

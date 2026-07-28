@@ -41,6 +41,8 @@ htmlcov/
 .tox/
 .dmypy.json
 .ipynb_checkpoints/
+ui_web/playwright-report/
+ui_web/test-results/
 
 # Build artifacts
 dist/

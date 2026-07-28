@@ -20,9 +20,11 @@ import Invite from './routes/Invite';
 import Users from './routes/Users';
 import { Placeholder } from './routes/Placeholder';
 import DesignPreview from './pages/DesignPreview';
-import { initStore } from './stores';
+import { initStore, state } from './stores';
+import { applyVisualPreferences } from './lib/visualPreferences';
 import { initLocale, t } from './lib/i18n';
 import { registerServiceWorker } from './lib/pwa';
+import { OverlayOutlet } from './lib/overlay';
 import { installSessionGuard, ready, refreshSession, requiresLogin, user } from './lib/session';
 // Self-host the design-system typefaces (DESIGN.md) so they render for every
 // user, not only those who happen to have them installed locally. Subsets load
@@ -36,6 +38,13 @@ import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 import './styles/tokens.css';
 import './styles/app.css';
+
+// Visual accessibility preferences must be present before auth resolves so
+// Login/Invite and the first authenticated frame use the same geometry.
+applyVisualPreferences({
+  interfaceSize: state.interfaceSize,
+  highContrast: state.highContrast,
+});
 
 function installViewportHeightSync() {
   const root = document.documentElement;
@@ -120,11 +129,14 @@ function App() {
   });
 
   return (
-    <Show when={ready()} fallback={null}>
-      <Show when={authenticated()} fallback={<InviteOrLogin />}>
-        <Player />
+    <>
+      <Show when={ready()} fallback={null}>
+        <Show when={authenticated()} fallback={<InviteOrLogin />}>
+          <Player />
+        </Show>
       </Show>
-    </Show>
+      <OverlayOutlet />
+    </>
   );
 }
 

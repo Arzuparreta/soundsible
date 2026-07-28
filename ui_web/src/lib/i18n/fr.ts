@@ -266,6 +266,19 @@ export const fr: Dict = {
       emptyFailed: 'Impossible de vider',
     },
   },
+  accessibility: {
+    title: 'Accessibilité',
+    open: 'Ouvrir les réglages d’accessibilité visuelle',
+    intro: 'Agrandissez le texte, les icônes et les commandes sur cet appareil.',
+    interfaceSize: 'Taille de l’interface',
+    size: {
+      compact: 'Compacte',
+      normal: 'Normale',
+      large: 'Grande',
+    },
+    highContrast: 'Contraste renforcé',
+    highContrastNote: 'Distingue mieux les textes secondaires, les icônes et les limites.',
+  },
   downloads: {
     title: 'Téléchargements',
     fallbackTitle: 'Téléchargement',

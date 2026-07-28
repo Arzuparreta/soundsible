@@ -93,8 +93,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--control-h);
-  height: var(--control-h);
+  width: 44px;
+  height: 44px;
   padding: 0;
   flex-shrink: 0;
   border: 1px solid var(--accent-soft);
@@ -327,7 +327,7 @@
     overflow: hidden;
     color: var(--ink-tertiary);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: var(--text-meter);
     line-height: 1;
     text-align: right;
     opacity: 0;
@@ -393,4 +393,32 @@
   .soundBlade:hover {
     width: 138px;
   }
+}
+
+:global(html[data-interface-size='normal']) .omni {
+  height: 68px;
+}
+
+:global(html[data-interface-size='normal']) .cover {
+  width: 50px;
+  height: 50px;
+}
+
+:global(html[data-interface-size='normal']) .ctrl {
+  width: 48px;
+  height: 48px;
+}
+
+:global(html[data-interface-size='large']) .omni {
+  height: 76px;
+}
+
+:global(html[data-interface-size='large']) .cover {
+  width: 58px;
+  height: 58px;
+}
+
+:global(html[data-interface-size='large']) .ctrl {
+  width: 56px;
+  height: 56px;
 }

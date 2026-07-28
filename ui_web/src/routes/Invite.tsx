@@ -3,6 +3,7 @@ import Button from '../components/Button';
 import PasswordFields from '../components/PasswordFields';
 import { t } from '../lib/i18n';
 import { invites } from '../lib/session';
+import { AccessibilityButton } from '../components/DisplayPreferences';
 import styles from './Login.module.css';
 
 /**
@@ -41,6 +42,7 @@ export default function Invite(props: { token: string }) {
   return (
     <div class={styles.screen}>
       <div class={styles.card}>
+        <AccessibilityButton class={styles.accessibilityButton} />
         <div class={styles.brand}>
           <img class={styles.mark} src="/player/branding/logo-app.png" alt="" />
           <Switch>

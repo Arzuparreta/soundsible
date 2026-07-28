@@ -7,13 +7,17 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run typecheck && vitest run",
     "test:unit": "vitest run",
+    "test:ui-scale": "playwright test",
+    "test:ui-scale:update": "playwright test --update-snapshots",
     "test:watch": "vitest",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@fontsource/plus-jakarta-sans": "^5.2.8",
+    "@playwright/test": "^1.62.0",
     "@solidjs/testing-library": "^0.8.10",
     "@testing-library/jest-dom": "^6.9.1",
     "@types/node": "^25.9.3",

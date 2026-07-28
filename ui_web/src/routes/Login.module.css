@@ -9,6 +9,7 @@
 }
 
 .card {
+  position: relative;
   width: 100%;
   max-width: 380px;
   display: flex;
@@ -19,6 +20,33 @@
   border: 1px solid var(--hairline-soft);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-3);
+}
+
+.accessibilityButton {
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  z-index: var(--z-base);
+  display: grid;
+  place-items: center;
+  min-width: var(--control-h);
+  height: var(--control-h);
+  padding: 0 var(--space-sm);
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: var(--fw-bold);
+  background: var(--bg-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .accessibilityButton:hover {
+    color: var(--ink-primary);
+    border-color: var(--hairline-strong);
+  }
 }
 
 .brand {
@@ -157,6 +185,12 @@
     border: none;
     border-radius: 0;
     box-shadow: none;
+  }
+
+  .accessibilityButton {
+    position: fixed;
+    top: max(var(--space-md), env(safe-area-inset-top, 0));
+    right: var(--gutter);
   }
 
   .mark {

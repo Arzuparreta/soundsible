@@ -10,6 +10,7 @@ import { passwordDialog } from '../lib/passwordDialog';
 import { promptDialog } from '../lib/prompt';
 import { DevicesPanel } from '../components/DeviceSheet';
 import { PairedDevicesPanel } from '../components/PairDevice';
+import { DisplayPreferences } from '../components/DisplayPreferences';
 import { t, locale, setLocale, LOCALES, type Locale } from '../lib/i18n';
 import { changePassword, isAdmin, logout, updateProfile, user } from '../lib/session';
 import { associationUrl } from '../lib/trackShare';
@@ -32,7 +33,7 @@ function Group(props: { label: string; children: JSX.Element }) {
   );
 }
 
-function Switch(props: { checked: boolean; onChange: () => void; label: string }) {
+function SettingSwitch(props: { checked: boolean; onChange: () => void; label: string }) {
   return (
     <div class={styles.row}>
       <span class={styles.rowLabel}>{props.label}</span>
@@ -336,6 +337,12 @@ export default function Settings() {
       <ViewHeader title={t('settings.title')} />
 
       <div class={styles.scroll} data-primary-scroll>
+        <Group label={t('accessibility.title')}>
+          <div class={`${styles.panel} ${styles.accessibilityPanel}`}>
+            <DisplayPreferences />
+          </div>
+        </Group>
+
         <Show when={user()}>
           {(me) => (
             <Group label={t('account.title')}>
@@ -420,7 +427,7 @@ export default function Settings() {
                 </For>
               </select>
             </div>
-            <Switch
+            <SettingSwitch
               label={t('settings.haptics')}
               checked={state.haptics}
               onChange={() => actions.setHaptics(!state.haptics)}
@@ -453,8 +460,8 @@ export default function Settings() {
 
         <Group label={t('settings.discovery')}>
           <div class={styles.panel}>
-            <Switch label={t('settings.autoplay')} checked={autoplay()} onChange={toggleAutoplay} />
-            <Switch label={t('settings.learnActivity')} checked={learning()} onChange={toggleLearning} />
+            <SettingSwitch label={t('settings.autoplay')} checked={autoplay()} onChange={toggleAutoplay} />
+            <SettingSwitch label={t('settings.learnActivity')} checked={learning()} onChange={toggleLearning} />
             <ActionRow label={t('settings.resetLearning')} onClick={resetLearning} />
           </div>
         </Group>
@@ -482,7 +489,7 @@ export default function Settings() {
                   </For>
                 </div>
               </div>
-              <Switch label={t('settings.autoUpdateYtdlp')} checked={autoUpdate()} onChange={toggleAuto} />
+              <SettingSwitch label={t('settings.autoUpdateYtdlp')} checked={autoUpdate()} onChange={toggleAuto} />
             </Show>
             <Show when={isAdmin()}>
               <ActionRow label={t('settings.optimize')} onClick={optimize} />

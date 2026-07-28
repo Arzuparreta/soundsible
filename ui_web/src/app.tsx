@@ -1,5 +1,4 @@
 import type { RouteSectionProps } from '@solidjs/router';
-import { OverlayOutlet } from './lib/overlay';
 import { ToastOutlet } from './lib/toast';
 import { TabBar } from './components/TabBar';
 import { Sidebar } from './components/Sidebar';
@@ -30,7 +29,6 @@ export default function Shell(props: RouteSectionProps) {
       <AutoMode />
       <ResumeBanner />
       <ContextMenuOutlet />
-      <OverlayOutlet />
       <ToastOutlet />
     </div>
   );

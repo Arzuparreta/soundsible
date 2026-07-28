@@ -93,6 +93,11 @@
   transition: color var(--dur-micro) var(--ease-out);
 }
 
+:global(html[data-interface-size='normal']) .artistLink,
+:global(html[data-interface-size='large']) .artistLink {
+  min-height: 24px;
+}
+
 @media (hover: hover) and (pointer: fine) {
 
 .artistLink:hover {
@@ -130,6 +135,16 @@
     width: 36px;
     height: 36px;
   }
+
+  :global(html[data-interface-size='normal']) .iconBtn {
+    width: 44px;
+    height: 44px;
+  }
+
+  :global(html[data-interface-size='large']) .iconBtn {
+    width: 48px;
+    height: 48px;
+  }
 }
 
 /* Reveal-on-hover is a pointer-only nicety; touch devices always show the heart
@@ -160,7 +175,7 @@
 .badge {
   flex-shrink: 0;
   padding: 2px 6px;
-  font-size: 10px;
+  font-size: var(--text-micro);
   font-weight: var(--fw-semibold);
   line-height: 1.2;
   color: var(--ink-tertiary);

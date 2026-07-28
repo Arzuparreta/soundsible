@@ -11,7 +11,7 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
-  min-height: 58px;
+  min-height: calc(var(--control-h) + 14px);
   padding: 7px 2px 8px;
   color: var(--ink-tertiary);
   text-decoration: none;
@@ -47,6 +47,32 @@
 
 @media (max-width: 360px) {
   .tab {
-    font-size: 10px;
+    font-size: var(--text-micro);
   }
+}
+
+:global(html[data-interface-size='normal']) .label,
+:global(html[data-interface-size='large']) .label {
+  width: 100%;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  line-height: var(--lh-tight);
+  text-align: center;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+:global(html[data-interface-size='large']) .tab {
+  min-height: calc(var(--control-h) + 26px);
+  font-size: var(--text-tiny);
+}
+
+:global(html[data-interface-size='normal']) .tab svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+:global(html[data-interface-size='large']) .tab svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
 }

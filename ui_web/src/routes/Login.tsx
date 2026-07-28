@@ -2,6 +2,7 @@ import { Show, createSignal } from 'solid-js';
 import Button from '../components/Button';
 import { t } from '../lib/i18n';
 import { login } from '../lib/session';
+import { AccessibilityButton } from '../components/DisplayPreferences';
 import styles from './Login.module.css';
 
 function EyeIcon(shown: boolean) {
@@ -54,6 +55,7 @@ export default function Login() {
   return (
     <div class={styles.screen}>
       <div class={styles.card}>
+        <AccessibilityButton class={styles.accessibilityButton} />
         <div class={styles.brand}>
           <img class={styles.mark} src="/player/branding/logo-app.png" alt="" />
           <h1 class={styles.title}>{t('login.title')}</h1>

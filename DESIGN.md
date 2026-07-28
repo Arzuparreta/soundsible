@@ -221,3 +221,36 @@ reactive). A live preview of tokens + primitives renders at `/player/#/preview`
 | 2026-06-16 | Dark · dense · pro, adaptive density | User direction; efficient content-forward feel that scales mobile↔desktop |
 | 2026-06-16 | Keep `#f97a12` accent | Continuity with shell + existing player |
 | 2026-06-16 | Explicit z-index + density token scales | Eliminate the legacy hard-coded stacking/spacing chaos at the source |
+
+### Visual accessibility profiles
+
+The player offers three deliberate interface recipes. This is semantic scaling,
+not browser zoom: type, icons, controls, rows, artwork and spacing move together,
+while responsive layouts are allowed to reflow at their proven breakpoints.
+
+| Profile | Product role |
+| --- | --- |
+| Compact | Exact pre-accessibility player density for users who prefer the original UI |
+| Normal | Default on every device, including devices without a stored preference |
+| Large | Low-vision recipe with larger type, icons and targets plus earlier tablet reflow |
+
+The preference is device-local (`localStorage`), applies before authentication,
+and is available from both Settings and the `Aa` control on login/invitation
+screens. Enhanced contrast is a separate manual, device-local option and remains
+off by default. OS forced-colour mode is also respected.
+
+`ui_web/src/styles/tokens.css` is the only source of sizing recipes. Components
+must consume semantic text/icon/density tokens; do not use `zoom`, root transforms
+or global percentage font scaling. Compact values are a compatibility contract:
+new profile work must not silently alter them.
+
+Required regression coverage is geometry plus reviewed screenshots on Chromium
+and WebKit, mobile and desktop. The test matrix also exercises 320px phones,
+tablets, short 1024px windows, primary routes, Now Playing, pre-auth access,
+preference migration and WCAG AA checks for the accessibility dialog.
+
+| Date | Decision | Rationale |
+|------|----------|-----------|
+| 2026-07-28 | Normal is the default; Compact preserves the previous player exactly | Improve readability for ordinary and low-vision users without removing the established dense option |
+| 2026-07-28 | Semantic three-recipe scaling instead of CSS zoom | Allows layout reflow and prevents magnified overflow |
+| 2026-07-28 | Enhanced contrast is independent and opt-in | Size and contrast solve different needs; users control each explicitly |

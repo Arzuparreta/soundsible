@@ -257,6 +257,19 @@ export const en = {
       emptyFailed: 'Could not empty',
     },
   },
+  accessibility: {
+    title: 'Accessibility',
+    open: 'Open display accessibility settings',
+    intro: 'Make text, icons and controls easier to see on this device.',
+    interfaceSize: 'Interface size',
+    size: {
+      compact: 'Compact',
+      normal: 'Normal',
+      large: 'Large',
+    },
+    highContrast: 'Enhanced contrast',
+    highContrastNote: 'Makes secondary text, icons and boundaries more distinct.',
+  },
   downloads: {
     title: 'Downloads',
     fallbackTitle: 'Download',
