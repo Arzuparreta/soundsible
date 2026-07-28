@@ -131,6 +131,42 @@ export default function Home() {
       : undefined;
   const searchHidden = () => isMobile() && searchProgress() === 0;
 
+  /** The library filter. Desktop puts it on the header row, where there is idle
+   * space next to the title; mobile keeps it under the header, inside the strip
+   * the swipe gesture reveals. */
+  const searchField = (inHeader: boolean) => (
+    <div class={styles.localSearch} classList={{ [styles.headerSearch]: inHeader }}>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-4-4" />
+      </svg>
+      <input
+        value={query()}
+        onInput={(event) => setQuery(event.currentTarget.value)}
+        onFocus={() => {
+          setSearchFocused(true);
+          setSearchProgress(1);
+        }}
+        onBlur={() => setSearchFocused(false)}
+        placeholder={t('home.searchLibrary')}
+        aria-label={t('home.searchLibrary')}
+      />
+      <Show when={query()}>
+        <button
+          class={styles.clearSearch}
+          type="button"
+          aria-label={t('home.clearSearch')}
+          onClick={() => setQuery('')}
+          data-pressable
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m7 7 10 10M17 7 7 17" />
+          </svg>
+        </button>
+      </Show>
+    </div>
+  );
+
   const sortLibrary = () =>
     openActionMenu({
       title: t('home.sortTitle'),
@@ -151,6 +187,7 @@ export default function Home() {
         meta={state.loading && songs().length === 0 ? t('common.loading') : trackCount(songs().length)}
         actions={
           <>
+            <Show when={!isMobile()}>{searchField(true)}</Show>
             <A class={styles.headerAction} href="/favourites" aria-label={t('home.favourites')} data-pressable>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z" />
@@ -168,44 +205,17 @@ export default function Home() {
         }
       />
 
-      <div
-        class={styles.searchReveal}
-        classList={{ [styles.searchDragging]: searchDragging() }}
-        style={searchRevealStyle()}
-        aria-hidden={searchHidden() ? 'true' : undefined}
-        inert={searchHidden()}
-      >
-        <div class={styles.localSearch}>
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-4-4" />
-          </svg>
-          <input
-            value={query()}
-            onInput={(event) => setQuery(event.currentTarget.value)}
-            onFocus={() => {
-              setSearchFocused(true);
-              setSearchProgress(1);
-            }}
-            onBlur={() => setSearchFocused(false)}
-            placeholder={t('home.searchLibrary')}
-            aria-label={t('home.searchLibrary')}
-          />
-          <Show when={query()}>
-            <button
-              class={styles.clearSearch}
-              type="button"
-              aria-label={t('home.clearSearch')}
-              onClick={() => setQuery('')}
-              data-pressable
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m7 7 10 10M17 7 7 17" />
-              </svg>
-            </button>
-          </Show>
+      <Show when={isMobile()}>
+        <div
+          class={styles.searchReveal}
+          classList={{ [styles.searchDragging]: searchDragging() }}
+          style={searchRevealStyle()}
+          aria-hidden={searchHidden() ? 'true' : undefined}
+          inert={searchHidden()}
+        >
+          {searchField(false)}
         </div>
-      </div>
+      </Show>
 
       <Show when={!searching()}>
         <div class={styles.toolbar}>

@@ -272,17 +272,17 @@
   border-radius: var(--radius-sm);
 }
 
+/* Header-mounted variant (desktop): sits on the title row, so it drops the
+   stand-alone strip's margins and shrinks to fit beside the heading. */
+.headerSearch {
+  width: clamp(220px, 26vw, 340px);
+  height: 40px;
+  margin: 0;
+}
+
 @media (min-width: 1024px) {
   /* Desktop already exposes both destinations in the permanent sidebar. */
   .headerAction {
     display: none;
-  }
-
-  .searchReveal {
-    height: auto !important;
-  }
-
-  .localSearch {
-    max-width: 520px;
   }
 }
