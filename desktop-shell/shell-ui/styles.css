@@ -25,6 +25,7 @@ body {
   color: var(--ink-primary);
   font-family: var(--font-ui);
   line-height: 1.5;
+  overflow-x: hidden;
 }
 
 .hidden { display: none !important; }
@@ -42,6 +43,14 @@ body {
 
 @media (max-width: 768px) {
   .shell-stage { grid-template-columns: 1fr; }
+}
+
+@media (max-height: 620px), (min-resolution: 144dpi) {
+  .shell-stage {
+    align-items: start;
+    min-height: auto;
+    padding-block: 24px;
+  }
 }
 
 .shell-hero .beta {
@@ -90,6 +99,10 @@ body {
 }
 
 .path-inset.filled { color: var(--ink-primary); }
+.path-inset.error {
+  color: var(--status-error);
+  border-color: color-mix(in srgb, var(--status-error) 45%, var(--hairline));
+}
 
 .scan-preview {
   font-family: var(--font-mono);
@@ -249,6 +262,15 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation: none; }
+}
+
+@media (forced-colors: active) {
+  .shell-card,
+  .path-inset,
+  .btn,
+  .log-tail {
+    border: 1px solid CanvasText;
+  }
 }
 
 .pairing-panel {

@@ -17,6 +17,7 @@ import pytest
 
 from shared.api import app
 from shared.api.routes.playback import COVER_CACHE_SEC
+from shared.runtime import configure_runtime, runtime_with_overrides
 
 
 @pytest.fixture
@@ -73,7 +74,15 @@ def test_cover_placeholder_is_cacheable(client, tmp_path):
     assert "max-age=" in response.headers["Cache-Control"]
 
 
-def test_service_worker_is_never_stored(client):
+def test_service_worker_is_never_stored(client, tmp_path, isolated_runtime):
+    # This contract must not depend on a previous UI build having left
+    # ui_web/dist behind. Point the route at the smallest valid built bundle.
+    dist = tmp_path / "ui-dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<!doctype html>", encoding="utf-8")
+    (dist / "sw.js").write_text("// service worker fixture", encoding="utf-8")
+    configure_runtime(runtime_with_overrides(base=isolated_runtime, ui_dist=dist))
+
     response = client.get("/player/sw.js")
 
     assert response.status_code == 200

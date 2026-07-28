@@ -1,17 +1,20 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Soundsible (Beta)",
-  "version": "0.1.0",
+  "productName": "Soundsible",
+  "version": "1.0.0-rc.1",
   "identifier": "org.soundsible.desktop",
   "build": {
-    "frontendDist": "../shell-ui"
+    "beforeDevCommand": "npm run frontend:dev",
+    "beforeBuildCommand": "npm run frontend:build",
+    "devUrl": "http://127.0.0.1:1420",
+    "frontendDist": "../shell-ui-dist"
   },
   "app": {
     "withGlobalTauri": true,
     "windows": [
       {
         "label": "main",
-        "title": "Soundsible (Beta)",
+        "title": "Soundsible",
         "width": 960,
         "height": 640,
         "minWidth": 640,
@@ -34,7 +37,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "externalBin": [
       "binaries/soundsible-engine",
       "binaries/ffmpeg"

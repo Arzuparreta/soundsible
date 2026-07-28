@@ -1,5 +1,8 @@
 name: Desktop Shell CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main, dev]
@@ -45,9 +48,41 @@ jobs:
           PYTHONPATH: .
         run: pytest tests/test_desktop_engine_smoke.py::test_desktop_engine_smoke_python -q
 
+  desktop_shell_ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: desktop-shell/package-lock.json
+      - name: Install shell dependencies
+        working-directory: desktop-shell
+        run: npm ci
+      - name: Validate shell state and bundle
+        working-directory: desktop-shell
+        run: |
+          npm test
+          npm run frontend:build
+      - name: Install Chromium
+        working-directory: desktop-shell
+        run: npx playwright install --with-deps chromium
+      - name: Validate shell layout and accessibility
+        working-directory: desktop-shell
+        run: npm run test:ui
+      - name: Upload shell browser report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-shell-browser-report
+          path: desktop-shell/playwright-report
+          if-no-files-found: warn
+          retention-days: 14
+
   desktop_sidecar_and_tauri:
     runs-on: ubuntu-latest
-    needs: desktop_engine_smoke
+    needs: [desktop_engine_smoke, desktop_shell_ui]
     steps:
       - uses: actions/checkout@v4
 
@@ -99,14 +134,29 @@ jobs:
           npm run build
 
   desktop_sidecar_windows:
-    runs-on: windows-latest
-    needs: desktop_engine_smoke
+    name: desktop_windows_${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    needs: [desktop_engine_smoke, desktop_shell_ui]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            python_arch: x64
+          - arch: arm64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            python_arch: arm64
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+          architecture: ${{ matrix.python_arch }}
           cache: pip
 
       - uses: actions/setup-node@v4
@@ -118,7 +168,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt pywinauto==0.6.9
+
+      - name: Validate shell modules
+        working-directory: desktop-shell
+        run: |
+          npm ci
+          npm test
 
       - name: Build PyInstaller sidecar (Windows)
         shell: bash
@@ -130,13 +186,47 @@ jobs:
         shell: bash
         env:
           PYTHONPATH: .
-          SOUNDSIBLE_ENGINE_BIN: desktop-shell/src-tauri/binaries/soundsible-engine-x86_64-pc-windows-msvc.exe
+          SOUNDSIBLE_ENGINE_BIN: desktop-shell/src-tauri/binaries/soundsible-engine-${{ matrix.target }}.exe
         run: pytest tests/test_desktop_engine_smoke.py::test_desktop_engine_smoke_sidecar -q
+
+      - name: Verify sidecar and FFmpeg architecture
+        shell: pwsh
+        run: |
+          ./desktop-shell/scripts/verify-pe-architecture.ps1 `
+            -Architecture "${{ matrix.arch }}" `
+            "desktop-shell/src-tauri/binaries/soundsible-engine-${{ matrix.target }}.exe" `
+            "desktop-shell/src-tauri/binaries/ffmpeg-${{ matrix.target }}.exe"
 
       - name: Build Tauri desktop shell (Windows)
         working-directory: desktop-shell
         env:
           SOUNDSIBLE_REPO_ROOT: ${{ github.workspace }}
+        run: npm run build
+
+      - name: Verify native shell architecture
+        shell: pwsh
         run: |
-          npm ci
-          npm run build
+          ./desktop-shell/scripts/verify-pe-architecture.ps1 `
+            -Architecture "${{ matrix.arch }}" `
+            "desktop-shell/src-tauri/target/release/soundsible-desktop.exe"
+
+      - name: Install, exercise native UI, and uninstall
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem `
+            "desktop-shell/src-tauri/target/release/bundle/nsis/*.exe" |
+            Select-Object -First 1
+          if (-not $installer) { throw "NSIS installer was not generated" }
+          ./desktop-shell/scripts/windows-installer-smoke.ps1 `
+            -Installer $installer.FullName `
+            -ArtifactDirectory "desktop-shell/windows-smoke-artifacts/${{ matrix.arch }}" `
+            -UiSmoke
+
+      - name: Upload Windows diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soundsible-windows-smoke-${{ matrix.arch }}
+          path: desktop-shell/windows-smoke-artifacts/${{ matrix.arch }}
+          if-no-files-found: warn
+          retention-days: 14

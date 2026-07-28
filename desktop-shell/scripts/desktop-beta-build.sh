@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot consumer beta build: sidecar + FFmpeg + Tauri bundles.
+# One-shot consumer RC build: sidecar + FFmpeg + Tauri bundles.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -27,5 +27,5 @@ npm run build
 
 echo ""
 echo "Done. Installers:"
-find "$ROOT/desktop-shell/src-tauri/target/release/bundle" -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' -o -name '*.msi' -o -name '*.exe' \) 2>/dev/null || true
-echo "Next: run Gate A1 in docs/DESKTOP_BETA.md on a clean VM using the artifact above."
+find "$ROOT/desktop-shell/src-tauri/target/release/bundle" -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' -o -name '*.exe' \) 2>/dev/null || true
+echo "Next: complete the human Windows RC gates in docs/DESKTOP_BETA.md."

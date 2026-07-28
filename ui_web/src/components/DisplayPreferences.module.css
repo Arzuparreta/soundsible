@@ -163,7 +163,10 @@
   color: var(--ink-secondary);
   font: inherit;
   font-size: var(--text-caption);
-  background: transparent;
+  /* Axe/WebKit can resolve transparent button backgrounds against the wrong
+     ancestor. This is visually identical inside the elevated preference card
+     and gives every engine an unambiguous contrast surface. */
+  background: var(--bg-elevated);
   border: 0;
   border-radius: var(--radius-xs);
   cursor: pointer;

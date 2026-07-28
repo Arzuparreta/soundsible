@@ -43,6 +43,8 @@ htmlcov/
 .ipynb_checkpoints/
 ui_web/playwright-report/
 ui_web/test-results/
+desktop-shell/playwright-report/
+desktop-shell/test-results/
 
 # Build artifacts
 dist/
@@ -50,8 +52,10 @@ node_modules/
 build/
 desktop-shell/src-tauri/binaries/soundsible-engine*
 desktop-shell/src-tauri/binaries/ffmpeg*
+desktop-shell/src-tauri/gen/
 desktop-shell/packaging/vendor/ffmpeg
 desktop-shell/build/ffmpeg-cache/
+desktop-shell/shell-ui-dist/
 
 # Note: ui_web/js/vendor/socket.io-client.esm.min.js is committed so /player/ works without npm install on the Station host.
 *.egg

@@ -5,11 +5,14 @@ mod tray;
 
 use engine::{EnginePhase, EngineSupervisor};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 #[cfg(desktop)]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
+
+static WRITE_PROBE_ID: AtomicU64 = AtomicU64::new(0);
 
 pub struct AppState {
     pub engine: EngineSupervisor,
@@ -24,6 +27,8 @@ struct FolderPreview {
     track_count: u64,
     size_bytes: u64,
     scan_ms: u64,
+    inaccessible_entries: u64,
+    writable: bool,
 }
 
 #[tauri::command]
@@ -96,33 +101,48 @@ fn get_selected_folder(state: State<'_, AppState>) -> Option<String> {
         .and_then(|v| v.as_ref().map(|p| p.display().to_string()))
 }
 
-#[tauri::command]
-async fn pick_music_folder() -> Result<Option<String>, String> {
-    let path = tauri::async_runtime::spawn_blocking(move || {
-        rfd::FileDialog::new()
-            .set_title("Choose your music folder")
-            .pick_folder()
-    })
-    .await
-    .map_err(|e| e.to_string())?;
-    Ok(path.map(|p| p.to_string_lossy().to_string()))
-}
-
-#[tauri::command]
-fn preview_music_folder(path: String) -> Result<FolderPreview, String> {
+fn scan_music_folder(path: String) -> Result<FolderPreview, String> {
     let started = std::time::Instant::now();
     let root = PathBuf::from(&path);
     if !root.is_dir() {
-        return Err("Folder does not exist".into());
+        return Err("Folder does not exist or is not a directory.".into());
     }
+
+    let probe = root.join(format!(
+        ".soundsible-write-probe-{}-{}",
+        std::process::id(),
+        WRITE_PROBE_ID.fetch_add(1, Ordering::Relaxed)
+    ));
+    let writable = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+        .map(|_| {
+            let _ = std::fs::remove_file(&probe);
+            true
+        })
+        .unwrap_or(false);
+    if !writable {
+        return Err(
+            "Folder is not writable. Soundsible needs write access for downloads and metadata."
+                .into(),
+        );
+    }
+
     let mut track_count = 0u64;
     let mut size_bytes = 0u64;
-    let extensions = ["mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "aiff", "aif"];
-    for entry in walkdir::WalkDir::new(&root)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    let mut inaccessible_entries = 0u64;
+    let extensions = [
+        "mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "aiff", "aif",
+    ];
+    for entry in walkdir::WalkDir::new(&root).follow_links(false) {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => {
+                inaccessible_entries += 1;
+                continue;
+            }
+        };
         if !entry.file_type().is_file() {
             continue;
         }
@@ -131,9 +151,16 @@ fn preview_music_folder(path: String) -> Result<FolderPreview, String> {
             .extension()
             .and_then(|e| e.to_str())
             .map(|e| e.to_ascii_lowercase());
-        if ext.as_deref().map(|e| extensions.contains(&e)).unwrap_or(false) {
+        if ext
+            .as_deref()
+            .map(|e| extensions.contains(&e))
+            .unwrap_or(false)
+        {
             track_count += 1;
-            size_bytes += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            match entry.metadata() {
+                Ok(metadata) => size_bytes += metadata.len(),
+                Err(_) => inaccessible_entries += 1,
+            }
         }
     }
     Ok(FolderPreview {
@@ -141,7 +168,52 @@ fn preview_music_folder(path: String) -> Result<FolderPreview, String> {
         track_count,
         size_bytes,
         scan_ms: started.elapsed().as_millis() as u64,
+        inaccessible_entries,
+        writable,
     })
+}
+
+#[tauri::command]
+async fn preview_music_folder(path: String) -> Result<FolderPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || scan_music_folder(path))
+        .await
+        .map_err(|error| format!("Folder scan task failed: {error}"))?
+}
+
+#[tauri::command]
+fn log_shell_event(level: String, message: String) -> Result<(), String> {
+    use std::io::Write;
+
+    let log_dir = state::config_dir().join("logs");
+    std::fs::create_dir_all(&log_dir).map_err(|error| error.to_string())?;
+    let path = log_dir.join("desktop-shell.log");
+    if path
+        .metadata()
+        .map(|metadata| metadata.len() > 1_048_576)
+        .unwrap_or(false)
+    {
+        let previous = log_dir.join("desktop-shell.previous.log");
+        let _ = std::fs::remove_file(&previous);
+        std::fs::rename(&path, previous).map_err(|error| error.to_string())?;
+    }
+    let level = match level.to_ascii_lowercase().as_str() {
+        "debug" => "DEBUG",
+        "warning" | "warn" => "WARN",
+        "error" => "ERROR",
+        _ => "INFO",
+    };
+    let clean = message.replace('\r', " ").replace('\n', " ");
+    let clean = clean.chars().take(2000).collect::<String>();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|error| error.to_string())?;
+    writeln!(file, "{timestamp} {level} {clean}").map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -156,7 +228,11 @@ fn start_engine(app: AppHandle, state: State<'_, AppState>) -> Result<(), String
 }
 
 #[tauri::command]
-fn start_engine_with_path(app: AppHandle, path: String, state: State<'_, AppState>) -> Result<(), String> {
+fn start_engine_with_path(
+    app: AppHandle,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     if let Ok(mut slot) = state.selected_folder.lock() {
         *slot = Some(PathBuf::from(&path));
     }
@@ -324,8 +400,8 @@ pub fn run() {
             get_autostart,
             get_engine_status,
             get_selected_folder,
-            pick_music_folder,
             preview_music_folder,
+            log_shell_event,
             start_engine,
             start_engine_with_path,
             restart_engine,
@@ -364,8 +440,11 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 let app_handle = app.handle().clone();
                 window.on_window_event(move |event| {
-                    if matches!(event, WindowEvent::CloseRequested { .. }) {
-                        tray::shutdown(&app_handle);
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.hide();
+                        }
                     }
                 });
             }
@@ -385,7 +464,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{player_url_for_capsule, track_capsule_from_deep_link};
+    use super::{player_url_for_capsule, scan_music_folder, track_capsule_from_deep_link};
 
     #[test]
     fn parses_only_bounded_track_links() {
@@ -410,5 +489,31 @@ mod tests {
             player_url_for_capsule("http://127.0.0.1:5000/player/desktop/", "abc_DEF-123"),
             Some("http://127.0.0.1:5000/player/desktop/#/search?shared=abc_DEF-123".into())
         );
+    }
+
+    #[test]
+    fn scans_unicode_music_folders_without_following_links() {
+        let root = std::env::temp_dir().join(format!("soundsible-música-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("Álbum")).expect("create fixture directory");
+        std::fs::write(root.join("Álbum").join("canción.mp3"), [0_u8; 32])
+            .expect("write fixture track");
+        std::fs::write(root.join("notes.txt"), [0_u8; 8]).expect("write ignored fixture");
+
+        let preview = scan_music_folder(root.display().to_string()).expect("scan succeeds");
+        assert_eq!(preview.track_count, 1);
+        assert_eq!(preview.size_bytes, 32);
+        assert_eq!(preview.inaccessible_entries, 0);
+        assert!(preview.writable);
+
+        std::fs::remove_dir_all(root).expect("remove fixture directory");
+    }
+
+    #[test]
+    fn rejects_missing_music_folder() {
+        let missing =
+            std::env::temp_dir().join(format!("soundsible-missing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&missing);
+        assert!(scan_music_folder(missing.display().to_string()).is_err());
     }
 }

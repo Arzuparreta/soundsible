@@ -3958,14 +3958,13 @@ dependencies = [
 
 [[package]]
 name = "soundsible-desktop"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "base64 0.22.1",
  "dirs 6.0.0",
  "image",
  "libc",
  "qrcode",
- "rfd",
  "serde",
  "serde_json",
  "tauri",

@@ -1,2 +1,4 @@
-# Requires the repo venv with requirements.txt installed.
-pyinstaller>=6.0.0
+# Windows ARM64 support depends on the native bootloader shipped by current
+# PyInstaller. Pin release packaging so an upstream update cannot silently
+# change the generated sidecar.
+pyinstaller==6.21.0

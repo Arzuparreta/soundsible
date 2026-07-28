@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0d0d0f">
-  <title>Soundsible (Beta)</title>
+  <title>Soundsible</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -14,44 +14,44 @@
   <div id="app" data-view="first-run">
     <section id="view-first-run" class="shell-stage">
       <div class="shell-hero">
-        <div class="beta">Beta</div>
-        <h1>Point me at your music.</h1>
-        <p>Your library stays on this machine. Nothing uploads. Ever.</p>
+        <div class="beta" data-i18n="rc">Release candidate</div>
+        <h1 data-i18n="heading">Point me at your music.</h1>
+        <p data-i18n="lead">Your library stays on this machine. Nothing uploads. Ever.</p>
       </div>
       <div class="shell-card">
-        <div id="path-display" class="path-inset">No folder selected</div>
-        <div id="scan-preview" class="scan-preview hidden"></div>
-        <button type="button" id="btn-choose" class="btn btn-primary" autofocus>Choose folder…</button>
-        <button type="button" id="btn-continue" class="btn btn-secondary" disabled aria-disabled="true">Continue</button>
+        <div id="path-display" class="path-inset" role="status" aria-live="polite" data-i18n="noFolder">No folder selected</div>
+        <div id="scan-preview" class="scan-preview hidden" role="status" aria-live="polite"></div>
+        <button type="button" id="btn-choose" class="btn btn-primary" autofocus data-i18n="choose">Choose folder…</button>
+        <button type="button" id="btn-continue" class="btn btn-secondary" disabled aria-disabled="true" data-i18n="continue">Continue</button>
         <label class="autostart-row">
           <input type="checkbox" id="chk-autostart">
-          <span>Start Soundsible when I log in</span>
+          <span data-i18n="autostart">Start Soundsible when I log in</span>
         </label>
-        <p class="fine-print">Soundsible (Beta) — built for people who own their music.</p>
-        <p class="shell-keyboard-hint">Keyboard: <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>O</kbd> open · <kbd>P</kbd> pair · <kbd>R</kbd> restart · <kbd>S</kbd> stop · <kbd>Q</kbd> quit</p>
+        <p class="fine-print" data-i18n="finePrint">Soundsible — built for people who own their music.</p>
+        <p class="shell-keyboard-hint" data-i18n="keyboard">Keyboard: Ctrl+Alt+O open · P pair · R restart · S stop · Q quit</p>
       </div>
     </section>
 
     <section id="view-loading" class="state-panel hidden" aria-live="polite">
-      <h2 tabindex="-1"><span class="spinner" aria-hidden="true"></span>Starting Soundsible…</h2>
+      <h2 tabindex="-1"><span class="spinner" aria-hidden="true"></span><span data-i18n="starting">Starting Soundsible…</span></h2>
       <div id="log-loading" class="log-tail"></div>
     </section>
 
     <section id="view-error" class="state-panel hidden" aria-live="assertive">
-      <h2 class="error-title" tabindex="-1">Couldn't start</h2>
+      <h2 class="error-title" tabindex="-1" data-i18n="couldNotStart">Couldn't start</h2>
       <div id="log-error" class="log-tail"></div>
       <div class="actions">
-        <button type="button" id="btn-retry" class="btn btn-primary">Try again</button>
-        <button type="button" id="btn-logs" class="btn btn-secondary">Open logs</button>
+        <button type="button" id="btn-retry" class="btn btn-primary" data-i18n="tryAgain">Try again</button>
+        <button type="button" id="btn-logs" class="btn btn-secondary" data-i18n="openLogs">Open logs</button>
       </div>
     </section>
 
     <section id="view-pairing" class="pairing-panel hidden" aria-live="polite">
       <div class="pairing-header">
-        <div class="beta">Pair phone</div>
-        <h1 tabindex="-1">Scan and connect</h1>
-        <p class="pairing-lead">Open the camera on your phone and scan the code. This session auto-confirms while this screen is open.</p>
-        <p id="pairing-unavailable" class="pairing-warning hidden">Start the engine before pairing a phone.</p>
+        <div class="beta" data-i18n="pairBadge">Pair phone</div>
+        <h1 tabindex="-1" data-i18n="pairHeading">Scan and connect</h1>
+        <p class="pairing-lead" data-i18n="pairLead">Open the camera on your phone and scan the code.</p>
+        <p id="pairing-unavailable" class="pairing-warning hidden" data-i18n="pairUnavailable">Start the engine before pairing a phone.</p>
         <p id="pairing-lan-warning" class="pairing-warning hidden"></p>
       </div>
       <div class="pairing-grid">
@@ -60,30 +60,30 @@
         </div>
         <div class="pairing-details">
           <div class="detail-card">
-            <div class="detail-label">Pairing code</div>
+            <div class="detail-label" data-i18n="pairCode">Pairing code</div>
             <div id="pairing-code" class="pairing-code">--------</div>
-            <div id="pairing-status" class="pairing-status">Waiting for phone claim</div>
+            <div id="pairing-status" class="pairing-status" data-i18n="pairWaiting">Waiting for phone claim</div>
           </div>
           <div class="detail-card">
-            <div class="detail-label">Open on phone</div>
-            <a id="pairing-claim-url" href="#" target="_blank" rel="noopener" class="claim-link">LAN URL unavailable</a>
-            <p class="detail-hint">If scanning fails, open the link and enter the code manually.</p>
+            <div class="detail-label" data-i18n="pairOpenPhone">Open on phone</div>
+            <a id="pairing-claim-url" href="#" target="_blank" rel="noopener" class="claim-link" data-i18n="pairNoLan">LAN URL unavailable</a>
+            <p class="detail-hint" data-i18n="pairHint">If scanning fails, open the link and enter the code manually.</p>
           </div>
           <div class="pairing-actions-inline">
-            <button type="button" id="btn-copy-code" class="btn btn-secondary">Copy code</button>
-            <button type="button" id="btn-cancel-pairing" class="btn btn-danger">Cancel session</button>
+            <button type="button" id="btn-copy-code" class="btn btn-secondary" data-i18n="pairCopy">Copy code</button>
+            <button type="button" id="btn-cancel-pairing" class="btn btn-danger" data-i18n="pairCancel">Cancel session</button>
           </div>
         </div>
       </div>
       <div class="paired-section">
         <div class="paired-header">
-          <h2>Paired phones</h2>
-          <button type="button" id="btn-refresh-paired" class="btn btn-secondary btn-inline">Refresh</button>
+          <h2 data-i18n="pairedPhones">Paired phones</h2>
+          <button type="button" id="btn-refresh-paired" class="btn btn-secondary btn-inline" data-i18n="refresh">Refresh</button>
         </div>
         <div id="paired-devices" class="paired-devices"></div>
       </div>
       <div class="actions pairing-footer">
-        <button type="button" id="btn-back-player" class="btn btn-primary">Back to player</button>
+        <button type="button" id="btn-back-player" class="btn btn-primary" data-i18n="backPlayer">Back to player</button>
       </div>
     </section>
   </div>
@@ -108,7 +108,7 @@
       });
     })();
   </script>
-  <script src="pairing.js"></script>
-  <script src="app.js"></script>
+  <script type="module" src="pairing.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

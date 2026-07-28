@@ -1,6 +1,8 @@
 # Soundsible Desktop Shell
 
-Tauri consumer wrapper for Soundsible (T4/T6). First-run folder picker, engine supervisor, tray menu, webview handoff to `/player/desktop/`.
+Tauri consumer wrapper for Soundsible. It uses the official native folder
+dialog, supervises the bundled engine, exposes tray controls, and hands the
+webview to `/player/desktop/`.
 
 ## Dev workflow
 
@@ -42,16 +44,18 @@ Tray: Open | Pair phone… | Restart engine | Stop engine | Quit
 
 Left-click tray icon also focuses the window. Right-click opens the tray menu (platform convention).
 
-Closing the window (or **Quit** / `Ctrl+Alt+Q`) stops the engine and exits the app.
+Closing the window hides Soundsible in the tray and keeps playback running.
+Use **Quit** or `Ctrl+Alt+Q` to stop the engine and exit.
 
 ## Accessibility
 
 - Shell buttons use 44px minimum touch targets (`DESIGN.md` DT5)
 - `:focus-visible` outline on shell buttons; focus moves to the primary action when switching views (first-run → loading → error)
 - The webview loads the shared responsive SolidJS player from `/player/desktop/`.
-```
 
-Shell UI lives in `shell-ui/` (DESIGN.md tokens). Player UI is the existing `ui_web` bundle served by the sidecar.
+Shell source lives in `shell-ui/` and Vite writes the untracked
+`shell-ui-dist/` bundle consumed by Tauri. Player UI is the existing `ui_web`
+bundle served by the sidecar.
 
 ## Phone pairing (§6)
 
@@ -90,7 +94,7 @@ This runs `fetch-ffmpeg.sh`, embeds FFmpeg in the sidecar when possible, and pla
 
 This writes `desktop-shell/src-tauri/binaries/soundsible-engine-<target-triple>`, which Tauri bundles via `externalBin`. The shell prefers the sidecar over repo Python when present.
 
-**Beta validation:** [docs/DESKTOP_BETA.md](../docs/DESKTOP_BETA.md)  
+**Windows RC validation:** [docs/DESKTOP_BETA.md](../docs/DESKTOP_BETA.md)
 **Release CI:** tag `desktop-v*` or run `.github/workflows/desktop-release.yml` manually.
 
 Sidecar flags used by the shell:
@@ -116,7 +120,13 @@ Headless check for engine health + desktop player route:
 
 CI runs the same checks in `.github/workflows/desktop-shell.yml` (Linux + Windows sidecar/Tauri jobs).
 
-**Windows sidecar:** run `./desktop-shell/scripts/build-sidecar.sh` on Windows (Git Bash or WSL) to produce `binaries/soundsible-engine-x86_64-pc-windows-msvc.exe`.
+**Windows sidecars:** native runners produce
+`soundsible-engine-x86_64-pc-windows-msvc.exe` and
+`soundsible-engine-aarch64-pc-windows-msvc.exe`. CI verifies that the shell,
+engine, and FFmpeg all match the advertised architecture.
+
+Windows RC delivery is NSIS `.exe` only. Closing the main window hides it to
+the tray; **Quit** stops the engine and exits.
 
 ## Icons (DT3)
 

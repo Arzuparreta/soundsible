@@ -1,6 +1,6 @@
 [package]
 name = "soundsible-desktop"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 description = "Soundsible consumer desktop shell"
 authors = ["Arzuparreta"]
 edition = "2021"
@@ -36,4 +36,3 @@ url = "2"
 qrcode = "0.14"
 image = "0.25"
 base64 = "0.22"
-rfd = { version = "0.16", default-features = false }

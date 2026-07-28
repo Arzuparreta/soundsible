@@ -88,7 +88,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .icon(icon)
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .tooltip("Soundsible (Beta) — Ctrl+Alt+O open")
+        .tooltip("Soundsible — Ctrl+Alt+O open")
         .on_menu_event(|app, event| match event.id.as_ref() {
             "tray_open" => focus_main_window(app),
             "tray_pair" => open_pairing(app),

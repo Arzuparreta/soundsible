@@ -1,17 +1,25 @@
 {
   "name": "soundsible-desktop-shell",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0-rc.1",
   "description": "Soundsible consumer desktop shell (Tauri)",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
-    "build": "tauri build"
+    "build": "tauri build",
+    "frontend:dev": "vite --config vite.shell.config.js",
+    "frontend:build": "vite build --config vite.shell.config.js",
+    "test": "vitest run shell-ui",
+    "test:ui": "playwright test"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.4.0"
+    "@tauri-apps/cli": "^2.4.0",
+    "@playwright/test": "^1.62.0",
+    "vite": "^6.2.0",
+    "vitest": "^4.1.9"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.4.0"
+    "@tauri-apps/api": "^2.4.0",
+    "@tauri-apps/plugin-dialog": "^2.4.0"
   }
 }

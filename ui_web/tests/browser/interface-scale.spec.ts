@@ -198,7 +198,15 @@ test.describe('interface scale geometry', () => {
     await installPreferences(page, 'large', true);
     await page.goto('/player/');
     await page.getByRole('button', { name: 'Abrir ajustes de accesibilidad visual' }).click();
-    await expect(page.getByRole('dialog', { name: 'Accesibilidad' })).toBeVisible();
+    const dialog = page.getByRole('dialog', { name: 'Accesibilidad' });
+    await expect(dialog).toBeVisible();
+    // WebKit can expose the sheet to Axe during the first animation frame,
+    // when ancestor opacity is still near zero and every descendant appears to
+    // have dark blended text. Audit the settled UI, not an intermediate frame.
+    await dialog.evaluate(async (element) => {
+      const animations = element.getAnimations({ subtree: true });
+      await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
+    });
     await assertGeometry(page);
 
     const results = await new AxeBuilder({ page })

@@ -90,15 +90,18 @@ pub struct StartupProfile {
     pub returning_user: bool,
     pub music_dir: Option<String>,
     pub auto_start: bool,
+    pub configured_but_missing: bool,
 }
 
 pub fn startup_profile(skip_autostart: bool) -> StartupProfile {
     let music_dir = load_persisted_music_dir().map(|p| p.display().to_string());
     let returning_user = has_consumer_config() && music_dir.is_some();
+    let has_saved_path = config_dir().join("music_dir.json").is_file();
     StartupProfile {
         returning_user,
         music_dir,
         auto_start: returning_user && !skip_autostart,
+        configured_but_missing: has_consumer_config() && has_saved_path && !returning_user,
     }
 }
 

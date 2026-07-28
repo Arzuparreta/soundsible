@@ -1,4 +1,5 @@
-const { invoke } = window.__TAURI__.core;
+import { invoke } from '@tauri-apps/api/core';
+import { t } from './l10n.js';
 
 const POLL_MS = 2000;
 
@@ -46,7 +47,7 @@ async function copyText(text, okMessage) {
     await navigator.clipboard.writeText(text);
     pairingStatus.textContent = okMessage;
   } catch {
-    pairingStatus.textContent = 'Copy failed';
+    pairingStatus.textContent = t('copyFailed');
   }
 }
 
@@ -55,21 +56,21 @@ async function renderSession(session) {
   activeSessionStatus = session.status;
   pairingCode.textContent = session.code || '--------';
 
-  const lines = [`Status: ${session.status}`];
-  if (session.device_name) lines.push(`Device: ${session.device_name}`);
-  if (session.status === 'completed') lines.push('Pairing completed');
-  else if (session.claimed_at) lines.push('Waiting for desktop to finish');
-  else lines.push('Waiting for phone claim');
+  const lines = [session.status];
+  if (session.device_name) lines.push(session.device_name);
+  if (session.status === 'completed') lines.push(t('pairingCompleted'));
+  else if (session.claimed_at) lines.push(t('waitingDesktop'));
+  else lines.push(t('pairWaiting'));
   pairingStatus.textContent = lines.join(' · ');
 
   const claimUrl = session.connect?.claim_url || '';
-  pairingClaimUrl.textContent = claimUrl || 'LAN URL unavailable. Enable LAN access to scan from a phone.';
+  pairingClaimUrl.textContent = claimUrl || t('pairNoLan');
   pairingClaimUrl.href = claimUrl || '#';
   pairingClaimUrl.classList.toggle('disabled', !claimUrl);
 
   const missingLan = !session.connect?.presentable;
   pairingLanWarning.textContent = missingLan
-    ? 'LAN access is not available from this runtime, so the QR only carries the pairing code payload.'
+    ? t('lanUnavailable')
     : '';
   pairingLanWarning.classList.toggle('hidden', !missingLan);
 
@@ -85,22 +86,22 @@ async function renderSession(session) {
 }
 
 async function renderPairedDevices() {
-  pairedDevices.innerHTML = '<div class="paired-empty">Loading…</div>';
+  pairedDevices.innerHTML = `<div class="paired-empty">${t('loading')}</div>`;
   try {
     const data = await invoke('pairing_list_devices');
     const devices = data.devices || [];
     if (!devices.length) {
-      pairedDevices.innerHTML = '<div class="paired-empty">No paired phones yet.</div>';
+      pairedDevices.innerHTML = `<div class="paired-empty">${t('noPaired')}</div>`;
       return;
     }
     pairedDevices.innerHTML = devices.map((device) => `
       <div class="paired-device">
         <div>
-          <div class="paired-device-name">${escapeHtml(device.name || 'Paired device')}</div>
+          <div class="paired-device-name">${escapeHtml(device.name || t('pairedPhones'))}</div>
           <div class="paired-device-meta">${escapeHtml(device.device_type || 'phone')} · ${escapeHtml((device.scopes || []).join(', ') || 'no scopes')}</div>
-          <div class="paired-device-meta">Last used: ${escapeHtml(formatTimestamp(device.last_used_at) || 'Never')}</div>
+          <div class="paired-device-meta">${escapeHtml(t('lastUsed', { value: formatTimestamp(device.last_used_at) || t('never') }))}</div>
         </div>
-        <button type="button" class="btn btn-danger btn-inline paired-revoke" data-token-id="${escapeHtml(device.token_id)}">Revoke</button>
+        <button type="button" class="btn btn-danger btn-inline paired-revoke" data-token-id="${escapeHtml(device.token_id)}">${t('revoke')}</button>
       </div>
     `).join('');
 
@@ -109,13 +110,13 @@ async function renderPairedDevices() {
         const tokenId = btn.getAttribute('data-token-id');
         if (!tokenId) return;
         btn.disabled = true;
-        btn.textContent = 'Revoking…';
+        btn.textContent = t('revoking');
         try {
           await invoke('pairing_revoke_device', { tokenId });
           await renderPairedDevices();
         } catch (err) {
           btn.disabled = false;
-          btn.textContent = 'Revoke';
+          btn.textContent = t('revoke');
           pairingStatus.textContent = String(err);
         }
       });
@@ -137,7 +138,7 @@ function startPolling(sessionId) {
       if (record.status === 'completed' || record.status === 'cancelled') {
         stopPolling();
         if (record.status === 'completed') {
-          pairingStatus.textContent = 'Phone paired successfully.';
+          pairingStatus.textContent = t('pairingSuccessful');
           await renderPairedDevices();
         }
       }
@@ -162,7 +163,7 @@ async function closeActiveSession() {
 
 async function startPairingSession() {
   pairingUnavailable.classList.add('hidden');
-  pairingStatus.textContent = 'Starting pairing session…';
+  pairingStatus.textContent = t('pairingStarting');
   try {
     const session = await invoke('pairing_create_session');
     activeSessionId = session.session_id;
@@ -189,14 +190,14 @@ async function openPairingView({ unavailable = false } = {}) {
 }
 
 btnCopyCode?.addEventListener('click', () => {
-  copyText(pairingCode.textContent.replace(/-/g, '').trim(), 'Pairing code copied');
+  copyText(pairingCode.textContent.replace(/-/g, '').trim(), t('codeCopied'));
 });
 
 btnCancelPairing?.addEventListener('click', async () => {
   if (!activeSessionId) return;
   try {
     await invoke('pairing_cancel_session', { sessionId: activeSessionId });
-    pairingStatus.textContent = 'Pairing session cancelled.';
+    pairingStatus.textContent = t('pairingCancelled');
   } catch (err) {
     pairingStatus.textContent = String(err);
   }
