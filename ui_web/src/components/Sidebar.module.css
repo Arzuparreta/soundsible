@@ -19,10 +19,13 @@
   }
 }
 
+/* Same column rhythm as .item (20px icon slot + space-md gap) so the mark sits on
+   the nav icons' axis and the wordmark starts where the entry labels start. */
 .brand {
-  display: flex;
+  display: grid;
+  grid-template-columns: 20px 1fr;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-md);
   padding: var(--space-sm) var(--space-md) var(--space-lg);
   text-decoration: none;
   border-radius: var(--radius-sm);
@@ -36,10 +39,12 @@
 }
 }
 
+/* 18px wide inside the 20px slot: the 1px of air per side matches the optical
+   inset the stroked nav icons carry inside their own 20px boxes. */
 .mark {
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
+  justify-self: center;
+  width: 18px;
+  height: 26px;
   color: var(--accent);
 }
 
