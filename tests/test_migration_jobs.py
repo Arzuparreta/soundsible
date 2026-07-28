@@ -68,6 +68,7 @@ def test_apple_xml_preserves_playlist_and_excludes_podcasts():
     assert manifest.provider == "apple_music"
     assert len(manifest.tracks) == 1
     assert manifest.library_keys == ["apple_music:APPLEALPHA"]
+    assert manifest.favourite_keys == ["apple_music:APPLEALPHA"]
     assert [playlist.name for playlist in manifest.playlists] == ["Focus"]
     assert manifest.playlists[0].track_keys == manifest.library_keys
 

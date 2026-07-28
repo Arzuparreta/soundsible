@@ -233,6 +233,7 @@ class MigrationStore:
                         "source_id": playlist.source_id,
                         "name": playlist.name,
                         "track_count": len(playlist.track_keys),
+                        "track_keys": playlist.track_keys,
                         "is_favourites": playlist.is_favourites,
                     }
                     for playlist in manifest.playlists

@@ -197,6 +197,7 @@ def _tabular_manifest(text: str, source_name: str, provider: str = "apple_music"
     album_col = pick("album", "album name")
     duration_col = pick("total time", "duration", "duration ms", "time")
     persistent_col = pick("persistent id", "track id", "id")
+    loved_col = pick("loved", "favorite", "favourite")
     if not title_col:
         raise ParseError("The export needs a Name, Title, or Track column")
 
@@ -215,6 +216,8 @@ def _tabular_manifest(text: str, source_name: str, provider: str = "apple_music"
             duration=raw_duration // 1000 if raw_duration > 10000 else raw_duration,
         )
         keys.append(_put_track(manifest, track))
+        if loved_col and _clean(row.get(loved_col)).casefold() in {"1", "true", "yes", "y", "loved"}:
+            manifest.favourite_keys.append(keys[-1])
     if not keys:
         raise ParseError("No songs were found in the text export")
     manifest.library_keys = list(keys)
@@ -252,6 +255,8 @@ def _apple_manifest(data: Any, source_name: str) -> MigrationManifest:
         key = _put_track(manifest, track)
         apple_keys[str(track_id)] = key
         manifest.library_keys.append(key)
+        if raw.get("Loved") is True:
+            manifest.favourite_keys.append(key)
 
     for index, raw_playlist in enumerate(data.get("Playlists") or []):
         if not isinstance(raw_playlist, dict):
@@ -274,6 +279,8 @@ def _apple_manifest(data: Any, source_name: str) -> MigrationManifest:
                 is_favourites=name.casefold() in _LIKED_NAMES,
             )
         )
+        if name.casefold() in _LIKED_NAMES:
+            manifest.favourite_keys.extend(keys)
     if not manifest.tracks:
         raise ParseError("No music tracks were found in the Apple Music export")
     return manifest
