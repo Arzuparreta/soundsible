@@ -12,6 +12,8 @@ export interface SongRowProps {
   index?: number;
   /** Resolved cover URL; falls back to track.cover, then a gradient placeholder. */
   cover?: string;
+  /** Optional compact type marker used by mixed result lists. */
+  badge?: string;
   active?: boolean;
   onPlay?: (track: Track) => void;
   /** When set, the artist name becomes a tappable link (navigates to the artist). */
@@ -112,6 +114,9 @@ export default function SongRow(props: SongRowProps) {
           </button>
         </Show>
       </div>
+      <Show when={props.badge}>
+        <span class={styles.badge}>{props.badge}</span>
+      </Show>
       <span class={styles.duration}>{formatDuration(props.track.duration)}</span>
       <Show when={props.onMenu}>
         <button

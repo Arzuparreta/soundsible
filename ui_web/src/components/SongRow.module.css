@@ -156,3 +156,21 @@
   color: var(--ink-tertiary);
   text-align: right;
 }
+
+.badge {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  line-height: 1.2;
+  color: var(--ink-tertiary);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+}
+
+@media (max-width: 420px) {
+  .badge + .duration {
+    display: none;
+  }
+}

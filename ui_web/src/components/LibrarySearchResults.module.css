@@ -1,0 +1,107 @@
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.canvas {
+  position: relative;
+  width: 100%;
+}
+
+.slot {
+  position: absolute;
+  inset: 0 0 auto;
+  width: 100%;
+}
+
+.artistRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  height: 100%;
+  padding: 0 var(--space-md);
+  color: var(--ink-primary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--dur-micro) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .artistRow:hover {
+    background: var(--bg-hover);
+    border-color: var(--hairline-soft);
+  }
+}
+
+.artistRow:active {
+  transform: scale(0.997);
+}
+
+.avatar {
+  width: var(--cover-sm);
+  height: var(--cover-sm);
+  flex: none;
+  background-position: center;
+  background-size: cover;
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 1px var(--hairline-soft), var(--shadow-1);
+}
+
+.artistMeta {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.artistName {
+  overflow: hidden;
+  font-size: var(--text-body);
+  font-weight: var(--fw-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artistCount {
+  overflow: hidden;
+  font-size: var(--text-label);
+  color: var(--ink-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  flex: none;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  line-height: 1.2;
+  color: var(--ink-tertiary);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+}
+
+.chevron {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  color: var(--ink-tertiary);
+}
+
+@media (min-width: 1024px) {
+  .artistRow {
+    padding-inline: var(--space-md);
+  }
+}

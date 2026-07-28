@@ -4,9 +4,12 @@ import { state, actions, downloadCounts, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import ArtistGrid from '../components/ArtistGrid';
+import LibrarySearchResults from '../components/LibrarySearchResults';
+import { openActionMenu } from '../components/ActionMenu';
 import { trackCount } from '../lib/format';
 import { t } from '../lib/i18n';
 import { librarySort, setLibrarySort, libraryTab, setLibraryTab, sortTracks, buildArtists } from '../lib/libraryView';
+import { searchLibrary } from '../lib/librarySearch';
 import { createTopSwipeReveal } from '../lib/topSwipeReveal';
 import styles from './Home.module.css';
 import { EmptyState } from '../components/EmptyState';
@@ -19,6 +22,10 @@ export default function Home() {
   const songs = createMemo(() => musicLibrary());
   const sorted = createMemo(() => sortTracks(songs(), librarySort(), favSet()));
   const artists = createMemo(() => buildArtists(songs()));
+  const [query, setQuery] = createSignal('');
+  const [searchFocused, setSearchFocused] = createSignal(false);
+  const searchResults = createMemo(() => searchLibrary(sorted(), artists(), query()));
+  const searching = createMemo(() => query().trim().length > 0);
   /** The library never loaded, as opposed to being genuinely empty. */
   const unreachable = createMemo(() => state.libraryError && songs().length === 0);
 
@@ -39,8 +46,8 @@ export default function Home() {
   // mobile the song row's subtitle is the same gesture as the row itself, so
   // we render the artist as plain text and let the row click play the track.
   const [isMobile, setIsMobile] = createSignal(true);
-  const [toolbarProgress, setToolbarProgress] = createSignal(0);
-  const [toolbarDragging, setToolbarDragging] = createSignal(false);
+  const [searchProgress, setSearchProgress] = createSignal(0);
+  const [searchDragging, setSearchDragging] = createSignal(false);
   const swipeReveal = createTopSwipeReveal();
 
   onMount(() => {
@@ -49,10 +56,10 @@ export default function Home() {
     const onChange = (e: MediaQueryListEvent) => {
       setIsMobile(e.matches);
       if (!e.matches) {
-        setToolbarProgress(1);
-        setToolbarDragging(false);
+        setSearchProgress(1);
+        setSearchDragging(false);
       } else {
-        setToolbarProgress(0);
+        setSearchProgress(searching() || searchFocused() ? 1 : 0);
       }
     };
     mq.addEventListener('change', onChange);
@@ -61,36 +68,43 @@ export default function Home() {
       target instanceof HTMLElement ? target.closest<HTMLElement>('[data-library-scroll]') : null;
 
     const onTouchStart = (event: TouchEvent) => {
-      if (event.touches.length !== 1 || toolbarProgress() > 0) return;
+      if (event.touches.length !== 1 || searchProgress() > 0) return;
       const surface = scrollSurface(event.target);
       const touch = event.touches[0];
       swipeReveal.begin(touch.clientX, touch.clientY, event.timeStamp, !!surface && surface.scrollTop <= 1, isMobile());
     };
     const onTouchMove = (event: TouchEvent) => {
-      if (event.touches.length !== 1 || (toolbarProgress() >= 1 && !toolbarDragging())) return;
+      if (event.touches.length !== 1 || (searchProgress() >= 1 && !searchDragging())) return;
       const touch = event.touches[0];
       const frame = swipeReveal.move(touch.clientX, touch.clientY, event.timeStamp);
       if (!frame.captured) return;
       event.preventDefault();
-      setToolbarDragging(true);
-      setToolbarProgress(frame.progress);
+      setSearchDragging(true);
+      setSearchProgress(frame.progress);
     };
     const finishTouch = (event: TouchEvent) => {
-      if (toolbarProgress() >= 1 && !toolbarDragging()) return;
+      if (searchProgress() >= 1 && !searchDragging()) return;
       const frame = swipeReveal.end(event.timeStamp);
       if (frame.captured) event.preventDefault();
-      setToolbarDragging(false);
-      setToolbarProgress(frame.progress);
+      setSearchDragging(false);
+      setSearchProgress(frame.progress);
     };
     const cancelTouch = () => {
       const frame = swipeReveal.cancel();
-      setToolbarDragging(false);
-      if (frame.captured) setToolbarProgress(0);
+      setSearchDragging(false);
+      if (frame.captured) setSearchProgress(0);
     };
     const onScroll = (event: Event) => {
       const surface = scrollSurface(event.target);
-      if (isMobile() && toolbarProgress() === 1 && surface && surface.scrollTop > 24) {
-        setToolbarProgress(0);
+      if (
+        isMobile() &&
+        searchProgress() === 1 &&
+        !searching() &&
+        !searchFocused() &&
+        surface &&
+        surface.scrollTop > 24
+      ) {
+        setSearchProgress(0);
       }
     };
 
@@ -111,43 +125,89 @@ export default function Home() {
     });
   });
 
-  const toolbarStyle = () =>
+  const searchRevealStyle = () =>
     isMobile()
-      ? `height:${toolbarProgress() * 44}px;--toolbar-reveal:${toolbarProgress()};--toolbar-offset:${(1 - toolbarProgress()) * -8}px`
+      ? `height:${searchProgress() * 56}px;--search-reveal:${searchProgress()};--search-offset:${(1 - searchProgress()) * -8}px`
       : undefined;
-  const toolbarHidden = () => isMobile() && toolbarProgress() === 0;
+  const searchHidden = () => isMobile() && searchProgress() === 0;
+
+  const sortLibrary = () =>
+    openActionMenu({
+      title: t('home.sortTitle'),
+      actions: [
+        ['recent', t('home.sortRecent')],
+        ['az', t('home.sortAZ')],
+        ['fav', t('home.sortFavFirst')],
+      ].map(([value, label]) => ({
+        label: `${librarySort() === value ? '✓  ' : ''}${label}`,
+        onSelect: () => setLibrarySort(value),
+      })),
+    });
 
   return (
     <div ref={viewRef} class="view">
       <ViewHeader
         title={t('home.title')}
         meta={state.loading && songs().length === 0 ? t('common.loading') : trackCount(songs().length)}
+        actions={
+          <>
+            <A class={styles.headerAction} href="/favourites" aria-label={t('home.favourites')} data-pressable>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z" />
+              </svg>
+            </A>
+            <A class={styles.headerAction} href="/downloads" aria-label={t('home.downloads')} data-pressable>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" />
+              </svg>
+              <Show when={active() > 0}>
+                <span class={styles.badge}>{active()}</span>
+              </Show>
+            </A>
+          </>
+        }
       />
-      <nav class={styles.chips}>
-        <A href="/favourites" class={styles.chip}>
-          {t('home.favourites')}
-        </A>
-        <A href="/playlists" class={styles.chip}>
-          {t('home.playlists')}
-        </A>
-        <A href="/podcasts" class={styles.chip}>
-          {t('home.podcasts')}
-        </A>
-        <A href="/downloads" class={styles.chip}>
-          {t('home.downloads')}
-          <Show when={active() > 0}>
-            <span class={styles.badge}>{active()}</span>
-          </Show>
-        </A>
-      </nav>
 
       <div
-        class={styles.toolbarReveal}
-        classList={{ [styles.toolbarDragging]: toolbarDragging() }}
-        style={toolbarStyle()}
-        aria-hidden={toolbarHidden() ? 'true' : undefined}
-        inert={toolbarHidden()}
+        class={styles.searchReveal}
+        classList={{ [styles.searchDragging]: searchDragging() }}
+        style={searchRevealStyle()}
+        aria-hidden={searchHidden() ? 'true' : undefined}
+        inert={searchHidden()}
       >
+        <div class={styles.localSearch}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-4-4" />
+          </svg>
+          <input
+            value={query()}
+            onInput={(event) => setQuery(event.currentTarget.value)}
+            onFocus={() => {
+              setSearchFocused(true);
+              setSearchProgress(1);
+            }}
+            onBlur={() => setSearchFocused(false)}
+            placeholder={t('home.searchLibrary')}
+            aria-label={t('home.searchLibrary')}
+          />
+          <Show when={query()}>
+            <button
+              class={styles.clearSearch}
+              type="button"
+              aria-label={t('home.clearSearch')}
+              onClick={() => setQuery('')}
+              data-pressable
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m7 7 10 10M17 7 7 17" />
+              </svg>
+            </button>
+          </Show>
+        </div>
+      </div>
+
+      <Show when={!searching()}>
         <div class={styles.toolbar}>
           <div class={styles.tabs}>
             <button
@@ -168,36 +228,41 @@ export default function Home() {
             </button>
           </div>
           <Show when={libraryTab() === 'songs'}>
-            <select class={styles.select} value={librarySort()} onChange={(e) => setLibrarySort(e.currentTarget.value)}>
-              <option value="recent">{t('home.sortRecent')}</option>
-              <option value="az">{t('home.sortAZ')}</option>
-              <option value="fav">{t('home.sortFavFirst')}</option>
-            </select>
+            <button class={styles.sortButton} type="button" onClick={sortLibrary} aria-label={t('home.sortTitle')} data-pressable>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 6h18M6 12h12M10 18h4" />
+              </svg>
+              <span>{librarySort() === 'az' ? t('home.sortAZ') : librarySort() === 'fav' ? t('home.sortFavFirst') : t('home.sortRecent')}</span>
+            </button>
           </Show>
         </div>
-      </div>
+      </Show>
 
       {/* Stale but not empty: the list below is real, just possibly behind. */}
       <Show when={state.libraryError && songs().length > 0}>
         <p class={styles.stale}>{t('home.unreachable')}</p>
       </Show>
 
-      <Show
-        when={libraryTab() === 'songs'}
-        fallback={
-          <Show when={artists().length > 0} fallback={emptyState(t('home.emptyArtists'))}>
-            <div class={styles.artistsScroll} data-library-scroll data-primary-scroll>
-              <ArtistGrid artists={artists()} />
-            </div>
-          </Show>
-        }
-      >
-        <TrackList
-          tracks={sorted()}
-          loading={state.loading}
-          empty={emptyState(t('home.emptyLibrary'))}
-          linkArtist={!isMobile()}
-        />
+      <Show when={searching()} fallback={
+        <Show
+          when={libraryTab() === 'songs'}
+          fallback={
+            <Show when={artists().length > 0} fallback={emptyState(t('home.emptyArtists'))}>
+              <div class={styles.artistsScroll} data-library-scroll data-primary-scroll>
+                <ArtistGrid artists={artists()} />
+              </div>
+            </Show>
+          }
+        >
+          <TrackList
+            tracks={sorted()}
+            loading={state.loading}
+            empty={emptyState(t('home.emptyLibrary'))}
+            linkArtist={!isMobile()}
+          />
+        </Show>
+      }>
+        <LibrarySearchResults results={searchResults()} />
       </Show>
     </div>
   );

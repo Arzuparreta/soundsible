@@ -1,30 +1,10 @@
-.chips {
-  flex-shrink: 0;
-  display: flex;
-  gap: var(--space-sm);
-  padding: 0 var(--gutter) var(--space-md);
-  overflow-x: auto;
-  scrollbar-width: none;
-  overscroll-behavior-x: contain;
-}
-
-.chips::-webkit-scrollbar {
-  display: none;
-}
-
-.chip {
-  flex: none;
+.headerAction {
   position: relative;
-}
-
-.chip {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-xs);
-  height: var(--pill-h);
-  padding: 0 11px;
-  font-size: 12px;
-  font-weight: var(--fw-medium);
+  justify-content: center;
+  width: 44px;
+  height: 44px;
   color: var(--ink-secondary);
   text-decoration: none;
   background: var(--bg-raised);
@@ -32,43 +12,146 @@
   border-radius: var(--radius-full);
   transition:
     color var(--dur-short) var(--ease-out),
-    border-color var(--dur-short) var(--ease-out),
     background var(--dur-short) var(--ease-out),
-    transform var(--dur-micro) var(--ease-out);
+    border-color var(--dur-short) var(--ease-out);
+}
+
+.headerAction svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 @media (hover: hover) and (pointer: fine) {
-
-.chip:hover {
-  color: var(--ink-primary);
-  border-color: var(--hairline-strong);
-  background: var(--bg-hover);
-}
-}
-
-.chip:active {
-  transform: scale(0.97);
+  .headerAction:hover {
+    color: var(--ink-primary);
+    background: var(--bg-hover);
+    border-color: var(--hairline-strong);
+  }
 }
 
 .badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: var(--fw-bold);
   font-variant-numeric: tabular-nums;
   line-height: 1;
   color: var(--ink-on-accent);
   background: var(--accent);
+  border: 2px solid var(--bg-base);
   border-radius: var(--radius-full);
 }
 
-.toolbarReveal {
+.searchReveal {
   flex-shrink: 0;
   overflow: clip;
+}
+
+.localSearch {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  margin: 0 var(--gutter) var(--space-sm);
+  padding: 0 var(--space-sm) 0 var(--space-md);
+  color: var(--ink-tertiary);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  transition:
+    border-color var(--dur-short) var(--ease-out),
+    background var(--dur-short) var(--ease-out);
+}
+
+.localSearch:focus-within {
+  color: var(--ink-secondary);
+  background: var(--bg-elevated);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hairline));
+}
+
+.localSearch > svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.localSearch input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--space-sm);
+  font: inherit;
+  font-size: var(--text-body);
+  color: var(--ink-primary);
+  background: transparent;
+  border: 0;
+  outline: 0;
+}
+
+.localSearch input::placeholder {
+  color: var(--ink-tertiary);
+}
+
+.clearSearch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  padding: 0;
+  color: var(--ink-tertiary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-full);
+}
+
+.clearSearch svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+@media (max-width: 1023px) {
+  .searchReveal {
+    height: 0;
+    transition: height 240ms var(--ease-out);
+    will-change: height;
+  }
+
+  .searchDragging {
+    transition: none;
+  }
+
+  .localSearch {
+    opacity: var(--search-reveal, 0);
+    transform: translateY(var(--search-offset, -8px));
+    transition:
+      opacity var(--dur-short) var(--ease-out),
+      transform 240ms var(--ease-out);
+  }
+
+  .searchDragging .localSearch {
+    transition: none;
+  }
 }
 
 .toolbar {
@@ -77,32 +160,8 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
+  min-height: 44px;
   padding: 0 var(--gutter) var(--space-sm);
-}
-
-@media (max-width: 1023px) {
-  .toolbarReveal {
-    height: 0;
-    transition: height 240ms var(--ease-out);
-    will-change: height;
-  }
-
-  .toolbarDragging {
-    transition: none;
-  }
-
-  .toolbar {
-    height: 44px;
-    opacity: var(--toolbar-reveal, 0);
-    transform: translateY(var(--toolbar-offset, -8px));
-    transition:
-      opacity var(--dur-short) var(--ease-out),
-      transform 240ms var(--ease-out);
-  }
-
-  .toolbarDragging .toolbar {
-    transition: none;
-  }
 }
 
 .tabs {
@@ -124,37 +183,64 @@
   border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
-  transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
+  transition:
+    color var(--dur-short) var(--ease-out),
+    background var(--dur-short) var(--ease-out);
+}
+
+.tabActive {
+  color: var(--ink-on-accent);
+  background: var(--accent);
+}
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  min-width: 44px;
+  min-height: 40px;
+  padding: 0 var(--space-sm);
+  font: inherit;
+  font-size: 12px;
+  font-weight: var(--fw-medium);
+  color: var(--ink-secondary);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.sortButton svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sortButton:hover {
+    color: var(--ink-primary);
+    background: var(--bg-hover);
+    border-color: var(--hairline-strong);
+  }
 }
 
 @media (hover: none) and (pointer: coarse) {
-  .chip::before {
-    position: absolute;
-    inset: -5px 0;
-    content: '';
-  }
-
   .tab::before {
     position: absolute;
     inset: -4px 0;
     content: '';
   }
 }
-.tabActive {
-  color: var(--ink-on-accent);
-  background: var(--accent);
-}
 
-.select {
-  height: var(--segment-h);
-  padding: 0 var(--space-sm);
-  font: inherit;
-  font-size: 12px;
-  color: var(--ink-secondary);
-  background: var(--bg-raised);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+@media (max-width: 360px) {
+  .sortButton span {
+    display: none;
+  }
 }
 
 .artistsScroll {
@@ -163,14 +249,6 @@
   overflow-y: auto;
 }
 
-.empty {
-  padding: var(--space-3xl) var(--gutter);
-  text-align: center;
-  color: var(--ink-secondary);
-}
-
-/* Inline retry inside the empty-state sentence: it reads as part of the
-   explanation rather than as a separate call to action. */
 .retry {
   padding: 0;
   font: inherit;
@@ -183,8 +261,6 @@
   text-underline-offset: 2px;
 }
 
-/* The list below is real but may be behind the server. A quiet line, not an
-   alarm — nothing is broken, it is just not confirmed fresh. */
 .stale {
   flex-shrink: 0;
   margin: 0 var(--gutter) var(--space-sm);
@@ -196,21 +272,12 @@
   border-radius: var(--radius-sm);
 }
 
-/* Desktop: the sidebar already lists Favoritos/Listas/Podcasts/Descargas. */
 @media (min-width: 1024px) {
-  .chips {
-    display: none;
-  }
-
-  .tab {
-    min-height: var(--segment-h);
-  }
-
-  .select {
-    height: var(--segment-h);
-  }
-
-  .toolbarReveal {
+  .searchReveal {
     height: auto !important;
+  }
+
+  .localSearch {
+    max-width: 520px;
   }
 }
