@@ -15,6 +15,7 @@ export const es: Dict = {
     downloads: 'Descargas',
     settings: 'Ajustes',
     library: 'Biblioteca',
+    shortcuts: 'Accesos',
   },
   common: {
     play: 'Reproducir',

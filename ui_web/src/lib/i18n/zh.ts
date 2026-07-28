@@ -15,6 +15,7 @@ export const zh: Dict = {
     downloads: '下载',
     settings: '设置',
     library: '资料库',
+    shortcuts: '快捷访问',
   },
   common: {
     play: '播放',

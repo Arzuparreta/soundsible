@@ -15,6 +15,7 @@ export const fr: Dict = {
     downloads: 'Téléchargements',
     settings: 'Réglages',
     library: 'Bibliothèque',
+    shortcuts: 'Accès rapides',
   },
   common: {
     play: 'Lire',

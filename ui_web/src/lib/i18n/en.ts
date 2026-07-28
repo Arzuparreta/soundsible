@@ -14,6 +14,7 @@ export const en = {
     downloads: 'Downloads',
     settings: 'Settings',
     library: 'Library',
+    shortcuts: 'Quick access',
   },
   common: {
     play: 'Play',
