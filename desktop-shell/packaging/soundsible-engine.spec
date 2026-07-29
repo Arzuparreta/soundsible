@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 REPO_ROOT = Path(SPEC).resolve().parents[2]
 ENTRY = REPO_ROOT / "soundsible_engine.py"
@@ -17,8 +17,11 @@ if VENDOR_FFMPEG.is_file():
     pyinstaller_binaries.append((str(VENDOR_FFMPEG), "bin"))
 
 hiddenimports = []
+curl_cffi_datas, curl_cffi_binaries, curl_cffi_hiddenimports = collect_all("curl_cffi")
+pyinstaller_binaries.extend(curl_cffi_binaries)
 for package in ("shared", "player", "odst_tool", "setup_tool"):
     hiddenimports.extend(collect_submodules(package))
+hiddenimports.extend(curl_cffi_hiddenimports)
 
 hiddenimports.extend(
     [
@@ -46,6 +49,7 @@ hiddenimports.extend(
 datas = [
     (str(REPO_ROOT / "ui_web"), "ui_web"),
     (str(REPO_ROOT / "branding"), "branding"),
+    *curl_cffi_datas,
 ]
 for pkg in ("flask", "engineio", "socketio", "yt_dlp"):
     datas.extend(collect_data_files(pkg, include_py_files=True))

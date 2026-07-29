@@ -2,3 +2,5 @@
 # PyInstaller. Pin release packaging so an upstream update cannot silently
 # change the generated sidecar.
 pyinstaller==6.21.0
+yt-dlp==2026.7.4
+curl-cffi==0.15.0

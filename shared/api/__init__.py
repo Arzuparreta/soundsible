@@ -1638,8 +1638,8 @@ def start_api(
         except Exception:
             pass
 
-    _defer_ytdlp_thread = False
-    _run_ytdlp_update = None
+    _defer_runtime_update = False
+    _run_runtime_update = None
 
     try:
         # Warm the admin's core so the first request is not the one that pays
@@ -1653,41 +1653,33 @@ def start_api(
                 get_core()
         logger.info("API: Core services initialized successfully.")
 
-        # Note: Optional auto-update yt-dlp in background if user enabled it (thread started after terminal message)
+        # Keep the network-facing download tools current when their respective
+        # admin settings are enabled. They share one pip transaction so startup
+        # can never launch two package installers against the same environment.
         try:
             from dotenv import dotenv_values
-            # Note: Always resolve the .env path from the repo root so auto-update works regardless of CWD.
+            from shared.runtime_updates import enabled_runtime_packages, pip_upgrade_command
+
             _env_path = Path(_REPO_ROOT) / "odst_tool" / ".env"
             _env = dotenv_values(_env_path) if _env_path.exists() else {}
-            _raw_auto = (_env.get("YTDLP_AUTO_UPDATE", os.getenv("YTDLP_AUTO_UPDATE", "false")) or "false").strip()
-            _auto = _raw_auto.lower() in ("true", "1")
+            _runtime_packages, _runtime_flags = enabled_runtime_packages(_env)
             logger.info(
-                "API: yt-dlp auto-update config resolved (env_file=%s, exists=%s, raw=%r, enabled=%s)",
+                "API: runtime auto-update config resolved (env_file=%s, exists=%s, flags=%s)",
                 _env_path,
                 _env_path.exists(),
-                _raw_auto,
-                _auto,
+                _runtime_flags,
             )
-            if _auto:
-                logger.info("API: yt-dlp auto-update requested (YTDLP_AUTO_UPDATE=true). Will run in background after startup banner.")
-                def _run_ytdlp_update():
+            if _runtime_packages:
+                logger.info(
+                    "API: runtime auto-update requested for %s. Will run in background after startup banner.",
+                    ", ".join(_runtime_packages),
+                )
+
+                def _run_runtime_update():
                     import subprocess
-                    pip_cmd = None
+                    pip_cmd = pip_upgrade_command(Path(_REPO_ROOT), _runtime_packages)
                     try:
-                        root = Path(_REPO_ROOT)
-                        if os.name == "nt":
-                            pip_exe = root / "venv" / "Scripts" / "pip.exe"
-                        else:
-                            pip_exe = root / "venv" / "bin" / "pip"
-                        if pip_exe.exists():
-                            pip_cmd = [str(pip_exe), "install", "-U", "yt-dlp"]
-                    except Exception:
-                        pass
-                    if not pip_cmd:
-                        pip_cmd = [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"]
-                    try:
-                        logger.info("API: Updating yt-dlp (auto-update enabled)...")
-                        logger.info("API: Starting yt-dlp auto-update via pip: %s", " ".join(pip_cmd))
+                        logger.info("API: Starting runtime auto-update via pip: %s", " ".join(pip_cmd))
                         result = subprocess.run(
                             pip_cmd,
                             capture_output=True,
@@ -1695,18 +1687,19 @@ def start_api(
                             timeout=120,
                         )
                         if result.returncode == 0:
-                            logger.info("API: yt-dlp auto-update completed successfully.")
+                            logger.info("API: Runtime auto-update completed successfully.")
                             if result.stdout:
-                                logger.info("API: yt-dlp auto-update stdout (first 400 chars): %s", result.stdout[:400])
+                                logger.info("API: Runtime auto-update stdout (first 400 chars): %s", result.stdout[:400])
                         else:
-                            logger.warning("API: yt-dlp auto-update failed: %s", result.stderr or result.stdout or 'unknown')
+                            logger.warning("API: Runtime auto-update failed: %s", result.stderr or result.stdout or "unknown")
                     except Exception as e:
-                        logger.warning("API: yt-dlp auto-update error: %s", e)
-                _defer_ytdlp_thread = True
+                        logger.warning("API: Runtime auto-update error: %s", e)
+
+                _defer_runtime_update = True
             else:
-                logger.info("API: yt-dlp auto-update disabled. Skipping update attempt.")
+                logger.info("API: Runtime auto-update disabled. Skipping update attempt.")
         except Exception:
-            logger.debug("API: yt-dlp auto-update setup skipped due to error", exc_info=True)
+            logger.debug("API: Runtime auto-update setup skipped due to error", exc_info=True)
 
         # Note: Start library file watcher. Manifests live one directory per
         # account, so watch the users root recursively and let the handler map
@@ -1790,10 +1783,10 @@ def start_api(
     from shared.daemon_launcher import MSG_KEEP_TERMINAL_OPEN
     _terminal_msg = MSG_KEEP_TERMINAL_OPEN
     logger.info("API: %s", _terminal_msg)
-    if _defer_ytdlp_thread and _run_ytdlp_update:
+    if _defer_runtime_update and _run_runtime_update:
         # Route through orchestrator so the update is visible in /api/health
         # active_jobs and queues behind other disk-heavy work on HDD (plan T3).
-        orchestrator.submit_background("ytdlp_update", _run_ytdlp_update)
+        orchestrator.submit_background("runtime_dependencies_update", _run_runtime_update)
     sys.stdout.flush()
     sys.stderr.flush()
     _register_api_shutdown_handlers()

@@ -76,15 +76,13 @@ describe('CollectionButton — the two halves of having a song', () => {
     expect(actions.downloadSaved).not.toHaveBeenCalled();
   });
 
-  it('keeps the slot when hiding the tick, so neighbouring controls hold still', () => {
+  it('takes no space on a downloaded row — no tick, and no box where one was', () => {
     held.saved = true;
     held.owned = true;
     const { container, queryByRole } = render(() => <CollectionButton entry={entry} hideOwned />);
 
     expect(queryByRole('button')).toBeNull();
-    // An empty box of the same size, not an empty gap.
-    expect(container.firstElementChild).not.toBeNull();
-    expect(container.firstElementChild).toHaveAttribute('aria-hidden', 'true');
+    expect(container.firstElementChild).toBeNull();
   });
 
   it('spins while the download is in flight, offering nothing to press', () => {

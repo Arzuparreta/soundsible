@@ -402,9 +402,11 @@ def get_downloader_config():
         return f"{s[:4]}...{s[-4:]}****"
 
     auto_update = (env_vars.get("YTDLP_AUTO_UPDATE", "") or "false").strip().lower() in ("true", "1")
+    auto_update_curl_cffi = (env_vars.get("CURL_CFFI_AUTO_UPDATE", "") or "false").strip().lower() in ("true", "1")
     config = {
         "quality": env_vars.get("DEFAULT_QUALITY", "high"),
         "auto_update_ytdlp": auto_update,
+        "auto_update_curl_cffi": auto_update_curl_cffi,
     }
 
     # Storage paths and bucket credentials describe the machine, not a library.
@@ -454,13 +456,14 @@ def update_downloader_config():
         "r2_secret_key": "R2_SECRET_ACCESS_KEY",
         "r2_bucket": "R2_BUCKET_NAME",
         "auto_update_ytdlp": "YTDLP_AUTO_UPDATE",
+        "auto_update_curl_cffi": "CURL_CFFI_AUTO_UPDATE",
     }
     for key, env_key in key_map.items():
         val = data.get(key)
         if val is not None:
             if isinstance(val, str) and val.endswith("****"):
                 continue
-            if key == "auto_update_ytdlp":
+            if key in {"auto_update_ytdlp", "auto_update_curl_cffi"}:
                 val = "true" if (val is True or (isinstance(val, str) and val.strip().lower() in ("true", "1"))) else "false"
             set_key(str(env_path), env_key, str(val))
             os.environ[env_key] = str(val)

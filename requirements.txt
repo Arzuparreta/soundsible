@@ -37,7 +37,8 @@ ruff>=0.1.0                # Fast Python linter
 bandit[toml]>=1.7.5        # Security linter
 
 # ODST-Tool Dependencies (YouTube Downloader)
-yt-dlp==2026.2.21         # YouTube Downloader (update manually when needed)
+yt-dlp==2026.7.4          # YouTube Downloader; startup auto-update is optional
+curl-cffi==0.15.0         # Current browser impersonation for yt-dlp
 python-dotenv>=1.0.0       # Environment variables
 gevent>=24.2.0            # Async networking for SocketIO (concurrent requests)
 gevent-websocket>=0.10.1   # WebSocket support for Flask-SocketIO

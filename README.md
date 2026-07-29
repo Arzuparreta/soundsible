@@ -75,7 +75,7 @@ Soundsible is a music app you run on your **own** machine. Browse, stream, and s
 
 ## Install
 
-Soundsible runs anywhere Python does. From a git clone you need **Python 3.10+**, **git**, **FFmpeg**, and **Node.js 20+** (one-time build of the SolidJS player — the production bundle is not committed to the repo). **Desktop beta** installers bundle the player, so they skip the Node.js build step.
+Soundsible runs anywhere Python does. From a git clone you need **Python 3.10+**, **git**, **FFmpeg**, and **Node.js 22+** (one-time build of the SolidJS player — the production bundle is not committed to the repo). **Desktop beta** installers bundle the player, so they skip the Node.js build step.
 
 ### 👉 Pick your OS — click to expand
 

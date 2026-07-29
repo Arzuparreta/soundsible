@@ -218,6 +218,7 @@ export const fr: Dict = {
     qualityNormal: 'Normale',
     qualityHigh: 'Haute',
     autoUpdateYtdlp: 'Mettre à jour yt-dlp auto.',
+    autoUpdateCurlCffi: 'Mettre à jour la compatibilité web (curl-cffi)',
     optimize: 'Optimiser la bibliothèque',
     sync: 'Synchronisation cloud',
     libraryCard: 'Bibliothèque',

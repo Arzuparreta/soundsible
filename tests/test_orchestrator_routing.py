@@ -5,7 +5,7 @@ instead of raw threading.Thread.
 
 Covers:
   - optimization and sync admin tasks submit via orchestrator.submit_task
-  - yt-dlp startup auto-update submits via orchestrator.submit_background
+  - runtime dependency auto-update submits via orchestrator.submit_background
 """
 
 import ast
@@ -62,18 +62,17 @@ def test_run_sync_task_submits_to_orchestrator():
         assert task_id == "sync"
 
 
-def test_ytdlp_autoupdate_uses_orchestrator_not_thread():
-    """The startup hook must route yt-dlp pip update via submit_background,
+def test_runtime_autoupdate_uses_orchestrator_not_thread():
+    """The startup hook must route the shared pip update via submit_background,
     not a raw daemon Thread — otherwise it competes with playback I/O
     without being tracked in active_jobs."""
     src = _source("shared/api/__init__.py")
-    # Find the conditional block that handles _defer_ytdlp_thread.
-    idx = src.find("_defer_ytdlp_thread and _run_ytdlp_update")
-    assert idx != -1, "yt-dlp deferred-startup block not found"
+    idx = src.find("_defer_runtime_update and _run_runtime_update")
+    assert idx != -1, "runtime dependency deferred-startup block not found"
     snippet = src[idx : idx + 400]
     assert "submit_background" in snippet, (
-        "yt-dlp update should go through orchestrator.submit_background"
+        "runtime dependency update should go through orchestrator.submit_background"
     )
-    assert "threading.Thread(target=_run_ytdlp_update" not in snippet, (
-        "yt-dlp update is still using a raw Thread"
+    assert "threading.Thread(target=_run_runtime_update" not in snippet, (
+        "runtime dependency update is still using a raw Thread"
     )

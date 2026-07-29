@@ -213,6 +213,7 @@ export const zh: Dict = {
     qualityNormal: '标准',
     qualityHigh: '高',
     autoUpdateYtdlp: '自动更新 yt-dlp',
+    autoUpdateCurlCffi: '自动更新网页兼容层 (curl-cffi)',
     optimize: '优化资料库',
     sync: '云端同步',
     libraryCard: '资料库',

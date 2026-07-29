@@ -109,7 +109,8 @@ export default function Settings() {
   const [learning, setLearning] = createSignal(true);
   const [autoplay, setAutoplay] = createSignal(state.playback.autoplayEnabled);
   const [quality, setQuality] = createSignal('high');
-  const [autoUpdate, setAutoUpdate] = createSignal(false);
+  const [autoUpdateYtdlp, setAutoUpdateYtdlp] = createSignal(false);
+  const [autoUpdateCurlCffi, setAutoUpdateCurlCffi] = createSignal(false);
   const sharedLinkAssociation = associationUrl();
 
   onMount(async () => {
@@ -123,7 +124,8 @@ export default function Settings() {
     try {
       const c = await api.getDownloaderConfig();
       if (c.quality) setQuality(c.quality);
-      if (typeof c.auto_update_ytdlp === 'boolean') setAutoUpdate(c.auto_update_ytdlp);
+      if (typeof c.auto_update_ytdlp === 'boolean') setAutoUpdateYtdlp(c.auto_update_ytdlp);
+      if (typeof c.auto_update_curl_cffi === 'boolean') setAutoUpdateCurlCffi(c.auto_update_curl_cffi);
     } catch {
       /* defaults */
     }
@@ -184,13 +186,24 @@ export default function Settings() {
     }
   };
 
-  const toggleAuto = async () => {
-    const next = !autoUpdate();
-    setAutoUpdate(next);
+  const toggleAutoYtdlp = async () => {
+    const next = !autoUpdateYtdlp();
+    setAutoUpdateYtdlp(next);
     try {
       await api.setDownloaderConfig({ auto_update_ytdlp: next });
     } catch {
-      setAutoUpdate(!next);
+      setAutoUpdateYtdlp(!next);
+      toast.error(t('settings.toast.notSaved'));
+    }
+  };
+
+  const toggleAutoCurlCffi = async () => {
+    const next = !autoUpdateCurlCffi();
+    setAutoUpdateCurlCffi(next);
+    try {
+      await api.setDownloaderConfig({ auto_update_curl_cffi: next });
+    } catch {
+      setAutoUpdateCurlCffi(!next);
       toast.error(t('settings.toast.notSaved'));
     }
   };
@@ -489,7 +502,16 @@ export default function Settings() {
                   </For>
                 </div>
               </div>
-              <SettingSwitch label={t('settings.autoUpdateYtdlp')} checked={autoUpdate()} onChange={toggleAuto} />
+              <SettingSwitch
+                label={t('settings.autoUpdateYtdlp')}
+                checked={autoUpdateYtdlp()}
+                onChange={toggleAutoYtdlp}
+              />
+              <SettingSwitch
+                label={t('settings.autoUpdateCurlCffi')}
+                checked={autoUpdateCurlCffi()}
+                onChange={toggleAutoCurlCffi}
+              />
             </Show>
             <Show when={isAdmin()}>
               <ActionRow label={t('settings.optimize')} onClick={optimize} />

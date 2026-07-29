@@ -14,9 +14,11 @@ export interface CollectionButtonProps {
   compact?: boolean;
   /** Extra class from the host surface, for layout only. */
   class?: string;
-  /** Drop the ✓ once the song has a file. The library uses this: nearly every
-   * row there is downloaded, so a tick on each is noise, and its *absence*
-   * stops meaning anything. */
+  /** Render nothing at all once the song has a file. The library uses this:
+   * nearly every row there is downloaded, so a tick on each is noise and its
+   * *absence* stops meaning anything. The control takes no space either — an
+   * empty box on every downloaded row is a worse trade than letting the few
+   * rows that still offer something sit a little wider. */
   hideOwned?: boolean;
   /** How this surface downloads, when it knows better than the store. Catalog
    * rows pass their own: a Deezer row has to be matched to a video first, and
@@ -76,12 +78,7 @@ export function CollectionButton(props: CollectionButtonProps) {
     `${styles.slot}${props.compact ? ` ${styles.compact}` : ''}${props.class ? ` ${props.class}` : ''}`;
 
   return (
-    <Show
-      when={!(props.hideOwned && state() === 'owned')}
-      // The box stays even when its glyph goes, so the controls to its right do
-      // not shuffle sideways between a downloaded row and a streamed one.
-      fallback={<span class={slotClass()} aria-hidden="true" />}
-    >
+    <Show when={!(props.hideOwned && state() === 'owned')}>
       <Show
         when={state() !== 'downloading'}
         fallback={

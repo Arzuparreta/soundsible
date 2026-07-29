@@ -761,8 +761,18 @@ export const api = {
       body: { autoplay_enabled: enabled },
     }),
   getDownloaderConfig: () =>
-    request<{ output_dir?: string; quality?: string; auto_update_ytdlp?: boolean }>('/api/downloader/config'),
-  setDownloaderConfig: (cfg: { quality?: string; auto_update_ytdlp?: boolean; output_dir?: string }) =>
+    request<{
+      output_dir?: string;
+      quality?: string;
+      auto_update_ytdlp?: boolean;
+      auto_update_curl_cffi?: boolean;
+    }>('/api/downloader/config'),
+  setDownloaderConfig: (cfg: {
+    quality?: string;
+    auto_update_ytdlp?: boolean;
+    auto_update_curl_cffi?: boolean;
+    output_dir?: string;
+  }) =>
     request<{ status?: string }>('/api/downloader/config', { method: 'POST', body: cfg }),
   optimizeLibrary: () =>
     request<{ status?: string }>('/api/downloader/optimize', { method: 'POST', timeoutMs: 60000 }),

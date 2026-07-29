@@ -213,6 +213,7 @@ export const en = {
     qualityNormal: 'Normal',
     qualityHigh: 'High',
     autoUpdateYtdlp: 'Auto-update yt-dlp',
+    autoUpdateCurlCffi: 'Auto-update web compatibility (curl-cffi)',
     optimize: 'Optimise library',
     sync: 'Cloud sync',
     libraryCard: 'Library',
