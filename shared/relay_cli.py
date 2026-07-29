@@ -123,9 +123,8 @@ def _status() -> int:
     return 0 if result.returncode == 0 and "ActiveState=active" in result.stdout else 1
 
 
-def _probe(proxy: str, video_id: str) -> dict:
+def _resolve_probe(proxy: str, video_id: str) -> dict:
     try:
-        import requests
         import yt_dlp
     except ImportError as exc:
         return {"video_id": video_id, "status": "dependency_error", "error": str(exc)}
@@ -142,13 +141,32 @@ def _probe(proxy: str, video_id: str) -> dict:
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
-        resolved_at = time.monotonic()
         stream_url = info.get("url") if isinstance(info, dict) else None
         if not stream_url:
             raise RuntimeError("no stream URL")
-        received = 0
+        return {
+            "video_id": video_id,
+            "status": "ok",
+            "resolve_ms": round((time.monotonic() - started) * 1000),
+            "_stream_url": stream_url,
+        }
+    except Exception as exc:
+        return {
+            "video_id": video_id,
+            "status": "failed",
+            "elapsed_ms": round((time.monotonic() - started) * 1000),
+            "error": type(exc).__name__,
+        }
+
+
+def _transfer_probe(proxy: str, probe: dict) -> dict:
+    import requests
+
+    started = time.monotonic()
+    received = 0
+    try:
         with requests.get(
-            stream_url,
+            probe["_stream_url"],
             stream=True,
             headers={"Range": "bytes=0-262143"},
             proxies={"http": proxy, "https": proxy},
@@ -162,19 +180,18 @@ def _probe(proxy: str, video_id: str) -> dict:
                     break
         ended = time.monotonic()
         return {
-            "video_id": video_id,
-            "status": "ok",
-            "resolve_ms": round((resolved_at - started) * 1000),
-            "first_headers_ms": round((headers_at - resolved_at) * 1000),
+            **probe,
+            "first_headers_ms": round((headers_at - started) * 1000),
             "first_256k_ms": round((ended - headers_at) * 1000),
             "bytes": received,
         }
     except Exception as exc:
         return {
-            "video_id": video_id,
+            "video_id": probe["video_id"],
             "status": "failed",
-            "elapsed_ms": round((time.monotonic() - started) * 1000),
+            "resolve_ms": probe["resolve_ms"],
             "error": type(exc).__name__,
+            "elapsed_ms": round((time.monotonic() - started) * 1000),
         }
 
 
@@ -196,8 +213,20 @@ def _verify(args: argparse.Namespace) -> int:
         print(json.dumps(report, indent=2) if args.json else f"Relay health failed: {type(exc).__name__}")
         return 1
     video_ids = list(dict.fromkeys(args.video_ids or DEFAULT_PROBES))
+    # Resolution represents the latency-critical active click and is measured
+    # without synthetic extractor contention. Transfer capacity is a separate
+    # concurrent gate using the already-resolved URLs.
+    resolved = [_resolve_probe(proxy, video_id) for video_id in video_ids]
+    resolvable = [probe for probe in resolved if probe["status"] == "ok"]
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(8, args.concurrency))) as pool:
-        probes = list(pool.map(lambda video_id: _probe(proxy, video_id), video_ids))
+        transferred = list(pool.map(lambda probe: _transfer_probe(proxy, probe), resolvable))
+    transferred_by_id = {probe["video_id"]: probe for probe in transferred}
+    probes = [
+        transferred_by_id.get(probe["video_id"], probe)
+        for probe in resolved
+    ]
+    for probe in probes:
+        probe.pop("_stream_url", None)
     good = [probe for probe in probes if probe["status"] == "ok"]
     resolve_p95 = _percentile([row["resolve_ms"] for row in good], 0.95)
     first_256k_p95 = _percentile(
