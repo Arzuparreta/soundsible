@@ -152,16 +152,6 @@ export const fr: Dict = {
       'Rien de marqué pour l’instant. Le cœur distingue un morceau du reste de votre bibliothèque.',
   },
   search: {
-    refreshDiscovery: 'Actualiser les suggestions',
-    discoveryUnavailable: 'Les suggestions sont indisponibles pour le moment.',
-    discovery: {
-      made_for_library: 'Depuis votre bibliothèque',
-      rediscover: 'À redécouvrir',
-      more_like: 'Dans le style de {artist}',
-      from_playlist: 'Depuis {playlist}',
-      explore_from: 'Explorer depuis {title}',
-      cold_start: 'Commencez votre bibliothèque',
-    },
     placeholder: 'Que voulez-vous écouter ?',
     tabAll: 'Tout',
     tabSongs: 'Titres',

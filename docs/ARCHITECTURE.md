@@ -120,16 +120,15 @@ Catalog resolve queues the winner's stream-URL resolution on the **preview prefe
 
 - The browser cannot call `api.deezer.com` (CORS). The Station exposes **`GET /api/discovery/deezer/<path>`**, which forwards **allowlisted** Deezer paths only (e.g. `chart`, `search`, `playlist/<id>`, `track/<id>`, `artist/<id>/top`) and returns Deezer’s JSON unchanged.
 - Requests are **rate-limited** per IP (`discovery_deezer`). The engine needs **outbound HTTPS** to Deezer.
-- **`GET /api/discovery/music/feed`** is the zero-query Search contract. It
+- **`GET /api/discovery/music/feed`** is an internal ranked discovery contract. It
   assembles local-library,
   favourite, playlist, listening-history, Deezer, and cached YouTube-related
   candidates; the server then ranks sections, diversifies artists, and removes
   cross-section duplicates. A local result is returned without waiting for
   provider extraction, while the fuller response is refreshed in the
   background and served stale-while-revalidate.
-- The Solid **Search** route renders those sections only before a query is
-  entered; explicit queries replace them with neutral search results.
-  **Library** is the root route.
+- Playback discovery pools can consume that contract without changing the
+  existing **Search** presentation. **Library** remains the root route.
 - **Playback and downloads** for those rows do **not** use Deezer audio. The UI runs **YouTube / YouTube Music text search** (same ODST `/api/downloader/youtube/search` path as the downloader) using Deezer title + artist, picks a matching video id, then:
   - **In-app preview** streams via **`GET /api/preview/stream/<video_id>`** (playback blueprint).
   - **Download queue** uses the resolved item like any other ODST search result.

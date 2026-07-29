@@ -147,16 +147,6 @@ export const en = {
     empty: 'Nothing marked yet. The heart singles a song out from the rest of your library.',
   },
   search: {
-    refreshDiscovery: 'Refresh suggestions',
-    discoveryUnavailable: 'Suggestions are unavailable right now.',
-    discovery: {
-      made_for_library: 'From your library',
-      rediscover: 'Rediscover',
-      more_like: 'More like {artist}',
-      from_playlist: 'From {playlist}',
-      explore_from: 'Explore from {title}',
-      cold_start: 'Start your library',
-    },
     placeholder: 'What do you want to play?',
     tabAll: 'All',
     tabSongs: 'Songs',

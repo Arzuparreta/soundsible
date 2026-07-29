@@ -2,7 +2,7 @@ import { For, Show } from 'solid-js';
 import { A } from '@solidjs/router';
 import { downloadCounts } from '../stores';
 import { t } from '../lib/i18n';
-import { desktopNavigation, type PrimaryNavItem } from './primaryNavigation';
+import { primaryNavigation, type PrimaryNavItem } from './primaryNavigation';
 import styles from './Sidebar.module.css';
 
 /** Secondary library shortcuts shared by the desktop rail only. */
@@ -39,7 +39,8 @@ function Item(props: { item: PrimaryNavItem; badge?: number }) {
   );
 }
 
-/** Desktop-only left navigation rail. */
+/** Desktop-only left navigation rail. Its primary group is the exact same
+ *  source as the mobile tab bar; only secondary library shortcuts are extra. */
 export function Sidebar() {
   const active = () => downloadCounts().active;
   return (
@@ -59,7 +60,7 @@ export function Sidebar() {
       </A>
 
       <nav class={styles.group}>
-        <For each={desktopNavigation}>{(item) => <Item item={item} />}</For>
+        <For each={primaryNavigation}>{(item) => <Item item={item} />}</For>
       </nav>
 
       <p class={styles.heading}>{t('nav.shortcuts')}</p>

@@ -148,16 +148,6 @@ export const es: Dict = {
     empty: 'Aún no has destacado nada. El corazón separa una canción del resto de tu biblioteca.',
   },
   search: {
-    refreshDiscovery: 'Actualizar sugerencias',
-    discoveryUnavailable: 'Las sugerencias no están disponibles ahora mismo.',
-    discovery: {
-      made_for_library: 'Desde tu biblioteca',
-      rediscover: 'Redescubre',
-      more_like: 'Más como {artist}',
-      from_playlist: 'Desde {playlist}',
-      explore_from: 'Explora desde {title}',
-      cold_start: 'Empieza tu biblioteca',
-    },
     placeholder: 'Qué quieres escuchar?',
     tabAll: 'Todo',
     tabSongs: 'Canciones',

@@ -166,9 +166,9 @@ This makes later design work implementation-safe instead of speculative.
 
 ## Implementation Status
 
-Last updated: 2026-07-30 (Recommendation Engine v2 / unified Search discovery).
+Last updated: 2026-07-30 (ranked discovery foundation).
 
-Implemented in Recommendation Engine v2 / unified Search discovery:
+Implemented in the ranked discovery foundation:
 
 - Listening rollups now add time-decayed artist and track affinity, recent
   context, event counts, and cold/warming/established profile maturity.
@@ -179,15 +179,11 @@ Implemented in Recommendation Engine v2 / unified Search discovery:
 - The discovery feed returns local candidates immediately, consumes the cached YouTube
   related graph without blocking, and refreshes external candidates in a
   bounded background worker with stale-while-revalidate caching.
-- Search owns both discovery and explicit retrieval: server-selected sections
-  appear only with an empty query and disappear when the user searches.
-  Library remains the root route and Search owns the discovery surface.
-- Server-selected sections drive desktop and mobile. Recommendation context is
-  retained through playback, and each recommendation exposes its reason plus
-  undoable `Not interested` feedback.
-- Backend route/ranking tests and frontend Search/navigation tests cover the
-  contract, localization, playback mapping, caching, diversification, and
-  deduplication.
+- The ranked feed is available to playback discovery pools without replacing
+  or redesigning Search's established empty-query presentation. Library remains
+  the root route.
+- Backend route and ranking tests cover the contract, caching,
+  diversification, and deduplication.
 
 Implemented in the first slice:
 
@@ -247,8 +243,9 @@ Implemented in Option A (Listening-Event Rollups):
 ## Where To Continue
 
 The next recommendation milestone is to move Autoplay, Auto Mode, and the
-seeded "more like this" action behind the same server-side planner used by
-Search, while keeping Auto Mode as the hands-off driving/co-pilot experience.
+seeded "more like this" action behind one server-side planner built on the
+shared discovery candidate and ranking foundation, while keeping Auto Mode as
+the hands-off driving/co-pilot experience.
 After that,
 the highest-value product tracks are playback continuity (gapless,
 normalization, crossfade), the portable desktop release path, and a richer
