@@ -55,6 +55,12 @@ class ListeningRollup:
     album_plays: dict[str, int] = field(default_factory=dict)
     podcast_plays: dict[str, int] = field(default_factory=dict)
     played_track_ids: set[str] = field(default_factory=set)
+    artist_affinity: dict[str, float] = field(default_factory=dict)
+    track_affinity: dict[str, float] = field(default_factory=dict)
+    recent_track_ids: list[str] = field(default_factory=list)
+    recent_artists: list[str] = field(default_factory=list)
+    event_count: int = 0
+    last_event_ts: int = 0
 
     @property
     def has_data(self) -> bool:
@@ -63,6 +69,14 @@ class ListeningRollup:
     @property
     def saved_artists(self) -> list[str]:
         return sorted(self.artist_saves, key=lambda a: self.artist_saves[a], reverse=True)
+
+    @property
+    def maturity(self) -> str:
+        if self.event_count >= 100 or len(self.played_track_ids) >= 40:
+            return "established"
+        if self.event_count >= 12 or len(self.played_track_ids) >= 6:
+            return "warming"
+        return "cold"
 
 
 def _listening_events_paths() -> list[Path]:
@@ -104,6 +118,9 @@ def load_listening_event_rollups(max_events: int = 2000) -> ListeningRollup:
             break
 
     rollup = ListeningRollup()
+    now = int(time.time())
+    recent_tracks: list[str] = []
+    recent_artists: list[str] = []
     for raw in lines[-max_events:]:
         raw = raw.strip()
         if not raw:
@@ -119,6 +136,26 @@ def load_listening_event_rollups(max_events: int = 2000) -> ListeningRollup:
         album = _norm(ev.get("album"))
         track_id = _clean_str(ev.get("track_id") or "")
         feed_id = _clean_str(ev.get("podcast_feed_id") or ev.get("itunes_collection_id") or "")
+        try:
+            event_ts = int(ev.get("ts") or now)
+        except (TypeError, ValueError):
+            event_ts = now
+        age_days = max(0.0, (now - event_ts) / 86400)
+        temporal_weight = math.pow(0.5, age_days / 45.0)
+        positive_weight = float(_POSITIVE_WEIGHTS.get(event, 0))
+        if positive_weight > 0:
+            rollup.event_count += 1
+            rollup.last_event_ts = max(rollup.last_event_ts, event_ts)
+            if artist:
+                rollup.artist_affinity[artist] = (
+                    rollup.artist_affinity.get(artist, 0.0)
+                    + positive_weight * temporal_weight
+                )
+            if track_id:
+                rollup.track_affinity[track_id] = (
+                    rollup.track_affinity.get(track_id, 0.0)
+                    + positive_weight * temporal_weight
+                )
 
         if event in ("music_played_30s", "music_search_played"):
             if artist:
@@ -128,6 +165,9 @@ def load_listening_event_rollups(max_events: int = 2000) -> ListeningRollup:
                 rollup.album_plays[key] = rollup.album_plays.get(key, 0) + 1
             if track_id:
                 rollup.played_track_ids.add(track_id)
+                recent_tracks.append(track_id)
+            if artist:
+                recent_artists.append(artist)
 
         elif event == "music_saved_to_library":
             if artist:
@@ -137,6 +177,8 @@ def load_listening_event_rollups(max_events: int = 2000) -> ListeningRollup:
             if feed_id:
                 rollup.podcast_plays[feed_id] = rollup.podcast_plays.get(feed_id, 0) + 1
 
+    rollup.recent_track_ids = list(dict.fromkeys(reversed(recent_tracks)))[:40]
+    rollup.recent_artists = list(dict.fromkeys(reversed(recent_artists)))[:20]
     return rollup
 
 
@@ -470,7 +512,8 @@ def _rollup_score_boost(artist_norm: str, rollup: ListeningRollup) -> float:
     """Extra score from listening history; capped at 0.50."""
     plays = rollup.artist_plays.get(artist_norm, 0)
     saves = rollup.artist_saves.get(artist_norm, 0)
-    return min(0.50, plays * 0.15 + saves * 0.20)
+    affinity = rollup.artist_affinity.get(artist_norm, 0.0)
+    return min(0.50, math.log1p(affinity) * 0.12 + plays * 0.04 + saves * 0.08)
 
 
 def _build_main_items(
@@ -571,6 +614,7 @@ def _build_rediscover_section(tracks: list[Track], rollup: ListeningRollup) -> d
     return {
         "id": "rediscover",
         "title": "Rediscover",
+        "title_key": "rediscover",
         "reason": "Tracks in your library you haven't played in a while.",
         "item_ids": rediscover_ids,
     }
@@ -619,6 +663,8 @@ def _build_playlist_sections(
             sections.append({
                 "id": f"from_playlist_{_norm(pl_name)[:40].replace(' ', '_')}",
                 "title": pl_name,
+                "title_key": "from_playlist",
+                "title_params": {"playlist": pl_name},
                 "reason": f"Tracks from your playlist.",
                 "item_ids": pl_item_ids,
                 "playlist_name": pl_name,
@@ -648,6 +694,7 @@ def build_music_recommendations(
                 {
                     "id": "cold_start",
                     "title": "Start your library",
+                    "title_key": "cold_start",
                     "reason": "Add music, import playlists, or search to teach Soundsible what to recommend.",
                     "item_ids": [],
                 }
@@ -662,6 +709,7 @@ def build_music_recommendations(
         {
             "id": "made_for_your_library",
             "title": "Made for Your Library",
+            "title_key": "made_for_library",
             "reason": "Local-first picks from favourites, playlists, and library structure.",
             "item_ids": [item["id"] for item in items[:limit]],
         }
@@ -679,6 +727,121 @@ def build_music_recommendations(
         "items": ranked_items[:limit],
         "sections": sections,
         "settings": load_discovery_settings(),
+    }
+
+
+def compose_discovery_feed(
+    candidate_response: dict[str, Any],
+    *,
+    rollup: ListeningRollup | None = None,
+    max_sections: int = 6,
+    section_size: int = 12,
+) -> dict[str, Any]:
+    """Rank and diversify sections for the zero-query discovery feed.
+
+    Candidate builders may propose many sections. The feed keeps only useful
+    sections, removes duplicate tracks across them, and caps artist repetition.
+    Search renders this contract when there is no explicit query.
+    """
+    if rollup is None:
+        rollup = load_listening_event_rollups()
+
+    raw_items = [
+        dict(item)
+        for item in candidate_response.get("items") or []
+        if isinstance(item, dict) and item.get("id")
+    ]
+    item_by_id = {str(item["id"]): item for item in raw_items}
+    candidates: list[tuple[float, int, dict[str, Any]]] = []
+
+    for section_index, raw_section in enumerate(candidate_response.get("sections") or []):
+        if not isinstance(raw_section, dict):
+            continue
+        section = dict(raw_section)
+        ids = [
+            str(item_id)
+            for item_id in section.get("item_ids") or []
+            if str(item_id) in item_by_id
+        ]
+        if not ids:
+            continue
+
+        ids.sort(key=lambda item_id: -float(item_by_id[item_id].get("score") or 0))
+        artist_counts: dict[str, int] = {}
+        diversified: list[str] = []
+        for item_id in ids:
+            item = item_by_id[item_id]
+            artist = _norm(item.get("artist") or item.get("channel"))
+            if artist and artist_counts.get(artist, 0) >= 2:
+                continue
+            diversified.append(item_id)
+            if artist:
+                artist_counts[artist] = artist_counts.get(artist, 0) + 1
+            if len(diversified) >= section_size:
+                break
+        if not diversified:
+            continue
+
+        section_items = [item_by_id[item_id] for item_id in diversified]
+        top_scores = [min(1.5, max(0.0, float(item.get("score") or 0))) for item in section_items[:4]]
+        mean_score = sum(top_scores) / len(top_scores)
+        novelty = sum(
+            1 for item in section_items
+            if not bool((item.get("action_state") or {}).get("in_library"))
+        ) / len(section_items)
+        confidence = sum(
+            min(1.0, max(0.0, float(item.get("confidence") or 0.5)))
+            for item in section_items
+        ) / len(section_items)
+        source_variety = min(
+            1.0,
+            len({_clean_str(item.get("source"), 80) for item in section_items if item.get("source")})
+            / 3,
+        )
+        size_quality = min(1.0, len(section_items) / 8)
+        utility = (
+            mean_score * 0.55
+            + novelty * 0.16
+            + confidence * 0.13
+            + source_variety * 0.08
+            + size_quality * 0.08
+        )
+        section["item_ids"] = diversified
+        section["section_type"] = section.get("section_type") or "track_rail"
+        section["score"] = round(utility, 6)
+        candidates.append((utility, section_index, section))
+
+    candidates.sort(key=lambda row: (-row[0], row[1]))
+    used_items: set[str] = set()
+    sections: list[dict[str, Any]] = []
+    for _, _, section in candidates:
+        unique_ids = [item_id for item_id in section["item_ids"] if item_id not in used_items]
+        if not unique_ids:
+            continue
+        section["item_ids"] = unique_ids
+        used_items.update(unique_ids)
+        sections.append(section)
+        if len(sections) >= max_sections:
+            break
+
+    feed_items = [item_by_id[item_id] for section in sections for item_id in section["item_ids"]]
+    return {
+        "v": 1,
+        "generated_at": int(time.time()),
+        "items": feed_items,
+        "sections": sections,
+        "profile": {
+            "maturity": rollup.maturity,
+            "event_count": rollup.event_count,
+            "distinct_tracks": len(rollup.played_track_ids),
+            "learning_enabled": bool(
+                candidate_response.get("settings", load_discovery_settings()).get(
+                    "learning_enabled",
+                    True,
+                )
+            ),
+        },
+        "needs_seed": not bool(sections),
     }
 
 

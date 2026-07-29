@@ -7,7 +7,6 @@ export const zh: Dict = {
   },
   nav: {
     mobile: '主导航',
-    home: '首页',
     search: '搜索',
     favourites: '收藏',
     playlists: '歌单',
@@ -110,7 +109,7 @@ export const zh: Dict = {
   autoplay: {
     reason: '与你刚才收听的内容相似',
   },
-  home: {
+  library: {
     title: '你的资料库',
     favourites: '收藏',
     playlists: '歌单',
@@ -149,6 +148,16 @@ export const zh: Dict = {
     empty: '还没有标记任何歌曲。心形用来把一首歌从你的资料库中标出来。',
   },
   search: {
+    refreshDiscovery: '刷新推荐',
+    discoveryUnavailable: '推荐暂时不可用。',
+    discovery: {
+      made_for_library: '来自你的音乐库',
+      rediscover: '重新发现',
+      more_like: '更多类似 {artist}',
+      from_playlist: '来自 {playlist}',
+      explore_from: '从 {title} 开始探索',
+      cold_start: '开始建立音乐库',
+    },
     placeholder: '想听什么？',
     tabAll: '全部',
     tabSongs: '歌曲',

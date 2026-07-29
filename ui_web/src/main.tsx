@@ -3,7 +3,7 @@ import { render } from 'solid-js/web';
 import { Show, createEffect, onMount } from 'solid-js';
 import { HashRouter, Route, useNavigate } from '@solidjs/router';
 import Shell from './app';
-import Home from './routes/Home';
+import Library from './routes/Library';
 import Favourites from './routes/Favourites';
 import Search from './routes/Search';
 import Settings from './routes/Settings';
@@ -79,7 +79,8 @@ function DiscoverRedirect() {
 function Player() {
   return (
     <HashRouter root={Shell}>
-      <Route path="/" component={Home} />
+      <Route path="/" component={Library} />
+      <Route path="/library" component={Library} />
       <Route path="/favourites" component={Favourites} />
       <Route path="/search" component={Search} />
       <Route path="/settings" component={Settings} />
@@ -123,7 +124,7 @@ function App() {
     if (!ready() || !authenticated()) return;
     // A leftover `#/invite/<token>` — e.g. a home-screen icon saved on the
     // invite page — must not strand a signed-in user on a dead-link screen.
-    // Once there is a session the token is irrelevant: drop it and go home.
+    // Once there is a session the token is irrelevant: drop it and go to the root.
     if (inviteToken()) window.location.hash = '#/';
     initStore();
   });

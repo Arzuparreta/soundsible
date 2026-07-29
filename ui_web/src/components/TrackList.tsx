@@ -27,7 +27,7 @@ function readRowHeight(): number {
 }
 
 /**
- * Reusable virtualized song list. Shared by Home, Favourites and Search.
+ * Reusable virtualized song list. Shared by Library, Favourites and Search.
  * Reads playback/favourites/actions from the single store; only visible rows
  * render, and only the affected node updates on play/favourite changes.
  *

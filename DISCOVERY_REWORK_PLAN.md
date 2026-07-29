@@ -166,7 +166,28 @@ This makes later design work implementation-safe instead of speculative.
 
 ## Implementation Status
 
-Last updated: 2026-05-19 (Phase 3 partial).
+Last updated: 2026-07-30 (Recommendation Engine v2 / unified Search discovery).
+
+Implemented in Recommendation Engine v2 / unified Search discovery:
+
+- Listening rollups now add time-decayed artist and track affinity, recent
+  context, event counts, and cold/warming/established profile maturity.
+- `GET /api/discovery/music/feed` is the single server-owned, source-agnostic
+  zero-query discovery contract. It ranks candidate sections by utility, caps
+  artist repetition, removes duplicate tracks across sections, and returns
+  recommendation identity and reasons.
+- The discovery feed returns local candidates immediately, consumes the cached YouTube
+  related graph without blocking, and refreshes external candidates in a
+  bounded background worker with stale-while-revalidate caching.
+- Search owns both discovery and explicit retrieval: server-selected sections
+  appear only with an empty query and disappear when the user searches.
+  Library remains the root route and Search owns the discovery surface.
+- Server-selected sections drive desktop and mobile. Recommendation context is
+  retained through playback, and each recommendation exposes its reason plus
+  undoable `Not interested` feedback.
+- Backend route/ranking tests and frontend Search/navigation tests cover the
+  contract, localization, playback mapping, caching, diversification, and
+  deduplication.
 
 Implemented in the first slice:
 
@@ -195,17 +216,20 @@ Implemented in Phase 3 (Save and Resolve):
 - `saveTrackToLibrary()` exported from `discovery.js`; wired to all `.dl-add-one[data-deezer-id]` buttons via `deezer_actions.js`.
 - Tests: `tests/test_resolution_confidence.py` (13 tests) covering scoring bands, DB migration, upsert, and empty-input guards.
 
-Known limits of the first slice:
+Known limits after the unified Search discovery slice:
 
-- The full quiet-premium Discover and Podcasts redesign has not started.
-- External `Save to Library` still mostly uses current downloader queue mechanics under the UI.
-- Recommendation scoring is deterministic and intentionally simple; it does not yet read historical listening-event rollups.
-- Podcast recommendations are subscription-based only in this slice.
-- No confidence-gated resolution sheet has been added yet.
+- Recommendation scoring remains deterministic and local-first; this slice does
+  not introduce embeddings or a hosted recommendation dependency.
+- Search and playback generators share recommendation identity/feedback ranking,
+  but Auto Mode and Radio still assemble their candidate pools independently.
+- Podcast recommendations remain less mature than music recommendations.
+- Provider-backed enrichment depends on outbound services; local discovery and
+  explicit library search remain usable when those services are unavailable.
 
 Implemented in Phase 4 (Discovery UI Redesign):
 
-- `renderHome()` replaced in `DiscoveryUI`: now data-driven from the recommendation API sections instead of hardcoded rails.
+- The legacy discovery landing renderer became data-driven from recommendation
+  API sections instead of hardcoded rails.
 - New helpers `fetchLocalRecommendationData(limit)` and `_sectionToLibraryTracks(section, itemById, trackById)` for mapping API sections to library tracks.
 - Sections rendered in order: **Made for Your Library** → **Because You Saved…** (dynamic title, shown only when rollup has saves) → **Rediscover** (shown only when enough play history exists) → **New to You** (Deezer personalized) → **Trending, But Filtered** (chart filtered to library artists, falls back to full chart) → **Popular Playlists** (Deezer grid).
 - Each section is gracefully hidden/empty-stated when data is absent.
@@ -220,31 +244,13 @@ Implemented in Option A (Listening-Event Rollups):
 - `build_podcast_recommendations` now sorts subscriptions by recent play count; shows "podcast_recently_played" reason for boosted shows.
 - Tests: 7 new rollup tests covering aggregation, opt-out, score boost, section generation, and podcast ranking.
 
-## Where The Next Agent Should Continue
+## Where To Continue
 
-Recommended next phase: Phase 3, then Phase 4.
-
-1. Build a first-class `Save to Library` flow on top of the downloader.
-   - Replace prominent queue/download wording on Discover rows with ownership language.
-   - Keep progress visible, but make queue mechanics secondary.
-   - Emit `music_saved_to_library` only after backend queue acceptance, as currently started.
-
-2. Extend resolution confidence.
-   - Add confidence, candidate list, verification metadata, and failure state to the existing YouTube resolution path/cache.
-   - Direct-save high-confidence matches.
-   - Show a resolution sheet for uncertain matches.
-
-3. Add listening-event rollups.
-   - Read local `listening-events.jsonl`.
-   - Aggregate artist, album, playlist, source, podcast show, search-play, and save signals.
-   - Feed those rollups into `build_music_recommendations` and `build_podcast_recommendations`.
-
-4. Redesign Discover.
-   - Keep music and podcasts as separate product experiences.
-   - Use the API reason/action-state contracts rather than frontend-only heuristics.
-   - Prioritize `Made for Your Library`, `Because You Saved...`, `From Your Imported Playlists`, `Rediscover`, and `Continue This Vibe`.
-
-5. Expand tests.
-   - Add route-level tests for discovery settings/events/recommendations.
-   - Add frontend smoke coverage for the Settings learning toggle and Discover local rail.
-   - Add fixture tests for listening-event rollup scoring once rollups exist.
+The next recommendation milestone is to move Autoplay, Auto Mode, and the
+seeded "more like this" action behind the same server-side planner used by
+Search, while keeping Auto Mode as the hands-off driving/co-pilot experience.
+After that,
+the highest-value product tracks are playback continuity (gapless,
+normalization, crossfade), the portable desktop release path, and a richer
+podcast profile. Each remains a separate shippable milestone; none is implied
+complete by this discovery slice.

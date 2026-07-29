@@ -93,9 +93,9 @@ export async function chartCandidates(max = 6, signal?: AbortSignal): Promise<Au
   if (chartCache && Date.now() - chartCache.ts < CHART_TTL_MS) {
     seeds = chartCache.seeds;
   } else {
-    const feed = await api.getDiscoveryMusicFeed();
+    const feed = await api.getDiscoveryMusicFeed(signal);
     seeds = (feed.items ?? [])
-      .filter((it) => (it.media_type ?? 'track') === 'track')
+      .filter((it) => ['track', 'music_track'].includes(it.media_type ?? 'track'))
       .map((it) => ({ artist: it.artist, title: it.title, duration: it.duration, cover: it.cover, album: it.album }))
       .filter((s) => s.artist && s.title);
     chartCache = { ts: Date.now(), seeds };

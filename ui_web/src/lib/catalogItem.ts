@@ -28,7 +28,11 @@ export function catalogPreviewId(item: CatalogItem): string | null {
 export function itemToTrack(item: CatalogItem): Track | null {
   if (item.track_id) {
     const found = state.library.find((tr) => tr.id === item.track_id);
-    if (found) return found;
+    if (found) {
+      return item.raw?.recommendation
+        ? { ...found, recommendation: item.raw.recommendation }
+        : found;
+    }
   }
   const previewId = catalogPreviewId(item);
   if (previewId) {
@@ -43,6 +47,7 @@ export function itemToTrack(item: CatalogItem): Track | null {
       cover: item.cover,
       source: 'preview',
       originKeys: catalogItemKeys(item),
+      recommendation: raw.recommendation,
     };
   }
   return null;
@@ -124,6 +129,7 @@ export async function playCatalogItem(
       // Deezer/MusicBrainz row that picked it, so without this the row could
       // not tell that the thing it just started is the thing now playing.
       originKeys: catalogItemKeys(item),
+      recommendation: item.raw?.recommendation,
     };
     if (queue) {
       const rest = queue

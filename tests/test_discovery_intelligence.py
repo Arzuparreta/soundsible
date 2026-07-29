@@ -7,6 +7,7 @@ from shared.discovery_intelligence import (
     ListeningRollup,
     build_music_recommendations,
     build_podcast_recommendations,
+    compose_discovery_feed,
     emit_discovery_event,
     load_discovery_settings,
     load_listening_event_rollups,
@@ -423,3 +424,63 @@ def test_from_your_playlists_section_appears(tmp_path):
     assert len(pl_sections) >= 1
     assert pl_sections[0]["playlist_name"] == "Road Trip"
     assert "music:a" in pl_sections[0]["item_ids"] or "music:b" in pl_sections[0]["item_ids"]
+
+
+def test_temporal_profile_values_recent_events_more_than_old_events(tmp_path, monkeypatch):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    now = 2_000_000_000
+    monkeypatch.setattr("shared.discovery_intelligence.time.time", lambda: now)
+    _write_jsonl_events(runtime.data_dir, [
+        {
+            "event": "music_played_30s",
+            "track_id": "old",
+            "artist": "Old Artist",
+            "ts": now - 180 * 86400,
+        },
+        {
+            "event": "music_played_30s",
+            "track_id": "new",
+            "artist": "New Artist",
+            "ts": now,
+        },
+    ])
+
+    profile = load_listening_event_rollups()
+
+    assert profile.maturity == "cold"
+    assert profile.event_count == 2
+    assert profile.artist_affinity["new artist"] > profile.artist_affinity["old artist"] * 10
+    assert profile.recent_track_ids == ["new", "old"]
+
+
+def test_compose_discovery_feed_ranks_sections_diversifies_artists_and_removes_duplicates(tmp_path):
+    _make_runtime(tmp_path)
+    items = [
+        {
+            "id": f"item:{index}",
+            "title": f"Track {index}",
+            "artist": "Repeated Artist" if index < 4 else f"Artist {index}",
+            "source": "external" if index >= 4 else "library",
+            "score": 1.2 - index * 0.04,
+            "confidence": 0.9,
+            "action_state": {"in_library": index < 4},
+        }
+        for index in range(8)
+    ]
+    response = compose_discovery_feed({
+        "items": items,
+        "sections": [
+            {"id": "broad", "title": "Broad", "item_ids": [item["id"] for item in items]},
+            {"id": "duplicate", "title": "Duplicate", "item_ids": ["item:0", "item:1"]},
+        ],
+        "settings": {"learning_enabled": True},
+    }, max_sections=4, section_size=8)
+
+    assert response["v"] == 1
+    assert response["sections"][0]["id"] == "broad"
+    assert response["sections"][0]["item_ids"][:2] == ["item:0", "item:1"]
+    assert "item:2" not in response["sections"][0]["item_ids"]
+    assert all(section["id"] != "duplicate" for section in response["sections"])
+    assert len(response["items"]) == len({item["id"] for item in response["items"]})
+    assert response["profile"]["learning_enabled"] is True

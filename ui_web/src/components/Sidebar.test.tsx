@@ -10,7 +10,7 @@ beforeEach(() => {
 });
 
 describe('desktop sidebar', () => {
-  it('uses the same five primary destinations and order as mobile', () => {
+  it('keeps the complete desktop IA while mobile stays thumb-sized', () => {
     const view = render(() => (
       <Router>
         <Route path="*" component={Sidebar} />
@@ -19,7 +19,7 @@ describe('desktop sidebar', () => {
     const groups = view.container.querySelectorAll('nav');
 
     expect(within(groups[0] as HTMLElement).getAllByRole('link').map((link) => link.textContent?.trim()))
-      .toEqual(['Biblioteca', 'Buscar', 'Listas', 'Podcasts', 'Ajustes']);
+      .toEqual(['Buscar', 'Biblioteca', 'Listas', 'Podcasts', 'Ajustes']);
     expect(within(groups[1] as HTMLElement).getAllByRole('link').map((link) => link.textContent?.trim()))
       .toEqual(['Favoritos', 'Descargas']);
   });

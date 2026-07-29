@@ -15,13 +15,10 @@ const apiMock = vi.hoisted(() => ({
   resolveCatalogItem: vi.fn(),
   saveCatalogItem: vi.fn(),
   saveDiscoveryTrack: vi.fn(),
+  getDiscoveryMusicFeed: vi.fn(),
+  sendDiscoveryFeedback: vi.fn(),
+  undoDiscoveryFeedback: vi.fn(),
   prefetchPreviews: vi.fn(() => Promise.resolve({ status: 'queued' })),
-}));
-const nodeMock = vi.hoisted(() => ({
-  ensureNodeFeed: vi.fn(),
-  refreshNodeFeed: vi.fn(),
-  items: [] as Array<Record<string, unknown>>,
-  loading: false,
 }));
 const storeMock = vi.hoisted(() => ({
   playTrack: vi.fn(),
@@ -30,18 +27,13 @@ const storeMock = vi.hoisted(() => ({
 
 vi.mock('@solidjs/router', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('../lib/api', () => ({ api: apiMock }));
-vi.mock('../lib/nodeDiscover', () => ({
-  ensureNodeFeed: nodeMock.ensureNodeFeed,
-  refreshNodeFeed: nodeMock.refreshNodeFeed,
-  nodeFeed: () => nodeMock.items,
-  nodeLoading: () => nodeMock.loading,
-}));
 vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
 vi.mock('../lib/toast', () => ({
   toast: {
     info: vi.fn(),
     success: vi.fn(),
     error: vi.fn(),
+    action: vi.fn(),
     loading: vi.fn(() => ({ update: vi.fn() })),
   },
 }));
@@ -68,8 +60,6 @@ describe('Search route', () => {
   beforeEach(() => {
     setLocale('en');
     vi.useFakeTimers();
-    nodeMock.items = [];
-    nodeMock.loading = false;
     storeMock.library = [];
     window.location.hash = '#/search';
     apiMock.searchCatalog.mockResolvedValue({ items: [], sections: [] });
@@ -87,6 +77,50 @@ describe('Search route', () => {
     apiMock.resolveCatalogItem.mockResolvedValue({});
     apiMock.saveCatalogItem.mockResolvedValue({ status: 'queued' });
     apiMock.saveDiscoveryTrack.mockResolvedValue({ status: 'queued' });
+    apiMock.getDiscoveryMusicFeed.mockResolvedValue({
+      v: 1,
+      items: [],
+      sections: [],
+      needs_seed: true,
+    });
+    apiMock.sendDiscoveryFeedback.mockResolvedValue({ recorded: true, event_id: 'feedback-1' });
+    apiMock.undoDiscoveryFeedback.mockResolvedValue({ undone: true });
+  });
+
+  it('uses the ranked discovery feed as the zero-query Search state', async () => {
+    apiMock.getDiscoveryMusicFeed.mockResolvedValue({
+      v: 1,
+      items: [{
+        id: 'youtube:abcdefghijk',
+        title: 'Discovery Pick',
+        artist: 'Outside Artist',
+        source: 'youtube_related',
+        reason: 'Because it fits.',
+        reason_code: 'library_graph',
+        recommendation_identity: 'music:youtube:abcdefghijk',
+        external_ids: { youtube_id: 'abcdefghijk' },
+      }],
+      sections: [{
+        id: 'dynamic-first',
+        title: 'Fallback',
+        title_key: 'more_like',
+        title_params: { artist: 'Outside Artist' },
+        item_ids: ['youtube:abcdefghijk'],
+      }],
+      needs_seed: false,
+    });
+
+    render(() => <Search />);
+
+    expect(await screen.findByText('More like Outside Artist')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Discovery Pick'));
+    expect(storeMock.playTrack).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'abcdefghijk',
+      recommendation: expect.objectContaining({
+        identity: 'music:youtube:abcdefghijk',
+        source: 'discover',
+      }),
+    }));
   });
 
   afterEach(() => {
@@ -150,26 +184,6 @@ describe('Search route', () => {
     expect(screen.getByText('Literal Artist')).toBeInTheDocument();
     expect(screen.getAllByText('El Fary')).toHaveLength(2);
     expect(apiMock.searchYouTube).not.toHaveBeenCalled();
-  });
-
-  it('renders the node feed as the empty search state', async () => {
-    setLocale('es');
-    nodeMock.items = [
-      {
-        id: 'rec00000001',
-        title: 'New Track',
-        channel: 'New Artist',
-        seedId: 'lib1',
-        seedTitle: 'Seed Song',
-        seedArtist: 'Seed Artist',
-      },
-    ];
-
-    render(() => <Search />);
-
-    expect(await screen.findByText('Recomendaciones')).toBeInTheDocument();
-    expect(screen.getByText('New Track')).toBeInTheDocument();
-    expect(nodeMock.ensureNodeFeed).toHaveBeenCalled();
   });
 
   it('treats pasted YouTube URLs as exact YouTube items', async () => {

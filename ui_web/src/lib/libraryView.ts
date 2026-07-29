@@ -19,8 +19,8 @@ function persisted(key: string, def: string) {
 }
 
 /** Persisted library browse preferences (shared so they survive navigation). */
-export const [librarySort, setLibrarySort] = persisted('home:sort', 'recent');
-export const [libraryTab, setLibraryTab] = persisted('home:tab', 'songs');
+export const [librarySort, setLibrarySort] = persisted('library:sort', 'recent');
+export const [libraryTab, setLibraryTab] = persisted('library:tab', 'songs');
 
 /** Sort a track list by the chosen mode. 'recent' keeps the engine's order. */
 export function sortTracks(tracks: Track[], mode: string, favSet: Set<string>): Track[] {

@@ -9,7 +9,7 @@ export interface SwipeRevealFrame {
 }
 
 /**
- * Small, DOM-free state machine for Home's concealed mobile controls.
+ * Small, DOM-free state machine for Library's concealed mobile controls.
  *
  * The first gesture towards the top of the library is consumed by the controls
  * instead of overscrolling the first song. Touch coordinates move down while

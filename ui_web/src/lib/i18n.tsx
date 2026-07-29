@@ -78,7 +78,7 @@ function interpolate(template: string, params?: Record<string, string | number>)
 }
 
 /**
- * Translate a dotted key (e.g. `nav.home`) using the active locale, interpolating
+ * Translate a dotted key (e.g. `nav.library`) using the active locale, interpolating
  * `{name}` placeholders from `params`. Reactive: reading it in a tracking scope
  * re-runs when the locale changes. Falls back to the key itself if missing.
  */

@@ -11,11 +11,11 @@ import { t } from '../lib/i18n';
 import { librarySort, setLibrarySort, libraryTab, setLibraryTab, sortTracks, buildArtists } from '../lib/libraryView';
 import { searchLibrary } from '../lib/librarySearch';
 import { createTopSwipeReveal } from '../lib/topSwipeReveal';
-import styles from './Home.module.css';
+import styles from './Library.module.css';
 import { EmptyState } from '../components/EmptyState';
 
 /** Library view: songs (sortable, virtualized) or artists browser. */
-export default function Home() {
+export default function Library() {
   let viewRef: HTMLDivElement | undefined;
   const active = createMemo(() => downloadCounts().active);
   // Keyed off the resolved rows rather than library ids, so "favourites first"
@@ -36,9 +36,9 @@ export default function Home() {
   const emptyState = (emptyMessage: string) => (
     <Show when={unreachable()} fallback={<EmptyState>{emptyMessage}</EmptyState>}>
       <EmptyState tone="danger">
-        {t('home.unreachableEmpty')}{' '}
+        {t('library.unreachableEmpty')}{' '}
         <button class={styles.retry} type="button" onClick={() => void actions.syncLibrary()}>
-          {t('home.retry')}
+          {t('library.retry')}
         </button>
       </EmptyState>
     </Show>
@@ -150,14 +150,14 @@ export default function Home() {
           setSearchProgress(1);
         }}
         onBlur={() => setSearchFocused(false)}
-        placeholder={t('home.searchLibrary')}
-        aria-label={t('home.searchLibrary')}
+        placeholder={t('library.searchLibrary')}
+        aria-label={t('library.searchLibrary')}
       />
       <Show when={query()}>
         <button
           class={styles.clearSearch}
           type="button"
-          aria-label={t('home.clearSearch')}
+          aria-label={t('library.clearSearch')}
           onClick={() => setQuery('')}
           data-pressable
         >
@@ -171,11 +171,11 @@ export default function Home() {
 
   const sortLibrary = () =>
     openActionMenu({
-      title: t('home.sortTitle'),
+      title: t('library.sortTitle'),
       actions: [
-        ['recent', t('home.sortRecent')],
-        ['az', t('home.sortAZ')],
-        ['fav', t('home.sortFavFirst')],
+        ['recent', t('library.sortRecent')],
+        ['az', t('library.sortAZ')],
+        ['fav', t('library.sortFavFirst')],
       ].map(([value, label]) => ({
         label: `${librarySort() === value ? '✓  ' : ''}${label}`,
         onSelect: () => setLibrarySort(value),
@@ -185,17 +185,17 @@ export default function Home() {
   return (
     <div ref={viewRef} class="view">
       <ViewHeader
-        title={t('home.title')}
+        title={t('library.title')}
         meta={state.loading && songs().length === 0 ? t('common.loading') : trackCount(songs().length)}
         actions={
           <>
             <Show when={!isMobile()}>{searchField(true)}</Show>
-            <A class={styles.headerAction} href="/favourites" aria-label={t('home.favourites')} data-pressable>
+            <A class={styles.headerAction} href="/favourites" aria-label={t('library.favourites')} data-pressable>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z" />
               </svg>
             </A>
-            <A class={styles.headerAction} href="/downloads" aria-label={t('home.downloads')} data-pressable>
+            <A class={styles.headerAction} href="/downloads" aria-label={t('library.downloads')} data-pressable>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" />
               </svg>
@@ -228,7 +228,7 @@ export default function Home() {
               type="button"
               onClick={() => setLibraryTab('songs')}
             >
-              {t('home.songs')}
+              {t('library.songs')}
             </button>
             <button
               class={styles.tab}
@@ -236,15 +236,15 @@ export default function Home() {
               type="button"
               onClick={() => setLibraryTab('artists')}
             >
-              {t('home.artists')}
+              {t('library.artists')}
             </button>
           </div>
           <Show when={libraryTab() === 'songs'}>
-            <button class={styles.sortButton} type="button" onClick={sortLibrary} aria-label={t('home.sortTitle')} data-pressable>
+            <button class={styles.sortButton} type="button" onClick={sortLibrary} aria-label={t('library.sortTitle')} data-pressable>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M3 6h18M6 12h12M10 18h4" />
               </svg>
-              <span>{librarySort() === 'az' ? t('home.sortAZ') : librarySort() === 'fav' ? t('home.sortFavFirst') : t('home.sortRecent')}</span>
+              <span>{librarySort() === 'az' ? t('library.sortAZ') : librarySort() === 'fav' ? t('library.sortFavFirst') : t('library.sortRecent')}</span>
             </button>
           </Show>
         </div>
@@ -252,14 +252,14 @@ export default function Home() {
 
       {/* Stale but not empty: the list below is real, just possibly behind. */}
       <Show when={state.libraryError && songs().length > 0}>
-        <p class={styles.stale}>{t('home.unreachable')}</p>
+        <p class={styles.stale}>{t('library.unreachable')}</p>
       </Show>
 
       <Show when={searching()} fallback={
         <Show
           when={libraryTab() === 'songs'}
           fallback={
-            <Show when={artists().length > 0} fallback={emptyState(t('home.emptyArtists'))}>
+            <Show when={artists().length > 0} fallback={emptyState(t('library.emptyArtists'))}>
               <div class={styles.artistsScroll} data-library-scroll data-primary-scroll>
                 <ArtistGrid artists={artists()} />
               </div>
@@ -268,9 +268,9 @@ export default function Home() {
         >
           <TrackList
             tracks={sorted()}
-            context={{ id: 'library', kind: 'library', label: t('home.title') }}
+            context={{ id: 'library', kind: 'library', label: t('library.title') }}
             loading={state.loading}
-            empty={emptyState(t('home.emptyLibrary'))}
+            empty={emptyState(t('library.emptyLibrary'))}
             linkArtist={!isMobile()}
           />
         </Show>

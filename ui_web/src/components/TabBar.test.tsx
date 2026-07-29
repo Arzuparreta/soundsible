@@ -31,8 +31,8 @@ describe('mobile tab bar', () => {
   it('exposes the five decided top-level destinations', () => {
     renderTabs();
     expect(screen.getAllByRole('link').map((link) => link.textContent?.trim())).toEqual([
-      'Biblioteca',
       'Buscar',
+      'Biblioteca',
       'Listas',
       'Podcasts',
       'Ajustes',

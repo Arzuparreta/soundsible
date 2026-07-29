@@ -11,15 +11,15 @@
 > mount, auto-disposed (the Discover leak is now structurally impossible). Placeholder routes
 > exercise store + overlay.
 >
-> **Home/Library view DONE** (`routes/Home.tsx`): real engine data (`/api/library` + `/api/library/favourites`)
+> **Library view DONE** (`routes/Library.tsx`): real engine data (`/api/library` + `/api/library/favourites`)
 > in the store; virtualized `SongRow` list (`@tanstack/solid-virtual`); favourite toggle (optimistic
 > + `/api/library/favourites/toggle`, revert on failure); real audio playback via a shared element
 > (`lib/audio.ts`, streams `/api/static/stream/<id>`) reflected in `OmniBar` with play/pause. Builds +
 > typechecks clean.
 >
-> **Views done so far:** Home, **Favourites**, **Search** (client-side library filter), **Settings**
+> **Views done so far:** Library, **Favourites**, **Search** (client-side library filter), **Settings**
 > (connection, library reload/rescan, device name). Reusable `TrackList` (virtualized) + `ViewHeader`
-> extracted; tab bar IA = Inicio / Buscar / Discover / Ajustes (Favoritos + Listas via Home chips).
+> extracted; tab bar IA has since converged on Buscar / Biblioteca / Listas / Podcasts / Ajustes.
 >
 > **Process (user decision 2026-06-16):** build ALL views first, then ONE full test-coverage pass at
 > the end — not test-as-you-go. Verify each batch with typecheck + build for now.
@@ -50,14 +50,14 @@
 > queue, unknown ids append). Per-row progress bar (determinate %/indeterminate), phase + speed·ETA,
 > optimistic retry/remove + clear-failed/clear-all, and a transient "recently added" strip. New
 > `api.ts` methods: getDownloadQueue / retryDownload / removeDownload / clearDownloads /
-> clearFailedDownloads. Reachable via a **Home "Descargas" chip with a live active-count badge**.
+> clearFailedDownloads. Reachable from the Library header and desktop shortcut rail.
 >
 > **Artist DONE** — `routes/Artist.tsx` (`/artist/:name`): every library track by one artist (matches
 > `artist`/`album_artist`), artist hero (gradient avatar + initial), play-all + shuffle. Reachable by
 > tapping an artist name in any `SongRow`/`TrackList` row, or on the Now Playing screen (library tracks
 > only — preview/podcast sources are not library artists). Store gained `actions.playShuffled`.
 >
-> **🎉 ALL VIEWS DONE:** Inicio · Buscar · Discover · Favoritos · Listas (+detalle) · Podcasts (+show)
+> **🎉 ALL VIEWS DONE:** Biblioteca · Buscar · Favoritos · Listas (+detalle) · Podcasts (+show)
 > · **Descargas** · **Artista** · Ajustes, on the single store + overlay manager, dark/dense/pro,
 > virtualized, fine-grained.
 >
@@ -177,7 +177,7 @@ the hard, tested half of the system doesn't move.
   Sheet/Modal via overlay manager, Tabs, VirtualList, SongRow, ArtistCard, Skeleton, Toast…)
   with a preview page. Each ships with a component test.
 - **Phase 3 — Views, one at a time, mobile-first.** Suggested order (value + risk):
-  Home/Library → Favourites → Artist detail → Playlists/detail → **Discover** (worst leaker,
+  Library → Favourites → Artist detail → Playlists/detail → **Search discovery** (worst leaker,
   now trivially correct) → Podcasts → Settings → Search → Downloads → Now-Playing/omni player.
   Each view: bind to store + API client, redesign per the design system, add component +
   e2e tests, and check off a **parity checklist** against the legacy view.

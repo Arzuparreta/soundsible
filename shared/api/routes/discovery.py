@@ -20,6 +20,7 @@ from shared.discovery_intelligence import (
     POSITIVE_LISTENING_EVENTS,
     build_music_recommendations,
     build_podcast_recommendations,
+    compose_discovery_feed,
     emit_discovery_event,
     load_listening_event_rollups,
     load_discovery_settings,
@@ -61,8 +62,12 @@ _PODCAST_TOP_CACHE: dict[str, tuple[float, list]] = {}
 _PODCAST_TOP_TTL_SEC = 90
 _DEEZER_JSON_CACHE: dict[str, tuple[float, dict]] = {}
 _DEEZER_TRACK_CACHE_TTL_SEC = 180
-_MUSIC_FEED_CACHE: dict[str, tuple[float, dict]] = {}
-_MUSIC_FEED_TTL_SEC = 600
+_DISCOVERY_FEED_CACHE: dict[str, tuple[float, float, dict]] = {}
+_DISCOVERY_FEED_TTL_SEC = 180
+_DISCOVERY_FEED_STALE_SEC = 3600
+_DISCOVERY_FEED_INFLIGHT: set[str] = set()
+_DISCOVERY_FEED_LOCK = threading.Lock()
+_DISCOVERY_FEED_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="soundsible-discovery")
 _LOOKUP_CHUNK = 40
 # Short search terms — merged and deduped when RSS chart is unavailable.
 _ITUNES_TOP_FALLBACK_TERMS = ("podcast", "news", "comedy", "technology", "sports")
@@ -72,9 +77,12 @@ _MAX_PERSONALIZED_SEEDS = 5
 def _invalidate_personalized_cache() -> None:
     from shared.user_context import current_user_id
 
-    prefix = f"music-feed-v3:{current_user_id() or '-'}:"
-    for key in [key for key in _MUSIC_FEED_CACHE if key.startswith(prefix)]:
-        _MUSIC_FEED_CACHE.pop(key, None)
+    feed_prefix = f"discovery-feed-v4:{current_user_id() or '-'}:"
+    now = time.time()
+    with _DISCOVERY_FEED_LOCK:
+        for key in [key for key in _DISCOVERY_FEED_CACHE if key.startswith(feed_prefix)]:
+            _, stale_until, body = _DISCOVERY_FEED_CACHE[key]
+            _DISCOVERY_FEED_CACHE[key] = (0, max(stale_until, now + _DISCOVERY_FEED_STALE_SEC), body)
 
 
 def _podcast_row_from_itunes_search(r: dict) -> dict | None:
@@ -455,6 +463,8 @@ def _append_external_items(
     local_keys: set[str],
     seen: set[str],
     limit: int,
+    title_key: str | None = None,
+    title_params: dict | None = None,
 ) -> dict | None:
     section_ids: list[str] = []
     for row in rows:
@@ -478,13 +488,18 @@ def _append_external_items(
         section_ids.append(item["id"])
     if not section_ids:
         return None
-    return {
+    section = {
         "id": section_id,
         "title": title,
         "reason": reason,
         "item_ids": section_ids,
         "section_type": source,
     }
+    if title_key:
+        section["title_key"] = title_key
+    if title_params:
+        section["title_params"] = title_params
+    return section
 
 
 def _top_taste_artists(metadata, fav_ids: list[str], limit: int = _MAX_PERSONALIZED_SEEDS) -> list[str]:
@@ -596,6 +611,8 @@ def _append_personalized_artist_sections(
             local_keys=local_keys,
             seen=seen,
             limit=min(10, limit),
+            title_key="more_like",
+            title_params={"artist": artist},
         )
         if sec:
             sections.append(sec)
@@ -646,6 +663,233 @@ def _build_music_feed(metadata, fav_ids: list[str], limit: int) -> dict:
     }
 
 
+def _cached_related_feed_candidates(
+    metadata,
+    fav_ids: list[str],
+    *,
+    items: list[dict],
+    sections: list[dict],
+    limit: int,
+) -> None:
+    """Add cached YouTube graph candidates without blocking Search.
+
+    Missing seeds are warmed in the existing bounded worker pool.
+    """
+    tracks = list(metadata.tracks if metadata and metadata.tracks else [])
+    if not tracks:
+        return
+    by_id = {track.id: track for track in tracks}
+    rollup = load_listening_event_rollups()
+    local_video_ids = {
+        str(getattr(track, "youtube_id", "") or "")
+        for track in tracks
+        if getattr(track, "youtube_id", None)
+    }
+    seeds: list = []
+    seen_seed_ids: set[str] = set()
+
+    def add_seed(track) -> None:
+        video = str(getattr(track, "youtube_id", "") or "")
+        if not video or track.id in seen_seed_ids:
+            return
+        seen_seed_ids.add(track.id)
+        seeds.append(track)
+
+    for track_id in fav_ids:
+        track = by_id.get(str(track_id))
+        if track:
+            add_seed(track)
+    for artist in rollup.recent_artists:
+        for track in reversed(tracks):
+            if str(track.artist or track.album_artist or "").strip().casefold() == artist:
+                add_seed(track)
+                break
+    for track in reversed(tracks):
+        add_seed(track)
+        if len(seeds) >= 8:
+            break
+
+    known_ids = {str(item.get("id")) for item in items}
+    added_sections = 0
+    scheduled_misses = 0
+    for seed in seeds[:6]:
+        video_id = str(getattr(seed, "youtube_id", "") or "")
+        cached = instance_db().get_related_mix(video_id)
+        if cached is None:
+            if scheduled_misses < 2:
+                _schedule_expand(video_id)
+                scheduled_misses += 1
+            continue
+        section_ids: list[str] = []
+        for row in rank_recommendation_rows(cached, source="discover"):
+            candidate_video_id = str(row.get("video_id") or row.get("id") or "")
+            if (
+                not candidate_video_id
+                or candidate_video_id in local_video_ids
+                or len(section_ids) >= min(10, limit)
+            ):
+                continue
+            item_id = f"youtube:{candidate_video_id}"
+            if item_id in known_ids:
+                continue
+            known_ids.add(item_id)
+            artist = str(row.get("channel") or row.get("uploader") or row.get("artist") or "")
+            item = {
+                "id": item_id,
+                "media_type": "music_track",
+                "source": "youtube_related",
+                "title": str(row.get("title") or "Unknown"),
+                "artist": artist,
+                "duration": int(row.get("duration") or 0),
+                "cover": str(row.get("thumbnail") or ""),
+                "reason": f'Related to "{seed.title}".',
+                "reason_code": "library_graph",
+                "recommendation_identity": row.get("recommendation_identity"),
+                "score": float(row.get("score") or 0.5),
+                "confidence": 0.82,
+                "action_state": {
+                    "in_library": False,
+                    "saved": False,
+                    "playable": True,
+                    "downloadable": True,
+                    "needs_resolution": False,
+                },
+                "external_ids": {"youtube_id": candidate_video_id},
+            }
+            items.append(item)
+            section_ids.append(item_id)
+        if not section_ids:
+            continue
+        sections.append({
+            "id": f"explore_from_{seed.id}",
+            "title": f"Explore from {seed.title}",
+            "title_key": "explore_from",
+            "title_params": {"title": seed.title},
+            "reason": f'Connections from "{seed.title}" in your local music graph.',
+            "section_type": "youtube_graph",
+            "item_ids": section_ids,
+        })
+        added_sections += 1
+        if added_sections >= 2:
+            break
+
+
+def _build_discovery_feed_body(limit: int, *, include_external: bool = True) -> dict:
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    try:
+        lib.refresh_if_stale()
+    except Exception:
+        pass
+    metadata = getattr(lib, "metadata", None)
+    fav_ids = api["_mod"].favourite_library_ids()
+    if include_external:
+        feed = _build_music_feed(metadata, fav_ids, max(36, limit * 4))
+    else:
+        feed = build_music_recommendations(metadata, fav_ids, limit=max(24, limit * 3))
+    if not feed["sections"]:
+        local = build_music_recommendations(metadata, fav_ids, limit=max(24, limit * 3))
+        feed["items"].extend(local.get("items") or [])
+        feed["sections"].extend(local.get("sections") or [])
+    _cached_related_feed_candidates(
+        metadata,
+        fav_ids,
+        items=feed["items"],
+        sections=feed["sections"],
+        limit=limit,
+    )
+    return compose_discovery_feed(
+        feed,
+        rollup=load_listening_event_rollups(),
+        max_sections=6,
+        section_size=limit,
+    )
+
+
+def _refresh_discovery_feed_cache(cache_key: str, user_id: str | None, limit: int) -> None:
+    try:
+        from shared.user_context import user_context
+
+        with user_context(user_id):
+            body = _build_discovery_feed_body(limit, include_external=True)
+        now = time.time()
+        with _DISCOVERY_FEED_LOCK:
+            _DISCOVERY_FEED_CACHE[cache_key] = (
+                now + _DISCOVERY_FEED_TTL_SEC,
+                now + _DISCOVERY_FEED_STALE_SEC,
+                dict(body),
+            )
+    except Exception as exc:
+        logger.warning("Discovery feed refresh failed: %s", exc)
+    finally:
+        with _DISCOVERY_FEED_LOCK:
+            _DISCOVERY_FEED_INFLIGHT.discard(cache_key)
+
+
+def _schedule_discovery_feed_refresh(cache_key: str, user_id: str | None, limit: int) -> bool:
+    with _DISCOVERY_FEED_LOCK:
+        if cache_key in _DISCOVERY_FEED_INFLIGHT:
+            return False
+        _DISCOVERY_FEED_INFLIGHT.add(cache_key)
+    _DISCOVERY_FEED_EXECUTOR.submit(_refresh_discovery_feed_cache, cache_key, user_id, limit)
+    return True
+
+
+@discovery_bp.route("/api/discovery/music/feed", methods=["GET"])
+@rate_limit("discovery_music_feed", limit=120, window_sec=60)
+def discovery_music_feed():
+    """Ranked zero-query discovery with stale-while-revalidate delivery."""
+    from shared.user_context import current_user_id
+
+    limit = min(16, max(4, request.args.get("limit", type=int) or 10))
+    user_id = current_user_id()
+    cache_key = f"discovery-feed-v4:{user_id or '-'}:{limit}"
+    now = time.time()
+    with _DISCOVERY_FEED_LOCK:
+        cached = _DISCOVERY_FEED_CACHE.get(cache_key)
+    if cached and cached[0] > now:
+        body = dict(cached[2])
+        body.update({"cached": True, "stale": False, "revalidating": False})
+        return jsonify(body)
+    if cached and cached[1] > now:
+        revalidating = _schedule_discovery_feed_refresh(cache_key, user_id, limit)
+        body = dict(cached[2])
+        body.update({"cached": True, "stale": True, "revalidating": revalidating})
+        return jsonify(body)
+
+    try:
+        body = _build_discovery_feed_body(limit, include_external=False)
+    except Exception as exc:
+        logger.warning("Discovery feed build failed: %s", exc)
+        return jsonify({
+            "v": 1,
+            "generated_at": int(now),
+            "items": [],
+            "sections": [],
+            "profile": {
+                "maturity": "cold",
+                "event_count": 0,
+                "distinct_tracks": 0,
+                "learning_enabled": load_discovery_settings().get("learning_enabled", True),
+            },
+            "needs_seed": True,
+            "cached": False,
+            "stale": False,
+            "revalidating": False,
+            "error": "Discovery feed unavailable",
+        }), 502
+
+    with _DISCOVERY_FEED_LOCK:
+        _DISCOVERY_FEED_CACHE[cache_key] = (
+            now + _DISCOVERY_FEED_TTL_SEC,
+            now + _DISCOVERY_FEED_STALE_SEC,
+            dict(body),
+        )
+    revalidating = _schedule_discovery_feed_refresh(cache_key, user_id, limit)
+    body.update({"cached": False, "stale": False, "revalidating": revalidating})
+    return jsonify(body)
+
+
 @discovery_bp.route("/api/discovery/music/recommendations", methods=["GET"])
 @rate_limit("discovery_music_recommendations", limit=120, window_sec=60)
 def discovery_music_recommendations():
@@ -660,55 +904,6 @@ def discovery_music_recommendations():
     mod = api["_mod"]
     fav_ids = mod.favourite_library_ids()
     return jsonify(build_music_recommendations(metadata, fav_ids, limit=limit))
-
-
-@discovery_bp.route("/api/discovery/music/feed", methods=["GET"])
-@rate_limit("discovery_music_feed", limit=120, window_sec=60)
-def discovery_music_feed():
-    limit = min(50, max(1, request.args.get("limit", type=int) or 24))
-    # The feed is built from your library, your favourites, and your listening
-    # history, so the cache key has to carry who "you" are.
-    from shared.user_context import current_user_id
-
-    cache_key = f"music-feed-v3:{current_user_id() or '-'}:{limit}"
-    now = time.time()
-    cached = _MUSIC_FEED_CACHE.get(cache_key)
-    if cached and cached[0] > now:
-        body = dict(cached[1])
-        body["cached"] = True
-        return jsonify(body)
-
-    api = _get_api()
-    lib, _, _ = api["get_core"]()
-    try:
-        lib.refresh_if_stale()
-    except Exception:
-        pass
-    metadata = getattr(lib, "metadata", None)
-    mod = api["_mod"]
-    fav_ids = mod.favourite_library_ids()
-
-    try:
-        body = _build_music_feed(metadata, fav_ids, limit)
-    except Exception as exc:
-        logger.warning("Discovery music feed failed: %s", exc)
-        if cached:
-            body = dict(cached[1])
-            body["cached"] = True
-            body["stale"] = True
-            return jsonify(body)
-        body = {
-            "generated_at": int(time.time()),
-            "items": [],
-            "sections": [],
-            "settings": load_discovery_settings(),
-            "error": "Discovery feed unavailable",
-        }
-        return jsonify(body), 502
-
-    body["cached"] = False
-    _MUSIC_FEED_CACHE[cache_key] = (now + _MUSIC_FEED_TTL_SEC, dict(body))
-    return jsonify(body)
 
 
 @discovery_bp.route("/api/discovery/music/recently-saved", methods=["GET"])

@@ -508,9 +508,9 @@ class _FakeResponse:
         return self._payload
 
 
-def test_music_feed_includes_taste_based_external_tracks_and_local_recs(tmp_path):
+def test_enriched_music_feed_includes_taste_based_external_tracks_and_local_recs(tmp_path):
     _make_runtime(tmp_path)
-    _disc_routes._MUSIC_FEED_CACHE.clear()
+    _disc_routes._DISCOVERY_FEED_CACHE.clear()
     _disc_routes._DEEZER_JSON_CACHE.clear()
 
     metadata = LibraryMetadata(
@@ -552,6 +552,15 @@ def test_music_feed_includes_taste_based_external_tracks_and_local_recs(tmp_path
                         "rank": 999,
                         "artist": {"id": 77, "name": "Local Artist"},
                         "album": {"title": "Taste Album", "cover_big": "https://example.test/new.jpg"},
+                    },
+                    {
+                        "id": 102,
+                        "title": "Second Taste Match",
+                        "title_short": "Second Taste Match",
+                        "duration": 198,
+                        "rank": 900,
+                        "artist": {"id": 77, "name": "Local Artist"},
+                        "album": {"title": "Taste Album", "cover_big": "https://example.test/second.jpg"},
                     }
                 ]
             })
@@ -559,13 +568,10 @@ def test_music_feed_includes_taste_based_external_tracks_and_local_recs(tmp_path
 
     with patch.object(_disc_routes, "_get_api", return_value=api), \
          patch.object(_disc_routes.requests, "get", side_effect=fake_get):
-        res = _make_app().test_client().get("/api/discovery/music/feed?limit=12")
+        body = _disc_routes._build_discovery_feed_body(12, include_external=True)
 
-    assert res.status_code == 200
-    body = res.get_json()
-    assert body["cached"] is False
     assert any(s["id"] == "made_for_your_library" for s in body["sections"])
-    assert body["sections"][0]["id"] == "because_you_listen_local_artist"
+    assert any(s["id"] == "because_you_listen_local_artist" for s in body["sections"])
     assert any(item["id"] == "deezer:101" for item in body["items"])
     external = next(item for item in body["items"] if item["id"] == "deezer:101")
     assert external["action_state"]["needs_resolution"] is True
@@ -573,7 +579,7 @@ def test_music_feed_includes_taste_based_external_tracks_and_local_recs(tmp_path
 
 def test_music_feed_uses_cache_when_fresh(tmp_path):
     _make_runtime(tmp_path)
-    _disc_routes._MUSIC_FEED_CACHE.clear()
+    _disc_routes._DISCOVERY_FEED_CACHE.clear()
     _disc_routes._DEEZER_JSON_CACHE.clear()
 
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
@@ -587,7 +593,8 @@ def test_music_feed_uses_cache_when_fresh(tmp_path):
     }
 
     with patch.object(_disc_routes, "_get_api", return_value=api), \
-         patch.object(_disc_routes.requests, "get", return_value=_FakeResponse({"tracks": {"data": []}})):
+         patch.object(_disc_routes.requests, "get", return_value=_FakeResponse({"tracks": {"data": []}})), \
+         patch.object(_disc_routes, "_schedule_discovery_feed_refresh", return_value=False):
         first = _make_app().test_client().get("/api/discovery/music/feed?limit=12")
         second = _make_app().test_client().get("/api/discovery/music/feed?limit=12")
 
@@ -595,3 +602,43 @@ def test_music_feed_uses_cache_when_fresh(tmp_path):
     assert second.status_code == 200
     assert first.get_json()["cached"] is False
     assert second.get_json()["cached"] is True
+
+
+def test_discovery_feed_ranks_server_sections_and_reuses_fresh_cache(tmp_path):
+    _make_runtime(tmp_path)
+    _disc_routes._DISCOVERY_FEED_CACHE.clear()
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[
+            _track("t1", "One", "Artist One"),
+            _track("t2", "Two", "Artist Two"),
+            _track("t3", "Three", "Artist Three"),
+        ],
+        playlists={},
+        settings={},
+    )
+    mod = MagicMock()
+    mod.favourite_library_ids.return_value = ["t1"]
+    api = {
+        "get_core": MagicMock(return_value=(_FakeLibrary(metadata), None, None)),
+        "_mod": mod,
+    }
+
+    with patch.object(_disc_routes, "_get_api", return_value=api), \
+         patch.object(_disc_routes, "_deezer_json", return_value={"data": []}), \
+         patch.object(_disc_routes, "_cached_related_feed_candidates"), \
+         patch.object(_disc_routes, "_schedule_discovery_feed_refresh", return_value=False):
+        first = _make_app().test_client().get("/api/discovery/music/feed?limit=6")
+        second = _make_app().test_client().get("/api/discovery/music/feed?limit=6")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    first_body = first.get_json()
+    assert first_body["v"] == 1
+    assert first_body["cached"] is False
+    assert first_body["sections"]
+    assert first_body["sections"][0]["section_type"] == "track_rail"
+    assert first_body["items"]
+    assert all(item.get("reason") for item in first_body["items"])
+    assert second.get_json()["cached"] is True
+    assert _make_app().test_client().get("/api/home").status_code == 404

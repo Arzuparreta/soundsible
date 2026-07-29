@@ -101,6 +101,7 @@ export interface DiscoveryFeedItem {
   rank?: number;
   reason?: string;
   reason_code?: string;
+  recommendation_identity?: string;
   confidence?: number;
   action_state?: DiscoveryActionState;
   external_ids?: Record<string, string | number | boolean | null | undefined>;
@@ -112,15 +113,27 @@ export interface DiscoveryFeedSection {
   reason?: string;
   item_ids?: string[];
   section_type?: string;
+  title_key?: string;
+  title_params?: Record<string, string>;
+  score?: number;
 }
 
 export interface DiscoveryMusicFeed {
+  v?: 1;
   generated_at?: number;
   cached?: boolean;
   stale?: boolean;
+  revalidating?: boolean;
   needs_seed?: boolean;
+  error?: string;
   items?: DiscoveryFeedItem[];
   sections?: DiscoveryFeedSection[];
+  profile?: {
+    maturity: 'cold' | 'warming' | 'established';
+    event_count: number;
+    distinct_tracks: number;
+    learning_enabled: boolean;
+  };
 }
 
 export interface DiscoverySaveCandidate {
@@ -616,8 +629,11 @@ export const api = {
       body: { items },
       timeoutMs: 15000,
     }),
-  getDiscoveryMusicFeed: () =>
-    request<DiscoveryMusicFeed>('/api/discovery/music/feed?limit=36', { timeoutMs: 12000 }),
+  getDiscoveryMusicFeed: (signal?: AbortSignal) =>
+    request<DiscoveryMusicFeed>('/api/discovery/music/feed?limit=10', {
+      signal,
+      timeoutMs: 15000,
+    }),
   saveDiscoveryTrack: (body: {
     artist: string;
     title: string;

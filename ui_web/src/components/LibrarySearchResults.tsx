@@ -35,7 +35,7 @@ function ArtistResult(props: { result: Extract<LibrarySearchResult, { kind: 'art
       data-pressable
       role="button"
       tabindex="0"
-      aria-label={t('home.openArtist', { artist: props.result.artist.name })}
+      aria-label={t('library.openArtist', { artist: props.result.artist.name })}
       {...tap}
       onKeyDown={(event) => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -49,9 +49,9 @@ function ArtistResult(props: { result: Extract<LibrarySearchResult, { kind: 'art
       />
       <div class={styles.artistMeta}>
         <span class={styles.artistName}>{props.result.artist.name}</span>
-        <span class={styles.artistCount}>{t('home.artistTrackCount', { count: props.result.artist.count })}</span>
+        <span class={styles.artistCount}>{t('library.artistTrackCount', { count: props.result.artist.count })}</span>
       </div>
-      <span class={styles.badge}>{t('home.resultArtist')}</span>
+      <span class={styles.badge}>{t('library.resultArtist')}</span>
       <svg class={styles.chevron} viewBox="0 0 24 24" aria-hidden="true">
         <path d="m9 18 6-6-6-6" />
       </svg>
@@ -103,7 +103,7 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
 
   return (
     <div ref={scrollRef} class={styles.scroll} data-library-scroll data-primary-scroll>
-      <Show when={props.results.length > 0} fallback={<EmptyState>{t('home.noSearchResults')}</EmptyState>}>
+      <Show when={props.results.length > 0} fallback={<EmptyState>{t('library.noSearchResults')}</EmptyState>}>
         <div class={styles.canvas} style={{ height: `${virtualizer.getTotalSize()}px` }}>
           <For each={virtualizer.getVirtualItems()}>
             {(item) => {
@@ -119,12 +119,12 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
                       // A saved song with no file has no engine-side cover to
                       // ask for; its thumbnail is the only artwork it has.
                       cover={trackCover((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track)}
-                      badge={t('home.resultTrack')}
+                      badge={t('library.resultTrack')}
                       active={isPlayingTrack((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track)}
                       onPlay={(track) => actions.playFrom(
                         trackQueue(),
                         trackPositions().get(track.id) ?? 0,
-                        { context: { id: 'library-search', kind: 'search', label: t('home.searchLibrary') } },
+                        { context: { id: 'library-search', kind: 'search', label: t('library.searchLibrary') } },
                       )}
                       onMenu={openMenu}
                     />

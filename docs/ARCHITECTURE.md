@@ -115,11 +115,21 @@ Catalog resolve queues the winner's stream-URL resolution on the **preview prefe
 - **`GET /api/agent/verify`**, **`POST /api/agent/play`**, and **`POST /api/agent/command`** require `@require_agent_token`.
 - Agent control targets a supplied `device_id` or the most recently registered non-agent device in the current scope. Commands emit to `playback:{scope}:{device_id}` rooms and reuse playback state for `play`/handoff-style starts.
 
-**Discover / Deezer proxy** (`shared/api/routes/discovery.py`):
+**Search discovery feed and providers** (`shared/api/routes/discovery.py`,
+`shared/discovery_intelligence.py`):
 
 - The browser cannot call `api.deezer.com` (CORS). The Station exposes **`GET /api/discovery/deezer/<path>`**, which forwards **allowlisted** Deezer paths only (e.g. `chart`, `search`, `playlist/<id>`, `track/<id>`, `artist/<id>/top`) and returns Deezer’s JSON unchanged.
 - Requests are **rate-limited** per IP (`discovery_deezer`). The engine needs **outbound HTTPS** to Deezer.
-- **Discover** in `ui_web` (`discovery.js`, `deezer_actions.js`, shared list renderers) uses this for charts, curated editorial playlists, and search. Track rows use Deezer ids in the UI (`deezer_<numericId>`).
+- **`GET /api/discovery/music/feed`** is the zero-query Search contract. It
+  assembles local-library,
+  favourite, playlist, listening-history, Deezer, and cached YouTube-related
+  candidates; the server then ranks sections, diversifies artists, and removes
+  cross-section duplicates. A local result is returned without waiting for
+  provider extraction, while the fuller response is refreshed in the
+  background and served stale-while-revalidate.
+- The Solid **Search** route renders those sections only before a query is
+  entered; explicit queries replace them with neutral search results.
+  **Library** is the root route.
 - **Playback and downloads** for those rows do **not** use Deezer audio. The UI runs **YouTube / YouTube Music text search** (same ODST `/api/downloader/youtube/search` path as the downloader) using Deezer title + artist, picks a matching video id, then:
   - **In-app preview** streams via **`GET /api/preview/stream/<video_id>`** (playback blueprint).
   - **Download queue** uses the resolved item like any other ODST search result.

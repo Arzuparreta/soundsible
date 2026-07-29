@@ -1,6 +1,11 @@
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, onCleanup, onMount, untrack, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { api } from '../lib/api';
+import {
+  api,
+  type DiscoveryFeedItem,
+  type DiscoveryFeedSection,
+  type DiscoveryMusicFeed,
+} from '../lib/api';
 import {
   actions,
   state,
@@ -16,7 +21,6 @@ import { artistPath, albumPath } from '../lib/artistRoute';
 import { toast } from '../lib/toast';
 import { parseYouTubeInput } from '../lib/youtube';
 import { prefetchPreviews } from '../lib/prefetch';
-import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed, type NodeRec } from '../lib/nodeDiscover';
 import { t as tr } from '../lib/i18n';
 import { userKey } from '../lib/session';
 import {
@@ -27,16 +31,21 @@ import {
   cancelCatalogResolve,
 } from '../lib/catalogItem';
 import SearchResultRow from '../components/SearchResultRow';
-import { savedFromCatalogItem, savedFromTrack } from '../lib/saved';
+import { savedFromCatalogItem } from '../lib/saved';
 import { FavouriteButton } from '../components/FavouriteButton';
 import { CollectionButton } from '../components/CollectionButton';
 import { Spinner } from '../components/Spinner';
-import type { CatalogItem, CatalogSaveResponse, SavedEntry, SearchResult, Track } from '../types/music';
+import type {
+  CatalogItem,
+  CatalogSaveResponse,
+  RecommendationContext,
+  SavedEntry,
+  SearchResult,
+} from '../types/music';
 import styles from './Search.module.css';
 import { coverStyle } from '../lib/cover';
 import { formatDuration } from '../lib/format';
 import { attachContextMenu } from '../lib/contextMenu';
-import { trackMenuOptions } from '../components/trackActions';
 import type { ActionMenuOptions } from '../components/ActionMenu';
 import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
@@ -91,6 +100,55 @@ function candidateVideoId(candidate: Record<string, unknown>): string {
   return String(candidate.video_id || candidate.id || '');
 }
 
+function discoveryRecommendation(item: DiscoveryFeedItem): RecommendationContext {
+  return {
+    identity: item.recommendation_identity || item.id,
+    source: 'discover',
+    reason: item.reason,
+    reason_code: item.reason_code,
+  };
+}
+
+function discoveryCatalogItem(item: DiscoveryFeedItem): CatalogItem {
+  const youtubeId = item.external_ids?.youtube_id
+    ? String(item.external_ids.youtube_id)
+    : item.source === 'youtube_related'
+      ? item.id.replace(/^youtube:/, '')
+      : null;
+  return {
+    id: item.id,
+    type: item.track_id ? 'library_track' : 'track',
+    source: youtubeId ? 'youtube' : item.source || 'discovery',
+    title: item.title,
+    subtitle: item.artist,
+    artist: item.artist,
+    album: item.album,
+    duration: item.duration,
+    cover: item.cover,
+    track_id: item.track_id,
+    external_ids: item.external_ids,
+    action_state: item.action_state,
+    raw: {
+      id: youtubeId || undefined,
+      title: item.title,
+      artist: item.artist,
+      album: item.album,
+      duration: item.duration,
+      youtube_id: youtubeId || undefined,
+      source: youtubeId ? 'preview' : undefined,
+      recommendation: discoveryRecommendation(item),
+    },
+  };
+}
+
+function discoverySectionTitle(section: DiscoveryFeedSection): string {
+  if (section.title_key) {
+    const translated = tr(`search.discovery.${section.title_key}`, section.title_params);
+    if (!translated.startsWith('search.discovery.')) return translated;
+  }
+  return section.title;
+}
+
 export default function Search() {
   const navigate = useNavigate();
   const [domain, setDomain] = createSignal<SearchDomain>('music');
@@ -115,8 +173,12 @@ export default function Search() {
   const [sharedLoading, setSharedLoading] = createSignal(false);
   const [sharedError, setSharedError] = createSignal(false);
   const [sharedInvalid, setSharedInvalid] = createSignal(false);
+  const [discovery, setDiscovery] = createSignal<DiscoveryMusicFeed | null>(null);
+  const [discoveryLoading, setDiscoveryLoading] = createSignal(true);
+  const [discoveryError, setDiscoveryError] = createSignal(false);
 
   let aborter: AbortController | undefined;
+  let discoveryAborter: AbortController | undefined;
   let suggestAborter: AbortController | undefined;
   let debounce: number | undefined;
   let suggestDebounce: number | undefined;
@@ -127,6 +189,23 @@ export default function Search() {
   const songs = createMemo(() =>
     items().filter((item) => ['track', 'library_track'].includes(item.type)),
   );
+  const loadDiscovery = async () => {
+    discoveryAborter?.abort();
+    const controller = new AbortController();
+    discoveryAborter = controller;
+    setDiscoveryLoading(!discovery());
+    setDiscoveryError(false);
+    try {
+      setDiscovery(await api.getDiscoveryMusicFeed(controller.signal));
+    } catch (error) {
+      if (!isAbort(error)) setDiscoveryError(true);
+    } finally {
+      if (discoveryAborter === controller && !controller.signal.aborted) {
+        setDiscoveryLoading(false);
+      }
+    }
+  };
+
   const openSharedTrack = (capsule: TrackShareCapsuleV1) => {
     const current = ++requestId;
     aborter?.abort();
@@ -199,7 +278,7 @@ export default function Search() {
   };
 
   onMount(() => {
-    ensureNodeFeed();
+    void loadDiscovery();
     const shared = sharedCapsuleFromHash(window.location.hash);
     if (shared) openSharedTrack(shared.capsule);
     else if (/[?&]shared=/.test(window.location.hash)) {
@@ -512,31 +591,46 @@ export default function Search() {
   };
 
 
-  // ── Node feed: play instantly (the video id is already resolved) and save
-  // through the standard download pipeline. ──
-  const nodeTrack = (rec: NodeRec): Track => ({
-    id: rec.id,
-    title: rec.title,
-    artist: rec.channel ?? '',
-    duration: rec.duration,
-    cover: rec.thumbnail,
-    source: 'preview',
-    recommendation: rec.recommendation_identity
-      ? {
-          identity: rec.recommendation_identity,
-          source: 'discover',
-          reason: rec.seedArtist ? tr('discoverNodes.fromArtist', { artist: rec.seedArtist }) : undefined,
-        }
-      : undefined,
-  });
-
-  const playNodeRec = (rec: NodeRec) => {
-    actions.playTrack(nodeTrack(rec));
+  const hideDiscoveryItem = (item: DiscoveryFeedItem) => {
+    void api.sendDiscoveryFeedback({
+      media_type: 'music_track',
+      track_id: item.track_id,
+      title: item.title,
+      artist: item.artist,
+      youtube_id: item.external_ids?.youtube_id,
+      deezer_id: item.external_ids?.deezer_id,
+      source: item.source,
+    }).then((result) => {
+      if (!result.recorded || !result.event_id) return;
+      setDiscovery((current) => current ? {
+        ...current,
+        items: (current.items ?? []).filter((candidate) => candidate.id !== item.id),
+        sections: (current.sections ?? [])
+          .map((section) => ({
+            ...section,
+            item_ids: (section.item_ids ?? []).filter((itemId) => itemId !== item.id),
+          }))
+          .filter((section) => (section.item_ids?.length ?? 0) > 0),
+      } : current);
+      toast.action(tr('trackActions.feedbackSaved'), tr('common.undo'), () => {
+        void api.undoDiscoveryFeedback(result.event_id!).then(() => loadDiscovery());
+      });
+    }).catch(() => toast.error(tr('trackActions.feedbackFailed')));
   };
+
+  const discoveryMenu = (item: DiscoveryFeedItem): ActionMenuOptions => ({
+    title: item.title,
+    subtitle: item.artist,
+    actions: [
+      ...(item.reason ? [{ label: item.reason, disabled: true, onSelect: () => {} }] : []),
+      { label: tr('trackActions.notInterested'), onSelect: () => hideDiscoveryItem(item) },
+    ],
+  });
 
   onCleanup(() => {
     requestId += 1;
     aborter?.abort();
+    discoveryAborter?.abort();
     cancelCatalogResolve();
     suggestAborter?.abort();
     clearTimeout(debounce);
@@ -640,14 +734,15 @@ export default function Search() {
             <StartPanel
               recents={recents()}
               domain={domain()}
-              recs={nodeFeed()}
-              loading={nodeLoading()}
+              feed={discovery()}
+              loading={discoveryLoading()}
+              failed={discoveryError()}
               onPick={commit}
               onFocusSearch={() => searchInput?.focus()}
-              onRefresh={refreshNodeFeed}
-              onPlay={playNodeRec}
-              entry={(rec) => savedFromTrack(nodeTrack(rec))}
-              menu={(rec) => trackMenuOptions(nodeTrack(rec), { navigate })}
+              onRefresh={() => void loadDiscovery()}
+              onPlay={(item) => void playCatalogItem(discoveryCatalogItem(item))}
+              entry={(item) => savedFromCatalogItem(discoveryCatalogItem(item))}
+              menu={discoveryMenu}
             />
           </Match>
           <Match when={domain() === 'youtube'}>
@@ -804,66 +899,93 @@ export default function Search() {
 function StartPanel(props: {
   recents: string[];
   domain: SearchDomain;
-  recs: NodeRec[];
+  feed: DiscoveryMusicFeed | null;
   loading: boolean;
+  failed: boolean;
   onPick: (value: string) => void;
   onFocusSearch: () => void;
   onRefresh: () => void;
-  onPlay: (rec: NodeRec) => void;
-  entry: (rec: NodeRec) => SavedEntry;
-  menu: (rec: NodeRec) => ActionMenuOptions;
+  onPlay: (item: DiscoveryFeedItem) => void;
+  entry: (item: DiscoveryFeedItem) => SavedEntry;
+  menu: (item: DiscoveryFeedItem) => ActionMenuOptions;
 }) {
+  const itemById = () =>
+    new Map((props.feed?.items ?? []).map((item) => [item.id, item] as const));
+  const sections = () =>
+    (props.feed?.sections ?? []).filter((section) => (section.item_ids?.length ?? 0) > 0);
+
   return (
     <div class={styles.start}>
       <Show
-        when={props.recs.length > 0}
-        fallback={props.loading ? <RailSkeletons /> : <SeedSearch onFocusSearch={props.onFocusSearch} />}
+        when={sections().length > 0}
+        fallback={
+          props.loading
+            ? <RailSkeletons />
+            : props.failed
+              ? (
+                <EmptyState compact tone="danger">
+                  {tr('search.discoveryUnavailable')}{' '}
+                  <button class={styles.retry} type="button" onClick={props.onRefresh}>
+                    {tr('common.retry')}
+                  </button>
+                </EmptyState>
+              )
+              : <SeedSearch onFocusSearch={props.onFocusSearch} />
+        }
       >
-        <section class={styles.rail}>
-          <div class={styles.railHead}>
-            <div>
-              <h2 class={styles.railTitle}>{tr('discoverNodes.title')}</h2>
-            </div>
-            <button
-              class={styles.railRefresh}
-              type="button"
-              aria-label={tr('discoverNodes.refresh')}
-              title={tr('discoverNodes.refresh')}
-              disabled={props.loading}
-              onClick={props.onRefresh}
-            >
-              <svg
-                classList={{ [styles.spinning]: props.loading }}
-                viewBox="0 0 24 24"
-                width="17"
-                height="17"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M21 12a9 9 0 11-2.64-6.36M21 3v6h-6" />
-              </svg>
-            </button>
-          </div>
-          <div class={styles.discoverGrid}>
-            <For each={props.recs}>
-              {(rec) => (
-                <DiscoveryCard
-                  title={rec.title}
-                  sub={rec.channel ?? ''}
-                  cover={rec.thumbnail}
-                  seedKey={rec.id}
-                  entry={props.entry(rec)}
-                  onPlay={() => props.onPlay(rec)}
-                  menu={() => props.menu(rec)}
-                />
-              )}
-            </For>
-          </div>
-        </section>
+        <For each={sections()}>
+          {(section, sectionIndex) => (
+            <section class={styles.rail}>
+              <div class={styles.railHead}>
+                <h2 class={styles.railTitle}>{discoverySectionTitle(section)}</h2>
+                <Show when={sectionIndex() === 0}>
+                  <button
+                    class={styles.railRefresh}
+                    type="button"
+                    aria-label={tr('search.refreshDiscovery')}
+                    title={tr('search.refreshDiscovery')}
+                    disabled={props.loading}
+                    onClick={props.onRefresh}
+                  >
+                    <svg
+                      classList={{ [styles.spinning]: props.loading }}
+                      viewBox="0 0 24 24"
+                      width="17"
+                      height="17"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M21 12a9 9 0 11-2.64-6.36M21 3v6h-6" />
+                    </svg>
+                  </button>
+                </Show>
+              </div>
+              <div class={styles.discoverGrid}>
+                <For
+                  each={(section.item_ids ?? [])
+                    .map((itemId) => itemById().get(itemId))
+                    .filter((item): item is DiscoveryFeedItem => Boolean(item))}
+                >
+                  {(item) => (
+                    <DiscoveryCard
+                      title={item.title}
+                      sub={item.artist ?? ''}
+                      cover={item.cover}
+                      seedKey={item.id}
+                      entry={props.entry(item)}
+                      onPlay={() => props.onPlay(item)}
+                      menu={() => props.menu(item)}
+                    />
+                  )}
+                </For>
+              </div>
+            </section>
+          )}
+        </For>
       </Show>
 
       <Show when={props.recents.length > 0}>
