@@ -12,6 +12,12 @@ export function itemArtist(item: CatalogItem): string {
   return item.artist || item.subtitle || '';
 }
 
+/** Exact playable YouTube identity already carried by a catalog row. */
+export function catalogPreviewId(item: CatalogItem): string | null {
+  const id = item.source === 'youtube' ? item.raw?.id : null;
+  return typeof id === 'string' && id ? id : null;
+}
+
 /**
  * The playable track behind a catalog row, if there already is one.
  *
@@ -24,16 +30,18 @@ export function itemToTrack(item: CatalogItem): Track | null {
     const found = state.library.find((tr) => tr.id === item.track_id);
     if (found) return found;
   }
-  if (item.raw?.id && typeof item.raw.id === 'string') {
+  const previewId = catalogPreviewId(item);
+  if (previewId) {
+    const raw = item.raw ?? {};
     return {
-      id: item.raw.id,
-      title: String(item.raw.title || item.title),
-      artist: String(item.raw.artist || itemArtist(item)),
-      album: typeof item.raw.album === 'string' ? item.raw.album : item.album,
-      duration: typeof item.raw.duration === 'number' ? item.raw.duration : item.duration,
-      youtube_id: typeof item.raw.youtube_id === 'string' ? item.raw.youtube_id : undefined,
+      id: previewId,
+      title: String(raw.title || item.title),
+      artist: String(raw.artist || itemArtist(item)),
+      album: typeof raw.album === 'string' ? raw.album : item.album,
+      duration: typeof raw.duration === 'number' ? raw.duration : item.duration,
+      youtube_id: typeof raw.youtube_id === 'string' ? raw.youtube_id : undefined,
       cover: item.cover,
-      source: item.source === 'youtube' ? 'preview' : undefined,
+      source: 'preview',
       originKeys: catalogItemKeys(item),
     };
   }

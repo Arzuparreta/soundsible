@@ -19,7 +19,13 @@ import { prefetchPreviews } from '../lib/prefetch';
 import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed, type NodeRec } from '../lib/nodeDiscover';
 import { t as tr } from '../lib/i18n';
 import { userKey } from '../lib/session';
-import { itemArtist, itemBusy, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
+import {
+  catalogPreviewId,
+  itemArtist,
+  itemBusy,
+  playCatalogItem,
+  cancelCatalogResolve,
+} from '../lib/catalogItem';
 import SearchResultRow from '../components/SearchResultRow';
 import { savedFromCatalogItem, savedFromTrack } from '../lib/saved';
 import { FavouriteButton } from '../components/FavouriteButton';
@@ -331,17 +337,17 @@ export default function Search() {
   const prefetchedCatalog = new Set<string>();
   createEffect(() => {
     const directResult = youtubeDirect();
-    const ytTop = youtubeResults().slice(0, 3).map((r) => r.id);
-    const topSongs = songs().slice(0, 2);
+    const playableIds = [
+      ...(directResult ? [directResult.id] : []),
+      ...youtubeResults().map((r) => r.id),
+      ...songs().map(catalogPreviewId).filter((id): id is string => !!id),
+    ].slice(0, 8);
+    const unresolvedSongs = songs()
+      .filter((item) => item.type === 'track' && !item.track_id && !catalogPreviewId(item))
+      .slice(0, 2);
     untrack(() => {
-      if (directResult) prefetchPreviews([directResult.id]);
-      prefetchPreviews(ytTop);
-      for (const item of topSongs) {
-        if (item.type !== 'track' || item.track_id) continue;
-        if (item.raw?.id && typeof item.raw.id === 'string') {
-          prefetchPreviews([item.raw.id]);
-          continue;
-        }
+      prefetchPreviews(playableIds);
+      for (const item of unresolvedSongs) {
         const artist = itemArtist(item);
         if (!artist || !item.title || prefetchedCatalog.has(item.id)) continue;
         prefetchedCatalog.add(item.id);

@@ -22,10 +22,15 @@ export function prefetchPreviews(videoIds: string[], opts: { download?: boolean 
     .slice(0, 8);
   if (ids.length === 0) return;
   for (const id of ids) lastWarm.set(id, now);
+  const releaseFailedWarm = (): void => {
+    for (const id of ids) {
+      if (lastWarm.get(id) === now) lastWarm.delete(id);
+    }
+  };
   try {
-    void api.prefetchPreviews(ids, opts.download ?? false).catch(() => {});
+    void api.prefetchPreviews(ids, opts.download ?? false).catch(releaseFailedWarm);
   } catch {
-    /* prefetch must never break the calling surface */
+    releaseFailedWarm();
   }
 }
 

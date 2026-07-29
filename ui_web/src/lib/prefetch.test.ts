@@ -61,4 +61,14 @@ describe('prefetchPreviews', () => {
     prefetchPreviews(['nope']);
     expect(apiMock.prefetchPreviews).not.toHaveBeenCalled();
   });
+
+  it('allows a retry when the engine rejects a warm-up request', async () => {
+    apiMock.prefetchPreviews.mockRejectedValueOnce(new Error('offline'));
+
+    prefetchPreviews(['retry12-_AB']);
+    await vi.waitFor(() => expect(apiMock.prefetchPreviews).toHaveBeenCalledTimes(1));
+
+    prefetchPreviews(['retry12-_AB']);
+    expect(apiMock.prefetchPreviews).toHaveBeenCalledTimes(2);
+  });
 });

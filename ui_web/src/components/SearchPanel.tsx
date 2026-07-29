@@ -24,6 +24,7 @@ import { catalogItemKeys } from '../lib/playbackIdentity';
 import { resolveTrackYoutubeId } from '../lib/relatedDiscovery';
 import { prefetchPreviews } from '../lib/prefetch';
 import { isPodcastTrack } from '../lib/track';
+import { catalogPreviewId, itemToTrack } from '../lib/catalogItem';
 import { artistPath, albumPath } from '../lib/artistRoute';
 import { openTrackMenu } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
@@ -310,21 +311,8 @@ export function SearchPanel() {
     });
 
   const trackForCatalog = async (item: CatalogItem): Promise<Track | null> => {
-    if (item.track_id) {
-      const found = state.library.find((t) => t.id === item.track_id);
-      if (found) return found;
-    }
-    if (item.raw?.id && typeof item.raw.id === 'string') {
-      return {
-        id: item.raw.id,
-        title: String(item.raw.title || item.title),
-        artist: String(item.raw.artist || itemArtist(item)),
-        album: typeof item.raw.album === 'string' ? item.raw.album : item.album,
-        duration: typeof item.raw.duration === 'number' ? item.raw.duration : item.duration,
-        youtube_id: typeof item.raw.youtube_id === 'string' ? item.raw.youtube_id : undefined,
-        cover: item.cover,
-      };
-    }
+    const existing = itemToTrack(item);
+    if (existing) return existing;
     const cached = resolvedCache.get(item.id);
     if (cached) return cached;
     const artist = itemArtist(item);
@@ -356,17 +344,17 @@ export function SearchPanel() {
   createEffect(() => {
     if (!searching()) return;
     const directResult = direct();
-    const ytTop = ytResults().slice(0, 3).map((r) => r.id);
-    const topSongs = songs().slice(0, 2);
+    const playableIds = [
+      ...(directResult ? [directResult.id] : []),
+      ...ytResults().map((r) => r.id),
+      ...songs().map(catalogPreviewId).filter((id): id is string => !!id),
+    ].slice(0, 8);
+    const unresolvedSongs = songs()
+      .filter((item) => !item.track_id && item.type !== 'library_track' && !catalogPreviewId(item))
+      .slice(0, 2);
     untrack(() => {
-      if (directResult) prefetchPreviews([directResult.id]);
-      prefetchPreviews(ytTop);
-      for (const item of topSongs) {
-        if (item.track_id || item.type === 'library_track') continue;
-        if (item.raw?.id && typeof item.raw.id === 'string') {
-          prefetchPreviews([item.raw.id]);
-          continue;
-        }
+      prefetchPreviews(playableIds);
+      for (const item of unresolvedSongs) {
         if (prefetchedCatalog.has(item.id)) continue;
         prefetchedCatalog.add(item.id);
         void trackForCatalog(item)

@@ -187,6 +187,44 @@ describe('SearchPanel', () => {
     );
   });
 
+  it('plays a raw YouTube catalog result through the preview stream', async () => {
+    apiMock.searchCatalog.mockResolvedValue({
+      items: [
+        {
+          id: 'youtube:track:live',
+          type: 'track',
+          source: 'youtube',
+          title: 'Internet Live Set',
+          artist: 'Web Artist',
+          raw: {
+            id: '98u3AJVEL8Q',
+            title: 'Internet Live Set',
+            artist: 'Web Artist',
+            duration: 3600,
+          },
+        },
+      ],
+      sections: [{ id: 'songs', title: 'Canciones', item_ids: ['youtube:track:live'] }],
+    });
+
+    render(() => <SearchPanel />);
+    await typeQuery('internet live set');
+
+    await waitFor(() =>
+      expect(apiMock.prefetchPreviews).toHaveBeenCalledWith(['98u3AJVEL8Q'], false),
+    );
+    fireEvent.click(await screen.findByText('Internet Live Set'));
+
+    await waitFor(() =>
+      expect(storeMock.actions.playNow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: '98u3AJVEL8Q',
+          source: 'preview',
+        }),
+      ),
+    );
+  });
+
   it('falls back to YouTube when the catalog has no songs', async () => {
     apiMock.searchCatalog.mockResolvedValue({ items: [], sections: [] });
     apiMock.searchYouTube.mockResolvedValue([
