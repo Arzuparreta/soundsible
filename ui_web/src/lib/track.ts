@@ -38,6 +38,7 @@ export function podcastEpisodeToTrack(
     source: 'preview',
     media_kind: 'podcast_episode',
     podcast_episode_guid: key,
+    podcast_enclosure_url: ep.enclosure_url,
     podcast_feed_id: feedId,
   };
 }

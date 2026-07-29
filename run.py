@@ -37,6 +37,11 @@ def build_parser() -> argparse.ArgumentParser:
         nargs=argparse.REMAINDER,
         help="Manage accounts, e.g. --users list. Run --users -h for the full set.",
     )
+    parser.add_argument(
+        "--relay",
+        nargs=argparse.REMAINDER,
+        help="Run, install, inspect, or verify the private VPS relay.",
+    )
     parser.set_defaults(lan_enabled=None)
     return parser
 
@@ -65,7 +70,7 @@ def _seed_runtime_env_from_args(args: argparse.Namespace) -> None:
         os.environ["SOUNDSIBLE_ADVANCED_MODE"] = "true"
 
 
-if any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
+if "--relay" not in sys.argv[1:] and any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
     build_parser().print_help()
     raise SystemExit(0)
 
@@ -681,6 +686,10 @@ class SoundsibleLauncher:
 
 if __name__ == "__main__":
     args = build_parser().parse_args()
+    if args.relay is not None:
+        from shared.relay_cli import main as relay_cli_main
+
+        raise SystemExit(relay_cli_main(args.relay))
     _build_runtime_config(args, desktop_defaults=args.desktop_engine)
     if args.users is not None:
         # Account admin runs against the database directly — no engine, no

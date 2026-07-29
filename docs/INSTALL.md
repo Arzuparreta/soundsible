@@ -71,7 +71,19 @@ Reverse-proxy the **legacy daemon** port, not the desktop-sidecar's random loopb
 
 ---
 
-## 5. Storage
+## 5. VPS with residential YouTube relay
+
+If YouTube classifies the VPS address as automated traffic, Soundsible can use
+an official Tailscale-only relay on a trusted Linux PC. This preserves a VPS
+Station while keeping URL resolution and media transfer on the same residential
+egress.
+
+Follow [Verified VPS relay](VPS_RELAY.md). Do not substitute an internet-facing
+open proxy.
+
+---
+
+## 6. Storage
 
 By default Soundsible uses local disk on the host. For larger or shared libraries:
 
@@ -82,7 +94,7 @@ See [CONFIGURATION.md](./CONFIGURATION.md) for storage options.
 
 ---
 
-## 6. Security baseline
+## 7. Security baseline
 
 Soundsible is designed for trusted **LAN / Tailscale** use. For anything beyond a single machine:
 

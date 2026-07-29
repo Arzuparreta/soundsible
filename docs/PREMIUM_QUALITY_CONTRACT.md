@@ -37,8 +37,13 @@ This contract states **five non-negotiable user outcomes**. Each has a single **
 
 **Outcome:** Playback starts quickly and stays stable enough that routine listening is not disrupted by stalls or queue glitches.
 
-**Pass/fail gate (compound, single outcome):**  
-- **Latency:** **p95** `intent_to_playing_ms` **≤350ms** on reference hardware, rolling **7 days**. Fail if regression **>10%** vs frozen baseline.  
+**Pass/fail gate (compound, single outcome):**
+- **Latency:** version-2 `click_to_playing_ms`, rolling **7 days**, with at
+  least 50 valid samples per route. Local files and disk-cached previews
+  **≤350ms** p95; URL-warm direct previews **≤750ms**; cold direct previews
+  **≤3s**; URL-warm relay previews **≤1.25s**; cold relay previews **≤4s**;
+  podcasts **≤2s**. A route with fewer samples reports “insufficient data”
+  rather than passing.
 - **Continuity:** **≥99.5%** of queue actions complete without critical desync in release-candidate verification. Fail on **any** critical desync bug.  
 - **Comfort:** Session **playback stall rate &lt;0.3%** and no pattern of repeated mid-track pauses under standard network profile (operative definition: “no noticeable interruption”).
 

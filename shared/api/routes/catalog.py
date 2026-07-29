@@ -753,14 +753,14 @@ def _resolve_candidates_uncached(
 def _warm_preview_stream_url(video_id: str) -> None:
     """Queue background resolution of `video_id`'s googlevideo URL."""
     from shared import preview_cache
-    from shared.api.routes.playback import _get_preview_stream_url_cached
+    from shared.api.routes.playback import _get_preview_stream_cached
 
     api = _get_api()
     try:
         preview_cache.request_prefetch(
             [video_id],
             download=False,
-            resolver=lambda vid: _get_preview_stream_url_cached(api, vid),
+            resolver=lambda vid: _get_preview_stream_cached(api, vid),
         )
     except Exception as exc:  # pragma: no cover — best-effort warm-up
         logger.debug("Catalog resolve: could not queue stream-URL warm for %s: %s", video_id, exc)

@@ -54,6 +54,7 @@ export type Theme = 'dark' | 'light' | 'system';
 /** Concrete appearance applied to the document (never `system`). */
 export type ResolvedTheme = 'dark' | 'light';
 export type RepeatMode = 'off' | 'all' | 'one';
+export type PlaybackPhase = 'idle' | 'loading' | 'playing' | 'paused' | 'buffering' | 'recovering' | 'failed';
 
 export interface DownloadsState {
   /** Live queue (pending/downloading/failed). Completed items leave the queue. */
@@ -75,6 +76,8 @@ export interface PlaybackState {
   /** The current track could not be played at all. Keeps the transport showing a
    * retry instead of a dead play button. */
   loadError: boolean;
+  /** Detailed transport state; isLoading/loadError remain compatibility views. */
+  phase: PlaybackPhase;
   currentTime: number;
   duration: number;
   queue: PlaybackQueueEntry[];
@@ -191,6 +194,7 @@ const [state, setState] = createStore<AppState>({
     isPlaying: false,
     isLoading: false,
     loadError: false,
+    phase: 'idle',
     currentTime: 0,
     duration: 0,
     queue: [],
@@ -242,22 +246,124 @@ let radioGeneration = 0;
 const AUTOPLAY_TARGET = 8;
 const AUTOPLAY_PREPARE_THRESHOLD = 2;
 const AUTOPLAY_REFILL_THRESHOLD = 3;
-function trackUrl(track: Track): string {
-  const previewId = playbackYoutubeId(track);
-  return track.source === 'preview' && previewId ? previewUrl(previewId) : streamUrl(track.id);
+type PlaybackTrigger = 'selection' | 'next' | 'ended' | 'retry' | 'resume' | 'recovery' | 'podcast';
+type PlaybackSourceKind = 'local' | 'preview' | 'podcast';
+
+interface PlaybackAttempt {
+  id: string;
+  trackId: string;
+  sourceKind: PlaybackSourceKind;
+  trigger: PlaybackTrigger;
+  queueLane: string;
+  startedAt: number;
+  audibleAt: number | null;
+  stallStartedAt: number | null;
+  stallCount: number;
+  stallMs: number;
+  recoveryCount: number;
+  reportedRecoveryCount: number;
+  generation: number;
 }
 
-/** Set when the user starts a track; consumed by the audio 'playing' event to
- * report click→sound latency (local-only telemetry, see play-timing route). */
-let pendingPlayTiming: { trackId: string; preview: boolean; startedAt: number } | null = null;
+const STALL_RECOVERY_MS = 3000;
+const STARTUP_RECOVERY_MS = 12000;
+let activeAttempt: PlaybackAttempt | null = null;
+let stallRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function playbackSourceKind(track: Track): PlaybackSourceKind {
+  if (isPodcastTrack(track)) return 'podcast';
+  return track.source === 'preview' ? 'preview' : 'local';
+}
+
+function trackUrl(track: Track, attemptId?: string): string {
+  const previewId = playbackYoutubeId(track);
+  return track.source === 'preview' && previewId
+    ? previewUrl(previewId, attemptId)
+    : streamUrl(track.id, attemptId);
+}
+
+function clearStallTimer(): void {
+  if (stallRecoveryTimer) clearTimeout(stallRecoveryTimer);
+  stallRecoveryTimer = null;
+}
+
+function emitAttempt(
+  attempt: PlaybackAttempt,
+  phase: string,
+  terminalState: string,
+  extra: Record<string, number | boolean> = {},
+  failureReason?: string,
+): void {
+  void api
+    .sendPlayTiming({
+      v: 2,
+      attempt_id: attempt.id,
+      track_id: attempt.trackId,
+      device_id: state.device.device_id,
+      phase,
+      source_kind: attempt.sourceKind,
+      cache_state: 'unknown',
+      trigger: attempt.trigger,
+      queue_lane: attempt.queueLane,
+      terminal_state: terminalState,
+      egress: 'unknown',
+      failure_reason: failureReason,
+      segments: extra,
+    })
+    .catch(() => {});
+}
+
+function cancelActiveAttempt(reason = 'superseded'): void {
+  clearStallTimer();
+  const attempt = activeAttempt;
+  if (!attempt) return;
+  if (attempt.audibleAt === null) {
+    emitAttempt(
+      attempt,
+      'ui_attempt_cancelled',
+      'cancelled',
+      { elapsed_ms: Math.round(performance.now() - attempt.startedAt) },
+      reason,
+    );
+  }
+  activeAttempt = null;
+}
+
+function createPlaybackAttempt(
+  track: Track,
+  generation: number,
+  trigger: PlaybackTrigger,
+): PlaybackAttempt {
+  cancelActiveAttempt();
+  const attempt: PlaybackAttempt = {
+    id: randomId(),
+    trackId: track.id,
+    sourceKind: playbackSourceKind(track),
+    trigger,
+    queueLane: 'queueLane' in track && typeof track.queueLane === 'string' ? track.queueLane : 'context',
+    startedAt: performance.now(),
+    audibleAt: null,
+    stallStartedAt: null,
+    stallCount: 0,
+    stallMs: 0,
+    recoveryCount: 0,
+    reportedRecoveryCount: 0,
+    generation,
+  };
+  activeAttempt = attempt;
+  return attempt;
+}
 
 /** Warm the tracks `actions.next` would reach so track changes start instantly.
  * Skipped in shuffle mode — the next pick is random, prefetch would guess wrong. */
 function prefetchUpcoming(): void {
   const pb = state.playback;
   if (pb.shuffle) return;
-  const ids = upcomingPreviewIds(pb.queue, pb.index, pb.repeat === 'all');
-  if (ids.length > 0) prefetchPreviews(ids, { download: true });
+  const ids = upcomingPreviewIds(pb.queue, pb.index, pb.repeat === 'all', 5);
+  const downloads = ids.slice(0, 2);
+  if (downloads.length > 0) prefetchPreviews(downloads, { download: true });
+  const warmOnly = ids.slice(2);
+  if (warmOnly.length > 0) prefetchPreviews(warmOnly);
 }
 
 function discardFutureAutoplay(): void {
@@ -433,7 +539,7 @@ function osSeekStep(direction: 'forward' | 'backward'): number {
  * costs the engine a yt-dlp resolution and a proxied stream, and the first tap
  * has already paid for both. Pass `restart` for the deliberate replay.
  */
-function loadIndex(i: number, opts: { restart?: boolean } = {}): void {
+function loadIndex(i: number, opts: { restart?: boolean; trigger?: PlaybackTrigger } = {}): void {
   const track = state.playback.queue[i];
   if (!track) return;
   const pb = state.playback;
@@ -444,21 +550,18 @@ function loadIndex(i: number, opts: { restart?: boolean } = {}): void {
   }
   userPlaybackStartedThisSession = true;
   const generation = beginLoad();
+  const attempt = createPlaybackAttempt(track, generation, opts.trigger ?? 'selection');
   setState('playback', {
     currentTrack: track,
     index: i,
     isPlaying: true,
     isLoading: true,
     loadError: false,
+    phase: 'loading',
     currentTime: 0,
   });
   updateMediaSession(track);
-  pendingPlayTiming = {
-    trackId: track.id,
-    preview: track.source === 'preview',
-    startedAt: performance.now(),
-  };
-  void audioService.load(trackUrl(track)).catch(() => onPlaybackFailed(generation));
+  void audioService.load(trackUrl(track, attempt.id)).catch(() => onPlaybackFailed(generation, 'load'));
   prefetchUpcoming();
   queueMicrotask(() => void ensureAutoplay());
 }
@@ -480,13 +583,84 @@ const beginLoad = (): number => ++loadGeneration;
 let consecutiveLoadFailures = 0;
 const MAX_CONSECUTIVE_SKIPS = 3;
 
+function recoverCurrent(reason: 'load' | 'error' | 'stall'): boolean {
+  const attempt = activeAttempt;
+  const track = state.playback.currentTrack;
+  if (!attempt || !track || attempt.recoveryCount >= 1) return false;
+  attempt.recoveryCount += 1;
+  clearStallTimer();
+  if (attempt.stallStartedAt !== null) {
+    attempt.stallMs += Math.max(0, performance.now() - attempt.stallStartedAt);
+    attempt.stallStartedAt = null;
+  }
+  const generation = beginLoad();
+  attempt.generation = generation;
+  setState('playback', {
+    isPlaying: true,
+    isLoading: true,
+    loadError: false,
+    phase: 'recovering',
+  });
+  emitAttempt(
+    attempt,
+    'ui_recovery_started',
+    'recovering',
+    {
+      recovery_count: attempt.recoveryCount,
+      position_ms: Math.round((state.playback.currentTime || 0) * 1000),
+    },
+    reason,
+  );
+  const position = state.playback.currentTime || 0;
+  const recovery = attempt.sourceKind === 'podcast' && track.podcast_enclosure_url
+    ? api
+        .podcastPeek(track.podcast_enclosure_url)
+        .then(({ stream_token }) => {
+          if (!stream_token) throw new Error('no podcast stream token');
+          return audioService.recover(podcastStreamUrl(stream_token, attempt.id), position);
+        })
+    : audioService.recover(trackUrl(track, attempt.id), position);
+  void recovery.catch(() => onPlaybackFailed(generation, reason));
+  return true;
+}
+
+function scheduleStallRecovery(delayMs = STALL_RECOVERY_MS): void {
+  clearStallTimer();
+  if (document.visibilityState === 'hidden') return;
+  const attempt = activeAttempt;
+  if (!attempt) return;
+  stallRecoveryTimer = setTimeout(() => {
+    stallRecoveryTimer = null;
+    if (activeAttempt !== attempt || state.playback.phase !== 'buffering') return;
+    if (!recoverCurrent('stall')) onPlaybackFailed(attempt.generation, 'stall');
+  }, delayMs);
+}
+
 /** The current track cannot be played: surface it, then move on if that is the
  * sane thing to do. Silence with a dead play button was the old behaviour. */
-function onPlaybackFailed(generation: number): void {
+function onPlaybackFailed(generation: number, reason = 'media_error'): void {
   if (generation !== loadGeneration) return; // a later attempt already took over
+  if (recoverCurrent(reason === 'stall' ? 'stall' : reason === 'load' ? 'load' : 'error')) return;
   loadGeneration += 1; // retire this attempt: further reports for it are stale
   const pb = state.playback;
-  setState('playback', { isPlaying: false, isLoading: false, loadError: true });
+  const attempt = activeAttempt;
+  clearStallTimer();
+  if (attempt) {
+    emitAttempt(
+      attempt,
+      'ui_attempt_failed',
+      'failed',
+      {
+        elapsed_ms: Math.round(performance.now() - attempt.startedAt),
+        stall_count: attempt.stallCount,
+        stall_ms: Math.round(attempt.stallMs),
+        recovery_count: attempt.recoveryCount,
+      },
+      reason,
+    );
+    activeAttempt = null;
+  }
+  setState('playback', { isPlaying: false, isLoading: false, loadError: true, phase: 'failed' });
   if (state.autoMode.active) {
     void actions.autoSkip();
     return;
@@ -554,12 +728,14 @@ function removeTrackReferences(id: string): void {
   }
 
   if (pb.currentTrack?.id === id) {
+    cancelActiveAttempt('track_removed');
     audioService.stop();
     setState('playback', {
       currentTrack: null,
       isPlaying: false,
       isLoading: false,
       loadError: false,
+      phase: 'idle',
       currentTime: 0,
       duration: 0,
       queue: nextQueue,
@@ -587,6 +763,7 @@ function restoreSameDevicePlayback(remote: RemotePlaybackState): void {
     isPlaying: false,
     isLoading: false,
     loadError: false,
+    phase: 'paused',
     currentTime: pos,
     duration: track.duration ?? 0,
     queue: [createQueueEntry(track, 'context', isPodcastTrack(track) ? 'podcast' : 'single', {
@@ -608,12 +785,15 @@ function onEnded(): void {
     return;
   }
   if (pb.index < pb.queue.length - 1 || pb.repeat === 'all') {
-    actions.next();
+    actions.next('ended');
     return;
   }
   void ensureAutoplay(true).then((ready) => {
-    if (ready && state.playback.index < state.playback.queue.length - 1) actions.next();
-    else setState('playback', 'isPlaying', false);
+    if (ready && state.playback.index < state.playback.queue.length - 1) {
+      loadIndex(state.playback.index + 1, { trigger: 'ended' });
+    } else {
+      setState('playback', { isPlaying: false, phase: 'paused' });
+    }
   });
 }
 
@@ -1163,6 +1343,7 @@ export const actions = {
     if (pb.currentTrack?.id === track.id && (pb.isLoading || pb.isPlaying)) return;
     userPlaybackStartedThisSession = true;
     const generation = beginLoad();
+    const attempt = createPlaybackAttempt(track, generation, 'podcast');
     setState('playback', {
       currentTrack: track,
       queue: [createQueueEntry(track, 'context', 'podcast', {
@@ -1174,6 +1355,7 @@ export const actions = {
       isPlaying: true,
       isLoading: true,
       loadError: false,
+      phase: 'loading',
       currentTime: 0,
       duration: 0,
       radioMode: false,
@@ -1184,9 +1366,9 @@ export const actions = {
     try {
       const { stream_token } = await api.podcastPeek(ep.enclosure_url);
       if (!stream_token) throw new Error('no token');
-      await audioService.load(podcastStreamUrl(stream_token));
+      await audioService.load(podcastStreamUrl(stream_token, attempt.id));
     } catch {
-      onPlaybackFailed(generation);
+      onPlaybackFailed(generation, 'load');
     }
   },
 
@@ -1221,10 +1403,18 @@ export const actions = {
       actions.retryCurrent();
       return;
     }
-    if (pb.isPlaying) audioService.pause();
+    if (pb.isPlaying) {
+      if (pb.phase === 'loading' || pb.phase === 'recovering') {
+        cancelActiveAttempt('user_pause');
+        setState('playback', { isPlaying: false, isLoading: false, phase: 'paused' });
+      }
+      audioService.pause();
+    }
     else {
       const generation = beginLoad();
-      void audioService.resume().catch(() => onPlaybackFailed(generation));
+      const attempt = createPlaybackAttempt(pb.currentTrack, generation, 'resume');
+      setState('playback', { isLoading: true, phase: 'loading' });
+      void audioService.resume().catch(() => onPlaybackFailed(attempt.generation, 'load'));
     }
   },
 
@@ -1233,20 +1423,20 @@ export const actions = {
     const pb = state.playback;
     if (!pb.currentTrack || pb.index < 0) return;
     consecutiveLoadFailures = 0;
-    loadIndex(pb.index, { restart: true });
+    loadIndex(pb.index, { restart: true, trigger: 'retry' });
   },
 
-  next(): void {
+  next(trigger: PlaybackTrigger = 'next'): void {
     const pb = state.playback;
     if (pb.queue.length === 0) return;
-    if (pb.index < pb.queue.length - 1) loadIndex(pb.index + 1);
+    if (pb.index < pb.queue.length - 1) loadIndex(pb.index + 1, { trigger });
     else if (pb.repeat === 'all') {
       const cycle = pb.queue.filter(
         (entry) => entry.queueLane !== 'manual' && entry.queueSource !== 'autoplay',
       );
       if (cycle.length > 0) {
         setState('playback', { queue: cycle, index: 0 });
-        loadIndex(0);
+        loadIndex(0, { trigger });
       }
     }
   },
@@ -1342,6 +1532,7 @@ export const actions = {
     if (i === pb.index) {
       setState('playback', 'queue', next);
       if (next.length === 0) {
+        cancelActiveAttempt('queue_empty');
         audioService.stop();
         setState('playback', {
           currentTrack: null,
@@ -1349,6 +1540,7 @@ export const actions = {
           isPlaying: false,
           isLoading: false,
           loadError: false,
+          phase: 'idle',
         });
       } else {
         loadIndex(Math.min(i, next.length - 1));
@@ -2268,7 +2460,10 @@ export function initStore(): void {
     pushPlaybackState();
   });
   a.addEventListener('pause', () => {
-    setState('playback', 'isPlaying', false);
+    clearStallTimer();
+    if (state.playback.phase !== 'loading' && state.playback.phase !== 'recovering') {
+      setState('playback', { isPlaying: false, isLoading: false, phase: 'paused' });
+    }
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
     updatePositionState();
     pushPlaybackState();
@@ -2278,32 +2473,54 @@ export function initStore(): void {
     // `stop()` clears src, which some engines report as an error. Nothing is
     // loaded and nothing is expected to be — not a playback failure.
     if (!a.getAttribute('src') && !a.currentSrc) return;
-    onPlaybackFailed(loadGeneration);
+    onPlaybackFailed(loadGeneration, 'media_error');
   });
   // Buffering, both cold (nothing has sounded yet) and mid-track. Either way the
   // transport shows progress instead of a stuck play button.
   a.addEventListener('waiting', () => {
-    if (state.playback.currentTrack) setState('playback', 'isLoading', true);
+    if (!state.playback.currentTrack) return;
+    const attempt = activeAttempt;
+    if (attempt) {
+      if (attempt.stallStartedAt === null) {
+        attempt.stallStartedAt = performance.now();
+        attempt.stallCount += 1;
+      }
+    }
+    setState('playback', { isLoading: true, phase: 'buffering' });
+    scheduleStallRecovery(attempt?.audibleAt == null ? STARTUP_RECOVERY_MS : STALL_RECOVERY_MS);
   });
-  a.addEventListener('canplay', () => setState('playback', 'isLoading', false));
+  a.addEventListener('canplay', () => {
+    // `canplay` can precede actual audio by a noticeable amount; `playing` is
+    // the only event that closes the user's click-to-sound attempt.
+  });
   // First 'playing' after a user-initiated load → click-to-sound latency.
   a.addEventListener('playing', () => {
-    setState('playback', { isLoading: false, loadError: false });
+    clearStallTimer();
+    setState('playback', { isLoading: false, loadError: false, phase: 'playing' });
     consecutiveLoadFailures = 0;
-    const timing = pendingPlayTiming;
-    if (!timing || state.playback.currentTrack?.id !== timing.trackId) return;
-    pendingPlayTiming = null;
-    void api
-      .sendPlayTiming({
-        track_id: timing.trackId,
-        device_id: state.device.device_id,
-        phase: 'ui_click_to_playing',
-        segments: {
-          click_to_playing_ms: Math.round(performance.now() - timing.startedAt),
-          preview: timing.preview,
-        },
-      })
-      .catch(() => {});
+    const attempt = activeAttempt;
+    if (!attempt || state.playback.currentTrack?.id !== attempt.trackId) return;
+    const now = performance.now();
+    if (attempt.stallStartedAt !== null) {
+      attempt.stallMs += Math.max(0, now - attempt.stallStartedAt);
+      attempt.stallStartedAt = null;
+    }
+    if (attempt.audibleAt === null) {
+      attempt.audibleAt = now;
+      emitAttempt(attempt, 'ui_click_to_playing', 'playing', {
+        click_to_playing_ms: Math.round(now - attempt.startedAt),
+        stall_count: attempt.stallCount,
+        stall_ms: Math.round(attempt.stallMs),
+        recovery_count: attempt.recoveryCount,
+      });
+    } else if (attempt.recoveryCount > attempt.reportedRecoveryCount) {
+      emitAttempt(attempt, 'ui_recovery_succeeded', 'playing', {
+        stall_count: attempt.stallCount,
+        stall_ms: Math.round(attempt.stallMs),
+        recovery_count: attempt.recoveryCount,
+      });
+      attempt.reportedRecoveryCount = attempt.recoveryCount;
+    }
   });
   a.addEventListener('timeupdate', () => {
     const position = a.currentTime || 0;
@@ -2320,6 +2537,14 @@ export function initStore(): void {
   // to re-anchor the OS scrubber or it keeps counting from the old position.
   a.addEventListener('seeked', updatePositionState);
   a.addEventListener('ratechange', updatePositionState);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && state.playback.phase === 'buffering') {
+      const attempt = activeAttempt;
+      scheduleStallRecovery(attempt?.audibleAt == null ? STARTUP_RECOVERY_MS : STALL_RECOVERY_MS);
+    } else if (document.visibilityState === 'hidden') {
+      clearStallTimer();
+    }
+  });
 
   if ('mediaSession' in navigator) {
     const ms = navigator.mediaSession;

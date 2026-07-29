@@ -28,11 +28,12 @@ import queue
 import threading
 import time
 from pathlib import Path
-from typing import Callable, Iterable, Optional
+from typing import Callable, Iterable, Optional, Union
 
 import requests
 
 from shared.runtime import get_cache_dir
+from shared.stream_resolution import ResolvedStream, resolved_stream
 
 logger = logging.getLogger(__name__)
 
@@ -233,33 +234,46 @@ def enforce_cache_limit() -> None:
 
 
 # ── Prefetch worker ──────────────────────────────────────────────────────────
-# One daemon thread; jobs are (video_id, download, resolver). Resolution warms
-# the caller's stream-URL cache; download also lands the audio in this cache.
+# Separate bounded lanes keep URL warming from waiting behind a full download.
+# Active playback never enters either lane; it resolves synchronously through
+# the single-flight cache and therefore always has priority.
 
 _QUEUE_MAX = 32
-_prefetch_queue: "queue.Queue[tuple[str, bool, Callable[[str], str]]]" = queue.Queue(maxsize=_QUEUE_MAX)
+ResolutionValue = Union[ResolvedStream, str, None]
+Resolver = Callable[[str], ResolutionValue]
+_resolve_queue: "queue.Queue[tuple[str, Resolver]]" = queue.Queue(maxsize=_QUEUE_MAX)
+_download_queue: "queue.Queue[tuple[str, Resolver]]" = queue.Queue(maxsize=_QUEUE_MAX)
 _pending_lock = threading.Lock()
-_pending: set[str] = set()
+_pending: set[tuple[str, bool]] = set()
 _worker_started = threading.Event()
 
 
-def _proxies() -> Optional[dict[str, str]]:
-    # Same routing as the stream proxy: googlevideo URLs are IP-bound to the
-    # resolver's IP, so downloads must go through the same proxy if one is set.
-    yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "")
-    return {"http": yt_proxy, "https": yt_proxy} if yt_proxy else None
+def _coerce_resolution(value: ResolutionValue) -> Optional[ResolvedStream]:
+    if isinstance(value, ResolvedStream):
+        return value
+    if isinstance(value, str) and value:
+        proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
+        return resolved_stream(
+            value,
+            egress="relay" if proxy else "direct",
+            proxy_url=proxy or None,
+        )
+    return None
 
 
-def _download_to_cache(video_id: str, stream_url: str) -> None:
+def _download_to_cache(video_id: str, stream: Union[ResolvedStream, str]) -> None:
     if get_cached(video_id):
+        return
+    resolved = _coerce_resolution(stream)
+    if resolved is None:
         return
     # bytes=0- matters: googlevideo throttles DASH URLs fetched without a
     # Range header to roughly realtime; an open-ended range runs at full speed.
     with requests.get(
-        stream_url,
+        resolved.url,
         stream=True,
         timeout=(5, 90),
-        proxies=_proxies(),
+        proxies=resolved.requests_proxies(),
         headers={"Range": "bytes=0-"},
     ) as resp:
         resp.raise_for_status()
@@ -279,19 +293,19 @@ def _download_to_cache(video_id: str, stream_url: str) -> None:
             raise
 
 
-def _worker_loop() -> None:
+def _worker_loop(jobs: "queue.Queue[tuple[str, Resolver]]", *, download: bool) -> None:
     while True:
-        video_id, download, resolver = _prefetch_queue.get()
+        video_id, resolver = jobs.get()
         try:
-            stream_url = resolver(video_id)
-            if stream_url and download and cache_limit_bytes() > 0:
-                _download_to_cache(video_id, stream_url)
+            stream = _coerce_resolution(resolver(video_id))
+            if stream and download and cache_limit_bytes() > 0:
+                _download_to_cache(video_id, stream)
         except Exception as e:
             logger.info("[PreviewCache] Prefetch failed for %s: %s", video_id, e)
         finally:
             with _pending_lock:
-                _pending.discard(video_id)
-            _prefetch_queue.task_done()
+                _pending.discard((video_id, download))
+            jobs.task_done()
 
 
 def _ensure_worker() -> None:
@@ -300,7 +314,20 @@ def _ensure_worker() -> None:
     with _pending_lock:
         if _worker_started.is_set():
             return
-        threading.Thread(target=_worker_loop, name="preview-prefetch", daemon=True).start()
+        threading.Thread(
+            target=_worker_loop,
+            args=(_resolve_queue,),
+            kwargs={"download": False},
+            name="preview-resolve",
+            daemon=True,
+        ).start()
+        threading.Thread(
+            target=_worker_loop,
+            args=(_download_queue,),
+            kwargs={"download": True},
+            name="preview-download",
+            daemon=True,
+        ).start()
         _worker_started.set()
 
 
@@ -308,7 +335,7 @@ def request_prefetch(
     video_ids: Iterable[str],
     *,
     download: bool,
-    resolver: Callable[[str], str],
+    resolver: Resolver,
 ) -> list[str]:
     """Queue background prefetch jobs; returns the ids actually queued.
 
@@ -318,18 +345,20 @@ def request_prefetch(
     """
     _ensure_worker()
     queued: list[str] = []
+    jobs = _download_queue if download else _resolve_queue
     for video_id in video_ids:
         if download and get_cached(video_id):
             continue
+        pending_key = (video_id, download)
         with _pending_lock:
-            if video_id in _pending:
+            if pending_key in _pending:
                 continue
-            _pending.add(video_id)
+            _pending.add(pending_key)
         try:
-            _prefetch_queue.put_nowait((video_id, download, resolver))
+            jobs.put_nowait((video_id, resolver))
             queued.append(video_id)
         except queue.Full:
             with _pending_lock:
-                _pending.discard(video_id)
+                _pending.discard(pending_key)
             break
     return queued

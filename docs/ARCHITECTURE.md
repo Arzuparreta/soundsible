@@ -260,6 +260,7 @@ Exact filenames and fields may evolve; treat the code under `shared/` and `playe
 ### 7. Related documentation
 
 - [INSTALL.md](INSTALL.md) — headless operation, reverse proxy, Tailscale.
+- [VPS_RELAY.md](VPS_RELAY.md) — verified private residential egress for bot-blocked VPS hosts.
 - [AGENT_INTEGRATION.md](AGENT_INTEGRATION.md) — API guide for OpenClaw, Hermes agents, and local assistants.
 - [CAR_INTEGRATION.md](CAR_INTEGRATION.md) — car media surfaces, `/api/car/*`, and native companion contract.
 - [CONFIGURATION.md](CONFIGURATION.md) — configuration surfaces and environment variables.

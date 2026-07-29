@@ -47,6 +47,12 @@ The current runtime layer supports these top-level environment variables:
 - `SOUNDSIBLE_YT_SEARCH_SOURCE` — `ytmusic` (default) or `youtube`. YouTube Music
   gives cleaner metadata but is not always reachable from a datacenter IP; set it
   to `youtube` on a VPS whose searches come back empty.
+- `SOUNDSIBLE_YT_PROXY` — private HTTP relay used for both YouTube resolution
+  and the resulting Googlevideo transfer. For the supported VPS topology use
+  Soundsible's Tailscale-only relay; see [VPS_RELAY.md](VPS_RELAY.md).
+- `SOUNDSIBLE_PREVIEW_CACHE_MB` — LRU preview-audio disk cache, `2048` by
+  default. This is disk, not reserved RAM; `0` disables audio caching while URL
+  warming remains available.
 
 Notes:
 
@@ -115,6 +121,10 @@ Funnel, or reverse-proxy connection only carries queue control and progress.
 Public extraction is attempted first because it normally exposes cleaner
 audio-only formats. Configured cookies are retried automatically when YouTube
 requires authentication, age confirmation, or a cookie-only format.
+
+When a relay is configured, every resolved stream records whether it came from
+direct or relay egress. Preview streaming and prefetch reuse that exact path;
+they never guess from the current environment after the URL has been resolved.
 
 ### 3A. Web UI source-vs-build note
 

@@ -43,6 +43,8 @@ export const fr: Dict = {
     unmute: 'Activer le son',
     volume: 'Volume',
     loading: 'Chargement…',
+    buffering: 'Mise en mémoire tampon…',
+    reconnecting: 'Reconnexion…',
     unavailable: 'Indisponible — touchez pour réessayer',
   },
   nowPlaying: {

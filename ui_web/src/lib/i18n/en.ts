@@ -42,6 +42,8 @@ export const en = {
     unmute: 'Unmute',
     volume: 'Volume',
     loading: 'Loading…',
+    buffering: 'Buffering…',
+    reconnecting: 'Reconnecting…',
     unavailable: 'Unavailable — tap to retry',
   },
   nowPlaying: {

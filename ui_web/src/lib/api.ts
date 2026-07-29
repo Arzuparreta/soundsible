@@ -339,10 +339,19 @@ export const api = {
     }),
   /** Local-only playback latency telemetry (see docs/TELEMETRY_PRIVACY.md). */
   sendPlayTiming: (body: {
+    v?: number;
+    attempt_id?: string;
     track_id?: string;
     device_id?: string;
     phase?: string;
-    segments?: Record<string, number | boolean>;
+    source_kind?: 'local' | 'preview' | 'podcast';
+    cache_state?: 'unknown' | 'disk' | 'url_warm' | 'cold';
+    trigger?: string;
+    queue_lane?: string;
+    terminal_state?: string;
+    egress?: 'direct' | 'relay' | 'unknown';
+    failure_reason?: string;
+    segments?: Record<string, number | boolean | string>;
   }) => request<{ status?: string }>('/api/playback/play-timing', { method: 'POST', body, timeoutMs: 5000 }),
 
   // ── Cross-device playback state (for resume) ──

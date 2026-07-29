@@ -40,12 +40,14 @@ async function loadStore(
     searchYouTube: vi.fn(),
     relatedYouTube: vi.fn(),
     emitDiscoveryEvent: vi.fn().mockResolvedValue(undefined),
+    sendPlayTiming: vi.fn().mockResolvedValue({ status: 'ok' }),
     getDiscoverySettings: vi.fn().mockResolvedValue({ learning_enabled: true, autoplay_enabled: true }),
     setAutoplayEnabled: vi.fn().mockResolvedValue({ autoplay_enabled: true }),
     ...apiOverrides,
   };
   const audioService = {
     load: vi.fn().mockResolvedValue(undefined),
+    recover: vi.fn().mockResolvedValue(undefined),
     prime: vi.fn(),
     pause: vi.fn(),
     stop: vi.fn(),
@@ -267,7 +269,10 @@ describe('Playback load coalescing', () => {
   });
 
   it('skips to the next entry when a track cannot be played, then gives up', async () => {
-    const { actions, state, audioService } = await loadStore({}, { load: vi.fn().mockRejectedValue(new Error('502')) });
+    const { actions, state, audioService } = await loadStore({}, {
+      load: vi.fn().mockRejectedValue(new Error('502')),
+      recover: vi.fn().mockRejectedValue(new Error('502')),
+    });
 
     actions.playFrom([t1, t2], 0);
     await flush();
@@ -284,7 +289,10 @@ describe('Playback load coalescing', () => {
     // `error`. Counting both would skip two entries for one broken track — and
     // blame the innocent one that just started.
     const load = vi.fn().mockRejectedValueOnce(new Error('502')).mockResolvedValue(undefined);
-    const { actions, state, audioService } = await loadStore({}, { load });
+    const { actions, state, audioService } = await loadStore({}, {
+      load,
+      recover: vi.fn().mockRejectedValueOnce(new Error('502')),
+    });
     const t3: Track = { id: 't3', title: 'Three', artist: 'Artist' };
 
     actions.playFrom([t1, t2, t3], 0);
@@ -297,7 +305,10 @@ describe('Playback load coalescing', () => {
 
   it('retryCurrent re-requests the failed entry', async () => {
     const load = vi.fn().mockRejectedValueOnce(new Error('502')).mockResolvedValue(undefined);
-    const { actions, state, audioService } = await loadStore({}, { load });
+    const { actions, state, audioService } = await loadStore({}, {
+      load,
+      recover: vi.fn().mockRejectedValueOnce(new Error('502')),
+    });
 
     actions.playTrack(preview);
     await flush();

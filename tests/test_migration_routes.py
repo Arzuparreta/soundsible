@@ -270,3 +270,42 @@ def test_play_timing_endpoint_writes_jsonl(tmp_path, monkeypatch):
     row = json.loads(log.splitlines()[-1])
     assert row["event"] == "play_timing"
     assert row["segments"]["user_click_to_audio_ms"] == 120
+
+
+def test_play_timing_v2_bounds_samples_and_keeps_attempt_dimensions(tmp_path, monkeypatch):
+    monkeypatch.delenv("SOUNDSIBLE_TELEMETRY_ENABLED", raising=False)
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    app = Flask(__name__)
+    app.register_blueprint(playback_bp)
+    client = app.test_client()
+    play_tok = _agent_play(instance_db())
+
+    res = client.post(
+        "/api/playback/play-timing",
+        json={
+            "v": 2,
+            "attempt_id": "attempt-1",
+            "track_id": "tid",
+            "phase": "ui_click_to_playing",
+            "source_kind": "preview",
+            "cache_state": "url_warm",
+            "egress": "relay",
+            "terminal_state": "playing",
+            "segments": {
+                "click_to_playing_ms": 750,
+                "impossible_ms": 2_711_035,
+                "recovery_count": 1,
+            },
+        },
+        headers={"Authorization": f"Bearer {play_tok}"},
+    )
+    assert res.status_code == 200
+    row = json.loads(
+        (user_telemetry_dir() / "play-timing.jsonl").read_text(encoding="utf-8").strip().splitlines()[-1]
+    )
+    assert row["v"] == 2
+    assert row["attempt_id"] == "attempt-1"
+    assert row["egress"] == "relay"
+    assert row["segments"]["click_to_playing_ms"] == 750
+    assert "impossible_ms" not in row["segments"]

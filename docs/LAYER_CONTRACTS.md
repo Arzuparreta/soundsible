@@ -81,7 +81,12 @@ All events are append-only JSON lines. Common fields: `v`, `event`, `ts` (Unix s
 
 | `event` | When emitted | Payload | Status |
 |---------|----------------|---------|--------|
-| `play_timing` | `POST /api/playback/play-timing` | `segments` object (see [TELEMETRY_PRIVACY.md](./TELEMETRY_PRIVACY.md)); optional `track_id`, `device_id`, `phase` | **Implemented** |
+| `play_timing` v1 | Legacy `POST /api/playback/play-timing` | `segments`; optional `track_id`, `device_id`, `phase` | **Compatible; excluded from v2 SLO** |
+| `play_timing` v2 | Browser attempt or correlated Station stream | `attempt_id`, `source_kind`, `cache_state`, `trigger`, `queue_lane`, `terminal_state`, `egress`, bounded `segments`; optional failure reason | **Implemented** |
+
+Version 2 makes cancellation and recovery explicit. `server_stream_ready` and
+`ui_click_to_playing` rows join on `attempt_id`; the local report uses the
+server's cache/egress classification and never infers it in the browser.
 
 ### 3.4 `listening-events.jsonl` and `library.db` recommendation profile (Layer 2 — active)
 
@@ -103,7 +108,7 @@ One-page mapping from **user outcomes** to **signals** (product scorecard reques
 |--------|------------|-----------------|---------------------|-------|
 | Setup → first play | §1 | Success %, median time, “shell intervention” tagging | `setup-events` + `play-timing`; read-only rollup `scripts/setup_gate_rollup.py` | L1 |
 | Migration trust | §2 | Match rate on fixtures; confirmation rate | `migration-events` + audit reports | L1 |
-| Playback responsive & stable | §3 | `intent_to_playing_ms` p95; stall rate; queue tests | `play-timing` + automated queue checks | L1 → L2 |
+| Playback responsive & stable | §3 | route-specific v2 `click_to_playing_ms` p95; stall/recovery rate; queue tests | `play-timing` + `scripts/playback_report.py` + automated queue checks | L1 → L2 |
 | Discovery usefulness | §4 | 30s play rate; offline eval score; uplift | Layer 2 reco + eval job | L2 |
 | Trust, explainability, control | §5 | 100% reason field; control adoption; privacy checklist | API tests + Layer 2 UX events | L2 |
 

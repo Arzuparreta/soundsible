@@ -13,7 +13,10 @@ All events are **append-only JSON lines** under the runtime **data directory**, 
 | Play timing | `play-timing.jsonl` | Latency segments for Phase 2 baseline (instrumentation only in Phase 1). |
 | Listening and recommendation feedback | `listening-events.jsonl` | Per-account positive outcomes and explicit soft-negative feedback. |
 
-**Schema versions:** Records use `"v": 1` and event shapes are catalogued in [LAYER_CONTRACTS.md](./LAYER_CONTRACTS.md) §3 (setup, migration, play timing). Future fields are additive within a version or bump `v` with a documented migration in that doc.
+**Schema versions:** Setup and migration records use `"v": 1`. Playback
+attempts use `"v": 2`; listening history uses `"v": 2`. Event shapes are
+catalogued in [LAYER_CONTRACTS.md](./LAYER_CONTRACTS.md) §3. Future fields are
+additive within a version or bump `v` with a documented migration.
 
 **Listening history schema:** active records use `"v": 2`. Writers record actual
 30-second playback, explicit saves/playlist/subscription actions, and
@@ -61,18 +64,26 @@ profile.
 
 ## Play timing segments (`play-timing.jsonl`)
 
-`play_timing` events include a `segments` object (milliseconds, rounded integers). Phase 1 recorded **`intent_to_playing_ms`** only. Phase 2 adds optional sub-segments for **library/static** playback when the web client records them:
+Version-2 `play_timing` events correlate browser and Station work with an
+opaque `attempt_id`. They may include:
 
-| Segment | Meaning |
-|---------|---------|
-| `intent_to_playing_ms` | User intent → first `playing` event (primary latency gate). |
-| `intent_to_src_set_ms` | Intent → after `audio.src` is set and `load()` runs. |
-| `src_set_to_play_call_ms` | After load → immediately before `audio.play()`. |
-| `intent_to_play_call_ms` | Intent → immediately before `audio.play()`. |
-| `play_call_to_await_ms` | Before `play()` → after the returned promise settles. |
-| `await_to_playing_ms` | After play promise → `playing` event. |
+- `source_kind`: local, preview, or podcast;
+- `cache_state`: disk, URL-warm, cold, or unknown;
+- `egress`: direct, relay, or unknown;
+- trigger, queue lane, terminal state and bounded failure reason;
+- click-to-playing, resolution, upstream TTFB, stalls and recovery counts.
 
-Segments besides `intent_to_playing_ms` may be absent on older clients, ineligible tracks (previews/radio/etc.), or if playback failed before a mark.
+Cancelled and superseded attempts are written explicitly and are not counted as
+successful latency samples. Timing values ending in `_ms` outside the accepted
+0–300 second range are rejected instead of polluting percentiles. Version-1
+rows remain inspectable but are not mixed into the version-2 SLO report.
+
+Signed media URLs, relay addresses, cookies, tokens and audio contents are
+never recorded. Generate a local seven-day report with:
+
+```bash
+python3 scripts/playback_report.py /path/to/play-timing.jsonl
+```
 
 ## Relation to product privacy claims
 

@@ -64,6 +64,42 @@ export const audioService = {
       throw err;
     });
   },
+  /** Reload a stalled stream and resume from the last audible position. */
+  recover(url: string, positionSec: number): Promise<void> {
+    const a = audioEl();
+    const token = ++loadSeq;
+    a.src = url;
+    const resumeAtPosition = async () => {
+      if (token !== loadSeq) return;
+      const position = Number.isFinite(positionSec) ? Math.max(0, positionSec) : 0;
+      if (position > 0) {
+        const duration = a.duration;
+        a.currentTime = Number.isFinite(duration) && duration > 0
+          ? Math.min(position, Math.max(0, duration - 0.05))
+          : position;
+      }
+      try {
+        await a.play();
+      } catch (err: unknown) {
+        if (token !== loadSeq) return;
+        if (err instanceof Error && err.name === 'AbortError') return;
+        throw err;
+      }
+    };
+    if (a.readyState >= 1) return resumeAtPosition();
+    return new Promise<void>((resolve, reject) => {
+      const onMetadata = () => {
+        a.removeEventListener('error', onError);
+        void resumeAtPosition().then(resolve, reject);
+      };
+      const onError = () => {
+        a.removeEventListener('loadedmetadata', onMetadata);
+        reject(new Error('media recovery failed'));
+      };
+      a.addEventListener('loadedmetadata', onMetadata, { once: true });
+      a.addEventListener('error', onError, { once: true });
+    });
+  },
   /** Load without playing, optionally cued to `positionSec` (cross-device resume). */
   prime(url: string, positionSec = 0): void {
     const a = audioEl();

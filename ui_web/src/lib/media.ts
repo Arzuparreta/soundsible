@@ -21,12 +21,15 @@ export const coverUrl = (id: string): string => {
 };
 
 /** Audio stream for a library track. */
-export const streamUrl = (id: string): string =>
-  `${apiOrigin()}/api/static/stream/${encodeURIComponent(id)}`;
+const attemptQuery = (attemptId?: string): string =>
+  attemptId ? `?attempt_id=${encodeURIComponent(attemptId)}` : '';
+
+export const streamUrl = (id: string, attemptId?: string): string =>
+  `${apiOrigin()}/api/static/stream/${encodeURIComponent(id)}${attemptQuery(attemptId)}`;
 
 /** Preview audio stream for a not-yet-downloaded YouTube video (Discover). */
-export const previewUrl = (videoId: string): string =>
-  `${apiOrigin()}/api/preview/stream/${encodeURIComponent(videoId)}`;
+export const previewUrl = (videoId: string, attemptId?: string): string =>
+  `${apiOrigin()}/api/preview/stream/${encodeURIComponent(videoId)}${attemptQuery(attemptId)}`;
 
 /**
  * Return the YouTube identity used by playback for this track.
@@ -40,5 +43,5 @@ export const playbackYoutubeId = (track: TrackMediaIdentity): string | null =>
   track.source === 'preview' ? track.id : track.youtube_id || null;
 
 /** Tokenized podcast episode stream (token minted via api.podcastPeek). */
-export const podcastStreamUrl = (token: string): string =>
-  `${apiOrigin()}/api/podcasts/stream/${encodeURIComponent(token)}`;
+export const podcastStreamUrl = (token: string, attemptId?: string): string =>
+  `${apiOrigin()}/api/podcasts/stream/${encodeURIComponent(token)}${attemptQuery(attemptId)}`;

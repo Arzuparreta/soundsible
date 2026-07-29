@@ -8,6 +8,8 @@ export interface Track {
   youtube_id?: string | null;
   media_kind?: string | null;
   podcast_episode_guid?: string | null;
+  /** Original enclosure URL retained only for token refresh during recovery. */
+  podcast_enclosure_url?: string | null;
   podcast_feed_id?: string | null;
   podcast_rss_url?: string | null;
   isrc?: string | null;

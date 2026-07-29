@@ -43,6 +43,8 @@ export const zh: Dict = {
     unmute: '取消静音',
     volume: '音量',
     loading: '加载中…',
+    buffering: '缓冲中…',
+    reconnecting: '正在重新连接…',
     unavailable: '不可用 — 点击重试',
   },
   nowPlaying: {

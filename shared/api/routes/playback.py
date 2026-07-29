@@ -15,6 +15,7 @@ from shared.api.memo import Memo
 from shared.constants import DEFAULT_CACHE_DIR
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, rate_limit, require_scope
 from shared.path_resolver import resolve_local_track_path
+from shared.stream_resolution import ResolvedStream, resolved_stream
 from shared.url_utils import validate_youtube_video_id
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ _preview_stream_lock = threading.Lock()
 # but is also not written off for the full five minutes.
 PREVIEW_STREAM_CACHE_TTL_SEC = 300  # 5 minutes
 PREVIEW_STREAM_NEGATIVE_TTL_SEC = 20
-_preview_stream_urls: Memo[str] = Memo(
+_preview_stream_urls: Memo[ResolvedStream | str] = Memo(
     ttl_sec=PREVIEW_STREAM_CACHE_TTL_SEC,
     negative_ttl_sec=PREVIEW_STREAM_NEGATIVE_TTL_SEC,
     maxsize=512,
@@ -80,7 +81,7 @@ def _preview_stream_rate_limit(ip: str) -> bool:
     return True
 
 
-def _get_preview_stream_url_cached(api, video_id: str) -> str:
+def _get_preview_stream_cached(api, video_id: str) -> ResolvedStream | None:
     """Resolve a preview stream URL, at most once per video id at a time.
 
     Concurrent callers for the same id — repeated taps, a range request landing
@@ -88,18 +89,42 @@ def _get_preview_stream_url_cached(api, video_id: str) -> str:
     one yt-dlp extraction instead of each paying for their own.
     """
 
-    def resolve() -> str:
+    def resolve() -> ResolvedStream | str:
         dl = api["get_downloader"](open_browser=False)
-        return dl.downloader.get_stream_url(video_id) or ""
+        resolver = getattr(dl.downloader, "get_resolved_stream", None)
+        if callable(resolver):
+            return resolver(video_id) or ""
+        url = dl.downloader.get_stream_url(video_id) or ""
+        if not url:
+            return ""
+        proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
+        return resolved_stream(
+            url,
+            egress="relay" if proxy else "direct",
+            proxy_url=proxy or None,
+        )
 
     try:
-        return _preview_stream_urls.resolve(video_id, resolve)
+        value = _preview_stream_urls.resolve(video_id, resolve)
+        return value if isinstance(value, ResolvedStream) else None
     except TimeoutError:
         logger.warning("API: [Preview] Timed out waiting on in-flight resolution for %s", video_id)
-        return ""
+        return None
 
 
-def warm_preview_stream_cache(video_id: str, url: str, ttl_sec: int = PREVIEW_STREAM_CACHE_TTL_SEC) -> None:
+def _get_preview_stream_url_cached(api, video_id: str) -> str:
+    """Compatibility helper for catalog and older tests."""
+    resolved = _get_preview_stream_cached(api, video_id)
+    return resolved.url if resolved else ""
+
+
+def warm_preview_stream_cache(
+    video_id: str,
+    url: str,
+    ttl_sec: int = PREVIEW_STREAM_CACHE_TTL_SEC,
+    *,
+    egress: str | None = None,
+) -> None:
     """Warm the in-process preview URL cache from another route.
 
     Catalog/discovery resolve knows the best video_id before the user clicks the
@@ -111,7 +136,14 @@ def warm_preview_stream_cache(video_id: str, url: str, ttl_sec: int = PREVIEW_ST
     """
     if not video_id or not isinstance(url, str) or not url:
         return
-    _preview_stream_urls.put(video_id, url, ttl_sec=ttl_sec)
+    proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
+    selected_egress = egress if egress in {"direct", "relay"} else ("relay" if proxy else "direct")
+    stream = resolved_stream(
+        url,
+        egress="relay" if selected_egress == "relay" else "direct",
+        proxy_url=proxy or None,
+    )
+    _preview_stream_urls.put(video_id, stream, ttl_sec=min(ttl_sec, stream.cache_ttl(ttl_sec)))
 
 
 def _get_api():
@@ -214,9 +246,79 @@ def stream_local_track(track_id):
         response.headers.add("Access-Control-Allow-Methods", "GET, OPTIONS")
         response.headers.add("Access-Control-Allow-Headers", "Range")
         response.headers.add("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges")
+        response.headers["X-Soundsible-Playback-Source"] = "local"
+        response.headers["X-Soundsible-Playback-Egress"] = "direct"
         return response
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+def _clean_attempt_id() -> str | None:
+    value = request.args.get("attempt_id", "").strip()
+    if not value or len(value) > 128:
+        return None
+    return value
+
+
+def _emit_stream_timing(
+    *,
+    attempt_id: str | None,
+    track_id: str,
+    cache_state: str,
+    egress: str,
+    segments: dict[str, int | float | bool],
+) -> None:
+    if not attempt_id:
+        return
+    from shared.telemetry import emit
+
+    emit(
+        "play_timing",
+        {
+            "v": 2,
+            "event": "play_timing",
+            "ts": int(time.time()),
+            "attempt_id": attempt_id,
+            "track_id": track_id[:128],
+            "phase": "server_stream_ready",
+            "source_kind": "preview",
+            "cache_state": cache_state,
+            "egress": egress,
+            "segments": segments,
+        },
+    )
+
+
+def _preview_upstream(api, video_id: str, headers: dict[str, str]):
+    """Resolve and open upstream, refreshing one stale signed URL."""
+    cache_was_warm = isinstance(_preview_stream_urls.get(video_id), ResolvedStream)
+    for attempt in range(2):
+        resolve_started = time.monotonic()
+        stream = _get_preview_stream_cached(api, video_id)
+        resolve_ms = round((time.monotonic() - resolve_started) * 1000)
+        if not stream:
+            return None, None, "unavailable", resolve_ms, 0
+        upstream_started = time.monotonic()
+        response = requests.get(
+            stream.url,
+            stream=True,
+            headers=headers,
+            timeout=(5, 90),
+            proxies=stream.requests_proxies(),
+        )
+        ttfb_ms = round((time.monotonic() - upstream_started) * 1000)
+        if response.status_code not in {403, 410} or attempt == 1:
+            return (
+                response,
+                stream,
+                "url_warm" if cache_was_warm and attempt == 0 else "cold",
+                resolve_ms,
+                ttfb_ms,
+            )
+        response.close()
+        _preview_stream_urls.invalidate(video_id)
+        cache_was_warm = False
+    return None, None, "unavailable", 0, 0
 
 
 @playback_bp.route("/api/preview/stream/<video_id>", methods=["GET"])
@@ -235,35 +337,35 @@ def preview_stream_proxy(video_id):
         # The bytes are content-addressed by video id and never change, so let
         # the browser skip us entirely when the listener replays the track.
         response.headers["Cache-Control"] = "private, max-age=86400"
+        response.headers["X-Soundsible-Playback-Source"] = "preview"
+        response.headers["X-Soundsible-Playback-Cache"] = "disk"
+        response.headers["X-Soundsible-Playback-Egress"] = "direct"
+        _emit_stream_timing(
+            attempt_id=_clean_attempt_id(),
+            track_id=video_id,
+            cache_state="disk",
+            egress="direct",
+            segments={"server_ready_ms": 0},
+        )
         return response
 
     if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
         return jsonify({"error": "Too many requests"}), 429
 
     try:
-        stream_url = _get_preview_stream_url_cached(api, video_id)
-        if not stream_url:
-            return jsonify({"error": "Preview unavailable"}), 502
         range_header = request.headers.get("Range")
         # googlevideo throttles DASH URLs fetched *without* a Range header to
         # roughly realtime; an open-ended bytes=0- is served at full speed.
         # Browsers always send a Range, but direct/no-Range clients would
         # crawl — so inject one and translate the upstream 206 back to a 200.
         req_headers = {"Range": range_header or "bytes=0-"}
-        # Route through the same proxy used for yt-dlp resolution if set.
-        # YouTube CDN URLs are IP-bound to the resolver's IP; the VPS
-        # cannot fetch them directly when resolution went through a proxy.
-        proxies = None
-        yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "")
-        if yt_proxy:
-            proxies = {"http": yt_proxy, "https": yt_proxy}
-        resp = requests.get(
-            stream_url,
-            stream=True,
-            headers=req_headers,
-            timeout=(5, 90),
-            proxies=proxies,
+        resp, stream, cache_state, resolve_ms, upstream_ttfb_ms = _preview_upstream(
+            api,
+            video_id,
+            req_headers,
         )
+        if resp is None or stream is None:
+            return jsonify({"error": "Preview unavailable"}), 502
         resp.raise_for_status()
         content_length = resp.headers.get("Content-Length")
         content_range = resp.headers.get("Content-Range")
@@ -273,7 +375,13 @@ def preview_stream_proxy(video_id):
             # The client never asked for a range; hide the injected one.
             status_code = 200
             content_range = None
-        response_headers = {"Content-Type": content_type, "Accept-Ranges": "bytes"}
+        response_headers = {
+            "Content-Type": content_type,
+            "Accept-Ranges": "bytes",
+            "X-Soundsible-Playback-Source": "preview",
+            "X-Soundsible-Playback-Cache": cache_state,
+            "X-Soundsible-Playback-Egress": stream.egress,
+        }
         if content_range:
             response_headers["Content-Range"] = content_range
         if content_length:
@@ -286,6 +394,17 @@ def preview_stream_proxy(video_id):
         if covers_whole_file:
             expected = int(content_length) if content_length and content_length.isdigit() else None
             writer = preview_cache.open_writer(video_id, content_type, expected)
+
+        _emit_stream_timing(
+            attempt_id=_clean_attempt_id(),
+            track_id=video_id,
+            cache_state=cache_state,
+            egress=stream.egress,
+            segments={
+                "resolve_ms": resolve_ms,
+                "upstream_ttfb_ms": upstream_ttfb_ms,
+            },
+        )
 
         def iter_chunks():
             try:
@@ -336,8 +455,8 @@ def preview_prefetch():
         return jsonify({"status": "queued", "queued": []})
     download = bool(data.get("download"))
 
-    def resolver(vid: str) -> str:
-        return _get_preview_stream_url_cached(api, vid)
+    def resolver(vid: str) -> ResolvedStream | None:
+        return _get_preview_stream_cached(api, vid)
 
     queued = preview_cache.request_prefetch(video_ids, download=download, resolver=resolver)
     return jsonify({"status": "queued", "queued": queued})
@@ -621,9 +740,11 @@ def playback_play_timing():
     track_id = data.get("track_id")
     device_id = data.get("device_id")
     phase = data.get("phase")
+    requested_version = data.get("v")
+    version = 2 if requested_version == 2 else 1
 
     payload = {
-        "v": 1,
+        "v": version,
         "event": "play_timing",
         "ts": int(time.time()),
     }
@@ -633,6 +754,21 @@ def playback_play_timing():
         payload["device_id"] = device_id.strip()[:128]
     if isinstance(phase, str) and phase.strip():
         payload["phase"] = phase.strip()[:64]
+    if version == 2:
+        string_fields = {
+            "attempt_id": 128,
+            "source_kind": 32,
+            "cache_state": 32,
+            "trigger": 64,
+            "queue_lane": 32,
+            "terminal_state": 32,
+            "egress": 32,
+            "failure_reason": 64,
+        }
+        for key, max_len in string_fields.items():
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                payload[key] = value.strip()[:max_len]
     if isinstance(segments, dict):
         clean = {}
         for k, v in list(segments.items())[:32]:
@@ -640,10 +776,15 @@ def playback_play_timing():
                 continue
             if isinstance(v, bool):
                 clean[k[:64]] = v
-            elif isinstance(v, int) and -1_000_000_000 <= v <= 1_000_000_000:
-                clean[k[:64]] = v
-            elif isinstance(v, float) and abs(v) <= 1e12:
-                clean[k[:64]] = round(v, 3)
+            elif isinstance(v, (int, float)):
+                numeric = float(v)
+                if k.endswith("_ms") and not 0 <= numeric <= 300_000:
+                    continue
+                if ("count" in k or k.endswith("_retries")) and not 0 <= numeric <= 10_000:
+                    continue
+                if not -1_000_000_000 <= numeric <= 1_000_000_000:
+                    continue
+                clean[k[:64]] = int(numeric) if numeric.is_integer() else round(numeric, 3)
         payload["segments"] = clean
 
     emit("play_timing", payload)

@@ -28,6 +28,7 @@ from .config import (
 import difflib
 from .audio_utils import AudioProcessor
 from .models import Track
+from shared.stream_resolution import ResolvedStream, resolved_stream
 from shared.venv_utils import get_subprocess_python
 
 logger = logging.getLogger(__name__)
@@ -1163,111 +1164,121 @@ class YouTubeDownloader:
 
         return []
 
-    def get_stream_url(self, video_id: str) -> Optional[str]:
-        """Resolve a direct googlevideo audio URL in-process (no subprocess).
-
-        Replaces the previous `python -m yt_dlp -g` subprocess path. Removing
-        the per-click interpreter fork + yt-dlp import shaves a fixed 200-800ms
-        from every cold preview click on top of the actual player extraction.
-        Uses the preview-tier format selector (lower bitrate) and keeps the
-        same four-attempt fallback chain (proxy / cookies-v6 / ipv4 default /
-        cookies-v4).
-        """
+    def get_resolved_stream(self, video_id: str) -> Optional[ResolvedStream]:
+        """Resolve audio together with the network path that owns the URL."""
         if not video_id or not str(video_id).strip():
             return None
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
 
-        def _try(opts: Dict[str, Any]) -> Optional[str]:
+        def _try(
+            opts: Dict[str, Any],
+            *,
+            egress: str,
+            proxy_url: Optional[str] = None,
+        ) -> tuple[Optional[ResolvedStream], bool]:
+            started = time.monotonic()
             try:
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(yt_url, download=False)
             except Exception as exc:
                 msg = str(exc) or exc.__class__.__name__
                 if "Requested format is not available" in msg:
-                    return None
+                    return None, False
                 if "Sign in to confirm" in msg:
-                    return None
+                    return None, False
                 logger.warning(
                     "[Preview] yt-dlp extract failed for %s: %s",
                     video_id,
                     msg[:300],
                 )
-                return "__ERROR__"
+                return None, True
             if not isinstance(info, dict) or not info:
-                return None
+                return None, False
             url = info.get("url")
-            if isinstance(url, str) and url:
-                return url
-            requested = info.get("requested_formats") or []
-            for f in requested:
-                if isinstance(f, dict):
-                    u = f.get("url")
-                    if isinstance(u, str) and u:
-                        return u
-            formats = info.get("formats") or []
-            for f in formats:
-                if isinstance(f, dict):
-                    u = f.get("url")
-                    if isinstance(u, str) and u:
-                        return u
-            return None
+            if not isinstance(url, str) or not url:
+                for collection in (info.get("requested_formats") or [], info.get("formats") or []):
+                    for fmt in collection:
+                        candidate = fmt.get("url") if isinstance(fmt, dict) else None
+                        if isinstance(candidate, str) and candidate:
+                            url = candidate
+                            break
+                    if isinstance(url, str) and url:
+                        break
+            if not isinstance(url, str) or not url:
+                return None, False
+            return (
+                resolved_stream(
+                    url,
+                    egress="relay" if egress == "relay" else "direct",
+                    proxy_url=proxy_url,
+                    resolution_ms=round((time.monotonic() - started) * 1000),
+                ),
+                False,
+            )
 
         base_opts: Dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
             "noplaylist": True,
             "format": YDL_FORMAT_AUDIO_PREVIEW,
+            "extractor_args": {"youtube": {"player_client": ["default", "android", "ios"]}},
         }
 
-        # Attempt 1: HTTP proxy (SOUNDSIBLE_YT_PROXY env var).
-        # Routes yt-dlp through a residential IP (e.g. Tailscale desktop).
-        yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "")
+        # A relay is the primary path when configured. Its result retains the
+        # proxy URL so every later byte follows the same egress.
+        yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
         if yt_proxy:
             opts = _apply_ytdlp_network_options({**base_opts, "proxy": yt_proxy})
-            result = _try(opts)
-            if result == "__ERROR__":
+            result, hard_error = _try(opts, egress="relay", proxy_url=yt_proxy)
+            if hard_error:
                 return None
             if result:
                 return result
 
-        # Attempt 2: cookies via IPv6.
+        # Cookie attempts are explicit direct paths. Do not call
+        # _apply_ytdlp_network_options here: that helper intentionally injects
+        # the configured relay and would silently mislabel the result.
         if self.cookie_file and os.path.exists(self.cookie_file):
-            opts = _apply_ytdlp_network_options({**base_opts, "cookiefile": self.cookie_file})
+            opts = {**base_opts, "cookiefile": self.cookie_file}
             opts["source_address"] = "::"
-            result = _try(opts)
-            if result == "__ERROR__":
+            from shared.ffmpeg_runtime import apply_ytdlp_ffmpeg_options
+
+            apply_ytdlp_ffmpeg_options(opts)
+            result, hard_error = _try(opts, egress="direct")
+            if hard_error:
                 return None
             if result:
                 return result
 
-        # Attempt 3: default web client first (audio-only formats: itag 140/251),
-        # then android/ios within the same call. Without "default" the android
-        # client only offers muxed video+audio (itag 18) — ~4x the bytes for
-        # the same audio.
-        opts = _apply_ytdlp_network_options(
-            {
-                **base_opts,
-                "extractor_args": {"youtube": {"player_client": ["default", "android", "ios"]}},
-            }
-        )
-        result = _try(opts)
-        if result == "__ERROR__":
+        opts = {**base_opts}
+        if _yt_dlp_force_ipv4():
+            opts["source_address"] = "0.0.0.0"
+        from shared.ffmpeg_runtime import apply_ytdlp_ffmpeg_options
+
+        apply_ytdlp_ffmpeg_options(opts)
+        result, hard_error = _try(opts, egress="direct")
+        if hard_error:
             return None
         if result:
             return result
 
-        # Attempt 4: cookies via IPv4.
         if self.cookie_file and os.path.exists(self.cookie_file):
-            opts = _apply_ytdlp_network_options({**base_opts, "cookiefile": self.cookie_file})
+            opts = {**base_opts, "cookiefile": self.cookie_file}
             opts["source_address"] = "0.0.0.0"
-            result = _try(opts)
-            if result == "__ERROR__":
+            apply_ytdlp_ffmpeg_options(opts)
+            result, hard_error = _try(opts, egress="direct")
+            if hard_error:
                 return None
             if result:
                 return result
 
         logger.warning("[Preview] All attempts failed for %s.", video_id)
         return None
+
+    def get_stream_url(self, video_id: str) -> Optional[str]:
+        """Compatibility wrapper for callers that do not fetch the URL."""
+        resolved = self.get_resolved_stream(video_id)
+        return resolved.url if resolved else None
 
     def get_cover_for_query(self, artist: str, title: str) -> Optional[str]:
         """Fetch only cover (thumbnail) for a track via yt-dlp search. No audio download.
@@ -1293,12 +1304,17 @@ class YouTubeDownloader:
         Yield audio bytes for a YouTube video (for in-app preview streaming).
         Uses bestaudio format and streams via the direct URL; no file written.
         """
-        stream_url = self.get_stream_url(video_id)
-        if not stream_url:
+        resolved = self.get_resolved_stream(video_id)
+        if not resolved:
             logger.debug("[Preview] No stream URL for %s; response will be empty", video_id)
             return
         try:
-            with requests.get(stream_url, stream=True, timeout=timeout) as resp:
+            with requests.get(
+                resolved.url,
+                stream=True,
+                timeout=timeout,
+                proxies=resolved.requests_proxies(),
+            ) as resp:
                 resp.raise_for_status()
                 for chunk in resp.iter_content(chunk_size=65536):
                     if chunk:

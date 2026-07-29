@@ -19,6 +19,7 @@ from flask import Flask
 from shared import preview_cache
 from shared.api.routes import playback as playback_routes
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
+from shared.stream_resolution import resolved_stream
 
 VID = "dQw4w9WgXcQ"
 
@@ -76,6 +77,9 @@ class _FakeUpstream:
         for i in range(0, len(self._data), chunk_size):
             yield self._data[i : i + chunk_size]
 
+    def close(self):
+        return None
+
 
 def _seed_cache(data: bytes, content_type: str) -> None:
     writer = preview_cache.open_writer(VID, content_type, len(data))
@@ -120,7 +124,9 @@ def test_preview_stream_proxy_passes_content_type_and_tees_to_cache(tmp_path, mo
     data = b"proxied-bytes" * 512
     seen = {}
     monkeypatch.setattr(
-        playback_routes, "_get_preview_stream_url_cached", lambda api, vid: "http://upstream.invalid/a"
+        playback_routes,
+        "_get_preview_stream_cached",
+        lambda api, vid: resolved_stream("http://upstream.invalid/a", egress="direct"),
     )
 
     def fake_get(url, **kwargs):
@@ -165,7 +171,9 @@ def test_preview_stream_proxy_does_not_tee_partial_ranges(tmp_path, monkeypatch)
     _patch_api(monkeypatch)
     data = b"tail-bytes"
     monkeypatch.setattr(
-        playback_routes, "_get_preview_stream_url_cached", lambda api, vid: "http://upstream.invalid/a"
+        playback_routes,
+        "_get_preview_stream_cached",
+        lambda api, vid: resolved_stream("http://upstream.invalid/a", egress="direct"),
     )
     monkeypatch.setattr(
         playback_routes.requests, "get", lambda url, **kwargs: _FakeUpstream(data, "audio/webm")
@@ -177,6 +185,37 @@ def test_preview_stream_proxy_does_not_tee_partial_ranges(tmp_path, monkeypatch)
 
     assert response.status_code == 200  # fake upstream ignores ranges; passthrough
     assert preview_cache.get_cached(VID) is None  # partial body never cached
+
+
+def test_preview_refresh_keeps_each_resolutions_egress(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    relay_url = "http://100.91.167.48:8888"
+    resolutions = iter(
+        [
+            resolved_stream("http://upstream.invalid/stale", egress="relay", proxy_url=relay_url),
+            resolved_stream("http://upstream.invalid/fresh", egress="direct"),
+        ]
+    )
+    monkeypatch.setattr(playback_routes, "_get_preview_stream_cached", lambda api, vid: next(resolutions))
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append((url, kwargs.get("proxies")))
+        if url.endswith("/stale"):
+            return _FakeUpstream(b"", "audio/mp4", status_code=403)
+        return _FakeUpstream(b"fresh", "audio/mp4", status_code=206, content_range="bytes 0-4/5")
+
+    monkeypatch.setattr(playback_routes.requests, "get", fake_get)
+    response = _make_app().test_client().get(f"/api/preview/stream/{VID}")
+
+    assert response.status_code == 200
+    assert calls == [
+        ("http://upstream.invalid/stale", {"http": relay_url, "https": relay_url}),
+        ("http://upstream.invalid/fresh", None),
+    ]
+    assert response.headers["X-Soundsible-Playback-Egress"] == "direct"
 
 
 def test_preview_prefetch_queues_valid_ids(tmp_path, monkeypatch):
@@ -222,7 +261,9 @@ def test_warm_preview_stream_cache_fills_ttl_entry():
     try:
         assert playback_routes._preview_stream_urls.get(VID) is None
         playback_routes.warm_preview_stream_cache(VID, "https://rr.googlevideo.com/warmed")
-        assert playback_routes._preview_stream_urls.get(VID) == "https://rr.googlevideo.com/warmed"
+        warmed = playback_routes._preview_stream_urls.get(VID)
+        assert warmed is not None
+        assert warmed.url == "https://rr.googlevideo.com/warmed"
     finally:
         playback_routes._preview_stream_urls.clear()
 
