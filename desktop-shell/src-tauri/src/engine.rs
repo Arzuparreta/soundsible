@@ -399,7 +399,12 @@ fn health_watchdog(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool
 }
 
 fn health_check(url: &str) -> bool {
-    match ureq::get(url).timeout(HEALTH_TIMEOUT).call() {
+    match ureq::get(url)
+        .config()
+        .timeout_global(Some(HEALTH_TIMEOUT))
+        .build()
+        .call()
+    {
         Ok(resp) => resp.status() == 200,
         Err(_) => false,
     }

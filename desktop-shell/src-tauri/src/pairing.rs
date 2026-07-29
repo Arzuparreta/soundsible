@@ -17,35 +17,40 @@ fn admin_request(method: &str, path: &str, body: Option<Value>) -> Result<Value,
     let base = api_base_url()?;
     let token = read_owner_token()?;
     let url = format!("{base}{path}");
-    let agent = ureq::AgentBuilder::new().timeout(REQUEST_TIMEOUT).build();
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(REQUEST_TIMEOUT))
+        .build()
+        .into();
 
     let response = match method {
         "GET" => agent
             .get(&url)
-            .set("X-Soundsible-Admin-Token", &token)
+            .header("X-Soundsible-Admin-Token", &token)
             .call()
             .map_err(|e| format!("Request failed: {e}"))?,
         "POST" => {
             let request = agent
                 .post(&url)
-                .set("X-Soundsible-Admin-Token", &token)
-                .set("Content-Type", "application/json");
+                .header("X-Soundsible-Admin-Token", &token)
+                .header("Content-Type", "application/json");
             if let Some(payload) = body {
                 request
-                    .send_json(payload)
+                    .send_json(&payload)
                     .map_err(|e| format!("Request failed: {e}"))?
             } else {
                 request
-                    .call()
+                    .send_empty()
                     .map_err(|e| format!("Request failed: {e}"))?
             }
         }
         _ => return Err("Unsupported HTTP method.".into()),
     };
 
-    let status = response.status();
+    let mut response = response;
+    let status = response.status().as_u16();
     let data: Value = response
-        .into_json()
+        .body_mut()
+        .read_json()
         .map_err(|e| format!("Invalid JSON response: {e}"))?;
     if !(200..300).contains(&status) {
         let message = data
