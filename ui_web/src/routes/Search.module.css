@@ -654,6 +654,14 @@
   text-align: right;
 }
 
+/* See `SongRow.module.css`: lists drop the duration on phones. */
+@media (max-width: 1023px) {
+  .duration {
+    display: none;
+  }
+}
+
+
 .primaryIcon,
 .iconBtn,
 .done {

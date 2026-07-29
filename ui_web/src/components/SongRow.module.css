@@ -193,6 +193,16 @@
   text-align: right;
 }
 
+/* Durations are dropped from every list on phones, where the width they take
+ * costs more than the answer they give — you are picking a song by its title,
+ * not by its length. The full number is still there on desktop, and on both it
+ * is in Now Playing the moment the song starts. */
+@media (max-width: 1023px) {
+  .duration {
+    display: none;
+  }
+}
+
 .badge {
   flex-shrink: 0;
   padding: 2px 6px;
@@ -205,8 +215,3 @@
   border-radius: var(--radius-full);
 }
 
-@media (max-width: 420px) {
-  .badge + .duration {
-    display: none;
-  }
-}

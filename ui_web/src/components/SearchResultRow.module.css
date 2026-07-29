@@ -65,6 +65,14 @@
   color: var(--ink-tertiary);
 }
 
+/* See `SongRow.module.css`: lists drop the duration on phones. */
+@media (max-width: 1023px) {
+  .dur {
+    display: none;
+  }
+}
+
+
 .iconBtn,
 .addBtn,
 .done {

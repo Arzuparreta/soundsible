@@ -334,6 +334,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* See `SongRow.module.css`: lists drop the duration on phones. */
+@media (max-width: 1023px) {
+  .trackDuration {
+    display: none;
+  }
+}
+
+
 .libraryBadge {
   flex: none;
   display: inline-flex;
