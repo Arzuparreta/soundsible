@@ -1,12 +1,13 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { actions, state } from '../stores';
+import { actions, isSavedTrack, state } from '../stores';
 import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import type { AutoActivity, AutoProfile } from '../lib/autopilot';
 import { isPodcastTrack } from '../lib/track';
-import { favouriteFromTrack } from '../lib/favourites';
+import { savedFromTrack } from '../lib/saved';
 import { FavouriteButton } from './FavouriteButton';
+import { CollectionButton } from './CollectionButton';
 import { LyricsPanel } from './LyricsPanel';
 import styles from './AutoMode.module.css';
 import { clockTime } from '../lib/format';
@@ -371,18 +372,20 @@ export function AutoMode() {
                     </button>
                   </div>
                   <div class={styles.extras}>
-                    {/* Saving and downloading are separate acts, so the heart is
-                      * always here and the download only appears when there is
-                      * still something to download. */}
-                    <FavouriteButton
-                      favourite={favouriteFromTrack(current()!)}
-                      class={styles.secondaryAction}
-                    />
-                    <Show when={current()!.source === 'preview'}>
-                      <button class={styles.secondaryAction} type="button" aria-label={t('nowPlaying.saveToLibrary')} onClick={() => void actions.downloadTrack(current()!)}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14" /></svg>
-                      </button>
+                    {/* Having a song and marking it out are separate acts, in
+                      * that order: the heart appears once the song is yours,
+                      * and the slot beside it is what makes it yours. */}
+                    <Show when={isSavedTrack(current()!)}>
+                      <FavouriteButton
+                        favourite={savedFromTrack(current()!)}
+                        class={styles.secondaryAction}
+                      />
                     </Show>
+                    <CollectionButton
+                      entry={savedFromTrack(current()!)}
+                      class={styles.secondaryAction}
+                      hideOwned
+                    />
                   </div>
                 </div>
               </div>

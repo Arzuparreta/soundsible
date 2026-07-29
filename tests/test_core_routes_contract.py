@@ -230,7 +230,7 @@ def test_library_favourites_toggle_accepts_an_identity_entry(tmp_path, monkeypat
     _make_runtime(tmp_path)
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     fav = MagicMock()
-    fav.toggle_entry.return_value = True
+    fav.set_favourite.return_value = True
 
     client, token, emit = _favourites_client(monkeypatch, metadata, fav)
 
@@ -242,7 +242,7 @@ def test_library_favourites_toggle_accepts_an_identity_entry(tmp_path, monkeypat
     )
     assert resp.status_code == 200
     assert resp.get_json()["is_favourite"] is True
-    fav.toggle_entry.assert_called_once_with(entry)
+    fav.set_favourite.assert_called_once_with(entry)
     fav.toggle.assert_not_called()
     # Other devices on this account have to learn about it.
     emit.assert_called_once_with("favourites_updated")
@@ -253,7 +253,7 @@ def test_library_favourites_toggle_rejects_an_entry_without_identity(tmp_path, m
     _make_runtime(tmp_path)
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     fav = MagicMock()
-    fav.toggle_entry.side_effect = ValueError("no keys")
+    fav.set_favourite.side_effect = ValueError("no keys")
 
     client, token, _ = _favourites_client(monkeypatch, metadata, fav)
 
@@ -284,7 +284,7 @@ def test_library_favourite_entries_expose_snapshots(tmp_path, monkeypatch):
     _make_runtime(tmp_path)
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     fav = MagicMock()
-    fav.get_entries.return_value = [
+    fav.get_favourite_entries.return_value = [
         {"keys": ["yt:vid123"], "title": "Weightless", "artist": "Marconi Union"}
     ]
 
@@ -296,6 +296,70 @@ def test_library_favourite_entries_expose_snapshots(tmp_path, monkeypatch):
     assert body["version"] == 2
     assert body["favourites"][0]["keys"] == ["yt:vid123"]
     assert body["favourites"][0]["title"] == "Weightless"
+
+
+def test_library_saved_lists_the_whole_collection(tmp_path, monkeypatch):
+    """What the player unions with the scanned library to draw one collection."""
+    reset_runtime()
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    fav = MagicMock()
+    fav.get_entries.return_value = [
+        {"keys": ["yt:vid123"], "title": "Weightless", "favourite": False}
+    ]
+
+    client, _, _ = _favourites_client(monkeypatch, metadata, fav)
+
+    resp = client.get("/api/library/saved")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["version"] == 3
+    assert body["saved"][0]["keys"] == ["yt:vid123"]
+    assert body["saved"][0]["favourite"] is False
+
+
+def test_library_saved_toggle_adds_by_identity(tmp_path, monkeypatch):
+    """Saving is not downloading and not favouriting: it just claims the song."""
+    reset_runtime()
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    fav = MagicMock()
+    fav.toggle_saved.return_value = True
+
+    client, token, emit = _favourites_client(monkeypatch, metadata, fav)
+
+    entry = {"keys": ["yt:vid123"], "title": "Weightless", "artist": "Marconi Union"}
+    resp = client.post(
+        "/api/library/saved/toggle",
+        json={"entry": entry},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    assert resp.get_json()["is_saved"] is True
+    fav.toggle_saved.assert_called_once_with(entry)
+    fav.set_favourite.assert_not_called()
+    emit.assert_called_once_with("favourites_updated")
+
+
+def test_library_saved_toggle_rejects_a_missing_entry(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    fav = MagicMock()
+    fav.toggle_saved.side_effect = ValueError("no keys")
+
+    client, token, _ = _favourites_client(monkeypatch, metadata, fav)
+
+    assert client.post(
+        "/api/library/saved/toggle",
+        json={},
+        headers={"Authorization": f"Bearer {token}"},
+    ).status_code == 400
+    assert client.post(
+        "/api/library/saved/toggle",
+        json={"entry": {"keys": []}},
+        headers={"Authorization": f"Bearer {token}"},
+    ).status_code == 400
 
 
 # ---------------------------------------------------------------------------

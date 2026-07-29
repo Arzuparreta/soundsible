@@ -16,6 +16,12 @@ import { t } from '../lib/i18n';
 import type { LibrarySearchResult } from '../lib/librarySearch';
 import styles from './LibrarySearchResults.module.css';
 
+/** Artwork for a row: the engine's file cover, or the snapshot's thumbnail for
+ * a song we hold no file for. */
+function trackCover(track: { id: string; cover?: string; source?: 'preview' }): string | undefined {
+  return track.source === 'preview' ? track.cover : coverUrl(track.id);
+}
+
 function readRowHeight(): number {
   if (typeof document === 'undefined') return 60;
   return window.matchMedia('(min-width: 1024px)').matches ? 48 : 60;
@@ -110,7 +116,9 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
                   <Show when={result()?.kind === 'track'}>
                     <SongRow
                       track={(result() as Extract<LibrarySearchResult, { kind: 'track' }>).track}
-                      cover={coverUrl((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track.id)}
+                      // A saved song with no file has no engine-side cover to
+                      // ask for; its thumbnail is the only artwork it has.
+                      cover={trackCover((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track)}
                       badge={t('home.resultTrack')}
                       active={isPlayingTrack((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track)}
                       onPlay={(track) => actions.playFrom(

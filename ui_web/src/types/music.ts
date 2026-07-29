@@ -24,20 +24,24 @@ export interface Track {
 }
 
 /**
- * A saved song, downloaded or not.
+ * A song in your library that is not (or not only) a file.
  *
  * Identity is the `keys` set (see `lib/playbackIdentity.ts`), never a single id
- * — a song changes id at every hop, so storing one would mean the favourite
+ * — a song changes id at every hop, so storing one would mean the entry
  * survives exactly one of them. The rest is a snapshot: enough to render and
  * stream the song when the library has never heard of it.
+ *
+ * `favourite` is the mark the heart sets. It is a property *of* a saved song,
+ * which is why saving and marking cannot be the same act.
  */
-export interface FavouriteEntry {
+export interface SavedEntry {
   keys: string[];
   title?: string;
   artist?: string;
   album?: string;
   duration?: number;
   thumbnail?: string;
+  favourite?: boolean;
   added_at?: string | null;
 }
 

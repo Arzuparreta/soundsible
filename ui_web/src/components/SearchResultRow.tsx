@@ -1,10 +1,11 @@
-import { Show, type JSX } from 'solid-js';
+import { createMemo, Show, type JSX } from 'solid-js';
 import type { SearchResult } from '../types/music';
 import { t } from '../lib/i18n';
-import { Spinner } from './Spinner';
+import { isSavedResult } from '../stores';
 import { createResponsiveTap } from '../lib/responsiveTap';
-import { favouriteFromSearchResult } from '../lib/favourites';
+import { savedFromSearchResult } from '../lib/saved';
 import { FavouriteButton } from './FavouriteButton';
+import { CollectionButton } from './CollectionButton';
 import styles from './SearchResultRow.module.css';
 
 function fmtDur(s?: number): string {
@@ -17,23 +18,23 @@ function fmtDur(s?: number): string {
 export interface SearchResultRowProps {
   r: SearchResult;
   active: boolean;
-  inLibrary: boolean;
-  enqueued: boolean;
-  /** Tap the row to preview-stream the result. */
-  onPreview: () => void;
-  /** Add (enqueue download into the library). */
-  onAdd: () => void;
   /** When set, shows a "radio / more like this" button. */
   onRadio?: () => void;
+  /** Tap the row to preview-stream the result. */
+  onPreview: () => void;
 }
 
 /**
  * One online (YouTube / YouTube-Music) search result. Shared by Discover and
- * the unified Search: tap to preview, ＋ to add to the library (spinner while
- * queued, ✓ once it's in the library), optional radio seed.
+ * the unified Search: tap to preview, ＋ to put it in your library, ⬇ to give
+ * it a file, optional radio seed.
+ *
+ * The heart appears the moment the song is yours and not a second earlier —
+ * marking a song out among the ones you have presupposes having it.
  */
 export default function SearchResultRow(props: SearchResultRowProps) {
   const tap = createResponsiveTap({ onTap: props.onPreview });
+  const entry = createMemo(() => savedFromSearchResult(props.r));
   const bg = (): JSX.CSSProperties =>
     props.r.thumbnail
       ? { background: `url("${props.r.thumbnail}") center / cover no-repeat, var(--bg-raised)` }
@@ -59,9 +60,9 @@ export default function SearchResultRow(props: SearchResultRowProps) {
         <span class={styles.sub}>{props.r.channel}</span>
       </div>
       <span class={styles.dur}>{fmtDur(props.r.duration)}</span>
-      {/* Saving is independent of owning: the heart works here exactly as it
-        * does on a library row, and ＋ still downloads. */}
-      <FavouriteButton favourite={favouriteFromSearchResult(props.r)} compact />
+      <Show when={isSavedResult(props.r)}>
+        <FavouriteButton favourite={entry()} compact />
+      </Show>
       <Show when={props.onRadio}>
         <button
           class={styles.iconBtn}
@@ -78,37 +79,7 @@ export default function SearchResultRow(props: SearchResultRowProps) {
           </svg>
         </button>
       </Show>
-      <Show
-        when={props.inLibrary}
-        fallback={
-          <Show
-            when={props.enqueued}
-            fallback={
-              <button
-                class={styles.addBtn}
-                type="button"
-                aria-label={t('searchResultRow.ariaAdd')}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  props.onAdd();
-                }}
-              >
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-              </button>
-            }
-          >
-            <Spinner size={18} class={styles.spinner} label={t('searchResultRow.ariaDownloading')} />
-          </Show>
-        }
-      >
-        <span class={styles.done} aria-label={t('searchResultRow.ariaInLibrary')}>
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M5 12l5 5L20 7" />
-          </svg>
-        </span>
-      </Show>
+      <CollectionButton entry={entry()} compact />
     </div>
   );
 }

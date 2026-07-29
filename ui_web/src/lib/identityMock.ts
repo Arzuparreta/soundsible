@@ -8,8 +8,8 @@ import {
   searchResultKeys,
   trackKeys,
 } from './playbackIdentity';
-import { favouriteToTrack } from './favourites';
-import type { CatalogItem, FavouriteEntry, SearchResult, Track } from '../types/music';
+import { savedToTrack } from './saved';
+import type { CatalogItem, SavedEntry, SearchResult, Track } from '../types/music';
 
 /**
  * Test-only: the store's identity predicates over a hand-built state snapshot.
@@ -27,12 +27,17 @@ export function identityMock(read: {
   library: () => Track[];
   queue?: () => Track[];
   links?: () => ReadonlyMap<string, string>;
-  favourites?: () => FavouriteEntry[];
+  /** The whole collection: songs held without a file, each flagged or not. */
+  saved?: () => SavedEntry[];
+  /** Downloads in flight, by video id. */
+  downloading?: () => string[];
 }) {
   const links = () => read.links?.() ?? new Map<string, string>();
   const playing = () => resolvePlayingKeys(read.currentTrack(), buildIdentityIndex(read.library()), links());
   const queued = () => collectIdentityKeys(read.queue?.() ?? []);
-  const favourites = () => read.favourites?.() ?? [];
+  const saved = () => read.saved?.() ?? [];
+  const savedKeys = () => new Set(saved().flatMap((f) => f.keys));
+  const favourites = () => saved().filter((f) => f.favourite);
   const favouriteKeys = () => new Set(favourites().flatMap((f) => f.keys));
   const owned = (keys: string[]) => {
     const index = buildIdentityIndex(read.library());
@@ -56,6 +61,25 @@ export function identityMock(read: {
     ownedTrackForKeys: owned,
     ownedTrackForItem: (item: CatalogItem) => owned(catalogItemKeys(item)),
     ownedTrackForResult: (result: SearchResult) => owned(searchResultKeys(result)),
+    isSavedKeys: (keys: string[]) => !!owned(keys) || keysMatch(keys, savedKeys(), links()),
+    isSavedTrack: (track: Track) =>
+      !!owned(trackKeys(track)) || keysMatch(trackKeys(track), savedKeys(), links()),
+    isSavedItem: (item: CatalogItem) =>
+      !!owned(catalogItemKeys(item)) || keysMatch(catalogItemKeys(item), savedKeys(), links()),
+    isSavedResult: (result: SearchResult) =>
+      !!owned(searchResultKeys(result)) || keysMatch(searchResultKeys(result), savedKeys(), links()),
+    isDownloadingKeys: (keys: string[]) => {
+      const inFlight = new Set(read.downloading?.() ?? []);
+      if (!inFlight.size) return false;
+      return keys.some((key) => key.startsWith('yt:') && inFlight.has(key.slice(3)));
+    },
+    isDownloadingTrack: (track: Track) => {
+      const inFlight = new Set(read.downloading?.() ?? []);
+      if (!inFlight.size) return false;
+      return trackKeys(track).some((key) => key.startsWith('yt:') && inFlight.has(key.slice(3)));
+    },
+    savedEntryForKeys: (keys: string[]) =>
+      saved().find((entry) => entry.keys.some((key) => keys.includes(key))) ?? null,
     isFavouriteKeys: (keys: string[]) => keysMatch(keys, favouriteKeys(), links()),
     isFavouriteTrack: (track: Track) => keysMatch(trackKeys(track), favouriteKeys(), links()),
     isFavouriteItem: (item: CatalogItem) => keysMatch(catalogItemKeys(item), favouriteKeys(), links()),
@@ -63,7 +87,7 @@ export function identityMock(read: {
       keysMatch(searchResultKeys(result), favouriteKeys(), links()),
     favouriteTracks: () =>
       favourites()
-        .map((entry) => favouriteToTrack(entry, buildIdentityIndex(read.library())))
+        .map((entry) => savedToTrack(entry, buildIdentityIndex(read.library())))
         .filter((track): track is Track => !!track),
     favouriteLibraryIds: () => {
       const index = buildIdentityIndex(read.library());

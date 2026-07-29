@@ -1,12 +1,14 @@
-import { Show, type JSX } from 'solid-js';
+import { createMemo, Show, type JSX } from 'solid-js';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
 import styles from './SongRow.module.css';
 import { coverStyle } from '../lib/cover';
 import { formatDuration } from '../lib/format';
 import { createResponsiveTap } from '../lib/responsiveTap';
-import { favouriteFromTrack } from '../lib/favourites';
+import { savedFromTrack } from '../lib/saved';
+import { isSavedTrack } from '../stores';
 import { FavouriteButton } from './FavouriteButton';
+import { CollectionButton } from './CollectionButton';
 
 export interface SongRowProps {
   track: Track;
@@ -42,6 +44,9 @@ function rowCoverStyle(props: SongRowProps): JSX.CSSProperties {
  */
 export default function SongRow(props: SongRowProps) {
   const openMenu = (ev?: MouseEvent) => props.onMenu?.(props.track, ev);
+  /** Identity plus snapshot, shared by the heart and the collection control so
+   * the two can never disagree about which song this row is. */
+  const entry = createMemo(() => savedFromTrack(props.track));
 
   const onRowClick = () => {
     props.onPlay?.(props.track);
@@ -122,11 +127,19 @@ export default function SongRow(props: SongRowProps) {
         <span class={styles.badge}>{props.badge}</span>
       </Show>
       <span class={styles.duration}>{formatDuration(props.track.duration)}</span>
-      {/* Every song gets a heart, downloaded or not — that is the whole point.
-        * `FavouriteButton` matches on identity, so it is already correct for a
-        * preview row without this component knowing anything about it. */}
+      {/* Downloaded or not, a song in the library gets a heart — the mark is
+        * about which of your songs stand out, not about where they live. What
+        * it never gets is a heart before it is yours: `entry()` is only saved
+        * once the row is part of the collection. */}
+      <Show when={props.favouritable !== false && isSavedTrack(props.track)}>
+        <FavouriteButton favourite={entry()} class={styles.rowHeart} />
+      </Show>
+      {/* The one row control that changes state: an arrow while the song has no
+        * file, a spinner while it lands, nothing once it is on disk. Its
+        * presence is how a streamed song announces itself — there is no second
+        * badge saying the same thing. */}
       <Show when={props.favouritable !== false}>
-        <FavouriteButton favourite={favouriteFromTrack(props.track)} class={styles.rowHeart} />
+        <CollectionButton entry={entry()} class={styles.rowCollect} hideOwned />
       </Show>
       <Show when={props.onMenu}>
         <button

@@ -44,7 +44,15 @@ const { actions, state } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../stores', () => ({ actions, state, isFavouriteKeys: () => false }));
+vi.mock('../stores', () => ({
+  actions,
+  state,
+  isFavouriteKeys: () => false,
+  isSavedTrack: () => true,
+  isSavedKeys: () => true,
+  isDownloadingKeys: () => false,
+  ownedTrackForKeys: () => null,
+}));
 vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
 vi.mock('../lib/i18n', () => ({
   t: (key: string, params?: Record<string, string | number>) =>

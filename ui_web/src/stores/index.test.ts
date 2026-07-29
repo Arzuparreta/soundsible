@@ -28,8 +28,12 @@ async function loadStore(
 
   const api = {
     getLibrary: vi.fn().mockResolvedValue({ tracks: [], playlists: {}, settings: {}, podcast_subscriptions: [] }),
-    getFavourites: vi.fn().mockResolvedValue([]),
+    getSaved: vi.fn().mockResolvedValue([]),
+    toggleSaved: vi.fn().mockResolvedValue({ is_saved: true }),
     toggleFavourite: vi.fn().mockResolvedValue({ is_favourite: true }),
+    resolveCatalogItem: vi.fn().mockResolvedValue({ video_id: null }),
+    enqueueDownload: vi.fn().mockResolvedValue({ status: 'ok' }),
+    getDownloadQueue: vi.fn().mockResolvedValue({ queue: [], is_processing: false }),
     getPlaybackState: vi.fn().mockResolvedValue(undefined),
     putPlaybackState: vi.fn().mockResolvedValue({ status: 'ok' }),
     deleteTrack: vi.fn().mockResolvedValue({ status: 'ok' }),
@@ -140,9 +144,9 @@ describe('Solid store library and playback resume', () => {
         .fn()
         .mockResolvedValueOnce({ tracks: [t1, t2], playlists: { Mix: ['t1', 't2'] }, settings: {}, podcast_subscriptions: [] })
         .mockResolvedValueOnce({ tracks: [t2], playlists: { Mix: ['t2'] }, settings: {}, podcast_subscriptions: [] }),
-      getFavourites: vi
+      getSaved: vi
         .fn()
-        .mockResolvedValueOnce([{ keys: ['lib:t1'], title: 'One', artist: 'Artist' }])
+        .mockResolvedValueOnce([{ keys: ['lib:t1'], title: 'One', artist: 'Artist', favourite: true }])
         .mockResolvedValueOnce([]),
     });
 
@@ -151,7 +155,7 @@ describe('Solid store library and playback resume', () => {
     await actions.deleteTrack('t1');
 
     expect(state.library.map((t) => t.id)).toEqual(['t2']);
-    expect(state.favourites).toEqual([]);
+    expect(state.saved).toEqual([]);
     expect(state.playlists).toEqual({ Mix: ['t2'] });
     expect(state.playback.currentTrack).toBeNull();
     expect(state.playback.queue.map((t) => t.id)).toEqual(['t2']);
@@ -738,7 +742,7 @@ describe('Solid store favourites', () => {
 
     actions.toggleFavouriteTrack(preview);
 
-    expect(state.favourites[0].keys).toEqual(['yt:dQw4w9WgXcQ']);
+    expect(state.saved[0].keys).toEqual(['yt:dQw4w9WgXcQ']);
     expect(api.toggleFavourite).toHaveBeenCalledWith(
       expect.objectContaining({ keys: ['yt:dQw4w9WgXcQ'], title: 'Weightless' }),
     );
@@ -777,10 +781,12 @@ describe('Solid store favourites', () => {
         .mockResolvedValueOnce({ tracks: [owned], playlists: {}, settings: {}, podcast_subscriptions: [] }),
       // The engine stores the entry exactly as it was saved — it never learns
       // the library id, because it does not need to.
-      getFavourites: vi
+      getSaved: vi
         .fn()
         .mockResolvedValueOnce([])
-        .mockResolvedValue([{ keys: ['yt:dQw4w9WgXcQ'], title: 'Weightless', artist: 'Marconi Union', duration: 490 }]),
+        .mockResolvedValue([
+          { keys: ['yt:dQw4w9WgXcQ'], title: 'Weightless', artist: 'Marconi Union', duration: 490, favourite: true },
+        ]),
     });
 
     await actions.syncLibrary();
@@ -795,13 +801,13 @@ describe('Solid store favourites', () => {
     expect([...favouriteLibraryIds()]).toEqual(['hash9f2a']);
   });
 
-  it('unsaves by identity, not by the id the surface happens to hold', async () => {
-    const { actions, state, isFavouriteTrack } = await loadStore({
+  it('unmarks by identity, not by the id the surface happens to hold', async () => {
+    const { actions, state, isFavouriteTrack, isSavedTrack } = await loadStore({
       toggleFavourite: vi.fn().mockResolvedValue({ is_favourite: true }),
     });
 
     actions.toggleFavouriteTrack(preview);
-    // Unsaved from the library row, which shares only the video id.
+    // Unmarked from the library row, which shares only the video id.
     actions.toggleFavouriteTrack({
       id: 'hash9f2a',
       title: 'Weightless',
@@ -809,8 +815,77 @@ describe('Solid store favourites', () => {
       youtube_id: 'dQw4w9WgXcQ',
     });
 
-    expect(state.favourites).toEqual([]);
     expect(isFavouriteTrack(preview)).toBe(false);
+    // Taking the mark off is not taking the song away: it is still yours.
+    expect(state.saved).toHaveLength(1);
+    expect(isSavedTrack(preview)).toBe(true);
+  });
+
+  it('saves without marking, and marks what it saved', async () => {
+    const { actions, state, isSavedTrack, isFavouriteTrack, api } = await loadStore();
+
+    actions.toggleSavedTrack(preview);
+    expect(api.toggleSaved).toHaveBeenCalledWith(
+      expect.objectContaining({ keys: ['yt:dQw4w9WgXcQ'], title: 'Weightless' }),
+    );
+    expect(isSavedTrack(preview)).toBe(true);
+    expect(isFavouriteTrack(preview)).toBe(false);
+
+    actions.toggleFavouriteTrack(preview);
+    expect(isFavouriteTrack(preview)).toBe(true);
+    // One song, one entry — marking did not save a second copy of it.
+    expect(state.saved).toHaveLength(1);
+  });
+
+  it('unsaving takes the mark with it — there is nothing left to mark', async () => {
+    const { actions, state, isSavedTrack, isFavouriteTrack } = await loadStore();
+
+    actions.toggleFavouriteTrack(preview);
+    expect(isFavouriteTrack(preview)).toBe(true);
+
+    actions.toggleSavedTrack(preview);
+    expect(state.saved).toEqual([]);
+    expect(isSavedTrack(preview)).toBe(false);
+    expect(isFavouriteTrack(preview)).toBe(false);
+  });
+
+  it('counts a downloaded song as in the library without an entry of its own', async () => {
+    const owned = { id: 'hash9f2a', title: 'Weightless', artist: 'Marconi Union', youtube_id: 'dQw4w9WgXcQ' };
+    const { actions, isSavedTrack, isFavouriteTrack } = await loadStore({
+      getLibrary: vi
+        .fn()
+        .mockResolvedValue({ tracks: [owned], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+    });
+
+    await actions.syncLibrary();
+
+    // Having the file *is* having the song, so the heart is offered over it —
+    // and the search result it came from answers the same way.
+    expect(isSavedTrack(owned)).toBe(true);
+    expect(isSavedTrack(preview)).toBe(true);
+    expect(isFavouriteTrack(owned)).toBe(false);
+  });
+
+  it('shows songs held without a file in the library, and drops them once downloaded', async () => {
+    const owned = { id: 'hash9f2a', title: 'Weightless', artist: 'Marconi Union', youtube_id: 'dQw4w9WgXcQ' };
+    const other = { id: 't1', title: 'One', artist: 'Artist' };
+    const { actions, musicLibrary } = await loadStore({
+      getLibrary: vi
+        .fn()
+        .mockResolvedValueOnce({ tracks: [other], playlists: {}, settings: {}, podcast_subscriptions: [] })
+        .mockResolvedValue({ tracks: [other, owned], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+      getSaved: vi
+        .fn()
+        .mockResolvedValue([{ keys: ['yt:dQw4w9WgXcQ'], title: 'Weightless', artist: 'Marconi Union' }]),
+    });
+
+    await actions.syncLibrary();
+    // Browsable exactly like a file, which is the point of saving it.
+    expect(musicLibrary().map((t) => t.id)).toEqual(['t1', 'dQw4w9WgXcQ']);
+
+    // The download lands: the same song, now as its file — listed once, not twice.
+    await actions.syncLibrary();
+    expect(musicLibrary().map((t) => t.id)).toEqual(['t1', 'hash9f2a']);
   });
 
   it('reverts the optimistic save when the engine rejects it', async () => {
@@ -819,10 +894,10 @@ describe('Solid store favourites', () => {
     });
 
     actions.toggleFavouriteTrack(preview);
-    expect(state.favourites).toHaveLength(1);
+    expect(state.saved).toHaveLength(1);
 
     await flush();
-    expect(state.favourites).toEqual([]);
+    expect(state.saved).toEqual([]);
   });
 
   it('keeps a favourite when its file is deleted — that frees disk, it does not unsave', async () => {
@@ -833,7 +908,7 @@ describe('Solid store favourites', () => {
         .fn()
         .mockResolvedValueOnce({ tracks: [owned], playlists: {}, settings: {}, podcast_subscriptions: [] })
         .mockResolvedValue({ tracks: [], playlists: {}, settings: {}, podcast_subscriptions: [] }),
-      getFavourites: vi
+      getSaved: vi
         .fn()
         .mockResolvedValueOnce([])
         .mockResolvedValue(state_favourite_after_delete()),
@@ -847,7 +922,7 @@ describe('Solid store favourites', () => {
 
     expect(state.library).toEqual([]);
     // Still saved, now as a stream rather than a file.
-    expect(state.favourites).toHaveLength(1);
+    expect(state.saved).toHaveLength(1);
     expect(favouriteTracks()[0].source).toBe('preview');
     expect(favouriteTracks()[0].id).toBe('dQw4w9WgXcQ');
   });
@@ -862,6 +937,7 @@ function state_favourite_after_delete() {
       title: 'One',
       artist: 'Artist',
       duration: 180,
+      favourite: true,
     },
   ];
 }

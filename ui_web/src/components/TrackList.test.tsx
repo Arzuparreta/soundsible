@@ -10,10 +10,14 @@ vi.mock('./PlaylistPicker', () => ({ openPlaylistPicker: vi.fn() }));
 vi.mock('./MetadataEditor', () => ({ openMetadataEditor: vi.fn() }));
 vi.mock('./DeviceSheet', () => ({ openPlayOnDevice: vi.fn() }));
 vi.mock('../stores', () => ({
-  actions: { playFrom: vi.fn(), toggleFavourite: vi.fn() },
+  actions: { playFrom: vi.fn(), toggleFavourite: vi.fn(), toggleSaved: vi.fn() },
   state: { interfaceSize: 'normal' },
   isPlayingTrack: () => false,
   isFavouriteKeys: () => false,
+  isSavedTrack: () => true,
+  isSavedKeys: () => true,
+  isDownloadingKeys: () => false,
+  ownedTrackForKeys: () => null,
 }));
 
 import TrackList from './TrackList';

@@ -4,7 +4,7 @@ import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import { trackCount } from '../lib/format';
 import { isPodcastTrack } from '../lib/track';
-import { favouriteIsPlayable } from '../lib/favourites';
+import { savedIsPlayable } from '../lib/saved';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
@@ -14,12 +14,14 @@ import { EmptyState } from '../components/EmptyState';
 const context = () => ({ id: 'favourites', kind: 'favourites' as const, label: t('favourites.title') });
 
 /**
- * Every saved song, in the order it was saved — downloaded or not.
+ * The songs you marked out, in the order you marked them.
  *
- * The list makes no distinction: an entry resolves to the owned track when the
- * library has it and to a streaming preview when it does not, so a song you
- * download later simply changes what it is here without moving. Podcasts are
- * excluded — they live under their own section.
+ * A slice of the library, not a second one: the heart says "this one, among the
+ * ones I have", so everything here is already in Library. Whether a song has a
+ * file makes no difference — an entry resolves to the owned track when the
+ * library has it and to a streaming preview when it does not, so downloading
+ * one later changes what it is here without moving it. Podcasts are excluded —
+ * they live under their own section.
  */
 export default function Favourites() {
   const rows = createMemo(() => favouriteRows().filter((row) => !isPodcastTrack(row.track)));
@@ -34,7 +36,7 @@ export default function Favourites() {
    */
   const play = async (tracks: Track[], index: number) => {
     const row = rows()[index];
-    if (!row || favouriteIsPlayable(row.entry, row.track)) {
+    if (!row || savedIsPlayable(row.entry, row.track)) {
       actions.playFrom(tracks, index, { context: context() });
       return;
     }

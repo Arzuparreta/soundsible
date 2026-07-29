@@ -969,8 +969,11 @@ function PanelRow(props: {
           props.onQueue();
         }}
       >
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <path d="M12 5v14M5 12h14" />
+        {/* The queue glyph from the track menu, not a bare ＋: everywhere else
+          * in the app a plus on a row means "put this in my library", and the
+          * same mark cannot mean two things. */}
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 6h13M3 12h9M3 18h9M16 14v6M19 17h-6" />
         </svg>
       </button>
       <button

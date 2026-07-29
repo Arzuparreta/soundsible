@@ -127,16 +127,23 @@ export const en = {
     openArtist: 'Open {artist}',
     artistTrackCount: '{count} songs',
     emptyArtists: 'No artists yet.',
-    emptyLibrary: 'Your library is empty. Download something from Search.',
+    emptyLibrary: 'Your library is empty. Save anything you find in Search — downloading it is a separate step.',
     unreachable: "Couldn't reach your station, so this may not be everything.",
     unreachableEmpty: "Couldn't reach your station. Your library is still there.",
     retry: 'Try again',
   },
+  /** Having a song, and having its bytes: two steps, one control. */
+  collection: {
+    save: 'Save to your library',
+    unsave: 'Remove from your library',
+    download: 'Download',
+    downloading: 'Downloading…',
+    owned: 'Downloaded',
+    resolving: 'Finding a source…',
+  },
   favourites: {
     title: 'Favourites',
-    empty: "You don't have any favourites yet. Tap the heart on any song.",
-    /** Row badge: saved, but we hold no file for it — it plays from the internet. */
-    notDownloaded: 'Stream',
+    empty: 'Nothing marked yet. The heart singles a song out from the rest of your library.',
   },
   search: {
     placeholder: 'What do you want to play?',
@@ -174,10 +181,6 @@ export const en = {
     seedDesc:
       'Recommendations are generated from the artists, favourites, playlists, and songs you save or play.',
     seedAction: 'Search for songs',
-    ariaSaveToLibrary: 'Save to library',
-    ariaSaved: 'Saved',
-    ariaSave: 'Save',
-    ariaInLibrary: 'In library',
     labelLibraryTrack: 'In your library',
     labelTrack: 'Song',
     labelArtist: 'Artist',
@@ -568,6 +571,7 @@ export const en = {
     fromArtist: 'Because you listen to {artist}',
   },
   searchPanel: {
+    ariaInLibrary: 'In your library',
     fallbackTitle: 'YouTube video',
     fallbackChannel: 'YouTube',
     noResolve: 'Could not resolve the track',
@@ -600,7 +604,6 @@ export const en = {
     searchError: 'The search could not be completed.',
     retry: 'Retry',
     noResults: 'No results.',
-    ariaInLibrary: 'In your library',
     ariaLoading: 'Loading',
     ariaQueued: 'In queue',
     ariaAddQueue: 'Add to queue',
@@ -608,9 +611,6 @@ export const en = {
   },
   searchResultRow: {
     ariaRadio: 'Radio: more like this',
-    ariaAdd: 'Add to library',
-    ariaDownloading: 'Downloading',
-    ariaInLibrary: 'In library',
   },
   songRow: {
     ariaPlay: 'Play {title} by {artist}',

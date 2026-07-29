@@ -2,7 +2,8 @@ import type { JSX } from 'solid-js';
 import { type MenuAction, type ActionMenuOptions } from './ActionMenu';
 import { openContextMenu } from '../lib/contextMenu';
 import type { Track } from '../types/music';
-import { actions, isFavouriteTrack, state } from '../stores';
+import { actions, isDownloadingTrack, isFavouriteTrack, isSavedTrack, state } from '../stores';
+import { savedFromTrack } from '../lib/saved';
 import { shareTrack } from '../lib/share';
 import { confirmDialog } from '../lib/confirm';
 import { artistPath } from '../lib/artistRoute';
@@ -54,6 +55,8 @@ const icons = {
     </svg>
   ),
   download: () => sw('M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3'),
+  save: () => sw('M12 5v14M5 12h14'),
+  unsave: () => sw('M5 12h14'),
   remove: () => sw('M5 12h14'),
   trash: () => sw('M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'),
   feedback: () => sw('M17 14V4M9 18.5l1-4.5H4.5a2 2 0 01-1.9-2.6l2-6A2 2 0 016.5 4H17v10l-4 7a2 2 0 01-4-2.5z'),
@@ -63,7 +66,9 @@ const icons = {
 /** Build the action list for a track, given its context. */
 export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAction[] {
   const isFav = isFavouriteTrack(track);
+  /** Has a file on disk. Not the same question as "is it in the library". */
   const isLibrary = track.source !== 'preview';
+  const isSaved = isLibrary || isSavedTrack(track);
   const isPodcast = isPodcastTrack(track);
   // A streamed podcast episode plays via a minted token, not a `previewUrl`, so
   // the generic queue can't re-load it — keep it out of queue/playlist flows.
@@ -81,7 +86,9 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     list.push({ icon: icons.radio(), label: t('trackActions.startRadio'), onSelect: () => void actions.startRadio(track) });
   if (ctx.navigate && track.artist && isLibrary && !isPodcast)
     list.push({ icon: icons.artist(), label: t('trackActions.goToArtist'), onSelect: () => ctx.navigate!(artistPath(track.artist, { view: 'library' })) });
-  if (!isPodcast)
+  // The heart only makes sense over songs you have: it marks some of them out
+  // from the others. The menu offers saving instead until then.
+  if (!isPodcast && isSaved)
     list.push({
       icon: icons.heart(),
       label: isFav ? t('trackActions.removeFav') : t('trackActions.addFav'),
@@ -105,17 +112,37 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
       onSelect: () => void sendNotInterested(track),
     });
   }
-  // Save to library for preview tracks (not yet downloaded).
-  // Exclude podcast episodes — they use a different download flow.
+  // Having a song and having its bytes are two separate steps, and the menu
+  // offers exactly the one the song is standing on.
+  // Podcast episodes are excluded — they use a different download flow.
   if (track.source === 'preview' && !track.podcast_episode_guid) {
-    const alreadySaved = state.library.some((t) => t.youtube_id === track.id || t.id === track.id);
-    const alreadyDownloading = state.downloads.queue.some(
-      (i) => i.video_id === track.id && i.status !== 'failed' && i.status !== 'interrupted',
-    );
-    if (!alreadySaved && !alreadyDownloading) {
-      list.push({ icon: icons.download(), label: t('trackActions.saveToLibrary'), onSelect: () => void actions.downloadTrack(track) });
-    } else if (alreadyDownloading) {
-      list.push({ icon: icons.download(), label: t('trackActions.downloading'), disabled: true, onSelect: () => {} });
+    const entry = savedFromTrack(track);
+    const alreadyOnDisk = state.library.some((t) => t.youtube_id === track.id || t.id === track.id);
+    if (!isSaved) {
+      list.push({
+        icon: icons.save(),
+        label: t('collection.save'),
+        onSelect: () => actions.toggleSaved(entry),
+      });
+    }
+    if (!alreadyOnDisk) {
+      if (isDownloadingTrack(track)) {
+        list.push({ icon: icons.download(), label: t('trackActions.downloading'), disabled: true, onSelect: () => {} });
+      } else {
+        list.push({
+          icon: icons.download(),
+          label: t('collection.download'),
+          onSelect: () => void actions.downloadSaved(entry),
+        });
+      }
+    }
+    if (isSaved) {
+      list.push({
+        icon: icons.unsave(),
+        label: t('collection.unsave'),
+        danger: true,
+        onSelect: () => actions.toggleSaved(entry),
+      });
     }
   }
   if (ctx.onPlayOnDevice && isLibrary)

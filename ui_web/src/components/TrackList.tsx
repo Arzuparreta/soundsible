@@ -147,7 +147,6 @@ export default function TrackList(props: {
                           // asking the engine for a cover it has no file for
                           // just 404s into the placeholder gradient.
                           cover={t().source === 'preview' ? t().cover : coverUrl(t().id)}
-                          badge={t().source === 'preview' ? tr('favourites.notDownloaded') : undefined}
                           favouritable={!isPodcastTrack(t())}
                           active={isPlayingTrack(t())}
                           onPlay={() =>

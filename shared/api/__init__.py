@@ -637,11 +637,14 @@ def favourite_library_ids(user_id: Optional[str] = None) -> list:
     """
     Favourites resolved against this account's library, newest first.
 
-    A favourite carries every identity its song answers to, so one saved as a
+    A favourite carries every identity its song answers to, so one marked as a
     YouTube preview and downloaded later is *the same entry* — it just starts
     resolving to a library track. Callers that only speak library ids (car,
     discovery seeds) go through here so that promotion is visible to them too,
     rather than reading the stored `lib:` keys directly.
+
+    Saved-but-unmarked songs are not favourites and never appear here: these
+    callers want the songs the user singled out, not the whole library.
     """
     from player.favourites_manager import LIB_PREFIX
 
@@ -662,7 +665,7 @@ def favourite_library_ids(user_id: Optional[str] = None) -> list:
 
     ids = []
     seen = set()
-    for entry in favourites.get_entries():
+    for entry in favourites.get_favourite_entries():
         track_id = None
         for key in entry.get("keys") or []:
             if key.startswith(LIB_PREFIX) and key[len(LIB_PREFIX):] in owned:

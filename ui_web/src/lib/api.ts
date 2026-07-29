@@ -3,7 +3,7 @@ import type {
   CatalogResolveResponse,
   CatalogSaveResponse,
   CatalogSearchResponse,
-  FavouriteEntry,
+  SavedEntry,
   Track,
   PlaylistMap,
   LibrarySettings,
@@ -395,12 +395,20 @@ export const api = {
       settings?: LibrarySettings;
       podcast_subscriptions?: PodcastSubscription[];
     }>(`/api/library?t=${Date.now()}`, { timeoutMs: 30000 }),
-  /** Saved songs — identity plus snapshot, newest first, downloaded or not. */
-  getFavourites: () =>
-    request<{ version?: number; favourites?: FavouriteEntry[] }>(
-      `/api/library/favourites/entries?t=${Date.now()}`,
-    ).then((res) => res.favourites ?? []),
-  toggleFavourite: (favourite: FavouriteEntry) =>
+  /** The songs in the library that have no file of their own — identity plus
+   * snapshot, newest first, each carrying whether it is marked a favourite. */
+  getSaved: () =>
+    request<{ version?: number; saved?: SavedEntry[] }>(
+      `/api/library/saved?t=${Date.now()}`,
+    ).then((res) => res.saved ?? []),
+  /** Put a song in the library, or take it out. Nothing is downloaded. */
+  toggleSaved: (entry: SavedEntry) =>
+    request<{ is_saved?: boolean }>('/api/library/saved/toggle', {
+      method: 'POST',
+      body: { entry },
+    }),
+  /** Mark a song out among the ones you have (saving it first if need be). */
+  toggleFavourite: (favourite: SavedEntry) =>
     request<{ is_favourite?: boolean }>('/api/library/favourites/toggle', {
       method: 'POST',
       body: { favourite },

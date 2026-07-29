@@ -1,0 +1,68 @@
+/* One slot, four states. Sized and coloured like `FavouriteButton` so the pair
+ * reads as one control group wherever a row carries both. */
+.slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  flex-shrink: 0;
+  padding: 0;
+  color: var(--ink-tertiary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition:
+    color var(--dur-short) var(--ease-out),
+    transform var(--dur-short) var(--ease-out);
+}
+
+.slot svg {
+  width: 20px;
+  height: 20px;
+}
+
+.compact {
+  width: 32px;
+  height: 32px;
+}
+
+.compact svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* The song has no file yet and the arrow is the offer to give it one. Louder
+ * than the ✓ it will become, because this is the only state with a next step. */
+.slot[data-state='streaming'] {
+  color: var(--ink-secondary);
+}
+
+/* Already yours. Stated, not offered — so it takes no cursor and no hover. */
+.slot[data-state='owned'] {
+  color: var(--accent);
+  cursor: default;
+  opacity: 0.75;
+}
+
+.slot:not(:disabled):active {
+  transform: scale(0.9);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .slot:not(:disabled):hover {
+    color: var(--ink-primary);
+    background: var(--bg-elevated);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slot {
+    transition: none;
+  }
+
+  .slot:not(:disabled):active {
+    transform: none;
+  }
+}

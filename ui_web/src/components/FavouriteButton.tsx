@@ -1,12 +1,12 @@
 import { createMemo } from 'solid-js';
 import { actions, isFavouriteKeys } from '../stores';
 import { t } from '../lib/i18n';
-import type { FavouriteEntry } from '../types/music';
+import type { SavedEntry } from '../types/music';
 import styles from './FavouriteButton.module.css';
 
 export interface FavouriteButtonProps {
-  /** The song this heart saves — identity plus snapshot, built by `lib/favourites`. */
-  favourite: FavouriteEntry;
+  /** The song this heart saves — identity plus snapshot, built by `lib/saved`. */
+  favourite: SavedEntry;
   /** Smaller variant for dense rows (search results, album tracklists). */
   compact?: boolean;
   /** Extra class from the host surface, for layout only. */

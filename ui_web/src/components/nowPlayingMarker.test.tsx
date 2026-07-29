@@ -32,10 +32,7 @@ describe('now playing marker', () => {
       <SearchResultRow
         r={result}
         active
-        inLibrary={false}
-        enqueued={false}
         onPreview={vi.fn()}
-        onAdd={vi.fn()}
       />
     ));
     expect(container.querySelector('[data-now-playing]')).not.toBeNull();
@@ -45,10 +42,7 @@ describe('now playing marker', () => {
       <SearchResultRow
         r={result}
         active={false}
-        inLibrary={false}
-        enqueued={false}
         onPreview={vi.fn()}
-        onAdd={vi.fn()}
       />
     ));
     expect(idle.container.querySelector('[data-now-playing]')).toBeNull();

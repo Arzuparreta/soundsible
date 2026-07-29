@@ -136,11 +136,19 @@ export const fr: Dict = {
       'Impossible de joindre votre station. Votre bibliothèque est toujours là.',
     retry: 'Réessayer',
   },
+  /** Avoir un morceau, et avoir ses octets : deux étapes, un contrôle. */
+  collection: {
+    save: 'Enregistrer dans votre bibliothèque',
+    unsave: 'Retirer de votre bibliothèque',
+    download: 'Télécharger',
+    downloading: 'Téléchargement…',
+    owned: 'Téléchargé',
+    resolving: 'Recherche d’une source…',
+  },
   favourites: {
     title: 'Favoris',
     empty:
-      "Vous n'avez pas encore de favoris. Touchez le cœur sur n'importe quel titre.",
-    notDownloaded: 'Stream',
+      'Rien de marqué pour l’instant. Le cœur distingue un morceau du reste de votre bibliothèque.',
   },
   search: {
     placeholder: 'Que voulez-vous écouter ?',
@@ -178,10 +186,6 @@ export const fr: Dict = {
     seedDesc:
       'Les recommandations sont générées à partir des artistes, favoris, listes et titres que vous enregistrez ou lisez.',
     seedAction: 'Rechercher des titres',
-    ariaSaveToLibrary: 'Enregistrer dans la bibliothèque',
-    ariaSaved: 'Enregistré',
-    ariaSave: 'Enregistrer',
-    ariaInLibrary: 'Dans la bibliothèque',
     labelLibraryTrack: 'Dans votre bibliothèque',
     labelTrack: 'Titre',
     labelArtist: 'Artiste',
@@ -582,6 +586,7 @@ export const fr: Dict = {
     fromArtist: 'Parce que vous écoutez {artist}',
   },
   searchPanel: {
+    ariaInLibrary: 'Dans votre bibliothèque',
     fallbackTitle: 'Vidéo YouTube',
     fallbackChannel: 'YouTube',
     noResolve: 'Impossible de résoudre le titre',
@@ -614,7 +619,6 @@ export const fr: Dict = {
     searchError: 'La recherche n’a pas pu aboutir.',
     retry: 'Réessayer',
     noResults: 'Aucun résultat.',
-    ariaInLibrary: 'Dans votre bibliothèque',
     ariaLoading: 'Chargement',
     ariaQueued: 'Dans la file',
     ariaAddQueue: 'Ajouter à la file',
@@ -622,9 +626,6 @@ export const fr: Dict = {
   },
   searchResultRow: {
     ariaRadio: 'Radio : plus comme ça',
-    ariaAdd: 'Ajouter à la bibliothèque',
-    ariaDownloading: 'Téléchargement',
-    ariaInLibrary: 'Dans la bibliothèque',
   },
   songRow: {
     ariaPlay: 'Lire {title} par {artist}',

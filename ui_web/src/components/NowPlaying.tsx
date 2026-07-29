@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { state, actions, nowPlayingOpen, setNowPlayingOpen } from '../stores';
+import { state, actions, isSavedTrack, nowPlayingOpen, setNowPlayingOpen } from '../stores';
 import { coverUrl } from '../lib/media';
 import { openTrackMenu } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
@@ -8,8 +8,9 @@ import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import { artistPath } from '../lib/artistRoute';
 import { isPodcastTrack } from '../lib/track';
-import { favouriteFromTrack } from '../lib/favourites';
+import { savedFromTrack } from '../lib/saved';
 import { FavouriteButton } from './FavouriteButton';
+import { CollectionButton } from './CollectionButton';
 import { t as tr } from '../lib/i18n';
 import { SearchPanel, panelOpen, panelSide, togglePanel } from './SearchPanel';
 import { RadioBadge, onStopRadio } from './RadioBadge';
@@ -681,22 +682,19 @@ export function NowPlaying() {
               </button>
             </Show>
 
-            <Show when={!isPodcast()}>
-              <FavouriteButton favourite={favouriteFromTrack(t()!)} class={styles.actBtn} tooltip />
+            {/* Marking presupposes having: what is playing may be a stream you
+              * have never claimed, and the ＋ next to it is how you claim it. */}
+            <Show when={!isPodcast() && isSavedTrack(t()!)}>
+              <FavouriteButton favourite={savedFromTrack(t()!)} class={styles.actBtn} tooltip />
             </Show>
 
-            <Show when={t()!.source === 'preview' && !isPodcast()}>
-              <button
+            <Show when={!isPodcast()}>
+              <CollectionButton
+                entry={savedFromTrack(t()!)}
                 class={styles.actBtn}
-                type="button"
-                aria-label={tr('nowPlaying.saveToLibrary')}
-                title={tr('nowPlaying.saveToLibrary')}
-                onClick={() => void actions.downloadTrack(t()!)}
-              >
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-                </svg>
-              </button>
+                hideOwned
+                tooltip
+              />
             </Show>
 
             {/* Radio earns a permanent slot because it is the only action here

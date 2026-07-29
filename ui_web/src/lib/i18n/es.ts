@@ -128,15 +128,23 @@ export const es: Dict = {
     openArtist: 'Abrir {artist}',
     artistTrackCount: '{count} canciones',
     emptyArtists: 'No hay artistas todavía.',
-    emptyLibrary: 'Tu biblioteca está vacía. Descarga algo desde Buscar.',
+    emptyLibrary: 'Tu biblioteca está vacía. Guarda lo que encuentres en Buscar; descargarlo es otro paso.',
     unreachable: 'No se pudo contactar con tu estación, puede que falte algo.',
     unreachableEmpty: 'No se pudo contactar con tu estación. Tu biblioteca sigue ahí.',
     retry: 'Reintentar',
   },
+  /** Tener una canción, y tener sus bytes: dos pasos, un control. */
+  collection: {
+    save: 'Guardar en tu biblioteca',
+    unsave: 'Quitar de tu biblioteca',
+    download: 'Descargar',
+    downloading: 'Descargando…',
+    owned: 'Descargada',
+    resolving: 'Buscando una fuente…',
+  },
   favourites: {
     title: 'Favoritos',
-    empty: 'Aún no tienes favoritos. Toca el corazón en cualquier canción.',
-    notDownloaded: 'Stream',
+    empty: 'Aún no has destacado nada. El corazón separa una canción del resto de tu biblioteca.',
   },
   search: {
     placeholder: 'Qué quieres escuchar?',
@@ -174,10 +182,6 @@ export const es: Dict = {
     seedDesc:
       'Las recomendaciones se generan con artistas, favoritos, playlists y canciones que guardas o reproduces.',
     seedAction: 'Buscar canciones',
-    ariaSaveToLibrary: 'Guardar en biblioteca',
-    ariaSaved: 'Guardado',
-    ariaSave: 'Guardar',
-    ariaInLibrary: 'En biblioteca',
     labelLibraryTrack: 'En tu biblioteca',
     labelTrack: 'Cancion',
     labelArtist: 'Artista',
@@ -574,6 +578,7 @@ export const es: Dict = {
     fromArtist: 'Porque escuchas a {artist}',
   },
   searchPanel: {
+    ariaInLibrary: 'En tu biblioteca',
     fallbackTitle: 'Video de YouTube',
     fallbackChannel: 'YouTube',
     noResolve: 'No se pudo resolver la canción',
@@ -606,7 +611,6 @@ export const es: Dict = {
     searchError: 'No se pudo completar la búsqueda.',
     retry: 'Reintentar',
     noResults: 'Sin resultados.',
-    ariaInLibrary: 'En tu biblioteca',
     ariaLoading: 'Cargando',
     ariaQueued: 'En la cola',
     ariaAddQueue: 'Añadir a la cola',
@@ -614,9 +618,6 @@ export const es: Dict = {
   },
   searchResultRow: {
     ariaRadio: 'Radio: más como esto',
-    ariaAdd: 'Añadir a biblioteca',
-    ariaDownloading: 'Descargando',
-    ariaInLibrary: 'En biblioteca',
   },
   songRow: {
     ariaPlay: 'Reproducir {title} de {artist}',

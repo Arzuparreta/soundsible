@@ -1,7 +1,16 @@
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, onCleanup, onMount, untrack, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { api } from '../lib/api';
-import { actions, state, isPlayingItem, isPlayingResult, ownedTrackForItem, ownedTrackForResult } from '../stores';
+import {
+  actions,
+  state,
+  isDownloadingKeys,
+  isPlayingItem,
+  isPlayingResult,
+  isSavedItem,
+  isSavedKeys,
+  ownedTrackForKeys,
+} from '../stores';
 import { coverUrl } from '../lib/media';
 import { artistPath, albumPath } from '../lib/artistRoute';
 import { toast } from '../lib/toast';
@@ -12,10 +21,11 @@ import { t as tr } from '../lib/i18n';
 import { userKey } from '../lib/session';
 import { itemArtist, itemBusy, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import SearchResultRow from '../components/SearchResultRow';
-import { favouriteFromCatalogItem } from '../lib/favourites';
+import { savedFromCatalogItem, savedFromTrack } from '../lib/saved';
 import { FavouriteButton } from '../components/FavouriteButton';
+import { CollectionButton } from '../components/CollectionButton';
 import { Spinner } from '../components/Spinner';
-import type { CatalogItem, CatalogSaveResponse, SearchResult, Track } from '../types/music';
+import type { CatalogItem, CatalogSaveResponse, SavedEntry, SearchResult, Track } from '../types/music';
 import styles from './Search.module.css';
 import { coverStyle } from '../lib/cover';
 import { formatDuration } from '../lib/format';
@@ -93,10 +103,7 @@ export default function Search() {
   const [lastRun, setLastRun] = createSignal('');
   const [recents, setRecents] = createSignal<string[]>(loadRecents('music'));
   const [saving, setSaving] = createSignal<Set<string>>(new Set());
-  const [saved, setSaved] = createSignal<Set<string>>(new Set());
-  const [youtubeEnqueued, setYoutubeEnqueued] = createSignal<Set<string>>(new Set());
   const [review, setReview] = createSignal<{ item: CatalogItem; response: CatalogSaveResponse } | null>(null);
-  const [nodeSaving, setNodeSaving] = createSignal<Set<string>>(new Set());
   const [sharedCapsule, setSharedCapsule] = createSignal<TrackShareCapsuleV1 | null>(null);
   const [sharedItem, setSharedItem] = createSignal<CatalogItem | null>(null);
   const [sharedLoading, setSharedLoading] = createSignal(false);
@@ -466,7 +473,6 @@ export default function Search() {
       });
       if (response.status === 'queued') {
         setReview(null);
-        setSaved((s) => new Set(s).add(item.id));
         // The row and the download now share a video id. Recording it is what
         // lets this row flip to ✓ — and light up if it is what's playing — the
         // moment the download lands, instead of waiting for a fresh search.
@@ -499,49 +505,6 @@ export default function Search() {
     });
   };
 
-  const addYouTube = async (result: SearchResult) => {
-    if (ownedTrackForResult(result)) {
-      toast.info(tr('search.alreadyInLibrary'));
-      return;
-    }
-    const alreadyDownloading = state.downloads.queue.some(
-      (item) => item.video_id === result.id && item.status !== 'failed' && item.status !== 'interrupted',
-    );
-    if (alreadyDownloading || youtubeEnqueued().has(result.id)) {
-      toast.info(tr('search.alreadyInQueue'));
-      return;
-    }
-    setYoutubeEnqueued((s) => new Set(s).add(result.id));
-    try {
-      await api.enqueueDownload([
-        {
-          source_type: 'youtube_url',
-          song_str: `https://www.youtube.com/watch?v=${result.id}`,
-          video_id: result.id,
-          display_title: result.title,
-          display_artist: result.channel,
-          thumbnail_url: result.thumbnail,
-          duration_sec: result.duration,
-          metadata_evidence: null,
-        },
-      ]);
-      void actions.loadDownloads();
-      void api.emitDiscoveryEvent('music_added_to_queue', {
-        title: result.title,
-        artist: result.channel ?? '',
-        source: 'youtube_search',
-        youtube_id: result.id,
-      }).catch(() => {});
-      toast.success(tr('search.addedToDownloads'));
-    } catch {
-      setYoutubeEnqueued((s) => {
-        const next = new Set(s);
-        next.delete(result.id);
-        return next;
-      });
-      toast.error(tr('search.notAddedDownloads'));
-    }
-  };
 
   // ── Node feed: play instantly (the video id is already resolved) and save
   // through the standard download pipeline. ──
@@ -564,25 +527,6 @@ export default function Search() {
   const playNodeRec = (rec: NodeRec) => {
     actions.playTrack(nodeTrack(rec));
   };
-
-  const saveNodeRec = async (rec: NodeRec) => {
-    setNodeSaving((current) => new Set(current).add(rec.id));
-    try {
-      await actions.downloadTrack(nodeTrack(rec));
-    } finally {
-      setNodeSaving((current) => {
-        const next = new Set(current);
-        next.delete(rec.id);
-        return next;
-      });
-    }
-  };
-
-  const nodeSaved = (rec: NodeRec) =>
-    state.library.some((t) => t.id === rec.id || t.youtube_id === rec.id) ||
-    state.downloads.queue.some(
-      (i) => i.video_id === rec.id && i.status !== 'failed' && i.status !== 'interrupted',
-    );
 
   onCleanup(() => {
     requestId += 1;
@@ -677,10 +621,9 @@ export default function Search() {
                       coverStyle={itemCoverStyle}
                       active={isPlayingItem(item())}
                       saving={saving().has(item().id)}
-                      saved={!!ownedTrackForItem(item())}
                       busy={itemBusy(item())}
                       onPlay={() => playItem(item())}
-                      onSave={() => saveItem(item())}
+                      onDownload={() => void saveItem(item())}
                     />
                   </section>
                 )}
@@ -697,9 +640,7 @@ export default function Search() {
               onFocusSearch={() => searchInput?.focus()}
               onRefresh={refreshNodeFeed}
               onPlay={playNodeRec}
-              onSave={(rec) => void saveNodeRec(rec)}
-              saving={(rec) => nodeSaving().has(rec.id)}
-              saved={nodeSaved}
+              entry={(rec) => savedFromTrack(nodeTrack(rec))}
               menu={(rec) => trackMenuOptions(nodeTrack(rec), { navigate })}
             />
           </Match>
@@ -735,10 +676,7 @@ export default function Search() {
                     <SearchResultRow
                       r={result()}
                       active={isPlayingResult(result())}
-                      inLibrary={!!ownedTrackForResult(result())}
-                      enqueued={youtubeEnqueued().has(result().id)}
                       onPreview={() => previewYouTube(result())}
-                      onAdd={() => void addYouTube(result())}
                     />
                   </section>
                 )}
@@ -752,10 +690,7 @@ export default function Search() {
                       <SearchResultRow
                         r={result}
                         active={isPlayingResult(result)}
-                        inLibrary={!!ownedTrackForResult(result)}
-                        enqueued={youtubeEnqueued().has(result.id)}
                         onPreview={() => previewYouTube(result)}
-                        onAdd={() => void addYouTube(result)}
                       />
                     )}
                   </For>
@@ -805,10 +740,9 @@ export default function Search() {
                           coverStyle={itemCoverStyle}
                           active={isPlayingItem(item)}
                           saving={saving().has(item.id)}
-                          saved={saved().has(item.id) || !!ownedTrackForItem(item)}
                           busy={itemBusy(item)}
                           onPlay={() => playItem(item)}
-                          onSave={() => saveItem(item)}
+                          onDownload={() => void saveItem(item)}
                         />
                       </Match>
                       <Match when={true}>
@@ -870,9 +804,7 @@ function StartPanel(props: {
   onFocusSearch: () => void;
   onRefresh: () => void;
   onPlay: (rec: NodeRec) => void;
-  onSave: (rec: NodeRec) => void;
-  saving: (rec: NodeRec) => boolean;
-  saved: (rec: NodeRec) => boolean;
+  entry: (rec: NodeRec) => SavedEntry;
   menu: (rec: NodeRec) => ActionMenuOptions;
 }) {
   return (
@@ -918,10 +850,8 @@ function StartPanel(props: {
                   sub={rec.channel ?? ''}
                   cover={rec.thumbnail}
                   seedKey={rec.id}
+                  entry={props.entry(rec)}
                   onPlay={() => props.onPlay(rec)}
-                  onSave={props.saved(rec) ? undefined : () => props.onSave(rec)}
-                  saving={props.saving(rec)}
-                  saved={props.saved(rec)}
                   menu={() => props.menu(rec)}
                 />
               )}
@@ -971,14 +901,19 @@ function DiscoveryCard(props: {
   sub: string;
   cover?: string;
   seedKey: string;
+  /** What the card's corner control acts on. */
+  entry: SavedEntry;
   onPlay: () => void;
-  onSave?: () => void;
-  saving: boolean;
-  saved: boolean;
   menu?: () => ActionMenuOptions | null;
 }) {
   const bg = (): JSX.CSSProperties => coverStyle(props.seedKey, props.cover);
   const tap = createResponsiveTap({ onTap: props.onPlay });
+  // Same four states as every row, in the card's own corner slot: claim it,
+  // then give it a file. The heart lives in this card's context menu, which
+  // offers it from the moment the song is yours.
+  const owned = () => !!ownedTrackForKeys(props.entry.keys);
+  const downloading = () => isDownloadingKeys(props.entry.keys);
+  const saved = () => isSavedKeys(props.entry.keys);
   return (
     <div
       class={styles.discoverCard}
@@ -990,26 +925,41 @@ function DiscoveryCard(props: {
         <span class={styles.discoverCardSub}>{props.sub}</span>
       </button>
       <Switch>
-        <Match when={props.onSave && !props.saved}>
+        <Match when={owned()}>
+          <span class={styles.discoverSavedBadge} aria-label={tr('collection.owned')}>
+            <CheckIcon />
+          </span>
+        </Match>
+        <Match when={downloading()}>
+          <span class={styles.discoverSavedBadge} aria-label={tr('collection.downloading')}>
+            <Spinner size={16} onAccent />
+          </span>
+        </Match>
+        <Match when={saved()}>
           <button
             class={styles.discoverSaveBtn}
             type="button"
-            aria-label={tr('search.ariaSaveToLibrary')}
-            disabled={props.saving}
+            aria-label={tr('collection.download')}
             onClick={(e) => {
               e.stopPropagation();
-              props.onSave?.();
+              void actions.downloadSaved(props.entry, 'discover');
             }}
           >
-            <Show when={props.saving} fallback={<PlusIcon />}>
-              <Spinner size={16} onAccent />
-            </Show>
+            <DownloadIcon />
           </button>
         </Match>
-        <Match when={props.saved}>
-          <span class={styles.discoverSavedBadge} aria-label={tr('search.ariaSaved')}>
-            <CheckIcon />
-          </span>
+        <Match when={true}>
+          <button
+            class={styles.discoverSaveBtn}
+            type="button"
+            aria-label={tr('collection.save')}
+            onClick={(e) => {
+              e.stopPropagation();
+              actions.toggleSaved(props.entry);
+            }}
+          >
+            <PlusIcon />
+          </button>
         </Match>
       </Switch>
     </div>
@@ -1024,13 +974,15 @@ function SongResult(props: {
   item: CatalogItem;
   coverStyle: (item: CatalogItem, round?: boolean) => JSX.CSSProperties;
   active: boolean;
-  saving: boolean;
-  saved: boolean;
   busy: boolean;
+  /** A catalog row has no video id yet, so downloading it goes through the
+   * resolver (which may come back asking which version the user meant). */
+  saving: boolean;
   onPlay: () => void;
-  onSave: () => void;
+  onDownload: () => void;
 }) {
-  const canSave = () => props.item.type === 'track' && !props.saved;
+  const entry = createMemo(() => savedFromCatalogItem(props.item));
+  const collectable = () => props.item.type === 'track' || props.item.type === 'library_track';
   const tap = createResponsiveTap({ onTap: props.onPlay });
   return (
     <div
@@ -1060,27 +1012,17 @@ function SongResult(props: {
       </span>
       <span class={styles.source}>{props.item.source}</span>
       <span class={styles.duration}>{formatDuration(props.item.duration)}</span>
-      <FavouriteButton favourite={favouriteFromCatalogItem(props.item)} compact />
-      <Show when={props.saved}>
-        <span class={styles.done} aria-label={tr('search.ariaInLibrary')}>
-          <CheckIcon />
-        </span>
+      {/* The heart only over songs you already have; ＋ is what puts one there. */}
+      <Show when={collectable() && isSavedItem(props.item)}>
+        <FavouriteButton favourite={entry()} compact />
       </Show>
-      <Show when={canSave()}>
-        <button
-          class={styles.iconBtn}
-          type="button"
-          disabled={props.saving}
-          aria-label={tr('search.ariaSave')}
-          onClick={(e) => {
-            e.stopPropagation();
-            props.onSave();
-          }}
-        >
-          <Show when={props.saving} fallback={<PlusIcon />}>
-            <Spinner size={17} />
-          </Show>
-        </button>
+      <Show when={collectable()}>
+        <CollectionButton
+          entry={entry()}
+          compact
+          busy={props.saving}
+          onDownload={props.onDownload}
+        />
       </Show>
     </div>
   );
@@ -1121,6 +1063,14 @@ function SearchIcon() {
     <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
       <circle cx="11" cy="11" r="7" />
       <path d="M21 21l-4.3-4.3" />
+    </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 20h14" />
     </svg>
   );
 }

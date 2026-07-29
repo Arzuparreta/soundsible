@@ -133,10 +133,18 @@ export const zh: Dict = {
     unreachableEmpty: '无法连接到你的电台。你的资料库还在。',
     retry: '重试',
   },
+  /** 拥有一首歌，和拥有它的文件：两个步骤，一个控件。 */
+  collection: {
+    save: '保存到你的资料库',
+    unsave: '从资料库移除',
+    download: '下载',
+    downloading: '下载中…',
+    owned: '已下载',
+    resolving: '正在寻找音源…',
+  },
   favourites: {
     title: '收藏',
-    empty: '还没有收藏。在任意歌曲上点一下心形即可收藏。',
-    notDownloaded: '在线',
+    empty: '还没有标记任何歌曲。心形用来把一首歌从你的资料库中标出来。',
   },
   search: {
     placeholder: '想听什么？',
@@ -174,10 +182,6 @@ export const zh: Dict = {
     seedDesc:
       '推荐会根据你保存或播放的艺人、收藏、歌单和歌曲生成。',
     seedAction: '搜索歌曲',
-    ariaSaveToLibrary: '保存到资料库',
-    ariaSaved: '已保存',
-    ariaSave: '保存',
-    ariaInLibrary: '已在资料库',
     labelLibraryTrack: '在你的资料库中',
     labelTrack: '歌曲',
     labelArtist: '艺人',
@@ -560,6 +564,7 @@ export const zh: Dict = {
     fromArtist: '因为你常听 {artist}',
   },
   searchPanel: {
+    ariaInLibrary: '在你的资料库中',
     fallbackTitle: 'YouTube 视频',
     fallbackChannel: 'YouTube',
     noResolve: '无法解析曲目',
@@ -592,7 +597,6 @@ export const zh: Dict = {
     searchError: '无法完成搜索。',
     retry: '重试',
     noResults: '无结果。',
-    ariaInLibrary: '在你的资料库中',
     ariaLoading: '加载中',
     ariaQueued: '在队列中',
     ariaAddQueue: '加入队列',
@@ -600,9 +604,6 @@ export const zh: Dict = {
   },
   searchResultRow: {
     ariaRadio: '电台：更多类似',
-    ariaAdd: '添加到资料库',
-    ariaDownloading: '下载中',
-    ariaInLibrary: '已在资料库',
   },
   songRow: {
     ariaPlay: '播放 {artist} 的《{title}》',

@@ -151,6 +151,14 @@
   transition: opacity var(--dur-short) var(--ease-out);
 }
 
+/* Never revealed on hover, unlike its neighbours. This control is only rendered
+ * at all when the song has no file yet, so it is the one thing on the row that
+ * says so — hiding it until the pointer arrives would make a library of streams
+ * look identical to a library of files. */
+.rowCollect {
+  opacity: 1;
+}
+
 /* Reveal-on-hover is a pointer-only nicety; touch devices always show the heart
  * so it stays tappable (no hover state to trigger). */
 @media (hover: hover) and (pointer: fine) {

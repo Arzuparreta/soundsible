@@ -23,7 +23,8 @@ describe('buildTrackMenu — podcast coherence', () => {
     expect(l).not.toContain('Add to playlist');
     expect(l).not.toContain('Play next');
     expect(l).not.toContain('Add to queue');
-    expect(l).not.toContain('Save to library');
+    expect(l).not.toContain('Save to your library');
+    expect(l).not.toContain('Download');
     expect(l).not.toContain('Add to favourites');
   });
 
@@ -36,11 +37,24 @@ describe('buildTrackMenu — podcast coherence', () => {
     expect(l).not.toContain('Add to playlist');
   });
 
-  it('preview music tracks keep radio + save-to-library', () => {
+  it('preview music tracks keep radio, and offer both halves of having a song', () => {
     const preview: Track = { id: 'yt1', title: 'Song', artist: 'A', source: 'preview' };
     const l = labels(preview, ctx);
     expect(l).toContain('Start radio');
     expect(l).toContain('Add to playlist');
-    expect(l).toContain('Save to library');
+    expect(l).toContain('Save to your library');
+    expect(l).toContain('Download');
+  });
+
+  it('withholds the heart until a song is in the library, and offers saving instead', () => {
+    // A search result the user has never claimed. Marking it out among "your
+    // songs" would presuppose the thing the ＋ above it is there to do.
+    const unsaved: Track = { id: 'yt2', title: 'Song', artist: 'A', source: 'preview' };
+    const l = labels(unsaved, ctx);
+    expect(l).not.toContain('Add to favourites');
+    expect(l).toContain('Save to your library');
+    // …and a downloaded song, which is in the library by definition, has it.
+    const owned: Track = { id: 'lib1', title: 'Song', artist: 'A' };
+    expect(labels(owned, ctx)).toContain('Add to favourites');
   });
 });

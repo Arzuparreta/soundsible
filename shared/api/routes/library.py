@@ -443,18 +443,61 @@ def get_favourites():
 
 @library_bp.route("/api/library/favourites/entries", methods=["GET"])
 def get_favourite_entries():
-    """The full favourites list — identity keys plus the snapshot needed to render
+    """The favourites list — identity keys plus the snapshot needed to render
     and stream a song that is not downloaded. Newest first."""
     api = _get_api()
     api["get_core"]()
-    return jsonify({"version": 2, "favourites": api["favourites_manager"].get_entries()})
+    return jsonify(
+        {"version": 2, "favourites": api["favourites_manager"].get_favourite_entries()}
+    )
+
+
+@library_bp.route("/api/library/saved", methods=["GET"])
+def get_saved_entries():
+    """Every song in this account's library that is not (or not only) a file:
+    identity keys, snapshot, and whether it is marked a favourite. Newest first.
+
+    The player unions this with the scanned library to draw one collection —
+    a saved song streams until a download gives it a file, and nothing about
+    the entry changes when that happens.
+    """
+    api = _get_api()
+    api["get_core"]()
+    return jsonify({"version": 3, "saved": api["favourites_manager"].get_entries()})
+
+
+@library_bp.route("/api/library/saved/toggle", methods=["POST"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("library_toggle_saved", limit=120, window_sec=60)
+def toggle_saved():
+    """Add or remove a song from the library by identity (`entry`), no file involved."""
+    api = _get_api()
+    api["get_core"]()
+    data = request.json or {}
+    entry = data.get("entry") or data.get("saved")
+    if not isinstance(entry, dict):
+        return jsonify({"error": "entry must be an object"}), 400
+
+    try:
+        is_saved = api["favourites_manager"].toggle_saved(entry)
+    except ValueError:
+        return jsonify({"error": "entry needs at least one identity key"}), 400
+    if is_saved:
+        _schedule_favourite_resolve(entry)
+
+    api["emit_to_user"]("favourites_updated")
+    return jsonify({"status": "success", "is_saved": is_saved})
 
 
 @library_bp.route("/api/library/favourites/toggle", methods=["POST"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_toggle_favourite", limit=120, window_sec=60)
 def toggle_favourite():
-    """Toggle a favourite, by identity (`favourite`) or by library id (`track_id`)."""
+    """Toggle the favourite mark, by identity (`favourite`) or library id (`track_id`).
+
+    Marking a song the library does not hold saves it in the same act — you
+    cannot single out a song you do not have. Unmarking leaves it saved.
+    """
     api = _get_api()
     api["get_core"]()
     data = request.json or {}
@@ -463,7 +506,7 @@ def toggle_favourite():
 
     if isinstance(favourite, dict):
         try:
-            is_fav = manager.toggle_entry(favourite)
+            is_fav = manager.set_favourite(favourite)
         except ValueError:
             return jsonify({"error": "favourite needs at least one identity key"}), 400
         if is_fav:

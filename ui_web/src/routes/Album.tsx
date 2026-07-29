@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, Show, type JSX, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
-import { actions, musicLibrary, isPlayingItem, isPlayingTrack } from '../stores';
+import { actions, musicLibrary, isPlayingItem, isPlayingTrack, isSavedItem } from '../stores';
 import { api } from '../lib/api';
 import { coverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
@@ -11,8 +11,9 @@ import { t } from '../lib/i18n';
 import type { AlbumProfile, CatalogItem, Track } from '../types/music';
 import { Spinner } from '../components/Spinner';
 import { itemArtist, itemBusy, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
-import { favouriteFromCatalogItem, favouriteFromTrack } from '../lib/favourites';
+import { savedFromCatalogItem, savedFromTrack } from '../lib/saved';
 import { FavouriteButton } from '../components/FavouriteButton';
+import { CollectionButton } from '../components/CollectionButton';
 import styles from './Album.module.css';
 import { coverGradient, coverStyle } from '../lib/cover';
 import { formatDuration } from '../lib/format';
@@ -267,12 +268,16 @@ function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
             })}
           >
             <span class={styles.trackIndex}>{i() + 1}</span>
-            <span class={styles.trackCover} style={coverStyle(track.id, coverUrl(track.id))} />
+            <span
+              class={styles.trackCover}
+              style={coverStyle(track.id, track.source === 'preview' ? track.cover : coverUrl(track.id))}
+            />
             <span class={styles.trackMeta}>
               <span class={styles.trackTitle}>{track.title}</span>
             </span>
             <span class={styles.trackDuration}>{formatDuration(track.duration)}</span>
-            <FavouriteButton favourite={favouriteFromTrack(track)} compact />
+            <FavouriteButton favourite={savedFromTrack(track)} compact />
+            <CollectionButton entry={savedFromTrack(track)} compact hideOwned />
           </div>
         )}
       </For>
@@ -314,29 +319,18 @@ function DiscoverView(props: {
                   </Show>
                 </span>
                 <span class={styles.trackDuration}>{formatDuration(item.duration)}</span>
-                <FavouriteButton favourite={favouriteFromCatalogItem(item)} compact />
-                <Show when={item.action_state?.in_library || props.saved.has(item.id)}>
-                  <span class={styles.libraryBadge} aria-label={t('search.ariaInLibrary')}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
-                      <path d="M5 12l5 5L20 7" />
-                    </svg>
-                  </span>
+                {/* The heart only over songs already in the library; ＋ is what puts one
+                  * there, and the arrow that replaces it gives it a file. */}
+                <Show when={isSavedItem(item)}>
+                  <FavouriteButton favourite={savedFromCatalogItem(item)} compact />
                 </Show>
-                <Show when={item.type === 'track' && !item.action_state?.in_library && !props.saved.has(item.id)}>
-                  <button
-                    class={styles.iconBtn}
-                    type="button"
-                    disabled={props.saving.has(item.id)}
-                    aria-label={t('search.ariaSave')}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      props.onSaveItem(item);
-                    }}
-                  >
-                    <Show when={props.saving.has(item.id)} fallback={<PlusIcon />}>
-                      <Spinner size={14} />
-                    </Show>
-                  </button>
+                <Show when={item.type === 'track'}>
+                  <CollectionButton
+                    entry={savedFromCatalogItem(item)}
+                    compact
+                    busy={props.saving.has(item.id)}
+                    onDownload={() => props.onSaveItem(item)}
+                  />
                 </Show>
               </div>
             )}
@@ -347,10 +341,3 @@ function DiscoverView(props: {
   );
 }
 
-function PlusIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
-}

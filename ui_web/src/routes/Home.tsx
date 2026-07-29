@@ -1,6 +1,6 @@
 import { createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { A } from '@solidjs/router';
-import { state, actions, downloadCounts, favouriteLibraryIds, musicLibrary } from '../stores';
+import { state, actions, downloadCounts, favouriteRows, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import ArtistGrid from '../components/ArtistGrid';
@@ -18,8 +18,9 @@ import { EmptyState } from '../components/EmptyState';
 export default function Home() {
   let viewRef: HTMLDivElement | undefined;
   const active = createMemo(() => downloadCounts().active);
-  // Sorting the library by favourites only concerns the tracks in it.
-  const favSet = createMemo(() => new Set(favouriteLibraryIds()));
+  // Keyed off the resolved rows rather than library ids, so "favourites first"
+  // also lifts the marked songs that have no file — they are in this list too.
+  const favSet = createMemo(() => new Set(favouriteRows().map((row) => row.track.id)));
   const songs = createMemo(() => musicLibrary());
   const sorted = createMemo(() => sortTracks(songs(), librarySort(), favSet()));
   const artists = createMemo(() => buildArtists(songs()));
