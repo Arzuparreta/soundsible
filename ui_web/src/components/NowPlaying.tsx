@@ -104,20 +104,28 @@ export function NowPlaying(props: {
   });
 
   let requestedMobilePanel: NowPlayingMobilePanel | null = null;
+  let carouselFrame = 0;
+  let previousSurfaceOpen = props.surfaceOpen;
   createEffect(() => {
-    const panel = props.mobilePanel;
+    const surfaceOpen = props.surfaceOpen;
+    const opening = surfaceOpen && !previousSurfaceOpen;
+    previousSurfaceOpen = surfaceOpen;
+    const panel = surfaceOpen ? props.mobilePanel : 'stage';
     if (!mobileLayout() || !workspaceEl) return;
     const tile = workspaceEl.querySelector<HTMLElement>(`[data-now-playing-tile="${panel}"]`);
     if (!tile) return;
     requestedMobilePanel = panel;
+    if (!surfaceOpen) cancelAnimationFrame(carouselFrame);
     requestAnimationFrame(() => {
-      workspaceEl?.scrollTo({ left: tile.offsetLeft, behavior: props.surfaceOpen ? 'smooth' : 'auto' });
+      workspaceEl?.scrollTo({
+        left: tile.offsetLeft,
+        behavior: !surfaceOpen || opening ? 'auto' : 'smooth',
+      });
     });
   });
 
-  let carouselFrame = 0;
   const onCarouselScroll = () => {
-    if (!mobileLayout() || !workspaceEl) return;
+    if (!props.surfaceOpen || !mobileLayout() || !workspaceEl) return;
     cancelAnimationFrame(carouselFrame);
     carouselFrame = requestAnimationFrame(() => {
       if (!workspaceEl) return;
@@ -878,8 +886,8 @@ export function NowPlaying(props: {
                   <Tile panel="browser">
                     <NowPlayingBrowser
                       onClose={() => {
-                        closeBrowser();
                         if (mobileLayout()) props.onMobilePanelChange('stage');
+                        else closeBrowser();
                       }}
                       dragHandle={<PanelGrip panel="browser" />}
                     />

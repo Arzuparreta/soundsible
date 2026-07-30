@@ -168,12 +168,6 @@
   display: contents;
 }
 
-/* The browser is desktop-only. Its tile owns that responsive contract so the
-   browser itself can always fill the grid cell when the tile is mounted. */
-.tile[data-now-playing-tile='browser'] {
-  display: none;
-}
-
 .splitter,
 .panelGrip,
 .desktopLyrics,
@@ -1620,7 +1614,7 @@
   min-width: 0;
   min-height: 0;
   padding:
-    clamp(76px, 9vh, 96px)
+    calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap))
     clamp(12px, 2vw, 28px)
     clamp(48px, 6vh, 68px);
   overflow: hidden;
@@ -1661,10 +1655,11 @@
 
 @media (max-width: 1023px) {
   .workspace {
-    padding:
-      clamp(66px, 8.5vh, 84px)
-      clamp(10px, 2.5vw, 20px)
-      clamp(48px, 7vh, 62px);
+    padding-top:
+      calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap));
+    padding-right: max(clamp(10px, 2.5vw, 20px), env(safe-area-inset-right, 0px));
+    padding-bottom: 0;
+    padding-left: max(clamp(10px, 2.5vw, 20px), env(safe-area-inset-left, 0px));
   }
 
   .main,
@@ -1712,8 +1707,12 @@
     padding:
       clamp(10px, 2vh, 20px)
       clamp(14px, 4vw, 34px)
-      clamp(14px, 2.5vh, 24px);
+      calc(var(--player-mobile-footer-clearance) + clamp(8px, 1.5vh, 16px));
     overflow-y: auto;
+  }
+
+  .tile[data-now-playing-tile='queue'] .queueRows {
+    padding-bottom: var(--player-mobile-footer-clearance);
   }
 
   .tile[data-now-playing-tile='queue'] > .desktopQueue,

@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@solidjs/testing-library';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const harness = vi.hoisted(() => ({
   actions: {
@@ -10,6 +10,7 @@ const harness = vi.hoisted(() => ({
   setState: undefined as undefined | ((...args: unknown[]) => void),
   openBrowser: vi.fn(),
   toggleBrowser: vi.fn(),
+  mobileViewport: false,
 }));
 
 vi.mock('../stores', async () => {
@@ -55,6 +56,19 @@ vi.mock('./NowPlayingBrowser', () => ({
 
 import { PlayerSurface } from './PlayerSurface';
 
+beforeEach(() => {
+  vi.stubGlobal('matchMedia', vi.fn(() => ({
+    matches: harness.mobileViewport,
+    media: '(max-width: 1023px)',
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })));
+});
+
 afterEach(() => {
   cleanup();
   harness.setOpen?.(true);
@@ -66,6 +80,8 @@ afterEach(() => {
     cover: '/current.jpg',
   });
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
+  harness.mobileViewport = false;
   delete document.documentElement.dataset.playerSurface;
 });
 
@@ -117,5 +133,30 @@ describe('PlayerSurface', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.panel.browser' }));
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('browser');
+  });
+
+  it('resets the compact carousel before every close and reopen', () => {
+    harness.mobileViewport = true;
+    render(() => <PlayerSurface />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.panel.browser' }));
+    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('browser');
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.close' }));
+    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('stage');
+
+    harness.setOpen?.(true);
+    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('stage');
+  });
+
+  it('opens the compact browser without changing the desktop browser preference', () => {
+    harness.mobileViewport = true;
+    render(() => <PlayerSurface />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.showSearchPanel' }));
+
+    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('browser');
+    expect(harness.openBrowser).not.toHaveBeenCalled();
+    expect(harness.toggleBrowser).not.toHaveBeenCalled();
   });
 });

@@ -47,6 +47,11 @@ export function PlayerSurface() {
     return track ? track.cover ?? coverUrl(track.id) : '';
   });
   const [mobilePanel, setMobilePanel] = createSignal<NowPlayingMobilePanel>('stage');
+  const [mobileLayout, setMobileLayout] = createSignal(
+    typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia(MOBILE_QUERY).matches,
+  );
   const [backdrops, setBackdrops] = createSignal<BackdropState>({
     first: art(),
     second: '',
@@ -91,12 +96,18 @@ export function PlayerSurface() {
       setMobilePanel('stage');
       requestAnimationFrame(() => surfaceEl?.focus({ preventScroll: true }));
     } else if (!open && wasOpen) {
+      // Reset while the surface is hidden so reopening never reveals the
+      // previous carousel card during a smooth snap back to the player.
+      setMobilePanel('stage');
       requestAnimationFrame(() => restoreFocus?.focus({ preventScroll: true }));
     }
     wasOpen = open;
   });
 
-  const closeSurface = () => setNowPlayingOpen(false);
+  const closeSurface = () => {
+    setMobilePanel('stage');
+    setNowPlayingOpen(false);
+  };
 
   const showNowPlaying = () => {
     if (auto()) actions.exitAutoMode();
@@ -108,16 +119,18 @@ export function PlayerSurface() {
     actions.enterAutoMode();
   };
 
+  const browserSelected = () =>
+    !auto() && (mobileLayout() ? mobilePanel() === 'browser' : browserOpen());
+
   const browserActionLabel = () =>
-    !auto() && browserOpen()
+    !mobileLayout() && browserSelected()
       ? t('nowPlaying.hideSearchPanel')
       : t('nowPlaying.showSearchPanel');
 
   const browserAction = () => {
     const wasAuto = auto();
     if (wasAuto) actions.exitAutoMode();
-    if (window.matchMedia(MOBILE_QUERY).matches) {
-      openBrowser();
+    if (mobileLayout()) {
       setMobilePanel('browser');
       return;
     }
@@ -203,11 +216,16 @@ export function PlayerSurface() {
 
   onMount(() => {
     if (!surfaceEl) return;
+    const media = typeof window.matchMedia === 'function' ? window.matchMedia(MOBILE_QUERY) : null;
+    const syncLayout = () => setMobileLayout(Boolean(media?.matches));
+    media?.addEventListener('change', syncLayout);
+    syncLayout();
     surfaceEl.addEventListener('touchstart', beginTouch, { passive: true });
     surfaceEl.addEventListener('touchmove', moveTouch, { passive: false });
     surfaceEl.addEventListener('touchend', finishSwipe, { passive: true });
     surfaceEl.addEventListener('touchcancel', cancelSwipe, { passive: true });
     onCleanup(() => {
+      media?.removeEventListener('change', syncLayout);
       surfaceEl?.removeEventListener('touchstart', beginTouch);
       surfaceEl?.removeEventListener('touchmove', moveTouch);
       surfaceEl?.removeEventListener('touchend', finishSwipe);
@@ -244,11 +262,11 @@ export function PlayerSurface() {
 
         <div class={styles.floatingChrome} data-no-surface-swipe="">
           <button
-            classList={{ [styles.chromeButton]: true, [styles.chromeButtonActive]: !auto() && browserOpen() }}
+            classList={{ [styles.chromeButton]: true, [styles.chromeButtonActive]: browserSelected() }}
             type="button"
             aria-label={browserActionLabel()}
             title={browserActionLabel()}
-            aria-pressed={!auto() && browserOpen()}
+            aria-pressed={browserSelected()}
             onClick={browserAction}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">

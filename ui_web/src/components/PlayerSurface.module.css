@@ -1,6 +1,15 @@
 .surface {
+  --player-chrome-top: max(14px, env(safe-area-inset-top, 0px));
+  --player-chrome-size: 48px;
+  --player-chrome-gap: 14px;
+  --player-mobile-footer-clearance:
+    calc(max(10px, env(safe-area-inset-bottom, 0px)) + 38px);
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  left: 0;
+  width: 100%;
+  height: var(--app-viewport-height, 100dvh);
   z-index: var(--z-auto);
   overflow: hidden;
   color: var(--ink-primary);
@@ -82,7 +91,7 @@
 .floatingChrome {
   position: absolute;
   z-index: 40;
-  top: max(14px, env(safe-area-inset-top));
+  top: var(--player-chrome-top);
   left: clamp(14px, 2.2vw, 34px);
   right: clamp(14px, 2.2vw, 34px);
   display: grid;
@@ -249,8 +258,13 @@
 }
 
 @media (max-width: 1023px) {
+  .surface {
+    --player-chrome-top: calc(env(safe-area-inset-top, 0px) + 9px);
+    --player-chrome-size: 44px;
+    --player-chrome-gap: 12px;
+  }
+
   .floatingChrome {
-    top: max(9px, env(safe-area-inset-top));
     left: 10px;
     right: 10px;
   }
@@ -273,6 +287,12 @@
 
   .carouselNav {
     display: flex;
+  }
+}
+
+@media all and (display-mode: standalone) {
+  .surface {
+    height: 100vh;
   }
 }
 

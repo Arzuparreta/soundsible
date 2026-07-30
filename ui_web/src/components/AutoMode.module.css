@@ -1673,7 +1673,8 @@
   grid-template-areas:
     'stage'
     'queue';
-  padding-top: clamp(70px, 8.5vh, 90px);
+  padding-top:
+    calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap));
   background: transparent;
   transform: none;
 }
@@ -1729,10 +1730,6 @@
 }
 
 @media (max-width: 767px) {
-  .root {
-    padding-top: clamp(64px, 8vh, 78px);
-  }
-
   .embeddedTools {
     position: relative;
     top: auto;
