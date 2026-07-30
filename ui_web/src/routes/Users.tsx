@@ -5,6 +5,7 @@ import { ViewHeader } from '../components/ViewHeader';
 import { confirmDialog } from '../lib/confirm';
 import { passwordDialog } from '../lib/passwordDialog';
 import { toast } from '../lib/toast';
+import { copyText } from '../lib/clipboard';
 import { t } from '../lib/i18n';
 import PasswordFields from '../components/PasswordFields';
 import { invites, isAdmin, user, users, type Role, type User } from '../lib/session';
@@ -64,14 +65,10 @@ export default function Users_() {
     try {
       const { url } = await invites.create();
       setInviteLink(url);
-      try {
-        await navigator.clipboard.writeText(url);
-        toast.success(t('users.inviteCopied'));
-      } catch {
-        // Clipboard is blocked on plain HTTP in some browsers — the link stays
-        // on screen so it can still be selected by hand.
-        toast.info(t('users.inviteReady'));
-      }
+      // Clipboard access can be refused (no secure context, no permission) —
+      // the link stays on screen so it can still be selected by hand.
+      if (await copyText(url)) toast.success(t('users.inviteCopied'));
+      else toast.info(t('users.inviteReady'));
     } catch {
       toast.error(t('users.inviteFailed'));
     }

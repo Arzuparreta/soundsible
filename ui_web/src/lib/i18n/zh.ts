@@ -771,7 +771,10 @@ export const zh: Dict = {
   },
   social: {
     copied: '已复制到剪贴板',
-    shareFailed: '分享失败',
-    shareIdentityMissing: '此歌曲没有可分享的来源标识',
+    copiedTextOnly: '已复制：这首没有可分享的链接',
+    copyAction: '复制',
+    copyManualTitle: '复制此链接',
+    copyManualTitleText: '复制以下内容',
+    copyManualHint: '浏览器不允许自动复制。请选中并手动复制。',
   },
 };

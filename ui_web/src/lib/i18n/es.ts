@@ -785,7 +785,10 @@ export const es: Dict = {
   },
   social: {
     copied: 'Copiado al portapapeles',
-    shareFailed: 'No se pudo compartir',
-    shareIdentityMissing: 'Esta canción no tiene una fuente que se pueda compartir',
+    copiedTextOnly: 'Copiado: esta pista no tiene enlace para compartir',
+    copyAction: 'Copiar',
+    copyManualTitle: 'Copia este enlace',
+    copyManualTitleText: 'Copia esto',
+    copyManualHint: 'Tu navegador no ha dejado copiarlo solo. Selecciónalo y cópialo a mano.',
   },
 };

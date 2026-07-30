@@ -3,6 +3,7 @@ import QRCode from '../lib/vendor/qrcode.esm.js';
 import { openOverlay } from '../lib/overlay';
 import { api, type PairingSession, type PairedDevice } from '../lib/api';
 import { toast } from '../lib/toast';
+import { copyText } from '../lib/clipboard';
 import { confirmDialog } from '../lib/confirm';
 import { t } from '../lib/i18n';
 import styles from './PairDevice.module.css';
@@ -114,12 +115,10 @@ function openPairDevice(onPaired: () => void): void {
     const copyCode = async () => {
       const code = session()?.code;
       if (!code) return;
-      try {
-        await navigator.clipboard.writeText(code);
-        toast.success(t('pairDevice.codeCopied'));
-      } catch {
-        /* clipboard blocked */
-      }
+      // The code is on screen either way, so a refused copy is a hint, not an
+      // error — but it must say something, or the button looks broken.
+      if (await copyText(code)) toast.success(t('pairDevice.codeCopied'));
+      else toast.info(t('social.copyManualHint'));
     };
 
     return (

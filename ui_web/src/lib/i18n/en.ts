@@ -778,8 +778,11 @@ export const en = {
   },
   social: {
     copied: 'Copied to clipboard',
-    shareFailed: 'Could not share',
-    shareIdentityMissing: 'This song has no shareable source identity',
+    copiedTextOnly: 'Copied — this one has no link to share',
+    copyAction: 'Copy',
+    copyManualTitle: 'Copy this link',
+    copyManualTitleText: 'Copy this',
+    copyManualHint: "Your browser wouldn't copy it on its own. Select it and copy it by hand.",
   },
 };
 

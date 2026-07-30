@@ -19,6 +19,7 @@ import { migrateCopy } from '../lib/migrateCopy';
 import { ViewHeader } from '../components/ViewHeader';
 import Button from '../components/Button';
 import { toast } from '../lib/toast';
+import { copyText } from '../lib/clipboard';
 import styles from './Migrate.module.css';
 
 const ACTIVE_STATES = new Set(['queued', 'running']);
@@ -349,25 +350,8 @@ function UploadStep(props: {
   };
 
   const copyStationAddress = async () => {
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(window.location.href);
-      } else {
-        const helper = document.createElement('textarea');
-        helper.value = window.location.href;
-        helper.setAttribute('readonly', '');
-        helper.style.position = 'fixed';
-        helper.style.opacity = '0';
-        document.body.appendChild(helper);
-        helper.select();
-        const copied = document.execCommand('copy');
-        helper.remove();
-        if (!copied) throw new Error('copy rejected');
-      }
-      toast.success(c().addressCopied);
-    } catch {
-      toast.error(c().copyFailed);
-    }
+    if (await copyText(window.location.href)) toast.success(c().addressCopied);
+    else toast.error(c().copyFailed);
   };
 
   return (

@@ -793,7 +793,10 @@ export const fr: Dict = {
   },
   social: {
     copied: 'Copié dans le presse-papiers',
-    shareFailed: 'Impossible de partager',
-    shareIdentityMissing: "Cette chanson n'a pas de source partageable",
+    copiedTextOnly: "Copié : ce titre n'a pas de lien à partager",
+    copyAction: 'Copier',
+    copyManualTitle: 'Copiez ce lien',
+    copyManualTitleText: 'Copiez ceci',
+    copyManualHint: "Votre navigateur n'a pas autorisé la copie automatique. Sélectionnez le texte et copiez-le à la main.",
   },
 };
