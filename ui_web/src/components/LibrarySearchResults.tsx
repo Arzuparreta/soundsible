@@ -15,6 +15,7 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 import { t } from '../lib/i18n';
 import type { LibrarySearchResult } from '../lib/librarySearch';
 import styles from './LibrarySearchResults.module.css';
+import { registerPrimaryScroll } from '../lib/scrollHistory';
 
 /** Artwork for a row: the engine's file cover, or the snapshot's thumbnail for
  * a song we hold no file for. */
@@ -102,7 +103,15 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
   createEffect(on(rowH, () => virtualizer.measure(), { defer: true }));
 
   return (
-    <div ref={scrollRef} class={styles.scroll} data-library-scroll data-primary-scroll>
+    <div
+      ref={(element) => {
+        scrollRef = element;
+        registerPrimaryScroll(element);
+      }}
+      class={styles.scroll}
+      data-library-scroll
+      data-primary-scroll
+    >
       <Show when={props.results.length > 0} fallback={<EmptyState>{t('library.noSearchResults')}</EmptyState>}>
         <div class={styles.canvas} style={{ height: `${virtualizer.getTotalSize()}px` }}>
           <For each={virtualizer.getVirtualItems()}>

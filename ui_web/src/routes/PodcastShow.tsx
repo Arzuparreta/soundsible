@@ -8,6 +8,7 @@ import styles from './PodcastShow.module.css';
 import { neutralCoverStyle } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
+import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 
 function fmtDur(s?: number): string {
   if (s == null || !Number.isFinite(s) || s <= 0) return '';
@@ -60,13 +61,13 @@ export default function PodcastShow() {
     if (!id) return;
     await api.unsubscribePodcast(id).catch(() => {});
     await actions.syncLibrary();
-    navigate('/podcasts');
+    navigateBackOr(navigate, '/podcasts');
   };
 
   return (
     <div class="view">
       <header class={styles.header}>
-        <button class={styles.back} type="button" aria-label={t('podcastShow.ariaBack')} onClick={() => navigate('/podcasts')}>
+        <button class={styles.back} type="button" aria-label={t('podcastShow.ariaBack')} onClick={() => navigateBackOr(navigate, '/podcasts')}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M15 18l-6-6 6-6" />
           </svg>
@@ -94,7 +95,11 @@ export default function PodcastShow() {
         </button>
       </div>
 
-      <div class={styles.scroll} data-primary-scroll>
+      <div
+        ref={(element) => registerPrimaryScroll(element, () => !data.loading)}
+        class={styles.scroll}
+        data-primary-scroll
+      >
         <Show
           when={!data.loading}
           fallback={<SkeletonRows count={8} compact />}

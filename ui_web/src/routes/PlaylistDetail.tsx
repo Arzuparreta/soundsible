@@ -9,6 +9,7 @@ import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './PlaylistDetail.module.css';
 import { EmptyState } from '../components/EmptyState';
+import { navigateBackOr } from '../lib/scrollHistory';
 
 export default function PlaylistDetail() {
   const params = useParams();
@@ -42,7 +43,7 @@ export default function PlaylistDetail() {
   return (
     <div class="view">
       <header class={styles.header}>
-        <button class={styles.back} type="button" aria-label={t('playlistDetail.ariaBack')} onClick={() => navigate('/playlists')}>
+        <button class={styles.back} type="button" aria-label={t('playlistDetail.ariaBack')} onClick={() => navigateBackOr(navigate, '/playlists')}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M15 18l-6-6 6-6" />
           </svg>

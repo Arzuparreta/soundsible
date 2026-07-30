@@ -8,6 +8,7 @@ import {
   Show,
 } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
+import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { ApiError } from '../lib/api';
 import {
   migrationApi,
@@ -276,7 +277,11 @@ export default function Migrate() {
   return (
     <div class="view">
       <ViewHeader title={c().title} />
-      <div class={styles.scroll} data-primary-scroll>
+      <div
+        ref={(element) => registerPrimaryScroll(element, () => !restoring())}
+        class={styles.scroll}
+        data-primary-scroll
+      >
         <Show when={!restoring()} fallback={<StatusCard label={c().recent} />}>
           <Show when={job()} fallback={<UploadStep busy={busy()} dragging={dragging()} setDragging={setDragging} analyze={analyze} />}>
             {(current) => (

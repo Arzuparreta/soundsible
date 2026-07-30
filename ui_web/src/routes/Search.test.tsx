@@ -27,8 +27,15 @@ const storeMock = vi.hoisted(() => ({
   playTrack: vi.fn(),
   library: [] as Array<Record<string, unknown>>,
 }));
+const routerMock = vi.hoisted(() => ({
+  params: {} as Record<string, string>,
+  setParams: vi.fn(),
+}));
 
-vi.mock('@solidjs/router', () => ({ useNavigate: () => vi.fn() }));
+vi.mock('@solidjs/router', () => ({
+  useNavigate: () => vi.fn(),
+  useSearchParams: () => [routerMock.params, routerMock.setParams],
+}));
 vi.mock('../lib/api', () => ({ api: apiMock }));
 vi.mock('../lib/nodeDiscover', () => ({
   ensureNodeFeed: nodeMock.ensureNodeFeed,
@@ -71,6 +78,7 @@ describe('Search route', () => {
     nodeMock.items = [];
     nodeMock.loading = false;
     storeMock.library = [];
+    routerMock.params = {};
     window.location.hash = '#/search';
     apiMock.searchCatalog.mockResolvedValue({ items: [], sections: [] });
     apiMock.searchYouTube.mockResolvedValue([
@@ -109,6 +117,22 @@ describe('Search route', () => {
     await waitFor(() => expect(apiMock.searchYouTube).toHaveBeenCalledWith('Oliver Heldens live set', expect.any(AbortSignal)));
     expect(await screen.findByText('YouTube results')).toBeInTheDocument();
     expect(screen.getByText('Oliver Heldens Live Set')).toBeInTheDocument();
+  });
+
+  it('reconstructs an executed search from route parameters', async () => {
+    routerMock.params = { q: 'Boards of Canada', tab: 'album' };
+    render(() => <Search />);
+
+    await waitFor(() => expect(apiMock.searchCatalog).toHaveBeenCalledWith(
+      'Boards of Canada',
+      expect.any(AbortSignal),
+      'album',
+    ));
+    expect(screen.getByDisplayValue('Boards of Canada')).toBeInTheDocument();
+    expect(routerMock.setParams).toHaveBeenCalledWith(
+      { q: 'Boards of Canada', domain: undefined, tab: 'album' },
+      { replace: true },
+    );
   });
 
   it('renders the complete neutral mixed response in one list', async () => {

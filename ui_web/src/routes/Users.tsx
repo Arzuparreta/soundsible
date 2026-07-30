@@ -10,6 +10,7 @@ import { t } from '../lib/i18n';
 import PasswordFields from '../components/PasswordFields';
 import { invites, isAdmin, user, users, type Role, type User } from '../lib/session';
 import styles from './Users.module.css';
+import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 
 function initials(person: User): string {
   return (person.display_name || person.username).trim().slice(0, 1);
@@ -117,7 +118,11 @@ export default function Users_() {
   };
 
   return (
-    <section class={styles.page}>
+    <section
+      ref={(element) => registerPrimaryScroll(element, () => !list.loading)}
+      class={styles.page}
+      data-primary-scroll
+    >
       <ViewHeader title={t('users.title')} />
 
       <Show
@@ -246,7 +251,7 @@ export default function Users_() {
           </Button>
         </form>
 
-        <Button variant="ghost" onClick={() => navigate('/settings')}>
+        <Button variant="ghost" onClick={() => navigateBackOr(navigate, '/settings')}>
           {t('common.back')}
         </Button>
       </Show>

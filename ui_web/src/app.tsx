@@ -7,6 +7,7 @@ import { NowPlaying } from './components/NowPlaying';
 import { AutoMode } from './components/AutoMode';
 import { ResumeBanner } from './components/ResumeBanner';
 import { ContextMenuOutlet } from './lib/contextMenu';
+import { ScrollHistoryManager } from './lib/scrollHistory';
 import styles from './app.module.css';
 
 /**
@@ -17,6 +18,7 @@ import styles from './app.module.css';
 export default function Shell(props: RouteSectionProps) {
   return (
     <div class={styles.app}>
+      <ScrollHistoryManager />
       <Sidebar />
       <main class={styles.content}>{props.children}</main>
       <div class={styles.dock}>

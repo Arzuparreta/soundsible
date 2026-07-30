@@ -1,5 +1,5 @@
 import { createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { A } from '@solidjs/router';
+import { A, useSearchParams } from '@solidjs/router';
 import { state, actions, downloadCounts, favouriteRows, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
@@ -13,9 +13,11 @@ import { searchLibrary } from '../lib/librarySearch';
 import { createTopSwipeReveal } from '../lib/topSwipeReveal';
 import styles from './Library.module.css';
 import { EmptyState } from '../components/EmptyState';
+import { registerPrimaryScroll } from '../lib/scrollHistory';
 
 /** Library view: songs (sortable, virtualized) or artists browser. */
 export default function Library() {
+  const [searchParams, setSearchParams] = useSearchParams();
   let viewRef: HTMLDivElement | undefined;
   const active = createMemo(() => downloadCounts().active);
   // Keyed off the resolved rows rather than library ids, so "favourites first"
@@ -24,7 +26,13 @@ export default function Library() {
   const songs = createMemo(() => musicLibrary());
   const sorted = createMemo(() => sortTracks(songs(), librarySort(), favSet()));
   const artists = createMemo(() => buildArtists(songs()));
-  const [query, setQuery] = createSignal('');
+  const [query, setQuerySignal] = createSignal(
+    typeof searchParams.q === 'string' ? searchParams.q : '',
+  );
+  const setQuery = (next: string) => {
+    setQuerySignal(next);
+    setSearchParams({ q: next || undefined }, { replace: true });
+  };
   const [searchFocused, setSearchFocused] = createSignal(false);
   const searchResults = createMemo(() => searchLibrary(sorted(), artists(), query()));
   const searching = createMemo(() => query().trim().length > 0);
@@ -55,6 +63,7 @@ export default function Library() {
   onMount(() => {
     const mq = window.matchMedia('(max-width: 1023px)');
     setIsMobile(mq.matches);
+    setSearchProgress(mq.matches ? (searching() ? 1 : 0) : 1);
     const onChange = (e: MediaQueryListEvent) => {
       setIsMobile(e.matches);
       if (!e.matches) {
@@ -260,7 +269,12 @@ export default function Library() {
           when={libraryTab() === 'songs'}
           fallback={
             <Show when={artists().length > 0} fallback={emptyState(t('library.emptyArtists'))}>
-              <div class={styles.artistsScroll} data-library-scroll data-primary-scroll>
+              <div
+                ref={(element) => registerPrimaryScroll(element)}
+                class={styles.artistsScroll}
+                data-library-scroll
+                data-primary-scroll
+              >
                 <ArtistGrid artists={artists()} />
               </div>
             </Show>

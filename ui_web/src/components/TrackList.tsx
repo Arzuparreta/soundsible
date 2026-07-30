@@ -16,6 +16,7 @@ import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import styles from './TrackList.module.css';
 import { SkeletonRows } from './Skeleton';
 import { EmptyState } from './EmptyState';
+import { registerPrimaryScroll } from '../lib/scrollHistory';
 
 /** Current value of the `--row-h` design token, in pixels. Falls back to the
  * mobile default when the stylesheet has not applied yet (SSR, tests). */
@@ -105,7 +106,15 @@ export default function TrackList(props: {
   createEffect(on(rowH, () => virtualizer.measure(), { defer: true }));
 
   return (
-    <div ref={scrollRef} class={styles.scroll} data-library-scroll data-primary-scroll>
+    <div
+      ref={(element) => {
+        scrollRef = element;
+        registerPrimaryScroll(element, () => !props.loading || props.tracks.length > 0);
+      }}
+      class={styles.scroll}
+      data-library-scroll
+      data-primary-scroll
+    >
       <Show
         when={!(props.loading && props.tracks.length === 0)}
         fallback={<SkeletonRows count={10} />}

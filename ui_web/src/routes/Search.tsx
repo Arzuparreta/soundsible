@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, onCleanup, onMount, untrack, type JSX } from 'solid-js';
-import { useNavigate } from '@solidjs/router';
+import { useNavigate, useSearchParams } from '@solidjs/router';
 import { api } from '../lib/api';
 import {
   actions,
@@ -39,6 +39,7 @@ import { sharedCapsuleFromHash, type TrackShareCapsuleV1 } from '../lib/trackSha
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { SearchField } from '../components/SearchField';
 import { CatalogResultRow } from '../components/CatalogResultRow';
+import { registerPrimaryScroll } from '../lib/scrollHistory';
 
 type SearchDomain = 'music' | 'youtube';
 type SearchTab = 'all' | 'track,library_track' | 'artist' | 'album';
@@ -90,9 +91,15 @@ function candidateVideoId(candidate: Record<string, unknown>): string {
 
 export default function Search() {
   const navigate = useNavigate();
-  const [domain, setDomain] = createSignal<SearchDomain>('music');
-  const [q, setQ] = createSignal('');
-  const [tab, setTab] = createSignal<SearchTab>('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialDomain: SearchDomain = searchParams.domain === 'youtube' ? 'youtube' : 'music';
+  const initialTab: SearchTab = tabs.some((candidate) => candidate.id === searchParams.tab)
+    ? searchParams.tab as SearchTab
+    : 'all';
+  const initialQuery = typeof searchParams.q === 'string' ? searchParams.q : '';
+  const [domain, setDomain] = createSignal<SearchDomain>(initialDomain);
+  const [q, setQ] = createSignal(initialQuery);
+  const [tab, setTab] = createSignal<SearchTab>(initialTab);
   const [items, setItems] = createSignal<CatalogItem[]>([]);
   const [interpretedAs, setInterpretedAs] = createSignal('');
   const [loading, setLoading] = createSignal(false);
@@ -104,7 +111,7 @@ export default function Search() {
   const [suggestions, setSuggestions] = createSignal<string[]>([]);
   const [showSuggest, setShowSuggest] = createSignal(false);
   const [lastRun, setLastRun] = createSignal('');
-  const [recents, setRecents] = createSignal<string[]>(loadRecents('music'));
+  const [recents, setRecents] = createSignal<string[]>(loadRecents(initialDomain));
   const [saving, setSaving] = createSignal<Set<string>>(new Set());
   const [review, setReview] = createSignal<{ item: CatalogItem; response: CatalogSaveResponse } | null>(null);
   const [sharedCapsule, setSharedCapsule] = createSignal<TrackShareCapsuleV1 | null>(null);
@@ -205,6 +212,9 @@ export default function Search() {
     else if (/[?&]shared=/.test(window.location.hash)) {
       setQ(tr('search.sharedLink'));
       setSharedInvalid(true);
+    }
+    else if (initialQuery.trim().length >= 2) {
+      runSearch(parseSearchInput(initialQuery).query, initialDomain, initialTab);
     }
     // Mobile navigation should land on Search without summoning the keyboard.
     // Fine pointers retain the fast desktop workflow.
@@ -319,6 +329,14 @@ export default function Search() {
 
   const runSearch = (query: string, nextDomain = domain(), nextTab = tab()) => {
     setLastRun(query.trim());
+    setSearchParams(
+      {
+        q: q().trim() || query.trim() || undefined,
+        domain: nextDomain === 'youtube' ? 'youtube' : undefined,
+        tab: nextDomain === 'music' && nextTab !== 'all' ? nextTab : undefined,
+      },
+      { replace: true },
+    );
     if (nextDomain === 'youtube') runYouTube(query);
     else runCatalog(query, nextTab);
   };
@@ -397,9 +415,7 @@ export default function Search() {
       setSharedError(false);
       setSharedInvalid(false);
       setSharedLoading(false);
-      const clean = new URL(window.location.href);
-      clean.hash = '#/search';
-      window.history.replaceState(null, '', clean);
+      setSearchParams({ shared: undefined }, { replace: true });
     }
     const { query: parsed, forceYt } = parseSearchInput(value);
     const nextDomain = forceYt || parseYouTubeInput(parsed) ? 'youtube' : domain();
@@ -428,7 +444,7 @@ export default function Search() {
   const setActiveTab = (next: SearchTab) => {
     if (next === tab() && !loading()) return;
     setTab(next);
-    runCatalog(q(), next);
+    runSearch(parseSearchInput(q()).query, 'music', next);
   };
 
   const setActiveDomain = (next: SearchDomain) => {
@@ -597,7 +613,14 @@ export default function Search() {
         </div>
       </Show>
 
-      <div class={styles.scroll} data-primary-scroll>
+      <div
+        ref={(element) => registerPrimaryScroll(
+          element,
+          () => !loading() && !youtubeLoading() && !sharedLoading() && !nodeLoading(),
+        )}
+        class={styles.scroll}
+        data-primary-scroll
+      >
         <Show when={loading() && items().length > 0 && domain() === 'music'}>
           <div class={styles.loadingBar} role="status" aria-live="polite" aria-label={tr('common.loading')}>
             <span>{tr('common.loading')}</span>

@@ -11,9 +11,14 @@ const apiMock = vi.hoisted(() => ({
   sendDiscoveryFeedback: vi.fn(),
   undoDiscoveryFeedback: vi.fn(),
 }));
+const routerMock = vi.hoisted(() => ({
+  params: {} as Record<string, string>,
+  setParams: vi.fn(),
+}));
 
 vi.mock('@solidjs/router', () => ({
   useNavigate: () => vi.fn(),
+  useSearchParams: () => [routerMock.params, routerMock.setParams],
   A: (props: { href: string; children: JSX.Element }) => <a href={props.href}>{props.children}</a>,
 }));
 vi.mock('../lib/api', () => ({ api: apiMock }));
@@ -34,6 +39,7 @@ describe('Podcasts route search state', () => {
   beforeEach(() => {
     setLocale('en');
     vi.useFakeTimers();
+    routerMock.params = {};
     apiMock.searchPodcasts.mockResolvedValue([]);
   });
 
@@ -67,6 +73,21 @@ describe('Podcasts route search state', () => {
     resolveNext([{ feed_url: 'second.xml', title: 'Second show', author: 'Second author' }]);
     expect(await screen.findByText('Second show')).toBeInTheDocument();
     expect(screen.queryByText('First show')).not.toBeInTheDocument();
+  });
+
+  it('reconstructs the routed podcast query on mount', async () => {
+    routerMock.params = { q: 'sound design' };
+    render(() => <Podcasts />);
+
+    await waitFor(() => expect(apiMock.searchPodcasts).toHaveBeenCalledWith(
+      'sound design',
+      expect.any(AbortSignal),
+    ));
+    expect(screen.getByDisplayValue('sound design')).toBeInTheDocument();
+    expect(routerMock.setParams).toHaveBeenCalledWith(
+      { q: 'sound design' },
+      { replace: true },
+    );
   });
 
   it('does not let an aborted older request replace a newer result', async () => {

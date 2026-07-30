@@ -15,6 +15,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import SongRow from '../components/SongRow';
 import { CatalogResultRow } from '../components/CatalogResultRow';
+import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 
 type ViewMode = 'discover' | 'library';
 
@@ -28,7 +29,7 @@ function formatFans(n: number): string {
  * Reached by tapping an artist name, badge, or card anywhere in the app. */
 export default function Artist() {
   const params = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const name = createMemo(() => decodeArtistName(params.name));
   const viewParams = createMemo(() => parseViewParams(searchParams as Record<string, string | undefined>));
@@ -176,13 +177,18 @@ export default function Artist() {
 
   const switchView = (mode: ViewMode) => {
     setViewOverride(mode);
+    setSearchParams({ view: mode }, { replace: true });
   };
 
   return (
     <div class="view">
-      <div class={styles.pageScroll} data-primary-scroll>
+      <div
+        ref={(element) => registerPrimaryScroll(element, () => !profile.loading)}
+        class={styles.pageScroll}
+        data-primary-scroll
+      >
         <header class={styles.header}>
-        <button class={styles.back} type="button" aria-label={t('artist.ariaBack')} onClick={() => navigate(-1)}>
+        <button class={styles.back} type="button" aria-label={t('artist.ariaBack')} onClick={() => navigateBackOr(navigate, '/search')}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M15 18l-6-6 6-6" />
           </svg>

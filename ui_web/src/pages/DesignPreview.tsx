@@ -3,6 +3,7 @@ import Button from '../components/Button';
 import SongRow from '../components/SongRow';
 import type { Track } from '../types/music';
 import styles from './DesignPreview.module.css';
+import { registerPrimaryScroll } from '../lib/scrollHistory';
 
 const SAMPLE_TRACKS: Track[] = [
   { id: 't1', title: 'Midnight Drive', artist: 'Neon Forest', duration: 214 },
@@ -42,7 +43,7 @@ export default function DesignPreview() {
   const [activeId, setActiveId] = createSignal<string | null>('t3');
 
   return (
-    <div class={styles.page}>
+    <div ref={(element) => registerPrimaryScroll(element)} class={styles.page} data-primary-scroll>
       <header class={styles.head}>
         <span class={styles.badge}>Design system · preview</span>
         <h1 class={styles.h1}>Soundsible</h1>

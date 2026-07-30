@@ -15,6 +15,7 @@ import { t, locale, setLocale, LOCALES, type Locale } from '../lib/i18n';
 import { changePassword, isAdmin, logout, updateProfile, user } from '../lib/session';
 import { associationUrl } from '../lib/trackShare';
 import styles from './Settings.module.css';
+import { registerPrimaryScroll } from '../lib/scrollHistory';
 
 function Chevron() {
   return (
@@ -382,7 +383,7 @@ export default function Settings() {
     <div class="view">
       <ViewHeader title={t('settings.title')} />
 
-      <div class={styles.scroll} data-primary-scroll>
+      <div ref={(element) => registerPrimaryScroll(element)} class={styles.scroll} data-primary-scroll>
         <Group label={t('accessibility.title')}>
           <div class={`${styles.panel} ${styles.accessibilityPanel}`}>
             <DisplayPreferences />

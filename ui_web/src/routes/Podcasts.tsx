@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, Show, onMount, onCleanup } from 'solid-js';
-import { A, useNavigate } from '@solidjs/router';
+import { A, useNavigate, useSearchParams } from '@solidjs/router';
 import { api } from '../lib/api';
 import { state, actions } from '../stores';
 import { ensureDiscover, topPodcasts } from '../lib/discover';
@@ -14,6 +14,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { SearchField } from '../components/SearchField';
+import { registerPrimaryScroll } from '../lib/scrollHistory';
 
 function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
@@ -22,7 +23,8 @@ function isAbort(e: unknown): boolean {
 /** Podcasts: your subscriptions grid + iTunes directory search → subscribe. */
 export default function Podcasts() {
   const navigate = useNavigate();
-  const [q, setQ] = createSignal('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [q, setQ] = createSignal(typeof searchParams.q === 'string' ? searchParams.q : '');
   const [results, setResults] = createSignal<PodcastSearchResult[]>([]);
   const [loading, setLoading] = createSignal(false);
   const [searchError, setSearchError] = createSignal(false);
@@ -37,10 +39,9 @@ export default function Podcasts() {
   let debounce: number | undefined;
   let requestId = 0;
 
-  onMount(() => ensureDiscover());
-
   const run = (query: string) => {
     query = query.trim();
+    setSearchParams({ q: query || undefined }, { replace: true });
     const current = ++requestId;
     aborter?.abort();
     aborter = undefined;
@@ -67,6 +68,11 @@ export default function Podcasts() {
         if (current === requestId) setLoading(false);
       });
   };
+
+  onMount(() => {
+    ensureDiscover();
+    if (q().trim().length >= 2) run(q());
+  });
 
   const onInput = (v: string) => {
     setQ(v);
@@ -150,7 +156,11 @@ export default function Podcasts() {
         />
       </div>
 
-      <div class={styles.scroll} data-primary-scroll>
+      <div
+        ref={(element) => registerPrimaryScroll(element, () => !loading())}
+        class={styles.scroll}
+        data-primary-scroll
+      >
         <Show when={loading() && results().length > 0}>
           <div class={styles.loadingBar} role="status" aria-live="polite" aria-label={t('common.loading')}>
             <span>{t('common.loading')}</span>

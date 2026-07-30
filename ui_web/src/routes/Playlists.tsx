@@ -14,6 +14,7 @@ import type { Track } from '../types/music';
 import styles from './Playlists.module.css';
 import { EmptyState } from '../components/EmptyState';
 import { createResponsiveTap } from '../lib/responsiveTap';
+import { registerPrimaryScroll } from '../lib/scrollHistory';
 
 export default function Playlists() {
   const navigate = useNavigate();
@@ -39,7 +40,7 @@ export default function Playlists() {
   return (
     <div class="view">
       <ViewHeader title={t('playlists.title')} meta={`${names().length}`} />
-      <div class={styles.scroll} data-primary-scroll>
+      <div ref={(element) => registerPrimaryScroll(element)} class={styles.scroll} data-primary-scroll>
         <button class={styles.newBtn} type="button" onClick={createNew}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M12 5v14M5 12h14" />
