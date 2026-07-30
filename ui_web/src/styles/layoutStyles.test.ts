@@ -64,7 +64,9 @@ describe('route scroll containment', () => {
 
 describe('unified player geometry', () => {
   const nowPlaying = path.resolve(process.cwd(), 'src/components/NowPlaying.module.css');
+  const browser = path.resolve(process.cwd(), 'src/components/NowPlayingBrowser.module.css');
   const surface = path.resolve(process.cwd(), 'src/components/PlayerSurface.module.css');
+  const tokens = path.resolve(process.cwd(), 'src/styles/tokens.css');
 
   it('uses the visual viewport and reserves both device safe areas through shared geometry', () => {
     const surfaceGeometry = scopedDeclarations(surface, '.surface');
@@ -94,5 +96,22 @@ describe('unified player geometry', () => {
       });
     });
     expect(hiddenRules).toEqual([]);
+  });
+
+  it('keeps desktop layout controls above the workspace and browser close mobile-only', () => {
+    expect(scopedDeclarations(surface, '.layoutButton')).toMatchObject({
+      display: 'none',
+    });
+    expect(scopedDeclarations(surface, '.layoutButton', 'min-width: 1024px')).toMatchObject({
+      display: 'inline-grid',
+    });
+    expect(scopedDeclarations(browser, '.close', 'min-width:1024px')).toMatchObject({
+      display: 'none',
+    });
+
+    const z = declarations(tokens, ':root');
+    expect(Number(z['--z-auto'])).toBeLessThan(Number(z['--z-modal']));
+    expect(Number(z['--z-modal'])).toBeLessThan(Number(z['--z-popover']));
+    expect(Number(z['--z-popover'])).toBeLessThan(Number(z['--z-toast']));
   });
 });

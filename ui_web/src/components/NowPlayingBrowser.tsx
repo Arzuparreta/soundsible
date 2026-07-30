@@ -63,25 +63,6 @@ type SearchReturn = {
   scope: 'global' | 'library';
 };
 
-const [browserOpen, setBrowserOpen] = createSignal(localStorage.getItem('np:panel') !== 'closed');
-export { browserOpen };
-
-export function toggleBrowser(): void {
-  const next = !browserOpen();
-  setBrowserOpen(next);
-  localStorage.setItem('np:panel', next ? 'open' : 'closed');
-}
-
-export function openBrowser(): void {
-  setBrowserOpen(true);
-  localStorage.setItem('np:panel', 'open');
-}
-
-export function closeBrowser(): void {
-  setBrowserOpen(false);
-  localStorage.setItem('np:panel', 'closed');
-}
-
 function isAbort(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }

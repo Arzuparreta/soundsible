@@ -6,7 +6,6 @@ import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import { AutoMode } from './AutoMode';
 import { NowPlaying, type NowPlayingMobilePanel } from './NowPlaying';
-import { browserOpen, openBrowser, toggleBrowser } from './NowPlayingBrowser';
 import styles from './PlayerSurface.module.css';
 
 const MOBILE_QUERY = '(max-width: 1023px)';
@@ -119,23 +118,9 @@ export function PlayerSurface() {
     actions.enterAutoMode();
   };
 
-  const browserSelected = () =>
-    !auto() && (mobileLayout() ? mobilePanel() === 'browser' : browserOpen());
-
-  const browserActionLabel = () =>
-    !mobileLayout() && browserSelected()
-      ? t('nowPlaying.hideSearchPanel')
-      : t('nowPlaying.showSearchPanel');
-
   const browserAction = () => {
-    const wasAuto = auto();
-    if (wasAuto) actions.exitAutoMode();
-    if (mobileLayout()) {
-      setMobilePanel('browser');
-      return;
-    }
-    if (wasAuto) openBrowser();
-    else toggleBrowser();
+    if (auto()) actions.exitAutoMode();
+    setMobilePanel('browser');
   };
 
   const beginTouch = (event: TouchEvent) => {
@@ -261,19 +246,20 @@ export function PlayerSurface() {
         <div class={styles.grain} aria-hidden="true" />
 
         <div class={styles.floatingChrome} data-no-surface-swipe="">
-          <button
-            classList={{ [styles.chromeButton]: true, [styles.chromeButtonActive]: browserSelected() }}
-            type="button"
-            aria-label={browserActionLabel()}
-            title={browserActionLabel()}
-            aria-pressed={browserSelected()}
-            onClick={browserAction}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-              <circle cx="10.5" cy="10.5" r="5.5" />
-              <path d="m15 15 4 4M4 4h16v16H4" opacity=".58" />
-            </svg>
-          </button>
+          <Show when={mobileLayout()}>
+            <button
+              classList={{ [styles.chromeButton]: true, [styles.browserButton]: true }}
+              type="button"
+              aria-label={t('nowPlaying.openSearch')}
+              title={t('nowPlaying.openSearch')}
+              onClick={browserAction}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <circle cx="10.5" cy="10.5" r="5.5" />
+                <path d="m15 15 4 4" />
+              </svg>
+            </button>
+          </Show>
 
           <div class={styles.modePill} role="tablist" aria-label={t('nowPlaying.modeSelector')}>
             <button
@@ -299,7 +285,12 @@ export function PlayerSurface() {
             </button>
           </div>
 
-          <button class={styles.chromeButton} type="button" aria-label={t('common.close')} onClick={closeSurface}>
+          <button
+            classList={{ [styles.chromeButton]: true, [styles.closeButton]: true }}
+            type="button"
+            aria-label={t('common.close')}
+            onClick={closeSurface}
+          >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
               <path d="m6 9 6 6 6-6" />
             </svg>

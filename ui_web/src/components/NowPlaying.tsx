@@ -12,7 +12,8 @@ import { savedFromTrack } from '../lib/saved';
 import { FavouriteButton } from './FavouriteButton';
 import { CollectionButton } from './CollectionButton';
 import { t as tr } from '../lib/i18n';
-import { NowPlayingBrowser, browserOpen, closeBrowser } from './NowPlayingBrowser';
+import { NowPlayingBrowser } from './NowPlayingBrowser';
+import { NowPlayingLayoutControl } from './NowPlayingLayoutControl';
 import { RadioBadge, onStopRadio } from './RadioBadge';
 import { Spinner } from './Spinner';
 import { LyricsPanel } from './LyricsPanel';
@@ -20,11 +21,13 @@ import { openActionMenu } from './ActionMenu';
 import { buildTrackMenu } from './trackActions';
 import {
   DEFAULT_NOW_PLAYING_LAYOUT,
+  layoutFromPreset,
   movePanel,
   NOW_PLAYING_LAYOUT_KEY,
   parseNowPlayingLayout,
   reorderPanel,
   resizeAdjacentPanels,
+  type NowPlayingLayoutPresetId,
   type NowPlayingPanelId,
 } from '../lib/nowPlayingLayout';
 import styles from './NowPlaying.module.css';
@@ -68,11 +71,8 @@ export function NowPlaying(props: {
   );
   const [layoutBusy, setLayoutBusy] = createSignal(false);
   const desktopLyricsActive = createMemo(() => desktopLyrics() && !isPodcast());
-  const visiblePanels = createMemo(() =>
-    desktopLayout().order.filter((panel) => panel !== 'browser' || browserOpen()),
-  );
   const renderedPanels = createMemo<NowPlayingPanelId[]>(() =>
-    mobileLayout() ? ['browser', 'stage', 'queue'] : visiblePanels(),
+    mobileLayout() ? ['browser', 'stage', 'queue'] : desktopLayout().order,
   );
   const panelMinimum: Record<NowPlayingPanelId, number> = { browser: 240, stage: 360, queue: 220 };
   const gridColumns = createMemo(() =>
@@ -105,7 +105,15 @@ export function NowPlaying(props: {
 
   let requestedMobilePanel: NowPlayingMobilePanel | null = null;
   let carouselFrame = 0;
+  let carouselAligned = false;
   let previousSurfaceOpen = props.surfaceOpen;
+  const jumpToTile = (tile: HTMLElement) => {
+    if (!workspaceEl) return;
+    const previousBehavior = workspaceEl.style.scrollBehavior;
+    workspaceEl.style.scrollBehavior = 'auto';
+    workspaceEl.scrollLeft = tile.offsetLeft;
+    workspaceEl.style.scrollBehavior = previousBehavior;
+  };
   createEffect(() => {
     const surfaceOpen = props.surfaceOpen;
     const opening = surfaceOpen && !previousSurfaceOpen;
@@ -115,12 +123,13 @@ export function NowPlaying(props: {
     const tile = workspaceEl.querySelector<HTMLElement>(`[data-now-playing-tile="${panel}"]`);
     if (!tile) return;
     requestedMobilePanel = panel;
-    if (!surfaceOpen) cancelAnimationFrame(carouselFrame);
-    requestAnimationFrame(() => {
-      workspaceEl?.scrollTo({
-        left: tile.offsetLeft,
-        behavior: !surfaceOpen || opening ? 'auto' : 'smooth',
-      });
+    cancelAnimationFrame(carouselFrame);
+    const alignImmediately = !surfaceOpen || opening || !carouselAligned;
+    carouselAligned = surfaceOpen;
+    if (alignImmediately) jumpToTile(tile);
+    carouselFrame = requestAnimationFrame(() => {
+      if (alignImmediately) jumpToTile(tile);
+      else workspaceEl?.scrollTo({ left: tile.offsetLeft, behavior: 'smooth' });
     });
   });
 
@@ -382,6 +391,19 @@ export function NowPlaying(props: {
     animateRects(before, '[data-now-playing-tile]');
   };
 
+  const applyLayoutPreset = (preset: NowPlayingLayoutPresetId) =>
+    updateLayout(() => setDesktopLayout(layoutFromPreset(preset)));
+
+  const resetDesktopLayout = () => updateLayout(() => {
+    try {
+      localStorage.removeItem(NOW_PLAYING_LAYOUT_KEY);
+      localStorage.removeItem('np:panelSide');
+    } catch {
+      /* storage disabled */
+    }
+    setDesktopLayout(layoutFromPreset('balanced'));
+  });
+
   const changePanelOrder = (panel: NowPlayingPanelId, target: number) =>
     updateLayout(() => setDesktopLayout((layout) => ({
       ...layout,
@@ -423,14 +445,6 @@ export function NowPlaying(props: {
                 order: movePanel(layout.order, props.panel, 1),
               }))),
             },
-            {
-              label: tr('nowPlaying.resetLayout'),
-              onSelect: () => updateLayout(() => setDesktopLayout({
-                ...DEFAULT_NOW_PLAYING_LAYOUT,
-                order: [...DEFAULT_NOW_PLAYING_LAYOUT.order],
-                ratios: { ...DEFAULT_NOW_PLAYING_LAYOUT.ratios },
-              })),
-            },
           ],
         });
       }}
@@ -439,22 +453,32 @@ export function NowPlaying(props: {
     </button>
   );
 
-  const Tile = (props: { panel: NowPlayingPanelId; children: JSX.Element }) => (
+  const Tile = (tileProps: { panel: NowPlayingPanelId; children: JSX.Element }) => (
     <section
+      ref={(element) => {
+        if (tileProps.panel !== props.mobilePanel) return;
+        queueMicrotask(() => {
+          if (!mobileLayout() || carouselAligned || !workspaceEl) return;
+          jumpToTile(element);
+          carouselAligned = props.surfaceOpen;
+        });
+      }}
       class={styles.tile}
-      data-now-playing-tile={props.panel}
+      data-now-playing-tile={tileProps.panel}
+      aria-hidden={mobileLayout() && props.mobilePanel !== tileProps.panel ? 'true' : undefined}
+      inert={mobileLayout() && props.mobilePanel !== tileProps.panel ? true : undefined}
       onDragOver={(event) => {
-        if (draggedPanel && draggedPanel !== props.panel) event.preventDefault();
+        if (draggedPanel && draggedPanel !== tileProps.panel) event.preventDefault();
       }}
       onDrop={(event) => {
         event.preventDefault();
         const panel = draggedPanel;
         draggedPanel = null;
-        if (!panel || panel === props.panel) return;
-        changePanelOrder(panel, renderedPanels().indexOf(props.panel));
+        if (!panel || panel === tileProps.panel) return;
+        changePanelOrder(panel, renderedPanels().indexOf(tileProps.panel));
       }}
     >
-      {props.children}
+      {tileProps.children}
     </section>
   );
 
@@ -558,6 +582,7 @@ export function NowPlaying(props: {
 
   return (
     <section ref={rootEl} class={styles.workspace} aria-label={tr('nowPlaying.playing')}>
+      <NowPlayingLayoutControl onSelect={applyLayoutPreset} onReset={resetDesktopLayout} />
       <Show when={t()} fallback={<div class={styles.empty}>{tr('nowPlaying.nothingPlaying')}</div>}>
         <div
           class={styles.main}
@@ -887,7 +912,6 @@ export function NowPlaying(props: {
                     <NowPlayingBrowser
                       onClose={() => {
                         if (mobileLayout()) props.onMobilePanelChange('stage');
-                        else closeBrowser();
                       }}
                       dragHandle={<PanelGrip panel="browser" />}
                     />

@@ -84,7 +84,8 @@ async function assertGeometry(page: Page) {
     const visible = (element: Element) => {
       const style = getComputedStyle(element);
       const rect = element.getBoundingClientRect();
-      return style.display !== 'none'
+      return !element.closest('[inert], [aria-hidden="true"]')
+        && style.display !== 'none'
         && style.visibility !== 'hidden'
         && style.opacity !== '0'
         && rect.width > 0

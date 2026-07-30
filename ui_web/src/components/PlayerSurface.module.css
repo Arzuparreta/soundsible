@@ -140,6 +140,27 @@
   justify-self: end;
 }
 
+.browserButton {
+  grid-column: 1;
+}
+
+.modePill {
+  grid-column: 2;
+}
+
+.closeButton {
+  grid-column: 3;
+  justify-self: end;
+}
+
+.layoutButton {
+  position: absolute;
+  z-index: 42;
+  top: var(--player-chrome-top);
+  left: clamp(14px, 2.2vw, 34px);
+  display: none;
+}
+
 .chromeButton svg {
   width: 21px;
   height: 21px;
@@ -230,8 +251,8 @@
 }
 
 .carouselDot {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   background: transparent;
   border: 0;
@@ -293,6 +314,12 @@
 
   .carouselNav {
     display: flex;
+  }
+}
+
+@media (min-width: 1024px) {
+  .layoutButton {
+    display: inline-grid;
   }
 }
 

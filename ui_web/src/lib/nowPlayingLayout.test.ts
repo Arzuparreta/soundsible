@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_NOW_PLAYING_LAYOUT,
+  layoutFromPreset,
   movePanel,
   normalizePanelRatios,
   parseNowPlayingLayout,
@@ -38,5 +39,29 @@ describe('nowPlayingLayout', () => {
     expect(resized.browser).toBeCloseTo(0.35);
     expect(resized.stage).toBeCloseTo(0.4);
     expect(resized.queue).toBeCloseTo(0.25);
+  });
+
+  it('builds independent presets with their intended order and emphasis', () => {
+    expect(layoutFromPreset('balanced')).toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
+    expect(layoutFromPreset('player')).toEqual({
+      version: 1,
+      order: ['browser', 'stage', 'queue'],
+      ratios: { browser: 0.2, stage: 0.6, queue: 0.2 },
+    });
+    expect(layoutFromPreset('explore')).toEqual({
+      version: 1,
+      order: ['stage', 'browser', 'queue'],
+      ratios: { browser: 0.5, stage: 0.3, queue: 0.2 },
+    });
+    expect(layoutFromPreset('queue')).toEqual({
+      version: 1,
+      order: ['browser', 'queue', 'stage'],
+      ratios: { browser: 0.2, stage: 0.3, queue: 0.5 },
+    });
+
+    const first = layoutFromPreset('balanced');
+    first.order.reverse();
+    first.ratios.stage = 1;
+    expect(layoutFromPreset('balanced')).toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
   });
 });

@@ -6,6 +6,8 @@ export interface NowPlayingDesktopLayout {
   ratios: Record<NowPlayingPanelId, number>;
 }
 
+export type NowPlayingLayoutPresetId = 'balanced' | 'player' | 'explore' | 'queue';
+
 export const NOW_PLAYING_LAYOUT_KEY = 'np:desktopLayout:v1';
 export const DEFAULT_NOW_PLAYING_LAYOUT: NowPlayingDesktopLayout = {
   version: 1,
@@ -13,7 +15,35 @@ export const DEFAULT_NOW_PLAYING_LAYOUT: NowPlayingDesktopLayout = {
   ratios: { browser: 0.25, stage: 0.5, queue: 0.25 },
 };
 
+export const NOW_PLAYING_LAYOUT_PRESETS: Record<NowPlayingLayoutPresetId, NowPlayingDesktopLayout> = {
+  balanced: DEFAULT_NOW_PLAYING_LAYOUT,
+  player: {
+    version: 1,
+    order: ['browser', 'stage', 'queue'],
+    ratios: { browser: 0.2, stage: 0.6, queue: 0.2 },
+  },
+  explore: {
+    version: 1,
+    order: ['stage', 'browser', 'queue'],
+    ratios: { browser: 0.5, stage: 0.3, queue: 0.2 },
+  },
+  queue: {
+    version: 1,
+    order: ['browser', 'queue', 'stage'],
+    ratios: { browser: 0.2, stage: 0.3, queue: 0.5 },
+  },
+};
+
 const IDS: NowPlayingPanelId[] = ['browser', 'stage', 'queue'];
+
+export function layoutFromPreset(preset: NowPlayingLayoutPresetId): NowPlayingDesktopLayout {
+  const layout = NOW_PLAYING_LAYOUT_PRESETS[preset];
+  return {
+    ...layout,
+    order: [...layout.order],
+    ratios: { ...layout.ratios },
+  };
+}
 
 function isPanelId(value: unknown): value is NowPlayingPanelId {
   return value === 'browser' || value === 'stage' || value === 'queue';

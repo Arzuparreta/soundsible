@@ -112,10 +112,10 @@
   --z-header: 200;
   --z-omni: 300; /* the persistent player bar */
   --z-overlay: 1000; /* scrims */
+  --z-auto: 1050; /* fullscreen player; its menus and dialogs must remain above it */
   --z-modal: 1100;
   --z-popover: 1200;
   --z-toast: 1300;
-  --z-auto: 1250; /* autonomous listening environment; toasts remain visible */
   --z-max: 9999;
 
   /* ── Motion ── */

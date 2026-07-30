@@ -8,9 +8,6 @@ const harness = vi.hoisted(() => ({
   },
   setOpen: undefined as undefined | ((open: boolean) => void),
   setState: undefined as undefined | ((...args: unknown[]) => void),
-  setBrowserOpen: undefined as undefined | ((open: boolean) => void),
-  openBrowser: vi.fn(),
-  toggleBrowser: vi.fn(),
   mobileViewport: false,
 }));
 
@@ -49,18 +46,6 @@ vi.mock('./NowPlaying', () => ({
   NowPlaying: (props: { mobilePanel: string }) => <div data-testid="now-playing-view">{props.mobilePanel}</div>,
 }));
 vi.mock('./AutoMode', () => ({ AutoMode: () => <div data-testid="auto-mode-view">Auto</div> }));
-vi.mock('./NowPlayingBrowser', async () => {
-  const { createSignal } = await vi.importActual<typeof import('solid-js')>('solid-js');
-  const [browserOpen, setBrowserOpen] = createSignal(true);
-  harness.setBrowserOpen = setBrowserOpen;
-  harness.openBrowser.mockImplementation(() => setBrowserOpen(true));
-  harness.toggleBrowser.mockImplementation(() => setBrowserOpen((open) => !open));
-  return {
-    browserOpen,
-    openBrowser: harness.openBrowser,
-    toggleBrowser: harness.toggleBrowser,
-  };
-});
 
 import { PlayerSurface } from './PlayerSurface';
 
@@ -87,7 +72,6 @@ afterEach(() => {
     artist: 'Artist',
     cover: '/current.jpg',
   });
-  harness.setBrowserOpen?.(true);
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   harness.mobileViewport = false;
@@ -158,30 +142,20 @@ describe('PlayerSurface', () => {
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('stage');
   });
 
-  it('opens the compact browser without changing the desktop browser preference', () => {
+  it('opens the compact browser from the dedicated mobile search action', () => {
     harness.mobileViewport = true;
     render(() => <PlayerSurface />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.showSearchPanel' }));
+    const search = screen.getByRole('button', { name: 'nowPlaying.openSearch' });
+    expect(search).not.toHaveAttribute('aria-pressed');
+    fireEvent.click(search);
 
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('browser');
-    expect(harness.openBrowser).not.toHaveBeenCalled();
-    expect(harness.toggleBrowser).not.toHaveBeenCalled();
   });
 
-  it('opens the desktop browser from the top-left toggle', () => {
-    harness.setBrowserOpen?.(false);
+  it('does not expose the mobile search action in the desktop chrome', () => {
     render(() => <PlayerSurface />);
 
-    const toggle = screen.getByRole('button', { name: 'nowPlaying.showSearchPanel' });
-    expect(toggle).toHaveAttribute('aria-pressed', 'false');
-
-    fireEvent.click(toggle);
-
-    expect(harness.toggleBrowser).toHaveBeenCalledOnce();
-    expect(screen.getByRole('button', { name: 'nowPlaying.hideSearchPanel' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(screen.queryByRole('button', { name: 'nowPlaying.openSearch' })).not.toBeInTheDocument();
   });
 });
