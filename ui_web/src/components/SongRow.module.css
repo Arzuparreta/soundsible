@@ -193,12 +193,14 @@
   text-align: right;
 }
 
-/* Durations are dropped from every list on phones, where the width they take
- * costs more than the answer they give — you are picking a song by its title,
- * not by its length. The full number is still there on desktop, and on both it
- * is in Now Playing the moment the song starts. */
+/* Durations and direct actions are dropped from library rows on touch layouts,
+ * where they squeeze the title more than they help. Favourite and download
+ * remain available from the permanent ⋯ menu; player surfaces have their own
+ * heart and are deliberately unaffected. Desktop keeps every row control. */
 @media (max-width: 1023px) {
-  .duration {
+  .duration,
+  .rowHeart,
+  .rowCollect {
     display: none;
   }
 }
@@ -214,4 +216,3 @@
   border: 1px solid var(--hairline);
   border-radius: var(--radius-full);
 }
-
