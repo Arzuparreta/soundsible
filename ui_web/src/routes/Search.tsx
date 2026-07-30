@@ -7,7 +7,6 @@ import {
   isDownloadingKeys,
   isPlayingItem,
   isPlayingResult,
-  isSavedItem,
   isSavedKeys,
   ownedTrackForKeys,
 } from '../stores';
@@ -22,19 +21,15 @@ import { userKey } from '../lib/session';
 import {
   catalogPreviewId,
   itemArtist,
-  itemBusy,
   playCatalogItem,
   cancelCatalogResolve,
 } from '../lib/catalogItem';
 import SearchResultRow from '../components/SearchResultRow';
-import { savedFromCatalogItem, savedFromTrack } from '../lib/saved';
-import { FavouriteButton } from '../components/FavouriteButton';
-import { CollectionButton } from '../components/CollectionButton';
+import { savedFromTrack } from '../lib/saved';
 import { Spinner } from '../components/Spinner';
 import type { CatalogItem, CatalogSaveResponse, SavedEntry, SearchResult, Track } from '../types/music';
 import styles from './Search.module.css';
 import { coverStyle } from '../lib/cover';
-import { formatDuration } from '../lib/format';
 import { attachContextMenu } from '../lib/contextMenu';
 import { trackMenuOptions } from '../components/trackActions';
 import type { ActionMenuOptions } from '../components/ActionMenu';
@@ -42,6 +37,8 @@ import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { sharedCapsuleFromHash, type TrackShareCapsuleV1 } from '../lib/trackShare';
 import { createResponsiveTap } from '../lib/responsiveTap';
+import { SearchField } from '../components/SearchField';
+import { CatalogResultRow } from '../components/CatalogResultRow';
 
 type SearchDomain = 'music' | 'youtube';
 type SearchTab = 'all' | 'track,library_track' | 'artist' | 'album';
@@ -127,6 +124,9 @@ export default function Search() {
   const songs = createMemo(() =>
     items().filter((item) => ['track', 'library_track'].includes(item.type)),
   );
+  const artists = createMemo(() => items().filter((item) => item.type === 'artist'));
+  const albums = createMemo(() => items().filter((item) => item.type === 'album'));
+  const playlists = createMemo(() => items().filter((item) => item.type === 'playlist'));
   const openSharedTrack = (capsule: TrackShareCapsuleV1) => {
     const current = ++requestId;
     aborter?.abort();
@@ -426,6 +426,7 @@ export default function Search() {
   };
 
   const setActiveTab = (next: SearchTab) => {
+    if (next === tab() && !loading()) return;
     setTab(next);
     runCatalog(q(), next);
   };
@@ -547,14 +548,15 @@ export default function Search() {
     <div class="view">
       <div class={styles.searchBox}>
         <div class={styles.bar}>
-          <input
-            class={styles.input}
-            data-global-search-input
-            type="search"
+          <SearchField
             placeholder={tr('search.placeholder')}
+            clearLabel={tr('searchPanel.clear')}
             value={q()}
-            ref={searchInput}
-            onInput={(e) => onInput(e.currentTarget.value)}
+            global
+            inputRef={(element) => {
+              searchInput = element;
+            }}
+            onInput={onInput}
             onFocus={() => setShowSuggest(domain() === 'youtube')}
             onBlur={() => setShowSuggest(false)}
             onKeyDown={(e) => {
@@ -578,12 +580,14 @@ export default function Search() {
       </div>
 
       <Show when={!sharedCapsule() && !sharedInvalid() && domain() === 'music' && q().trim().length >= 2}>
-        <div class={styles.tabs}>
+        <div class={styles.tabs} role="tablist" aria-label={tr('search.resultsSection')}>
           <For each={tabs}>
             {(t) => (
               <button
                 classList={{ [styles.tab]: true, [styles.activeTab]: tab() === t.id }}
                 type="button"
+                role="tab"
+                aria-selected={tab() === t.id}
                 onClick={() => setActiveTab(t.id)}
               >
                 {t.label()}
@@ -594,6 +598,11 @@ export default function Search() {
       </Show>
 
       <div class={styles.scroll} data-primary-scroll>
+        <Show when={loading() && items().length > 0 && domain() === 'music'}>
+          <div class={styles.loadingBar} role="status" aria-live="polite" aria-label={tr('common.loading')}>
+            <span>{tr('common.loading')}</span>
+          </div>
+        </Show>
         <Switch>
           <Match when={sharedInvalid()}>
             <EmptyState compact tone="danger">{tr('search.sharedInvalid')}</EmptyState>
@@ -622,12 +631,10 @@ export default function Search() {
                 {(item) => (
                   <section class={styles.section}>
                     <h2 class={styles.sectionTitle}>{tr('search.sharedSection')}</h2>
-                    <SongResult
+                    <CatalogResultRow
                       item={item()}
-                      coverStyle={itemCoverStyle}
                       active={isPlayingItem(item())}
                       saving={saving().has(item().id)}
-                      busy={itemBusy(item())}
                       onPlay={() => playItem(item())}
                       onDownload={() => void saveItem(item())}
                     />
@@ -705,7 +712,7 @@ export default function Search() {
             </div>
           </Match>
           <Match when={loading() && items().length === 0}>
-            <SkeletonRows count={8} compact />
+            <SearchLoading tab={tab()} />
           </Match>
           <Match when={!loading() && items().length === 0}>
             <EmptyState compact tone={searchError() ? 'danger' : 'neutral'}>
@@ -727,41 +734,61 @@ export default function Search() {
             </EmptyState>
           </Match>
           <Match when={true}>
-            <div class={styles.results}>
-              <section class={styles.section}>
-                <h2 class={styles.sectionTitle}>{tr('search.resultsSection')}</h2>
-                <Show when={interpretedAs()}>
-                  {(name) => (
-                    <p class={styles.interpretation}>
-                      {tr('search.interpretedAs', { name: name() })}
-                    </p>
-                  )}
-                </Show>
-                <For each={items()}>
-                  {(item) => (
-                    <Switch>
-                      <Match when={item.type === 'track' || item.type === 'library_track'}>
-                        <SongResult
-                          item={item}
-                          coverStyle={itemCoverStyle}
-                          active={isPlayingItem(item)}
-                          saving={saving().has(item.id)}
-                          busy={itemBusy(item)}
-                          onPlay={() => playItem(item)}
-                          onDownload={() => void saveItem(item)}
-                        />
-                      </Match>
-                      <Match when={true}>
-                        <EntityResult
-                          item={item}
-                          coverStyle={itemCoverStyle}
-                          onPick={() => playItem(item)}
-                        />
-                      </Match>
-                    </Switch>
-                  )}
-                </For>
-              </section>
+            <div
+              classList={{ [styles.results]: true, [styles.resultsRefreshing]: loading() }}
+              aria-busy={loading()}
+              aria-disabled={loading()}
+              inert={loading() ? true : undefined}
+            >
+              <Show when={interpretedAs()}>
+                {(name) => (
+                  <p class={styles.interpretation}>
+                    {tr('search.interpretedAs', { name: name() })}
+                  </p>
+                )}
+              </Show>
+              <Show when={songs().length > 0}>
+                <section class={styles.section}>
+                  <h2 class={styles.sectionTitle}>{tr('search.tabSongs')}</h2>
+                  <For each={songs()}>
+                    {(item) => (
+                      <CatalogResultRow
+                        item={item}
+                        active={isPlayingItem(item)}
+                        saving={saving().has(item.id)}
+                        showSource
+                        onPlay={() => playItem(item)}
+                        onDownload={() => void saveItem(item)}
+                      />
+                    )}
+                  </For>
+                </section>
+              </Show>
+              <Show when={artists().length > 0}>
+                <EntitySection
+                  title={tr('search.tabArtists')}
+                  items={artists()}
+                  round
+                  coverStyle={itemCoverStyle}
+                  onPick={playItem}
+                />
+              </Show>
+              <Show when={albums().length > 0}>
+                <EntitySection
+                  title={tr('search.tabAlbums')}
+                  items={albums()}
+                  coverStyle={itemCoverStyle}
+                  onPick={playItem}
+                />
+              </Show>
+              <Show when={playlists().length > 0}>
+                <EntitySection
+                  title={tr('search.labelPlaylist')}
+                  items={playlists()}
+                  coverStyle={itemCoverStyle}
+                  onPick={playItem}
+                />
+              </Show>
             </div>
           </Match>
         </Switch>
@@ -976,92 +1003,72 @@ function RailSkeletons() {
   return <SkeletonCards count={12} />;
 }
 
-function SongResult(props: {
-  item: CatalogItem;
-  coverStyle: (item: CatalogItem, round?: boolean) => JSX.CSSProperties;
-  active: boolean;
-  busy: boolean;
-  /** A catalog row has no video id yet, so downloading it goes through the
-   * resolver (which may come back asking which version the user meant). */
-  saving: boolean;
-  onPlay: () => void;
-  onDownload: () => void;
-}) {
-  const entry = createMemo(() => savedFromCatalogItem(props.item));
-  const collectable = () => props.item.type === 'track' || props.item.type === 'library_track';
-  const tap = createResponsiveTap({ onTap: props.onPlay });
+function SearchLoading(props: { tab: SearchTab }) {
   return (
-    <div
-      class={styles.songRow}
-      data-pressable
-      data-now-playing={props.active ? '' : undefined}
-      aria-busy={props.busy}
-      role="button"
-      tabindex="0"
-      {...tap}
-      onKeyDown={(event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        props.onPlay();
-      }}
-    >
-      <span class={styles.songCover} style={props.coverStyle(props.item)}>
-        <Show when={props.busy}>
-          <span class={styles.coverBusy}>
-            <Spinner size={18} />
-          </span>
-        </Show>
-      </span>
-      <span class={styles.songMeta}>
-        <span class={styles.songTitle}>{props.item.title}</span>
-        <span class={styles.songSub}>{props.item.subtitle || itemArtist(props.item)}</span>
-      </span>
-      <span class={styles.source}>{props.item.source}</span>
-      <span class={styles.duration}>{formatDuration(props.item.duration)}</span>
-      {/* The heart only over songs you already have; ＋ is what puts one there. */}
-      <Show when={collectable() && isSavedItem(props.item)}>
-        <FavouriteButton favourite={entry()} compact />
-      </Show>
-      <Show when={collectable()}>
-        <CollectionButton
-          entry={entry()}
-          compact
-          busy={props.saving}
-          onDownload={props.onDownload}
-        />
-      </Show>
-    </div>
+    <Switch>
+      <Match when={props.tab === 'artist'}>
+        <SkeletonCards count={8} shape="round" />
+      </Match>
+      <Match when={props.tab === 'album'}>
+        <SkeletonCards count={8} />
+      </Match>
+      <Match when={props.tab === 'track,library_track'}>
+        <SkeletonRows count={8} compact />
+      </Match>
+      <Match when={true}>
+        <div class={styles.mixedSkeleton}>
+          <SkeletonRows count={4} compact />
+          <SkeletonCards count={4} shape="round" />
+          <SkeletonCards count={4} />
+        </div>
+      </Match>
+    </Switch>
   );
 }
 
-function EntityResult(props: {
+function EntitySection(props: {
+  title: string;
+  items: CatalogItem[];
+  round?: boolean;
+  coverStyle: (item: CatalogItem, round?: boolean) => JSX.CSSProperties;
+  onPick: (item: CatalogItem) => void;
+}) {
+  return (
+    <section class={styles.section}>
+      <h2 class={styles.sectionTitle}>{props.title}</h2>
+      <div class={styles.entityGrid}>
+        <For each={props.items}>
+          {(item) => (
+            <EntityCard
+              item={item}
+              round={props.round}
+              coverStyle={props.coverStyle}
+              onPick={() => props.onPick(item)}
+            />
+          )}
+        </For>
+      </div>
+    </section>
+  );
+}
+
+function EntityCard(props: {
   item: CatalogItem;
+  round?: boolean;
   coverStyle: (item: CatalogItem, round?: boolean) => JSX.CSSProperties;
   onPick: () => void;
 }) {
   const tap = createResponsiveTap({ onTap: props.onPick });
   return (
-    <button class={styles.songRow} type="button" data-pressable {...tap}>
+    <button class={styles.entityCard} type="button" data-pressable {...tap}>
       <span
-        class={styles.songCover}
-        style={props.coverStyle(props.item, props.item.type === 'artist')}
+        classList={{ [styles.entityCover]: true, [styles.entityCoverRound]: props.round }}
+        style={props.coverStyle(props.item, props.round)}
       />
-      <span class={styles.songMeta}>
-        <span class={styles.songTitle}>{props.item.title}</span>
-        <span class={styles.songSub}>{props.item.subtitle || itemArtist(props.item)}</span>
-      </span>
-      <span class={styles.source}>{props.item.source}</span>
-      <span class={styles.pill}>{labelFor(props.item)}</span>
+      <span class={styles.entityTitle}>{props.item.title}</span>
+      <span class={styles.entitySub}>{props.item.subtitle || itemArtist(props.item)}</span>
     </button>
   );
-}
-
-function labelFor(item: CatalogItem): string {
-  if (item.type === 'library_track') return tr('search.labelLibraryTrack');
-  if (item.type === 'track') return tr('search.labelTrack');
-  if (item.type === 'artist') return tr('search.labelArtist');
-  if (item.type === 'album') return tr('search.labelAlbum');
-  return tr('search.labelPlaylist');
 }
 
 function SearchIcon() {

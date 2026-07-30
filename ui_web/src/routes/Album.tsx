@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, Show, type JSX, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
-import { actions, musicLibrary, isPlayingItem, isPlayingTrack, isSavedItem } from '../stores';
+import { actions, musicLibrary, isPlayingItem } from '../stores';
 import { api } from '../lib/api';
 import { coverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
@@ -9,16 +9,13 @@ import { toast } from '../lib/toast';
 import { artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { AlbumProfile, CatalogItem, Track } from '../types/music';
-import { Spinner } from '../components/Spinner';
-import { itemArtist, itemBusy, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
-import { savedFromCatalogItem, savedFromTrack } from '../lib/saved';
-import { FavouriteButton } from '../components/FavouriteButton';
-import { CollectionButton } from '../components/CollectionButton';
+import { itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import styles from './Album.module.css';
-import { coverGradient, coverStyle } from '../lib/cover';
-import { formatDuration } from '../lib/format';
+import { coverGradient } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
+import SongRow from '../components/SongRow';
+import { CatalogResultRow } from '../components/CatalogResultRow';
 
 type ViewMode = 'discover' | 'library';
 
@@ -33,7 +30,6 @@ export default function Album() {
   const artistName = createMemo(() => (searchParams as Record<string, string | undefined>).artist || '');
   const [viewOverride, setViewOverride] = createSignal<ViewMode | null>(null);
   const [saving, setSaving] = createSignal<Set<string>>(new Set());
-  const [saved, setSaved] = createSignal<Set<string>>(new Set());
 
   let aborter: AbortController | undefined;
 
@@ -136,7 +132,6 @@ export default function Album() {
         external_ids: item.external_ids,
       });
       if (response.status === 'queued') {
-        setSaved((s) => new Set(s).add(item.id));
         toast.success(t('search.addedToDownloads'));
       } else if (response.status === 'needs_review') {
         toast.info(t('search.chooseVersion'));
@@ -161,7 +156,8 @@ export default function Album() {
 
   return (
     <div class="view">
-      <header class={styles.header}>
+      <div class={styles.pageScroll} data-primary-scroll>
+        <header class={styles.header}>
         <button class={styles.back} type="button" aria-label={t('album.ariaBack')} onClick={() => navigate(-1)}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M15 18l-6-6 6-6" />
@@ -214,33 +210,33 @@ export default function Album() {
             </button>
           </div>
         </Show>
-      </header>
+        </header>
 
-      <Show
-        when={profile.loading && !profile()}
-        fallback={
-          <Show
-            when={profile()}
-            fallback={<EmptyState>{t('album.noTracklist')}</EmptyState>}
-          >
-            <Show when={view() === 'discover'} fallback={<LibraryView tracks={libraryTrackList()} contextLabel={title()} />}>
-              <DiscoverView
-                tracklist={tracklist()}
-                saving={saving()}
-                saved={saved()}
-                onPlayItem={(item, queue) => void playCatalogItem(item, queue, {
-                  id: `album:${title()}`,
-                  kind: 'album',
-                  label: title(),
-                })}
-                onSaveItem={saveItem}
-              />
+        <Show
+          when={profile.loading && !profile()}
+          fallback={
+            <Show
+              when={profile()}
+              fallback={<EmptyState>{t('album.noTracklist')}</EmptyState>}
+            >
+              <Show when={view() === 'discover'} fallback={<LibraryView tracks={libraryTrackList()} contextLabel={title()} />}>
+                <DiscoverView
+                  tracklist={tracklist()}
+                  saving={saving()}
+                  onPlayItem={(item, queue) => void playCatalogItem(item, queue, {
+                    id: `album:${title()}`,
+                    kind: 'album',
+                    label: title(),
+                  })}
+                  onSaveItem={saveItem}
+                />
+              </Show>
             </Show>
-          </Show>
-        }
-      >
-        <SkeletonRows count={8} />
-      </Show>
+          }
+        >
+          <SkeletonRows count={8} />
+        </Show>
+      </div>
     </div>
   );
 }
@@ -260,25 +256,14 @@ function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
     <div class={styles.trackList}>
       <For each={props.tracks}>
         {(track, i) => (
-          <div
-            class={styles.trackRow}
-            data-now-playing={isPlayingTrack(track) ? '' : undefined}
-            onClick={() => actions.playFrom(props.tracks, i(), {
+          <SongRow
+            track={track}
+            index={i() + 1}
+            cover={track.source === 'preview' ? track.cover : coverUrl(track.id)}
+            onPlay={() => actions.playFrom(props.tracks, i(), {
               context: { id: `album:${props.contextLabel}`, kind: 'album', label: props.contextLabel },
             })}
-          >
-            <span class={styles.trackIndex}>{i() + 1}</span>
-            <span
-              class={styles.trackCover}
-              style={coverStyle(track.id, track.source === 'preview' ? track.cover : coverUrl(track.id))}
-            />
-            <span class={styles.trackMeta}>
-              <span class={styles.trackTitle}>{track.title}</span>
-            </span>
-            <span class={styles.trackDuration}>{formatDuration(track.duration)}</span>
-            <FavouriteButton favourite={savedFromTrack(track)} compact />
-            <CollectionButton entry={savedFromTrack(track)} compact hideOwned />
-          </div>
+          />
         )}
       </For>
     </div>
@@ -288,7 +273,6 @@ function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
 function DiscoverView(props: {
   tracklist: CatalogItem[];
   saving: Set<string>;
-  saved: Set<string>;
   onPlayItem: (item: CatalogItem, queue?: CatalogItem[]) => void;
   onSaveItem: (item: CatalogItem) => void;
 }) {
@@ -298,41 +282,14 @@ function DiscoverView(props: {
         <div class={styles.trackList}>
           <For each={props.tracklist}>
             {(item, i) => (
-              <div
-                class={styles.trackRow}
-                data-now-playing={isPlayingItem(item) ? '' : undefined}
-                aria-busy={itemBusy(item)}
-                onClick={() => props.onPlayItem(item, props.tracklist)}
-              >
-                <span class={styles.trackIndex}>{i() + 1}</span>
-                <span class={styles.trackCover} style={coverStyle(item.id, item.cover)}>
-                  <Show when={itemBusy(item)}>
-                    <span class={styles.trackCoverBusy}>
-                      <Spinner size={16} />
-                    </span>
-                  </Show>
-                </span>
-                <span class={styles.trackMeta}>
-                  <span class={styles.trackTitle}>{item.title}</span>
-                  <Show when={item.artist && item.artist !== (item.subtitle || '')}>
-                    <span class={styles.trackArtist}>{itemArtist(item)}</span>
-                  </Show>
-                </span>
-                <span class={styles.trackDuration}>{formatDuration(item.duration)}</span>
-                {/* The heart only over songs already in the library; ＋ is what puts one
-                  * there, and the arrow that replaces it gives it a file. */}
-                <Show when={isSavedItem(item)}>
-                  <FavouriteButton favourite={savedFromCatalogItem(item)} compact />
-                </Show>
-                <Show when={item.type === 'track'}>
-                  <CollectionButton
-                    entry={savedFromCatalogItem(item)}
-                    compact
-                    busy={props.saving.has(item.id)}
-                    onDownload={() => props.onSaveItem(item)}
-                  />
-                </Show>
-              </div>
+              <CatalogResultRow
+                item={item}
+                index={i() + 1}
+                active={isPlayingItem(item)}
+                saving={props.saving.has(item.id)}
+                onPlay={() => props.onPlayItem(item, props.tracklist)}
+                onDownload={() => props.onSaveItem(item)}
+              />
             )}
           </For>
         </div>
@@ -340,4 +297,3 @@ function DiscoverView(props: {
     </div>
   );
 }
-

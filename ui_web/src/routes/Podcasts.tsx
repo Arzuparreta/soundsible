@@ -13,6 +13,7 @@ import { toast } from '../lib/toast';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { createResponsiveTap } from '../lib/responsiveTap';
+import { SearchField } from '../components/SearchField';
 
 function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
@@ -24,6 +25,7 @@ export default function Podcasts() {
   const [q, setQ] = createSignal('');
   const [results, setResults] = createSignal<PodcastSearchResult[]>([]);
   const [loading, setLoading] = createSignal(false);
+  const [searchError, setSearchError] = createSignal(false);
   const [subscribing, setSubscribing] = createSignal<Set<string>>(new Set());
 
   const subscribedFeeds = createMemo(() => new Set(state.podcastSubscriptions.map((s) => s.rss_url)));
@@ -33,26 +35,37 @@ export default function Podcasts() {
 
   let aborter: AbortController | undefined;
   let debounce: number | undefined;
+  let requestId = 0;
 
   onMount(() => ensureDiscover());
 
   const run = (query: string) => {
     query = query.trim();
+    const current = ++requestId;
+    aborter?.abort();
+    aborter = undefined;
+    setSearchError(false);
     if (query.length < 2) {
       setResults([]);
       setLoading(false);
       return;
     }
-    aborter?.abort();
     aborter = new AbortController();
     setLoading(true);
     api
       .searchPodcasts(query, aborter.signal)
-      .then(setResults)
-      .catch((e) => {
-        if (!isAbort(e)) setResults([]);
+      .then((next) => {
+        if (current !== requestId) return;
+        setResults(next);
       })
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (current !== requestId || isAbort(e)) return;
+        setResults([]);
+        setSearchError(true);
+      })
+      .finally(() => {
+        if (current === requestId) setLoading(false);
+      });
   };
 
   const onInput = (v: string) => {
@@ -121,6 +134,7 @@ export default function Podcasts() {
   };
 
   onCleanup(() => {
+    requestId += 1;
     aborter?.abort();
     clearTimeout(debounce);
   });
@@ -128,16 +142,20 @@ export default function Podcasts() {
   return (
     <div class="view">
       <div class={styles.bar}>
-        <input
-          class={styles.input}
-          type="search"
+        <SearchField
           placeholder={t('podcasts.searchPlaceholder')}
+          clearLabel={t('searchPanel.clear')}
           value={q()}
-          onInput={(e) => onInput(e.currentTarget.value)}
+          onInput={onInput}
         />
       </div>
 
       <div class={styles.scroll} data-primary-scroll>
+        <Show when={loading() && results().length > 0}>
+          <div class={styles.loadingBar} role="status" aria-live="polite" aria-label={t('common.loading')}>
+            <span>{t('common.loading')}</span>
+          </div>
+        </Show>
         <Show
           when={q().trim().length >= 2}
           fallback={
@@ -207,40 +225,58 @@ export default function Podcasts() {
             <SkeletonRows count={6} compact />
           </Show>
           <Show when={!loading() && results().length === 0}>
-            <EmptyState compact>{t('podcasts.noResults')}</EmptyState>
+            <EmptyState compact tone={searchError() ? 'danger' : 'neutral'}>
+              {searchError() ? (
+                <>
+                  {t('search.catalogErrorHint')}{' '}
+                  <button class={styles.retry} type="button" onClick={() => run(q())}>
+                    {t('common.retry')}
+                  </button>
+                </>
+              ) : (
+                t('podcasts.noResults')
+              )}
+            </EmptyState>
           </Show>
-          <For each={results()}>
-            {(r) => {
-              const disabled = () => subscribing().has(r.feed_url);
-              const tap = createResponsiveTap({
-                disabled,
-                onTap: () => void subscribe(r),
-              });
-              return (
-                <div class={styles.row}>
-                  <div class={styles.rowCover} style={neutralCoverStyle(r.image_url)} />
-                  <div class={styles.meta}>
-                    <span class={styles.title}>{r.title}</span>
-                    <span class={styles.sub}>{r.author}</span>
-                  </div>
-                  <Show
-                    when={!subscribedFeeds().has(r.feed_url)}
-                    fallback={<span class={styles.subbed}>{t('podcasts.subscribed')}</span>}
-                  >
-                    <button
-                      class={styles.subBtn}
-                      data-pressable
-                      type="button"
-                      disabled={disabled()}
-                      {...tap}
+          <div
+            classList={{ [styles.results]: true, [styles.resultsRefreshing]: loading() }}
+            aria-busy={loading()}
+            aria-disabled={loading()}
+            inert={loading() ? true : undefined}
+          >
+            <For each={results()}>
+              {(r) => {
+                const disabled = () => subscribing().has(r.feed_url);
+                const tap = createResponsiveTap({
+                  disabled,
+                  onTap: () => void subscribe(r),
+                });
+                return (
+                  <div class={styles.row}>
+                    <div class={styles.rowCover} style={neutralCoverStyle(r.image_url)} />
+                    <div class={styles.meta}>
+                      <span class={styles.title}>{r.title}</span>
+                      <span class={styles.sub}>{r.author}</span>
+                    </div>
+                    <Show
+                      when={!subscribedFeeds().has(r.feed_url)}
+                      fallback={<span class={styles.subbed}>{t('podcasts.subscribed')}</span>}
                     >
-                      {disabled() ? t('podcasts.subscribing') : t('podcasts.subscribe')}
-                    </button>
-                  </Show>
-                </div>
-              );
-            }}
-          </For>
+                      <button
+                        class={styles.subBtn}
+                        data-pressable
+                        type="button"
+                        disabled={disabled()}
+                        {...tap}
+                      >
+                        {disabled() ? t('podcasts.subscribing') : t('podcasts.subscribe')}
+                      </button>
+                    </Show>
+                  </div>
+                );
+              }}
+            </For>
+          </div>
         </Show>
       </div>
     </div>

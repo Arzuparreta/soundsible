@@ -26,6 +26,7 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
+  overflow-x: clip;
   overflow-y: auto;
   /* index.html declares viewport-fit=cover, so content draws edge-to-edge under
      the iOS notch/status bar. Reserve the safe areas here (once, for every route)

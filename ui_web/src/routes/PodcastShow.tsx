@@ -94,7 +94,7 @@ export default function PodcastShow() {
         </button>
       </div>
 
-      <div class={styles.scroll}>
+      <div class={styles.scroll} data-primary-scroll>
         <Show
           when={!data.loading}
           fallback={<SkeletonRows count={8} compact />}

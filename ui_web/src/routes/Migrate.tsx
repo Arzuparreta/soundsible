@@ -275,7 +275,7 @@ export default function Migrate() {
   return (
     <div class="view">
       <ViewHeader title={c().title} />
-      <div class={styles.scroll}>
+      <div class={styles.scroll} data-primary-scroll>
         <Show when={!restoring()} fallback={<StatusCard label={c().recent} />}>
           <Show when={job()} fallback={<UploadStep busy={busy()} dragging={dragging()} setDragging={setDragging} analyze={analyze} />}>
             {(current) => (

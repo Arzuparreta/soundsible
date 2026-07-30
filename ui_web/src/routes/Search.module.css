@@ -8,34 +8,6 @@
   padding: var(--space-lg) var(--gutter) var(--space-sm);
 }
 
-.input {
-  width: 100%;
-  height: var(--control-h);
-  padding: 0 var(--space-lg);
-  font: inherit;
-  font-size: var(--text-body);
-  color: var(--ink-primary);
-  background: var(--bg-inset);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-full);
-  outline: none;
-  box-shadow: 0 1px 0 var(--hairline-soft) inset;
-  transition:
-    border-color var(--dur-short) var(--ease-out),
-    background var(--dur-short) var(--ease-out),
-    box-shadow var(--dur-short) var(--ease-out);
-}
-
-.input::placeholder {
-  color: var(--ink-tertiary);
-}
-
-.input:focus {
-  border-color: var(--accent);
-  background: var(--bg-raised);
-  box-shadow: 0 0 0 3px var(--accent-faint), var(--shadow-1);
-}
-
 .suggest {
   position: absolute;
   left: var(--gutter);
@@ -97,7 +69,14 @@
   gap: var(--space-xs);
   flex-shrink: 0;
   overflow-x: auto;
-  padding: 0 var(--gutter) var(--space-md);
+  width: fit-content;
+  max-width: calc(100% - var(--gutter) * 2);
+  margin: 0 var(--gutter) var(--space-md);
+  padding: var(--space-2xs);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius-full);
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
 }
 
@@ -110,8 +89,8 @@
   height: var(--pill-h);
   padding: 0 11px;
   color: var(--ink-secondary);
-  background: var(--bg-inset);
-  border: 1px solid var(--hairline);
+  background: transparent;
+  border: 0;
   border-radius: var(--radius-full);
   font: inherit;
   font-size: var(--text-caption);
@@ -138,16 +117,52 @@
 }
 
 .activeTab {
-  color: var(--bg-base);
-  background: var(--ink-primary);
-  border-color: var(--ink-primary);
+  color: var(--ink-on-accent);
+  background: var(--accent);
 }
 
 .scroll {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  overflow-x: clip;
   overflow-y: auto;
   padding: 0 var(--gutter) var(--space-xl);
+}
+
+.loadingBar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  height: 2px;
+  overflow: hidden;
+  background: var(--accent-faint);
+}
+
+.loadingBar::after {
+  display: block;
+  width: 38%;
+  height: 100%;
+  content: '';
+  background: var(--accent);
+  animation: search-loading 1s var(--ease-in-out) infinite;
+}
+
+.loadingBar span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+@keyframes search-loading {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(270%);
+  }
 }
 
 .start {
@@ -207,7 +222,7 @@
    grid instead of per-section horizontal scrollers. */
 .discoverGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(132px, 100%), 1fr));
   gap: var(--space-md);
   padding: var(--space-2xs) 0 var(--space-sm);
 }
@@ -438,6 +453,13 @@
 .results {
   display: grid;
   gap: var(--space-xl);
+  min-width: 0;
+  transition: opacity var(--dur-short) var(--ease-out);
+}
+
+.resultsRefreshing {
+  opacity: 0.48;
+  pointer-events: none;
 }
 
 .topSection,
@@ -453,9 +475,83 @@
 }
 
 .interpretation {
-  margin: calc(var(--space-xs) * -1) 0 var(--space-sm);
+  margin: 0;
   color: var(--ink-secondary);
   font-size: var(--text-caption);
+}
+
+.mixedSkeleton {
+  display: grid;
+  gap: var(--space-xl);
+}
+
+.entityGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(144px, 100%), 1fr));
+  gap: var(--space-lg);
+  min-width: 0;
+}
+
+.entityCard {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--dur-short) var(--ease-out);
+}
+
+.entityCover {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  transition:
+    border-color var(--dur-short) var(--ease-out),
+    box-shadow var(--dur-short) var(--ease-out);
+}
+
+.entityCoverRound {
+  border-radius: var(--radius-full);
+}
+
+.entityTitle,
+.entitySub {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entityTitle {
+  margin-top: var(--space-sm);
+  color: var(--ink-primary);
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+}
+
+.entitySub {
+  margin-top: var(--space-2xs);
+  color: var(--ink-tertiary);
+  font-size: var(--text-caption);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .entityCard:hover {
+    transform: translateY(-3px);
+  }
+
+  .entityCard:hover .entityCover {
+    border-color: var(--hairline-strong);
+    box-shadow: var(--shadow-2);
+  }
 }
 
 /* Subordinate YouTube fallback: sits under the music results, visually quieter
@@ -867,6 +963,11 @@
   .cardGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .entityGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+  }
 }
 
 @media (min-width: 1024px) {
@@ -898,5 +999,12 @@
   from {
     opacity: 0;
     transform: translateY(-4px) scale(0.99);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loadingBar::after {
+    animation: none;
+    width: 100%;
   }
 }

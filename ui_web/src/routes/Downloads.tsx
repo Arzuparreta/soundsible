@@ -95,7 +95,7 @@ export default function Downloads() {
         </Show>
       </header>
 
-      <div class={styles.scroll}>
+      <div class={styles.scroll} data-primary-scroll>
         <For each={state.downloads.recent}>
           {(r) => (
             <div class={styles.recentRow}>

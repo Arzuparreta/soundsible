@@ -177,6 +177,9 @@ export function SearchPanel() {
       .slice(0, 6),
   );
   const searching = createMemo(() => q().trim().length >= 2 || !!parseYouTubeInput(q()));
+  const refreshingSearch = createMemo(
+    () => loading() && (items().length > 0 || ytResults().length > 0 || !!direct()),
+  );
 
   // ── Search: unified catalog first, YouTube as fallback, URLs direct ──
   const runYouTubeFallback = (query: string, currentReq: number, signal: AbortSignal) => {
@@ -727,7 +730,17 @@ export function SearchPanel() {
           </Show>
         </div>
 
-        <div class={styles.body}>
+        <div
+          classList={{ [styles.body]: true, [styles.bodyRefreshing]: refreshingSearch() }}
+          aria-busy={loading()}
+          aria-disabled={refreshingSearch()}
+          inert={refreshingSearch() ? true : undefined}
+        >
+          <Show when={refreshingSearch()}>
+            <div class={styles.loadingBar} role="status" aria-live="polite" aria-label={t('common.loading')}>
+              <span>{t('common.loading')}</span>
+            </div>
+          </Show>
           <Switch>
             <Match when={!searching()}>
               <Show when={recentQueries().length > 0}>

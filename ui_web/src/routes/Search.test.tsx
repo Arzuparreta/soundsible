@@ -152,6 +152,93 @@ describe('Search route', () => {
     expect(apiMock.searchYouTube).not.toHaveBeenCalled();
   });
 
+  it('keeps completed results inert and visibly busy while a tab refreshes', async () => {
+    apiMock.searchCatalog.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'deezer:track:one',
+          type: 'track',
+          source: 'deezer',
+          title: 'Previous song',
+          artist: 'Previous artist',
+        },
+        {
+          id: 'deezer:artist:one',
+          type: 'artist',
+          source: 'deezer',
+          title: 'Previous artist',
+          subtitle: 'Artist',
+        },
+      ],
+      sections: [],
+    });
+    let resolveArtists!: (value: unknown) => void;
+    apiMock.searchCatalog.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveArtists = resolve;
+      }),
+    );
+    render(() => <Search />);
+
+    fireEvent.input(screen.getByPlaceholderText('What do you want to play?'), {
+      target: { value: 'previous' },
+    });
+    await vi.advanceTimersByTimeAsync(230);
+    expect(await screen.findByText('Previous song')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Artists' }));
+    await waitFor(() =>
+      expect(apiMock.searchCatalog).toHaveBeenLastCalledWith(
+        'previous',
+        expect.any(AbortSignal),
+        'artist',
+      ),
+    );
+
+    const busyResults = screen.getByText('Previous song').closest('[aria-busy="true"]');
+    expect(busyResults).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('status', { name: /Loading/ })).toBeInTheDocument();
+
+    resolveArtists({
+      items: [
+        {
+          id: 'deezer:artist:two',
+          type: 'artist',
+          source: 'deezer',
+          title: 'Fresh artist',
+          subtitle: 'Artist',
+        },
+      ],
+      sections: [],
+    });
+
+    expect(await screen.findByText('Fresh artist')).toBeInTheDocument();
+    expect(screen.queryByText('Previous song')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole('status', { name: /Loading/ })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('uses a round card skeleton for a cold Artists request', async () => {
+    apiMock.searchCatalog.mockImplementation(() => new Promise(() => {}));
+    render(() => <Search />);
+
+    fireEvent.input(screen.getByPlaceholderText('What do you want to play?'), {
+      target: { value: 'artist query' },
+    });
+    await vi.advanceTimersByTimeAsync(230);
+    fireEvent.click(screen.getByRole('tab', { name: 'Artists' }));
+
+    await waitFor(() =>
+      expect(apiMock.searchCatalog).toHaveBeenLastCalledWith(
+        'artist query',
+        expect.any(AbortSignal),
+        'artist',
+      ),
+    );
+    expect(document.querySelector('[data-shape="round"]')).toBeInTheDocument();
+  });
+
   it('renders the node feed as the empty search state', async () => {
     setLocale('es');
     nodeMock.items = [

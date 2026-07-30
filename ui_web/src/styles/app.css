@@ -134,6 +134,23 @@ html[data-auto-mode='active'] #app {
   overflow: hidden;
 }
 
+/* Every route-level vertical surface opts into one containment contract.
+   Nested horizontal rails keep their own overflow; the viewport never does. */
+[data-primary-scroll] {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: contain;
+}
+
+[data-horizontal-scroll] {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
 /* A route change gets one short arrival cue. It is intentionally quieter than
    sheets and dialogs: those move to explain hierarchy, while peer navigation
    only needs to confirm that the surface changed. */

@@ -108,6 +108,10 @@
   border-radius: var(--radius-md);
 }
 
+.roundCover {
+  border-radius: var(--radius-full);
+}
+
 .cardTitle {
   width: 76%;
   height: 10px;

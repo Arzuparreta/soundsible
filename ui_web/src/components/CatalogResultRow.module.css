@@ -1,0 +1,117 @@
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  min-width: 0;
+  height: var(--row-h);
+  padding: 0 var(--space-md);
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--dur-micro) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+
+.row:active {
+  transform: scale(0.997);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .row:hover {
+    background: var(--bg-hover);
+    border-color: var(--hairline-soft);
+  }
+}
+
+[data-now-playing] .title {
+  color: var(--accent);
+}
+
+.index {
+  width: 22px;
+  flex: none;
+  color: var(--ink-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.cover {
+  position: relative;
+  width: var(--cover-sm);
+  height: var(--cover-sm);
+  flex: none;
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 1px var(--hairline-soft), var(--shadow-1);
+}
+
+.coverBusy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.meta {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.title,
+.subtitle,
+.source {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  color: var(--ink-primary);
+  font-size: var(--text-body);
+  font-weight: var(--fw-medium);
+}
+
+.subtitle {
+  color: var(--ink-secondary);
+  font-size: var(--text-label);
+}
+
+.source,
+.duration {
+  flex: none;
+  color: var(--ink-tertiary);
+  font-size: var(--text-caption);
+}
+
+.source {
+  max-width: 84px;
+  text-transform: capitalize;
+}
+
+.duration {
+  width: 40px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@media (max-width: 1023px) {
+  .source,
+  .duration {
+    display: none;
+  }
+}
