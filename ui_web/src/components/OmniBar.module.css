@@ -17,6 +17,15 @@
     var(--bg-raised);
 }
 
+/* On a phone an idle mini-player is not information, it is a permanent empty
+   banner that steals a row of content. Desktop keeps the quiet idle affordance
+   because the full-width transport area is otherwise structurally useful. */
+@media (max-width: 1023px) {
+  .empty {
+    display: none;
+  }
+}
+
 .progress {
   position: absolute;
   top: 0;
