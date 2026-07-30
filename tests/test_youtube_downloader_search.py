@@ -423,6 +423,10 @@ def test_get_related_videos_falls_back_to_ytmusic_search_when_rd_mix_empty(monke
         lambda url: {"track": "Seed Title", "channel": "Seed Artist"},
     )
 
+    # The surface is configurable and no longer defaults to YouTube Music, so
+    # this test asks for the branch its name describes rather than inheriting it.
+    monkeypatch.setenv("SOUNDSIBLE_YT_SEARCH_SOURCE", "ytmusic")
+
     results = downloader.get_related_videos("seedxxxxxxX", max_results=5, enrich=False)
 
     assert results and results[0]["id"] == "ytmFallback01"

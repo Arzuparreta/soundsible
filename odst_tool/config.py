@@ -35,17 +35,30 @@ QUALITY_PROFILES = {
 DEFAULT_QUALITY = os.getenv("DEFAULT_QUALITY", "high")
 
 # Note: Search settings
-# Which YouTube surface to search first. YouTube Music gives cleaner metadata,
-# but it is not always reachable from a datacenter IP — a VPS may have to fall
-# back to plain YouTube. Set SOUNDSIBLE_YT_SEARCH_SOURCE=youtube there instead
-# of patching call sites.
-YT_SEARCH_SOURCE = (os.getenv("SOUNDSIBLE_YT_SEARCH_SOURCE") or "ytmusic").strip().lower()
+# Which YouTube surface to search first.
+#
+# This defaulted to YouTube Music for its cleaner metadata, with plain YouTube as
+# an escape hatch for stations whose datacenter address YouTube Music will not
+# answer. In practice that left a relayed station and a desktop resolving tracks
+# differently, and the premise no longer holds either: YouTube Music's search
+# returns ids and titles and nothing else — no creator, no duration — so
+# "cleaner metadata" cost a full extraction per row to recover, and the duration
+# never came back at all.
+#
+# Plain search carries title, creator and duration together, and the ranking
+# YouTube Music would have added is now covered by the source preference in
+# `shared.resolution_confidence`, which favours the artist's own upload. Anyone
+# who wants YouTube Music back can still ask for it.
+_SEARCH_SOURCE_DEFAULT = "youtube"
+YT_SEARCH_SOURCE = (
+    os.getenv("SOUNDSIBLE_YT_SEARCH_SOURCE") or _SEARCH_SOURCE_DEFAULT
+).strip().lower()
 
 
 def prefer_ytmusic() -> bool:
     """Default for ``search_youtube(use_ytmusic=...)``. Read at call time so the
     environment can change without a reimport."""
-    raw = (os.getenv("SOUNDSIBLE_YT_SEARCH_SOURCE") or "ytmusic").strip().lower()
+    raw = (os.getenv("SOUNDSIBLE_YT_SEARCH_SOURCE") or _SEARCH_SOURCE_DEFAULT).strip().lower()
     return raw not in ("youtube", "yt", "plain")
 
 
