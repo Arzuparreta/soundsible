@@ -107,6 +107,12 @@ export function NowPlaying(props: {
   let carouselFrame = 0;
   let carouselAligned = false;
   let previousSurfaceOpen = props.surfaceOpen;
+  const releaseCarouselRequest = () => {
+    // A real gesture always wins over a pending programmatic alignment.
+    // An opening jump does not necessarily emit a final scroll event, so
+    // leaving this request latched can otherwise pin the state to the stage.
+    requestedMobilePanel = null;
+  };
   const jumpToTile = (tile: HTMLElement) => {
     if (!workspaceEl) return;
     const previousBehavior = workspaceEl.style.scrollBehavior;
@@ -590,6 +596,9 @@ export function NowPlaying(props: {
           style={{ 'grid-template-columns': gridColumns() }}
           data-layout-busy={layoutBusy() ? '' : undefined}
           onScroll={onCarouselScroll}
+          onPointerDown={releaseCarouselRequest}
+          onTouchStart={releaseCarouselRequest}
+          onWheel={releaseCarouselRequest}
         >
         <For each={renderedPanels()}>
           {(panel, index) => (

@@ -325,7 +325,13 @@ export function PlayerSurface() {
         </div>
 
         <Show when={!auto()}>
-          <nav class={styles.carouselNav} aria-label={t('nowPlaying.mobilePanels')} data-no-surface-swipe="">
+          <nav
+            class={styles.carouselNav}
+            aria-label={t('nowPlaying.mobilePanels')}
+            data-no-surface-swipe=""
+            style={`--carousel-index: ${(['browser', 'stage', 'queue'] as const).indexOf(mobilePanel())}`}
+          >
+            <span class={styles.carouselMarker} aria-hidden="true" />
             {(['browser', 'stage', 'queue'] as const).map((panel) => (
               <button
                 type="button"

@@ -43,7 +43,12 @@ vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
 vi.mock('../lib/track', () => ({ isPodcastTrack: (track: { podcast_guid?: string }) => Boolean(track.podcast_guid) }));
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 vi.mock('./NowPlaying', () => ({
-  NowPlaying: (props: { mobilePanel: string }) => <div data-testid="now-playing-view">{props.mobilePanel}</div>,
+  NowPlaying: (props: { mobilePanel: string; onMobilePanelChange: (panel: string) => void }) => (
+    <div data-testid="now-playing-view">
+      {props.mobilePanel}
+      <button type="button" onClick={() => props.onMobilePanelChange('queue')}>simulate swipe</button>
+    </div>
+  ),
 }));
 vi.mock('./AutoMode', () => ({ AutoMode: () => <div data-testid="auto-mode-view">Auto</div> }));
 
@@ -126,6 +131,17 @@ describe('PlayerSurface', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.panel.browser' }));
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('browser');
+  });
+
+  it('moves the compact pill when the carousel reports a user swipe', () => {
+    render(() => <PlayerSurface />);
+    const nav = screen.getByRole('navigation', { name: 'nowPlaying.mobilePanels' });
+
+    expect(nav).toHaveStyle('--carousel-index: 1');
+    fireEvent.click(screen.getByRole('button', { name: 'simulate swipe' }));
+
+    expect(screen.getByRole('button', { name: 'nowPlaying.panel.queue' })).toHaveAttribute('aria-current', 'page');
+    expect(nav).toHaveStyle('--carousel-index: 2');
   });
 
   it('resets the compact carousel before every close and reopen', () => {

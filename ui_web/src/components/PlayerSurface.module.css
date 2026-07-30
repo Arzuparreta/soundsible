@@ -234,13 +234,16 @@
 }
 
 .carouselNav {
+  --carousel-dot-size: 24px;
+  --carousel-gap: 7px;
+
   position: absolute;
   z-index: 45;
   bottom: var(--player-carousel-bottom);
   left: 50%;
   display: none;
   align-items: center;
-  gap: 7px;
+  gap: var(--carousel-gap);
   min-height: var(--player-carousel-height);
   padding: 0 10px;
   background: rgba(10, 10, 12, 0.48);
@@ -250,9 +253,26 @@
   transform: translateX(-50%);
 }
 
+.carouselMarker {
+  position: absolute;
+  top: 50%;
+  left: 14.5px;
+  width: 15px;
+  height: 5px;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: var(--radius-full);
+  transform:
+    translateX(calc(var(--carousel-index) * (var(--carousel-dot-size) + var(--carousel-gap))))
+    translateY(-50%);
+  transition: transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  will-change: transform;
+}
+
 .carouselDot {
-  width: 24px;
-  height: 24px;
+  position: relative;
+  width: var(--carousel-dot-size);
+  height: var(--carousel-dot-size);
   padding: 0;
   background: transparent;
   border: 0;
@@ -268,12 +288,14 @@
   content: '';
   background: rgba(255, 255, 255, 0.34);
   border-radius: inherit;
-  transition: width var(--dur-short), background var(--dur-short);
+  transition:
+    opacity 150ms var(--ease-out),
+    transform 260ms var(--ease-out);
 }
 
 .carouselDotActive::after {
-  width: 15px;
-  background: rgba(255, 255, 255, 0.86);
+  opacity: 0;
+  transform: scale(0.65);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -340,7 +362,9 @@
 @media (prefers-reduced-motion: reduce) {
   .surface,
   .view,
-  .backdrop {
+  .backdrop,
+  .carouselMarker,
+  .carouselDot::after {
     transition-duration: 1ms;
   }
 
