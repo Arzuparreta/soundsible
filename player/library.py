@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from shared.models import LibraryMetadata, Track, PlayerConfig, StorageProvider, merge_playlist_maps, merge_podcast_subscriptions
 from shared.constants import LIBRARY_METADATA_FILENAME
-from shared.path_resolver import resolve_local_track_path
+from shared.path_resolver import resolve_local_track_path, track_storage_key
 from shared.app_config import get_output_dir
 from shared.runtime import get_config_dir
 from shared.track_identity import preserve_track_identity
@@ -405,7 +405,7 @@ class LibraryManager:
                 
         # Note: 3. Cloud provider
         if self.provider:
-            remote_key = f"tracks/{track.id}.{track.format}"
+            remote_key = track_storage_key(track)
             return self.provider.get_file_url(remote_key)
             
         return None
@@ -546,7 +546,7 @@ class LibraryManager:
             
             # Note: If not in cache, download it
             if not local_path and self.provider:
-                remote_key = f"tracks/{track.id}.{track.format}"
+                remote_key = track_storage_key(track)
                 fd, temp_path = tempfile.mkstemp(suffix=f".{track.format}")
                 os.close(fd)
                 self._log("Downloading track for update...")
@@ -622,7 +622,7 @@ class LibraryManager:
                 
                 # Note: Clear cache for this track so new version with cover will be downloaded
                 if self.cache:
-                    old_cache_key = f"tracks/{track.id}.{track.format}"
+                    old_cache_key = track_storage_key(track)
                     cache_file = self.cache.cache_dir / old_cache_key.replace('/', '_')
                     if cache_file.exists():
                         self._log(f"Clearing cache for updated track...")
@@ -645,7 +645,7 @@ class LibraryManager:
                 # library is not.
                 if new_track.id != track.id and not _music_dir_manifest_is_shared():
                     self._log("Removing old file from storage...")
-                    old_key = f"tracks/{track.id}.{track.format}"
+                    old_key = track_storage_key(track)
                     self.provider.delete_file(old_key)
 
                 # Note: Update cache identically
@@ -687,7 +687,7 @@ class LibraryManager:
                 
             # Note: 2. Remove from cloud storage
             if self.provider:
-                remote_key = f"tracks/{track.id}.{track.format}"
+                remote_key = track_storage_key(track)
                 if self.provider.file_exists(remote_key):
                     self._log(f"Deleting remote file: {remote_key}")
                     if not self.provider.delete_file(remote_key):
@@ -828,7 +828,7 @@ class LibraryManager:
             remote_exists = False
             if self.provider:
                 try:
-                    remote_key = f"tracks/{track.id}.{track.format}"
+                    remote_key = track_storage_key(track)
                     remote_exists = self.provider.file_exists(remote_key)
                 except Exception:
                     # Be conservative: if we can't check, assume it exists to avoid accidental data loss

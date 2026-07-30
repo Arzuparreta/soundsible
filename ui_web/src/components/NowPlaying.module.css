@@ -257,6 +257,18 @@
   gap: var(--space-sm);
 }
 
+.losslessBadge {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink-secondary);
+  font-size: 9px;
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+}
+
 .radioBadge {
   display: inline-flex;
   align-items: center;

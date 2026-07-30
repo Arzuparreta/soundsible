@@ -111,6 +111,8 @@ export default function Settings() {
   const [quality, setQuality] = createSignal('high');
   const [autoUpdateYtdlp, setAutoUpdateYtdlp] = createSignal(false);
   const [autoUpdateCurlCffi, setAutoUpdateCurlCffi] = createSignal(false);
+  const [losslessEnabled, setLosslessEnabled] = createSignal(true);
+  const [losslessSummary, setLosslessSummary] = createSignal('');
   const sharedLinkAssociation = associationUrl();
 
   onMount(async () => {
@@ -128,6 +130,26 @@ export default function Settings() {
       if (typeof c.auto_update_curl_cffi === 'boolean') setAutoUpdateCurlCffi(c.auto_update_curl_cffi);
     } catch {
       /* defaults */
+    }
+    if (isAdmin()) {
+      try {
+        const status = await api.getLosslessStatus();
+        setLosslessEnabled(status.enabled);
+        const upgraded = status.counts.completed ?? 0;
+        const pending =
+          (status.counts.pending ?? 0) +
+          (status.counts.retry ?? 0) +
+          (status.counts.committing ?? 0);
+        setLosslessSummary(
+          status.identity_verifier_available
+            ? t('settings.losslessStatus')
+                .replace('{upgraded}', String(upgraded))
+                .replace('{pending}', String(pending))
+            : t('settings.losslessUnavailable'),
+        );
+      } catch {
+        /* optional service status */
+      }
     }
   });
 
@@ -193,6 +215,17 @@ export default function Settings() {
       await api.setDownloaderConfig({ auto_update_ytdlp: next });
     } catch {
       setAutoUpdateYtdlp(!next);
+      toast.error(t('settings.toast.notSaved'));
+    }
+  };
+
+  const toggleLossless = async () => {
+    const next = !losslessEnabled();
+    setLosslessEnabled(next);
+    try {
+      await api.setLosslessEnabled(next);
+    } catch {
+      setLosslessEnabled(!next);
       toast.error(t('settings.toast.notSaved'));
     }
   };
@@ -512,6 +545,17 @@ export default function Settings() {
                 checked={autoUpdateCurlCffi()}
                 onChange={toggleAutoCurlCffi}
               />
+              <SettingSwitch
+                label={t('settings.losslessUpgrades')}
+                checked={losslessEnabled()}
+                onChange={toggleLossless}
+              />
+              <Show when={losslessSummary()}>
+                <div class={styles.row}>
+                  <span class={styles.rowLabel}>{t('settings.losslessStatusLabel')}</span>
+                  <span class={styles.rowValue}>{losslessSummary()}</span>
+                </div>
+              </Show>
             </Show>
             <Show when={isAdmin()}>
               <ActionRow label={t('settings.optimize')} onClick={optimize} />

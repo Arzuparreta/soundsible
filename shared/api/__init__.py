@@ -1167,6 +1167,11 @@ def _mirror_track_into_odst_downloader(track: Track) -> None:
     other.file_size = track.file_size
     other.bitrate = track.bitrate
     other.format = track.format
+    other.audio_quality = track.audio_quality
+    other.audio_source = track.audio_source
+    other.audio_source_url = track.audio_source_url
+    other.audio_license_url = track.audio_license_url
+    other.audio_identity_verified = track.audio_identity_verified
     other.media_kind = getattr(track, "media_kind", None)
     other.podcast_feed_id = getattr(track, "podcast_feed_id", None)
     other.podcast_episode_guid = getattr(track, "podcast_episode_guid", None)
@@ -1420,6 +1425,7 @@ from shared.api.routes.setup import setup_bp
 from shared.api.routes.migration import migration_bp
 from shared.api.routes.car import car_bp
 from shared.api.routes.auth import auth_bp
+from shared.api.routes.lossless import lossless_bp
 app.register_blueprint(library_bp)
 app.register_blueprint(playback_bp)
 app.register_blueprint(downloader_bp)
@@ -1433,6 +1439,7 @@ app.register_blueprint(setup_bp)
 app.register_blueprint(migration_bp)
 app.register_blueprint(car_bp)
 app.register_blueprint(auth_bp)
+app.register_blueprint(lossless_bp)
 
 
 @app.route('/api/health')
@@ -1564,6 +1571,13 @@ def stop_api() -> None:
             observer.join(timeout=2)
         except Exception:
             logger.exception("API: Error stopping library file watcher")
+
+    try:
+        from shared.lossless import stop_lossless_service_if_started
+
+        stop_lossless_service_if_started()
+    except Exception:
+        logger.exception("API: Error stopping lossless idle worker")
 
     try:
         orchestrator.shutdown(wait=False)
@@ -1732,6 +1746,17 @@ def start_api(
                 logger.info("API: Downloader pump started (watchdog mode).")
         except Exception:
             logger.debug("API: Downloader pump start skipped", exc_info=True)
+
+        # Lossless discovery is deliberately detached from search, playback,
+        # resolve and download completion. Its own preemptible worker waits for
+        # a fully idle instance before inventorying or contacting providers.
+        try:
+            from shared.lossless import get_lossless_service
+
+            get_lossless_service().start()
+            logger.info("API: Lossless idle worker scheduled.")
+        except Exception:
+            logger.debug("API: Lossless idle worker start skipped", exc_info=True)
 
         # Note: Pre-warm the discover node feed's persistent related-mix cache
         # for the top likely seeds (favourites + most-recent additions). This

@@ -14,6 +14,11 @@ export interface Track {
   podcast_rss_url?: string | null;
   isrc?: string | null;
   musicbrainz_id?: string | null;
+  audio_quality?: 'unknown' | 'lossy' | 'lossless';
+  audio_source?: 'youtube' | 'jamendo' | 'wikimedia' | 'internet_archive' | 'local' | null;
+  audio_source_url?: string | null;
+  audio_license_url?: string | null;
+  audio_identity_verified?: boolean;
   cover?: string;
   source?: 'preview';
   /** Identity keys of the row this track was resolved from (see

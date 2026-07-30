@@ -56,6 +56,11 @@ _TRACKS_COLUMNS = {
     "album_artist": "TEXT",
     "cover_source": "TEXT",
     "metadata_modified_by_user": "BOOLEAN DEFAULT 0",
+    "audio_quality": "TEXT DEFAULT 'unknown'",
+    "audio_source": "TEXT",
+    "audio_source_url": "TEXT",
+    "audio_license_url": "TEXT",
+    "audio_identity_verified": "BOOLEAN DEFAULT 0",
 }
 
 _YT_CACHE_COLUMNS = {
@@ -132,7 +137,12 @@ class DatabaseManager:
                 album_artist TEXT,
                 cover_source TEXT,
                 metadata_modified_by_user BOOLEAN DEFAULT 0,
-                youtube_id TEXT
+                youtube_id TEXT,
+                audio_quality TEXT DEFAULT 'unknown',
+                audio_source TEXT,
+                audio_source_url TEXT,
+                audio_license_url TEXT,
+                audio_identity_verified BOOLEAN DEFAULT 0
             )
         """)
 
@@ -529,14 +539,21 @@ class DatabaseManager:
                             original_filename, compressed, file_size, bitrate, 
                             format, cover_art_key, year, genre, track_number, 
                             is_local, local_path, musicbrainz_id, isrc, album_artist,
-                            cover_source, metadata_modified_by_user, youtube_id
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            cover_source, metadata_modified_by_user, youtube_id,
+                            audio_quality, audio_source, audio_source_url,
+                            audio_license_url, audio_identity_verified
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             title=excluded.title,
                             artist=excluded.artist,
                             album=excluded.album,
                             duration=excluded.duration,
                             file_hash=excluded.file_hash,
+                            original_filename=excluded.original_filename,
+                            compressed=excluded.compressed,
+                            file_size=excluded.file_size,
+                            bitrate=excluded.bitrate,
+                            format=excluded.format,
                             cover_art_key=excluded.cover_art_key,
                             year=excluded.year,
                             genre=excluded.genre,
@@ -548,7 +565,12 @@ class DatabaseManager:
                             album_artist=excluded.album_artist,
                             cover_source=COALESCE(excluded.cover_source, tracks.cover_source),
                             metadata_modified_by_user=CASE WHEN excluded.metadata_modified_by_user THEN 1 ELSE tracks.metadata_modified_by_user END,
-                            youtube_id=COALESCE(excluded.youtube_id, tracks.youtube_id)
+                            youtube_id=COALESCE(excluded.youtube_id, tracks.youtube_id),
+                            audio_quality=COALESCE(excluded.audio_quality, tracks.audio_quality),
+                            audio_source=COALESCE(excluded.audio_source, tracks.audio_source),
+                            audio_source_url=COALESCE(excluded.audio_source_url, tracks.audio_source_url),
+                            audio_license_url=COALESCE(excluded.audio_license_url, tracks.audio_license_url),
+                            audio_identity_verified=CASE WHEN excluded.audio_identity_verified THEN 1 ELSE tracks.audio_identity_verified END
                     """, (
                         track.id, track.title, track.artist, track.album,
                         track.duration, track.file_hash, track.original_filename, 
@@ -556,7 +578,9 @@ class DatabaseManager:
                         track.cover_art_key, track.year, track.genre, track.track_number, 
                         track.is_local, None,
                         track.musicbrainz_id, track.isrc, track.album_artist,
-                        track.cover_source, track.metadata_modified_by_user, track.youtube_id
+                        track.cover_source, track.metadata_modified_by_user, track.youtube_id,
+                        track.audio_quality, track.audio_source, track.audio_source_url,
+                        track.audio_license_url, track.audio_identity_verified
                     ))
                 conn.execute("COMMIT")
             except Exception as e:
@@ -762,6 +786,7 @@ class DatabaseManager:
         if "last_updated" in data:
             del data["last_updated"]
         data["local_path"] = None
+        data["audio_identity_verified"] = bool(data.get("audio_identity_verified"))
         return Track.from_dict(data)
 
     def get_stats(self) -> Dict[str, int]:

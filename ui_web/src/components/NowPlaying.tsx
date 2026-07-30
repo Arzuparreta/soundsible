@@ -564,6 +564,11 @@ export function NowPlaying() {
             <div class={styles.info}>
               <div class={styles.titleRow}>
                 <h1 class={styles.title}>{t()!.title}</h1>
+                <Show when={t()!.audio_quality === 'lossless' && t()!.audio_identity_verified}>
+                  <span class={styles.losslessBadge} title={t()!.audio_source || 'Lossless'}>
+                    LOSSLESS
+                  </span>
+                </Show>
                 <RadioBadge class={styles.radioBadge} loadingClass={styles.radioBadgeLoading} />
               </div>
               <Show when={artistLinkable()} fallback={<p class={styles.artist}>{t()!.artist}</p>}>

@@ -79,6 +79,11 @@ class Track:
     podcast_feed_id: Optional[str] = None
     podcast_episode_guid: Optional[str] = None
     podcast_rss_url: Optional[str] = None
+    audio_quality: str = "unknown"  # "unknown" | "lossy" | "lossless"
+    audio_source: Optional[str] = None
+    audio_source_url: Optional[str] = None
+    audio_license_url: Optional[str] = None
+    audio_identity_verified: bool = False
 
     @staticmethod
     def generate_id() -> str:

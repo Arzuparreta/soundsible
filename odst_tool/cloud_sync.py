@@ -170,8 +170,8 @@ class CloudSync:
         if progress_callback: progress_callback("Checking files to upload...")
         
         for track in merged_list:
-            remote_path = f"tracks/{track.file_hash}.mp3" 
-            local_path = tracks_dir / f"{track.file_hash}.mp3"
+            remote_path = f"tracks/{track.file_hash}.{track.format}"
+            local_path = tracks_dir / f"{track.file_hash}.{track.format}"
             
             exists_on_remote = False
             

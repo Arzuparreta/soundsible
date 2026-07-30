@@ -10,6 +10,13 @@ from pathlib import Path
 from typing import Optional, Any
 
 
+def track_storage_key(track: Any) -> str:
+    """Return the canonical pool/cloud object key for a track's current audio."""
+    identity = getattr(track, "id", None) or getattr(track, "file_hash", None)
+    track_format = (getattr(track, "format", None) or "mp3").strip(".")
+    return f"tracks/{identity}.{track_format}"
+
+
 def resolve_local_track_path(track: Any) -> Optional[str]:
     """
     Resolve a local audio file path for a track using current OUTPUT_DIR only.

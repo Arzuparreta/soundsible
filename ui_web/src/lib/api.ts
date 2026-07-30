@@ -858,6 +858,21 @@ export const api = {
     output_dir?: string;
   }) =>
     request<{ status?: string }>('/api/downloader/config', { method: 'POST', body: cfg }),
+  getLosslessStatus: () =>
+    request<{
+      enabled: boolean;
+      activity: string;
+      current_track_id?: string | null;
+      providers: Array<{ name: string; available: boolean }>;
+      identity_verifier_available: boolean;
+      counts: Record<string, number>;
+      latest?: { last_error?: string | null } | null;
+    }>('/api/lossless/status'),
+  setLosslessEnabled: (enabled: boolean) =>
+    request<{ status: string; enabled: boolean }>('/api/lossless/config', {
+      method: 'PATCH',
+      body: { enabled },
+    }),
   optimizeLibrary: () =>
     request<{ status?: string }>('/api/downloader/optimize', { method: 'POST', timeoutMs: 60000 }),
   cloudSync: () => request<{ status?: string }>('/api/downloader/sync', { method: 'POST', timeoutMs: 60000 }),
