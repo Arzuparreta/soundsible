@@ -94,14 +94,21 @@ async function loadStore(
     setVolume: vi.fn(),
     setMuted: vi.fn(),
     getVolume: vi.fn(() => 1),
-    cancelDjTransition: vi.fn(),
-    scheduleDjTransition: vi.fn().mockResolvedValue(undefined),
+    ensureMixGraph: vi.fn(() => false),
+    mixPhase: vi.fn(() => 'idle' as const),
+    mixIsDominant: vi.fn(() => false),
+    cancelMix: vi.fn(),
+    startMixNow: vi.fn(() => false),
+    armTransition: vi.fn().mockResolvedValue(undefined),
     ...audioOverrides,
   };
 
   vi.doMock('../lib/api', () => ({ api }));
+  const deck = { duration: 180, currentTime: 0, paused: false, ended: false } as HTMLAudioElement;
   vi.doMock('../lib/audio', () => ({
-    audioEl: vi.fn(),
+    audioEl: vi.fn(() => deck),
+    eachDeck: vi.fn(),
+    isActiveDeck: vi.fn(() => true),
     audioService,
     storedVolume: () => 1,
     isCurrentLoad: () => true,

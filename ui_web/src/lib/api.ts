@@ -150,7 +150,9 @@ export interface DjDirection {
 
 export interface DjTransitionPlan {
   technique: 'long_blend' | 'bass_swap' | 'filter_blend' | 'echo_cut' | 'structural_fade' | 'safe_fade';
-  out_cue: number;
+  /** Null when the planner could not place the cue — the player owns the real
+   * duration and positions a safe fade against it. */
+  out_cue: number | null;
   in_cue: number;
   overlap_seconds: number;
   overlap_bars: number;
@@ -158,6 +160,17 @@ export interface DjTransitionPlan {
   score: number;
   confidence: number;
   fallback: boolean;
+}
+
+/** How the DJ endpoints identify one track's audio. */
+export interface DjItemRef {
+  id?: string;
+  track_id?: string;
+  youtube_id?: string;
+  source?: string;
+  title: string;
+  artist: string;
+  duration?: number;
 }
 
 export interface ListeningPlanItem {
@@ -756,8 +769,26 @@ export const api = {
     request<DjPlanResponse>('/api/discovery/music/dj-plan', {
       method: 'POST',
       body,
+      // The planner answers from measured features or a conservative fallback,
+      // never from a decode it has to wait for.
+      timeoutMs: 20000,
       signal,
-      timeoutMs: 90000,
+    }),
+  /** Re-plan one transition once its analysis has landed. Cache-only server
+   * side, so it is cheap enough to ask for shortly before every handoff. */
+  refineDjTransition: (
+    body: {
+      dj_profile: DjProfile;
+      from: DjItemRef;
+      to: DjItemRef;
+    },
+    signal?: AbortSignal,
+  ) =>
+    request<{ transition: DjTransitionPlan; measured: boolean }>('/api/discovery/music/dj-transition', {
+      method: 'POST',
+      body,
+      timeoutMs: 8000,
+      signal,
     }),
   saveDiscoveryTrack: (body: {
     artist: string;

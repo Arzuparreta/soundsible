@@ -796,14 +796,29 @@
 
 @media (hover: hover) and (pointer: fine) {
 
-.nextCard:hover {
+.nextCard:not(:disabled):hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.2);
   transform: translateY(-3px);
 }
 }
 
-.nextCard:active { transform: translateY(-1px) scale(0.98); }
+.nextCard:not(:disabled):active { transform: translateY(-1px) scale(0.98); }
+
+/* The one track that is already loaded and cued. It reads as settled rather
+   than as an option, because at this point it is no longer one: promoting
+   anything past it would drop a mix the DJ has already prepared. The card is
+   disabled, so the reactions above skip it. */
+.nextCardCued {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+  cursor: default;
+}
+
+.nextCardCued .routePosition {
+  color: var(--text);
+  opacity: 1;
+}
 
 .nextCover {
   width: 100%;

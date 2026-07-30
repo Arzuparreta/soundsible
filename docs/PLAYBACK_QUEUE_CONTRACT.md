@@ -39,8 +39,16 @@ continuation. Reordering cannot cross lane or generator boundaries.
 - **Auto Mode** preserves every pending manual request and owns only the
   generated tail behind it. Its DJ requests are separate ephemeral session
   state: they are route destinations with a maximum three-track ETA, not manual
-  queue entries. DJ or direction changes atomically replace only the
-  uncommitted generated tail.
+  queue entries.
+- **The committed handoff** is the one upcoming entry Auto Mode has already
+  loaded and cued. It survives every replan, and manual insertions land behind
+  it rather than in front of it. DJ, direction and request changes are debounced
+  and rewrite only the runway past that point — a session can be steered at any
+  moment without disturbing the mix that is already prepared.
+- Auto Mode's plans are **chained**: an entry's transition records which track
+  its cue was planned out of, and a refill continues the route from the tail of
+  what survives. A cue whose origin does not match what is playing is never
+  performed.
 
 Async results carry generation identity and may not attach to a newer playback
 session after cancellation.

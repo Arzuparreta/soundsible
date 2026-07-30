@@ -16,14 +16,15 @@ const { actions, state } = vi.hoisted(() => ({
     downloadTrack: vi.fn(),
     toggleFavourite: vi.fn(),
     jumpTo: vi.fn(),
+    promoteInAutoRoute: vi.fn(),
   },
   state: {
     favorites: [],
     playback: {
       currentTrack: { id: 'current', title: 'Current song', artist: 'Artist', cover: '/current.jpg' },
       queue: [
-        { id: 'current', title: 'Current song', artist: 'Artist', cover: '/current.jpg' },
-        { id: 'next', title: 'Next song', artist: 'Next artist', cover: '/next.jpg', source: 'preview' as const },
+        { id: 'current', queueId: 'q-current', title: 'Current song', artist: 'Artist', cover: '/current.jpg' },
+        { id: 'next', queueId: 'q-next', title: 'Next song', artist: 'Next artist', cover: '/next.jpg', source: 'preview' as const },
       ],
       index: 0,
       currentTime: 30,
@@ -37,7 +38,8 @@ const { actions, state } = vi.hoisted(() => ({
       djProfile: 'adaptive' as const,
       direction: { energy: 0, familiarity: 0, prompt: '', include: [], exclude: [] },
       requests: [],
-      transition: { status: 'idle' as const },
+      transition: { status: 'idle' as const } as { status: string; technique?: string; nextTrackId?: string },
+      pendingDirection: false,
       phase: 'ready' as const,
       activity: {
         id: 1,
@@ -46,7 +48,7 @@ const { actions, state } = vi.hoisted(() => ({
         values: { tracks: 'Next song', count: 1, related: 4, node: 3, local: 20 },
       },
       plan: {
-        next: { trackId: 'next', source: 'related' as const, reasonKey: 'autoMode.reason.related', reasonValues: { title: 'Current song' } },
+        next: { trackId: 'next', fromKey: 'current', source: 'related' as const, reasonKey: 'autoMode.reason.related', reasonValues: { title: 'Current song' } },
       },
     },
   },
@@ -77,6 +79,7 @@ const initialViewportWidth = window.innerWidth;
 afterEach(() => {
   vi.clearAllMocks();
   vi.useRealTimers();
+  state.autoMode.transition = { status: 'idle' };
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: initialViewportWidth });
 });
 
@@ -129,6 +132,48 @@ describe('AutoMode environment', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'autoMode.dj.discover' }));
     expect(actions.setAutoDirection).toHaveBeenCalledWith({ familiarity: -0.65, prompt: '' });
+  });
+
+  it('leaves the shortcuts alone while the listener is typing to the DJ', () => {
+    // Keydown is delegated, so everything typed into the command bar reaches
+    // the environment's handler too. Writing "no pongas reggaeton" used to skip
+    // a track on every "n" and ride the volume with the arrow keys.
+    render(() => <AutoMode />);
+    const command = screen.getByRole('textbox', { name: 'autoMode.dj.commandAria' });
+
+    for (const key of ['n', 'N', 'ArrowUp', 'ArrowDown']) {
+      fireEvent.keyDown(command, { key });
+    }
+    expect(actions.autoSkip).not.toHaveBeenCalled();
+    expect(actions.setVolume).not.toHaveBeenCalled();
+
+    // Outside a field the same keys are still the shortcuts they always were.
+    fireEvent.keyDown(screen.getByRole('region', { name: 'autoMode.aria' }), { key: 'n' });
+    expect(actions.autoSkip).toHaveBeenCalledOnce();
+  });
+
+  it('presents the cued track as settled rather than as another destination', () => {
+    // Once a handoff is loaded and cued there is nothing to jump to: promoting
+    // something past it would throw away a mix that is already prepared.
+    state.autoMode.transition = { status: 'armed', technique: 'long_blend', nextTrackId: 'next' };
+    render(() => <AutoMode />);
+
+    const card = screen.getByRole('button', { name: /Next song/ });
+    expect(card).toBeDisabled();
+    fireEvent.click(card);
+    expect(actions.promoteInAutoRoute).not.toHaveBeenCalled();
+    // The rail header and the card itself both say it, which is the point.
+    expect(screen.getAllByText(/autoMode\.dj\.cued/)).toHaveLength(2);
+    // And a direction change is honest about when it lands.
+    expect(screen.getByText('autoMode.dj.appliesNext')).toBeInTheDocument();
+  });
+
+  it('brings a route card forward instead of hard-loading it', () => {
+    render(() => <AutoMode />);
+
+    fireEvent.click(screen.getByRole('button', { name: /autoMode\.dj\.promote/ }));
+    expect(actions.promoteInAutoRoute).toHaveBeenCalledWith('q-next');
+    expect(actions.jumpTo).not.toHaveBeenCalled();
   });
 
   it('exits on a swipe down over the backdrop, but not on one that scrolls the queue', () => {

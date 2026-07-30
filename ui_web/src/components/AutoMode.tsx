@@ -328,8 +328,18 @@ export function AutoMode() {
     }
   };
 
+  /**
+   * Auto Mode's keyboard shortcuts.
+   *
+   * Keydown is delegated, so everything typed into the command bar or the
+   * request search reaches this handler too. Without the guard below, writing a
+   * message to the DJ skipped a track on every "n" and rode the volume with the
+   * arrow keys — the surface fought whoever tried to talk to it.
+   */
   const onKeyDown = (event: KeyboardEvent) => {
     armIdle();
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return;
     if (event.key === 'ArrowUp') actions.setVolume(state.playback.volume + 0.05);
     else if (event.key === 'ArrowDown') actions.setVolume(state.playback.volume - 0.05);
     else if (event.key.toLowerCase() === 'n') void actions.autoSkip();
@@ -507,7 +517,14 @@ export function AutoMode() {
                 <div class={styles.controlHeading}>
                   <div>
                     <strong>{t('autoMode.dj.direction')}</strong>
-                    <span>{t('autoMode.dj.directionHint')}</span>
+                    {/* Honest about when an instruction lands: the track that is
+                        playing, and any handoff already cued behind it, are not
+                        rewritten by a change of mind. */}
+                    <span aria-live="polite">
+                      {state.autoMode.pendingDirection || transitionState().status !== 'idle'
+                        ? t('autoMode.dj.appliesNext')
+                        : t('autoMode.dj.directionHint')}
+                    </span>
                   </div>
                   <button class={styles.requestButton} type="button" onClick={() => setRequestOpen(true)}>
                     <span aria-hidden="true">＋</span>
@@ -638,7 +655,7 @@ export function AutoMode() {
               <span class={styles.upHead}>
                 {transitionState().status === 'idle'
                   ? t('autoMode.dj.route')
-                  : `${transitionState().status === 'preparing' ? t('autoMode.dj.preparing') : t('autoMode.dj.mixing')} · ${techniqueText(transitionState().technique)}`}
+                  : `${transitionState().status === 'armed' ? t('autoMode.dj.cued') : t('autoMode.dj.mixing')} · ${techniqueText(transitionState().technique)}`}
               </span>
               <div
                 class={styles.filmstrip}
@@ -654,17 +671,25 @@ export function AutoMode() {
                   {(track, index) => {
                     const image = () => track.cover ?? coverUrl(track.id);
                     const plan = () => state.autoMode.plan[queueIdentity(track)];
+                    /** The one entry the DJ has already loaded and cued. */
+                    const cued = () =>
+                      index() === 0 && transitionState().status !== 'idle'
+                      && transitionState().nextTrackId === queueIdentity(track);
                     return (
                       <button
-                        class={styles.nextCard}
+                        classList={{ [styles.nextCard]: true, [styles.nextCardCued]: cued() }}
                         type="button"
                         title={`${track.title} — ${track.artist}`}
-                        onClick={() => actions.jumpTo(state.playback.index + index() + 1)}
+                        aria-label={cued()
+                          ? `${track.title} — ${track.artist}`
+                          : t('autoMode.dj.promote', { title: track.title })}
+                        disabled={cued()}
+                        onClick={() => actions.promoteInAutoRoute(track.queueId)}
                       >
                         <span class={styles.nextCover} style={{ 'background-image': `url("${image()}")` }} />
                         <span class={styles.nextMeta}>
                           <small class={styles.routePosition}>
-                            {index() + 1}
+                            {cued() ? t('autoMode.dj.cued') : index() + 1}
                             <Show when={plan()?.requestId}> · {t('autoMode.dj.requested')}</Show>
                           </small>
                           <strong>{track.title}</strong>

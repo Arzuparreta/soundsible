@@ -120,7 +120,7 @@ describe('GeneratedQueueController', () => {
     const h = harness();
     await h.controller.start('auto_mode', seed);
 
-    await h.controller.setProfile('familiar');
+    await h.controller.replan('familiar');
 
     expect(h.requestPlan).toHaveBeenLastCalledWith(
       'auto_mode',
@@ -134,6 +134,7 @@ describe('GeneratedQueueController', () => {
       'auto_mode',
       expect.any(Object),
       true,
+      expect.any(Object),
     );
     expect(h.onStatus).toHaveBeenCalledWith(
       'auto_mode',

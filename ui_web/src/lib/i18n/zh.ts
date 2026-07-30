@@ -124,6 +124,8 @@ export const zh: Dict = {
       cancelRequest: '取消点播 {title}',
       withinTracks: '{count} 首以内', route: '已准备路线',
       preparing: '准备中', mixing: '混音中', requested: '点播', analysing: '分析中',
+      cued: '已就绪', appliesNext: '从下一首开始生效；已准备好的衔接保持不变。',
+      promote: '提前播放 {title}',
       requestPanelAria: '向 DJ 点播歌曲',
       requestPromise: 'DJ 会准备过桥，并在接下来三首歌内播放。',
       searchPlaceholder: '歌曲或艺人', searching: '搜索中…',

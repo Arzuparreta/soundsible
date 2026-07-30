@@ -15,7 +15,11 @@ their existing generated-queue planner and playback behaviour.
 - The listener chooses a technical DJ independently from musical direction:
   `adaptive`, `long_blend`, `cuts_drops`, or `open_format`.
 - Natural-language direction and quick controls alter energy, familiarity,
-  destinations and exclusions. A change replans the uncommitted runway.
+  destinations and exclusions. Changes are debounced and coalesced, and replan
+  only the uncommitted runway.
+- Roughly 45 seconds before a blend, the next track is **committed**: it is
+  loaded, cued, and no longer replannable. From that point every instruction
+  applies to the track after it, and the surface says so.
 - Exact song requests form a cancellable FIFO. The first request starts within
   three tracks; each later request is at most three starts after the preceding
   request. Up to two bridge tracks may be inserted.
@@ -27,20 +31,25 @@ their existing generated-queue planner and playback behaviour.
 `shared/dj_engine.py` decodes a source through FFmpeg to mono float PCM on
 stdout and analyses it in memory with NumPy. It extracts tempo/pulse phase,
 phrase boundaries, key/mode, energy, loudness, intro/outro cues and confidence.
-Only versioned JSON features are persisted in `<cache>/dj/analysis.sqlite3`;
-decoded or mixed audio is never written.
+Tracks over four minutes are analysed from their head and tail only — that is
+where a transition is made — which is several times cheaper than decoding the
+whole file and answers the same questions. Only versioned JSON features are
+persisted in `<cache>/dj/analysis.sqlite3`; decoded or mixed audio is never
+written.
 
-Local files can be analysed immediately. Preview tracks use the existing
-full-file preview cache. An uncached preview receives a conservative structural
-fallback on its first route and is queued for download/analysis so later plans
-use real features.
+**Analysis never runs inside a request.** Planning is on the interaction path,
+so `POST /api/discovery/music/dj-plan` uses what is already measured, queues
+what is not on a small background pool, and returns a conservative transition
+marked as such. `POST /api/discovery/music/dj-transition` re-plans a single pair
+from the cache; the player asks for it shortly before committing a handoff, so
+a fade becomes a real blend as soon as the features exist.
 
-`POST /api/discovery/music/dj-plan` gathers a wider candidate pool through the
-existing recommendation providers, applies direction, evaluates transition
-edges and returns a short route. An exact request is treated as a route
-destination rather than a manual queue insertion. Low-confidence or
-incompatible pairs use a structural fade or echo cut instead of forced
-beatmatching.
+`dj-plan` gathers a wider candidate pool through the existing recommendation
+providers, applies direction, evaluates transition edges and returns a short
+route. An exact request is treated as a route destination rather than a manual
+queue insertion. Low-confidence or incompatible pairs use a structural fade or
+echo cut instead of forced beatmatching. A cue the planner cannot place is
+returned as `null` rather than guessed: the player knows the real duration.
 
 Every returned entry may carry:
 
@@ -51,20 +60,34 @@ Every returned entry may carry:
 
 ## Live audio
 
-Normal playback keeps one canonical `HTMLAudioElement`. Auto creates a second
-deck and connects both through a lazy Web Audio graph. The incoming deck is
-loaded and, where its cue permits, prerolls silently. The engine applies
-equal-power gain curves and bounded tempo correction with pitch preservation.
+Soundsible plays through **two symmetric decks**. Whichever deck owns playback
+is the one the rest of the app observes; a handoff moves that ownership without
+loading anything, so a transition costs no re-buffering and the media element
+never has its source re-assigned mid-song. Both decks run through a Web Audio
+graph built when Auto Mode is entered — a user gesture, and therefore the only
+moment an AudioContext can be relied on to start.
+
+The mixer is a state machine — `idle → armed → prerolling → crossfading` — and
+every decision reads a **media** clock rather than wall time. A buffering deck
+delays its own transition instead of being mixed out of at the wrong moment, and
+a pause freezes the blend exactly where it stood. Gains are equal-power curves
+ramped on the audio clock; tempo correction is bounded, pitch-preserving, and
+returns to unity over the eight seconds after the blend.
+
+Before any transition is armed the player validates it against what is actually
+loaded: the cue must have been planned out of the track that is playing, it is
+clamped into the real duration, every track gets a minimum airing, and an
+unmeasured pair is only ever faded, never beatmatched. A bad plan degrades to a
+plain fade; it cannot cut.
 
 At the dominance point, Now Playing, Media Session, queue index and Auto route
-move to the incoming track. At the end of the overlap, the incoming position is
-copied back to the canonical element so the rest of Soundsible continues to
-observe the same stable media element.
+move to the incoming track.
 
 Techniques currently emitted are long blend, bass swap, filter blend, echo cut,
-structural fade and safe fade. Seek and explicit navigation cancel a prepared
-transition. “Next” inside Auto requests a short version of the prepared DJ
-handoff when possible.
+structural fade and safe fade. Seek, explicit navigation and any hard load
+cancel a prepared transition, and the mixer reports that cancellation so the
+session state can never drift from what is audible. “Next” inside Auto brings
+the prepared handoff forward as a short blend rather than cutting.
 
 ## UI
 
@@ -78,6 +101,9 @@ action-oriented rather than a technical dashboard:
   current choice always visible;
 - request search inside Auto (desktop side panel, full mobile panel);
 - request chips with track ETA and cancellation;
+- an explicit promise about when an instruction lands, and a cued next track
+  presented as settled rather than as another destination;
+- route cards that bring a track forward instead of hard-loading it;
 - a numbered, human-readable prepared route with translated transition
   techniques and available BPM on runway cards.
 

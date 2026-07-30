@@ -13,15 +13,23 @@ import json
 import math
 import sqlite3
 import subprocess
+import threading
 import time
 from collections.abc import Iterable, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 from shared.ffmpeg_runtime import ffmpeg_executable
 from shared.runtime import get_cache_dir
 
-ANALYSER_VERSION = 1
+ANALYSER_VERSION = 2
+#: Above this, only the head and tail are decoded. A transition is made out of
+#: the end of one track and the beginning of the next; the twelve minutes in
+#: between cost real time and answer no question the planner asks.
+WINDOWED_ABOVE_SECONDS = 240.0
+HEAD_WINDOW_SECONDS = 90.0
+TAIL_WINDOW_SECONDS = 120.0
 DJ_PROFILES = {"adaptive", "long_blend", "cuts_drops", "open_format"}
 _PROFILE_POLICY = {
     "adaptive": {"bars": 16, "max_stretch": 0.08, "cut": 0.45},
@@ -63,8 +71,15 @@ def _source_stamp(path: Path) -> str:
 
 
 def _fallback(duration: float = 0.0) -> dict[str, Any]:
+    """A track nobody has measured yet.
+
+    `outro_cue` is deliberately `None` rather than a guess: the player knows the
+    real duration of what it has loaded and can place a safe fade against it,
+    whereas a number invented here from a missing duration hint is how a
+    transition ends up scheduled at 0:00.
+    """
     duration = max(0.0, float(duration or 0))
-    outro = max(0.0, duration - min(24.0, duration * 0.15)) if duration else 0.0
+    outro = max(0.0, duration - min(24.0, duration * 0.15)) if duration else None
     return {
         "version": ANALYSER_VERSION,
         "duration": round(duration, 3),
@@ -76,11 +91,33 @@ def _fallback(duration: float = 0.0) -> dict[str, Any]:
         "loudness_db": -14.0,
         "energy": 0.5,
         "intro_cue": 0.0,
-        "outro_cue": round(outro, 3),
-        "phrase_boundaries": [0.0, round(outro, 3)] if outro else [0.0],
+        "outro_cue": round(outro, 3) if outro else None,
+        "phrase_boundaries": [],
         "confidence": 0.18,
         "analysed": False,
     }
+
+
+def cached_analysis(path: str | Path, identity: str) -> dict[str, Any] | None:
+    """Previously measured features for this exact file, or None."""
+    source = Path(path)
+    if not source.is_file():
+        return None
+    try:
+        stamp = _source_stamp(source)
+    except OSError:
+        return None
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT source_stamp, payload FROM audio_analysis WHERE identity = ? AND analyser_version = ?",
+            (identity, ANALYSER_VERSION),
+        ).fetchone()
+    if not row or row[0] != stamp:
+        return None
+    try:
+        return json.loads(row[1])
+    except (TypeError, json.JSONDecodeError):
+        return None
 
 
 def analyse_audio(path: str | Path, identity: str, *, duration_hint: float = 0.0) -> dict[str, Any]:
@@ -88,17 +125,9 @@ def analyse_audio(path: str | Path, identity: str, *, duration_hint: float = 0.0
     source = Path(path)
     if not source.is_file():
         return _fallback(duration_hint)
-    stamp = _source_stamp(source)
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT source_stamp, payload FROM audio_analysis WHERE identity = ? AND analyser_version = ?",
-            (identity, ANALYSER_VERSION),
-        ).fetchone()
-        if row and row[0] == stamp:
-            try:
-                return json.loads(row[1])
-            except (TypeError, json.JSONDecodeError):
-                pass
+    cached = cached_analysis(source, identity)
+    if cached is not None:
+        return cached
 
     analysis = _analyse_pcm(source, duration_hint=duration_hint)
     with _connect() as conn:
@@ -111,47 +140,181 @@ def analyse_audio(path: str | Path, identity: str, *, duration_hint: float = 0.0
                 payload = excluded.payload,
                 updated_at = excluded.updated_at
             """,
-            (identity, stamp, ANALYSER_VERSION, json.dumps(analysis, separators=(",", ":")), int(time.time())),
+            (identity, _source_stamp(source), ANALYSER_VERSION, json.dumps(analysis, separators=(",", ":")), int(time.time())),
         )
     return analysis
 
 
-def _analyse_pcm(path: Path, *, duration_hint: float) -> dict[str, Any]:
+_pool: ThreadPoolExecutor | None = None
+_pending: set[str] = set()
+_pending_lock = threading.Lock()
+
+
+def _analysis_pool() -> ThreadPoolExecutor:
+    global _pool
+    if _pool is None:
+        # Two at a time: enough to keep a session's runway warm, few enough that
+        # analysis never competes with the streaming the listener can hear.
+        _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dj-analysis")
+    return _pool
+
+
+def request_analysis(path: str | Path, identity: str, *, duration_hint: float = 0.0) -> None:
+    """Measure this source in the background.
+
+    Planning never waits on FFmpeg. A route is built from whatever is already
+    known — cached features, or a conservative fallback — and the real analysis
+    lands in the cache for the plans that follow, well before the transition it
+    describes is committed.
+    """
+    source = Path(path)
+    if not source.is_file() or not identity:
+        return
+    with _pending_lock:
+        if identity in _pending:
+            return
+        _pending.add(identity)
+
+    def run() -> None:
+        try:
+            analyse_audio(source, identity, duration_hint=duration_hint)
+        except Exception:
+            pass
+        finally:
+            with _pending_lock:
+                _pending.discard(identity)
+
+    try:
+        _analysis_pool().submit(run)
+    except RuntimeError:
+        with _pending_lock:
+            _pending.discard(identity)
+
+
+def _probe_duration(path: Path) -> float:
+    """Track length without decoding it. Returns 0 when unavailable."""
+    executable = Path(ffmpeg_executable())
+    probe = executable.with_name(executable.name.replace("ffmpeg", "ffprobe", 1))
+    for candidate in (str(probe), "ffprobe"):
+        try:
+            result = subprocess.run(
+                [candidate, "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=20,
+            )
+            return max(0.0, float((result.stdout or b"").decode("utf-8", "ignore").strip() or 0))
+        except (OSError, ValueError, subprocess.SubprocessError):
+            continue
+    return 0.0
+
+
+def _decode(path: Path, sample_rate: int, *, start: float = 0.0, length: float = 0.0):
+    """Decode one window to mono float PCM. Returns None on any failure."""
     try:
         import numpy as np
     except ImportError:
-        return _fallback(duration_hint)
-
-    sample_rate = 11025
+        return None
+    command = [ffmpeg_executable(), "-v", "error"]
+    if start > 0:
+        # Before -i, so FFmpeg seeks instead of decoding and discarding.
+        command += ["-ss", f"{start:.3f}"]
+    command += ["-i", str(path)]
+    if length > 0:
+        command += ["-t", f"{length:.3f}"]
+    command += ["-vn", "-ac", "1", "-ar", str(sample_rate), "-f", "f32le", "pipe:1"]
     try:
         proc = subprocess.run(
-            [
-                ffmpeg_executable(),
-                "-v",
-                "error",
-                "-i",
-                str(path),
-                "-vn",
-                "-ac",
-                "1",
-                "-ar",
-                str(sample_rate),
-                "-f",
-                "f32le",
-                "pipe:1",
-            ],
+            command,
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=180,
         )
     except (OSError, subprocess.SubprocessError):
-        return _fallback(duration_hint)
-    samples = np.frombuffer(proc.stdout, dtype="<f4")
-    if samples.size < sample_rate * 4:
-        return _fallback(duration_hint or samples.size / sample_rate)
+        return None
+    return np.frombuffer(proc.stdout, dtype="<f4")
 
-    duration = samples.size / sample_rate
+
+def _analyse_pcm(path: Path, *, duration_hint: float) -> dict[str, Any]:
+    sample_rate = 11025
+    duration = float(duration_hint or 0)
+    if duration <= 0:
+        duration = _probe_duration(path)
+
+    if duration > WINDOWED_ABOVE_SECONDS:
+        head = _decode(path, sample_rate, length=HEAD_WINDOW_SECONDS)
+        tail_start = max(0.0, duration - TAIL_WINDOW_SECONDS)
+        tail = _decode(path, sample_rate, start=tail_start, length=TAIL_WINDOW_SECONDS)
+        if tail is None or tail.size < sample_rate * 4:
+            return _fallback(duration)
+        return _compose(tail, head, sample_rate, duration=duration, tail_start=tail_start)
+
+    samples = _decode(path, sample_rate)
+    if samples is None or samples.size < sample_rate * 4:
+        return _fallback(duration or (0.0 if samples is None else samples.size / sample_rate))
+    return _compose(samples, samples, sample_rate, duration=samples.size / sample_rate, tail_start=0.0)
+
+
+def _compose(
+    tail,
+    head,
+    sample_rate: int,
+    *,
+    duration: float,
+    tail_start: float,
+) -> dict[str, Any]:
+    """Build the stored analysis from the measured windows.
+
+    `tail` carries the pulse, key and outro — everything a transition mixes
+    *out* of. `head` only has to say where the music starts, which is what the
+    next track mixes *into*.
+    """
+    import numpy as np
+
+    features = _window_features(tail, sample_rate)
+    if features is None:
+        return _fallback(duration)
+    period = features["period"]
+    phrase_seconds = 32 * period
+    beat_offset = tail_start + features["beat_offset"]
+    intro_local = _window_features(head, sample_rate)["intro"] if head is not None and head.size >= sample_rate * 4 else 0.0
+
+    first_phrase = beat_offset + max(0, math.ceil((tail_start - beat_offset) / phrase_seconds)) * phrase_seconds
+    boundaries = [max(0.0, first_phrase)]
+    while boundaries[-1] + phrase_seconds < duration:
+        boundaries.append(boundaries[-1] + phrase_seconds)
+    last_active = tail_start + features["last_active"]
+    outro_candidates = [value for value in boundaries if value <= min(last_active, duration - period * 4)]
+    outro = outro_candidates[-1] if outro_candidates else max(0.0, duration - phrase_seconds)
+
+    confidence = min(0.98, 0.42 + max(0.0, features["periodicity"]) * 1.8 + min(0.2, features["key_margin"] / 8))
+    return {
+        "version": ANALYSER_VERSION,
+        "duration": round(duration, 3),
+        "bpm": round(features["bpm"], 3),
+        "beat_offset": round(beat_offset, 3),
+        "bar_seconds": round(period * 4, 3),
+        "key": features["key"],
+        "mode": features["mode"],
+        "loudness_db": round(features["loudness_db"], 3),
+        "energy": round(float(np.clip(features["energy"], 0, 1)), 3),
+        "intro_cue": round(max(0.0, min(intro_local, duration * 0.25)), 3),
+        "outro_cue": round(max(0.0, min(outro, duration - period * 4)), 3),
+        "phrase_boundaries": [round(float(value), 3) for value in boundaries],
+        "confidence": round(confidence, 3),
+        "analysed": True,
+    }
+
+
+def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
+    """Frame-level measures for one decoded window, in window-relative time."""
+    import numpy as np
+
+    if samples is None or samples.size < sample_rate * 4:
+        return None
     hop = 512
     frame = 2048
     usable = samples[: samples.size - frame]
@@ -201,37 +364,26 @@ def _analyse_pcm(path: Path, *, duration_hint: float) -> dict[str, Any]:
     key_score, tonic, mode = candidates[0]
     key_margin = max(0.0, key_score - candidates[1][0])
 
+    window_seconds = samples.size / sample_rate
     threshold = max(0.08, float(np.percentile(energy, 35)))
     active_frames = np.flatnonzero(energy >= threshold)
     intro = float(active_frames[0] * hop / sample_rate) if active_frames.size else 0.0
-    last_active = float(active_frames[-1] * hop / sample_rate) if active_frames.size else duration
-    beats_per_phrase = 32
-    phrase_seconds = beats_per_phrase * period
-    first_phrase = beat_offset + max(0, math.ceil((intro - beat_offset) / phrase_seconds)) * phrase_seconds
-    boundaries = [max(0.0, first_phrase)]
-    while boundaries[-1] + phrase_seconds < duration:
-        boundaries.append(boundaries[-1] + phrase_seconds)
-    outro_candidates = [value for value in boundaries if value <= min(last_active, duration - period * 4)]
-    outro = outro_candidates[-1] if outro_candidates else max(0.0, duration - phrase_seconds)
+    last_active = float(active_frames[-1] * hop / sample_rate) if active_frames.size else window_seconds
     loudness_db = 20 * math.log10(max(float(np.sqrt(np.mean(samples * samples))), 1e-8))
     periodicity = float(max(0.0, correlations.max()) / (np.dot(centred, centred) + 1e-9))
-    confidence = min(0.98, 0.42 + max(0.0, periodicity) * 1.8 + min(0.2, key_margin / 8))
 
     return {
-        "version": ANALYSER_VERSION,
-        "duration": round(duration, 3),
-        "bpm": round(float(bpm), 3),
-        "beat_offset": round(beat_offset, 3),
-        "bar_seconds": round(period * 4, 3),
+        "bpm": float(bpm),
+        "period": period,
+        "beat_offset": beat_offset,
         "key": _KEY_NAMES[tonic],
         "mode": mode,
-        "loudness_db": round(loudness_db, 3),
-        "energy": round(float(np.clip(np.mean(energy), 0, 1)), 3),
-        "intro_cue": round(max(0.0, min(intro, first_phrase)), 3),
-        "outro_cue": round(max(0.0, min(outro, duration - period * 4)), 3),
-        "phrase_boundaries": [round(float(value), 3) for value in boundaries],
-        "confidence": round(confidence, 3),
-        "analysed": True,
+        "key_margin": key_margin,
+        "loudness_db": loudness_db,
+        "energy": float(np.mean(energy)),
+        "intro": intro,
+        "last_active": last_active,
+        "periodicity": periodicity,
     }
 
 
@@ -287,12 +439,19 @@ def plan_transition(
     bar_seconds = float(outgoing.get("bar_seconds") or 2.0)
     overlap = max(4.0, min(48.0, bars * bar_seconds))
     duration = float(outgoing.get("duration") or 0)
-    proposed_out = float(outgoing.get("outro_cue") or max(0.0, duration - overlap))
-    out_cue = min(proposed_out, max(0.0, duration - overlap - 0.5)) if duration else proposed_out
+    # `None` means "place it against the real duration". The player knows what it
+    # actually loaded; a cue invented here from an unknown length is worse than
+    # no cue at all, because it looks authoritative.
+    outro = outgoing.get("outro_cue")
+    if outro is None and not duration:
+        out_cue = None
+    else:
+        proposed_out = float(outro if outro is not None else max(0.0, duration - overlap))
+        out_cue = min(proposed_out, max(0.0, duration - overlap - 0.5)) if duration else proposed_out
     in_cue = float(incoming.get("intro_cue") or 0)
     return {
         "technique": technique,
-        "out_cue": round(out_cue, 3),
+        "out_cue": round(out_cue, 3) if out_cue is not None else None,
         "in_cue": round(in_cue, 3),
         "overlap_seconds": round(overlap, 3),
         "overlap_bars": bars,

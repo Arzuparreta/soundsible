@@ -4,13 +4,21 @@ import { createSocket, type AppSocket, dispatchDiscoverSeed } from '../lib/socke
 import {
   api,
   type DjDirection,
+  type DjItemRef,
   type DjPlanResponse,
   type DjProfile,
   type DeviceRegistration,
   type ListeningPlanItem,
   type RemotePlaybackState,
 } from '../lib/api';
-import { audioEl, audioService, storedVolume } from '../lib/audio';
+import {
+  audioEl,
+  audioService,
+  eachDeck,
+  isActiveDeck,
+  storedVolume,
+  type LiveTransitionPlan,
+} from '../lib/audio';
 import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers, playbackYoutubeId } from '../lib/media';
 import { prefetchPreviews, upcomingPreviewIds } from '../lib/prefetch';
 import { toast } from '../lib/toast';
@@ -250,6 +258,7 @@ const [state, setState] = createStore<AppState>({
     direction: initialDjDirection(),
     requests: [],
     transition: { status: 'idle' },
+    pendingDirection: false,
     phase: 'idle',
     activity: null,
     plan: {},
@@ -763,78 +772,260 @@ function restoreSameDevicePlayback(remote: RemotePlaybackState): void {
   audioService.prime(trackUrl(track), pos);
 }
 
-let scheduledDjTransition = '';
+/**
+ * How long before the blend the next track is committed.
+ *
+ * At the commit point the incoming deck is loaded and cued, and the route stops
+ * being editable: direction changes, requests and DJ changes from here on apply
+ * to the track *after* this one. That is what a DJ does, and it is the whole
+ * reason the surface can be touched mid-song without breaking the mix.
+ */
+const COMMIT_LEAD_SECONDS = 45;
+/** Shortest a track may play before the DJ is allowed to mix out of it. */
+const MIN_PLAY_SECONDS = 90;
+const MIN_PLAY_FRACTION = 0.6;
+/** Below this the analysis is a structural guess, not measured features. */
+const TRUSTED_CONFIDENCE = 0.35;
 
-function resetDjTransitionState(): void {
-  scheduledDjTransition = '';
-  audioService.cancelDjTransition();
-  if (state.autoMode.active) setState('autoMode', 'transition', { status: 'idle' });
+interface CommittedTransition {
+  queueId: string;
+  fromKey: string;
+  toKey: string;
+}
+let committedTransition: CommittedTransition | null = null;
+/** Claim on the commitment. Arming a transition cancels whatever was armed
+ * before, and that cancellation reports back — so every callback has to be able
+ * to tell whether it is still the one in charge, or the ghost of the handoff it
+ * just replaced. */
+let commitSeq = 0;
+
+/** Duration of what is actually loaded, preferring the media element over the
+ * catalogue metadata — a plan clamped against a wrong duration is exactly how a
+ * cue lands in the middle of a song. */
+function playingDuration(): number {
+  const deck = audioEl();
+  if (Number.isFinite(deck.duration) && deck.duration > 0) return deck.duration;
+  const declared = state.playback.currentTrack?.duration ?? 0;
+  return Number.isFinite(declared) && declared > 0 ? declared : 0;
 }
 
-function maybeStartDjTransition(immediate = false): boolean {
-  if (!state.autoMode.active || state.autoMode.transition.status !== 'idle') return false;
-  const pb = state.playback;
-  const nextIndex = pb.index + 1;
-  const next = pb.queue[nextIndex];
-  if (!next || !pb.currentTrack) return false;
-  const identity = queueIdentity(next);
-  const plan = state.autoMode.plan[identity]?.transition;
-  if (!plan) return false;
-  const triggerAt = immediate ? pb.currentTime : plan.out_cue - 8;
-  if (!immediate && pb.currentTime < Math.max(0, triggerAt)) return false;
-  const key = `${pb.index}:${identity}:${plan.out_cue}`;
-  if (scheduledDjTransition === key) return false;
-  scheduledDjTransition = key;
-  const livePlan = immediate
-    ? { ...plan, out_cue: pb.currentTime + 0.35, overlap_seconds: Math.min(5, plan.overlap_seconds) }
-    : plan;
+/**
+ * Turn a planned transition into one that is safe to perform *right now*.
+ *
+ * Every rule here exists because its absence produced an audible failure:
+ *
+ * - a cue is only honoured when it was planned out of the track that is
+ *   playing (`fromKey`), otherwise it belongs to a different timeline;
+ * - the cue is clamped into the real duration, so a missing or zero `out_cue`
+ *   becomes an end-of-track fade instead of a mix at 0:00;
+ * - a track always gets a minimum airing before the DJ may leave it;
+ * - a low-confidence analysis is never beatmatched, only faded.
+ *
+ * The result is that a bad plan degrades to a plain fade. It never cuts.
+ */
+function resolveTransition(
+  fromKey: string,
+  duration: number,
+  item: AutoPlanItem | undefined,
+): LiveTransitionPlan | null {
+  if (!Number.isFinite(duration) || duration <= 4) return null;
+  const chained = item?.fromKey === fromKey ? item.transition : undefined;
+  const trusted = (chained?.confidence ?? 0) >= TRUSTED_CONFIDENCE;
+  const requested = chained?.overlap_seconds ?? 6;
+  const overlap = Math.max(1.5, Math.min(trusted ? requested : Math.min(requested, 6), duration * 0.25));
+  const latest = duration - overlap - 1;
+  if (latest <= 0) return null;
+  const earliest = Math.min(Math.min(MIN_PLAY_SECONDS, duration * MIN_PLAY_FRACTION), latest);
+  const proposed = chained && Number.isFinite(chained.out_cue) && (chained.out_cue ?? 0) > 0
+    ? Number(chained.out_cue)
+    : latest;
+  return {
+    technique: trusted ? chained!.technique : 'safe_fade',
+    out_cue: Math.min(latest, Math.max(earliest, proposed)),
+    in_cue: trusted ? chained!.in_cue : 0,
+    overlap_seconds: overlap,
+    overlap_bars: chained?.overlap_bars ?? 0,
+    playback_rate: trusted ? chained!.playback_rate : 1,
+    confidence: chained?.confidence ?? 0,
+  };
+}
+
+/** Hand the runway over to the mixer and freeze it there. */
+function commitTransition(
+  next: PlaybackQueueEntry,
+  fromKey: string,
+  plan: LiveTransitionPlan,
+  manual: boolean,
+): void {
+  const toKey = queueIdentity(next);
+  const token = ++commitSeq;
+  const owns = () => commitSeq === token;
+  committedTransition = { queueId: next.queueId, fromKey, toKey };
   setState('autoMode', 'transition', {
-    status: 'preparing',
-    technique: livePlan.technique,
-    nextTrackId: identity,
+    status: 'armed',
+    technique: plan.technique,
+    nextTrackId: toKey,
   });
-  void audioService.scheduleDjTransition(trackUrl(next), livePlan, {
+  audioService.armTransition(trackUrl(next), plan, {
     onDominant: () => {
-      if (!state.autoMode.active || state.playback.queue[nextIndex]?.queueId !== next.queueId) return;
+      if (!owns()) return;
+      const queue = state.playback.queue;
+      const index = queue.findIndex((entry) => entry.queueId === next.queueId);
+      // The incoming deck is already audible; there is no undo. Follow it.
       activeAttempt = null;
+      const deck = audioEl();
       setState('playback', {
         currentTrack: next,
-        index: nextIndex,
-        currentTime: livePlan.in_cue + livePlan.overlap_seconds / 2,
-        duration: next.duration ?? 0,
-        isPlaying: true,
+        index: index === -1 ? state.playback.index : index,
+        currentTime: deck.currentTime,
+        duration: Number.isFinite(deck.duration) && deck.duration > 0 ? deck.duration : next.duration ?? 0,
+        isPlaying: !deck.paused,
         isLoading: false,
         loadError: false,
         phase: 'playing',
       });
       setState('autoMode', 'transition', {
         status: 'mixing',
-        technique: livePlan.technique,
-        nextTrackId: identity,
+        technique: plan.technique,
+        nextTrackId: toKey,
       });
       setState('autoMode', 'requests', (requests) =>
-        requests.filter((request) => request.track.id !== next.id),
+        requests.filter((request) => queueIdentity(request.track) !== toKey),
       );
       updateMediaSession(next);
       pushPlaybackState();
     },
     onComplete: (position) => {
-      scheduledDjTransition = '';
-      setState('playback', { currentTime: position, duration: audioEl().duration || next.duration || 0 });
+      if (!owns()) return;
+      committedTransition = null;
+      setState('playback', { currentTime: position, duration: playingDuration() });
       setState('autoMode', 'transition', { status: 'idle' });
-      void generatedQueue?.refillNow();
+      if (state.autoMode.active) void generatedQueue?.ensureRunway();
+    },
+    onCancel: () => {
+      if (!owns()) return;
+      committedTransition = null;
+      setState('autoMode', 'transition', { status: 'idle' });
     },
     onError: () => {
-      scheduledDjTransition = '';
+      if (!owns()) return;
+      const index = state.playback.queue.findIndex((entry) => entry.queueId === next.queueId);
+      committedTransition = null;
       setState('autoMode', 'transition', { status: 'idle' });
-      // The request/route remains intact; normal playback is the safe fallback.
-      loadIndex(nextIndex, { trigger: 'next' });
+      // The route stays intact; plain playback is the safe fallback.
+      if (index > 0) loadIndex(index, { trigger: 'next' });
     },
-  });
-  return true;
+  }, { manual });
+}
+
+/** How far ahead of the commit point an unmeasured transition asks to be
+ * re-planned, leaving room for the answer to arrive in time to be used. */
+const REFINE_LEAD_SECONDS = 20;
+let refinedPair = '';
+
+function djItemRef(track: Track): DjItemRef {
+  return {
+    id: track.id,
+    track_id: track.source === 'preview' ? undefined : track.id,
+    youtube_id: track.youtube_id ?? (track.source === 'preview' ? track.id : undefined),
+    source: track.source,
+    title: track.title,
+    artist: track.artist,
+    duration: track.duration,
+  };
+}
+
+/**
+ * Upgrade a conservative transition once its analysis exists.
+ *
+ * The planner answers instantly with a fade for anything it has not measured
+ * yet. This asks again just before the handoff is committed: by then the
+ * background analysis has usually landed, and the fade becomes the beatmatched
+ * blend it was always meant to be. If it has not, nothing is lost — the fade
+ * was already safe.
+ */
+function maybeRefineTransition(current: Track, next: PlaybackQueueEntry, fromKey: string): void {
+  const toKey = queueIdentity(next);
+  const pair = `${fromKey}>${toKey}`;
+  if (refinedPair === pair) return;
+  const item = state.autoMode.plan[toKey];
+  if (!item || item.fromKey !== fromKey) return;
+  if ((item.transition?.confidence ?? 0) >= TRUSTED_CONFIDENCE) return;
+  refinedPair = pair;
+  void api
+    .refineDjTransition({
+      dj_profile: state.autoMode.djProfile,
+      from: djItemRef(current),
+      to: djItemRef(next),
+    })
+    .then((result) => {
+      if (!result.measured || !state.autoMode.active) return;
+      if (state.autoMode.plan[toKey]?.fromKey !== fromKey) return;
+      setState('autoMode', 'plan', toKey, 'transition', result.transition);
+    })
+    .catch(() => {
+      /* the conservative plan stands */
+    });
+}
+
+/** Watch the runway from `timeupdate` and commit when the moment arrives. */
+function evaluateDjRunway(): void {
+  if (!state.autoMode.active || committedTransition || audioService.mixPhase() !== 'idle') return;
+  const pb = state.playback;
+  const current = pb.currentTrack;
+  const next = pb.queue[pb.index + 1];
+  if (!current || !next || pb.loadError) return;
+  const fromKey = queueIdentity(current);
+  const plan = resolveTransition(fromKey, playingDuration(), state.autoMode.plan[queueIdentity(next)]);
+  if (!plan) return;
+  if (pb.currentTime >= plan.out_cue - COMMIT_LEAD_SECONDS - REFINE_LEAD_SECONDS) {
+    maybeRefineTransition(current, next, fromKey);
+  }
+  if (pb.currentTime < plan.out_cue - COMMIT_LEAD_SECONDS) return;
+  commitTransition(next, fromKey, plan, false);
+}
+
+/** Index that new manual entries must land after, so they cannot displace a
+ * handoff that is already loaded and cued. */
+function insertionFloor(): number {
+  const pb = state.playback;
+  if (!committedTransition) return pb.index;
+  const committed = pb.queue.findIndex((entry) => entry.queueId === committedTransition!.queueId);
+  return committed > pb.index ? committed : pb.index;
+}
+
+let replanTimer: ReturnType<typeof setTimeout> | null = null;
+const REPLAN_DEBOUNCE_MS = 800;
+
+/**
+ * Rewrite the uncommitted runway after a direction change.
+ *
+ * Debounced and coalesced: a listener nudging three controls in a row is one
+ * intention, not three replans. Nothing that is already committed is touched,
+ * so the music that is playing — and the one blend that is prepared — carries
+ * on undisturbed.
+ */
+function scheduleRunwayReplan(): void {
+  if (!state.autoMode.active) return;
+  if (replanTimer) clearTimeout(replanTimer);
+  setState('autoMode', 'pendingDirection', true);
+  replanTimer = setTimeout(() => {
+    replanTimer = null;
+    setState('autoMode', 'pendingDirection', false);
+    if (state.autoMode.active) void ensureGeneratedQueue().replan(state.autoMode.profile);
+  }, REPLAN_DEBOUNCE_MS);
+}
+
+function cancelRunwayReplan(): void {
+  if (replanTimer) clearTimeout(replanTimer);
+  replanTimer = null;
+  setState('autoMode', 'pendingDirection', false);
 }
 
 function onEnded(): void {
+  // A committed handoff owns the end of this track: the mixer starts the blend
+  // off the same moment, and advancing the queue here would cancel it.
+  if (audioService.mixPhase() !== 'idle') return;
   const pb = state.playback;
   if (pb.repeat === 'one') {
     audioService.seek(0);
@@ -1355,16 +1546,22 @@ export const actions = {
       activity: null,
       plan: {},
       transition: { status: 'idle' },
+      pendingDirection: false,
     });
+    // Entering Auto Mode is a user gesture, which is the only reliable moment to
+    // build the mixing graph: an AudioContext that cannot leave `suspended`
+    // would silence the decks routed into it.
+    audioService.ensureMixGraph();
     void ensureGeneratedQueue().start('auto_mode', current, state.autoMode.profile);
   },
 
   /** Leave Auto while preserving playback and every track it prepared. */
   exitAutoMode(): void {
-    // Once the incoming deck is dominant, let the already audible handoff
-    // finish before returning to normal playback. Cancelling it would revive
-    // the faded-out song while the UI names the new one.
-    if (state.autoMode.transition.status !== 'mixing') resetDjTransitionState();
+    cancelRunwayReplan();
+    // A blend that is already sounding finishes on its own; cancelling it would
+    // revive the faded-out song while the UI names the new one. Anything merely
+    // prepared is dropped.
+    if (audioService.mixPhase() !== 'crossfading') audioService.cancelMix('exit');
     generatedQueue?.stop('auto_mode');
     if (autoPlaybackPrefs) {
       setState('playback', {
@@ -1382,7 +1579,7 @@ export const actions = {
       /* private mode / storage disabled */
     }
     setState('autoMode', 'profile', profile);
-    void ensureGeneratedQueue().setProfile(profile);
+    scheduleRunwayReplan();
   },
 
   setAutoDjProfile(profile: DjProfile): void {
@@ -1392,12 +1589,12 @@ export const actions = {
       /* private mode / storage disabled */
     }
     setState('autoMode', 'djProfile', profile);
-    if (state.autoMode.active) void ensureGeneratedQueue().setProfile(state.autoMode.profile);
+    scheduleRunwayReplan();
   },
 
   setAutoDirection(direction: Partial<DjDirection>): void {
     setState('autoMode', 'direction', (current) => ({ ...current, ...direction }));
-    if (state.autoMode.active) void ensureGeneratedQueue().setProfile(state.autoMode.profile);
+    scheduleRunwayReplan();
   },
 
   requestAutoTrack(track: Track): void {
@@ -1413,19 +1610,48 @@ export const actions = {
       etaTracks: null,
     };
     setState('autoMode', 'requests', (requests) => [...requests, request]);
-    void ensureGeneratedQueue().setProfile(state.autoMode.profile);
+    scheduleRunwayReplan();
   },
 
   cancelAutoRequest(id: string): void {
     setState('autoMode', 'requests', (requests) => requests.filter((request) => request.id !== id));
-    if (state.autoMode.active) void ensureGeneratedQueue().setProfile(state.autoMode.profile);
+    scheduleRunwayReplan();
   },
 
+  /**
+   * "Next" inside Auto Mode.
+   *
+   * A skip is still a mix, just a short one: the listener asked for the next
+   * track, not for a hard cut. The handoff is reported immediately — they
+   * already know the track changed — while the blend itself lands underneath.
+   */
   async autoSkip(): Promise<void> {
     const canAdvance = () => state.playback.index < state.playback.queue.length - 1;
     if (canAdvance()) {
-      void generatedQueue?.refillNow();
-      if (!maybeStartDjTransition(true)) actions.next();
+      const pb = state.playback;
+      const next = pb.queue[pb.index + 1];
+      const current = pb.currentTrack;
+      if (audioService.mixPhase() !== 'idle') {
+        // A blend was already prepared for this exact pair: bring it forward.
+        audioService.startMixNow();
+      } else if (next && current) {
+        const fromKey = queueIdentity(current);
+        const item = state.autoMode.plan[queueIdentity(next)];
+        const chained = item?.fromKey === fromKey ? item.transition : undefined;
+        const trusted = (chained?.confidence ?? 0) >= TRUSTED_CONFIDENCE;
+        commitTransition(next, fromKey, {
+          technique: trusted ? chained!.technique : 'safe_fade',
+          out_cue: 0, // a manual skip blends from wherever the track is now
+          in_cue: trusted ? chained!.in_cue : 0,
+          overlap_seconds: 1.6,
+          overlap_bars: chained?.overlap_bars ?? 0,
+          playback_rate: trusted ? chained!.playback_rate : 1,
+          confidence: chained?.confidence ?? 0,
+        }, true);
+      } else {
+        actions.next();
+      }
+      void generatedQueue?.ensureRunway();
       return;
     }
     await generatedQueue?.refillNow();
@@ -1592,7 +1818,9 @@ export const actions = {
   },
 
   next(trigger: PlaybackTrigger = 'next'): void {
-    if (state.autoMode.transition.status !== 'idle') resetDjTransitionState();
+    // Every path out of here either loads a deck or does nothing; loading
+    // cancels the mixer, which reports back and clears the DJ state itself.
+    if (audioService.mixPhase() !== 'idle') audioService.cancelMix('load');
     const pb = state.playback;
     if (pb.queue.length === 0) return;
     if (pb.index < pb.queue.length - 1) loadIndex(pb.index + 1, { trigger });
@@ -1618,7 +1846,6 @@ export const actions = {
   },
 
   seek(t: number): void {
-    if (state.autoMode.transition.status !== 'idle') resetDjTransitionState();
     audioService.seek(t);
     setState('playback', 'currentTime', Math.max(0, t));
     pushPlaybackState();
@@ -1637,7 +1864,7 @@ export const actions = {
       return;
     }
     discardFutureAutoplay();
-    const at = manualInsertIndex(state.playback.queue, state.playback.index, 'last');
+    const at = manualInsertIndex(state.playback.queue, insertionFloor(), 'last');
     const entry = createQueueEntry(track, 'manual', 'add_to_queue');
     setState('playback', 'queue', (q) => [...q.slice(0, at), entry, ...q.slice(at)]);
     toast.success(tr('toast.addedToQueue'));
@@ -1684,7 +1911,8 @@ export const actions = {
       return;
     }
     discardFutureAutoplay();
-    const at = state.playback.index + 1;
+    // Never in front of a handoff that is already loaded and cued.
+    const at = insertionFloor() + 1;
     const entry = createQueueEntry(track, 'manual', 'play_next');
     setState('playback', 'queue', (q) => [...q.slice(0, at), entry, ...q.slice(at)]);
     toast.success(tr('toast.playNextConfirmed'));
@@ -1736,6 +1964,26 @@ export const actions = {
       if (to <= index) index++;
     }
     setState('playback', { queue: q, index });
+    prefetchUpcoming();
+  },
+
+  /**
+   * Bring a track from the prepared route forward.
+   *
+   * Inside Auto Mode a runway card is a plan, not a destination: promoting it
+   * keeps the session running, where jumping to it used to hard-load a stream
+   * over whatever the DJ had already prepared. It never lands in front of a
+   * committed handoff.
+   */
+  promoteInAutoRoute(queueId: string): void {
+    const pb = state.playback;
+    const from = pb.queue.findIndex((entry) => entry.queueId === queueId);
+    const to = insertionFloor() + 1;
+    if (from <= pb.index || from === to || to > from) return;
+    const queue = pb.queue.slice();
+    const [entry] = queue.splice(from, 1);
+    queue.splice(to, 0, entry);
+    setState('playback', 'queue', queue);
     prefetchUpcoming();
   },
 
@@ -2360,6 +2608,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
       index: state.playback.index,
     }),
     identity: queueIdentity,
+    isCommitted: (entry) => committedTransition?.queueId === entry.queueId,
     requestPlan: (intent, profile, seed, limit, exclude, signal) => {
       const seedBody = {
         id: seed.id,
@@ -2383,12 +2632,16 @@ function ensureGeneratedQueue(): GeneratedQueueController {
       }
       return api.planMusicQueue({ intent, profile, seed: seedBody, exclude, limit }, signal);
     },
-    applyPlan: (intent, response, replace) => {
+    applyPlan: (intent, response, replace, anchor) => {
+      // What a replacing plan keeps: everything already played, every explicit
+      // request, and the one handoff that is already loaded and cued.
+      const held = replace
+        ? futureEntries(state.playback.queue, state.playback.index).filter(
+            (entry) => entry.queueLane === 'manual' || committedTransition?.queueId === entry.queueId,
+          )
+        : [];
       const retained = replace
-        ? [
-            ...state.playback.queue.slice(0, state.playback.index + 1),
-            ...futureEntries(state.playback.queue, state.playback.index, 'manual'),
-          ]
+        ? [...state.playback.queue.slice(0, state.playback.index + 1), ...held]
         : state.playback.queue;
       const candidates = response.items
         .map((item) => ({ item, track: planItemTrack(item) }))
@@ -2396,15 +2649,30 @@ function ensureGeneratedQueue(): GeneratedQueueController {
       if (candidates.length === 0) return 0;
       const entries = candidates.map(({ track }) => createQueueEntry(track, 'generated', intent));
       if (replace) {
-        const prefix = state.playback.queue.slice(0, state.playback.index + 1);
-        const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
-        setState('playback', 'queue', [...prefix, ...manual, ...entries]);
+        setState('playback', 'queue', [
+          ...state.playback.queue.slice(0, state.playback.index + 1),
+          ...held,
+          ...entries,
+        ]);
       } else {
         setState('playback', 'queue', (queue) => [...queue, ...entries]);
       }
       if (intent === 'auto_mode') {
         const plan: Record<string, AutoPlanItem> = replace ? {} : { ...state.autoMode.plan };
-        for (const { item, track } of candidates) {
+        // The server chains a route: item N's transition is planned out of item
+        // N-1, starting at the anchor. Walk the response in order so each entry
+        // records which track its cue belongs to. An item dropped as a duplicate
+        // breaks the chain, and the entry behind it loses a transition it can no
+        // longer honour — a plain fade, rather than a cue from the wrong song.
+        let previousKey = queueIdentity(anchor);
+        let chained = true;
+        const accepted = new Set(candidates.map(({ item }) => item));
+        for (const item of response.items) {
+          if (!accepted.has(item)) {
+            chained = false;
+            continue;
+          }
+          const track = planItemTrack(item);
           const id = queueIdentity(track);
           plan[id] = {
             trackId: id,
@@ -2413,11 +2681,14 @@ function ensureGeneratedQueue(): GeneratedQueueController {
             reasonValues: item.source_pool === 'related'
               ? { title: state.playback.currentTrack?.title ?? '' }
               : undefined,
-            transition: item.transition,
+            fromKey: previousKey,
+            transition: chained ? item.transition : undefined,
             bpm: item.analysis?.bpm,
             key: item.analysis?.key,
             requestId: item.request_id,
           };
+          previousKey = id;
+          chained = true;
         }
         setState('autoMode', 'plan', plan);
         const djRequests = (response as Partial<DjPlanResponse>).requests;
@@ -2445,7 +2716,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
         return;
       }
       if (status === 'idle') {
-        setState('autoMode', { active: false, phase: 'idle' });
+        setState('autoMode', { active: false, phase: 'idle', pendingDirection: false });
         return;
       }
       if (status === 'planning') {
@@ -2621,7 +2892,25 @@ export function initStore(): void {
     // Test doubles and older engines may not expose this setting yet.
   }
 
-  const a = audioEl();
+  /**
+   * Bind a media listener to both decks, delivering only the active one's
+   * events.
+   *
+   * Playback lives on whichever deck currently owns it, and a DJ handoff moves
+   * that ownership without loading anything. Binding both decks and filtering
+   * here is what lets the rest of the store keep treating playback as one
+   * element: the deck being prepared underneath is silent to it, so no
+   * transport flicker, no duplicate `ended`, no progress from a track the
+   * listener is already leaving.
+   */
+  const a = { addEventListener: (type: string, handler: (event: Event) => void) => {
+    eachDeck((deck) => {
+      deck.addEventListener(type, (event: Event) => {
+        if (!isActiveDeck(event.currentTarget)) return;
+        handler(event);
+      });
+    });
+  } };
   a.addEventListener('play', () => {
     setState('playback', 'isPlaying', true);
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
@@ -2641,7 +2930,8 @@ export function initStore(): void {
   a.addEventListener('error', () => {
     // `stop()` clears src, which some engines report as an error. Nothing is
     // loaded and nothing is expected to be — not a playback failure.
-    if (!a.getAttribute('src') && !a.currentSrc) return;
+    const deck = audioEl();
+    if (!deck.getAttribute('src') && !deck.currentSrc) return;
     onPlaybackFailed(loadGeneration, 'media_error');
   });
   // Buffering, both cold (nothing has sounded yet) and mid-track. Either way the
@@ -2692,13 +2982,15 @@ export function initStore(): void {
     }
   });
   a.addEventListener('timeupdate', () => {
-    const position = a.currentTime || 0;
+    const deck = audioEl();
+    const position = deck.currentTime || 0;
     setState('playback', 'currentTime', position);
-    listeningLearning.update(state.playback.currentTrack, position, !a.paused && !a.ended);
-    if (state.autoMode.active) maybeStartDjTransition();
+    listeningLearning.update(state.playback.currentTrack, position, !deck.paused && !deck.ended);
+    evaluateDjRunway();
   });
   const setDur = () => {
-    setState('playback', 'duration', Number.isFinite(a.duration) ? a.duration : 0);
+    const duration = audioEl().duration;
+    setState('playback', 'duration', Number.isFinite(duration) ? duration : 0);
     updatePositionState();
   };
   a.addEventListener('durationchange', setDur);
@@ -2812,7 +3104,8 @@ export function initStore(): void {
 
   const pushStateOnUnload = () => {
     if (!state.playback.currentTrack) return;
-    const position = Number.isFinite(a.currentTime) ? a.currentTime : state.playback.currentTime || 0;
+    const live = audioEl().currentTime;
+    const position = Number.isFinite(live) ? live : state.playback.currentTime || 0;
     pushPlaybackState({
       keepalive: true,
       body: playbackStateBody({ position_sec: position, is_playing: false }),

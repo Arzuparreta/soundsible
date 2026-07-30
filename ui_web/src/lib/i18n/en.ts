@@ -123,6 +123,8 @@ export const en = {
       cancelRequest: 'Cancel request for {title}',
       withinTracks: 'within {count} tracks', route: 'Prepared route',
       preparing: 'Preparing', mixing: 'Mixing', requested: 'Requested', analysing: 'analysing',
+      cued: 'Cued', appliesNext: 'Applies from the next track; the mix already prepared stays.',
+      promote: 'Play {title} sooner',
       requestPanelAria: 'Request a track from the DJ',
       requestPromise: 'The DJ will build a bridge and play it within the next three tracks.',
       searchPlaceholder: 'Track or artist', searching: 'Searching…',

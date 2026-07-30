@@ -124,6 +124,8 @@ export const fr: Dict = {
       cancelRequest: 'Annuler la demande de {title}',
       withinTracks: 'sous {count} morceaux', route: 'Parcours préparé',
       preparing: 'Préparation', mixing: 'Mix', requested: 'Demandé', analysing: 'analyse',
+      cued: 'Calée', appliesNext: 'S’applique dès le morceau suivant ; le mix déjà préparé reste.',
+      promote: 'Avancer {title}',
       requestPanelAria: 'Demander un morceau au DJ',
       requestPromise: 'Le DJ préparera un pont et le jouera dans les trois prochains morceaux.',
       searchPlaceholder: 'Morceau ou artiste', searching: 'Recherche…',

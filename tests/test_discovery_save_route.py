@@ -796,3 +796,116 @@ def test_discovery_feed_ranks_server_sections_and_reuses_fresh_cache(tmp_path):
     assert all(item.get("reason") for item in first_body["items"])
     assert second.get_json()["cached"] is True
     assert _make_app().test_client().get("/api/home").status_code == 404
+
+
+def test_dj_plan_never_decodes_audio_on_the_interaction_path(tmp_path):
+    # Planning runs while the listener is nudging a control. It may read what
+    # has already been measured and it may queue work, but a decode inside the
+    # request would put FFmpeg between a button press and the music.
+    _make_runtime(tmp_path)
+    base = {
+        "v": 1,
+        "plan_id": "base-plan",
+        "intent": "auto_mode",
+        "profile": "balanced",
+        "seed_identity": "seed",
+        "degraded": False,
+        "generated_at": 1,
+        "pool_counts": {"local": 0, "related": 1, "discovery": 0},
+        "items": [{
+            "id": "candidate01",
+            "youtube_id": "candidate01",
+            "title": "Candidate",
+            "artist": "Artist",
+            "duration": 200,
+            "source": "preview",
+            "source_pool": "related",
+            "recommendation_identity": "music:youtube:candidate01",
+            "recommendation_source": "auto_mode",
+            "score": 0.6,
+        }],
+    }
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    queued: list[str] = []
+    with (
+        patch.object(_disc_routes, "_get_api", return_value=mock_api),
+        patch.object(_disc_routes, "_build_music_plan", return_value=(base, 200)),
+        patch.object(_disc_routes, "_dj_source_path", return_value="/library/candidate.mp3"),
+        patch.object(_disc_routes, "cached_analysis", return_value=None),
+        patch.object(_disc_routes, "request_analysis", side_effect=lambda *a, **k: queued.append(a[1])),
+        patch("shared.dj_engine._decode", side_effect=AssertionError("decoded during a plan request")),
+    ):
+        response = _make_app().test_client().post(
+            "/api/discovery/music/dj-plan",
+            json={
+                "dj_profile": "adaptive",
+                "seed": {"id": "seed", "title": "Seed", "artist": "Artist", "duration": 180},
+                "limit": 3,
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["items"]
+    # Unmeasured pairs are declared as such, so the player keeps them to a fade.
+    assert body["items"][0]["transition"]["confidence"] < 0.35
+    assert queued, "the missing analysis was never queued"
+
+
+def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):
+    _make_runtime(tmp_path)
+    measured = {
+        "duration": 220,
+        "bpm": 120,
+        "key": "C",
+        "mode": "major",
+        "energy": 0.6,
+        "confidence": 0.9,
+        "outro_cue": 190,
+        "intro_cue": 6,
+        "bar_seconds": 2,
+    }
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    pair = {
+        "dj_profile": "long_blend",
+        "from": {"id": "a", "track_id": "a", "title": "A", "artist": "Artist", "duration": 220},
+        "to": {"id": "b", "track_id": "b", "title": "B", "artist": "Artist", "duration": 220},
+    }
+    with (
+        patch.object(_disc_routes, "_get_api", return_value=mock_api),
+        patch.object(_disc_routes, "_dj_source_path", return_value="/library/track.mp3"),
+        patch.object(_disc_routes, "cached_analysis", return_value=measured),
+    ):
+        response = _make_app().test_client().post("/api/discovery/music/dj-transition", json=pair)
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["measured"] is True
+    assert body["transition"]["technique"] == "long_blend"
+    # Pulled back from the measured outro so the whole blend fits in the file.
+    assert body["transition"]["out_cue"] + body["transition"]["overlap_seconds"] <= 220
+
+    # Nothing measured yet: answer immediately with the conservative plan
+    # rather than making the player wait for a decode it cannot use in time.
+    with (
+        patch.object(_disc_routes, "_get_api", return_value=mock_api),
+        patch.object(_disc_routes, "_dj_source_path", return_value=None),
+    ):
+        response = _make_app().test_client().post("/api/discovery/music/dj-transition", json=pair)
+    assert response.get_json()["measured"] is False
+
+
+def test_dj_transition_validates_its_pair(tmp_path):
+    _make_runtime(tmp_path)
+    client = _make_app().test_client()
+    assert client.post("/api/discovery/music/dj-transition", json={}).status_code == 400
+    assert client.post(
+        "/api/discovery/music/dj-transition",
+        json={"dj_profile": "mystery", "from": {}, "to": {}},
+    ).status_code == 400

@@ -124,6 +124,8 @@ export const es: Dict = {
       cancelRequest: 'Cancelar petición de {title}',
       withinTracks: 'en ≤{count} temas', route: 'Ruta preparada',
       preparing: 'Preparando', mixing: 'Mezclando', requested: 'Petición', analysing: 'analizando',
+      cued: 'Preparada', appliesNext: 'Se aplica desde el próximo tema; la mezcla ya preparada se mantiene.',
+      promote: 'Adelantar {title}',
       requestPanelAria: 'Pedir una canción al DJ',
       requestPromise: 'El DJ preparará un puente y la pondrá en las próximas tres canciones.',
       searchPlaceholder: 'Canción o artista', searching: 'Buscando…',

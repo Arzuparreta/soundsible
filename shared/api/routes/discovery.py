@@ -41,7 +41,10 @@ from shared.dj_engine import (
     DJ_PROFILES,
     analyse_audio,
     analysis_identity,
+    cached_analysis,
     order_route,
+    plan_transition,
+    request_analysis,
     route_to_request,
 )
 from shared.path_resolver import resolve_local_track_path
@@ -1177,40 +1180,63 @@ def discovery_music_plan():
     return jsonify(payload), status
 
 
-def _dj_item_analysis(metadata, item: dict) -> dict:
+def _dj_source_path(metadata, item: dict) -> str | None:
+    """Where this item's audio already lives locally, if anywhere.
+
+    An uncached preview is queued for download rather than waited on: the route
+    it belongs to has to be answered now.
+    """
     track_id = str(item.get("track_id") or "").strip()
     video_id = str(item.get("youtube_id") or (item.get("id") if item.get("source") == "preview" else "") or "").strip()
-    path = None
     if track_id:
         track = _planner_track_by_id(metadata, track_id)
-        if track:
-            path = resolve_local_track_path(track)
-    elif validate_youtube_video_id(video_id):
-        from shared import preview_cache
+        return resolve_local_track_path(track) if track else None
+    if not validate_youtube_video_id(video_id):
+        return None
+    from shared import preview_cache
 
-        cached = preview_cache.get_cached(video_id)
-        if cached:
-            path = str(cached[0])
-        else:
-            # The browser already prefetches the runway.  Asking for the full
-            # file here makes a later re-plan use real analysis without making
-            # this request wait on a download.
-            try:
-                from shared.api.routes.playback import _get_preview_stream_cached
+    cached = preview_cache.get_cached(video_id)
+    if cached:
+        return str(cached[0])
+    # The browser already prefetches the runway. Asking for the full file here
+    # makes a later plan use real analysis without making this request wait.
+    try:
+        from shared.api.routes.playback import _get_preview_stream_cached
 
-                api = _get_api()
-                preview_cache.request_prefetch(
-                    [video_id],
-                    download=True,
-                    resolver=lambda vid: _get_preview_stream_cached(api, vid),
-                )
-            except Exception:
-                pass
-    return analyse_audio(
-        path or "",
-        analysis_identity(item),
-        duration_hint=float(item.get("duration") or 0),
-    )
+        api = _get_api()
+        preview_cache.request_prefetch(
+            [video_id],
+            download=True,
+            resolver=lambda vid: _get_preview_stream_cached(api, vid),
+        )
+    except Exception:
+        pass
+    return None
+
+
+def _dj_item_analysis(metadata, item: dict) -> dict:
+    """Features for one route item, without ever blocking on FFmpeg.
+
+    Planning is on the interaction path: a listener nudging the energy control
+    must not wait on a decode. Whatever has already been measured is used, the
+    rest is queued, and the route is built from a conservative fallback that the
+    player is required to treat as such. The refinement endpoint picks up the
+    real numbers once they land, before the transition is ever committed.
+    """
+    duration_hint = float(item.get("duration") or 0)
+    identity = analysis_identity(item)
+    path = _dj_source_path(metadata, item)
+    if not path:
+        return _dj_fallback_analysis(duration_hint)
+    cached = cached_analysis(path, identity)
+    if cached is not None:
+        return cached
+    request_analysis(path, identity, duration_hint=duration_hint)
+    return _dj_fallback_analysis(duration_hint)
+
+
+def _dj_fallback_analysis(duration_hint: float) -> dict:
+    return analyse_audio("", "", duration_hint=duration_hint)
 
 
 def _normalise_dj_request(raw: dict) -> dict | None:
@@ -1353,6 +1379,48 @@ def discovery_music_dj_plan():
             }
             for item in requests
         ],
+    })
+
+
+@discovery_bp.route("/api/discovery/music/dj-transition", methods=["POST"])
+@rate_limit("discovery_music_dj_transition", limit=240, window_sec=60)
+def discovery_music_dj_transition():
+    """Re-plan a single transition against whatever is now measured.
+
+    The route endpoint answers immediately with conservative transitions for
+    anything it has not measured yet. This is how those become real ones: the
+    player asks again shortly before it commits a handoff, and if the background
+    analysis has landed it gets the beatmatched plan instead of the fade. It is
+    cache-only by design — it never triggers a decode, so it always returns fast.
+    """
+    data = request.get_json(silent=True) or {}
+    profile = str(data.get("dj_profile") or "adaptive").strip()
+    if profile not in DJ_PROFILES:
+        return jsonify({"error": "unsupported dj_profile"}), 400
+    outgoing = data.get("from") if isinstance(data.get("from"), dict) else None
+    incoming = data.get("to") if isinstance(data.get("to"), dict) else None
+    if not outgoing or not incoming:
+        return jsonify({"error": "from and to are required"}), 400
+
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    metadata = getattr(lib, "metadata", None)
+
+    def measured(item: dict) -> tuple[dict, bool]:
+        path = _dj_source_path(metadata, item)
+        analysis = cached_analysis(path, analysis_identity(item)) if path else None
+        if analysis is not None:
+            return analysis, True
+        if path:
+            request_analysis(path, analysis_identity(item), duration_hint=float(item.get("duration") or 0))
+        return _dj_fallback_analysis(float(item.get("duration") or 0)), False
+
+    out_analysis, out_ready = measured(outgoing)
+    in_analysis, in_ready = measured(incoming)
+    return jsonify({
+        "transition": plan_transition(out_analysis, in_analysis, profile=profile),
+        "analysis": {"from": out_analysis, "to": in_analysis},
+        "measured": out_ready and in_ready,
     })
 
 

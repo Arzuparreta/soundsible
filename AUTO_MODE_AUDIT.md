@@ -380,3 +380,24 @@ Está bien y no es el problema:
   (cancelación, resultados obsoletos, reintentos). Le falta la distinción
   comprometido/replanificable, no un rediseño.
 - La composición visual de Auto Mode (portada, identidad, transporte, runway).
+
+---
+
+## 7. Estado
+
+Fases 0–4 implementadas (julio 2026). Lo que cambió respecto a lo auditado:
+
+- atajos de teclado con guardia de campo de texto;
+- invariantes de transición (origen del cue, duración real, aireado mínimo,
+  fade obligatorio sin análisis fiable) en `resolveTransition`;
+- punto de compromiso (`committedTransition`) y replan sólo del runway, con
+  debounce; las inserciones manuales nunca se cuelan delante de él;
+- planes encadenados con `fromKey`, y ruta anclada a la cola de lo que sobrevive
+  en vez de a la canción que suena;
+- mezclador de dos decks simétricos, máquina de estados sobre el reloj del
+  medio, sin recarga de stream al terminar la mezcla;
+- servidor que no decodifica en la ruta de interacción: análisis en background,
+  por segmentos en temas largos, y endpoint de refinamiento por par.
+
+El contrato de producto vive en `AUTO_MODE_PLAN.md`; este documento se queda
+como el registro de por qué se hizo así.
