@@ -8,6 +8,7 @@ import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import { artistPath } from '../lib/artistRoute';
 import { isPodcastTrack } from '../lib/track';
+import { createResponsiveTap } from '../lib/responsiveTap';
 import { savedFromTrack } from '../lib/saved';
 import { FavouriteButton } from './FavouriteButton';
 import { CollectionButton } from './CollectionButton';
@@ -218,6 +219,10 @@ export function NowPlaying(props: {
 
   const QueueRow = (props: { entry: PlaybackQueueEntry; current?: boolean; ordinal?: number }) => {
     const queueIndex = () => state.playback.queue.findIndex((entry) => entry.queueId === props.entry.queueId);
+    const tap = createResponsiveTap({
+      disabled: () => Boolean(props.current),
+      onTap: () => actions.playQueueEntry(props.entry.queueId),
+    });
     return (
       <div
         classList={{ [styles.qRow]: true, [styles.qActive]: !!props.current }}
@@ -249,7 +254,8 @@ export function NowPlaying(props: {
           class={styles.qPlay}
           type="button"
           disabled={props.current}
-          onClick={() => actions.playQueueEntry(props.entry.queueId)}
+          data-pressable
+          {...tap}
         >
           <span class={styles.qIndex}>
             <Show when={props.current} fallback={<>{props.ordinal ?? ''}</>}>

@@ -16,6 +16,7 @@ import { EmptyState } from '../components/EmptyState';
 import SongRow from '../components/SongRow';
 import { CatalogResultRow } from '../components/CatalogResultRow';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
+import { createResponsiveTap } from '../lib/responsiveTap';
 
 type ViewMode = 'discover' | 'library';
 
@@ -396,13 +397,16 @@ function DiscoverView(props: {
           <h2 class={styles.sectionTitle}>{t('artist.albums')}</h2>
           <div class={styles.albumRail} data-horizontal-scroll>
             <For each={props.albums}>
-              {(al) => (
-                <button class={styles.albumCard} type="button" onClick={() => props.onAlbumClick(al)}>
-                  <span class={styles.albumCover} style={coverStyle(al.title, al.cover)} />
-                  <span class={styles.albumName}>{al.title}</span>
-                  <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
-                </button>
-              )}
+              {(al) => {
+                const tap = createResponsiveTap({ onTap: () => props.onAlbumClick(al) });
+                return (
+                  <button class={styles.albumCard} type="button" data-pressable {...tap}>
+                    <span class={styles.albumCover} style={coverStyle(al.title, al.cover)} />
+                    <span class={styles.albumName}>{al.title}</span>
+                    <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
+                  </button>
+                );
+              }}
             </For>
           </div>
         </section>
@@ -413,13 +417,16 @@ function DiscoverView(props: {
           <h2 class={styles.sectionTitle}>{t('artist.singlesEps')}</h2>
           <div class={styles.albumRail} data-horizontal-scroll>
             <For each={props.singlesEps}>
-              {(al) => (
-                <button class={styles.albumCard} type="button" onClick={() => props.onAlbumClick(al)}>
-                  <span class={styles.albumCover} style={coverStyle(al.title, al.cover)} />
-                  <span class={styles.albumName}>{al.title}</span>
-                  <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
-                </button>
-              )}
+              {(al) => {
+                const tap = createResponsiveTap({ onTap: () => props.onAlbumClick(al) });
+                return (
+                  <button class={styles.albumCard} type="button" data-pressable {...tap}>
+                    <span class={styles.albumCover} style={coverStyle(al.title, al.cover)} />
+                    <span class={styles.albumName}>{al.title}</span>
+                    <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
+                  </button>
+                );
+              }}
             </For>
           </div>
         </section>
@@ -430,13 +437,16 @@ function DiscoverView(props: {
           <h2 class={styles.sectionTitle}>{t('artist.related')}</h2>
           <div class={styles.albumRail} data-horizontal-scroll>
             <For each={props.related}>
-              {(artist) => (
-                <button class={styles.albumCard} type="button" onClick={() => props.onRelatedClick(artist)}>
-                  <span classList={{ [styles.albumCover]: true, [styles.roundCover]: true }} style={coverStyle(artist.name, artist.picture)} />
-                  <span class={styles.albumName}>{artist.name}</span>
-                  <span class={styles.albumCount}>{formatFans(artist.nb_fans)} {t('artist.fans').replace('{n}', '').trim()}</span>
-                </button>
-              )}
+              {(artist) => {
+                const tap = createResponsiveTap({ onTap: () => props.onRelatedClick(artist) });
+                return (
+                  <button class={styles.albumCard} type="button" data-pressable {...tap}>
+                    <span classList={{ [styles.albumCover]: true, [styles.roundCover]: true }} style={coverStyle(artist.name, artist.picture)} />
+                    <span class={styles.albumName}>{artist.name}</span>
+                    <span class={styles.albumCount}>{formatFans(artist.nb_fans)} {t('artist.fans').replace('{n}', '').trim()}</span>
+                  </button>
+                );
+              }}
             </For>
           </div>
         </section>

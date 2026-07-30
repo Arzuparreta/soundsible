@@ -38,4 +38,44 @@ describe('input-capability CSS policy', () => {
 
     expect(violations).toEqual([]);
   });
+
+  it('keeps component-specific active paint behind a fine pointer query', () => {
+    const sourceRoot = path.resolve(process.cwd(), 'src');
+    const paintedProperties = new Set([
+      'background',
+      'background-color',
+      'border-color',
+      'box-shadow',
+      'color',
+      'filter',
+    ]);
+    const violations: string[] = [];
+
+    for (const file of cssFiles(sourceRoot)) {
+      const root = postcss.parse(fs.readFileSync(file, 'utf8'), { from: file });
+      root.walkRules((rule) => {
+        if (!rule.selector.includes(':active')) return;
+        const paints = rule.nodes.some(
+          (node) => node.type === 'decl' && paintedProperties.has(node.prop),
+        );
+        if (!paints) return;
+
+        const media: AtRule[] = [];
+        let parent = rule.parent;
+        while (parent && parent.type !== 'root') {
+          if (parent.type === 'atrule' && parent.name === 'media') media.push(parent);
+          parent = parent.parent;
+        }
+        const guarded = media.some(
+          (query) =>
+            query.params.includes('hover: hover') && query.params.includes('pointer: fine'),
+        );
+        if (!guarded) {
+          violations.push(`${path.relative(sourceRoot, file)}: ${rule.selector}`);
+        }
+      });
+    }
+
+    expect(violations).toEqual([]);
+  });
 });

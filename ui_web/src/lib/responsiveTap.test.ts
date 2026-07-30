@@ -62,6 +62,44 @@ describe('responsive touch activation', () => {
     expect(onTap).not.toHaveBeenCalled();
   });
 
+  it('cancels horizontal rail swipes as well as vertical scrolling', () => {
+    const onTap = vi.fn();
+    const target = document.createElement('div');
+    const handlers = createResponsiveTap({ onTap });
+
+    handlers.onPointerDown(pointerEvent(target));
+    handlers.onPointerMove(
+      pointerEvent(target, { clientX: 20 + responsiveTapConstants.TAP_SLOP + 1 }),
+    );
+    handlers.onPointerUp(pointerEvent(target, { clientX: 50 }));
+
+    expect(onTap).not.toHaveBeenCalled();
+  });
+
+  it('drops a candidate when the browser cancels the pointer', () => {
+    const onTap = vi.fn();
+    const target = document.createElement('div');
+    const handlers = createResponsiveTap({ onTap });
+
+    handlers.onPointerDown(pointerEvent(target));
+    handlers.onPointerCancel(pointerEvent(target));
+    handlers.onPointerUp(pointerEvent(target));
+
+    expect(onTap).not.toHaveBeenCalled();
+  });
+
+  it('never activates a disabled candidate', () => {
+    const onTap = vi.fn();
+    const target = document.createElement('button');
+    const handlers = createResponsiveTap({ onTap, disabled: () => true });
+
+    handlers.onPointerDown(pointerEvent(target));
+    handlers.onPointerUp(pointerEvent(target));
+    handlers.onClick(mouseEvent(0));
+
+    expect(onTap).not.toHaveBeenCalled();
+  });
+
   it('turns a stationary long press into the menu action, never a tap', () => {
     vi.useFakeTimers();
     const onTap = vi.fn();

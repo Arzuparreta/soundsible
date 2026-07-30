@@ -1,5 +1,6 @@
 import { For, Show, type JSX } from 'solid-js';
-import { A } from '@solidjs/router';
+import { A, useNavigate } from '@solidjs/router';
+import { createResponsiveTap } from '../lib/responsiveTap';
 import styles from './SettingsRows.module.css';
 
 /**
@@ -114,6 +115,7 @@ export function SwitchRow(props: {
         aria-checked={props.checked}
         aria-label={props.label}
         onClick={props.onChange}
+        data-pressable
       >
         <span class={styles.knob} />
       </button>
@@ -130,13 +132,19 @@ export function ActionRow(props: {
   danger?: boolean;
   warn?: boolean;
 }) {
+  const tap = createResponsiveTap({
+    disabled: () => Boolean(props.disabled),
+    onTap: props.onClick,
+  });
+
   return (
     <button
       type="button"
       class={styles.rowBtn}
       classList={{ [styles.rowBtnDanger]: props.danger }}
       disabled={props.disabled}
-      onClick={props.onClick}
+      data-pressable
+      {...tap}
     >
       <RowText label={props.label} hint={props.hint} warn={props.warn} />
       <Chevron />
@@ -146,8 +154,16 @@ export function ActionRow(props: {
 
 /** Row that navigates elsewhere in the app. */
 export function NavRow(props: { href: string; label: string; hint?: string }) {
+  const navigate = useNavigate();
+  const tap = createResponsiveTap({
+    onTap: (event) => {
+      event.preventDefault();
+      navigate(props.href);
+    },
+  });
+
   return (
-    <A href={props.href} class={styles.rowLink}>
+    <A href={props.href} class={styles.rowLink} data-pressable {...tap}>
       <RowText label={props.label} hint={props.hint} />
       <Chevron />
     </A>
@@ -186,6 +202,7 @@ export function SegmentedRow<T extends string>(props: {
               aria-label={option.aria}
               aria-pressed={props.value === option.value}
               onClick={() => props.onChange(option.value)}
+              data-pressable
             >
               <Show when={option.icon} fallback={option.label}>
                 <span class={styles.segIcon}>{option.icon}</span>

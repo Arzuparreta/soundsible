@@ -108,6 +108,11 @@ html[data-player-surface='auto'] #app {
 /* Touch gets one quiet, transient press cue. Native :active is cancelled when
    the gesture becomes a pan, so scrolling never leaves a visual selection. */
 @media (hover: none) and (pointer: coarse) {
+  [data-pressable] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
   :where(a, button, [role='button'], [data-pressable]):not(:disabled):not([aria-disabled='true']):active {
     opacity: 0.78;
   }

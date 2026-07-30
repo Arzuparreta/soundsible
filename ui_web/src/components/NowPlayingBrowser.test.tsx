@@ -103,8 +103,8 @@ describe('NowPlayingBrowser', () => {
     render(() => <NowPlayingBrowser onClose={vi.fn()} />);
 
     expect(screen.getByPlaceholderText('Search everywhere')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Library/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Playlists/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Library/ })).toHaveAttribute('data-pressable');
+    expect(screen.getByRole('button', { name: /^Playlists/ })).toHaveAttribute('data-pressable');
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
     expect(screen.queryByText('Podcasts')).not.toBeInTheDocument();
     expect(screen.queryByText('Settings')).not.toBeInTheDocument();

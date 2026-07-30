@@ -3,6 +3,7 @@ import { actions, isSavedTrack, state } from '../stores';
 import { api, type DjProfile } from '../lib/api';
 import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
+import { createResponsiveTap } from '../lib/responsiveTap';
 import type { AutoActivity } from '../lib/generatedQueue';
 import { parseDjDirection, parseNamedRequest } from '../lib/djDirection';
 import { queueIdentity } from '../lib/queueDiscovery';
@@ -683,6 +684,10 @@ export function AutoMode() {
                     const cued = () =>
                       index() === 0 && transitionState().status !== 'idle'
                       && transitionState().nextTrackId === queueIdentity(track);
+                    const tap = createResponsiveTap({
+                      disabled: cued,
+                      onTap: () => actions.promoteInAutoRoute(track.queueId),
+                    });
                     return (
                       <button
                         classList={{ [styles.nextCard]: true, [styles.nextCardCued]: cued() }}
@@ -692,7 +697,8 @@ export function AutoMode() {
                           ? `${track.title} — ${track.artist}`
                           : t('autoMode.dj.promote', { title: track.title })}
                         disabled={cued()}
-                        onClick={() => actions.promoteInAutoRoute(track.queueId)}
+                        data-pressable
+                        {...tap}
                       >
                         <span class={styles.nextCover} style={{ 'background-image': `url("${image()}")` }} />
                         <span class={styles.nextMeta}>
@@ -735,13 +741,16 @@ export function AutoMode() {
             <div class={styles.requestResults}>
               <Show when={!requestBusy()} fallback={<p class={styles.requestEmpty}>{t('autoMode.dj.searching')}</p>}>
                 <For each={requestResults()} fallback={<p class={styles.requestEmpty}>{t('autoMode.dj.searchEmpty')}</p>}>
-                  {(item) => (
-                    <button type="button" onClick={() => void requestItem(item)}>
-                      <span class={styles.resultCover} style={{ 'background-image': item.cover ? `url("${item.cover}")` : undefined }} />
-                      <span><strong>{item.title}</strong><small>{item.artist ?? item.subtitle}</small></span>
-                      <b>{t('autoMode.dj.requestAction')}</b>
-                    </button>
-                  )}
+                  {(item) => {
+                    const tap = createResponsiveTap({ onTap: () => void requestItem(item) });
+                    return (
+                      <button type="button" data-pressable {...tap}>
+                        <span class={styles.resultCover} style={{ 'background-image': item.cover ? `url("${item.cover}")` : undefined }} />
+                        <span><strong>{item.title}</strong><small>{item.artist ?? item.subtitle}</small></span>
+                        <b>{t('autoMode.dj.requestAction')}</b>
+                      </button>
+                    );
+                  }}
                 </For>
               </Show>
             </div>

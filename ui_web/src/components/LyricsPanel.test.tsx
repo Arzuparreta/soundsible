@@ -60,6 +60,35 @@ describe('LyricsPanel', () => {
     expect(actions.seek).toHaveBeenCalledWith(5);
   });
 
+  it('does not seek when a touch on a lyric line becomes a scroll', async () => {
+    render(() => <LyricsPanel />);
+
+    const second = await screen.findByRole('button', { name: 'Second line' });
+    fireEvent.pointerDown(second, {
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: 20,
+      clientY: 30,
+    });
+    fireEvent.pointerMove(second, {
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: 20,
+      clientY: 50,
+    });
+    fireEvent.pointerUp(second, {
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: 20,
+      clientY: 50,
+    });
+
+    expect(actions.seek).not.toHaveBeenCalled();
+  });
+
   it('centres the active line by scrolling its own container, not scrollIntoView', async () => {
     // scrollIntoView walks up to ancestors and does nothing useful inside the
     // fixed, transformed mobile Now Playing sheet — the panel has to move its

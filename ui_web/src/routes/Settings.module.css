@@ -124,10 +124,6 @@
   }
 }
 
-.cat:active {
-  background: var(--bg-active);
-}
-
 .catCurrent {
   background: color-mix(in srgb, var(--accent) 9%, var(--bg-raised));
 }

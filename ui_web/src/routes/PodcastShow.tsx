@@ -9,6 +9,7 @@ import { neutralCoverStyle } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
+import { createResponsiveTap } from '../lib/responsiveTap';
 
 function fmtDur(s?: number): string {
   if (s == null || !Number.isFinite(s) || s <= 0) return '';
@@ -108,11 +109,22 @@ export default function PodcastShow() {
             {(ep) => {
               const id = ep.guid || ep.enclosure_url;
               const downloaded = () => isDownloaded(ep);
+              const tap = createResponsiveTap({ onTap: () => playEp(ep) });
               return (
                 <div
                   class={styles.ep}
                   data-now-playing={isPlayingEpisode(id) ? '' : undefined}
-                  onClick={() => playEp(ep)}
+                  data-pressable
+                  role="button"
+                  tabindex="0"
+                  aria-label={`${t('podcastShow.ariaPlay')}: ${ep.title}`}
+                  {...tap}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    playEp(ep);
+                  }}
                 >
                   <button
                     class={styles.epPlay}

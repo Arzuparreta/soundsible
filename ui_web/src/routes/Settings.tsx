@@ -11,6 +11,7 @@ import {
 } from '../components/SettingsSections';
 import { groupSections, matchSections } from '../lib/settingsIndex';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
+import { createResponsiveTap } from '../lib/responsiveTap';
 import styles from './Settings.module.css';
 
 /**
@@ -19,12 +20,23 @@ import styles from './Settings.module.css';
  * same registry, so a setting exists in exactly one place with one label.
  */
 function CategoryRow(props: { section: SettingsSection; current: boolean }) {
+  const navigate = useNavigate();
+  const href = () => `/settings/${props.section.id}`;
+  const tap = createResponsiveTap({
+    onTap: (event) => {
+      event.preventDefault();
+      navigate(href());
+    },
+  });
+
   return (
     <A
-      href={`/settings/${props.section.id}`}
+      href={href()}
       class={styles.cat}
       classList={{ [styles.catCurrent]: props.current }}
       aria-current={props.current ? 'page' : undefined}
+      data-pressable
+      {...tap}
     >
       <span class={styles.catIcon} data-tone={props.section.tone}>
         {props.section.icon()}

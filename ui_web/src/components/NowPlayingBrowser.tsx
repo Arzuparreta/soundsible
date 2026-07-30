@@ -46,6 +46,7 @@ import { Spinner } from './Spinner';
 import { SkeletonRows } from './Skeleton';
 import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
+import { createResponsiveTap } from '../lib/responsiveTap';
 import type { CatalogItem, SearchResult, Track } from '../types/music';
 import styles from './NowPlayingBrowser.module.css';
 
@@ -877,13 +878,18 @@ function CatalogArtistView(props: {
                 <h2>{t('artist.albums')}</h2>
                 <div class={styles.albumGrid}>
                   <For each={data().albums}>
-                    {(album) => (
-                      <button type="button" onClick={() => props.onAlbum(album.title, props.view.name, album.deezer_id)}>
-                        <span style={coverStyle(album.title, album.cover)} />
-                        <strong>{album.title}</strong>
-                        <small>{album.year ?? ''}</small>
-                      </button>
-                    )}
+                    {(album) => {
+                      const tap = createResponsiveTap({
+                        onTap: () => props.onAlbum(album.title, props.view.name, album.deezer_id),
+                      });
+                      return (
+                        <button type="button" data-pressable {...tap}>
+                          <span style={coverStyle(album.title, album.cover)} />
+                          <strong>{album.title}</strong>
+                          <small>{album.year ?? ''}</small>
+                        </button>
+                      );
+                    }}
                   </For>
                 </div>
               </section>
@@ -950,12 +956,14 @@ function ViewHeader(props: { title: string; meta?: string; onBack?: () => void; 
 }
 
 function NavigationCard(props: { icon: JSX.Element; title: string; meta: string; onClick: () => void }) {
-  return <button class={styles.navCard} type="button" onClick={props.onClick}><span>{props.icon}</span><strong>{props.title}</strong><small>{props.meta}</small><ChevronIcon /></button>;
+  const tap = createResponsiveTap({ onTap: props.onClick });
+  return <button class={styles.navCard} type="button" data-pressable {...tap}><span>{props.icon}</span><strong>{props.title}</strong><small>{props.meta}</small><ChevronIcon /></button>;
 }
 
 function NavigationRow(props: { title: string; subtitle: string; cover?: string; round?: boolean; onClick: () => void }) {
+  const tap = createResponsiveTap({ onTap: props.onClick });
   return (
-    <button class={styles.navRow} type="button" onClick={props.onClick}>
+    <button class={styles.navRow} type="button" data-pressable {...tap}>
       <span classList={{ [styles.round]: props.round }} style={coverStyle(props.title, props.cover)} />
       <span><strong>{props.title}</strong><small>{props.subtitle}</small></span>
       <ChevronIcon />
@@ -964,7 +972,11 @@ function NavigationRow(props: { title: string; subtitle: string; cover?: string;
 }
 
 function QuickAction(props: { title: string; icon: JSX.Element; disabled: boolean; onClick: () => void }) {
-  return <button class={styles.quick} type="button" disabled={props.disabled} onClick={props.onClick}><span>{props.icon}</span><strong>{props.title}</strong></button>;
+  const tap = createResponsiveTap({
+    disabled: () => props.disabled,
+    onTap: props.onClick,
+  });
+  return <button class={styles.quick} type="button" disabled={props.disabled} data-pressable {...tap}><span>{props.icon}</span><strong>{props.title}</strong></button>;
 }
 
 function BrowserTrackRow(props: {
@@ -980,13 +992,14 @@ function BrowserTrackRow(props: {
   onQueue: () => void;
   onMenu?: (event: MouseEvent) => void;
 }) {
+  const tap = createResponsiveTap({ onTap: props.onPlay });
   return (
     <div classList={{ [styles.trackRow]: true, [styles.trackActive]: props.active }} onContextMenu={(event) => {
       if (!props.onMenu) return;
       event.preventDefault();
       props.onMenu(event);
     }}>
-      <button class={styles.trackMain} type="button" onClick={props.onPlay}>
+      <button class={styles.trackMain} type="button" data-pressable {...tap}>
         <span class={styles.trackCover} style={coverStyle(props.seed, props.cover)} />
         <span class={styles.trackMeta}><strong>{props.title}</strong><small>{props.subtitle}</small></span>
       </button>

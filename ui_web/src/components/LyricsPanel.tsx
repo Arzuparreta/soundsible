@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { actions, state } from '../stores';
 import { activeLineIndex, parseLrc } from '../lib/lrc';
 import { isPodcastTrack } from '../lib/track';
+import { createResponsiveTap } from '../lib/responsiveTap';
 import { t } from '../lib/i18n';
 import type { LyricsResponse } from '../types/music';
 import styles from './LyricsPanel.module.css';
@@ -200,25 +201,31 @@ export function LyricsPanel(props: {
                 >
                   <div class={styles.synced}>
                     <For each={parsed()}>
-                      {(line, i) => (
-                        <button
-                          type="button"
-                          data-line={i()}
-                          classList={{
-                            [styles.line]: true,
-                            [styles.lineActive]: i() === activeIdx(),
-                            [styles.linePast]: i() < activeIdx(),
-                          }}
-                          onClick={() => {
+                      {(line, i) => {
+                        const tap = createResponsiveTap({
+                          onTap: () => {
                             // The tap that seeks also set a touch hold; drop it
                             // so the view follows the new position immediately.
                             holdUntil = 0;
                             actions.seek(line.time);
-                          }}
-                        >
-                          {line.text || '♪'}
-                        </button>
-                      )}
+                          },
+                        });
+                        return (
+                          <button
+                            type="button"
+                            data-line={i()}
+                            data-pressable
+                            classList={{
+                              [styles.line]: true,
+                              [styles.lineActive]: i() === activeIdx(),
+                              [styles.linePast]: i() < activeIdx(),
+                            }}
+                            {...tap}
+                          >
+                            {line.text || '♪'}
+                          </button>
+                        );
+                      }}
                     </For>
                   </div>
                 </Show>

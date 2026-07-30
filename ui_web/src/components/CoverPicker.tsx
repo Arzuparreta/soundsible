@@ -6,6 +6,7 @@ import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './CoverPicker.module.css';
 import { EmptyState } from './EmptyState';
+import { createResponsiveTap } from '../lib/responsiveTap';
 
 /**
  * Choose a playlist's cover from one of its own tracks, or clear it (auto).
@@ -28,29 +29,34 @@ export function openPlaylistCoverPicker(name: string): void {
       void actions.setPlaylistCover(name, id);
       close();
     };
+    const noneTap = createResponsiveTap({ onTap: () => pick(null) });
 
     return (
       <div class={styles.picker}>
         <header class={styles.head}>
           <span class={styles.title}>{t('coverPicker.header', { name })}</span>
         </header>
-        <button class={styles.none} type="button" onClick={() => pick(null)}>
+        <button class={styles.none} type="button" data-pressable {...noneTap}>
           {t('coverPicker.none')}
         </button>
         <Show when={tracks().length > 0} fallback={<EmptyState compact>{t('coverPicker.empty')}</EmptyState>}>
           <div class={styles.grid}>
             <For each={tracks()}>
-              {(t) => (
-                <button
-                  class={styles.cell}
-                  classList={{ [styles.selected]: current() === t.id }}
-                  type="button"
-                  aria-label={t.title}
-                  onClick={() => pick(t.id)}
-                >
-                  <span class={styles.cover} style={bg(t.id)} />
-                </button>
-              )}
+              {(t) => {
+                const tap = createResponsiveTap({ onTap: () => pick(t.id) });
+                return (
+                  <button
+                    class={styles.cell}
+                    classList={{ [styles.selected]: current() === t.id }}
+                    type="button"
+                    aria-label={t.title}
+                    data-pressable
+                    {...tap}
+                  >
+                    <span class={styles.cover} style={bg(t.id)} />
+                  </button>
+                );
+              }}
             </For>
           </div>
         </Show>

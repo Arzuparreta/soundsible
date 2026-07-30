@@ -8,6 +8,7 @@ import type { Track } from '../types/music';
 import styles from './DeviceSheet.module.css';
 import { EmptyState } from './EmptyState';
 import { SkeletonRows } from './Skeleton';
+import { createResponsiveTap } from '../lib/responsiveTap';
 
 const others = (devs: Device[]): Device[] => devs.filter((d) => d.device_id !== state.device.device_id);
 
@@ -60,15 +61,18 @@ export function openPlayOnDevice(track: Track): void {
         <Show when={!loading()} fallback={<SkeletonRows count={3} compact />}>
           <Show when={devs().length > 0} fallback={<EmptyState compact>{t('deviceSheet.emptyOthers')}</EmptyState>}>
             <For each={devs()}>
-              {(d) => (
-                <button class={styles.item} type="button" onClick={() => play(d)}>
-                  <span class={styles.icon}>{deviceIcon(d.device_type)}</span>
-                  <span class={styles.itemName}>{d.device_name ?? d.device_id}</span>
-                  <Show when={d.socket_active}>
-                    <span class={styles.dot} aria-label={t('deviceSheet.ariaOnline')} />
-                  </Show>
-                </button>
-              )}
+              {(d) => {
+                const tap = createResponsiveTap({ onTap: () => void play(d) });
+                return (
+                  <button class={styles.item} type="button" data-pressable {...tap}>
+                    <span class={styles.icon}>{deviceIcon(d.device_type)}</span>
+                    <span class={styles.itemName}>{d.device_name ?? d.device_id}</span>
+                    <Show when={d.socket_active}>
+                      <span class={styles.dot} aria-label={t('deviceSheet.ariaOnline')} />
+                    </Show>
+                  </button>
+                );
+              }}
             </For>
           </Show>
         </Show>

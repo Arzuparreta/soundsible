@@ -921,12 +921,15 @@ function StartPanel(props: {
           <h2 class={styles.sectionTitle}>{props.domain === 'youtube' ? tr('search.ytRecentsSection') : tr('search.recentsSection')}</h2>
           <div class={styles.recentGrid}>
             <For each={props.recents}>
-              {(value) => (
-                <button class={styles.recent} type="button" onClick={() => props.onPick(value)}>
-                  <SearchIcon />
-                  <span>{value}</span>
-                </button>
-              )}
+              {(value) => {
+                const tap = createResponsiveTap({ onTap: () => props.onPick(value) });
+                return (
+                  <button class={styles.recent} type="button" data-pressable {...tap}>
+                    <SearchIcon />
+                    <span>{value}</span>
+                  </button>
+                );
+              }}
             </For>
           </div>
         </section>

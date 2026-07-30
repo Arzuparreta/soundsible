@@ -1,5 +1,6 @@
 import { For, Show, type JSX } from 'solid-js';
 import { openOverlay } from '../lib/overlay';
+import { createResponsiveTap } from '../lib/responsiveTap';
 import styles from './ActionMenu.module.css';
 
 export interface MenuAction {
@@ -30,23 +31,30 @@ export function ActionMenuList(props: { opts: ActionMenuOptions; close: () => vo
         </header>
       </Show>
       <For each={props.opts.actions}>
-        {(a) => (
-          <button
-            type="button"
-            class={styles.item}
-            classList={{ [styles.danger]: a.danger }}
-            disabled={a.disabled}
-            onClick={() => {
+        {(a) => {
+          const tap = createResponsiveTap({
+            disabled: () => Boolean(a.disabled),
+            onTap: () => {
               props.close();
               a.onSelect();
-            }}
-          >
-            <Show when={a.icon}>
-              <span class={styles.icon}>{a.icon}</span>
-            </Show>
-            <span class={styles.label}>{a.label}</span>
-          </button>
-        )}
+            },
+          });
+          return (
+            <button
+              type="button"
+              class={styles.item}
+              classList={{ [styles.danger]: a.danger }}
+              disabled={a.disabled}
+              data-pressable
+              {...tap}
+            >
+              <Show when={a.icon}>
+                <span class={styles.icon}>{a.icon}</span>
+              </Show>
+              <span class={styles.label}>{a.label}</span>
+            </button>
+          );
+        }}
       </For>
     </div>
   );

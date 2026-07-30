@@ -21,6 +21,7 @@ import { ViewHeader } from '../components/ViewHeader';
 import Button from '../components/Button';
 import { toast } from '../lib/toast';
 import { copyText } from '../lib/clipboard';
+import { createResponsiveTap } from '../lib/responsiveTap';
 import styles from './Migrate.module.css';
 
 const ACTIVE_STATES = new Set(['queued', 'running']);
@@ -348,6 +349,8 @@ function UploadStep(props: {
     if (!next) setSpotifyWaiting(false);
     writeGuideState({ provider: next, spotifyWaiting: next === 'spotify' && spotifyWaiting() });
   };
+  const spotifyTap = createResponsiveTap({ onTap: () => chooseProvider('spotify') });
+  const appleTap = createResponsiveTap({ onTap: () => chooseProvider('apple') });
 
   const markSpotifyRequested = () => {
     setSpotifyWaiting(true);
@@ -375,7 +378,7 @@ function UploadStep(props: {
               <p>{c().chooseSourceHint}</p>
             </div>
             <div class={styles.providerGrid}>
-              <button class={styles.providerCard} type="button" onClick={() => chooseProvider('spotify')}>
+              <button class={styles.providerCard} type="button" data-pressable {...spotifyTap}>
                 <span class={`${styles.providerMark} ${styles.spotifyMark}`} aria-hidden="true">●</span>
                 <span>
                   <strong>Spotify</strong>
@@ -383,7 +386,7 @@ function UploadStep(props: {
                 </span>
                 <span class={styles.providerArrow} aria-hidden="true">→</span>
               </button>
-              <button class={styles.providerCard} type="button" onClick={() => chooseProvider('apple')}>
+              <button class={styles.providerCard} type="button" data-pressable {...appleTap}>
                 <span class={`${styles.providerMark} ${styles.appleMark}`} aria-hidden="true">♪</span>
                 <span>
                   <strong>Apple Music</strong>
