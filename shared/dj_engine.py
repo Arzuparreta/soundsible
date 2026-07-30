@@ -8,7 +8,6 @@ only durable artifact is a small, versioned SQLite cache.
 from __future__ import annotations
 
 import hashlib
-import itertools
 import json
 import math
 import sqlite3
@@ -23,11 +22,12 @@ from typing import Any
 from shared.ffmpeg_runtime import ffmpeg_executable
 from shared.runtime import get_cache_dir
 
-ANALYSER_VERSION = 2
-#: Above this, only the head and tail are decoded. A transition is made out of
-#: the end of one track and the beginning of the next; the twelve minutes in
-#: between cost real time and answer no question the planner asks.
-WINDOWED_ABOVE_SECONDS = 240.0
+ANALYSER_VERSION = 3
+# A normal song is decoded in full so the grid and the musical sections come
+# from the recording, not from arithmetic projected from its first transient.
+# Very long mixes remain bounded: their head and tail still provide everything
+# needed for a safe hand-off without monopolising the background analyser.
+WINDOWED_ABOVE_SECONDS = 480.0
 HEAD_WINDOW_SECONDS = 90.0
 TAIL_WINDOW_SECONDS = 120.0
 DJ_PROFILES = {"adaptive", "long_blend", "cuts_drops", "open_format"}
@@ -92,7 +92,11 @@ def _fallback(duration: float = 0.0) -> dict[str, Any]:
         "energy": 0.5,
         "intro_cue": 0.0,
         "outro_cue": round(outro, 3) if outro else None,
+        "beat_grid": [],
+        "downbeats": [],
         "phrase_boundaries": [],
+        "sections": [],
+        "tempo_confidence": 0.0,
         "confidence": 0.18,
         "analysed": False,
     }
@@ -277,20 +281,61 @@ def _compose(
     features = _window_features(tail, sample_rate)
     if features is None:
         return _fallback(duration)
+    head_features = features if head is tail else _window_features(head, sample_rate)
     period = features["period"]
-    phrase_seconds = 32 * period
-    beat_offset = tail_start + features["beat_offset"]
-    intro_local = _window_features(head, sample_rate)["intro"] if head is not None and head.size >= sample_rate * 4 else 0.0
+    intro_local = head_features["intro"] if head_features is not None else 0.0
 
-    first_phrase = beat_offset + max(0, math.ceil((tail_start - beat_offset) / phrase_seconds)) * phrase_seconds
-    boundaries = [max(0.0, first_phrase)]
-    while boundaries[-1] + phrase_seconds < duration:
-        boundaries.append(boundaries[-1] + phrase_seconds)
+    def absolute_beats(window_features: Mapping[str, Any], offset: float) -> list[float]:
+        return [
+            offset + float(frame) * float(window_features["hop_seconds"])
+            for frame in window_features["beat_frames"]
+        ]
+
+    beats = absolute_beats(features, tail_start)
+    if tail_start and head_features is not None:
+        beats = absolute_beats(head_features, 0.0) + beats
+    beats = sorted({round(value, 6) for value in beats if 0 <= value <= duration})
+    if not beats:
+        beat_offset = tail_start + features["beat_offset"]
+        beats = list(_frange(beat_offset, duration, period))
+
+    # The strongest quarter-note phase is a much better downbeat proxy than
+    # assuming the first onset in the file is beat one.
+    strengths = features["beat_strengths"]
+    downbeat_phase = max(
+        range(4),
+        key=lambda phase: sum(float(value) for value in strengths[phase::4]),
+    ) if strengths else 0
+    tail_beats = absolute_beats(features, tail_start)
+    tail_downbeats = tail_beats[downbeat_phase::4]
+    if tail_start and head_features is not None:
+        head_strengths = head_features["beat_strengths"]
+        head_phase = max(
+            range(4),
+            key=lambda phase: sum(float(value) for value in head_strengths[phase::4]),
+        ) if head_strengths else 0
+        downbeats = absolute_beats(head_features, 0.0)[head_phase::4] + tail_downbeats
+    else:
+        downbeats = tail_downbeats
+    downbeats = sorted({round(value, 6) for value in downbeats if 0 <= value <= duration})
+
+    # Eight bars is a useful phrase prior, but the additional section starts
+    # below are derived from changes in measured bar energy and onset density.
+    boundaries = list(downbeats[::8])
+    sections = _sections_from_features(features, tail_start, duration, downbeats)
+    if tail_start and head_features is not None:
+        sections = _sections_from_features(head_features, 0.0, duration, downbeats) + sections
+    boundaries.extend(float(section["start"]) for section in sections)
+    boundaries = sorted({round(value, 3) for value in boundaries if 0 <= value < duration})
+    beat_offset = beats[0]
     last_active = tail_start + features["last_active"]
-    outro_candidates = [value for value in boundaries if value <= min(last_active, duration - period * 4)]
-    outro = outro_candidates[-1] if outro_candidates else max(0.0, duration - phrase_seconds)
+    outro_limit = min(last_active, duration - period * 4)
+    desired_outro = max(0.0, outro_limit - 64 * period)
+    outro_candidates = [value for value in boundaries if desired_outro <= value <= outro_limit]
+    outro = outro_candidates[0] if outro_candidates else max(0.0, duration - 32 * period)
 
-    confidence = min(0.98, 0.42 + max(0.0, features["periodicity"]) * 1.8 + min(0.2, features["key_margin"] / 8))
+    tempo_confidence = min(1.0, max(0.0, features["periodicity"]) * 4.0)
+    confidence = min(0.98, 0.38 + tempo_confidence * 0.36 + min(0.2, features["key_margin"] / 8))
     return {
         "version": ANALYSER_VERSION,
         "duration": round(duration, 3),
@@ -303,10 +348,72 @@ def _compose(
         "energy": round(float(np.clip(features["energy"], 0, 1)), 3),
         "intro_cue": round(max(0.0, min(intro_local, duration * 0.25)), 3),
         "outro_cue": round(max(0.0, min(outro, duration - period * 4)), 3),
-        "phrase_boundaries": [round(float(value), 3) for value in boundaries],
+        "beat_grid": [round(float(value), 3) for value in beats],
+        "downbeats": [round(float(value), 3) for value in downbeats],
+        "phrase_boundaries": boundaries,
+        "sections": sections,
+        "tempo_confidence": round(tempo_confidence, 3),
         "confidence": round(confidence, 3),
         "analysed": True,
     }
+
+
+def _frange(start: float, stop: float, step: float) -> Iterable[float]:
+    value = max(0.0, start)
+    while step > 0 and value <= stop:
+        yield value
+        value += step
+
+
+def _sections_from_features(
+    features: Mapping[str, Any],
+    offset: float,
+    duration: float,
+    downbeats: list[float],
+) -> list[dict[str, Any]]:
+    """Describe measured eight-bar regions and their musical role."""
+    import numpy as np
+
+    local_downbeats = [value for value in downbeats if offset <= value < offset + float(features["window_seconds"])]
+    starts = local_downbeats[::8]
+    if not starts:
+        return []
+    hop_seconds = float(features["hop_seconds"])
+    frame_energy = features["frame_energy"]
+    flux = features["flux"]
+    regions: list[tuple[float, float, float, float]] = []
+    for index, start in enumerate(starts):
+        end = starts[index + 1] if index + 1 < len(starts) else min(duration, offset + float(features["window_seconds"]))
+        left = max(0, int((start - offset) / hop_seconds))
+        right = max(left + 1, min(len(frame_energy), int((end - offset) / hop_seconds)))
+        region_energy = float(np.mean(frame_energy[left:right])) if right > left else 0.0
+        flux_right = max(left + 1, min(len(flux), right))
+        onset = float(np.mean(flux[left:flux_right])) if flux_right > left else 0.0
+        slope = float(frame_energy[right - 1] - frame_energy[left]) if right - left > 1 else 0.0
+        regions.append((start, end, region_energy, onset + max(0.0, slope)))
+    median_energy = max(1e-6, float(np.median([row[2] for row in regions])))
+    result: list[dict[str, Any]] = []
+    for index, (start, end, energy, motion) in enumerate(regions):
+        ratio = energy / median_energy
+        if index == 0 and ratio < 0.9:
+            label = "intro"
+        elif index == len(regions) - 1 and end >= duration - 1 and ratio < 0.95:
+            label = "outro"
+        elif ratio >= 1.18 and motion >= 0.35:
+            label = "drop"
+        elif ratio <= 0.72:
+            label = "breakdown"
+        elif motion >= 0.48:
+            label = "build"
+        else:
+            label = "body"
+        result.append({
+            "start": round(float(start), 3),
+            "end": round(float(end), 3),
+            "label": label,
+            "energy": round(max(0.0, min(1.5, energy)), 3),
+        })
+    return result
 
 
 def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
@@ -338,11 +445,21 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
     correlations = np.array(
         [float(np.dot(centred[:-lag], centred[lag:])) if lag < centred.size else 0.0 for lag in range(min_lag, max_lag + 1)]
     )
-    best_lag = min_lag + int(np.argmax(correlations))
+    # A broad 120 BPM prior only breaks ties between strong autocorrelation
+    # peaks; the recording remains authoritative.
+    candidate_indices = np.argsort(correlations)[-min(8, correlations.size):]
+    best_index = max(
+        (int(index) for index in candidate_indices),
+        key=lambda index: float(correlations[index]) * (0.96 + 0.04 * math.exp(-abs((60 * sample_rate / ((min_lag + index) * hop)) - 120) / 35)),
+    )
+    best_lag = min_lag + best_index
     bpm = 60 * sample_rate / (best_lag * hop)
     period = 60.0 / bpm
     first_window = max(1, min(flux.size, best_lag * 2))
-    beat_offset = (int(np.argmax(flux[:first_window])) + 1) * hop / sample_rate
+    seed = int(np.argmax(flux[:first_window]))
+    beat_frames = _snap_beat_frames(flux, seed, best_lag)
+    beat_offset = (beat_frames[0] + 1) * hop / sample_rate
+    beat_strengths = [float(flux[min(frame_index, flux.size - 1)]) for frame_index in beat_frames]
 
     # A compact chroma estimator.  It is deliberately confidence-gated: the
     # route planner treats uncertain keys as neutral rather than inventing a
@@ -384,7 +501,47 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
         "intro": intro,
         "last_active": last_active,
         "periodicity": periodicity,
+        "hop_seconds": hop / sample_rate,
+        "window_seconds": window_seconds,
+        "beat_frames": beat_frames,
+        "beat_strengths": beat_strengths,
+        "frame_energy": energy.tolist(),
+        "flux": flux.tolist(),
     }
+
+
+def _snap_beat_frames(flux, seed: int, lag: int) -> list[int]:
+    """Follow the tempo while snapping every beat to a nearby real onset."""
+    import numpy as np
+
+    if flux.size == 0:
+        return []
+    radius = max(1, lag // 5)
+    frames = [max(0, min(int(seed), flux.size - 1))]
+
+    def next_peak(predicted: int) -> int:
+        left = max(0, predicted - radius)
+        right = min(flux.size, predicted + radius + 1)
+        if right <= left:
+            return max(0, min(predicted, flux.size - 1))
+        positions = np.arange(left, right)
+        distance_cost = np.abs(positions - predicted) / max(1, radius)
+        return int(positions[int(np.argmax(flux[left:right] - distance_cost * 0.16))])
+
+    cursor = frames[0]
+    while cursor + lag < flux.size:
+        cursor = next_peak(cursor + lag)
+        if cursor <= frames[-1]:
+            cursor = frames[-1] + 1
+        frames.append(cursor)
+    before: list[int] = []
+    cursor = frames[0]
+    while cursor - lag >= 0:
+        cursor = next_peak(cursor - lag)
+        if before and cursor >= before[-1]:
+            break
+        before.append(cursor)
+    return sorted(set(before + frames))
 
 
 def _harmonic_score(left: Mapping[str, Any], right: Mapping[str, Any]) -> float:
@@ -400,6 +557,43 @@ def _harmonic_score(left: Mapping[str, Any], right: Mapping[str, Any]) -> float:
     if distance in {3, 4, 8, 9}:
         return 0.68
     return 0.35
+
+
+def _nearest_grid_point(
+    analysis: Mapping[str, Any],
+    target: float,
+    *,
+    prefer_downbeat: bool = True,
+) -> float:
+    grid = analysis.get("downbeats") if prefer_downbeat else analysis.get("beat_grid")
+    if not isinstance(grid, list) or not grid:
+        grid = analysis.get("beat_grid")
+    values = [float(value) for value in grid or [] if isinstance(value, (int, float))]
+    return min(values, key=lambda value: abs(value - target)) if values else target
+
+
+def _grid_point_at_or_before(analysis: Mapping[str, Any], limit: float) -> float:
+    grid = analysis.get("downbeats") or analysis.get("beat_grid") or []
+    values = [
+        float(value)
+        for value in grid
+        if isinstance(value, (int, float)) and float(value) <= limit
+    ]
+    return max(values) if values else limit
+
+
+def _local_period(analysis: Mapping[str, Any], cue: float) -> float:
+    grid = [
+        float(value)
+        for value in analysis.get("beat_grid") or []
+        if isinstance(value, (int, float)) and abs(float(value) - cue) <= 24
+    ]
+    intervals = [right - left for left, right in zip(grid, grid[1:]) if 0.25 <= right - left <= 1.2]
+    if intervals:
+        intervals.sort()
+        return intervals[len(intervals) // 2]
+    bpm = float(analysis.get("bpm") or 0)
+    return 60 / bpm if bpm > 0 else max(0.25, float(analysis.get("bar_seconds") or 2) / 4)
 
 
 def plan_transition(
@@ -448,17 +642,53 @@ def plan_transition(
     else:
         proposed_out = float(outro if outro is not None else max(0.0, duration - overlap))
         out_cue = min(proposed_out, max(0.0, duration - overlap - 0.5)) if duration else proposed_out
+    if out_cue is not None and outgoing.get("analysed"):
+        out_cue = _nearest_grid_point(outgoing, float(out_cue))
+        if duration:
+            latest = max(0.0, duration - overlap - 0.5)
+            if out_cue > latest:
+                out_cue = _grid_point_at_or_before(outgoing, latest)
     in_cue = float(incoming.get("intro_cue") or 0)
+    if incoming.get("analysed"):
+        in_cue = _nearest_grid_point(incoming, in_cue)
+
+    out_period = _local_period(outgoing, float(out_cue or 0))
+    in_period = _local_period(incoming, in_cue)
+    # playbackRate scales the incoming tempo. A 125 BPM incoming track needs
+    # 120/125 = 0.96 to sit on a 120 BPM outgoing grid.
+    local_ratio = in_period / out_period if out_period > 0 and in_period > 0 else ratio
+    if local_ratio < 0.7:
+        local_ratio *= 2
+    elif local_ratio > 1.4:
+        local_ratio /= 2
+    # Above six percent, resampling is more audible than a structural cut. The
+    # score can still select a safe technique, but never asks the player to
+    # torture a recording merely to claim that it beatmatched.
+    playback_rate = local_ratio if abs(1 - local_ratio) <= min(0.06, float(policy["max_stretch"])) else 1.0
+    if technique not in {"bass_swap", "long_blend", "filter_blend"}:
+        playback_rate = 1.0
     return {
         "technique": technique,
         "out_cue": round(out_cue, 3) if out_cue is not None else None,
         "in_cue": round(in_cue, 3),
         "overlap_seconds": round(overlap, 3),
         "overlap_bars": bars,
-        "playback_rate": round(ratio if technique in {"bass_swap", "long_blend", "filter_blend"} else 1.0, 5),
+        "playback_rate": round(playback_rate, 5),
         "score": round(blend_score, 3),
         "confidence": round(confidence, 3),
         "fallback": technique in {"echo_cut", "safe_fade", "structural_fade"},
+        "sync": {
+            "out_period": round(out_period, 6),
+            "in_period": round(in_period, 6),
+            "phase_tolerance_ms": 5,
+            "grid_source": "measured" if outgoing.get("beat_grid") and incoming.get("beat_grid") else "estimated",
+        },
+        "automation": {
+            "curve": "equal_power",
+            "eq": "bass_swap" if technique in {"bass_swap", "long_blend"} else "neutral",
+            "filter": technique in {"filter_blend", "long_blend"},
+            "echo_out": technique == "echo_cut",
+        },
     }
 
 
@@ -493,28 +723,41 @@ def route_to_request(
     requested: tuple[dict[str, Any], Mapping[str, Any]],
     *,
     profile: str,
-    max_starts: int = 3,
+    max_starts: int = 5,
 ) -> list[dict[str, Any]]:
-    """Choose zero, one, or two bridges, always ending at the exact request."""
+    """Reach the request in positions 2–6, preferring position 2.
+
+    The currently playing song is position one. A bridge is admitted only when
+    it materially improves safety; otherwise the explicit request is next.
+    """
     bridge_rows = list(bridges)[:12]
     requested_item, requested_analysis = requested
-    best_score = -1.0
+    best_score = float(plan_transition(current_analysis, requested_analysis, profile=profile)["score"])
     best: tuple[tuple[dict[str, Any], Mapping[str, Any]], ...] = (requested,)
-    max_bridges = max(0, min(2, max_starts - 1))
-    for count in range(max_bridges + 1):
-        for prefix in itertools.permutations(bridge_rows, count):
-            sequence = (*prefix, requested)
-            previous = current_analysis
-            scores: list[float] = []
-            for _, analysis in sequence:
-                scores.append(float(plan_transition(previous, analysis, profile=profile)["score"]))
-                previous = analysis
-            # A bridge has to materially improve the path to justify delaying an
-            # explicit request.  This small cost makes a clean direct mix win.
-            score = sum(scores) / len(scores) - count * 0.035
-            if score > best_score:
+    max_bridges = max(0, min(4, max_starts - 1))
+    # Beam search bounds the four-bridge case while retaining musically strong
+    # paths. Delaying costs progressively more, hence "next" remains preferred.
+    beam: list[tuple[float, tuple[tuple[dict[str, Any], Mapping[str, Any]], ...], Mapping[str, Any], frozenset[int]]] = [
+        (0.0, (), current_analysis, frozenset())
+    ]
+    for count in range(1, max_bridges + 1):
+        expanded = []
+        for accumulated, prefix, previous, used in beam:
+            for index, row in enumerate(bridge_rows):
+                if index in used:
+                    continue
+                quality = float(plan_transition(previous, row[1], profile=profile)["score"])
+                expanded.append((accumulated + quality, (*prefix, row), row[1], used | {index}))
+        expanded.sort(key=lambda state: state[0], reverse=True)
+        beam = expanded[:48]
+        for accumulated, prefix, previous, _ in beam:
+            final_quality = float(plan_transition(previous, requested_analysis, profile=profile)["score"])
+            sequence_quality = (accumulated + final_quality) / (count + 1)
+            delay_cost = 0.055 * count + 0.012 * count * count
+            score = sequence_quality - delay_cost
+            if score > best_score + 0.015:
                 best_score = score
-                best = sequence
+                best = (*prefix, requested)
     route: list[dict[str, Any]] = []
     previous = current_analysis
     for item, analysis in best:

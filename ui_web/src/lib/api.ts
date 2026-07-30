@@ -160,6 +160,31 @@ export interface DjTransitionPlan {
   score: number;
   confidence: number;
   fallback: boolean;
+  sync?: {
+    out_period: number;
+    in_period: number;
+    phase_tolerance_ms: number;
+    grid_source: 'measured' | 'estimated';
+  };
+  automation?: {
+    curve: 'equal_power';
+    eq: 'bass_swap' | 'neutral';
+    filter: boolean;
+    echo_out: boolean;
+  };
+}
+
+export type DjRequestTarget =
+  | { id: string; kind: 'track'; label: string; track: Track }
+  | { id: string; kind: 'artist'; label: string; artist: { name: string } };
+
+export interface DjCommandResponse {
+  v: 1;
+  understood: boolean;
+  direction_patch: Partial<DjDirection>;
+  request: null
+    | { kind: 'artist'; label: string; artist: { name: string } }
+    | { kind: 'query'; label: string; query: string };
 }
 
 /** How the DJ endpoints identify one track's audio. */
@@ -204,7 +229,7 @@ export interface ListeningPlanItem {
 }
 
 export interface ListeningPlanResponse {
-  v: 1 | 2;
+  v: 1 | 2 | 3;
   plan_id: string;
   intent: ListeningPlanIntent;
   profile: ListeningPlanProfile;
@@ -216,14 +241,25 @@ export interface ListeningPlanResponse {
 }
 
 export interface DjPlanResponse extends ListeningPlanResponse {
-  v: 2;
+  v: 2 | 3;
   dj_profile: DjProfile;
   source_profile: ListeningPlanProfile;
   /** Features of the track the route continues from — the only reading the
    * player has for a song it did not plan itself. */
   seed_analysis?: { bpm?: number; key?: string | null; energy?: number; analysed?: boolean };
   items: ListeningPlanItem[];
-  requests: Array<{ id: string; track_identity: string; eta_tracks: number | null }>;
+  requests: Array<{
+    id: string;
+    kind?: 'track' | 'artist';
+    label?: string;
+    status?: 'planned' | 'failed';
+    track_identity?: string | null;
+    eta_tracks: number | null;
+    scheduled_position?: number | null;
+    preferred_position?: number;
+    max_position?: number;
+    failure_code?: string | null;
+  }>;
 }
 
 export interface DiscoverySaveCandidate {
@@ -772,7 +808,7 @@ export const api = {
         album?: string;
         duration?: number;
       };
-      requests?: Array<{ id: string; track: Track }>;
+      requests?: DjRequestTarget[];
       exclude?: string[];
       limit?: number;
     },
@@ -784,6 +820,13 @@ export const api = {
       // The planner answers from measured features or a conservative fallback,
       // never from a decode it has to wait for.
       timeoutMs: 20000,
+      signal,
+    }),
+  interpretDjCommand: (text: string, signal?: AbortSignal) =>
+    request<DjCommandResponse>('/api/discovery/music/dj-command', {
+      method: 'POST',
+      body: { text },
+      timeoutMs: 12000,
       signal,
     }),
   /** Re-plan one transition once its analysis has landed. Cache-only server

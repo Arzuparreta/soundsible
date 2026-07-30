@@ -1,11 +1,7 @@
 const VOLUME_KEY = 'volume';
 
-/** Mixer tick. Fast enough that every gain step is interpolated, cheap enough
- * to run for the whole length of a long blend. */
+/** Media-clock supervision. Audio gain itself is sample-accurate automation. */
 const TICK_MS = 40;
-/** How far ahead each gain step is ramped. Slightly longer than a tick so the
- * curve stays continuous even when a tick is late. */
-const RAMP_AHEAD = 0.09;
 /** Longest silent head start given to the incoming deck. */
 const MAX_PREROLL = 4;
 const MIN_OVERLAP = 1.2;
@@ -19,6 +15,13 @@ let activeIndex = 0;
 const mixGains = [1, 0];
 let audioContext: AudioContext | null = null;
 let deckGains: GainNode[] | null = null;
+interface DeckEffects {
+  low?: BiquadFilterNode;
+  filter?: BiquadFilterNode;
+  echoWet?: GainNode;
+  echoFeedback?: GainNode;
+}
+let deckEffects: DeckEffects[] | null = null;
 let masterGain: GainNode | null = null;
 let masterVolume = storedVolume();
 let allMuted = false;
@@ -87,24 +90,18 @@ function applyDeckVolume(): void {
 /**
  * Set one deck's mix gain.
  *
- * `ramp` interpolates towards the value instead of stepping to it: the crossfade
- * ticks on the *media* clock (so a stall or a pause freezes it), while the audio
- * graph fills in the gaps on its own clock. Stepping here is what made the older
- * mixer audible as a staircase whenever the tab was throttled.
+ * This is for discrete deck state changes. Audible crossfades bypass it and use
+ * one scheduled AudioParam curve, because repeatedly cancelling short ramps is
+ * exactly what made the old mixer crackle when a timer arrived late.
  */
-function setDeckGain(index: number, value: number, ramp = false): void {
+function setDeckGain(index: number, value: number): void {
   const clamped = Math.min(1, Math.max(0, value));
   mixGains[index] = clamped;
   if (deckGains && audioContext) {
     const param = deckGains[index].gain;
     const now = audioContext.currentTime;
     param.cancelScheduledValues(now);
-    if (ramp) {
-      param.setValueAtTime(param.value, now);
-      param.linearRampToValueAtTime(clamped, now + RAMP_AHEAD);
-    } else {
-      param.setValueAtTime(clamped, now);
-    }
+    param.setValueAtTime(clamped, now);
     return;
   }
   const deck = decks()[index];
@@ -133,22 +130,63 @@ export function ensureMixGraph(): boolean {
     const master = context.createGain();
     // Reach the speakers before anything is routed in: a graph that throws
     // halfway would otherwise leave a deck connected to nothing audible.
-    master.connect(context.destination);
+    if (typeof context.createDynamicsCompressor === 'function') {
+      const limiter = context.createDynamicsCompressor();
+      limiter.threshold.value = -6;
+      limiter.knee.value = 8;
+      limiter.ratio.value = 6;
+      limiter.attack.value = 0.003;
+      limiter.release.value = 0.18;
+      master.connect(limiter).connect(context.destination);
+    } else {
+      master.connect(context.destination);
+    }
     master.gain.value = masterVolume;
+    const effects: DeckEffects[] = [];
     const gains = list.map((deck, index) => {
       const gain = context.createGain();
       gain.gain.value = mixGains[index];
-      context.createMediaElementSource(deck).connect(gain).connect(master);
+      const source = context.createMediaElementSource(deck);
+      if (typeof context.createBiquadFilter === 'function') {
+        const low = context.createBiquadFilter();
+        low.type = 'lowshelf';
+        low.frequency.value = 220;
+        low.gain.value = 0;
+        const filter = context.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 22000;
+        filter.Q.value = 0.7;
+        source.connect(low).connect(filter).connect(gain).connect(master);
+        const effect: DeckEffects = { low, filter };
+        if (typeof context.createDelay === 'function') {
+          const delay = context.createDelay(1);
+          delay.delayTime.value = 0.28;
+          const wet = context.createGain();
+          wet.gain.value = 0;
+          const feedback = context.createGain();
+          feedback.gain.value = 0.32;
+          source.connect(delay).connect(wet).connect(master);
+          delay.connect(feedback).connect(delay);
+          effect.echoWet = wet;
+          effect.echoFeedback = feedback;
+        }
+        effects.push(effect);
+      } else {
+        source.connect(gain).connect(master);
+        effects.push({});
+      }
       return gain;
     });
     for (const deck of list) deck.volume = 1;
     audioContext = context;
     deckGains = gains;
+    deckEffects = effects;
     masterGain = master;
     return true;
   } catch {
     audioContext = null;
     deckGains = null;
+    deckEffects = null;
     masterGain = null;
     applyDeckVolume();
     return false;
@@ -164,6 +202,8 @@ export interface LiveTransitionPlan {
   overlap_bars: number;
   playback_rate: number;
   confidence: number;
+  sync?: { phase_tolerance_ms?: number };
+  automation?: { eq?: 'bass_swap' | 'neutral'; filter?: boolean; echo_out?: boolean };
 }
 
 export type MixPhase = 'idle' | 'armed' | 'prerolling' | 'crossfading';
@@ -191,6 +231,9 @@ interface ActiveMix {
   preroll: number;
   /** Incoming media position at which the crossfade started. */
   mixStart: number | null;
+  technique: LiveTransitionPlan['technique'];
+  phaseTolerance: number;
+  phaseCorrected: boolean;
   dominant: boolean;
   /** A listener-requested skip: hand over as soon as the blend begins. */
   manual: boolean;
@@ -201,6 +244,66 @@ let mix: ActiveMix | null = null;
 let mixGeneration = 0;
 let mixTimer: ReturnType<typeof setInterval> | null = null;
 let rateTimer: ReturnType<typeof setInterval> | null = null;
+
+function resetDeckEffects(index: number): void {
+  const effect = deckEffects?.[index];
+  if (!effect || !audioContext) return;
+  const now = audioContext.currentTime;
+  const params = [
+    effect.low?.gain,
+    effect.filter?.frequency,
+    effect.echoWet?.gain,
+    effect.echoFeedback?.gain,
+  ];
+  for (const param of params) param?.cancelScheduledValues(now);
+  effect.low?.gain.setValueAtTime(0, now);
+  effect.filter?.frequency.setValueAtTime(22000, now);
+  effect.echoWet?.gain.setValueAtTime(0, now);
+  effect.echoFeedback?.gain.setValueAtTime(0.32, now);
+}
+
+function scheduleCurve(param: AudioParam | undefined, values: number[], duration: number): void {
+  if (!param || !audioContext) return;
+  const now = audioContext.currentTime;
+  const span = Math.max(0.05, duration);
+  param.cancelScheduledValues(now);
+  param.setValueAtTime(values[0], now);
+  if (typeof param.setValueCurveAtTime === 'function') {
+    param.setValueCurveAtTime(Float32Array.from(values), now, span);
+  } else {
+    param.linearRampToValueAtTime(values[values.length - 1], now + span);
+  }
+}
+
+/** Schedule one continuous curve; the supervisory timer never rewrites it. */
+function scheduleCrossfade(current: ActiveMix): void {
+  if (!deckGains || !audioContext) return;
+  const points = 96;
+  const incoming = Array.from(
+    { length: points },
+    (_, index) => Math.sin((index / (points - 1)) * Math.PI * 0.5),
+  );
+  const outgoing = Array.from(
+    { length: points },
+    (_, index) => Math.cos((index / (points - 1)) * Math.PI * 0.5),
+  );
+  scheduleCurve(deckGains[current.toIndex].gain, incoming, current.overlap);
+  scheduleCurve(deckGains[current.fromIndex].gain, outgoing, current.overlap);
+
+  const outEffect = deckEffects?.[current.fromIndex];
+  const inEffect = deckEffects?.[current.toIndex];
+  if (current.technique === 'bass_swap' || current.technique === 'long_blend') {
+    scheduleCurve(outEffect?.low?.gain, [0, 0, -4, -12, -18, -18], current.overlap);
+    scheduleCurve(inEffect?.low?.gain, [-18, -18, -12, -4, 0, 0], current.overlap);
+  }
+  if (current.technique === 'filter_blend' || current.technique === 'long_blend') {
+    scheduleCurve(outEffect?.filter?.frequency, [22000, 18000, 9000, 3500, 1200, 700], current.overlap);
+    scheduleCurve(inEffect?.filter?.frequency, [900, 1600, 4200, 10000, 18000, 22000], current.overlap);
+  }
+  if (current.technique === 'echo_cut') {
+    scheduleCurve(outEffect?.echoWet?.gain, [0, 0.05, 0.12, 0.24, 0.32, 0.18], current.overlap);
+  }
+}
 
 function stopTicker(): void {
   if (mixTimer) clearInterval(mixTimer);
@@ -267,6 +370,8 @@ function cancelMix(reason: MixCancelReason): void {
   activeIndex = keep;
   setDeckGain(keep, 1);
   setDeckGain(drop, 0);
+  resetDeckEffects(keep);
+  resetDeckEffects(drop);
   detach(decks()[drop]);
   if (current.dominant) scheduleRateReturn(keep);
   current.callbacks.onCancel(reason);
@@ -280,6 +385,8 @@ function finishMix(): void {
   mix = null;
   setDeckGain(current.toIndex, 1);
   setDeckGain(current.fromIndex, 0);
+  resetDeckEffects(current.toIndex);
+  resetDeckEffects(current.fromIndex);
   if (!current.dominant) {
     activeIndex = current.toIndex;
     current.callbacks.onDominant();
@@ -299,6 +406,8 @@ function failMix(error: unknown): void {
   activeIndex = keep;
   setDeckGain(keep, 1);
   setDeckGain(1 - keep, 0);
+  resetDeckEffects(keep);
+  resetDeckEffects(1 - keep);
   detach(decks()[1 - keep]);
   current.callbacks.onError(error);
 }
@@ -337,10 +446,33 @@ function tick(): void {
   if (to.paused || (from.paused && !from.ended)) return;
 
   if (current.phase === 'prerolling') {
-    const due = from.ended || from.currentTime >= current.outCue || to.currentTime >= current.inCue;
+    const outRemaining = current.outCue - from.currentTime;
+    const inRemaining = (current.inCue - to.currentTime) / current.rate;
+    const phaseError = inRemaining - outRemaining;
+    if (
+      !current.manual
+      && !current.phaseCorrected
+      && outRemaining > 0.15
+      && Math.abs(phaseError) > current.phaseTolerance
+    ) {
+      // The incoming deck is silent. Correcting its playhead here prevents a
+      // flam instead of trying to hide one after both tracks are audible.
+      to.currentTime = Math.max(0, current.inCue - outRemaining * current.rate);
+      current.phaseCorrected = true;
+      return;
+    }
+    const due = current.manual || from.ended
+      || (outRemaining <= current.phaseTolerance && inRemaining <= current.phaseTolerance);
     if (!due) return;
+    if (!from.ended && !current.manual) {
+      const target = current.inCue + Math.max(0, from.currentTime - current.outCue) * current.rate;
+      if (Math.abs(to.currentTime - target) > current.phaseTolerance * current.rate) {
+        to.currentTime = Math.max(0, target);
+      }
+    }
     current.mixStart = to.currentTime;
     current.phase = 'crossfading';
+    scheduleCrossfade(current);
   }
 
   const span = Math.max(0.05, current.overlap * current.rate);
@@ -348,8 +480,10 @@ function tick(): void {
   const progress = Math.min(1, Math.max(0, elapsed / span));
   // Equal-power curves keep the perceived loudness steadier than linear gain,
   // especially on long blends.
-  setDeckGain(current.toIndex, Math.sin(progress * Math.PI * 0.5), true);
-  setDeckGain(current.fromIndex, Math.cos(progress * Math.PI * 0.5), true);
+  if (!deckGains || !audioContext) {
+    setDeckGain(current.toIndex, Math.sin(progress * Math.PI * 0.5));
+    setDeckGain(current.fromIndex, Math.cos(progress * Math.PI * 0.5));
+  }
   if (!current.dominant && (current.manual || progress >= 0.5)) {
     current.dominant = true;
     activeIndex = current.toIndex;
@@ -467,6 +601,7 @@ export const audioService = {
   pause(): void {
     if (mix) {
       for (const deck of decks()) deck.pause();
+      if (audioContext?.state === 'running') void audioContext.suspend().catch(() => {});
       return;
     }
     audioEl().pause();
@@ -555,7 +690,7 @@ export const audioService = {
     const from = decks()[fromIndex];
     const to = decks()[toIndex];
     const manual = options.manual === true;
-    const rate = Math.min(1.12, Math.max(0.88, Number(plan.playback_rate) || 1));
+    const rate = Math.min(1.06, Math.max(0.94, Number(plan.playback_rate) || 1));
     const overlap = manual
       ? Math.max(MIN_OVERLAP, Math.min(1.8, Number(plan.overlap_seconds) || 4))
       : Math.max(MIN_OVERLAP, Number(plan.overlap_seconds) || 6);
@@ -565,6 +700,8 @@ export const audioService = {
     const outCue = manual ? from.currentTime : Math.max(0, Number(plan.out_cue) || 0);
 
     setDeckGain(toIndex, 0);
+    resetDeckEffects(toIndex);
+    resetDeckEffects(fromIndex);
     to.muted = allMuted;
     to.src = url;
     to.load();
@@ -591,6 +728,12 @@ export const audioService = {
       rate,
       preroll,
       mixStart: null,
+      technique: plan.technique,
+      phaseTolerance: Math.max(
+        0.001,
+        Math.min(0.012, Number(plan.sync?.phase_tolerance_ms || 5) / 1000),
+      ),
+      phaseCorrected: false,
       dominant: false,
       manual,
       callbacks,

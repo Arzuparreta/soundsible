@@ -42,9 +42,14 @@ export interface AutoPlanItem {
 
 export interface AutoRequest {
   id: string;
-  track: Track;
+  kind: 'track' | 'artist';
+  label: string;
+  track?: Track;
+  artist?: { name: string };
   status: 'queued' | 'planned' | 'playing' | 'failed';
   etaTracks: number | null;
+  scheduledPosition?: number | null;
+  failureCode?: string | null;
 }
 
 export interface AutoModeState {

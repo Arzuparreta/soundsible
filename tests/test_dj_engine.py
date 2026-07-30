@@ -50,6 +50,15 @@ def test_transition_uses_phrase_runway_instead_of_running_past_the_file():
     assert 0.94 <= transition["playback_rate"] <= 1.06
 
 
+def test_local_grid_rate_moves_the_incoming_tempo_in_the_right_direction():
+    transition = plan_transition(
+        analysis(bpm=120, key="C"),
+        analysis(bpm=125, key="G"),
+        profile="long_blend",
+    )
+    assert transition["playback_rate"] == pytest.approx(0.96, abs=0.01)
+
+
 def test_incompatible_pair_gets_a_structural_fallback():
     transition = plan_transition(
         analysis(bpm=72, key="C", confidence=0.6),
@@ -60,7 +69,7 @@ def test_incompatible_pair_gets_a_structural_fallback():
     assert transition["technique"] in {"echo_cut", "structural_fade", "safe_fade"}
 
 
-def test_exact_request_is_never_more_than_three_starts_away():
+def test_request_is_eventually_reached_while_a_clean_direct_mix_stays_preferred():
     current = analysis(bpm=100, key="C")
     bridges = [
         (item("bridge-a"), analysis(bpm=112, key="G")),
@@ -68,9 +77,18 @@ def test_exact_request_is_never_more_than_three_starts_away():
         (item("bridge-c"), analysis(bpm=128, key="F#")),
     ]
     requested = (item("requested"), analysis(bpm=128, key="D"))
-    route = route_to_request(current, bridges, requested, profile="adaptive", max_starts=3)
-    assert 1 <= len(route) <= 3
+    route = route_to_request(current, bridges, requested, profile="adaptive", max_starts=5)
+    assert 1 <= len(route) <= 5
     assert route[-1]["id"] == "requested"
+
+    direct = route_to_request(
+        analysis(bpm=128, key="D"),
+        bridges,
+        requested,
+        profile="adaptive",
+        max_starts=5,
+    )
+    assert [row["id"] for row in direct] == ["requested"]
 
 
 def test_route_order_considers_transition_quality_not_only_recommendation_score():
@@ -107,7 +125,11 @@ def test_analyser_decodes_in_memory_and_finds_a_real_pulse_grid(tmp_path, monkey
 
     assert result["analysed"] is True
     assert 112 <= result["bpm"] <= 124
+    assert len(result["beat_grid"]) >= 24
+    assert result["downbeats"]
     assert result["phrase_boundaries"]
+    assert result["sections"]
+    assert result["tempo_confidence"] > 0
     assert set(tmp_path.glob("*")) == {source, tmp_path / "analysis.sqlite3"}
 
 

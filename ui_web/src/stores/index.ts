@@ -7,6 +7,7 @@ import {
   type DjItemRef,
   type DjPlanResponse,
   type DjProfile,
+  type DjRequestTarget,
   type DeviceRegistration,
   type ListeningPlanItem,
   type RemotePlaybackState,
@@ -869,6 +870,7 @@ function commitTransition(
   manual: boolean,
 ): void {
   const toKey = queueIdentity(next);
+  const fulfilledRequestId = state.autoMode.plan[toKey]?.requestId;
   const token = ++commitSeq;
   const owns = () => commitSeq === token;
   committedTransition = { queueId: next.queueId, fromKey, toKey };
@@ -902,7 +904,7 @@ function commitTransition(
         nextTrackId: toKey,
       });
       setState('autoMode', 'requests', (requests) =>
-        requests.filter((request) => queueIdentity(request.track) !== toKey),
+        requests.filter((request) => request.id !== fulfilledRequestId),
       );
       updateMediaSession(next);
       pushPlaybackState();
@@ -1644,11 +1646,13 @@ export const actions = {
   requestAutoTrack(track: Track): void {
     if (!state.autoMode.active || isPodcastTrack(track)) return;
     const duplicate = state.autoMode.requests.some((request) =>
-      queueIdentity(request.track) === queueIdentity(track),
+      request.track ? queueIdentity(request.track) === queueIdentity(track) : false,
     );
     if (duplicate) return;
     const request: AutoRequest = {
       id: randomId(),
+      kind: 'track',
+      label: track.title,
       track,
       status: 'queued',
       etaTracks: null,
@@ -1657,11 +1661,30 @@ export const actions = {
     scheduleRunwayReplan(tr('autoMode.note.added', { title: track.title }));
   },
 
+  requestAutoArtist(name: string): void {
+    const artist = name.trim();
+    if (!state.autoMode.active || !artist) return;
+    const duplicate = state.autoMode.requests.some((request) =>
+      request.kind === 'artist' && request.artist?.name.toLocaleLowerCase() === artist.toLocaleLowerCase(),
+    );
+    if (duplicate) return;
+    const request: AutoRequest = {
+      id: randomId(),
+      kind: 'artist',
+      label: artist,
+      artist: { name: artist },
+      status: 'queued',
+      etaTracks: null,
+    };
+    setState('autoMode', 'requests', (requests) => [...requests, request]);
+    scheduleRunwayReplan(tr('autoMode.note.added', { title: artist }));
+  },
+
   cancelAutoRequest(id: string): void {
     const dropped = state.autoMode.requests.find((request) => request.id === id);
     setState('autoMode', 'requests', (requests) => requests.filter((request) => request.id !== id));
     scheduleRunwayReplan(
-      dropped ? tr('autoMode.note.dropped', { title: dropped.track.title }) : tr('autoMode.note.direction'),
+      dropped ? tr('autoMode.note.dropped', { title: dropped.label }) : tr('autoMode.note.direction'),
     );
   },
 
@@ -2672,7 +2695,13 @@ function ensureGeneratedQueue(): GeneratedQueueController {
           dj_profile: state.autoMode.djProfile,
           direction: state.autoMode.direction,
           seed: seedBody,
-          requests: state.autoMode.requests.map(({ id, track }) => ({ id, track })),
+          requests: state.autoMode.requests.map((request): DjRequestTarget | null => (
+            request.kind === 'artist' && request.artist
+              ? { id: request.id, kind: 'artist', label: request.label, artist: request.artist }
+              : request.track
+                ? { id: request.id, kind: 'track', label: request.label, track: request.track }
+                : null
+          )).filter((request): request is DjRequestTarget => request !== null),
           exclude,
           limit,
         }, signal);
@@ -2756,12 +2785,16 @@ function ensureGeneratedQueue(): GeneratedQueueController {
         setState('autoMode', 'plan', plan);
         const djRequests = (response as Partial<DjPlanResponse>).requests;
         if (Array.isArray(djRequests)) {
-          const statuses = new Map<string, number | null>(
-            djRequests.map((request) => [request.id, request.eta_tracks]),
-          );
+          const statuses = new Map(djRequests.map((request) => [request.id, request]));
           setState('autoMode', 'requests', (requests) => requests.map((request) => (
             statuses.has(request.id)
-              ? { ...request, status: 'planned', etaTracks: statuses.get(request.id) ?? null }
+              ? {
+                  ...request,
+                  status: statuses.get(request.id)?.status === 'failed' ? 'failed' : 'planned',
+                  etaTracks: statuses.get(request.id)?.eta_tracks ?? null,
+                  scheduledPosition: statuses.get(request.id)?.scheduled_position ?? null,
+                  failureCode: statuses.get(request.id)?.failure_code ?? null,
+                }
               : request
           )));
         }

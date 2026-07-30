@@ -1240,6 +1240,17 @@ def _dj_fallback_analysis(duration_hint: float) -> dict:
 
 
 def _normalise_dj_request(raw: dict) -> dict | None:
+    if str(raw.get("kind") or "").strip() == "artist":
+        artist_row = raw.get("artist") if isinstance(raw.get("artist"), dict) else {}
+        artist_name = str(artist_row.get("name") or raw.get("label") or "").strip()
+        if not artist_name:
+            return None
+        return {
+            "kind": "artist",
+            "artist_name": artist_name,
+            "label": artist_name,
+            "request_id": str(raw.get("id") or uuid.uuid4()),
+        }
     track = raw.get("track") if isinstance(raw.get("track"), dict) else raw
     is_preview = str(track.get("source") or "") == "preview"
     video_id = str(track.get("youtube_id") or (track.get("id") if is_preview else "") or "").strip()
@@ -1250,6 +1261,8 @@ def _normalise_dj_request(raw: dict) -> dict | None:
         return None
     is_preview = not track_id
     return {
+        "kind": "track",
+        "label": title,
         "id": video_id if is_preview else track_id,
         "track_id": track_id or None,
         "youtube_id": video_id if is_preview else track.get("youtube_id"),
@@ -1267,6 +1280,59 @@ def _normalise_dj_request(raw: dict) -> dict | None:
         "score": 1.0,
         "request_id": str(raw.get("id") or uuid.uuid4()),
     }
+
+
+def _dj_command_direction(text: str) -> tuple[dict, str | None]:
+    """Interpret the small, useful command language locally and predictably."""
+    folded = text.casefold()
+    patch: dict = {}
+    if re.search(r"\b(m[aá]s energ\w*|sube|ca[nñ]a|intens\w*|banger|harder|energ\w*)\b", folded):
+        patch["energy"] = 0.7
+    elif re.search(r"\b(m[aá]s tranquil|baja|relaja|suave|calm|chill|menos energ)\b", folded):
+        patch["energy"] = -0.7
+    if re.search(r"\b(conocid|familiar|cl[aá]sic|hits?|popular)\b", folded):
+        patch["familiarity"] = 0.7
+    elif re.search(r"\b(descubr|nuevo|sorpr[eé]nd|menos conocid|underground)\b", folded):
+        patch["familiarity"] = -0.7
+
+    request_match = re.search(
+        r"(?:^|\b)(?:pon(?:me)?|mete|quiero|toca|play|escuchar|escucha)\s+(?:algo\s+de\s+|una\s+de\s+|a\s+)?(.+?)(?:\s+(?:por favor|cuando puedas))?[.!?]*$",
+        text,
+        flags=re.IGNORECASE,
+    )
+    name = request_match.group(1).strip(" \t,.;:!?\"'") if request_match else None
+    if name:
+        name = re.split(r"\s+(?:pero|aunque|but|mais|however)\b", name, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+    return patch, name or None
+
+
+@discovery_bp.route("/api/discovery/music/dj-command", methods=["POST"])
+@rate_limit("discovery_music_dj_command", limit=60, window_sec=60)
+def discovery_music_dj_command():
+    """Understand booth commands without an LLM or an external prompt service."""
+    data = request.get_json(silent=True) or {}
+    text = str(data.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "text is required"}), 400
+    direction, requested_name = _dj_command_direction(text)
+    target = None
+    if requested_name:
+        try:
+            rows = _deezer_artist_top_rows(requested_name, 1)
+        except Exception:
+            rows = []
+        artist_row = rows[0].get("artist") if rows and isinstance(rows[0].get("artist"), dict) else {}
+        resolved_name = str(artist_row.get("name") or "").strip()
+        if resolved_name and resolved_name.casefold() == requested_name.casefold():
+            target = {"kind": "artist", "label": resolved_name, "artist": {"name": resolved_name}}
+        else:
+            target = {"kind": "query", "label": requested_name, "query": requested_name}
+    return jsonify({
+        "v": 1,
+        "understood": bool(direction or target),
+        "direction_patch": direction,
+        "request": target,
+    })
 
 
 @discovery_bp.route("/api/discovery/music/dj-plan", methods=["POST"])
@@ -1339,17 +1405,54 @@ def discovery_music_dj_plan():
     previous = seed_analysis
     remaining = list(candidates)
     max_items = requested_limit
+    request_statuses: list[dict] = []
     for requested in requests:
         if len(route) >= max_items:
             break
-        requested_analysis = _dj_item_analysis(metadata, requested)
-        segment = route_to_request(
-            previous,
-            remaining,
-            (requested, requested_analysis),
-            profile=profile,
-            max_starts=min(3, max_items - len(route)),
-        )
+        targets: list[dict]
+        if requested["kind"] == "artist":
+            from shared.user_context import current_user_id
+
+            targets = _planner_artist_candidates(requested["artist_name"], current_user_id(), 8)
+            for target in targets:
+                target.update({
+                    "request_id": requested["request_id"],
+                    "reason": f"Requested artist: {requested['artist_name']}",
+                    "reason_code": "dj_artist_request",
+                })
+        else:
+            targets = [requested]
+        candidate_segments: list[tuple[float, list[dict], dict]] = []
+        for target in targets:
+            target_analysis = _dj_item_analysis(metadata, target)
+            target_segment = route_to_request(
+                previous,
+                remaining,
+                (target, target_analysis),
+                profile=profile,
+                max_starts=min(5, max_items - len(route)),
+            )
+            if not target_segment:
+                continue
+            transition_quality = sum(float(row["transition"]["score"]) for row in target_segment) / len(target_segment)
+            position_cost = max(0, len(target_segment) - 1) * 0.025
+            candidate_segments.append((
+                transition_quality + float(target.get("score") or 0.5) * 0.08 - position_cost,
+                target_segment,
+                target_analysis,
+            ))
+        if not candidate_segments:
+            request_statuses.append({
+                "id": requested["request_id"],
+                "kind": requested["kind"],
+                "label": requested["label"],
+                "status": "failed",
+                "eta_tracks": None,
+                "scheduled_position": None,
+                "failure_code": "unavailable",
+            })
+            continue
+        _, segment, requested_analysis = max(candidate_segments, key=lambda row: row[0])
         route.extend(segment)
         used = {str(item.get("recommendation_identity") or item.get("id")) for item in segment}
         remaining = [
@@ -1358,27 +1461,36 @@ def discovery_music_dj_plan():
             if str(item.get("recommendation_identity") or item.get("id")) not in used
         ]
         previous = requested_analysis
+        eta = next(
+            (index + 1 for index, row in enumerate(route) if row.get("request_id") == requested["request_id"]),
+            None,
+        )
+        request_statuses.append({
+            "id": requested["request_id"],
+            "kind": requested["kind"],
+            "label": requested["label"],
+            "status": "planned",
+            "track_identity": next(
+                (row.get("recommendation_identity") for row in route if row.get("request_id") == requested["request_id"]),
+                None,
+            ),
+            "eta_tracks": eta,
+            "scheduled_position": eta + 1 if eta is not None else None,
+            "preferred_position": 2,
+            "max_position": 6,
+            "failure_code": None,
+        })
     if len(route) < max_items:
         route.extend(order_route(previous, remaining, profile=profile, limit=max_items - len(route)))
 
     return jsonify({
         **base,
-        "v": 2,
+        "v": 3,
         "dj_profile": profile,
         "source_profile": source_profile,
         "seed_analysis": seed_analysis,
         "items": route,
-        "requests": [
-            {
-                "id": item["request_id"],
-                "track_identity": item["recommendation_identity"],
-                "eta_tracks": next(
-                    (index + 1 for index, row in enumerate(route) if row.get("request_id") == item["request_id"]),
-                    None,
-                ),
-            }
-            for item in requests
-        ],
+        "requests": request_statuses,
     })
 
 

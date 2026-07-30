@@ -7,6 +7,7 @@ const { actions, apiMock, state } = vi.hoisted(() => ({
     setAutoDjProfile: vi.fn(),
     setAutoDirection: vi.fn(),
     requestAutoTrack: vi.fn(),
+    requestAutoArtist: vi.fn(),
     cancelAutoRequest: vi.fn(),
     exitAutoMode: vi.fn(),
     setVolume: vi.fn(),
@@ -23,6 +24,7 @@ const { actions, apiMock, state } = vi.hoisted(() => ({
     getArtistProfile: vi.fn(),
     searchCatalog: vi.fn(),
     resolveCatalogItem: vi.fn(),
+    interpretDjCommand: vi.fn(),
   },
   state: {
     favorites: [],
@@ -91,6 +93,7 @@ afterEach(() => {
   apiMock.getArtistProfile.mockReset();
   apiMock.searchCatalog.mockReset();
   apiMock.resolveCatalogItem.mockReset();
+  apiMock.interpretDjCommand.mockReset();
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: initialViewportWidth });
 });
 
@@ -172,6 +175,28 @@ describe('AutoMode environment', () => {
       'autoMode.note.added:Gecko',
     );
     expect(apiMock.searchCatalog).not.toHaveBeenCalled();
+  });
+
+  it('keeps an artist command as an artist destination for the planner', async () => {
+    apiMock.interpretDjCommand.mockResolvedValue({
+      v: 1,
+      understood: true,
+      direction_patch: {},
+      request: {
+        kind: 'artist',
+        label: 'Oliver Heldens',
+        artist: { name: 'Oliver Heldens' },
+      },
+    });
+    render(() => <AutoMode />);
+
+    const command = screen.getByRole('textbox', { name: 'autoMode.dj.commandAria' });
+    fireEvent.input(command, { target: { value: 'pon oliver heldens' } });
+    fireEvent.submit(command.closest('form')!);
+
+    await waitFor(() => expect(actions.requestAutoArtist).toHaveBeenCalledWith('Oliver Heldens'));
+    expect(actions.requestAutoTrack).not.toHaveBeenCalled();
+    expect(apiMock.getArtistProfile).not.toHaveBeenCalled();
   });
 
   it('reports an unknown spoken name instead of pretending it changed the route', async () => {

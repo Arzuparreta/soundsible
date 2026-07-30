@@ -191,7 +191,7 @@ def test_dj_plan_validates_profile_and_requires_seed(tmp_path):
     ).status_code == 400
 
 
-def test_dj_plan_places_an_exact_request_inside_three_tracks(tmp_path):
+def test_dj_plan_eventually_places_an_exact_request_and_prefers_it_next(tmp_path):
     _make_runtime(tmp_path)
     base_items = [
         {
@@ -257,9 +257,104 @@ def test_dj_plan_places_an_exact_request_inside_three_tracks(tmp_path):
     assert response.status_code == 200
     body = response.get_json()
     request_index = next(index for index, row in enumerate(body["items"]) if row.get("request_id") == "request-1")
-    assert request_index <= 2
+    assert request_index <= 4
     assert body["requests"][0]["eta_tracks"] == request_index + 1
+    assert body["requests"][0]["scheduled_position"] == request_index + 2
+    assert body["requests"][0]["preferred_position"] == 2
+    assert body["requests"][0]["max_position"] == 6
     assert all(row.get("transition") for row in body["items"])
+
+
+def test_dj_plan_keeps_an_artist_request_until_a_playable_track_fulfils_it(tmp_path):
+    _make_runtime(tmp_path)
+    base = {
+        "v": 1,
+        "plan_id": "base-plan",
+        "intent": "auto_mode",
+        "profile": "balanced",
+        "seed_identity": "seed",
+        "items": [],
+        "degraded": False,
+        "pool_counts": {"local": 0, "related": 0, "discovery": 0},
+        "generated_at": 1,
+    }
+    target = {
+        "id": "heldens001",
+        "youtube_id": "heldens001",
+        "title": "Gecko",
+        "artist": "Oliver Heldens",
+        "duration": 165,
+        "source": "preview",
+        "source_pool": "related",
+        "recommendation_identity": "music:youtube:heldens001",
+        "recommendation_source": "auto_mode",
+        "score": 0.9,
+    }
+    features = {
+        "duration": 180,
+        "bpm": 126,
+        "key": "C",
+        "mode": "major",
+        "energy": 0.7,
+        "confidence": 0.9,
+        "outro_cue": 130,
+        "intro_cue": 8,
+        "bar_seconds": 1.9,
+    }
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    with (
+        patch.object(_disc_routes, "_get_api", return_value=mock_api),
+        patch.object(_disc_routes, "_build_music_plan", return_value=(base, 200)),
+        patch.object(_disc_routes, "_planner_artist_candidates", return_value=[target]),
+        patch.object(_disc_routes, "_dj_item_analysis", return_value=features),
+    ):
+        response = _make_app().test_client().post(
+            "/api/discovery/music/dj-plan",
+            json={
+                "dj_profile": "adaptive",
+                "seed": {"id": "seed", "title": "Seed", "artist": "Artist", "duration": 180},
+                "requests": [{
+                    "id": "artist-request",
+                    "kind": "artist",
+                    "label": "Oliver Heldens",
+                    "artist": {"name": "Oliver Heldens"},
+                }],
+                "limit": 8,
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["v"] == 3
+    assert body["items"][0]["artist"] == "Oliver Heldens"
+    assert body["items"][0]["request_id"] == "artist-request"
+    assert body["requests"][0]["kind"] == "artist"
+    assert body["requests"][0]["status"] == "planned"
+
+
+def test_dj_command_recognises_an_exact_artist_without_an_llm(tmp_path):
+    _make_runtime(tmp_path)
+    with patch.object(
+        _disc_routes,
+        "_deezer_artist_top_rows",
+        return_value=[{"artist": {"id": 1, "name": "Oliver Heldens"}}],
+    ):
+        response = _make_app().test_client().post(
+            "/api/discovery/music/dj-command",
+            json={"text": "pon Oliver Heldens pero con más energía"},
+        )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["request"] == {
+        "kind": "artist",
+        "label": "Oliver Heldens",
+        "artist": {"name": "Oliver Heldens"},
+    }
+    assert body["direction_patch"]["energy"] == 0.7
 def test_music_plan_returns_server_ordered_playable_radio_items(tmp_path):
     runtime = _make_runtime(tmp_path)
     init_telemetry(runtime)

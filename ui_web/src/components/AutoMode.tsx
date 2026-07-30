@@ -230,7 +230,9 @@ export function AutoMode() {
     name: string,
     signal: AbortSignal,
   ): Promise<{ track: Track; artist: string } | null> => {
-    const requested = new Set(autoRequests().map((request) => `${request.track.artist}|${request.track.title}`.toLowerCase()));
+    const requested = new Set(autoRequests().flatMap((request) => (
+      request.track ? [`${request.track.artist}|${request.track.title}`.toLowerCase()] : []
+    )));
     const pickable = (items: CatalogItem[]) =>
       items.find((item) => item.type !== 'artist' && item.type !== 'album' && item.type !== 'playlist'
         && !requested.has(`${item.artist ?? item.subtitle ?? ''}|${item.title}`.toLowerCase()));
@@ -272,24 +274,53 @@ export function AutoMode() {
     const current = state.autoMode.direction ?? {
       energy: 0, familiarity: 0, prompt: '', include: [], exclude: [],
     };
-    const spoken = parseNamedRequest(value);
-    if (!spoken) {
+    const clientRequest = parseNamedRequest(value);
+    if (!clientRequest) {
       spokenRequestAborter?.abort();
       spokenRequestSeq += 1;
       actions.setAutoDirection(
         parseDjDirection(value, current),
-        // Your own words go back on the status line. The booth heard *you*, not
-        // a profile it derived from you.
         t('autoMode.note.quoted', { text: value }),
       );
       return;
     }
-
     spokenRequestAborter?.abort();
     const aborter = new AbortController();
     spokenRequestAborter = aborter;
     const sequence = ++spokenRequestSeq;
-    actions.reportAutoActivity('autoMode.agent.looking', 'working', { name: spoken });
+    actions.reportAutoActivity('autoMode.agent.looking', 'working', { name: clientRequest });
+    let command: Awaited<ReturnType<typeof api.interpretDjCommand>> | null = null;
+    if (typeof api.interpretDjCommand === 'function') {
+      try {
+        command = await api.interpretDjCommand(value, aborter.signal);
+      } catch {
+        command = null;
+      }
+    }
+    if (aborter.signal.aborted || sequence !== spokenRequestSeq) return;
+    const patch = command?.direction_patch ?? parseDjDirection(value, current);
+    const fallbackRequest = clientRequest;
+    const target = command?.request ?? (fallbackRequest
+      ? { kind: 'query' as const, label: fallbackRequest, query: fallbackRequest }
+      : null);
+    if (!target) {
+      actions.setAutoDirection(
+        patch,
+        t('autoMode.note.quoted', { text: value }),
+      );
+      spokenRequestAborter = null;
+      return;
+    }
+    if (target.kind === 'artist') {
+      actions.setAutoDirection(
+        { ...patch, prompt: value, include: [target.artist.name] },
+        t('autoMode.note.added', { title: target.artist.name }),
+      );
+      actions.requestAutoArtist(target.artist.name);
+      spokenRequestAborter = null;
+      return;
+    }
+    const spoken = target.query || parseNamedRequest(value) || value;
     const found = await resolveSpokenRequest(spoken, aborter.signal);
     if (aborter.signal.aborted || sequence !== spokenRequestSeq) return;
     spokenRequestAborter = null;
@@ -297,7 +328,7 @@ export function AutoMode() {
       // Say so. The phrase still carries a direction, so apply that much rather
       // than pretending the whole instruction landed.
       actions.reportAutoActivity('autoMode.agent.noMatch', 'error', { name: spoken });
-      const steered = parseDjDirection(value, current);
+      const steered = patch;
       if (steered.energy !== current.energy || steered.familiarity !== current.familiarity) {
         actions.setAutoDirection(steered, t('autoMode.note.quoted', { text: value }));
       }
@@ -306,7 +337,7 @@ export function AutoMode() {
     // Lean the runway their way too, so the set keeps that colour once the
     // requested track has played.
     actions.setAutoDirection(
-      { ...parseDjDirection(value, current), include: [found.artist] },
+      { ...patch, prompt: value, include: [found.artist] },
       t('autoMode.note.added', { title: found.track.title }),
     );
     actions.requestAutoTrack(found.track);
@@ -596,13 +627,16 @@ export function AutoMode() {
                     <For each={autoRequests()}>
                       {(request) => (
                         <span class={styles.requestChip}>
-                          <span>{request.track.title}</span>
+                          <span>{request.label}</span>
                           <Show when={request.etaTracks}>
                             <em>{t('autoMode.dj.withinTracks', { count: request.etaTracks! })}</em>
                           </Show>
+                          <Show when={request.status === 'failed'}>
+                            <em>{t('autoMode.dj.requestUnavailable')}</em>
+                          </Show>
                           <button
                             type="button"
-                            aria-label={t('autoMode.dj.cancelRequest', { title: request.track.title })}
+                            aria-label={t('autoMode.dj.cancelRequest', { title: request.label })}
                             onClick={() => actions.cancelAutoRequest(request.id)}
                           >
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">

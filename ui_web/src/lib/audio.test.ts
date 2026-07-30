@@ -1,6 +1,38 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const created: FakeAudio[] = [];
+const automatedCurves: Float32Array[] = [];
+
+class FakeAudioParam {
+  value = 0;
+  cancelScheduledValues = vi.fn();
+  setValueAtTime = vi.fn((value: number) => { this.value = value; });
+  linearRampToValueAtTime = vi.fn((value: number) => { this.value = value; });
+  setValueCurveAtTime = vi.fn((values: Float32Array) => {
+    automatedCurves.push(values);
+    this.value = values[values.length - 1];
+  });
+}
+
+class FakeAudioNode {
+  connect<T>(target: T): T {
+    return target;
+  }
+}
+
+class FakeGainNode extends FakeAudioNode {
+  gain = new FakeAudioParam();
+}
+
+class FakeAudioContext {
+  currentTime = 10;
+  state = 'running';
+  destination = new FakeAudioNode();
+  resume = vi.fn(async () => { this.state = 'running'; });
+  suspend = vi.fn(async () => { this.state = 'suspended'; });
+  createGain = () => new FakeGainNode();
+  createMediaElementSource = () => new FakeAudioNode();
+}
 
 class FakeAudio extends EventTarget {
   src = '';
@@ -86,6 +118,7 @@ async function play(deck: FakeAudio, position: number) {
 
 beforeEach(() => {
   created.length = 0;
+  automatedCurves.length = 0;
   vi.useFakeTimers();
   vi.stubGlobal('Audio', FakeAudio);
   vi.stubGlobal('AudioContext', undefined);
@@ -154,6 +187,33 @@ describe('two-deck mixer', () => {
     await vi.advanceTimersByTimeAsync(5_000);
     expect(incoming.volume).toBe(held);
     expect(audioEl()).toBe(outgoing as unknown as HTMLAudioElement);
+  });
+
+  it('does not open both decks while their beat cues are still out of phase', async () => {
+    const { audioService, outgoing, incoming } = await armed();
+    await play(outgoing, 108.5);
+
+    // Twenty milliseconds is enough to create the audible doubled attack the
+    // phase guard exists to prevent.
+    incoming.currentTime = 1.98;
+    await play(outgoing, 110);
+    expect(audioService.mixPhase()).toBe('prerolling');
+    expect(incoming.volume).toBe(0);
+
+    await play(incoming, 2);
+    expect(audioService.mixPhase()).toBe('crossfading');
+  });
+
+  it('schedules one continuous equal-power curve on the audio graph', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const { audioService, outgoing, incoming } = await armed();
+    await play(outgoing, 108.5);
+    incoming.currentTime = 2;
+    await play(outgoing, 110);
+
+    expect(audioService.mixPhase()).toBe('crossfading');
+    expect(automatedCurves).toHaveLength(2);
+    expect(automatedCurves.every((curve) => curve.length === 96)).toBe(true);
   });
 
   it('cancels a prepared transition without disturbing what is playing', async () => {
