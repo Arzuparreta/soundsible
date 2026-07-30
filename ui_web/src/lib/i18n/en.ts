@@ -47,8 +47,8 @@ export const en = {
   },
   nowPlaying: {
     playing: 'Playing',
-    hideSearchPanel: 'Hide search panel',
-    showSearchPanel: 'Show search panel',
+    hideSearchPanel: 'Hide browser and search',
+    showSearchPanel: 'Show browser and search',
     nothingPlaying: 'Nothing playing',
     seekLabel: 'Seek',
     shuffle: 'Shuffle',

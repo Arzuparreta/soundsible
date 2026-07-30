@@ -48,8 +48,8 @@ export const es: Dict = {
   },
   nowPlaying: {
     playing: 'Reproduciendo',
-    hideSearchPanel: 'Ocultar panel de búsqueda',
-    showSearchPanel: 'Mostrar panel de búsqueda',
+    hideSearchPanel: 'Ocultar explorador y búsqueda',
+    showSearchPanel: 'Mostrar explorador y búsqueda',
     nothingPlaying: 'Nada sonando',
     seekLabel: 'Buscar en la pista',
     shuffle: 'Aleatorio',

@@ -48,8 +48,8 @@ export const fr: Dict = {
   },
   nowPlaying: {
     playing: 'En lecture',
-    hideSearchPanel: 'Masquer le panneau de recherche',
-    showSearchPanel: 'Afficher le panneau de recherche',
+    hideSearchPanel: 'Masquer le navigateur et la recherche',
+    showSearchPanel: 'Afficher le navigateur et la recherche',
     nothingPlaying: 'Rien en lecture',
     seekLabel: 'Chercher dans le titre',
     shuffle: 'Aléatoire',

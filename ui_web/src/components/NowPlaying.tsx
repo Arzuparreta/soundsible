@@ -755,11 +755,13 @@ export function NowPlaying() {
             classList={{ [styles.iconBtn]: true, [styles.panelToggle]: true, [styles.panelToggleOn]: browserOpen() }}
             type="button"
             aria-label={browserOpen() ? tr('nowPlaying.hideSearchPanel') : tr('nowPlaying.showSearchPanel')}
+            title={browserOpen() ? tr('nowPlaying.hideSearchPanel') : tr('nowPlaying.showSearchPanel')}
             aria-pressed={browserOpen()}
             onClick={toggleBrowser}
           >
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M4 4h16v16H4zM9 4v16M13 8h4M13 12h4M13 16h3" />
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="5.5" />
+              <path d="m15 15 4 4M4 4h16v16H4" opacity=".55" />
             </svg>
           </button>
           <Show when={!t() || !isPodcast()}>

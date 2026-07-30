@@ -48,8 +48,8 @@ export const zh: Dict = {
   },
   nowPlaying: {
     playing: '正在播放',
-    hideSearchPanel: '隐藏搜索面板',
-    showSearchPanel: '显示搜索面板',
+    hideSearchPanel: '隐藏浏览和搜索',
+    showSearchPanel: '显示浏览和搜索',
     nothingPlaying: '未在播放',
     seekLabel: '在曲目中定位',
     shuffle: '随机播放',

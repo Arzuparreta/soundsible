@@ -168,6 +168,12 @@
   display: contents;
 }
 
+/* The browser is desktop-only. Its tile owns that responsive contract so the
+   browser itself can always fill the grid cell when the tile is mounted. */
+.tile[data-now-playing-tile='browser'] {
+  display: none;
+}
+
 .splitter,
 .panelGrip,
 .desktopLyrics,
@@ -1238,6 +1244,10 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+  }
+
+  .tile[data-now-playing-tile='browser'] {
+    display: block;
   }
 
   .tile[data-now-playing-tile='stage'] {
