@@ -59,10 +59,79 @@ _VERSION_MARKERS = (
 #: with, and below the bar for saving without asking.
 _VERSION_PENALTY = 0.20
 
+#: Where a recording was uploaded from, which `_norm` also erases: "official"
+#: and "lyrics" are filler words, stripped before titles are compared. Two
+#: candidates carrying the same recording therefore score identically whether
+#: one is the artist's own upload and the other is a third party's repackaging
+#: of it — and small accidents decide, like the six-second running time of an
+#: official video losing to a lyrics reupload's five.
+#:
+#: This is a preference between sources, not evidence about which track it is,
+#: so both adjustments are small enough that title, artist and duration still
+#: decide what the recording actually is.
+_OFFICIAL_TITLE_MARKERS = ("official",)
+_OFFICIAL_CHANNEL_MARKERS = ("vevo", "- topic", "official")
+_REPACKAGE_MARKERS = (
+    "lyrics",
+    "lyric video",
+    "letra",
+    "letras",
+    "sub espanol",
+    "sub español",
+    "subtitulado",
+    "traducida",
+    "traduccion",
+    "traducción",
+)
+_OFFICIAL_BONUS = 0.15
+_REPACKAGE_PENALTY = 0.15
+
 _MARKER_RES = {
     marker: re.compile(rf"(?<!\w){re.escape(marker)}(?!\w)", re.IGNORECASE)
     for marker in _VERSION_MARKERS
 }
+_REPACKAGE_RES = tuple(
+    re.compile(rf"(?<!\w){re.escape(marker)}(?!\w)", re.IGNORECASE)
+    for marker in _REPACKAGE_MARKERS
+)
+
+
+def is_official_source(candidate: dict) -> bool:
+    """True when a candidate looks like the artist's own upload.
+
+    Used to break ties between candidates we are equally confident about. Beyond
+    sounding right, these are the uploads that are still there next year: a
+    third-party reupload is what disappears and leaves a saved track dead.
+    """
+    title = candidate.get("title") or ""
+    channel = (candidate.get("channel") or candidate.get("uploader") or "").casefold()
+    if any(marker in channel for marker in _OFFICIAL_CHANNEL_MARKERS):
+        return True
+    return any(
+        re.search(rf"(?<!\w){re.escape(marker)}(?!\w)", title, re.IGNORECASE)
+        for marker in _OFFICIAL_TITLE_MARKERS
+    )
+
+
+def _source_adjustment(candidate_title: str, candidate_channel: str) -> float:
+    """Prefer the artist's own upload over somebody else's repost of it.
+
+    An "official lyric video" earns both marks and nets out at zero, which is
+    right: it is the canonical upload and it is a lyrics video.
+    """
+    title = candidate_title or ""
+    channel = candidate_channel or ""
+    adjustment = 0.0
+    lowered_channel = channel.casefold()
+    official = any(
+        re.search(rf"(?<!\w){re.escape(marker)}(?!\w)", title, re.IGNORECASE)
+        for marker in _OFFICIAL_TITLE_MARKERS
+    ) or any(marker in lowered_channel for marker in _OFFICIAL_CHANNEL_MARKERS)
+    if official:
+        adjustment += _OFFICIAL_BONUS
+    if any(pattern.search(title) for pattern in _REPACKAGE_RES):
+        adjustment -= _REPACKAGE_PENALTY
+    return adjustment
 
 
 def _version_mismatch(sought_title: str, candidate_title: str) -> bool:
@@ -166,6 +235,12 @@ def score_candidate(
     if wrong_version:
         score -= _VERSION_PENALTY
 
+    # — Source preference —
+    score += _source_adjustment(
+        candidate.get("title") or "",
+        candidate.get("channel") or candidate.get("uploader") or "",
+    )
+
     score = max(0.0, min(1.0, score))
 
     # Build reason code
@@ -216,7 +291,20 @@ def best_candidate(
     for c in candidates:
         s, reason = score_candidate(artist, title, duration_s, c)
         scored.append((s, reason, c))
-    scored.sort(key=lambda x: x[0], reverse=True)
+
+    # Near-equal score first, then the artist's own upload, then the exact score.
+    #
+    # Ordering on the score alone let accidents pick the winner: an official
+    # video six seconds off the album running time lost to a lyrics reupload
+    # five seconds off, because the duration bands happen to break at five. Once
+    # two candidates are equally credible as *this track*, which upload to keep
+    # is a separate question with a settled answer — and one that a score nudged
+    # until it wins by 0.01 would keep re-answering at random.
+    #
+    # "Equally credible" has to mean close, not merely the same band: `medium`
+    # spans 0.40 to 0.74, wide enough that the wrong song from the right channel
+    # would outrank the right song from somebody else's.
+    scored.sort(key=lambda x: (round(x[0], 1), is_official_source(x[2]), x[0]), reverse=True)
 
     best_score, best_reason, best = scored[0]
 
