@@ -108,6 +108,8 @@ export const es: Dict = {
     },
     agent: {
       heard: 'Te he oído: {note}',
+      looking: 'Buscando «{name}»…',
+      noMatch: 'Aquí no hay nadie que responda a «{name}»',
       searching: 'Leyendo «{title}» para ver por dónde seguir…',
       redrawing: 'Rehaciendo la ruta · {note}',
       steered: 'Ruta rehecha · {note}',
@@ -148,7 +150,7 @@ export const es: Dict = {
       openFormat: 'Open format', openFormatTrait: 'Saltos amplios · temas puente · cambios de estructura',
       direction: 'Dirección musical',
       directionHint: 'Dile a la cabina hacia dónde tirar. De mezclar se encarga ella.',
-      commandPlaceholder: 'más oscuro · más guitarras · nada de los ochenta',
+      commandPlaceholder: 'pon el parrita · más oscuro · nada de los ochenta',
       commandAria: 'Dile a la cabina hacia dónde llevar la sesión', send: 'Enviar',
       request: 'Pedir', requestEta: 'en ≤3', requests: 'En cabina',
       cancelRequest: 'Quitar la petición de {title}',

@@ -5,7 +5,7 @@ import { api, type DjProfile } from '../lib/api';
 import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import type { AutoActivity } from '../lib/generatedQueue';
-import { parseDjDirection } from '../lib/djDirection';
+import { parseDjDirection, parseNamedRequest } from '../lib/djDirection';
 import { queueIdentity } from '../lib/queueDiscovery';
 import { isPodcastTrack } from '../lib/track';
 import { savedFromTrack } from '../lib/saved';
@@ -137,6 +137,8 @@ export function AutoMode() {
   const [requestBusy, setRequestBusy] = createSignal(false);
   let requestAborter: AbortController | null = null;
   let requestTimer: ReturnType<typeof setTimeout> | null = null;
+  let spokenRequestAborter: AbortController | null = null;
+  let spokenRequestSeq = 0;
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let agentTimer: ReturnType<typeof setTimeout> | null = null;
   let rootEl: HTMLDivElement | undefined;
@@ -271,6 +273,7 @@ export function AutoMode() {
     if (agentTimer) clearTimeout(agentTimer);
     if (requestTimer) clearTimeout(requestTimer);
     requestAborter?.abort();
+    spokenRequestAborter?.abort();
     clearMobileCoverAnchor();
     if (typeof document !== 'undefined') delete document.documentElement.dataset.autoMode;
   });
@@ -313,23 +316,98 @@ export function AutoMode() {
     return left > 0 && left < 100 ? clockTime(left) : '';
   });
 
-  const submitDirection = () => {
+  /**
+   * Turn a spoken name into something the booth can actually cue.
+   *
+   * An artist first — "pon oliver heldens" means the act, and one of their own
+   * tracks is the way in. Failing that a track, because "pon despacito" is the
+   * same verbal act aimed at a song. The catalogue decides whether the words
+   * name anything; the parser only decides that they were meant to.
+   */
+  const resolveSpokenRequest = async (
+    name: string,
+    signal: AbortSignal,
+  ): Promise<{ track: Track; artist: string } | null> => {
+    const requested = new Set(autoRequests().map((request) => `${request.track.artist}|${request.track.title}`.toLowerCase()));
+    const pickable = (items: CatalogItem[]) =>
+      items.find((item) => item.type !== 'artist' && item.type !== 'album' && item.type !== 'playlist'
+        && !requested.has(`${item.artist ?? item.subtitle ?? ''}|${item.title}`.toLowerCase()));
+
+    const profile = await api.getArtistProfile(name, undefined, signal).catch(() => null);
+    const fromArtist = profile?.resolved ? pickable(profile.top_tracks ?? []) : undefined;
+    const item = fromArtist
+      ?? pickable((await api.searchCatalog(name, signal, 'track').catch(() => null))?.items ?? []);
+    if (!item) return null;
+
+    const artist = item.artist ?? item.subtitle ?? profile?.name ?? name;
+    const local = item.track_id ? state.library.find((track) => track.id === item.track_id) : null;
+    if (local) return { track: local, artist };
+    const resolved = await api.resolveCatalogItem(
+      { artist, title: item.title, duration: item.duration },
+      signal,
+    )
+      .catch(() => null);
+    if (!resolved?.video_id) return null;
+    return {
+      track: {
+        id: resolved.video_id,
+        title: item.title,
+        artist,
+        album: item.album,
+        duration: item.duration,
+        cover: item.cover,
+        source: 'preview',
+      },
+      artist,
+    };
+  };
+
+  const submitDirection = async () => {
     const value = prompt().trim();
     if (!value) return;
-    actions.setAutoDirection(
-      parseDjDirection(value, state.autoMode.direction ?? {
-        energy: 0,
-        familiarity: 0,
-        prompt: '',
-        include: [],
-        exclude: [],
-      }),
-      // Your own words go back on the status line. The booth heard *you*, not a
-      // profile it derived from you.
-      t('autoMode.note.quoted', { text: value }),
-    );
     setPrompt('');
     armIdle();
+    const current = state.autoMode.direction ?? {
+      energy: 0, familiarity: 0, prompt: '', include: [], exclude: [],
+    };
+    const spoken = parseNamedRequest(value);
+    if (!spoken) {
+      spokenRequestAborter?.abort();
+      spokenRequestSeq += 1;
+      actions.setAutoDirection(
+        parseDjDirection(value, current),
+        // Your own words go back on the status line. The booth heard *you*, not
+        // a profile it derived from you.
+        t('autoMode.note.quoted', { text: value }),
+      );
+      return;
+    }
+
+    spokenRequestAborter?.abort();
+    const aborter = new AbortController();
+    spokenRequestAborter = aborter;
+    const sequence = ++spokenRequestSeq;
+    actions.reportAutoActivity('autoMode.agent.looking', 'working', { name: spoken });
+    const found = await resolveSpokenRequest(spoken, aborter.signal);
+    if (aborter.signal.aborted || sequence !== spokenRequestSeq) return;
+    spokenRequestAborter = null;
+    if (!found) {
+      // Say so. The phrase still carries a direction, so apply that much rather
+      // than pretending the whole instruction landed.
+      actions.reportAutoActivity('autoMode.agent.noMatch', 'error', { name: spoken });
+      const steered = parseDjDirection(value, current);
+      if (steered.energy !== current.energy || steered.familiarity !== current.familiarity) {
+        actions.setAutoDirection(steered, t('autoMode.note.quoted', { text: value }));
+      }
+      return;
+    }
+    // Lean the runway their way too, so the set keeps that colour once the
+    // requested track has played.
+    actions.setAutoDirection(
+      { ...parseDjDirection(value, current), include: [found.artist] },
+      t('autoMode.note.added', { title: found.track.title }),
+    );
+    actions.requestAutoTrack(found.track);
   };
 
   const setDirectionLevel = (key: 'energy' | 'familiarity', value: number, note: string) => {
@@ -613,7 +691,7 @@ export function AutoMode() {
                   class={styles.talkback}
                   onSubmit={(event) => {
                     event.preventDefault();
-                    submitDirection();
+                    void submitDirection();
                   }}
                 >
                   <span class={styles.caret} aria-hidden="true">›</span>

@@ -108,6 +108,8 @@ export const zh: Dict = {
     },
     agent: {
       heard: '收到：{note}',
+      looking: '正在找《{name}》…',
+      noMatch: '这里找不到《{name}》',
       searching: '正在从《{title}》找去向…',
       redrawing: '正在重画路线 · {note}',
       steered: '路线已重画 · {note}',
@@ -148,7 +150,7 @@ export const zh: Dict = {
       openFormat: '开放格式', openFormatTrait: '大跨度 · 过桥曲目 · 结构切换',
       direction: '音乐方向',
       directionHint: '告诉 DJ 台往哪走，混音交给它。',
-      commandPlaceholder: '更暗一些 · 多点吉他 · 不要八十年代的',
+      commandPlaceholder: '放 Oliver Heldens · 更暗一些 · 不要八十年代的',
       commandAria: '告诉 DJ 台这场往哪走', send: '发送',
       request: '点播', requestEta: '3 首以内', requests: '待放',
       cancelRequest: '取消点播 {title}',

@@ -107,6 +107,8 @@ export const en = {
     },
     agent: {
       heard: 'Heard you: {note}',
+      looking: 'Looking for “{name}”…',
+      noMatch: 'Nothing here answers to “{name}”',
       searching: 'Reading “{title}” for somewhere to go…',
       redrawing: 'Redrawing the route · {note}',
       steered: 'Route redrawn · {note}',
@@ -147,7 +149,7 @@ export const en = {
       openFormat: 'Open format', openFormatTrait: 'Wide jumps · bridge tracks · structural changes',
       direction: 'Music direction',
       directionHint: 'Tell the booth where to take this. It handles the mixing.',
-      commandPlaceholder: 'darker · more guitars · nothing from the eighties',
+      commandPlaceholder: 'play oliver heldens · darker · nothing from the eighties',
       commandAria: 'Tell the booth where to take the session', send: 'Send',
       request: 'Request', requestEta: 'within 3', requests: 'On deck',
       cancelRequest: 'Drop the request for {title}',

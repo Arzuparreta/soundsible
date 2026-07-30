@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from '@solidjs/testing-library';
+import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { actions, state } = vi.hoisted(() => ({
+const { actions, apiMock, state } = vi.hoisted(() => ({
   actions: {
     setAutoProfile: vi.fn(),
     setAutoDjProfile: vi.fn(),
@@ -17,9 +17,16 @@ const { actions, state } = vi.hoisted(() => ({
     toggleFavourite: vi.fn(),
     jumpTo: vi.fn(),
     promoteInAutoRoute: vi.fn(),
+    reportAutoActivity: vi.fn(),
+  },
+  apiMock: {
+    getArtistProfile: vi.fn(),
+    searchCatalog: vi.fn(),
+    resolveCatalogItem: vi.fn(),
   },
   state: {
     favorites: [],
+    library: [],
     playback: {
       currentTrack: { id: 'current', title: 'Current song', artist: 'Artist', cover: '/current.jpg' },
       queue: [
@@ -63,6 +70,7 @@ vi.mock('../stores', () => ({
   isDownloadingKeys: () => false,
   ownedTrackForKeys: () => null,
 }));
+vi.mock('../lib/api', () => ({ api: apiMock }));
 vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
 vi.mock('../lib/i18n', () => ({
   t: (key: string, params?: Record<string, string | number>) =>
@@ -80,6 +88,9 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.useRealTimers();
   state.autoMode.transition = { status: 'idle' };
+  apiMock.getArtistProfile.mockReset();
+  apiMock.searchCatalog.mockReset();
+  apiMock.resolveCatalogItem.mockReset();
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: initialViewportWidth });
 });
 
@@ -122,6 +133,64 @@ describe('AutoMode environment', () => {
     fireEvent.click(screen.getByRole('button', { name: /autoMode\.dj\.request/ }));
     expect(screen.getByRole('complementary', { name: 'autoMode.dj.requestPanelAria' })).toBeInTheDocument();
     expect(screen.getByText('autoMode.dj.requestPromise')).toBeInTheDocument();
+  });
+
+  it('turns a spoken artist request into a real track request', async () => {
+    apiMock.getArtistProfile.mockResolvedValue({
+      name: 'Oliver Heldens',
+      resolved: true,
+      top_tracks: [{
+        id: 'deezer:track:1',
+        type: 'track',
+        source: 'deezer',
+        title: 'Gecko',
+        artist: 'Oliver Heldens',
+        duration: 165,
+      }],
+    });
+    apiMock.resolveCatalogItem.mockResolvedValue({ video_id: 'yt-gecko' });
+    render(() => <AutoMode />);
+
+    const command = screen.getByRole('textbox', { name: 'autoMode.dj.commandAria' });
+    fireEvent.input(command, { target: { value: 'pon oliver heldens' } });
+    fireEvent.submit(command.closest('form')!);
+
+    expect(actions.reportAutoActivity).toHaveBeenCalledWith(
+      'autoMode.agent.looking',
+      'working',
+      { name: 'oliver heldens' },
+    );
+    await waitFor(() => expect(actions.requestAutoTrack).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'yt-gecko',
+        title: 'Gecko',
+        artist: 'Oliver Heldens',
+        source: 'preview',
+      }),
+    ));
+    expect(actions.setAutoDirection).toHaveBeenCalledWith(
+      expect.objectContaining({ include: ['Oliver Heldens'] }),
+      'autoMode.note.added:Gecko',
+    );
+    expect(apiMock.searchCatalog).not.toHaveBeenCalled();
+  });
+
+  it('reports an unknown spoken name instead of pretending it changed the route', async () => {
+    apiMock.getArtistProfile.mockResolvedValue({ name: 'Nobody', resolved: false, top_tracks: [] });
+    apiMock.searchCatalog.mockResolvedValue({ items: [] });
+    render(() => <AutoMode />);
+
+    const command = screen.getByRole('textbox', { name: 'autoMode.dj.commandAria' });
+    fireEvent.input(command, { target: { value: 'pon nobody at all' } });
+    fireEvent.submit(command.closest('form')!);
+
+    await waitFor(() => expect(actions.reportAutoActivity).toHaveBeenLastCalledWith(
+      'autoMode.agent.noMatch',
+      'error',
+      { name: 'nobody at all' },
+    ));
+    expect(actions.requestAutoTrack).not.toHaveBeenCalled();
+    expect(actions.setAutoDirection).not.toHaveBeenCalled();
   });
 
   it('reads the two direction switches as settings, not as a menu', () => {

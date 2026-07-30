@@ -39,6 +39,7 @@ import {
 import { savedFromTrack, savedToTrack, savedVideoId } from '../lib/saved';
 import {
   GeneratedQueueController,
+  type AutoActivity,
   type AutoModeState,
   type AutoPlanItem,
   type AutoProfile,
@@ -1631,6 +1632,13 @@ export const actions = {
   setAutoDirection(direction: Partial<DjDirection>, note?: string): void {
     setState('autoMode', 'direction', (current) => ({ ...current, ...direction }));
     scheduleRunwayReplan(note ?? tr('autoMode.note.direction'));
+  },
+
+  /** Say something in the booth's voice without touching the route — used while
+   * a spoken request is being looked up, and when nothing answers to the name. */
+  reportAutoActivity(key: string, status: AutoActivity['status'], values?: Record<string, string | number>): void {
+    if (!state.autoMode.active) return;
+    setState('autoMode', 'activity', { id: ++generatedActivityId, status, key, values });
   },
 
   requestAutoTrack(track: Track): void {

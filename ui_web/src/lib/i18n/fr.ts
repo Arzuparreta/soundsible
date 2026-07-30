@@ -108,6 +108,8 @@ export const fr: Dict = {
     },
     agent: {
       heard: 'Bien reçu : {note}',
+      looking: 'Recherche de « {name} »…',
+      noMatch: 'Personne ne répond à « {name} » ici',
       searching: 'Lecture de « {title} » pour trouver la suite…',
       redrawing: 'Parcours redessiné · {note}',
       steered: 'Parcours refait · {note}',
@@ -148,7 +150,7 @@ export const fr: Dict = {
       openFormat: 'Open format', openFormatTrait: 'Grands écarts · morceaux-ponts · changements structurels',
       direction: 'Direction musicale',
       directionHint: 'Dites à la cabine où aller. Elle s’occupe du mix.',
-      commandPlaceholder: 'plus sombre · plus de guitares · rien des années 80',
+      commandPlaceholder: 'mets oliver heldens · plus sombre · rien des années 80',
       commandAria: 'Dites à la cabine où mener la session', send: 'Envoyer',
       request: 'Demander', requestEta: 'sous 3', requests: 'En cabine',
       cancelRequest: 'Retirer la demande de {title}',
