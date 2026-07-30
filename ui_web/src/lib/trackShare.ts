@@ -134,6 +134,7 @@ export function associationUrl(): string | null {
   const bridge = SOUNDSIBLE_SHARE_BRIDGE.endsWith('/')
     ? SOUNDSIBLE_SHARE_BRIDGE
     : `${SOUNDSIBLE_SHARE_BRIDGE}/`;
-  const returnTo = `${player}#/settings`;
+  // Back to the submenu the association was started from, not the index.
+  const returnTo = `${player}#/settings/devices`;
   return `${bridge}#register=${encodeURIComponent(player)}&return=${encodeURIComponent(returnTo)}`;
 }

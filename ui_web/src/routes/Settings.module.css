@@ -1,14 +1,80 @@
+/* Settings shell: an index of submenus. Mobile pushes one submenu at a time,
+   desktop keeps the index beside the open one. */
+
+.head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xl) var(--gutter) var(--space-md);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-base) 86%, transparent), transparent);
+}
+
+.back {
+  display: grid;
+  place-items: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  margin-left: calc(var(--space-sm) * -1);
+  flex-shrink: 0;
+  color: var(--ink-primary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out);
+}
+
+.back svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .back:hover {
+    background: var(--bg-hover);
+  }
+}
+
+.title {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-h1);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titleRoot {
+  display: none;
+}
+
 .scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
   padding: 0 var(--gutter) var(--space-2xl);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--space-xl);
+}
+
+/* Mobile is a push stack: the open submenu replaces the index. */
+.scroll[data-view='detail'] .index {
+  display: none;
+}
+
+.index {
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
-  max-width: 640px;
-  width: 100%;
-  margin: 0 auto;
+  min-width: 0;
 }
 
 .group {
@@ -27,7 +93,7 @@
   color: var(--ink-tertiary);
 }
 
-.panel {
+.catList {
   display: flex;
   flex-direction: column;
   background: var(--bg-raised);
@@ -37,333 +103,236 @@
   box-shadow: var(--shadow-1);
 }
 
-.accessibilityPanel {
-  padding: var(--space-lg);
-  overflow: visible;
-}
-
-.row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  min-height: var(--control-h);
-  padding: var(--space-sm) var(--space-lg);
-  font-size: var(--text-body);
-  color: var(--ink-primary);
-}
-
-.row + .row,
-.row + .rowBtn,
-.rowBtn + .row,
-.rowBtn + .rowBtn,
-.row + .rowLink,
-.rowLink + .row,
-.rowBtn + .rowLink,
-.rowLink + .rowBtn {
+.catList > * + * {
   border-top: 1px solid var(--hairline-soft);
 }
 
-.rowLabel {
-  flex: 1;
-  min-width: 0;
-  color: var(--ink-primary);
-}
-
-.rowLabelWithIcon {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35em;
-}
-
-.warnIcon {
-  flex-shrink: 0;
-  color: var(--warning);
-  opacity: 0.85;
-}
-
-.rowValue {
-  flex-shrink: 0;
-  font-size: var(--text-label);
-  color: var(--ink-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
-.rowBtn {
+.cat {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-md);
-  width: 100%;
-  min-height: var(--control-h);
+  min-height: var(--row-h);
   padding: var(--space-sm) var(--space-lg);
-  font: inherit;
-  font-size: var(--text-body);
-  color: var(--ink-primary);
-  text-align: left;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: background var(--dur-short) var(--ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.rowBtn:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-}
-
-.rowBtn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.rowBtnDanger {
-  color: var(--danger);
-}
-
-.rowLink {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  min-height: var(--control-h);
-  padding: var(--space-sm) var(--space-lg);
-  font-size: var(--text-body);
   color: var(--ink-primary);
   text-decoration: none;
   transition: background var(--dur-short) var(--ease-out);
 }
 
 @media (hover: hover) and (pointer: fine) {
-
-.rowLink:hover {
-  background: var(--bg-hover);
-}
-}
-
-.chevron {
-  flex-shrink: 0;
-  width: var(--icon-sm);
-  height: var(--icon-sm);
-  color: var(--ink-tertiary);
+  .cat:hover {
+    background: var(--bg-hover);
+  }
 }
 
-.input {
-  width: 100%;
-  height: var(--control-h);
-  padding: 0 var(--space-md);
-  font: inherit;
-  font-size: var(--text-body);
-  color: var(--ink-primary);
-  text-align: right;
-  background: transparent;
-  border: none;
-  outline: none;
+.cat:active {
+  background: var(--bg-active);
 }
 
-.input::placeholder {
-  color: var(--ink-tertiary);
+.catCurrent {
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-raised));
 }
 
-.input:focus {
+.catCurrent .catTitle {
   color: var(--accent);
 }
 
-.select {
-  height: var(--control-h);
-  padding: 0 var(--space-xl) 0 var(--space-sm);
-  font: inherit;
-  font-size: var(--text-label);
-  color: var(--ink-secondary);
-  background: var(--bg-inset);
-  border: 1px solid var(--hairline);
+.catIcon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
   border-radius: var(--radius-sm);
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236a6a72' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-}
-
-.segment {
-  display: inline-flex;
-  gap: var(--space-2xs);
-  padding: var(--space-2xs);
-  background: var(--bg-inset);
-  border-radius: var(--radius-full);
-}
-
-.seg {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: var(--control-h);
-  height: var(--control-h);
-  padding: 0 var(--space-sm);
-  font-size: var(--text-label);
-  font-weight: var(--fw-semibold);
   color: var(--ink-secondary);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
+  background: var(--bg-inset);
 }
 
-@media (hover: none) and (pointer: coarse) {
-  .seg::before {
-    position: absolute;
-    inset: -4px 0;
-    content: '';
-  }
+.catIcon svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
 }
 
-@media (hover: hover) and (pointer: fine) {
+.catIcon[data-tone='accent'] {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
 
-.seg:hover:not(.segOn) {
+.catIcon[data-tone='info'] {
+  color: color-mix(in srgb, var(--info) 82%, var(--ink-primary));
+  background: color-mix(in srgb, var(--info) 22%, transparent);
+}
+
+.catIcon[data-tone='success'] {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+}
+
+.catIcon[data-tone='warning'] {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+}
+
+.catIcon[data-tone='danger'] {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
+.catText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.catTitle {
+  font-size: var(--text-body);
+  line-height: var(--lh-snug);
   color: var(--ink-primary);
 }
-}
 
-.segOn {
-  color: var(--ink-on-accent);
-  background: var(--accent);
-}
-
-.segIcon {
-  display: inline-flex;
-}
-
-.segIcon svg {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
-}
-
-.switch {
-  position: relative;
-  width: 44px;
-  height: 26px;
-  flex-shrink: 0;
-  padding: 0;
-  background: var(--bg-inset);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: background var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
-}
-
-.switch::before {
-  position: absolute;
-  inset: -9px 0;
-  content: '';
-}
-
-.switchOn {
-  background: var(--accent);
-  border-color: transparent;
-}
-
-.knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: var(--shadow-1);
-  transition: transform var(--dur-short) var(--ease-out);
-}
-
-.switchOn .knob {
-  transform: translateX(18px);
-}
-
-.statusDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.statusOn {
-  background: var(--success);
-  box-shadow: 0 0 6px rgba(52, 199, 89, 0.5);
-}
-
-.statusOff {
-  background: var(--ink-tertiary);
-}
-
-.statusRow {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: var(--text-label);
-  color: var(--ink-secondary);
-}
-
-.mono {
-  font-family: var(--font-mono);
+.catBlurb {
   font-size: var(--text-caption);
-  color: var(--ink-tertiary);
-  font-variant-numeric: tabular-nums;
+  line-height: var(--lh-snug);
+  color: var(--ink-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-@media (max-width: 420px) {
-  .scroll {
-    gap: var(--space-lg);
-  }
+.catChevron {
+  flex-shrink: 0;
+}
 
-  .row {
-    flex-wrap: wrap;
-    align-items: center;
-  }
+.empty {
+  margin: 0;
+  padding: var(--space-xl) var(--space-md);
+  font-size: var(--text-label);
+  color: var(--ink-tertiary);
+  text-align: center;
+}
 
-  .segment {
-    margin-left: auto;
-  }
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  min-width: 0;
+}
 
-  .seg {
-    min-width: var(--segment-h);
-    height: var(--segment-h);
-    padding-inline: var(--space-sm);
-  }
+.detailTitle {
+  display: none;
+}
 
-  .input {
-    width: 100%;
-    text-align: left;
-    margin-top: var(--space-2xs);
+.placeholder {
+  display: none;
+}
+
+/* The submenu arrives from the side it was pushed from. */
+@media (max-width: 1023px) and (prefers-reduced-motion: no-preference) {
+  .detail {
+    animation: submenu-enter var(--dur-short) var(--ease-out) both;
+  }
+}
+
+@keyframes submenu-enter {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
   }
 }
 
 @media (min-width: 1024px) {
-  .input {
-    height: 36px;
+  .head {
+    max-width: 1080px;
+    width: 100%;
+    margin: 0 auto;
   }
 
-  .select {
-    height: 32px;
+  /* The index stays visible, so the header names the page, not the submenu —
+     and the back button has nothing to go back to. */
+  .back,
+  .titleContext {
+    display: none;
   }
 
-  .seg {
-    min-width: 36px;
-    height: 30px;
+  .titleRoot {
+    display: inline;
   }
 
-  :global(html[data-interface-size='normal']) .input,
-  :global(html[data-interface-size='normal']) .select,
-  :global(html[data-interface-size='large']) .input,
-  :global(html[data-interface-size='large']) .select {
-    height: var(--control-h);
+  .scroll {
+    max-width: 1080px;
+    grid-template-columns: clamp(260px, 30%, 340px) minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-2xl);
   }
 
-  :global(html[data-interface-size='normal']) .seg,
-  :global(html[data-interface-size='large']) .seg {
-    min-width: var(--segment-h);
-    height: var(--segment-h);
+  .scroll[data-view='detail'] .index {
+    display: flex;
+  }
+
+  .detailTitle {
+    display: block;
+    margin: 0 0 calc(var(--space-md) * -1) 0;
+    padding: 0 var(--space-md);
+    font-size: var(--text-h2);
+    font-weight: var(--fw-semibold);
+    letter-spacing: -0.01em;
+    color: var(--ink-primary);
+  }
+
+  .placeholder {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-2xl) var(--space-xl);
+    background: var(--bg-raised);
+    border: 1px dashed var(--hairline);
+    border-radius: var(--radius-md);
+    text-align: center;
+  }
+
+  .placeholderTitle {
+    margin: 0;
+    font-size: var(--text-title);
+    font-weight: var(--fw-semibold);
+    color: var(--ink-secondary);
+  }
+
+  .placeholderBody {
+    margin: 0;
+    font-size: var(--text-label);
+    color: var(--ink-tertiary);
+  }
+}
+
+/* Below the rail breakpoint the shell keeps the mobile composition, so settings
+   must too: a two-column split inside a phone-width column is unusable. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  :global(html[data-interface-size='large']) .scroll {
+    max-width: 640px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-xl);
+  }
+
+  :global(html[data-interface-size='large']) .scroll[data-view='detail'] .index {
+    display: none;
+  }
+
+  :global(html[data-interface-size='large']) .head {
+    max-width: 640px;
+  }
+
+  :global(html[data-interface-size='large']) .back {
+    display: grid;
+  }
+
+  :global(html[data-interface-size='large']) .titleContext {
+    display: inline;
+  }
+
+  :global(html[data-interface-size='large']) .titleRoot,
+  :global(html[data-interface-size='large']) .detailTitle,
+  :global(html[data-interface-size='large']) .placeholder {
+    display: none;
   }
 }

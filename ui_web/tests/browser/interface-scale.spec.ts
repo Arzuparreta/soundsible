@@ -173,6 +173,41 @@ test.describe('interface scale geometry', () => {
       : { body: '15px', row: '56px', control: '44px', cover: '44px', gutter: '16px' });
   });
 
+  test('Settings navigation uses a mobile push and a desktop split view', async ({ page }) => {
+    await mockEngine(page, true);
+    await installPreferences(page, 'normal');
+    await page.goto('/player/#/settings');
+
+    const search = page.getByPlaceholder('Buscar en ajustes');
+    await expect(search).toBeVisible();
+    await search.fill('contraseña');
+    await expect(page.getByRole('link', { name: /Cuenta/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Apariencia/ })).toBeHidden();
+    await search.clear();
+
+    await page.getByRole('link', { name: /Reproducción/ }).click();
+    await expect(page).toHaveURL(/#\/settings\/playback$/);
+
+    if (page.viewportSize()!.width >= 1024) {
+      await expect(page.getByRole('heading', { name: 'Ajustes', level: 1 })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Reproducción', level: 2 }).first()).toBeVisible();
+      await expect(search).toBeVisible();
+    } else {
+      await expect(page.getByRole('heading', { name: 'Reproducción', level: 1 })).toBeVisible();
+      await expect(search).toBeHidden();
+      await page.getByRole('button', { name: 'Volver' }).click();
+      await expect(page).toHaveURL(/#\/settings$/);
+      await expect(search).toBeVisible();
+    }
+
+    await assertGeometry(page);
+    const results = await new AxeBuilder({ page })
+      .include('main')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
+      .analyze();
+    expect(results.violations).toEqual([]);
+  });
+
   test('missing preference migrates every existing device to Normal', async ({ page }) => {
     await mockEngine(page, false);
     await installPreferences(page);

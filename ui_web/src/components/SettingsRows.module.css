@@ -1,0 +1,306 @@
+/* Shared vocabulary for every settings screen: grouped panels of hairline-
+   separated rows, an uppercase group title above and a quiet note below. */
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.groupLabel {
+  margin: 0;
+  padding: 0 var(--space-md);
+  font-size: var(--text-caption);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-tertiary);
+}
+
+.groupNote {
+  margin: 0;
+  padding: 0 var(--space-md);
+  font-size: var(--text-caption);
+  line-height: var(--lh-normal);
+  color: var(--ink-tertiary);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-1);
+}
+
+/* Every direct child of a panel is a row, so one rule draws every divider —
+   including rows rendered by panels that bring their own markup. */
+.panel > * + * {
+  border-top: 1px solid var(--hairline-soft);
+}
+
+.panelPlain {
+  padding: var(--space-lg);
+  overflow: visible;
+}
+
+.panelPlain > * + * {
+  border-top: none;
+}
+
+.row,
+.rowBtn,
+.rowLink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  width: 100%;
+  min-height: var(--control-h);
+  padding: var(--space-sm) var(--space-lg);
+  font: inherit;
+  font-size: var(--text-body);
+  color: var(--ink-primary);
+  text-align: left;
+  text-decoration: none;
+  background: transparent;
+  border: none;
+}
+
+.stackRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  font-size: var(--text-body);
+  color: var(--ink-primary);
+}
+
+.rowBtn,
+.rowLink {
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rowBtn:hover:not(:disabled),
+  .rowLink:hover {
+    background: var(--bg-hover);
+  }
+}
+
+.rowBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rowBtnDanger {
+  color: var(--danger);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  color: inherit;
+  line-height: var(--lh-snug);
+}
+
+.hint {
+  font-size: var(--text-caption);
+  line-height: var(--lh-snug);
+  color: var(--ink-tertiary);
+}
+
+.warnIcon {
+  flex-shrink: 0;
+  color: var(--warning);
+  opacity: 0.85;
+}
+
+.control {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.value {
+  flex-shrink: 0;
+  max-width: 55%;
+  font-size: var(--text-label);
+  color: var(--ink-secondary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.chevron {
+  flex-shrink: 0;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  color: var(--ink-tertiary);
+}
+
+/* ── Controls ── */
+
+.switch {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  flex-shrink: 0;
+  padding: 0;
+  background: var(--bg-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+}
+
+.switch::before {
+  position: absolute;
+  inset: -9px 0;
+  content: '';
+}
+
+.switchOn {
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-1);
+  transition: transform var(--dur-short) var(--ease-out);
+}
+
+.switchOn .knob {
+  transform: translateX(18px);
+}
+
+.segment {
+  display: flex;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs);
+  background: var(--bg-inset);
+  border-radius: var(--radius-full);
+}
+
+.seg {
+  position: relative;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--segment-h);
+  height: var(--segment-h);
+  padding: 0 var(--space-sm);
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .seg:hover:not(.segOn) {
+    color: var(--ink-primary);
+  }
+}
+
+.segOn {
+  color: var(--ink-on-accent);
+  background: var(--accent);
+}
+
+.segIcon {
+  display: inline-flex;
+}
+
+.segIcon svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+
+.select {
+  height: var(--control-h);
+  max-width: 100%;
+  padding: 0 var(--space-xl) 0 var(--space-sm);
+  font: inherit;
+  font-size: var(--text-label);
+  color: var(--ink-secondary);
+  background: var(--bg-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236a6a72' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+
+.input {
+  width: 100%;
+  height: var(--control-h);
+  padding: 0 var(--space-md);
+  font: inherit;
+  font-size: var(--text-body);
+  color: var(--ink-primary);
+  background: var(--bg-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--dur-short) var(--ease-out);
+}
+
+.input::placeholder {
+  color: var(--ink-tertiary);
+}
+
+.input:focus {
+  border-color: var(--accent);
+}
+
+@media (min-width: 1024px) {
+  .select {
+    height: 32px;
+  }
+
+  .input {
+    height: 36px;
+  }
+
+  .seg {
+    height: 30px;
+  }
+
+  :global(html[data-interface-size='normal']) .select,
+  :global(html[data-interface-size='large']) .select,
+  :global(html[data-interface-size='normal']) .input,
+  :global(html[data-interface-size='large']) .input {
+    height: var(--control-h);
+  }
+
+  :global(html[data-interface-size='normal']) .seg,
+  :global(html[data-interface-size='large']) .seg {
+    height: var(--segment-h);
+  }
+}

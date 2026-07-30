@@ -84,7 +84,9 @@ function Player() {
       <Route path="/favourites" component={Favourites} />
       <Route path="/search" component={Search} />
       <Route path="/settings" component={Settings} />
+      {/* Static wins over the dynamic sibling, so `users` keeps its own page. */}
       <Route path="/settings/users" component={Users} />
+      <Route path="/settings/:section" component={Settings} />
       <Route path="/discover" component={DiscoverRedirect} />
       <Route path="/playlists" component={Playlists} />
       <Route path="/playlists/:name" component={PlaylistDetail} />

@@ -1,616 +1,150 @@
-import { createSignal, onMount, For, Show, type JSX } from 'solid-js';
-import { A } from '@solidjs/router';
-import { state, actions } from '../stores';
-import { ViewHeader } from '../components/ViewHeader';
-import { trackCount } from '../lib/format';
-import { api } from '../lib/api';
-import { toast } from '../lib/toast';
-import { confirmDialog } from '../lib/confirm';
-import { passwordDialog } from '../lib/passwordDialog';
-import { promptDialog } from '../lib/prompt';
-import { DevicesPanel } from '../components/DeviceSheet';
-import { PairedDevicesPanel } from '../components/PairDevice';
-import { DisplayPreferences } from '../components/DisplayPreferences';
-import { t, locale, setLocale, LOCALES, type Locale } from '../lib/i18n';
-import { changePassword, isAdmin, logout, updateProfile, user } from '../lib/session';
-import { associationUrl } from '../lib/trackShare';
+import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
+import { A, useNavigate, useParams } from '@solidjs/router';
+import { t } from '../lib/i18n';
+import { SearchField } from '../components/SearchField';
+import { Chevron } from '../components/SettingsRows';
+import {
+  SETTINGS_GROUPS,
+  findSection,
+  visibleSections,
+  type SettingsSection,
+} from '../components/SettingsSections';
+import { groupSections, matchSections } from '../lib/settingsIndex';
+import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 import styles from './Settings.module.css';
-import { registerPrimaryScroll } from '../lib/scrollHistory';
 
-function Chevron() {
+/**
+ * Settings is an index of submenus, not a wall of switches. Mobile pushes one
+ * submenu at a time; desktop shows the index beside the open one. Both read the
+ * same registry, so a setting exists in exactly one place with one label.
+ */
+function CategoryRow(props: { section: SettingsSection; current: boolean }) {
   return (
-    <svg class={styles.chevron} viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <path d="M9 18l6-6-6-6" />
-    </svg>
-  );
-}
-
-function Group(props: { label: string; children: JSX.Element }) {
-  return (
-    <section class={styles.group}>
-      <h2 class={styles.groupLabel}>{props.label}</h2>
-      {props.children}
-    </section>
-  );
-}
-
-function SettingSwitch(props: { checked: boolean; onChange: () => void; label: string }) {
-  return (
-    <div class={styles.row}>
-      <span class={styles.rowLabel}>{props.label}</span>
-      <button
-        type="button"
-        class={styles.switch}
-        classList={{ [styles.switchOn]: props.checked }}
-        role="switch"
-        aria-checked={props.checked}
-        aria-label={props.label}
-        onClick={props.onChange}
-      >
-        <span class={styles.knob} />
-      </button>
-    </div>
-  );
-}
-
-function WarnIcon() {
-  return (
-    <svg class={styles.warnIcon} viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M12 3.2L2.4 20.2a1 1 0 0 0 .88 1.5h17.44a1 1 0 0 0 .88-1.5L12 3.2zm0 5.3a.9.9 0 0 1 .9.9v4.4a.9.9 0 0 1-1.8 0V9.4a.9.9 0 0 1 .9-.9zm0 8.4a1.05 1.05 0 1 1 0-2.1 1.05 1.05 0 0 1 0 2.1z"
-      />
-    </svg>
-  );
-}
-
-function ActionRow(props: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  danger?: boolean;
-  warn?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      class={styles.rowBtn}
-      classList={{ [styles.rowBtnDanger]: props.danger }}
-      disabled={props.disabled}
-      onClick={props.onClick}
+    <A
+      href={`/settings/${props.section.id}`}
+      class={styles.cat}
+      classList={{ [styles.catCurrent]: props.current }}
+      aria-current={props.current ? 'page' : undefined}
     >
-      <span class={styles.rowLabel} classList={{ [styles.rowLabelWithIcon]: props.warn }}>
-        {props.label}
-        {props.warn ? <WarnIcon /> : null}
+      <span class={styles.catIcon} data-tone={props.section.tone}>
+        {props.section.icon()}
       </span>
-      <Chevron />
-    </button>
-  );
-}
-
-function NavRow(props: { href: string; label: string }) {
-  return (
-    <A href={props.href} class={styles.rowLink}>
-      <span class={styles.rowLabel}>{props.label}</span>
-      <Chevron />
+      <span class={styles.catText}>
+        <span class={styles.catTitle}>{props.section.title()}</span>
+        <span class={styles.catBlurb}>{props.section.blurb()}</span>
+      </span>
+      <Chevron class={styles.catChevron} />
     </A>
   );
 }
 
-const QUALITY_OPTIONS = ['low', 'normal', 'high'] as const;
-
-function qualityLabel(q: string): string {
-  if (q === 'low') return t('settings.qualityLow');
-  if (q === 'normal') return t('settings.qualityNormal');
-  return t('settings.qualityHigh');
-}
-
 export default function Settings() {
-  const [busy, setBusy] = createSignal(false);
-  const [learning, setLearning] = createSignal(true);
-  const [autoplay, setAutoplay] = createSignal(state.playback.autoplayEnabled);
-  const [quality, setQuality] = createSignal('high');
-  const [autoUpdateYtdlp, setAutoUpdateYtdlp] = createSignal(false);
-  const [autoUpdateCurlCffi, setAutoUpdateCurlCffi] = createSignal(false);
-  const [losslessEnabled, setLosslessEnabled] = createSignal(true);
-  const [losslessSummary, setLosslessSummary] = createSignal('');
-  const sharedLinkAssociation = associationUrl();
+  const params = useParams();
+  const navigate = useNavigate();
+  const [query, setQuery] = createSignal('');
 
-  onMount(async () => {
-    try {
-      const d = await api.getDiscoverySettings();
-      if (typeof d.learning_enabled === 'boolean') setLearning(d.learning_enabled);
-      if (typeof d.autoplay_enabled === 'boolean') setAutoplay(d.autoplay_enabled);
-    } catch {
-      /* defaults */
-    }
-    try {
-      const c = await api.getDownloaderConfig();
-      if (c.quality) setQuality(c.quality);
-      if (typeof c.auto_update_ytdlp === 'boolean') setAutoUpdateYtdlp(c.auto_update_ytdlp);
-      if (typeof c.auto_update_curl_cffi === 'boolean') setAutoUpdateCurlCffi(c.auto_update_curl_cffi);
-    } catch {
-      /* defaults */
-    }
-    if (isAdmin()) {
-      try {
-        const status = await api.getLosslessStatus();
-        setLosslessEnabled(status.enabled);
-        const upgraded = status.counts.completed ?? 0;
-        const pending =
-          (status.counts.pending ?? 0) +
-          (status.counts.retry ?? 0) +
-          (status.counts.committing ?? 0);
-        setLosslessSummary(
-          status.identity_verifier_available
-            ? t('settings.losslessStatus')
-                .replace('{upgraded}', String(upgraded))
-                .replace('{pending}', String(pending))
-            : t('settings.losslessUnavailable'),
-        );
-      } catch {
-        /* optional service status */
-      }
-    }
+  const active = () => findSection(params.section);
+
+  // A stale bookmark or an admin-only id on a member account must land on the
+  // index rather than on an empty pane.
+  createEffect(() => {
+    if (params.section && !active()) navigate('/settings', { replace: true });
   });
 
-  const reload = async () => {
-    setBusy(true);
-    await actions.syncLibrary();
-    setBusy(false);
-  };
-
-  const rescan = async () => {
-    setBusy(true);
-    await actions.rescanLibrary();
-    setBusy(false);
-  };
-
-  const toggleLearning = async () => {
-    const next = !learning();
-    setLearning(next);
-    try {
-      await api.setDiscoveryLearning(next);
-    } catch {
-      setLearning(!next);
-      toast.error(t('settings.toast.notSaved'));
-    }
-  };
-
-  const toggleAutoplay = async () => {
-    const next = !autoplay();
-    setAutoplay(next);
-    if (!(await actions.setAutoplayEnabled(next))) setAutoplay(!next);
-  };
-
-  const resetLearning = async () => {
-    const ok = await confirmDialog({
-      title: t('settings.resetLearning'),
-      message: t('settings.resetLearningConfirm'),
-      confirmLabel: t('settings.resetLearning'),
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await api.resetDiscoveryProfile();
-      toast.success(t('settings.resetLearningDone'));
-    } catch {
-      toast.error(t('settings.toast.notSaved'));
-    }
-  };
-
-  const changeQuality = async (q: string) => {
-    setQuality(q);
-    try {
-      await api.setDownloaderConfig({ quality: q });
-      toast.success(t('settings.toast.qualityUpdated'));
-    } catch {
-      toast.error(t('settings.toast.notSaved'));
-    }
-  };
-
-  const toggleAutoYtdlp = async () => {
-    const next = !autoUpdateYtdlp();
-    setAutoUpdateYtdlp(next);
-    try {
-      await api.setDownloaderConfig({ auto_update_ytdlp: next });
-    } catch {
-      setAutoUpdateYtdlp(!next);
-      toast.error(t('settings.toast.notSaved'));
-    }
-  };
-
-  const toggleLossless = async () => {
-    const next = !losslessEnabled();
-    setLosslessEnabled(next);
-    try {
-      await api.setLosslessEnabled(next);
-    } catch {
-      setLosslessEnabled(!next);
-      toast.error(t('settings.toast.notSaved'));
-    }
-  };
-
-  const toggleAutoCurlCffi = async () => {
-    const next = !autoUpdateCurlCffi();
-    setAutoUpdateCurlCffi(next);
-    try {
-      await api.setDownloaderConfig({ auto_update_curl_cffi: next });
-    } catch {
-      setAutoUpdateCurlCffi(!next);
-      toast.error(t('settings.toast.notSaved'));
-    }
-  };
-
-  const optimize = async () => {
-    const h = toast.loading(t('settings.toast.optimizing'));
-    try {
-      await api.optimizeLibrary();
-      h.update('success', t('settings.toast.optimized'));
-    } catch {
-      h.update('error', t('settings.toast.optimizeFailed'));
-    }
-  };
-
-  const cloudSync = async () => {
-    const h = toast.loading(t('settings.toast.syncing'));
-    try {
-      await api.cloudSync();
-      await actions.syncLibrary();
-      h.update('success', t('settings.toast.synced'));
-    } catch {
-      h.update('error', t('settings.toast.syncFailed'));
-    }
-  };
-
-  const purge = async () => {
-    const ok = await confirmDialog({
-      title: t('settings.purgeTitle'),
-      message: t('settings.purgeMsg'),
-      confirmLabel: t('settings.purgeConfirm'),
-    });
-    if (!ok) return;
-    const h = toast.loading(t('settings.toast.purging'));
-    try {
-      const r = await api.purgeMissing();
-      await actions.syncLibrary();
-      h.update('success', t('settings.toast.purged', { count: r.removed ?? 0 }));
-    } catch {
-      h.update('error', t('settings.toast.purgeFailed'));
-    }
-  };
-
-  const wipe = async () => {
-    const ok = await confirmDialog({
-      title: t('settings.emptyLibraryTitle'),
-      message: t('settings.emptyLibraryMsg'),
-      confirmLabel: t('settings.emptyLibraryConfirm'),
-      danger: true,
-    });
-    if (!ok) return;
-    const count = state.library.length;
-    const typed = await promptDialog({
-      title: t('settings.emptyLibraryTitle'),
-      message: t('settings.emptyLibraryCountMsg', { count: trackCount(count) }),
-      inputLabel: t('settings.emptyLibraryCountLabel'),
-      confirmLabel: t('settings.emptyLibraryConfirm'),
-      danger: true,
-      match: String(count),
-    });
-    if (typed === null) return;
-    const h = toast.loading(t('settings.toast.emptying'));
-    try {
-      await api.wipeLibrary();
-      await actions.syncLibrary();
-      h.update('success', t('settings.toast.emptied'));
-    } catch {
-      h.update('error', t('settings.toast.emptyFailed'));
-    }
-  };
-
-  const editName = async () => {
-    const me = user();
-    if (!me) return;
-    const name = await promptDialog({
-      title: t('account.changeName'),
-      inputLabel: t('account.name'),
-      initial: me.display_name,
-      confirmLabel: t('common.save'),
-    });
-    if (!name || name.trim() === me.display_name) return;
-    try {
-      await updateProfile({ display_name: name.trim() });
-      toast.success(t('account.nameChanged'));
-    } catch {
-      toast.error(t('account.nameFailed'));
-    }
-  };
-
-  const editUsername = async () => {
-    const me = user();
-    if (!me) return;
-    const name = await promptDialog({
-      title: t('account.changeUsername'),
-      message: t('account.usernameHint'),
-      inputLabel: t('account.username'),
-      initial: me.username,
-      confirmLabel: t('common.save'),
-    });
-    if (!name || name.trim() === me.username) return;
-    try {
-      await updateProfile({ username: name.trim() });
-      toast.success(t('account.usernameChanged'));
-    } catch {
-      toast.error(t('account.usernameFailed'));
-    }
-  };
-
-  const updatePassword = async () => {
-    const me = user();
-    if (!me) return;
-    const current = me.has_password
-      ? await promptDialog({
-          title: t('account.changePassword'),
-          inputLabel: t('account.currentPassword'),
-          confirmLabel: t('common.continue'),
-        })
-      : '';
-    if (current === null) return;
-    const next = await passwordDialog({
-      title: t('account.changePassword'),
-      message: t('account.passwordHint'),
-      confirmLabel: t('common.save'),
-    });
-    if (!next) return;
-    try {
-      await changePassword(current ?? '', next);
-      toast.success(t('account.passwordChanged'));
-    } catch {
-      toast.error(t('account.passwordFailedHint'));
-    }
-  };
-
-  const signOut = async () => {
-    const ok = await confirmDialog({
-      title: t('account.signOut'),
-      message: t('account.signOutConfirm'),
-      confirmLabel: t('account.signOut'),
-    });
-    if (ok) await logout();
-  };
+  const matches = createMemo(() => matchSections(visibleSections(), query()));
+  const groups = createMemo(() => groupSections(visibleSections(), SETTINGS_GROUPS));
 
   return (
     <div class="view">
-      <ViewHeader title={t('settings.title')} />
-
-      <div ref={(element) => registerPrimaryScroll(element)} class={styles.scroll} data-primary-scroll>
-        <Group label={t('accessibility.title')}>
-          <div class={`${styles.panel} ${styles.accessibilityPanel}`}>
-            <DisplayPreferences />
-          </div>
-        </Group>
-
-        <Show when={user()}>
-          {(me) => (
-            <Group label={t('account.title')}>
-              <div class={styles.panel}>
-                <div class={styles.row}>
-                  <span class={styles.rowLabel}>{t('account.signedInAs', { name: me().display_name })}</span>
-                  <span class={styles.mono}>@{me().username}</span>
-                </div>
-                <ActionRow label={t('account.changeName')} onClick={editName} />
-                <ActionRow label={t('account.changeUsername')} onClick={editUsername} />
-                <ActionRow label={t('account.changePassword')} onClick={updatePassword} />
-                <Show when={isAdmin()}>
-                  <NavRow href="/settings/users" label={t('account.manageUsers')} />
-                </Show>
-                <ActionRow label={t('account.signOut')} onClick={signOut} />
-              </div>
-            </Group>
-          )}
+      <header class={styles.head}>
+        <Show when={active()}>
+          <button
+            type="button"
+            class={styles.back}
+            aria-label={t('common.back')}
+            onClick={() => navigateBackOr(navigate, '/settings')}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
         </Show>
+        {/* One of the two is always display:none, so only one reaches the
+            accessibility tree: the open submenu on mobile, the page on desktop. */}
+        <h1 class={styles.title}>
+          <span class={styles.titleContext}>{active()?.title() ?? t('settings.title')}</span>
+          <span class={styles.titleRoot}>{t('settings.title')}</span>
+        </h1>
+      </header>
 
-        <Group label={t('settings.appearance')}>
-          <div class={styles.panel}>
-            <div class={styles.row}>
-              <span class={styles.rowLabel}>{t('settings.theme')}</span>
-              <div class={styles.segment} role="group" aria-label={t('settings.theme')}>
-                <button
-                  type="button"
-                  class={styles.seg}
-                  classList={{ [styles.segOn]: state.theme === 'dark' }}
-                  aria-label={t('settings.themeDark')}
-                  aria-pressed={state.theme === 'dark'}
-                  onClick={() => actions.setTheme('dark')}
-                >
-                  <span class={styles.segIcon}>
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                    </svg>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  class={styles.seg}
-                  classList={{ [styles.segOn]: state.theme === 'system' }}
-                  aria-label={t('settings.themeSystem')}
-                  aria-pressed={state.theme === 'system'}
-                  onClick={() => actions.setTheme('system')}
-                >
-                  <span class={styles.segIcon}>
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                      <rect x="2" y="3" width="20" height="14" rx="2" />
-                      <path d="M8 21h8M12 17v4" />
-                    </svg>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  class={styles.seg}
-                  classList={{ [styles.segOn]: state.theme === 'light' }}
-                  aria-label={t('settings.themeLight')}
-                  aria-pressed={state.theme === 'light'}
-                  onClick={() => actions.setTheme('light')}
-                >
-                  <span class={styles.segIcon}>
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                      <circle cx="12" cy="12" r="4" />
-                      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-                    </svg>
-                  </span>
-                </button>
-              </div>
-            </div>
-            <div class={styles.row}>
-              <span class={styles.rowLabel}>{t('settings.language')}</span>
-              <select
-                class={styles.select}
-                value={locale()}
-                aria-label={t('settings.language')}
-                onChange={(e) => setLocale(e.currentTarget.value as Locale)}
+      <div
+        ref={(element) => registerPrimaryScroll(element)}
+        class={styles.scroll}
+        data-view={active() ? 'detail' : 'index'}
+        data-primary-scroll
+      >
+        <div class={styles.index}>
+          <SearchField
+            value={query()}
+            placeholder={t('settings.searchPlaceholder')}
+            onInput={setQuery}
+          />
+
+          <Show
+            when={matches()}
+            fallback={
+              <For each={groups()}>
+                {(group) => (
+                  <section class={styles.group}>
+                    <h2 class={styles.groupLabel}>{group.label}</h2>
+                    <div class={styles.catList}>
+                      <For each={group.sections}>
+                        {(section) => (
+                          <CategoryRow section={section} current={section.id === params.section} />
+                        )}
+                      </For>
+                    </div>
+                  </section>
+                )}
+              </For>
+            }
+          >
+            {(list) => (
+              <Show
+                when={list().length > 0}
+                fallback={
+                  <p class={styles.empty}>{t('settings.searchNoResults', { query: query() })}</p>
+                }
               >
-                <For each={LOCALES}>
-                  {(l) => <option value={l.code}>{l.native}</option>}
-                </For>
-              </select>
-            </div>
-            <SettingSwitch
-              label={t('settings.haptics')}
-              checked={state.haptics}
-              onChange={() => actions.setHaptics(!state.haptics)}
-            />
-          </div>
-        </Group>
-
-        <Group label={t('settings.libraryCard')}>
-          <div class={styles.panel}>
-            <ActionRow label={t('settings.reload')} onClick={reload} disabled={busy()} />
-            <ActionRow label={t('settings.rescan')} onClick={rescan} disabled={busy()} />
-            <ActionRow label={t('settings.purgeFiles')} onClick={purge} />
-            <NavRow href="/import" label={t('settings.importFrom')} />
-            <Show when={isAdmin()}>
-              <ActionRow label={t('settings.emptyLibrary')} onClick={wipe} danger warn />
-            </Show>
-          </div>
-        </Group>
-
-        <Show when={sharedLinkAssociation}>
-          <Group label={t('settings.sharedLinks')}>
-            <div class={styles.panel}>
-              <ActionRow
-                label={t('settings.openSharedLinks')}
-                onClick={() => window.location.assign(sharedLinkAssociation!)}
-              />
-            </div>
-          </Group>
-        </Show>
-
-        <Group label={t('settings.discovery')}>
-          <div class={styles.panel}>
-            <SettingSwitch label={t('settings.autoplay')} checked={autoplay()} onChange={toggleAutoplay} />
-            <SettingSwitch label={t('settings.learnActivity')} checked={learning()} onChange={toggleLearning} />
-            <ActionRow label={t('settings.resetLearning')} onClick={resetLearning} />
-          </div>
-        </Group>
-
-        <Group label={t('settings.downloads')}>
-          <div class={styles.panel}>
-            {/* Quality, yt-dlp, optimization and cloud sync all act on the shared
-                music pool, so they belong to whoever runs the server. */}
-            <Show when={isAdmin()}>
-              <div class={styles.row}>
-                <span class={styles.rowLabel}>{t('settings.quality')}</span>
-                <div class={styles.segment} role="group" aria-label={t('settings.quality')}>
-                  <For each={QUALITY_OPTIONS}>
-                    {(q) => (
-                      <button
-                        type="button"
-                        class={styles.seg}
-                        classList={{ [styles.segOn]: quality() === q }}
-                        aria-pressed={quality() === q}
-                        onClick={() => changeQuality(q)}
-                      >
-                        {qualityLabel(q)}
-                      </button>
+                <div class={styles.catList}>
+                  <For each={list()}>
+                    {(section) => (
+                      <CategoryRow section={section} current={section.id === params.section} />
                     )}
                   </For>
                 </div>
-              </div>
-              <SettingSwitch
-                label={t('settings.autoUpdateYtdlp')}
-                checked={autoUpdateYtdlp()}
-                onChange={toggleAutoYtdlp}
-              />
-              <SettingSwitch
-                label={t('settings.autoUpdateCurlCffi')}
-                checked={autoUpdateCurlCffi()}
-                onChange={toggleAutoCurlCffi}
-              />
-              <SettingSwitch
-                label={t('settings.losslessUpgrades')}
-                checked={losslessEnabled()}
-                onChange={toggleLossless}
-              />
-              <Show when={losslessSummary()}>
-                <div class={styles.row}>
-                  <span class={styles.rowLabel}>{t('settings.losslessStatusLabel')}</span>
-                  <span class={styles.rowValue}>{losslessSummary()}</span>
-                </div>
               </Show>
-            </Show>
-            <Show when={isAdmin()}>
-              <ActionRow label={t('settings.optimize')} onClick={optimize} />
-              <ActionRow label={t('settings.sync')} onClick={cloudSync} />
-            </Show>
-          </div>
-        </Group>
+            )}
+          </Show>
+        </div>
 
-        <Group label={t('settings.device')}>
-          <div class={styles.panel}>
-            <div class={styles.row}>
-              <span class={styles.rowLabel}>{t('settings.device')}</span>
-              <input
-                class={styles.input}
-                value={state.device.device_name}
-                aria-label={t('settings.device')}
-                onInput={(e) => actions.setDeviceName(e.currentTarget.value)}
-              />
+        <Show
+          when={active()}
+          keyed
+          fallback={
+            <div class={styles.placeholder}>
+              <p class={styles.placeholderTitle}>{t('settings.pickSection')}</p>
+              <p class={styles.placeholderBody}>{t('settings.pickSectionBody')}</p>
             </div>
-          </div>
-        </Group>
-
-        <Group label={t('settings.pairedDevices')}>
-          <div class={styles.panel}>
-            <PairedDevicesPanel />
-          </div>
-        </Group>
-
-        <Group label={t('settings.devices')}>
-          <div class={styles.panel}>
-            <DevicesPanel />
-          </div>
-        </Group>
-
-        <Group label={t('settings.about')}>
-          <div class={styles.panel}>
-            <div class={styles.row}>
-              <span class={styles.rowLabel}>{t('settings.engineLabel')}</span>
-              <span class={styles.statusRow}>
-                <span
-                  class={styles.statusDot}
-                  classList={{ [styles.statusOn]: state.online, [styles.statusOff]: !state.online }}
-                  aria-hidden="true"
-                />
-                {state.online ? t('common.online') : t('common.offline')}
-              </span>
+          }
+        >
+          {(section) => (
+            <div class={styles.detail}>
+              <h2 class={styles.detailTitle}>{section.title()}</h2>
+              {section.content()}
             </div>
-            <div class={styles.row}>
-              <span class={styles.rowLabel}>{t('brand.soundsible')}</span>
-              <span class={styles.mono}>{t('settings.version')}</span>
-            </div>
-            <NavRow href="/preview" label={t('settings.viewDesign')} />
-          </div>
-        </Group>
+          )}
+        </Show>
       </div>
     </div>
   );
