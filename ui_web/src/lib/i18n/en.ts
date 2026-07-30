@@ -47,6 +47,10 @@ export const en = {
   },
   nowPlaying: {
     playing: 'Playing',
+    modeLabel: 'Now Playing',
+    modeSelector: 'Player mode',
+    mobilePanels: 'Now Playing panels',
+    panel: { browser: 'Browser', stage: 'Player', queue: 'Queue' },
     hideSearchPanel: 'Hide browser and search',
     showSearchPanel: 'Show browser and search',
     nothingPlaying: 'Nothing playing',

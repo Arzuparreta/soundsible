@@ -1541,10 +1541,8 @@
   .extras { grid-column: 3; }
 }
 
-/* Mobile keeps the complete Auto environment and every one of its controls.
-   Only the current cover is anchored to the exact Now Playing rectangle. The
-   rest of Auto retains its own composition and enters through blur, so the
-   change of environment reads without a near-miss shared-element jump. */
+/* Mobile keeps the complete Auto environment and every one of its controls,
+   reflowed inside the same shared player surface. */
 @media (max-width: 767px) {
   .root {
     transform: none;
@@ -1577,74 +1575,10 @@
     border-left: 0;
   }
 
-  /* The anchor rectangle is in viewport coordinates, so the frame it drives has
-     to resolve against the viewport. Size containment is also *layout*
-     containment, which makes the stage the containing block for fixed
-     descendants and would offset the pinned cover by the stage's own origin —
-     roughly the height of the top bar, straight down. The containment is not
-     needed here anyway: the frame is out of flow and explicitly sized, so it
-     contributes nothing to the grid either way, and `cqmin` goes unused. */
-  .root[data-mobile-cover-anchor] .coverStage {
-    container-type: normal;
-  }
-
-  .root[data-mobile-cover-anchor] .coverFrame {
-    position: fixed;
-    top: var(--auto-mobile-cover-top);
-    left: var(--auto-mobile-cover-left);
-    width: var(--auto-mobile-cover-width);
-    height: var(--auto-mobile-cover-height);
-  }
-
-  /* The song's identity rides on the artwork it names. The pinned cover leaves
-     the panel whatever height Now Playing did not use, which on a phone is not
-     enough for the panel's title — so the title and artist come off the panel
-     and onto the foot of the cover, and the panel is left to the transport. */
-  .root[data-mobile-cover-anchor] .coverCaption {
-    display: flex;
-  }
-
   .root:not(.active) .coverCaption {
     opacity: 0;
   }
 
-  /* The metadata stays in the DOM as the live region — it is what announces a
-     track change, and a `display: none` region announces nothing. */
-  .root[data-mobile-cover-anchor] .meta {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
-  /* Pinned means pinned: the breath would drift the artwork a couple of pixels
-     off the rectangle it is supposed to be holding, and slide the caption's
-     corners out from under the cover's. */
-  .root[data-mobile-cover-anchor] .cover {
-    animation: none;
-  }
-
-  /* The Auto Mode status rides in the empty band above the pinned artwork, in the
-     artwork's own column, so it reads as its caption. The panel below is laid
-     out against the cover's flow position, not the pinned one, which is what put
-     this line on top of the cover's bottom edge. The top comes from JS and is
-     only supplied when the band is tall enough; without the attribute the line
-     stays in its reserved slot in the panel. */
-  .root[data-mobile-status-above] .status {
-    position: fixed;
-    top: var(--auto-mobile-status-top);
-    left: var(--auto-mobile-cover-left);
-    width: var(--auto-mobile-cover-width);
-  }
-
-  /* The enter transition is applied to the panel's blocks rather than the panel
-     itself: a filter on an ancestor would make it the containing block for the
-     status line, which is positioned against the viewport. */
-  .topbar,
   .meta,
   .status,
   .controls,
@@ -1655,7 +1589,6 @@
       filter 420ms var(--ease-out);
   }
 
-  .root:not(.active) .topbar,
   .root:not(.active) .meta,
   .root:not(.active) .status,
   .root:not(.active) .controls,
@@ -1726,5 +1659,110 @@
   .upStrip,
   .cover {
     filter: none !important;
+  }
+}
+
+/* Auto now lives inside PlayerSurface: it contributes the immersive content,
+   while the shared parent owns the viewport, artwork-derived backdrop and mode
+   chrome. */
+.root {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  grid-template-rows: minmax(min-content, 1fr) auto;
+  grid-template-areas:
+    'stage'
+    'queue';
+  padding-top: clamp(70px, 8.5vh, 90px);
+  background: transparent;
+  transform: none;
+}
+
+.active {
+  transform: none;
+}
+
+.root .cover {
+  animation: none;
+}
+
+:global([data-player-surface-open]) .root.active .cover {
+  animation: autoBreathe 9s ease-in-out infinite;
+}
+
+.embeddedTools {
+  position: absolute;
+  z-index: 12;
+  top: clamp(78px, 10vh, 108px);
+  right: var(--auto-gutter);
+  transition: opacity 320ms var(--ease-out);
+}
+
+.embeddedTools .profile {
+  background: rgba(10, 10, 13, 0.46);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.22), inset 0 1px rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(22px) saturate(1.15);
+  -webkit-backdrop-filter: blur(22px) saturate(1.15);
+}
+
+.booth,
+.djPicker,
+.requestPanel {
+  background: color-mix(in srgb, #0b0b0e 68%, transparent);
+  border-color: rgba(255, 255, 255, 0.11);
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.28), inset 0 1px rgba(255, 255, 255, 0.055);
+  backdrop-filter: blur(24px) saturate(1.14);
+  -webkit-backdrop-filter: blur(24px) saturate(1.14);
+}
+
+.nextCard {
+  background: color-mix(in srgb, #0b0b0e 58%, transparent);
+  border-color: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(16px) saturate(1.1);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+}
+
+.ambient .embeddedTools {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 767px) {
+  .root {
+    padding-top: clamp(64px, 8vh, 78px);
+  }
+
+  .embeddedTools {
+    position: relative;
+    top: auto;
+    right: auto;
+    z-index: 5;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin-bottom: -4px;
+    padding: 0 var(--auto-gutter);
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+  }
+
+  .embeddedTools .profile {
+    min-width: min(240px, 72vw);
+  }
+
+  .stage {
+    padding-top: clamp(58px, 8vh, 76px);
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .embeddedTools .profile,
+  .booth,
+  .djPicker,
+  .requestPanel,
+  .nextCard {
+    background: rgba(12, 12, 15, 0.94);
   }
 }

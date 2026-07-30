@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { state, actions, isSavedTrack, nowPlayingOpen, setNowPlayingOpen } from '../stores';
+import { state, actions, isSavedTrack } from '../stores';
 import { coverUrl } from '../lib/media';
 import { openTrackMenu } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
@@ -12,7 +12,7 @@ import { savedFromTrack } from '../lib/saved';
 import { FavouriteButton } from './FavouriteButton';
 import { CollectionButton } from './CollectionButton';
 import { t as tr } from '../lib/i18n';
-import { NowPlayingBrowser, browserOpen, toggleBrowser } from './NowPlayingBrowser';
+import { NowPlayingBrowser, browserOpen, closeBrowser } from './NowPlayingBrowser';
 import { RadioBadge, onStopRadio } from './RadioBadge';
 import { Spinner } from './Spinner';
 import { LyricsPanel } from './LyricsPanel';
@@ -33,11 +33,16 @@ import type { PlaybackQueueEntry } from '../lib/playbackQueue';
 import {
   initialMobileVisualState,
   toggleMobileLyrics,
-  toggleMobileQueue,
 } from '../lib/nowPlayingMobileVisual';
 
-/** Full-screen Now Playing sheet. Slides up; controlled by the nowPlayingOpen signal. */
-export function NowPlaying() {
+export type NowPlayingMobilePanel = 'browser' | 'stage' | 'queue';
+
+export function NowPlaying(props: {
+  mobilePanel: NowPlayingMobilePanel;
+  onMobilePanelChange: (panel: NowPlayingMobilePanel) => void;
+  surfaceOpen: boolean;
+  onCloseSurface?: () => void;
+}) {
   const navigate = useNavigate();
   const t = createMemo(() => state.playback.currentTrack);
   const isPodcast = createMemo(() => {
@@ -50,11 +55,11 @@ export function NowPlaying() {
   let dragFrom: number | null = null;
   let bodyEl: HTMLDivElement | undefined;
   let desktopQueueEl: HTMLDivElement | undefined;
-  let mobileQueueEl: HTMLDivElement | undefined;
-  let mobileLyricsEl: HTMLDivElement | undefined;
-  let sheetEl: HTMLDivElement | undefined;
+  let rootEl: HTMLElement | undefined;
   let workspaceEl: HTMLDivElement | undefined;
-  let headEl: HTMLElement | undefined;
+  const [mobileLayout, setMobileLayout] = createSignal(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches,
+  );
   const [desktopLayout, setDesktopLayout] = createSignal(
     parseNowPlayingLayout(localStorage.getItem(NOW_PLAYING_LAYOUT_KEY), localStorage.getItem('np:panelSide')),
   );
@@ -66,11 +71,14 @@ export function NowPlaying() {
   const visiblePanels = createMemo(() =>
     desktopLayout().order.filter((panel) => panel !== 'browser' || browserOpen()),
   );
-  const panelMinimum: Record<NowPlayingPanelId, number> = { browser: 280, stage: 420, queue: 260 };
+  const renderedPanels = createMemo<NowPlayingPanelId[]>(() =>
+    mobileLayout() ? ['browser', 'stage', 'queue'] : visiblePanels(),
+  );
+  const panelMinimum: Record<NowPlayingPanelId, number> = { browser: 240, stage: 360, queue: 220 };
   const gridColumns = createMemo(() =>
-    visiblePanels().flatMap((panel, index) => [
+    renderedPanels().flatMap((panel, index) => [
       `minmax(${panelMinimum[panel]}px, ${desktopLayout().ratios[panel]}fr)`,
-      ...(index < visiblePanels().length - 1 ? ['6px'] : []),
+      ...(index < renderedPanels().length - 1 ? ['14px'] : []),
     ]).join(' '),
   );
 
@@ -81,250 +89,57 @@ export function NowPlaying() {
       /* storage disabled/full */
     }
   });
-  // Always (re)open at the top of the sheet.
+  // Always (re)open on the player panel with every scroll surface reset.
   createEffect(() => {
-    if (!nowPlayingOpen()) {
+    if (!props.surfaceOpen) {
       setMobileVisual(initialMobileVisualState);
       return;
     }
     if (bodyEl) bodyEl.scrollTop = 0;
     if (desktopQueueEl) desktopQueueEl.scrollTop = 0;
-    if (mobileQueueEl) mobileQueueEl.scrollTop = 0;
   });
 
   createEffect(() => {
-    if (mobileVisual().queueOpen && state.playback.queue.length <= 1) {
-      setMobileVisual((visual) => ({ ...visual, queueOpen: false }));
-    }
-  });
-
-  createEffect(() => {
-    if (mobileVisual().queueOpen && mobileQueueEl) mobileQueueEl.scrollTop = 0;
-  });
-
-  createEffect(() => {
-    // Auto's shared-cover handoff must always start and land on artwork. The
-    // rectangle itself stays unchanged; only the compact surface resets.
     if (isPodcast() || state.autoMode.active) setMobileVisual(initialMobileVisualState);
   });
 
-  // Swipe-down-to-close. The queue is its own scroll container below the player,
-  // so touch gestures need an explicit non-passive path: when the active scroll
-  // area is already at the top, a downward pan belongs to the sheet instead of
-  // the native scroll container.
-  let swipeStartY = 0;
-  let swipeActive = false;
-  let swipeOnBody = false;
-  let swipeBodyAtTop = false;
-  let swipeStartAt = 0;
-  // A drag only exists between a pointerdown on the sheet and its pointerup.
-  // pointermove on a mouse also fires on bare hover (no button held), so without
-  // tracking an in-progress gesture a hover over the freshly-opened sheet would
-  // be read as a swipe (stale swipeStartY=0 → phantom drag that never ends).
-  let pointerDown = false;
-  let activePointerId: number | null = null;
-  /** Px of downward drag that closes the sheet on release. Tuned for a
-   * comfortable mobile thumb swipe — roughly 1/8 of a typical phone height. */
-  const SWIPE_CLOSE_THRESHOLD = 80;
-  const SWIPE_FAST_CLOSE_THRESHOLD = 32;
-  const SWIPE_CLOSE_VELOCITY = 0.45;
-  /** Px of downward movement that activates swipe-to-close. Below this we
-   * treat the gesture as a tap or horizontal interaction and stay out of the
-   * way (so seek/volume sliders and button taps work normally). */
-  const SWIPE_ACTIVATE_THRESHOLD = 8;
-  const HORIZONTAL_CANCEL_THRESHOLD = 12;
-
-  const isRangeTarget = (target: EventTarget | null) =>
-    target instanceof Element && !!target.closest('input[type="range"]');
-
-  const activeScrollAtTop = (target: EventTarget | null) => {
-    if (target instanceof Node && mobileQueueEl?.contains(target)) {
-      return mobileQueueEl.scrollTop <= 1;
-    }
-    if (target instanceof Node && mobileLyricsEl?.contains(target)) {
-      return mobileLyricsEl.scrollTop <= 1;
-    }
-    if (target instanceof Node && desktopQueueEl?.contains(target)) {
-      return desktopQueueEl.scrollTop <= 1;
-    }
-    return (bodyEl?.scrollTop ?? 0) <= 1;
-  };
-
-  const canStartSheetSwipe = (target: EventTarget | null) => {
-    if (!nowPlayingOpen() || isRangeTarget(target) || !(target instanceof Node)) {
-      return { allowed: false, onBody: false, bodyTop: false };
-    }
-    if (headEl?.contains(target)) {
-      return { allowed: true, onBody: false, bodyTop: true };
-    }
-    const onBody = !!bodyEl?.contains(target);
-    const atTop = activeScrollAtTop(target);
-    return { allowed: onBody && atTop, onBody, bodyTop: atTop };
-  };
-
-  const beginSheetSwipe = (clientY: number, start: ReturnType<typeof canStartSheetSwipe>) => {
-    swipeStartY = clientY;
-    swipeStartAt = performance.now();
-    swipeActive = false;
-    swipeOnBody = start.onBody;
-    swipeBodyAtTop = start.bodyTop;
-  };
-
-  const activateSheetSwipe = () => {
-    if (!sheetEl) return;
-    swipeActive = true;
-    // Disable the open/close transition so the sheet tracks the finger 1:1.
-    // Restored on release.
-    sheetEl.setAttribute('data-swiping', '');
-  };
-
-  const updateSheetSwipe = (deltaY: number) => {
-    if (!sheetEl) return;
-    sheetEl.style.transform = `translateY(${Math.max(0, deltaY)}px)`;
-  };
-
-  const onSheetPointerDown = (e: PointerEvent) => {
-    if (!nowPlayingOpen() || e.pointerType === 'touch') return;
-    // Only the primary pointer (first finger / left mouse button). Multi-touch
-    // and right-clicks fall through to the element beneath.
-    if (!e.isPrimary) return;
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    const start = canStartSheetSwipe(e.target);
-    if (!start.allowed) return;
-    pointerDown = true;
-    activePointerId = e.pointerId;
-    beginSheetSwipe(e.clientY, start);
-  };
-
-  const onSheetPointerMove = (e: PointerEvent) => {
-    // Ignore moves that aren't part of a gesture started on this sheet (e.g. a
-    // bare mouse hover over the open sheet, which would otherwise drag it down).
-    if (!pointerDown || e.pointerId !== activePointerId) return;
-    if (!nowPlayingOpen() || !sheetEl) return;
-    const deltaY = e.clientY - swipeStartY;
-    if (!swipeActive) {
-      if (deltaY <= SWIPE_ACTIVATE_THRESHOLD) return;
-      if (swipeOnBody && !swipeBodyAtTop) return;
-      activateSheetSwipe();
-      // Keep receiving move/up even if the pointer leaves the sheet, so a drag
-      // that ends off-element still gets its pointerup (no stuck transform).
-      try {
-        sheetEl.setPointerCapture(e.pointerId);
-      } catch {
-        /* pointer already gone — nothing to capture */
-      }
-    }
-    updateSheetSwipe(deltaY);
-  };
-
-  const endSwipe = (close: boolean) => {
-    if (!swipeActive || !sheetEl) return;
-    swipeActive = false;
-    sheetEl.removeAttribute('data-swiping');
-    if (close) setNowPlayingOpen(false);
-    // Clear the inline transform on the next frame so the CSS transition can
-    // animate from the finger's release position to translateY(0) (snap back)
-    // or translateY(100%) (close, once .open is removed above).
+  let requestedMobilePanel: NowPlayingMobilePanel | null = null;
+  createEffect(() => {
+    const panel = props.mobilePanel;
+    if (!mobileLayout() || !workspaceEl) return;
+    const tile = workspaceEl.querySelector<HTMLElement>(`[data-now-playing-tile="${panel}"]`);
+    if (!tile) return;
+    requestedMobilePanel = panel;
     requestAnimationFrame(() => {
-      if (sheetEl) sheetEl.style.transform = '';
+      workspaceEl?.scrollTo({ left: tile.offsetLeft, behavior: props.surfaceOpen ? 'smooth' : 'auto' });
+    });
+  });
+
+  let carouselFrame = 0;
+  const onCarouselScroll = () => {
+    if (!mobileLayout() || !workspaceEl) return;
+    cancelAnimationFrame(carouselFrame);
+    carouselFrame = requestAnimationFrame(() => {
+      if (!workspaceEl) return;
+      const panels = [...workspaceEl.querySelectorAll<HTMLElement>('[data-now-playing-tile]')];
+      if (requestedMobilePanel) {
+        const requested = panels.find((element) => element.dataset.nowPlayingTile === requestedMobilePanel);
+        if (requested && Math.abs(requested.offsetLeft - workspaceEl.scrollLeft) <= 2) requestedMobilePanel = null;
+        else return;
+      }
+      const nearest = panels.reduce<{ panel: NowPlayingMobilePanel; distance: number } | null>((best, element) => {
+        const panel = element.dataset.nowPlayingTile as NowPlayingMobilePanel;
+        const distance = Math.abs(element.offsetLeft - workspaceEl!.scrollLeft);
+        return !best || distance < best.distance ? { panel, distance } : best;
+      }, null);
+      if (nearest && nearest.panel !== props.mobilePanel) props.onMobilePanelChange(nearest.panel);
     });
   };
 
-  const onSheetPointerUp = (e: PointerEvent) => {
-    if (!pointerDown || e.pointerId !== activePointerId) return;
-    pointerDown = false;
-    activePointerId = null;
-    const deltaY = e.clientY - swipeStartY;
-    const elapsed = Math.max(1, performance.now() - swipeStartAt);
-    const velocity = deltaY / elapsed;
-    endSwipe(deltaY > SWIPE_CLOSE_THRESHOLD || (deltaY > SWIPE_FAST_CLOSE_THRESHOLD && velocity > SWIPE_CLOSE_VELOCITY));
-  };
-
-  const onSheetPointerCancel = () => {
-    pointerDown = false;
-    activePointerId = null;
-    endSwipe(false);
-  };
-
-  let touchAllowed = false;
-  let activeTouchId: number | null = null;
-  let touchStartX = 0;
-
-  const resetTouchSwipe = () => {
-    touchAllowed = false;
-    activeTouchId = null;
-  };
-
-  const touchById = (touches: TouchList) => {
-    if (activeTouchId == null) return null;
-    for (let i = 0; i < touches.length; i += 1) {
-      const touch = touches.item(i);
-      if (touch?.identifier === activeTouchId) return touch;
-    }
-    return null;
-  };
-
-  const onSheetTouchStart = (e: TouchEvent) => {
-    if (!nowPlayingOpen() || e.touches.length !== 1) {
-      resetTouchSwipe();
-      return;
-    }
-    const start = canStartSheetSwipe(e.target);
-    if (!start.allowed) {
-      resetTouchSwipe();
-      return;
-    }
-    const touch = e.touches.item(0);
-    if (!touch) return;
-    touchAllowed = true;
-    activeTouchId = touch.identifier;
-    touchStartX = touch.clientX;
-    beginSheetSwipe(touch.clientY, start);
-  };
-
-  const onSheetTouchMove = (e: TouchEvent) => {
-    if (!touchAllowed || !sheetEl) return;
-    const touch = touchById(e.touches);
-    if (!touch) return;
-    const deltaY = touch.clientY - swipeStartY;
-    const deltaX = touch.clientX - touchStartX;
-
-    if (!swipeActive) {
-      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > HORIZONTAL_CANCEL_THRESHOLD) {
-        resetTouchSwipe();
-        return;
-      }
-      if (deltaY <= 0) return;
-      if (swipeOnBody && !swipeBodyAtTop) return;
-      // Critical on mobile Safari/Chrome: without a non-passive preventDefault,
-      // the scroll container owns the downward pan and cancels the sheet drag.
-      e.preventDefault();
-      if (deltaY <= SWIPE_ACTIVATE_THRESHOLD) return;
-      activateSheetSwipe();
-    } else {
-      e.preventDefault();
-    }
-    updateSheetSwipe(deltaY);
-  };
-
-  const onSheetTouchEnd = (e: TouchEvent) => {
-    if (!touchAllowed) return;
-    const touch = touchById(e.changedTouches);
-    if (!touch) return;
-    const deltaY = touch.clientY - swipeStartY;
-    const elapsed = Math.max(1, performance.now() - swipeStartAt);
-    const velocity = deltaY / elapsed;
-    resetTouchSwipe();
-    endSwipe(deltaY > SWIPE_CLOSE_THRESHOLD || (deltaY > SWIPE_FAST_CLOSE_THRESHOLD && velocity > SWIPE_CLOSE_VELOCITY));
-  };
-
-  const onSheetTouchCancel = () => {
-    resetTouchSwipe();
-    endSwipe(false);
-  };
-
   onMount(() => {
-    if (!sheetEl) return;
+    const media = window.matchMedia('(max-width: 1023px)');
+    const syncLayout = () => setMobileLayout(media.matches);
+    media.addEventListener('change', syncLayout);
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && desktopLyricsActive()) {
         event.preventDefault();
@@ -332,16 +147,10 @@ export function NowPlaying() {
       }
     };
     window.addEventListener('keydown', onKeyDown);
-    sheetEl.addEventListener('touchstart', onSheetTouchStart, { passive: true });
-    sheetEl.addEventListener('touchmove', onSheetTouchMove, { passive: false });
-    sheetEl.addEventListener('touchend', onSheetTouchEnd, { passive: true });
-    sheetEl.addEventListener('touchcancel', onSheetTouchCancel, { passive: true });
     onCleanup(() => {
+      media.removeEventListener('change', syncLayout);
       window.removeEventListener('keydown', onKeyDown);
-      sheetEl?.removeEventListener('touchstart', onSheetTouchStart);
-      sheetEl?.removeEventListener('touchmove', onSheetTouchMove);
-      sheetEl?.removeEventListener('touchend', onSheetTouchEnd);
-      sheetEl?.removeEventListener('touchcancel', onSheetTouchCancel);
+      cancelAnimationFrame(carouselFrame);
     });
   });
   /** Library tracks link to their artist; preview/podcast sources do not. */
@@ -352,7 +161,7 @@ export function NowPlaying() {
   const goArtist = () => {
     const c = t();
     if (!c?.artist) return;
-    setNowPlayingOpen(false);
+    props.onCloseSurface?.();
     navigate(artistPath(c.artist, { view: c.source === 'preview' ? 'discover' : 'library' }));
   };
 
@@ -533,7 +342,7 @@ export function NowPlaying() {
   const animateRects = (before: Map<Element, DOMRect>, selector: string) => {
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
     requestAnimationFrame(() => {
-      for (const element of sheetEl?.querySelectorAll<HTMLElement>(selector) ?? []) {
+      for (const element of rootEl?.querySelectorAll<HTMLElement>(selector) ?? []) {
         const first = before.get(element);
         const last = element.getBoundingClientRect();
         if (!first || !last.width || !last.height) continue;
@@ -555,7 +364,7 @@ export function NowPlaying() {
 
   const captureRects = (selector: string) =>
     new Map(
-      [...(sheetEl?.querySelectorAll<HTMLElement>(selector) ?? [])]
+      [...(rootEl?.querySelectorAll<HTMLElement>(selector) ?? [])]
         .map((element) => [element, element.getBoundingClientRect()] as const),
     );
 
@@ -634,7 +443,7 @@ export function NowPlaying() {
         const panel = draggedPanel;
         draggedPanel = null;
         if (!panel || panel === props.panel) return;
-        changePanelOrder(panel, visiblePanels().indexOf(props.panel));
+        changePanelOrder(panel, renderedPanels().indexOf(props.panel));
       }}
     >
       {props.children}
@@ -740,63 +549,20 @@ export function NowPlaying() {
   };
 
   return (
-    <div
-      ref={sheetEl}
-      classList={{ [styles.sheet]: true, [styles.open]: nowPlayingOpen() }}
-      aria-hidden={!nowPlayingOpen()}
-      onPointerDown={onSheetPointerDown}
-      onPointerMove={onSheetPointerMove}
-      onPointerUp={onSheetPointerUp}
-      onPointerCancel={onSheetPointerCancel}
-    >
-      <header class={styles.head} ref={headEl}>
-        <div class={styles.headLeading}>
-          <button
-            classList={{ [styles.iconBtn]: true, [styles.panelToggle]: true, [styles.panelToggleOn]: browserOpen() }}
-            type="button"
-            aria-label={browserOpen() ? tr('nowPlaying.hideSearchPanel') : tr('nowPlaying.showSearchPanel')}
-            title={browserOpen() ? tr('nowPlaying.hideSearchPanel') : tr('nowPlaying.showSearchPanel')}
-            aria-pressed={browserOpen()}
-            onClick={toggleBrowser}
-          >
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="10.5" cy="10.5" r="5.5" />
-              <path d="m15 15 4 4M4 4h16v16H4" opacity=".55" />
-            </svg>
-          </button>
-          <Show when={!t() || !isPodcast()}>
-            <button
-              class={styles.autoToggle}
-              type="button"
-              aria-label={tr('autoMode.enter')}
-              aria-pressed={state.autoMode.active}
-              onClick={() => actions.enterAutoMode()}
-            >
-              <span class={styles.autoGlyph} aria-hidden="true"><i /><i /><i /></span>
-              <span class={styles.autoWord}>AUTO</span>
-            </button>
-          </Show>
-        </div>
-        <span class={styles.headLabel}>{tr('nowPlaying.playing')}</span>
-        <button class={styles.iconBtn} type="button" aria-label={tr('common.close')} onClick={() => setNowPlayingOpen(false)}>
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M6 9l6 6 6-6" />
-          </svg>
-        </button>
-      </header>
-
+    <section ref={rootEl} class={styles.workspace} aria-label={tr('nowPlaying.playing')}>
       <Show when={t()} fallback={<div class={styles.empty}>{tr('nowPlaying.nothingPlaying')}</div>}>
         <div
           class={styles.main}
           ref={workspaceEl}
           style={{ 'grid-template-columns': gridColumns() }}
           data-layout-busy={layoutBusy() ? '' : undefined}
+          onScroll={onCarouselScroll}
         >
-        <For each={visiblePanels()}>
+        <For each={renderedPanels()}>
           {(panel, index) => (
             <>
               <Show when={index() > 0}>
-                <Splitter left={visiblePanels()[index() - 1]} right={panel} />
+                <Splitter left={renderedPanels()[index() - 1]} right={panel} />
               </Show>
               <Switch>
                 <Match when={panel === 'stage'}>
@@ -812,20 +578,15 @@ export function NowPlaying() {
             <div
               class={styles.visualSlot}
               data-lyrics-morph=""
-              data-queue-open={mobileVisual().queueOpen ? '' : undefined}
-              data-lyrics-open={!mobileVisual().queueOpen && mobileVisual().content === 'lyrics' ? '' : undefined}
-              data-now-playing-cover-slot=""
+              data-lyrics-open={mobileVisual().content === 'lyrics' ? '' : undefined}
             >
               <div class={styles.art} style={artBg()} />
-              <Show when={state.playback.queue.length > 1 && mobileVisual().queueOpen}>
-                <QueueList className={styles.mobileQueue} setRef={(el) => { mobileQueueEl = el; }} />
-              </Show>
-              <Show when={!isPodcast() && !mobileVisual().queueOpen && mobileVisual().content === 'lyrics'}>
+              <Show when={!isPodcast() && mobileVisual().content === 'lyrics'}>
                 <div class={styles.mobileLyrics}>
-                  <LyricsPanel scrollRef={(element) => { mobileLyricsEl = element; }} />
+                  <LyricsPanel />
                 </div>
               </Show>
-              <Show when={!isPodcast() && !mobileVisual().queueOpen}>
+              <Show when={!isPodcast()}>
                 <button
                   classList={{
                     [styles.mobileLyricsToggle]: true,
@@ -986,12 +747,12 @@ export function NowPlaying() {
                 classList={{
                   [styles.actBtn]: true,
                   [styles.mobileQueueToggle]: true,
-                  [styles.actOn]: mobileVisual().queueOpen,
+                  [styles.actOn]: props.mobilePanel === 'queue',
                 }}
                 type="button"
                 aria-label={tr('nowPlaying.queue')}
-                aria-pressed={mobileVisual().queueOpen}
-                onClick={() => setMobileVisual(toggleMobileQueue)}
+                aria-pressed={props.mobilePanel === 'queue'}
+                onClick={() => props.onMobilePanelChange('queue')}
               >
                 <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M11 17a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
@@ -1115,7 +876,13 @@ export function NowPlaying() {
                 </Match>
                 <Match when={panel === 'browser'}>
                   <Tile panel="browser">
-                    <NowPlayingBrowser onClose={toggleBrowser} dragHandle={<PanelGrip panel="browser" />} />
+                    <NowPlayingBrowser
+                      onClose={() => {
+                        closeBrowser();
+                        if (mobileLayout()) props.onMobilePanelChange('stage');
+                      }}
+                      dragHandle={<PanelGrip panel="browser" />}
+                    />
                   </Tile>
                 </Match>
               </Switch>
@@ -1124,6 +891,6 @@ export function NowPlaying() {
         </For>
         </div>
       </Show>
-    </div>
+    </section>
   );
 }

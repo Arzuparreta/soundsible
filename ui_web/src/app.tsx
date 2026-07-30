@@ -3,8 +3,7 @@ import { ToastOutlet } from './lib/toast';
 import { TabBar } from './components/TabBar';
 import { Sidebar } from './components/Sidebar';
 import { OmniBar } from './components/OmniBar';
-import { NowPlaying } from './components/NowPlaying';
-import { AutoMode } from './components/AutoMode';
+import { PlayerSurface } from './components/PlayerSurface';
 import { ResumeBanner } from './components/ResumeBanner';
 import { ContextMenuOutlet } from './lib/contextMenu';
 import { ScrollHistoryManager } from './lib/scrollHistory';
@@ -27,8 +26,7 @@ export default function Shell(props: RouteSectionProps) {
           <TabBar />
         </div>
       </div>
-      <NowPlaying />
-      <AutoMode />
+      <PlayerSurface />
       <ResumeBanner />
       <ContextMenuOutlet />
       <ToastOutlet />

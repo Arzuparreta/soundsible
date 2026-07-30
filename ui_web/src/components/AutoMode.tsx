@@ -1,5 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import { Portal } from 'solid-js/web';
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import { actions, isSavedTrack, state } from '../stores';
 import { api, type DjProfile } from '../lib/api';
 import { coverUrl } from '../lib/media';
@@ -18,13 +17,6 @@ import type { CatalogItem, Track } from '../types/music';
 
 const IDLE_MS = 12_000;
 
-/** A downward drag has to travel this far, this straight, this fast, to exit. */
-const SWIPE_MIN_Y = 110;
-const SWIPE_MAX_MS = 900;
-
-/** Breathing room the Auto Mode status keeps from the artwork and the top bar. */
-const STATUS_GAP = 12;
-const STATUS_MIN_GAP = 6;
 const DJ_PROFILES: Array<{ id: DjProfile; titleKey: string; traitKey: string }> = [
   { id: 'adaptive', titleKey: 'autoMode.dj.adaptive', traitKey: 'autoMode.dj.adaptiveTrait' },
   { id: 'long_blend', titleKey: 'autoMode.dj.longBlend', traitKey: 'autoMode.dj.longBlendTrait' },
@@ -141,71 +133,6 @@ export function AutoMode() {
   let spokenRequestSeq = 0;
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let agentTimer: ReturnType<typeof setTimeout> | null = null;
-  let rootEl: HTMLDivElement | undefined;
-  let topbarEl: HTMLElement | undefined;
-  let statusEl: HTMLDivElement | undefined;
-  let mobileCover: DOMRect | null = null;
-  let swipe: { x: number; y: number; at: number } | null = null;
-  let restoreFocus: HTMLElement | null = null;
-  let wasActive = false;
-
-  const clearMobileStatusSlot = () => {
-    if (!rootEl) return;
-    rootEl.removeAttribute('data-mobile-status-above');
-    rootEl.style.removeProperty('--auto-mobile-status-top');
-  };
-
-  /**
-   * On mobile the artwork is pinned to the Now Playing rectangle, so the panel
-   * below it is laid out against the cover's *flow* position rather than the one
-   * it is actually drawn at — which is how the Auto Mode status ended up sitting
-   * over the bottom edge of the artwork. There is nothing to reclaim below the
-   * cover, but the band between the top bar and the pinned cover is empty on
-   * every phone, so the line moves up into it. On a viewport where that band is
-   * too short the line stays in its reserved slot in the panel: a status line
-   * crossing the top bar would be worse than one grazing the cover.
-   */
-  const placeMobileStatus = () => {
-    if (!rootEl || !statusEl || !topbarEl || !mobileCover) return;
-    clearMobileStatusSlot();
-    const height = statusEl.getBoundingClientRect().height;
-    const ceiling = topbarEl.getBoundingClientRect().bottom + STATUS_MIN_GAP;
-    const top = Math.max(ceiling, mobileCover.top - STATUS_GAP - height);
-    if (height <= 0 || top + height > mobileCover.top - STATUS_MIN_GAP) return;
-    rootEl.style.setProperty('--auto-mobile-status-top', `${Math.round(top)}px`);
-    rootEl.setAttribute('data-mobile-status-above', '');
-  };
-
-  const clearMobileCoverAnchor = () => {
-    mobileCover = null;
-    if (!rootEl) return;
-    rootEl.removeAttribute('data-mobile-cover-anchor');
-    rootEl.style.removeProperty('--auto-mobile-cover-left');
-    rootEl.style.removeProperty('--auto-mobile-cover-top');
-    rootEl.style.removeProperty('--auto-mobile-cover-width');
-    rootEl.style.removeProperty('--auto-mobile-cover-height');
-    clearMobileStatusSlot();
-  };
-
-  const captureMobileCoverAnchor = () => {
-    if (!rootEl || typeof window === 'undefined' || window.innerWidth >= 768) {
-      clearMobileCoverAnchor();
-      return;
-    }
-    const source = document.querySelector<HTMLElement>('[data-now-playing-cover-slot]');
-    const rect = source?.getBoundingClientRect();
-    if (!rect || rect.width <= 0 || rect.height <= 0) {
-      clearMobileCoverAnchor();
-      return;
-    }
-    mobileCover = rect;
-    rootEl.style.setProperty('--auto-mobile-cover-left', `${rect.left}px`);
-    rootEl.style.setProperty('--auto-mobile-cover-top', `${rect.top}px`);
-    rootEl.style.setProperty('--auto-mobile-cover-width', `${rect.width}px`);
-    rootEl.style.setProperty('--auto-mobile-cover-height', `${rect.height}px`);
-    rootEl.setAttribute('data-mobile-cover-anchor', '');
-    placeMobileStatus();
-  };
 
   const armIdle = () => {
     if (idleTimer) clearTimeout(idleTimer);
@@ -215,24 +142,11 @@ export function AutoMode() {
   };
 
   createEffect(() => {
-    const isActive = active();
-    if (typeof document !== 'undefined') {
-      if (isActive) document.documentElement.dataset.autoMode = 'active';
-      else delete document.documentElement.dataset.autoMode;
-    }
-    if (isActive && !wasActive) {
-      captureMobileCoverAnchor();
-      restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      requestAnimationFrame(() => rootEl?.focus({ preventScroll: true }));
-      armIdle();
-    } else if (!isActive && wasActive) {
-      requestAnimationFrame(() => restoreFocus?.focus({ preventScroll: true }));
-    }
-    if (!isActive && idleTimer) {
+    if (active()) armIdle();
+    else if (idleTimer) {
       clearTimeout(idleTimer);
       idleTimer = null;
     }
-    wasActive = isActive;
   });
 
   createEffect(() => {
@@ -242,21 +156,10 @@ export function AutoMode() {
     if (!active() || !track || isPodcastTrack(track)) setLyricsOpen(false);
   });
 
-  onMount(() => {
-    const syncAnchor = () => {
-      if (active()) captureMobileCoverAnchor();
-    };
-    window.addEventListener('resize', syncAnchor);
-    onCleanup(() => window.removeEventListener('resize', syncAnchor));
-  });
-
   createEffect(() => {
     current()?.id;
     if (!active()) return;
     armIdle();
-    // The panel only exists while there is a track, so the first one to arrive
-    // is the first chance to place the status line above the artwork.
-    placeMobileStatus();
   });
 
   createEffect(() => {
@@ -274,8 +177,6 @@ export function AutoMode() {
     if (requestTimer) clearTimeout(requestTimer);
     requestAborter?.abort();
     spokenRequestAborter?.abort();
-    clearMobileCoverAnchor();
-    if (typeof document !== 'undefined') delete document.documentElement.dataset.autoMode;
   });
 
   const art = createMemo(() => {
@@ -487,77 +388,36 @@ export function AutoMode() {
   };
 
   return (
-    <Portal mount={typeof document !== 'undefined' ? document.body : undefined}>
-      <div
-        ref={rootEl}
-        classList={{ [styles.root]: true, [styles.active]: active(), [styles.ambient]: !chromeVisible() }}
-        role="region"
-        aria-label={t('autoMode.aria')}
-        aria-hidden={!active()}
-        data-playing={state.playback.isPlaying ? 'true' : 'false'}
-        tabIndex={-1}
-        onPointerMove={armIdle}
-        onPointerDown={(event) => {
-          armIdle();
-          // A drag that starts on a control or inside the queue rail belongs to
-          // that control. Without this, scrolling the rail — or any drag that
-          // happened to travel downwards — exited Auto Mode.
-          const target = event.target as HTMLElement | null;
-          swipe = target?.closest('button, [data-rail], [data-lyrics-scroll]')
-            ? null
-            : { x: event.clientX, y: event.clientY, at: event.timeStamp };
-        }}
-        onPointerUp={(event) => {
-          const start = swipe;
-          swipe = null;
-          if (!start) return;
-          const dy = event.clientY - start.y;
-          const dx = Math.abs(event.clientX - start.x);
-          if (dy > SWIPE_MIN_Y && dx < dy * 0.6 && event.timeStamp - start.at < SWIPE_MAX_MS) {
-            actions.exitAutoMode();
-          }
-        }}
-        onPointerCancel={() => {
-          swipe = null;
-        }}
-        onKeyDown={onKeyDown}
-      >
-        <div class={styles.backdrop} style={backdropStyle()} aria-hidden="true" />
-        <div class={styles.wash} aria-hidden="true" />
-        <div class={styles.grain} aria-hidden="true" />
-
-        <header class={styles.topbar} ref={topbarEl}>
-          <div class={styles.brandBlock}>
-            <span class={styles.mark} aria-hidden="true"><i /><i /><i /></span>
-            <span class={styles.autoLabel}>{t('autoMode.label')}</span>
-          </div>
-          <div class={styles.topActions}>
-            <button
-              class={styles.profile}
-              type="button"
-              aria-label={t('autoMode.dj.changeCurrent', { dj: t(activeDj().titleKey) })}
-              aria-expanded={djPickerOpen()}
-              onClick={() => {
-                setDjPickerOpen((open) => !open);
-                armIdle();
-              }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                <circle cx="12" cy="12" r="8" /><path d="m15.5 8.5-2.1 4.9-4.9 2.1 2.1-4.9z" />
-              </svg>
-              <span class={styles.profileText}>
-                <small>{t('autoMode.dj.label')}</small>
-                <strong>{t(activeDj().titleKey)}</strong>
-              </span>
-              <span class={styles.profileChange}>{t('autoMode.dj.change')}</span>
-            </button>
-            <button class={styles.exit} type="button" aria-label={t('autoMode.exit')} onClick={() => actions.exitAutoMode()}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M6 6l12 12M18 6 6 18" />
-              </svg>
-            </button>
-          </div>
-        </header>
+    <div
+      classList={{ [styles.root]: true, [styles.active]: active(), [styles.ambient]: !chromeVisible() }}
+      role="region"
+      aria-label={t('autoMode.aria')}
+      data-playing={state.playback.isPlaying ? 'true' : 'false'}
+      tabIndex={-1}
+      onPointerMove={armIdle}
+      onKeyDown={onKeyDown}
+    >
+      <div class={styles.embeddedTools} data-no-surface-swipe="">
+        <button
+          class={styles.profile}
+          type="button"
+          aria-label={t('autoMode.dj.changeCurrent', { dj: t(activeDj().titleKey) })}
+          aria-expanded={djPickerOpen()}
+          onClick={() => {
+            setDjPickerOpen((open) => !open);
+            armIdle();
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="12" cy="12" r="8" /><path d="m15.5 8.5-2.1 4.9-4.9 2.1 2.1-4.9z" />
+          </svg>
+          <span class={styles.profileText}>
+            <small>{t('autoMode.dj.label')}</small>
+            <strong>{t(activeDj().titleKey)}</strong>
+          </span>
+          <span class={styles.profileChange}>{t('autoMode.dj.change')}</span>
+        </button>
+      </div>
 
         <Show when={djPickerOpen()}>
           <div class={styles.djPicker} role="dialog" aria-label={t('autoMode.dj.choose')}>
@@ -640,7 +500,7 @@ export function AutoMode() {
                 <p class={styles.artist} title={current()!.artist}>{current()!.artist}</p>
               </div>
 
-              <div class={styles.status} ref={statusEl}>
+              <div class={styles.status}>
                 <Show when={state.autoMode.activity && agentVisible()}>
                   <div
                     class={styles.agent}
@@ -887,7 +747,6 @@ export function AutoMode() {
             </div>
           </aside>
         </Show>
-      </div>
-    </Portal>
+    </div>
   );
 }

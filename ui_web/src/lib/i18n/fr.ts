@@ -48,6 +48,10 @@ export const fr: Dict = {
   },
   nowPlaying: {
     playing: 'En lecture',
+    modeLabel: 'Now Playing',
+    modeSelector: 'Mode du lecteur',
+    mobilePanels: 'Panneaux de lecture',
+    panel: { browser: 'Explorateur', stage: 'Lecteur', queue: 'File' },
     hideSearchPanel: 'Masquer le navigateur et la recherche',
     showSearchPanel: 'Afficher le navigateur et la recherche',
     nothingPlaying: 'Rien en lecture',

@@ -97,10 +97,10 @@ export function createShortcutHandler(
     }
 
     if (e.key === 'Escape') {
-      // Auto Mode is the outer state: leaving it first means one Escape never
-      // both stops Auto Mode generation and hides the sheet that reports on it.
-      if (ctx.autoModeActive) actions.exitAutoMode();
-      else if (ctx.nowPlayingOpen) actions.closeNowPlaying();
+      // The unified player surface can be dismissed without stopping Auto.
+      // Choosing Now Playing (or starting another context) is what hands control
+      // back; Escape only returns to the app.
+      if (ctx.nowPlayingOpen) actions.closeNowPlaying();
       return;
     }
 

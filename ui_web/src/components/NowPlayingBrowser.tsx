@@ -72,6 +72,16 @@ export function toggleBrowser(): void {
   localStorage.setItem('np:panel', next ? 'open' : 'closed');
 }
 
+export function openBrowser(): void {
+  setBrowserOpen(true);
+  localStorage.setItem('np:panel', 'open');
+}
+
+export function closeBrowser(): void {
+  setBrowserOpen(false);
+  localStorage.setItem('np:panel', 'closed');
+}
+
 function isAbort(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }

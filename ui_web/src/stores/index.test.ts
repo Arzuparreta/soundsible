@@ -581,6 +581,26 @@ describe('Auto Mode store contract', () => {
     actions.exitAutoMode();
   });
 
+  it('keeps Auto for queued requests but yields immediately to a manual Play action', async () => {
+    const { actions, state } = await loadStore({
+      relatedYouTube: vi.fn().mockResolvedValue([]),
+      searchYouTube: vi.fn().mockResolvedValue([{ id: 'yt-current' }]),
+    });
+    const current: Track = { id: 'current', title: 'Current', artist: 'A', youtube_id: 'yt-current' };
+    const later: Track = { id: 'later', title: 'Later', artist: 'B' };
+    const now: Track = { id: 'now', title: 'Now', artist: 'C' };
+    actions.playFrom([current], 0);
+    actions.enterAutoMode();
+
+    actions.enqueue(later);
+    actions.playNext({ ...later, id: 'next' });
+    expect(state.autoMode.active).toBe(true);
+
+    actions.playNow(now);
+    expect(state.autoMode.active).toBe(false);
+    expect(state.playback.currentTrack?.id).toBe('now');
+  });
+
   it('does not enter Auto Mode for podcasts', async () => {
     const { actions, state } = await loadStore();
     const podcast: Track = { id: 'episode', title: 'Episode', artist: 'Show', media_kind: 'podcast_episode' };

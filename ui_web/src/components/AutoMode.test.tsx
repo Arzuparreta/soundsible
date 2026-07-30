@@ -109,8 +109,7 @@ describe('AutoMode environment', () => {
     fireEvent.click(screen.getByRole('button', { name: /autoMode\.dj\.changeCurrent/ }));
     fireEvent.click(screen.getByRole('option', { name: /autoMode\.dj\.cutsDrops/ }));
     expect(actions.setAutoDjProfile).toHaveBeenCalledWith('cuts_drops');
-    fireEvent.click(screen.getByRole('button', { name: 'autoMode.exit' }));
-    expect(actions.exitAutoMode).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', { name: 'autoMode.exit' })).not.toBeInTheDocument();
   });
 
   it('keeps DJ technique separate from musical direction and opens requests in place', () => {
@@ -276,19 +275,16 @@ describe('AutoMode environment', () => {
     expect(actions.jumpTo).not.toHaveBeenCalled();
   });
 
-  it('exits on a swipe down over the backdrop, but not on one that scrolls the queue', () => {
+  it('leaves surface dismissal to the shared player shell', () => {
     render(() => <AutoMode />);
     const root = screen.getByRole('region', { name: 'autoMode.aria' });
     const rail = screen.getByRole('button', { name: /Next song/ }).parentElement!;
 
-    // Dragging the queue rail is scrolling, not leaving.
     fireEvent.pointerDown(rail, { clientX: 200, clientY: 100 });
     fireEvent.pointerUp(rail, { clientX: 200, clientY: 320 });
-    expect(actions.exitAutoMode).not.toHaveBeenCalled();
-
     fireEvent.pointerDown(root, { clientX: 200, clientY: 100 });
     fireEvent.pointerUp(root, { clientX: 200, clientY: 320 });
-    expect(actions.exitAutoMode).toHaveBeenCalledOnce();
+    expect(actions.exitAutoMode).not.toHaveBeenCalled();
   });
 
   it('enters the ambient state after twelve idle seconds and wakes on input', async () => {
@@ -327,48 +323,26 @@ describe('AutoMode environment', () => {
     expect(screen.queryByText('autoMode.agent.queued:Next song,1,4,3,20')).not.toBeInTheDocument();
   });
 
-  it('anchors the mobile Auto cover to the live Now Playing cover slot', () => {
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
-    const source = document.createElement('div');
-    source.dataset.nowPlayingCoverSlot = '';
-    source.getBoundingClientRect = vi.fn(() => rect({ top: 92, left: 16, width: 358, height: 358 }));
-    document.body.append(source);
-
+  it('renders inline without duplicating the shared backdrop or top chrome', () => {
     render(() => <AutoMode />);
     const root = screen.getByRole('region', { name: 'autoMode.aria' });
-    expect(root).toHaveAttribute('data-mobile-cover-anchor');
-    expect(root.style.getPropertyValue('--auto-mobile-cover-left')).toBe('16px');
-    expect(root.style.getPropertyValue('--auto-mobile-cover-top')).toBe('92px');
-    expect(root.style.getPropertyValue('--auto-mobile-cover-width')).toBe('358px');
-    expect(root.style.getPropertyValue('--auto-mobile-cover-height')).toBe('358px');
-    source.remove();
+    expect(root.querySelector('header')).toBeNull();
+    expect(root.querySelector('[class*="backdrop"]')).toBeNull();
+    expect(screen.getByRole('button', { name: /autoMode\.dj\.changeCurrent/ })).toBeInTheDocument();
   });
 
-  it('opens Lyrics inside the anchored cover without changing handoff geometry or swipe ownership', () => {
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
-    const source = document.createElement('div');
-    source.dataset.nowPlayingCoverSlot = '';
-    source.getBoundingClientRect = vi.fn(() => rect({ top: 92, left: 16, width: 358, height: 358 }));
-    document.body.append(source);
-
+  it('opens Lyrics inside its cover while the shared shell owns dismissal', () => {
     render(() => <AutoMode />);
-    const root = screen.getByRole('region', { name: 'autoMode.aria' });
     const showLyrics = screen.getByRole('button', { name: 'nowPlaying.showLyrics' });
     fireEvent.click(showLyrics);
 
     expect(screen.getByTestId('lyrics-panel')).toBeInTheDocument();
     expect(showLyrics).toHaveAttribute('aria-pressed', 'true');
     expect(showLyrics).toHaveAccessibleName('nowPlaying.showCover');
-    expect(root.style.getPropertyValue('--auto-mobile-cover-left')).toBe('16px');
-    expect(root.style.getPropertyValue('--auto-mobile-cover-top')).toBe('92px');
-    expect(root.style.getPropertyValue('--auto-mobile-cover-width')).toBe('358px');
-    expect(root.style.getPropertyValue('--auto-mobile-cover-height')).toBe('358px');
-
     const lyrics = screen.getByTestId('lyrics-panel');
     fireEvent.pointerDown(lyrics, { clientX: 200, clientY: 100 });
     fireEvent.pointerUp(lyrics, { clientX: 200, clientY: 320 });
     expect(actions.exitAutoMode).not.toHaveBeenCalled();
-    source.remove();
   });
 
   it('names the song on the artwork, without saying it twice to a screen reader', () => {
@@ -384,47 +358,10 @@ describe('AutoMode environment', () => {
     expect(screen.getByRole('heading', { name: 'Current song' }).closest('[aria-live]')).toBeTruthy();
   });
 
-  it('lifts the Auto Mode status into the band above the pinned cover, and only when it fits', () => {
-    // The pinned cover is not where the panel below it was laid out, so in flow
-    // the status line lands on the artwork. It belongs in the empty band between
-    // the top bar and the cover — but never on top of the top bar.
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
-    let coverTop = 300;
-    const source = document.createElement('div');
-    source.dataset.nowPlayingCoverSlot = '';
-    source.getBoundingClientRect = vi.fn(() => rect({ top: coverTop, left: 16, width: 358, height: 358 }));
-    document.body.append(source);
-
+  it('keeps the transient Auto status inside its own live region', () => {
     render(() => <AutoMode />);
-    const root = screen.getByRole('region', { name: 'autoMode.aria' });
-    const status = screen.getByText('autoMode.agent.queued:Next song,1,4,3,20').parentElement!.parentElement!;
-    root.querySelector('header')!.getBoundingClientRect = vi.fn(() => rect({ top: 20, left: 0, width: 390, height: 80 }));
-    status.getBoundingClientRect = vi.fn(() => rect({ top: 0, left: 16, width: 358, height: 18 }));
-
-    fireEvent(window, new Event('resize'));
-    expect(root).toHaveAttribute('data-mobile-status-above');
-    // 12px clear of the artwork, well below the top bar's 100px bottom edge.
-    expect(root.style.getPropertyValue('--auto-mobile-status-top')).toBe('270px');
-
-    // A band too short for the line: it stays in the panel's reserved slot.
-    coverTop = 118;
-    fireEvent(window, new Event('resize'));
-    expect(root).not.toHaveAttribute('data-mobile-status-above');
-    expect(root.style.getPropertyValue('--auto-mobile-status-top')).toBe('');
-    source.remove();
+    const status = screen.getByText('autoMode.agent.queued:Next song,1,4,3,20').parentElement!;
+    expect(status).toHaveAttribute('role', 'status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
   });
 });
-
-function rect({ top, left, width, height }: { top: number; left: number; width: number; height: number }): DOMRect {
-  return {
-    x: left,
-    y: top,
-    top,
-    left,
-    right: left + width,
-    bottom: top + height,
-    width,
-    height,
-    toJSON: () => ({}),
-  };
-}

@@ -48,6 +48,10 @@ export const es: Dict = {
   },
   nowPlaying: {
     playing: 'Reproduciendo',
+    modeLabel: 'Now Playing',
+    modeSelector: 'Modo del reproductor',
+    mobilePanels: 'Paneles de Now Playing',
+    panel: { browser: 'Explorador', stage: 'Reproductor', queue: 'Cola' },
     hideSearchPanel: 'Ocultar explorador y búsqueda',
     showSearchPanel: 'Mostrar explorador y búsqueda',
     nothingPlaying: 'Nada sonando',

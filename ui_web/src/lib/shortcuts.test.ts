@@ -160,15 +160,11 @@ describe('keys that are not ours', () => {
 });
 
 describe('Escape and Auto Mode', () => {
-  it('leaves Auto Mode before it closes the sheet reporting on it', () => {
+  it('closes the unified surface without stopping Auto Mode', () => {
     context = { ...idle, autoModeActive: true, nowPlayingOpen: true };
     press({ key: 'Escape' });
-    expect(actions.exitAutoMode).toHaveBeenCalledTimes(1);
-    expect(actions.closeNowPlaying).not.toHaveBeenCalled();
-
-    context = { ...idle, nowPlayingOpen: true };
-    press({ key: 'Escape' });
     expect(actions.closeNowPlaying).toHaveBeenCalledTimes(1);
+    expect(actions.exitAutoMode).not.toHaveBeenCalled();
   });
 
   it('toggles Auto Mode with "a" only from an open Now Playing sheet', () => {

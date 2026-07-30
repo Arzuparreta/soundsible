@@ -48,6 +48,10 @@ export const zh: Dict = {
   },
   nowPlaying: {
     playing: '正在播放',
+    modeLabel: '正在播放',
+    modeSelector: '播放器模式',
+    mobilePanels: '播放面板',
+    panel: { browser: '浏览', stage: '播放器', queue: '队列' },
     hideSearchPanel: '隐藏浏览和搜索',
     showSearchPanel: '显示浏览和搜索',
     nothingPlaying: '未在播放',
