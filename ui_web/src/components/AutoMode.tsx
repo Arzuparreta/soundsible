@@ -34,10 +34,53 @@ const DJ_PROFILES: Array<{ id: DjProfile; titleKey: string; traitKey: string }> 
 
 const DIRECTION_LEVELS = [-0.65, 0, 0.65] as const;
 
-function directionLevel(value: number): number {
-  if (value < -0.25) return -0.65;
-  if (value > 0.25) return 0.65;
-  return 0;
+/** Which of the three switch positions a stored direction value sits at. */
+function directionIndex(value: number): 0 | 1 | 2 {
+  if (value < -0.25) return 0;
+  if (value > 0.25) return 2;
+  return 1;
+}
+
+/**
+ * A three-position switch.
+ *
+ * Deliberately not three buttons that happen to be adjacent: the travelling
+ * thumb is what makes it read as a control with a *setting* rather than a menu
+ * with a highlight. The booth has two of these and they are the only things on
+ * this surface that move.
+ */
+function DirectionSwitch(props: {
+  label: string;
+  options: string[];
+  notes: string[];
+  value: number;
+  onPick: (value: number, note: string) => void;
+}) {
+  const index = () => directionIndex(props.value);
+  return (
+    <fieldset class={styles.switchGroup}>
+      <legend>{props.label}</legend>
+      <div class={styles.switchTrack} style={{ '--switch-pos': index() }}>
+        <span class={styles.switchThumb} aria-hidden="true" />
+        <For each={DIRECTION_LEVELS}>
+          {(level, position) => (
+            <button
+              type="button"
+              aria-pressed={index() === position()}
+              onClick={() => props.onPick(level, props.notes[position()])}
+            >
+              {props.options[position()]}
+            </button>
+          )}
+        </For>
+      </div>
+    </fieldset>
+  );
+}
+
+/** `128` from a raw BPM, or an em dash. The booth never shows a made-up number. */
+function bpmText(value?: number): string {
+  return value && Number.isFinite(value) ? String(Math.round(value)) : '—';
 }
 
 function techniqueText(technique?: string): string {
@@ -252,25 +295,45 @@ export function AutoMode() {
   const autoRequests = createMemo(() => state.autoMode.requests ?? []);
   const transitionState = createMemo(() => state.autoMode.transition ?? { status: 'idle' as const });
 
+  /** What the booth knows about the track on air, and the one cued behind it. */
+  const nowReading = createMemo(() => {
+    const track = current();
+    return track ? state.autoMode.plan[queueIdentity(track)] : undefined;
+  });
+  const nextPlan = createMemo(() => {
+    const next = state.playback.queue[state.playback.index + 1];
+    return next ? state.autoMode.plan[queueIdentity(next)] : undefined;
+  });
+  /** Time left before a committed blend opens, once it is close enough to be
+   * worth watching. A mix you can see coming is the whole appeal of a booth. */
+  const cueCountdown = createMemo(() => {
+    const at = state.autoMode.transition.at;
+    if (transitionState().status !== 'armed' || !at) return '';
+    const left = at - state.playback.currentTime;
+    return left > 0 && left < 100 ? clockTime(left) : '';
+  });
+
   const submitDirection = () => {
     const value = prompt().trim();
     if (!value) return;
-    actions.setAutoDirection(parseDjDirection(value, state.autoMode.direction ?? {
-      energy: 0,
-      familiarity: 0,
-      prompt: '',
-      include: [],
-      exclude: [],
-    }));
+    actions.setAutoDirection(
+      parseDjDirection(value, state.autoMode.direction ?? {
+        energy: 0,
+        familiarity: 0,
+        prompt: '',
+        include: [],
+        exclude: [],
+      }),
+      // Your own words go back on the status line. The booth heard *you*, not a
+      // profile it derived from you.
+      t('autoMode.note.quoted', { text: value }),
+    );
     setPrompt('');
     armIdle();
   };
 
-  const setDirectionLevel = (key: 'energy' | 'familiarity', value: number) => {
-    actions.setAutoDirection({
-      [key]: value,
-      prompt: '',
-    });
+  const setDirectionLevel = (key: 'energy' | 'familiarity', value: number, note: string) => {
+    actions.setAutoDirection({ [key]: value, prompt: '' }, note);
     armIdle();
   };
 
@@ -449,8 +512,8 @@ export function AutoMode() {
         <Show when={!current()}>
           <div class={styles.emptyDj} role="status">
             <span class={styles.emptyDisc} aria-hidden="true" />
-            <strong>El DJ está buscando por dónde empezar</strong>
-            <span>Usando tu biblioteca y tu historial</span>
+            <strong>{t('autoMode.booth.opening')}</strong>
+            <span>{t('autoMode.booth.openingHint')}</span>
           </div>
         </Show>
 
@@ -513,99 +576,106 @@ export function AutoMode() {
                 </Show>
               </div>
 
-              <div class={styles.djControls}>
-                <div class={styles.controlHeading}>
-                  <div>
-                    <strong>{t('autoMode.dj.direction')}</strong>
-                    {/* Honest about when an instruction lands: the track that is
-                        playing, and any handoff already cued behind it, are not
-                        rewritten by a change of mind. */}
-                    <span aria-live="polite">
-                      {state.autoMode.pendingDirection || transitionState().status !== 'idle'
-                        ? t('autoMode.dj.appliesNext')
-                        : t('autoMode.dj.directionHint')}
+              <section class={styles.booth} aria-label={t('autoMode.booth.aria')}>
+                {/* The decks, in the booth's own units. Everything here is
+                    measured — an unread track shows a dash, never a guess. */}
+                <div class={styles.readout}>
+                  <span class={styles.deck}>
+                    <small>{t('autoMode.booth.now')}</small>
+                    <b>{bpmText(nowReading()?.bpm)}</b>
+                    <span class={styles.unit}>{t('autoMode.booth.bpm')}</span>
+                    <Show when={nowReading()?.key}><i>{nowReading()!.key}</i></Show>
+                  </span>
+                  <span class={styles.blend} data-live={transitionState().status !== 'idle' ? '' : undefined}>
+                    <Show when={transitionState().status !== 'idle'} fallback={<span aria-hidden="true">→</span>}>
+                      <span class={styles.blendMark} aria-hidden="true" />
+                    </Show>
+                    <span>
+                      {techniqueText(nextPlan()?.transition?.technique ?? transitionState().technique)}
+                      <Show when={cueCountdown()}>{' '}{t('autoMode.booth.in', { time: cueCountdown()! })}</Show>
                     </span>
-                  </div>
+                  </span>
+                  <span class={styles.deck}>
+                    <small>{t('autoMode.booth.next')}</small>
+                    <b>{bpmText(nextPlan()?.bpm)}</b>
+                    <span class={styles.unit}>{t('autoMode.booth.bpm')}</span>
+                    <Show when={nextPlan()?.key}><i>{nextPlan()!.key}</i></Show>
+                  </span>
                   <button class={styles.requestButton} type="button" onClick={() => setRequestOpen(true)}>
-                    <span aria-hidden="true">＋</span>
                     {t('autoMode.dj.request')}
                     <small>{t('autoMode.dj.requestEta')}</small>
                   </button>
                 </div>
+
+                {/* Talkback: you speak to the booth in your own words, and it
+                    repeats back what it heard in the status line. */}
                 <form
-                  class={styles.command}
+                  class={styles.talkback}
                   onSubmit={(event) => {
                     event.preventDefault();
                     submitDirection();
                   }}
                 >
+                  <span class={styles.caret} aria-hidden="true">›</span>
                   <input
                     value={prompt()}
                     onInput={(event) => setPrompt(event.currentTarget.value)}
                     placeholder={t('autoMode.dj.commandPlaceholder')}
                     aria-label={t('autoMode.dj.commandAria')}
                   />
-                  <button type="submit" disabled={!prompt().trim()} aria-label={t('autoMode.dj.send')}>
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="m4 4 17 8-17 8 3-8z" /></svg>
-                  </button>
+                  <button type="submit" disabled={!prompt().trim()}>{t('autoMode.dj.send')}</button>
                 </form>
-                <div class={styles.directionGrid}>
-                  <fieldset class={styles.directionControl}>
-                    <legend>{t('autoMode.dj.energy')}</legend>
-                    <div>
-                      <For each={DIRECTION_LEVELS}>
-                        {(value, index) => (
-                          <button
-                            type="button"
-                            aria-pressed={directionLevel(state.autoMode.direction?.energy ?? 0) === value}
-                            onClick={() => setDirectionLevel('energy', value)}
-                          >
-                            {[t('autoMode.dj.energySoft'), t('autoMode.dj.balanced'), t('autoMode.dj.energyHigh')][index()]}
-                          </button>
-                        )}
-                      </For>
-                    </div>
-                  </fieldset>
-                  <fieldset class={styles.directionControl}>
-                    <legend>{t('autoMode.dj.selection')}</legend>
-                    <div>
-                      <For each={DIRECTION_LEVELS}>
-                        {(value, index) => (
-                          <button
-                            type="button"
-                            aria-pressed={directionLevel(state.autoMode.direction?.familiarity ?? 0) === value}
-                            onClick={() => setDirectionLevel('familiarity', value)}
-                          >
-                            {[t('autoMode.dj.discover'), t('autoMode.dj.balanced'), t('autoMode.dj.familiar')][index()]}
-                          </button>
-                        )}
-                      </For>
-                    </div>
-                  </fieldset>
+
+                <div class={styles.switches}>
+                  <DirectionSwitch
+                    label={t('autoMode.booth.energy')}
+                    options={[t('autoMode.booth.energyDown'), t('autoMode.booth.hold'), t('autoMode.booth.energyUp')]}
+                    notes={[t('autoMode.note.energy.down'), t('autoMode.note.energy.hold'), t('autoMode.note.energy.up')]}
+                    value={state.autoMode.direction?.energy ?? 0}
+                    onPick={(value, note) => setDirectionLevel('energy', value, note)}
+                  />
+                  <DirectionSwitch
+                    label={t('autoMode.booth.crate')}
+                    options={[t('autoMode.booth.crateDeep'), t('autoMode.booth.hold'), t('autoMode.booth.crateKnown')]}
+                    notes={[t('autoMode.note.crate.deep'), t('autoMode.note.crate.hold'), t('autoMode.note.crate.known')]}
+                    value={state.autoMode.direction?.familiarity ?? 0}
+                    onPick={(value, note) => setDirectionLevel('familiarity', value, note)}
+                  />
                 </div>
+
+                {/* Honest about when an instruction lands: the track playing and
+                    any handoff already cued behind it are not rewritten. */}
+                <p class={styles.boothFoot} aria-live="polite">
+                  {state.autoMode.pendingDirection || transitionState().status !== 'idle'
+                    ? t('autoMode.dj.appliesNext')
+                    : t('autoMode.dj.directionHint')}
+                </p>
+
                 <Show when={autoRequests().length > 0}>
                   <div class={styles.requests} aria-label={t('autoMode.dj.requests')}>
                     <span class={styles.requestsLabel}>{t('autoMode.dj.requests')}</span>
                     <For each={autoRequests()}>
                       {(request) => (
                         <span class={styles.requestChip}>
-                          <span>
-                            {request.track.title}
-                            <Show when={request.etaTracks}> · {t('autoMode.dj.withinTracks', { count: request.etaTracks! })}</Show>
-                          </span>
+                          <span>{request.track.title}</span>
+                          <Show when={request.etaTracks}>
+                            <em>{t('autoMode.dj.withinTracks', { count: request.etaTracks! })}</em>
+                          </Show>
                           <button
                             type="button"
                             aria-label={t('autoMode.dj.cancelRequest', { title: request.track.title })}
                             onClick={() => actions.cancelAutoRequest(request.id)}
                           >
-                            ×
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                              <path d="M6 6l12 12M18 6 6 18" />
+                            </svg>
                           </button>
                         </span>
                       )}
                     </For>
                   </div>
                 </Show>
-              </div>
+              </section>
 
               <div class={styles.controls}>
                 <div class={styles.seek}>

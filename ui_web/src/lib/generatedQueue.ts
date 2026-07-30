@@ -59,6 +59,9 @@ export interface AutoModeState {
     status: 'idle' | 'armed' | 'mixing';
     technique?: DjTransitionPlan['technique'];
     nextTrackId?: string;
+    /** Position in the playing track at which the blend begins, so the booth can
+     * count down to a mix the listener can already see coming. */
+    at?: number;
   };
   /** A direction change is waiting out its debounce before the runway is
    * rewritten. The UI uses it to promise "from the next track". */

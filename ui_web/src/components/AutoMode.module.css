@@ -911,89 +911,202 @@
 }
 
 .djCard strong { font-size: var(--auto-ui-body); }
-.djCard span { color: var(--ink-secondary); font-size: var(--auto-ui-caption); line-height: 1.4; }
-.djCardActive { border-color: var(--accent); background: rgba(249, 122, 18, 0.12); }
 
-.djControls {
+/* The traits are a spec sheet, so they are set like one. */
+.djCard span {
+  color: var(--ink-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--auto-ui-caption);
+  line-height: 1.45;
+}
+
+.djCardActive {
+  border-color: rgba(249, 122, 18, 0.55);
+  background: var(--accent-soft);
+}
+
+.djCardActive strong { color: var(--accent); }
+
+/* Which pair of hands is on the decks reads at a glance, without a tick that
+   would collide with the trait line. */
+.djCardActive::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 100%;
+  background: var(--accent);
+}
+
+.djCard {
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── The booth ─────────────────────────────────────────────────────────────
+ *
+ * Everything below is equipment, and it is styled as equipment: a console
+ * plate rather than a floating card, squared corners rather than pills, and
+ * every number in JetBrains Mono with tabular figures so a changing BPM does
+ * not shuffle the layout under it.
+ *
+ * The gold hairline along the top edge is the shell's action-card signature
+ * brought into the listening room. It is the one place brand gold appears
+ * here, and it never becomes a fill.
+ */
+.booth {
+  position: relative;
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--space-sm);
   padding: var(--space-md);
-  background: rgba(9, 9, 12, 0.38);
-  border: 1px solid rgba(255, 255, 255, 0.085);
-  border-radius: var(--radius-lg);
+  background: rgba(9, 9, 12, 0.52);
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
-.controlHeading {
+.booth::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: clamp(48px, 12%, 96px);
+  height: 2px;
+  background: var(--brand-gold);
+}
+
+/* ── Deck readout ── */
+.readout {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-md);
-}
-
-.controlHeading > div {
-  display: flex;
   min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.controlHeading strong {
-  font-size: var(--auto-ui-body);
-  line-height: 1.2;
-}
-
-.controlHeading > div > span {
-  color: var(--ink-secondary);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--hairline-soft);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: var(--auto-ui-caption);
-  line-height: 1.35;
+  line-height: 1;
+}
+
+.deck {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.deck small {
+  color: var(--ink-tertiary);
+  font-size: var(--text-nano);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.deck b {
+  color: var(--ink-primary);
+  font-size: calc(var(--auto-ui-body) * 1.12);
+  font-weight: var(--fw-semibold);
+}
+
+.unit {
+  color: var(--ink-tertiary);
+  font-size: var(--text-nano);
+  letter-spacing: 0.08em;
+}
+
+/* The key is the one piece of the readout a DJ scans for, so it is the one
+   piece that carries the accent. */
+.deck i {
+  color: var(--accent);
+  font-style: normal;
+  font-weight: var(--fw-semibold);
+}
+
+.blend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--ink-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blend[data-live] { color: var(--ink-secondary); }
+
+/* A blend that is loaded and counting down deserves a heartbeat; a route that
+   is merely planned does not. */
+.blendMark {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: boothCue 1.6s var(--ease-in-out) infinite;
 }
 
 .requestButton {
-  display: grid;
-  grid-template-columns: auto auto;
-  align-items: center;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   min-height: var(--auto-control-h);
-  padding: 5px var(--space-md);
-  color: var(--ink-on-accent);
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0 var(--space-md);
+  color: var(--accent);
   font: inherit;
-  font-size: var(--auto-ui-label);
+  font-family: var(--font-mono);
+  font-size: var(--auto-ui-caption);
   font-weight: var(--fw-bold);
-  line-height: 1.1;
-  background: var(--accent);
-  border: 0;
-  border-radius: var(--radius-md);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--accent-soft);
+  border: 1px solid rgba(249, 122, 18, 0.34);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-}
-
-.requestButton > span {
-  grid-row: 1 / 3;
-  margin-right: 7px;
-  font-size: 1.4em;
+  transition: background var(--dur-short), border-color var(--dur-short);
 }
 
 .requestButton small {
-  color: color-mix(in srgb, var(--ink-on-accent) 75%, transparent);
+  color: color-mix(in srgb, var(--accent) 72%, transparent);
   font-size: var(--text-nano);
   font-weight: var(--fw-medium);
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-.command {
+/* ── Talkback ── */
+.talkback {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--auto-control-h);
-  height: var(--auto-control-h);
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--radius-full);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: var(--auto-control-h);
+  padding-left: var(--space-sm);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--dur-short);
 }
 
-.command:focus-within { border-color: rgba(249, 122, 18, 0.68); }
+.talkback:focus-within { border-color: rgba(249, 122, 18, 0.6); }
 
-.command input {
+.caret {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--auto-ui-body);
+  line-height: 1;
+}
+
+.talkback input {
   min-width: 0;
-  padding: 0 var(--space-lg);
+  padding: 0 var(--space-sm);
   color: var(--ink-primary);
   font: inherit;
   font-size: var(--auto-ui-body);
@@ -1002,55 +1115,91 @@
   outline: 0;
 }
 
-.command input::placeholder { color: rgba(242, 242, 245, 0.46); }
-
-.command button {
-  display: grid;
-  place-items: center;
-  color: var(--accent);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
+.talkback input::placeholder {
+  color: var(--ink-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--auto-ui-caption);
 }
 
-.command button:disabled { color: var(--ink-tertiary); cursor: default; }
-.command svg { width: var(--icon-md); height: var(--icon-md); }
+/* Named action, not a paper plane: the booth is told things, not messaged. */
+.talkback button {
+  align-self: stretch;
+  padding: 0 var(--space-md);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--auto-ui-label);
+  font-weight: var(--fw-bold);
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--hairline);
+  border-radius: 0 calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0;
+  cursor: pointer;
+  transition: color var(--dur-short), background var(--dur-short);
+}
 
-.directionGrid {
+.talkback button:disabled {
+  color: var(--ink-tertiary);
+  cursor: default;
+}
+
+/* ── Switches ── */
+.switches {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-sm);
 }
 
-.directionControl {
+.switchGroup {
   min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
-.directionControl legend {
+.switchGroup legend {
   margin-bottom: 5px;
-  color: var(--ink-secondary);
-  font-size: var(--auto-ui-caption);
-  font-weight: var(--fw-semibold);
+  padding: 0;
+  color: var(--ink-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-nano);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
-.directionControl > div {
+.switchTrack {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 3px;
-  background: rgba(255, 255, 255, 0.055);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
 }
 
-.directionControl button {
+/* The thumb travels; that is what makes this a switch with a setting rather
+   than three buttons with a highlight. */
+.switchThumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / 3);
+  background: rgba(255, 255, 255, 0.11);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: calc(var(--radius-sm) - 3px);
+  box-shadow: var(--shadow-1);
+  transform: translateX(calc(var(--switch-pos, 0) * 100%));
+  transition: transform var(--dur-short) var(--ease-out);
+}
+
+.switchTrack button {
+  position: relative;
   min-width: 0;
   min-height: calc(var(--auto-segment-h) - 6px);
-  padding: 4px 7px;
+  padding: 4px 6px;
   overflow: hidden;
-  color: var(--ink-secondary);
+  color: var(--ink-tertiary);
   font: inherit;
   font-size: var(--auto-ui-caption);
   font-weight: var(--fw-semibold);
@@ -1058,22 +1207,31 @@
   white-space: nowrap;
   background: transparent;
   border: 0;
-  border-radius: calc(var(--radius-md) - 3px);
   cursor: pointer;
+  transition: color var(--dur-short);
 }
 
-.directionControl button[aria-pressed='true'] {
-  color: var(--ink-primary);
-  background: rgba(255, 255, 255, 0.13);
-  box-shadow: var(--shadow-1);
+.switchTrack button[aria-pressed='true'] { color: var(--ink-primary); }
+
+.boothFoot {
+  margin: 0;
+  color: var(--ink-tertiary);
+  font-size: var(--auto-ui-caption);
+  line-height: 1.35;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .djCard:hover { background: rgba(255, 255, 255, 0.1); }
-  .directionControl button:hover { color: var(--ink-primary); background: rgba(255, 255, 255, 0.08); }
-  .requestButton:hover { background: var(--accent-hover); }
+  .switchTrack button:not([aria-pressed='true']):hover { color: var(--ink-secondary); }
+  .requestButton:hover {
+    background: rgba(249, 122, 18, 0.22);
+    border-color: rgba(249, 122, 18, 0.5);
+  }
+  .talkback button:not(:disabled):hover { background: var(--accent-soft); }
+  .requestChip button:hover { color: var(--ink-primary); }
 }
 
+/* ── On deck ── */
 .requests {
   display: flex;
   align-items: center;
@@ -1085,38 +1243,60 @@
 .requestsLabel {
   flex: 0 0 auto;
   color: var(--ink-tertiary);
+  font-family: var(--font-mono);
   font-size: var(--text-nano);
   font-weight: var(--fw-bold);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
 .requestChip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   min-width: 0;
   min-height: var(--auto-pill-h);
-  padding: 4px 7px 4px 12px;
-  color: rgba(242, 242, 245, 0.78);
+  padding: 3px 4px 3px 10px;
+  color: var(--ink-secondary);
   font-size: var(--auto-ui-caption);
-  background: rgba(249, 122, 18, 0.1);
-  border: 1px solid rgba(249, 122, 18, 0.24);
-  border-radius: var(--radius-full);
+  background: var(--accent-soft);
+  border: 1px solid rgba(249, 122, 18, 0.28);
+  border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 
+.requestChip em {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-nano);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .requestChip button {
-  width: calc(var(--auto-pill-h) - 10px);
-  height: calc(var(--auto-pill-h) - 10px);
+  display: grid;
+  place-items: center;
+  width: calc(var(--auto-pill-h) - 12px);
+  height: calc(var(--auto-pill-h) - 12px);
   padding: 0;
-  color: inherit;
-  font-size: 17px;
-  line-height: 1;
+  color: var(--ink-tertiary);
   background: transparent;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   cursor: pointer;
+  transition: color var(--dur-short);
+}
+
+.requestChip button svg {
+  width: 62%;
+  height: 62%;
+}
+
+@keyframes boothCue {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.82); }
 }
 
 .requestPanel {
@@ -1318,8 +1498,9 @@
 
   .upHead { display: none; }
   .nextMeta { display: none; }
-  .djControls { gap: 5px; padding: 8px; }
-  .controlHeading > div > span,
+  .booth { gap: 5px; padding: 8px; }
+  /* A dashboard glance keeps the numbers and loses the prose. */
+  .boothFoot,
   .requestButton small { display: none; }
 }
 
@@ -1383,8 +1564,13 @@
   }
 
   .djPickerGrid { grid-template-columns: 1fr; }
-  .djControls { gap: var(--space-sm); }
-  .directionGrid { grid-template-columns: 1fr; }
+  .booth { gap: var(--space-sm); }
+
+  /* Narrow: the two readings stay on one line and the request button drops to
+     its own, rather than four items fighting over a phone's width. */
+  .readout { flex-wrap: wrap; row-gap: var(--space-sm); }
+  .blend { flex-basis: 100%; order: 3; }
+  .requestButton { order: 2; }
 
   .requestPanel {
     width: 100vw;
@@ -1527,7 +1713,10 @@
   .mark i,
   .agent,
   .agentPulse,
+  .blendMark,
   .nextCard { animation: none !important; }
+
+  .switchThumb { transition: none !important; }
 
   .topbar,
   .panel,

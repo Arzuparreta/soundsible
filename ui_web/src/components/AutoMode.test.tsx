@@ -49,7 +49,7 @@ const { actions, state } = vi.hoisted(() => ({
       },
       plan: {
         next: { trackId: 'next', fromKey: 'current', source: 'related' as const, reasonKey: 'autoMode.reason.related', reasonValues: { title: 'Current song' } },
-      },
+      } as Record<string, { trackId: string; fromKey: string; source: string; reasonKey: string; bpm?: number; key?: string }>,
     },
   },
 }));
@@ -108,30 +108,61 @@ describe('AutoMode environment', () => {
     const command = screen.getByRole('textbox', { name: 'autoMode.dj.commandAria' });
     fireEvent.input(command, { target: { value: 'Más energía y sorpréndeme' } });
     fireEvent.submit(command.closest('form')!);
-    expect(actions.setAutoDirection).toHaveBeenCalledWith(expect.objectContaining({
-      energy: 0.35,
-      familiarity: -0.35,
-      prompt: 'Más energía y sorpréndeme',
-    }));
+    // The booth repeats the listener's own words back on the status line
+    // instead of naming an internal profile they never touched.
+    expect(actions.setAutoDirection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        energy: 0.35,
+        familiarity: -0.35,
+        prompt: 'Más energía y sorpréndeme',
+      }),
+      'autoMode.note.quoted:Más energía y sorpréndeme',
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /autoMode\.dj\.request/ }));
     expect(screen.getByRole('complementary', { name: 'autoMode.dj.requestPanelAria' })).toBeInTheDocument();
     expect(screen.getByText('autoMode.dj.requestPromise')).toBeInTheDocument();
   });
 
-  it('presents musical direction as explicit, selected choices', () => {
+  it('reads the two direction switches as settings, not as a menu', () => {
     render(() => <AutoMode />);
 
-    const balanced = screen.getAllByRole('button', { name: 'autoMode.dj.balanced' });
-    expect(balanced).toHaveLength(2);
-    expect(balanced[0]).toHaveAttribute('aria-pressed', 'true');
-    expect(balanced[1]).toHaveAttribute('aria-pressed', 'true');
+    const held = screen.getAllByRole('button', { name: 'autoMode.booth.hold' });
+    expect(held).toHaveLength(2);
+    expect(held[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(held[1]).toHaveAttribute('aria-pressed', 'true');
+    // The thumb's position is the setting, so it has to track the value.
+    for (const track of document.querySelectorAll('fieldset > div')) {
+      expect((track as HTMLElement).style.getPropertyValue('--switch-pos')).toBe('1');
+    }
 
-    fireEvent.click(screen.getByRole('button', { name: 'autoMode.dj.energyHigh' }));
-    expect(actions.setAutoDirection).toHaveBeenCalledWith({ energy: 0.65, prompt: '' });
+    fireEvent.click(screen.getByRole('button', { name: 'autoMode.booth.energyUp' }));
+    expect(actions.setAutoDirection).toHaveBeenCalledWith(
+      { energy: 0.65, prompt: '' },
+      'autoMode.note.energy.up',
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: 'autoMode.dj.discover' }));
-    expect(actions.setAutoDirection).toHaveBeenCalledWith({ familiarity: -0.65, prompt: '' });
+    fireEvent.click(screen.getByRole('button', { name: 'autoMode.booth.crateDeep' }));
+    expect(actions.setAutoDirection).toHaveBeenCalledWith(
+      { familiarity: -0.65, prompt: '' },
+      'autoMode.note.crate.deep',
+    );
+  });
+
+  it('shows both decks in the booth’s own units, and never invents a reading', () => {
+    state.autoMode.plan.current = {
+      trackId: 'current', fromKey: '', source: 'local', reasonKey: 'autoMode.reason.library', bpm: 128.4, key: 'Am',
+    };
+    render(() => <AutoMode />);
+
+    const readout = screen.getByText('autoMode.booth.now').parentElement!;
+    expect(readout).toHaveTextContent('128');
+    expect(readout).toHaveTextContent('Am');
+    // The next track has no analysis in this fixture: a dash, not a guess.
+    const next = screen.getByText('autoMode.booth.next').parentElement!;
+    expect(next).toHaveTextContent('—');
+
+    delete state.autoMode.plan.current;
   });
 
   it('leaves the shortcuts alone while the listener is typing to the DJ', () => {

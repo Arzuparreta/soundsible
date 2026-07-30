@@ -219,6 +219,9 @@ export interface DjPlanResponse extends ListeningPlanResponse {
   v: 2;
   dj_profile: DjProfile;
   source_profile: ListeningPlanProfile;
+  /** Features of the track the route continues from — the only reading the
+   * player has for a song it did not plan itself. */
+  seed_analysis?: { bpm?: number; key?: string | null; energy?: number; analysed?: boolean };
   items: ListeningPlanItem[];
   requests: Array<{ id: string; track_identity: string; eta_tracks: number | null }>;
 }

@@ -787,6 +787,16 @@ const MIN_PLAY_FRACTION = 0.6;
 /** Below this the analysis is a structural guess, not measured features. */
 const TRUSTED_CONFIDENCE = 0.35;
 
+/** Cleared explicitly, field by field: a store update merges, so `{ status:
+ * 'idle' }` alone would leave the finished mix's technique and cue behind for
+ * the readout to keep showing. */
+const IDLE_TRANSITION = {
+  status: 'idle',
+  technique: undefined,
+  nextTrackId: undefined,
+  at: undefined,
+} as const;
+
 interface CommittedTransition {
   queueId: string;
   fromKey: string;
@@ -865,6 +875,7 @@ function commitTransition(
     status: 'armed',
     technique: plan.technique,
     nextTrackId: toKey,
+    at: manual ? state.playback.currentTime : plan.out_cue,
   });
   audioService.armTransition(trackUrl(next), plan, {
     onDominant: () => {
@@ -899,19 +910,19 @@ function commitTransition(
       if (!owns()) return;
       committedTransition = null;
       setState('playback', { currentTime: position, duration: playingDuration() });
-      setState('autoMode', 'transition', { status: 'idle' });
+      setState('autoMode', 'transition', IDLE_TRANSITION);
       if (state.autoMode.active) void generatedQueue?.ensureRunway();
     },
     onCancel: () => {
       if (!owns()) return;
       committedTransition = null;
-      setState('autoMode', 'transition', { status: 'idle' });
+      setState('autoMode', 'transition', IDLE_TRANSITION);
     },
     onError: () => {
       if (!owns()) return;
       const index = state.playback.queue.findIndex((entry) => entry.queueId === next.queueId);
       committedTransition = null;
-      setState('autoMode', 'transition', { status: 'idle' });
+      setState('autoMode', 'transition', IDLE_TRANSITION);
       // The route stays intact; plain playback is the safe fallback.
       if (index > 0) loadIndex(index, { trigger: 'next' });
     },
@@ -1005,10 +1016,32 @@ const REPLAN_DEBOUNCE_MS = 800;
  * so the music that is playing — and the one blend that is prepared — carries
  * on undisturbed.
  */
-function scheduleRunwayReplan(): void {
+/**
+ * What the listener just asked for, in their terms.
+ *
+ * The booth reports back the instruction it received, not the internal profile
+ * it derived from it — "retuning to balanced" was a leftover from a control the
+ * listener no longer touches, and it told them nothing about their own request.
+ * A literal string is the listener's own words; a value starting with
+ * `autoMode.` is translated on the way out.
+ */
+let replanNote = '';
+
+function scheduleRunwayReplan(note: string): void {
   if (!state.autoMode.active) return;
+  replanNote = note;
   if (replanTimer) clearTimeout(replanTimer);
-  setState('autoMode', 'pendingDirection', true);
+  setState('autoMode', {
+    pendingDirection: true,
+    // Answer the gesture immediately. Waiting out the debounce before saying
+    // anything reads as a surface that ignored you.
+    activity: {
+      id: ++generatedActivityId,
+      status: 'working',
+      key: 'autoMode.agent.heard',
+      values: { note },
+    },
+  });
   replanTimer = setTimeout(() => {
     replanTimer = null;
     setState('autoMode', 'pendingDirection', false);
@@ -1019,6 +1052,7 @@ function scheduleRunwayReplan(): void {
 function cancelRunwayReplan(): void {
   if (replanTimer) clearTimeout(replanTimer);
   replanTimer = null;
+  replanNote = '';
   setState('autoMode', 'pendingDirection', false);
 }
 
@@ -1579,7 +1613,7 @@ export const actions = {
       /* private mode / storage disabled */
     }
     setState('autoMode', 'profile', profile);
-    scheduleRunwayReplan();
+    scheduleRunwayReplan(tr(`autoMode.note.crate.${profile}`));
   },
 
   setAutoDjProfile(profile: DjProfile): void {
@@ -1589,12 +1623,14 @@ export const actions = {
       /* private mode / storage disabled */
     }
     setState('autoMode', 'djProfile', profile);
-    scheduleRunwayReplan();
+    scheduleRunwayReplan(tr(`autoMode.note.dj.${profile}`));
   },
 
-  setAutoDirection(direction: Partial<DjDirection>): void {
+  /** `note` is what the listener asked for, for the booth to repeat back: their
+   * own words when they typed them, otherwise the control they moved. */
+  setAutoDirection(direction: Partial<DjDirection>, note?: string): void {
     setState('autoMode', 'direction', (current) => ({ ...current, ...direction }));
-    scheduleRunwayReplan();
+    scheduleRunwayReplan(note ?? tr('autoMode.note.direction'));
   },
 
   requestAutoTrack(track: Track): void {
@@ -1610,12 +1646,15 @@ export const actions = {
       etaTracks: null,
     };
     setState('autoMode', 'requests', (requests) => [...requests, request]);
-    scheduleRunwayReplan();
+    scheduleRunwayReplan(tr('autoMode.note.added', { title: track.title }));
   },
 
   cancelAutoRequest(id: string): void {
+    const dropped = state.autoMode.requests.find((request) => request.id === id);
     setState('autoMode', 'requests', (requests) => requests.filter((request) => request.id !== id));
-    scheduleRunwayReplan();
+    scheduleRunwayReplan(
+      dropped ? tr('autoMode.note.dropped', { title: dropped.track.title }) : tr('autoMode.note.direction'),
+    );
   },
 
   /**
@@ -2690,6 +2729,22 @@ function ensureGeneratedQueue(): GeneratedQueueController {
           previousKey = id;
           chained = true;
         }
+        // The anchor is a track the route continues from, not one it chose, so
+        // it has no plan entry of its own. Recording its reading is what lets
+        // the booth show a BPM for the song that is actually playing when a
+        // session starts from whatever the listener already had on.
+        const seed = (response as Partial<DjPlanResponse>).seed_analysis;
+        const anchorKey = queueIdentity(anchor);
+        if (seed?.analysed && !plan[anchorKey]) {
+          plan[anchorKey] = {
+            trackId: anchorKey,
+            source: 'local',
+            reasonKey: 'autoMode.reason.library',
+            fromKey: '',
+            bpm: seed.bpm,
+            key: seed.key,
+          };
+        }
         setState('autoMode', 'plan', plan);
         const djRequests = (response as Partial<DjPlanResponse>).requests;
         if (Array.isArray(djRequests)) {
@@ -2726,9 +2781,9 @@ function ensureGeneratedQueue(): GeneratedQueueController {
           activity: {
             id: ++generatedActivityId,
             status: 'working',
-            key: replacing ? 'autoMode.agent.recalibrating' : 'autoMode.agent.searching',
+            key: replacing ? 'autoMode.agent.redrawing' : 'autoMode.agent.searching',
             values: replacing
-              ? { profile: `autoMode.profile.${state.autoMode.profile}` }
+              ? { note: replanNote }
               : { title: state.playback.currentTrack?.title ?? '' },
           },
         });
@@ -2748,7 +2803,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
               ? 'autoMode.agent.steered'
               : 'autoMode.agent.queued',
           values: {
-            profile: `autoMode.profile.${state.autoMode.profile}`,
+            note: replanNote,
             count: response?.items.length ?? 0,
             tracks: response?.items.slice(0, 2).map((item) => item.title).join(' · ') ?? '',
             related: counts.related,
