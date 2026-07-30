@@ -6,6 +6,26 @@
   overscroll-behavior: contain;
 }
 
+.stage {
+  --lyrics-line-size: clamp(26px, 3.2cqw, 46px);
+  --lyrics-plain-size: clamp(19px, 2cqw, 28px);
+
+  container-type: inline-size;
+  padding: clamp(28px, 5cqw, 72px) clamp(24px, 8cqw, 110px) 42%;
+  scrollbar-width: thin;
+}
+
+.stage .synced {
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.stage .line {
+  padding-block: clamp(5px, 1cqh, 12px);
+  line-height: 1.25;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.34);
+}
+
 .hint {
   margin: var(--space-md) var(--space-2xs);
   font-size: var(--text-caption);

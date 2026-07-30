@@ -12,10 +12,21 @@ import { savedFromTrack } from '../lib/saved';
 import { FavouriteButton } from './FavouriteButton';
 import { CollectionButton } from './CollectionButton';
 import { t as tr } from '../lib/i18n';
-import { SearchPanel, panelOpen, panelSide, togglePanel } from './SearchPanel';
+import { NowPlayingBrowser, browserOpen, toggleBrowser } from './NowPlayingBrowser';
 import { RadioBadge, onStopRadio } from './RadioBadge';
 import { Spinner } from './Spinner';
 import { LyricsPanel } from './LyricsPanel';
+import { openActionMenu } from './ActionMenu';
+import { buildTrackMenu } from './trackActions';
+import {
+  DEFAULT_NOW_PLAYING_LAYOUT,
+  movePanel,
+  NOW_PLAYING_LAYOUT_KEY,
+  parseNowPlayingLayout,
+  reorderPanel,
+  resizeAdjacentPanels,
+  type NowPlayingPanelId,
+} from '../lib/nowPlayingLayout';
 import styles from './NowPlaying.module.css';
 import { clockTime } from '../lib/format';
 import type { PlaybackQueueEntry } from '../lib/playbackQueue';
@@ -42,7 +53,34 @@ export function NowPlaying() {
   let mobileQueueEl: HTMLDivElement | undefined;
   let mobileLyricsEl: HTMLDivElement | undefined;
   let sheetEl: HTMLDivElement | undefined;
+  let workspaceEl: HTMLDivElement | undefined;
   let headEl: HTMLElement | undefined;
+  const [desktopLayout, setDesktopLayout] = createSignal(
+    parseNowPlayingLayout(localStorage.getItem(NOW_PLAYING_LAYOUT_KEY), localStorage.getItem('np:panelSide')),
+  );
+  const [desktopLyrics, setDesktopLyrics] = createSignal(
+    localStorage.getItem('np:desktopLyrics') === 'open' || localStorage.getItem('np:panelTab') === 'lyrics',
+  );
+  const [layoutBusy, setLayoutBusy] = createSignal(false);
+  const desktopLyricsActive = createMemo(() => desktopLyrics() && !isPodcast());
+  const visiblePanels = createMemo(() =>
+    desktopLayout().order.filter((panel) => panel !== 'browser' || browserOpen()),
+  );
+  const panelMinimum: Record<NowPlayingPanelId, number> = { browser: 280, stage: 420, queue: 260 };
+  const gridColumns = createMemo(() =>
+    visiblePanels().flatMap((panel, index) => [
+      `minmax(${panelMinimum[panel]}px, ${desktopLayout().ratios[panel]}fr)`,
+      ...(index < visiblePanels().length - 1 ? ['6px'] : []),
+    ]).join(' '),
+  );
+
+  createEffect(() => {
+    try {
+      localStorage.setItem(NOW_PLAYING_LAYOUT_KEY, JSON.stringify(desktopLayout()));
+    } catch {
+      /* storage disabled/full */
+    }
+  });
   // Always (re)open at the top of the sheet.
   createEffect(() => {
     if (!nowPlayingOpen()) {
@@ -287,11 +325,19 @@ export function NowPlaying() {
 
   onMount(() => {
     if (!sheetEl) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && desktopLyricsActive()) {
+        event.preventDefault();
+        toggleDesktopLyrics();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
     sheetEl.addEventListener('touchstart', onSheetTouchStart, { passive: true });
     sheetEl.addEventListener('touchmove', onSheetTouchMove, { passive: false });
     sheetEl.addEventListener('touchend', onSheetTouchEnd, { passive: true });
     sheetEl.addEventListener('touchcancel', onSheetTouchCancel, { passive: true });
     onCleanup(() => {
+      window.removeEventListener('keydown', onKeyDown);
       sheetEl?.removeEventListener('touchstart', onSheetTouchStart);
       sheetEl?.removeEventListener('touchmove', onSheetTouchMove);
       sheetEl?.removeEventListener('touchend', onSheetTouchEnd);
@@ -426,10 +472,11 @@ export function NowPlaying() {
     </Show>
   );
 
-  const QueueList = (props: { className: string; setRef: (el: HTMLDivElement) => void }) => (
+  const QueueList = (props: { className: string; setRef: (el: HTMLDivElement) => void; dragHandle?: JSX.Element }) => (
     <div class={`${styles.queue} ${props.className}`}>
       <div class={styles.queueHead}>
         <span class={styles.queueHeading}>
+          {props.dragHandle}
           <h2 class={styles.queueTitle}>{tr('nowPlaying.queue')}</h2>
           <span class={styles.queueCount}>
             {1 + manualQueue().length + contextQueue().length + generatedQueue().length}
@@ -483,6 +530,215 @@ export function NowPlaying() {
     </div>
   );
 
+  const animateRects = (before: Map<Element, DOMRect>, selector: string) => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    requestAnimationFrame(() => {
+      for (const element of sheetEl?.querySelectorAll<HTMLElement>(selector) ?? []) {
+        const first = before.get(element);
+        const last = element.getBoundingClientRect();
+        if (!first || !last.width || !last.height) continue;
+        const dx = first.left - last.left;
+        const dy = first.top - last.top;
+        const sx = first.width / last.width;
+        const sy = first.height / last.height;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(sx - 1) < 0.01 && Math.abs(sy - 1) < 0.01) continue;
+        element.animate(
+          [
+            { transformOrigin: 'top left', transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
+            { transformOrigin: 'top left', transform: 'none' },
+          ],
+          { duration: 420, easing: 'cubic-bezier(.2,.8,.2,1)' },
+        );
+      }
+    });
+  };
+
+  const captureRects = (selector: string) =>
+    new Map(
+      [...(sheetEl?.querySelectorAll<HTMLElement>(selector) ?? [])]
+        .map((element) => [element, element.getBoundingClientRect()] as const),
+    );
+
+  const updateLayout = (next: () => void) => {
+    const before = captureRects('[data-now-playing-tile]');
+    next();
+    animateRects(before, '[data-now-playing-tile]');
+  };
+
+  const changePanelOrder = (panel: NowPlayingPanelId, target: number) =>
+    updateLayout(() => setDesktopLayout((layout) => ({
+      ...layout,
+      order: reorderPanel(layout.order, panel, target),
+    })));
+
+  let draggedPanel: NowPlayingPanelId | null = null;
+  const PanelGrip = (props: { panel: NowPlayingPanelId }) => (
+    <button
+      class={styles.panelGrip}
+      type="button"
+      draggable
+      aria-label={tr('nowPlaying.movePanel', { panel: props.panel })}
+      title={tr('nowPlaying.movePanel', { panel: props.panel })}
+      onDragStart={(event) => {
+        draggedPanel = props.panel;
+        event.dataTransfer?.setData('text/plain', props.panel);
+        if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+      }}
+      onDragEnd={() => { draggedPanel = null; }}
+      onClick={() => {
+        const index = desktopLayout().order.indexOf(props.panel);
+        openActionMenu({
+          title: tr('nowPlaying.layoutPanel'),
+          actions: [
+            {
+              label: tr('nowPlaying.movePanelLeft'),
+              disabled: index <= 0,
+              onSelect: () => updateLayout(() => setDesktopLayout((layout) => ({
+                ...layout,
+                order: movePanel(layout.order, props.panel, -1),
+              }))),
+            },
+            {
+              label: tr('nowPlaying.movePanelRight'),
+              disabled: index >= 2,
+              onSelect: () => updateLayout(() => setDesktopLayout((layout) => ({
+                ...layout,
+                order: movePanel(layout.order, props.panel, 1),
+              }))),
+            },
+            {
+              label: tr('nowPlaying.resetLayout'),
+              onSelect: () => updateLayout(() => setDesktopLayout({
+                ...DEFAULT_NOW_PLAYING_LAYOUT,
+                order: [...DEFAULT_NOW_PLAYING_LAYOUT.order],
+                ratios: { ...DEFAULT_NOW_PLAYING_LAYOUT.ratios },
+              })),
+            },
+          ],
+        });
+      }}
+    >
+      <i /><i /><i /><i /><i /><i />
+    </button>
+  );
+
+  const Tile = (props: { panel: NowPlayingPanelId; children: JSX.Element }) => (
+    <section
+      class={styles.tile}
+      data-now-playing-tile={props.panel}
+      onDragOver={(event) => {
+        if (draggedPanel && draggedPanel !== props.panel) event.preventDefault();
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        const panel = draggedPanel;
+        draggedPanel = null;
+        if (!panel || panel === props.panel) return;
+        changePanelOrder(panel, visiblePanels().indexOf(props.panel));
+      }}
+    >
+      {props.children}
+    </section>
+  );
+
+  const Splitter = (props: { left: NowPlayingPanelId; right: NowPlayingPanelId }) => {
+    let startX = 0;
+    let startRatios = desktopLayout().ratios;
+    let width = 1;
+    let activePointer: number | null = null;
+    return (
+      <div
+        class={styles.splitter}
+        role="separator"
+        tabindex="0"
+        aria-orientation="vertical"
+        aria-label={tr('nowPlaying.resizePanels')}
+        onDblClick={() => updateLayout(() => setDesktopLayout((layout) => ({
+          ...layout,
+          ratios: { ...DEFAULT_NOW_PLAYING_LAYOUT.ratios },
+        })))}
+        onPointerDown={(event) => {
+          if (layoutBusy()) return;
+          activePointer = event.pointerId;
+          startX = event.clientX;
+          startRatios = { ...desktopLayout().ratios };
+          width = workspaceEl?.clientWidth || 1;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          setLayoutBusy(true);
+        }}
+        onPointerMove={(event) => {
+          if (activePointer !== event.pointerId) return;
+          const minimums = {
+            [props.left]: panelMinimum[props.left] / width,
+            [props.right]: panelMinimum[props.right] / width,
+          };
+          setDesktopLayout((layout) => ({
+            ...layout,
+            ratios: resizeAdjacentPanels(startRatios, props.left, props.right, (event.clientX - startX) / width, minimums),
+          }));
+        }}
+        onPointerUp={(event) => {
+          if (activePointer !== event.pointerId) return;
+          activePointer = null;
+          setLayoutBusy(false);
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+          event.preventDefault();
+          const direction = event.key === 'ArrowLeft' ? -0.02 : 0.02;
+          const containerWidth = workspaceEl?.clientWidth || 1;
+          setDesktopLayout((layout) => ({
+            ...layout,
+            ratios: resizeAdjacentPanels(layout.ratios, props.left, props.right, direction, {
+              [props.left]: panelMinimum[props.left] / containerWidth,
+              [props.right]: panelMinimum[props.right] / containerWidth,
+            }),
+          }));
+        }}
+      />
+    );
+  };
+
+  const toggleDesktopLyrics = () => {
+    if (layoutBusy() || isPodcast()) return;
+    const before = captureRects('[data-lyrics-morph]');
+    const next = !desktopLyrics();
+    setLayoutBusy(true);
+    setDesktopLyrics(next);
+    localStorage.setItem('np:desktopLyrics', next ? 'open' : 'closed');
+    animateRects(before, '[data-lyrics-morph]');
+    window.setTimeout(() => setLayoutBusy(false), 440);
+  };
+
+  const openLyricsOverflow = () => {
+    const track = t();
+    if (!track) return;
+    openActionMenu({
+      title: track.title,
+      subtitle: track.artist,
+      actions: [
+        {
+          label: `${state.playback.shuffle ? '✓  ' : ''}${tr('nowPlaying.shuffle')}`,
+          onSelect: () => actions.toggleShuffle(),
+        },
+        {
+          label: `${state.playback.repeat !== 'off' ? '✓  ' : ''}${tr('nowPlaying.repeat')}`,
+          onSelect: () => actions.cycleRepeat(),
+        },
+        {
+          label: state.playback.radioMode ? tr('nowPlaying.stopRadioTitle') : tr('trackActions.startRadio'),
+          onSelect: () => state.playback.radioMode ? void onStopRadio() : void actions.startRadio(track),
+        },
+        ...buildTrackMenu(track, {
+          onAddToPlaylist: openPlaylistPicker,
+          onEditMetadata: openMetadataEditor,
+          onPlayOnDevice: openPlayOnDevice,
+        }).filter((action) => action.label !== tr('trackActions.startRadio')),
+      ],
+    });
+  };
+
   return (
     <div
       ref={sheetEl}
@@ -496,15 +752,14 @@ export function NowPlaying() {
       <header class={styles.head} ref={headEl}>
         <div class={styles.headLeading}>
           <button
-            classList={{ [styles.iconBtn]: true, [styles.panelToggle]: true, [styles.panelToggleOn]: panelOpen() }}
+            classList={{ [styles.iconBtn]: true, [styles.panelToggle]: true, [styles.panelToggleOn]: browserOpen() }}
             type="button"
-            aria-label={panelOpen() ? tr('nowPlaying.hideSearchPanel') : tr('nowPlaying.showSearchPanel')}
-            aria-pressed={panelOpen()}
-            onClick={togglePanel}
+            aria-label={browserOpen() ? tr('nowPlaying.hideSearchPanel') : tr('nowPlaying.showSearchPanel')}
+            aria-pressed={browserOpen()}
+            onClick={toggleBrowser}
           >
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <circle cx="11" cy="11" r="7" />
-              <path d="M21 21l-4.3-4.3" />
+              <path d="M4 4h16v16H4zM9 4v16M13 8h4M13 12h4M13 16h3" />
             </svg>
           </button>
           <Show when={!t() || !isPodcast()}>
@@ -529,11 +784,32 @@ export function NowPlaying() {
       </header>
 
       <Show when={t()} fallback={<div class={styles.empty}>{tr('nowPlaying.nothingPlaying')}</div>}>
-        <div class={styles.main} data-panel-side={panelSide()}>
-        <div class={styles.body} ref={bodyEl}>
+        <div
+          class={styles.main}
+          ref={workspaceEl}
+          style={{ 'grid-template-columns': gridColumns() }}
+          data-layout-busy={layoutBusy() ? '' : undefined}
+        >
+        <For each={visiblePanels()}>
+          {(panel, index) => (
+            <>
+              <Show when={index() > 0}>
+                <Splitter left={visiblePanels()[index() - 1]} right={panel} />
+              </Show>
+              <Switch>
+                <Match when={panel === 'stage'}>
+                  <Tile panel="stage">
+        <PanelGrip panel="stage" />
+        <div
+          class={styles.body}
+          classList={{ [styles.desktopLyricsStage]: desktopLyricsActive() }}
+          data-lyrics-stage={desktopLyricsActive() ? '' : undefined}
+          ref={bodyEl}
+        >
           <div class={styles.media}>
             <div
               class={styles.visualSlot}
+              data-lyrics-morph=""
               data-queue-open={mobileVisual().queueOpen ? '' : undefined}
               data-lyrics-open={!mobileVisual().queueOpen && mobileVisual().content === 'lyrics' ? '' : undefined}
               data-now-playing-cover-slot=""
@@ -563,8 +839,40 @@ export function NowPlaying() {
                   </svg>
                 </button>
               </Show>
+              <Show when={desktopLyricsActive()}>
+                <div class={styles.desktopLyrics}>
+                  <LyricsPanel variant="stage" />
+                </div>
+              </Show>
+              <Show when={!isPodcast()}>
+                <button
+                  classList={{
+                    [styles.desktopLyricsToggle]: true,
+                    [styles.desktopLyricsToggleOn]: desktopLyricsActive(),
+                  }}
+                  type="button"
+                  aria-label={desktopLyricsActive() ? tr('nowPlaying.showCover') : tr('nowPlaying.showLyrics')}
+                  aria-pressed={desktopLyricsActive()}
+                  disabled={layoutBusy()}
+                  onClick={toggleDesktopLyrics}
+                >
+                  <Show
+                    when={!desktopLyricsActive()}
+                    fallback={
+                      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <rect x="4" y="4" width="16" height="16" rx="2" />
+                        <path d="m7 16 4-4 3 3 2-2 2 3" />
+                      </svg>
+                    }
+                  >
+                    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                      <path d="M5 6h14M5 10h10M5 14h14M5 18h8" />
+                    </svg>
+                  </Show>
+                </button>
+              </Show>
             </div>
-            <div class={styles.info}>
+            <div class={styles.info} data-lyrics-morph="">
               <div class={styles.titleRow}>
                 <h1 class={styles.title}>{t()!.title}</h1>
                 <Show when={t()!.audio_quality === 'lossless' && t()!.audio_identity_verified}>
@@ -583,7 +891,7 @@ export function NowPlaying() {
           </div>
 
           <div class={styles.controlsPanel}>
-            <div class={styles.seekWrap}>
+            <div class={styles.seekWrap} data-lyrics-morph="">
             <input
               class={styles.seek}
               type="range"
@@ -601,7 +909,7 @@ export function NowPlaying() {
             </div>
             </div>
 
-            <div class={styles.controls}>
+            <div class={styles.controls} data-lyrics-morph="">
             <button
               classList={{ [styles.toggle]: true, [styles.on]: state.playback.shuffle }}
               type="button"
@@ -670,7 +978,7 @@ export function NowPlaying() {
             </button>
             </div>
 
-            <div class={styles.actionsBar}>
+            <div class={styles.actionsBar} data-lyrics-morph="">
             <Show when={state.playback.queue.length > 1}>
               <button
                 classList={{
@@ -697,12 +1005,14 @@ export function NowPlaying() {
             </Show>
 
             <Show when={!isPodcast()}>
-              <CollectionButton
-                entry={savedFromTrack(t()!)}
-                class={styles.actBtn}
-                hideOwned
-                tooltip
-              />
+              <span class={styles.collectionAction}>
+                <CollectionButton
+                  entry={savedFromTrack(t()!)}
+                  class={styles.actBtn}
+                  hideOwned
+                  tooltip
+                />
+              </span>
             </Show>
 
             {/* Radio earns a permanent slot because it is the only action here
@@ -714,6 +1024,7 @@ export function NowPlaying() {
               <button
                 classList={{
                   [styles.actBtn]: true,
+                  [styles.radioAction]: true,
                   [styles.actOn]: state.playback.radioMode,
                   [styles.actPulse]: state.playback.radioLoading,
                 }}
@@ -770,14 +1081,14 @@ export function NowPlaying() {
               type="button"
               aria-label={tr('common.more')}
               title={tr('common.more')}
-              onClick={() =>
-                openTrackMenu(t()!, {
-                  navigate,
-                  onAddToPlaylist: openPlaylistPicker,
-                  onEditMetadata: openMetadataEditor,
-                  onPlayOnDevice: openPlayOnDevice,
-                })
-              }
+              onClick={() => desktopLyricsActive()
+                ? openLyricsOverflow()
+                : openTrackMenu(t()!, {
+                    navigate,
+                    onAddToPlaylist: openPlaylistPicker,
+                    onEditMetadata: openMetadataEditor,
+                    onPlayOnDevice: openPlayOnDevice,
+                  })}
             >
               <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
                 <circle cx="5" cy="12" r="2" />
@@ -787,14 +1098,28 @@ export function NowPlaying() {
             </button>
             </div>
           </div>
+          <div class={styles.lyricsControlPill} aria-hidden="true" />
         </div>
-
-        {/* Desktop queue column: always mounted while something plays so the
-            three-panel layout stays stable (no columns popping in and out as
-            the queue grows or shrinks). Hidden below 768px by CSS. */}
-        <QueueList className={styles.desktopQueue} setRef={(el) => { desktopQueueEl = el; }} />
-
-        <SearchPanel />
+                  </Tile>
+                </Match>
+                <Match when={panel === 'queue'}>
+                  <Tile panel="queue">
+                    <QueueList
+                      className={styles.desktopQueue}
+                      setRef={(el) => { desktopQueueEl = el; }}
+                      dragHandle={<PanelGrip panel="queue" />}
+                    />
+                  </Tile>
+                </Match>
+                <Match when={panel === 'browser'}>
+                  <Tile panel="browser">
+                    <NowPlayingBrowser onClose={toggleBrowser} dragHandle={<PanelGrip panel="browser" />} />
+                  </Tile>
+                </Match>
+              </Switch>
+            </>
+          )}
+        </For>
         </div>
       </Show>
     </div>
