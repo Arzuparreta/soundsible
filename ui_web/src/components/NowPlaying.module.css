@@ -1269,16 +1269,23 @@
     width: 2px;
     content: '';
     background: var(--hairline);
-    transition: background var(--dur-short), box-shadow var(--dur-short);
+    opacity: 0;
+    transition:
+      opacity var(--dur-short),
+      background var(--dur-short),
+      box-shadow var(--dur-short);
   }
 
-  .splitter:focus-visible::after {
+  .splitter:focus-visible::after,
+  .splitter:active::after {
+    opacity: 1;
     background: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-faint);
   }
 
   @media (hover: hover) and (pointer: fine) {
     .splitter:hover::after {
+      opacity: 1;
       background: var(--accent);
       box-shadow: 0 0 0 3px var(--accent-faint);
     }
