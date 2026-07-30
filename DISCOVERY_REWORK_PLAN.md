@@ -21,7 +21,11 @@ This is not a Spotify clone plan. The point is to make Soundsible feel like a se
 
 Soundsible already has strong ingredients: Deezer metadata proxying, YouTube and YouTube Music resolution, preview playback, downloader queue, radio, playlists, favourites, podcasts, migration fixtures, local telemetry, and an existing SQLite YouTube resolution cache.
 
-The product gap is coherence. Discover is still mostly charts plus search. Recommendation logic lives in frontend modules and cannot act as a stable product contract. External resolving and downloading feel like implementation details rather than a premium save flow. Search, radio, podcasts, imports, and library actions are not yet unified as one taste system.
+At the start of this roadmap, the product gap was coherence: Discover was
+mostly charts plus search, generated playback logic lived in frontend modules,
+and external resolving and downloading felt like implementation details rather
+than a premium save flow. The current implementation status below records which
+parts of that diagnosis have since been resolved and which remain open.
 
 ## Implementation Roadmap
 
@@ -166,9 +170,22 @@ This makes later design work implementation-safe instead of speculative.
 
 ## Implementation Status
 
-Last updated: 2026-07-30 (ranked discovery foundation).
+Last updated: 2026-07-30 (unified generated-listening planner).
 
-Implemented in the ranked discovery foundation:
+Implemented in the unified generated-listening planner:
+
+- `POST /api/discovery/music/plan` accepts Autoplay, Radio, and Auto Mode
+  intents and returns the final playable queue order after account ranking,
+  exclusions, source policy, and artist diversification.
+- One browser coordinator owns generated-session cancellation, stale-result
+  protection, retries, atomic Auto Mode profile changes, and refill.
+- Radio retains its existing UI and now replenishes continuously until stopped.
+  Auto Mode retains its three profiles, Autoplay remains invisible, and Search
+  is unchanged.
+- The old client-side Auto Mode pool mixer and separate Radio/Autoplay
+  coordinators have been removed.
+
+Previously implemented in the ranked discovery foundation:
 
 - Listening rollups now add time-decayed artist and track affinity, recent
   context, event counts, and cold/warming/established profile maturity.
@@ -212,12 +229,10 @@ Implemented in Phase 3 (Save and Resolve):
 - `saveTrackToLibrary()` exported from `discovery.js`; wired to all `.dl-add-one[data-deezer-id]` buttons via `deezer_actions.js`.
 - Tests: `tests/test_resolution_confidence.py` (13 tests) covering scoring bands, DB migration, upsert, and empty-input guards.
 
-Known limits after the unified Search discovery slice:
+Known limits:
 
 - Recommendation scoring remains deterministic and local-first; this slice does
   not introduce embeddings or a hosted recommendation dependency.
-- Search and playback generators share recommendation identity/feedback ranking,
-  but Auto Mode and Radio still assemble their candidate pools independently.
 - Podcast recommendations remain less mature than music recommendations.
 - Provider-backed enrichment depends on outbound services; local discovery and
   explicit library search remain usable when those services are unavailable.
@@ -242,12 +257,7 @@ Implemented in Option A (Listening-Event Rollups):
 
 ## Where To Continue
 
-The next recommendation milestone is to move Autoplay, Auto Mode, and the
-seeded "more like this" action behind one server-side planner built on the
-shared discovery candidate and ranking foundation, while keeping Auto Mode as
-the hands-off driving/co-pilot experience.
-After that,
-the highest-value product tracks are playback continuity (gapless,
+The highest-value product tracks are playback continuity (gapless,
 normalization, crossfade), the portable desktop release path, and a richer
 podcast profile. Each remains a separate shippable milestone; none is implied
 complete by this discovery slice.

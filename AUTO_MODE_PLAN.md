@@ -32,46 +32,40 @@ ambient, visibly autonomous and deliberately lower-input.
   orange accent, Plus Jakarta Sans and dark tokens remain, while scale,
   composition, depth and motion change substantially.
 
-## Autopilot contract
+## Generated-listening contract
 
-The engine lives in `ui_web/src/lib/autopilot.ts` and is independent from the
-view. It consumes two quota buckets fed by the platform's discovery
-capabilities:
+Auto Mode is one intent of Soundsible's shared generated-listening planner. The
+Station endpoint `POST /api/discovery/music/plan` assembles, ranks and orders
+three candidate pools:
 
 - **Related** — tracks related to the current song (YouTube related-mix) plus
   the current artist's top tracks (`/api/catalog/artist`).
-- **Node** — the assembled node-discovery feed plus the trending music feed
-  (`/api/discovery/music/feed`).
+- **Discovery** — the ranked discovery graph and resolved artist candidates.
 - **Local** — the listener's own library and favourites.
 
-Node and related identities are already playable video ids. Catalog rows
-(charts, artist top-tracks) carry Deezer metadata only, so `discoveryPools.ts`
-resolves a bounded number of them to video ids — bounded concurrency, a
-session-lived per-track resolution cache, short-TTL feed caches — and drops the
-unresolved and library-owned ones. The node feed is awaited to first paint
-(`ensureNodeFeedReady`) so it is not empty on the first plan. Related resolution
-is given a 12s ceiling because a library seed with no YouTube identity can chain
-catalog-resolve → search → related-mix. Autopilot never calls `startRadio()`:
-classic Radio is allowed to replace its queue, while Auto Mode is not.
+The server resolves external metadata to playable video ids with bounded
+concurrency, drops unresolved rows, applies the account's local learning
+signals, deduplicates downloaded/preview twins and returns the final order.
+`ui_web/src/lib/generatedQueue.ts` owns only browser-session lifecycle:
+cancellation, stale-result protection, retries, refill and atomic profile
+changes. It neither rebuilds provider pools nor re-ranks the response. Radio
+and Autoplay use the same contract with their own intent policies.
 
 Profiles define the source mix for each eight-slot batch:
 
-| Profile | Local | Related | Nodes |
+| Profile | Local | Related | Discovery |
 | --- | ---: | ---: | ---: |
 | Familiar | 4 | 3 | 1 |
 | Balanced | 2 | 3 | 3 |
 | Explore | 1 | 3 | 4 |
 
-Selection deduplicates downloaded/preview twins, excludes the active queue and
-the last 60 session identities, and permits at most two tracks by one artist in
-a batch. When discovery candidates exist, the number of local tracks is capped
-to the profile's local share so an unlucky source mix can't quietly refill the
-whole batch from the library (which made every profile look identical and
-library-only). The cap is lifted only when no external candidate exists at all,
-so offline playback still degrades gracefully to the library instead of
+Selection excludes the active queue and recent session identities and permits
+at most two tracks by one artist in an Auto Mode segment. Profiles are explicit
+source policies, with graceful cross-pool fallback when a provider is empty, so
+offline or partial-provider operation can continue from the library instead of
 stalling. Generic filler is not used.
 
-Autopilot records ownership and reason metadata outside `Track`. Changing
+The queue records ownership and reason metadata outside `Track`. Changing
 profile removes only future Auto-owned entries, preserves the current track and
 every manual entry, and then plans again. On exit, ownership is forgotten so a
 later session treats the surviving queue as the listener's queue.
@@ -97,10 +91,10 @@ The visible hierarchy is intentionally sparse:
 - Ordered transport and the actual upcoming queue.
 - Favourite for local tracks; Save for external previews.
 
-Engine work appears only while it is happening, as a transient agent-style
-status beside the current track. The working message names the seed being
-analysed. Its completion message names the tracks added and reports the real
-candidate counts returned by related discovery, nodes and the local library.
+Planning work appears only while it is happening, as a transient status beside
+the current track. The working message names the seed being analysed. Its
+completion message names the tracks added and reports the real candidate counts
+returned by related discovery, discovery and the local library.
 There is no persistent activity panel, phase copy or decorative history.
 
 The queue is a native horizontal rail rather than a fixed summary: every future
@@ -129,7 +123,7 @@ inside: what Now Playing did not use is all the panel gets, and on a phone that
 is not enough for the panel's title. So the metadata moves onto the artwork it
 names — a short frosted band across the foot of the cover, its blur dissolving
 upward, holding the title (two lines at most, same `titleFit` tiers) and the
-artist. The autopilot's line moves the other way, into the band above the cover
+artist. Auto Mode's status line moves the other way, into the band above the cover
 when one is tall enough to hold it. What is left in the panel is the transport.
 The panel's metadata block stays in the DOM, clipped, because it is the live
 region that announces a track change; the band on the cover is decoration and is
@@ -137,7 +131,7 @@ hidden from assistive tech. Both are mobile-only: desktop and TV keep the title
 as the largest thing on screen.
 
 **Content never changes the layout.** Titles run from 3 to 90 characters and the
-autopilot's status line appears and clears every few minutes; neither may move
+Auto Mode's status line appears and clears as plans complete; neither may move
 the artwork. The title lives in a fixed two-line well whose type size comes from
 a length tier (`titleFit`), clamped to two lines and ellipsised beyond; the
 status line has a reserved slot; the artwork is sized from the space that is
@@ -180,14 +174,15 @@ The store exposes:
 - `actions.setAutoProfile(profile)` and `actions.autoSkip()`.
 
 The persisted key is `auto:profile`. Session plan, activity, recency and queue
-ownership remain ephemeral. No database migration or backend endpoint is
+ownership remain ephemeral. The server contract is
+`POST /api/discovery/music/plan`; no queue persistence or database migration is
 required.
 
 ## Verification
 
-Automated coverage includes source quotas, canonical deduplication, artist caps,
-queue preservation, lookahead filling, generated ownership, profile replanning,
-preference restoration and podcast rejection.
+Automated coverage includes source policies, canonical deduplication, artist
+caps, queue preservation, continuous lookahead filling, generated ownership,
+profile replanning, cancellation, preference restoration and podcast rejection.
 
 Required gates:
 

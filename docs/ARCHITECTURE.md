@@ -129,6 +129,16 @@ Catalog resolve queues the winner's stream-URL resolution on the **preview prefe
   background and served stale-while-revalidate.
 - Playback discovery pools can consume that contract without changing the
   existing **Search** presentation. **Library** remains the root route.
+- **`POST /api/discovery/music/plan`** is the generated-listening contract for
+  Autoplay, Radio, and Auto Mode. The Station assembles playable local,
+  seed-related, cached graph, and artist candidates, applies the account
+  profile, diversity, exclusions, and intent/profile policy, then returns the
+  final ordered segment. A single browser coordinator owns cancellation,
+  retries, and refill; it never re-ranks the server response.
+- Radio remains the explicit “more of this now” mode and continuously refills.
+  Auto Mode retains its hands-off screen and Familiar/Balanced/Explore profiles;
+  Autoplay remains an invisible finite-context continuation. Search does not
+  use the queue planner and its UI is unchanged.
 - **Playback and downloads** for those rows do **not** use Deezer audio. The UI runs **YouTube / YouTube Music text search** (same ODST `/api/downloader/youtube/search` path as the downloader) using Deezer title + artist, picks a matching video id, then:
   - **In-app preview** streams via **`GET /api/preview/stream/<video_id>`** (playback blueprint).
   - **Download queue** uses the resolved item like any other ODST search result.
@@ -152,7 +162,7 @@ Catalog resolve queues the winner's stream-URL resolution on the **preview prefe
 - Each account has transactional `discovery_events` and
   `discovery_signals` tables in its own `library.db`, plus an inspectable local
   `listening-events.jsonl`.
-- Discover, Radio, Auto Mode, and podcast recommendations use the same exact
+- Discovery, Radio, Auto Mode, Autoplay, and podcast recommendations use the same exact
   identity multiplier. `not_interested` is soft, monotonic, undoable, and
   bounded above zero; it never becomes a blacklist. Search and manual queues do
   not call this ranker.
@@ -170,8 +180,9 @@ A failed load surfaces on two channels (`play()` rejects **and** the element fir
 ### 4B. Playback queue contract (client)
 
 The Solid player uses occurrence-based manual, context, and generated lanes.
-Their ordering, replacement, shuffle, Radio, Auto Mode, and Autoplay semantics
-are normative in [`PLAYBACK_QUEUE_CONTRACT.md`](PLAYBACK_QUEUE_CONTRACT.md).
+Its single generated-session coordinator and the ordering, replacement,
+shuffle, Radio, Auto Mode, and Autoplay semantics are normative in
+[`PLAYBACK_QUEUE_CONTRACT.md`](PLAYBACK_QUEUE_CONTRACT.md).
 
 ### 5. Data and configuration (conceptual)
 

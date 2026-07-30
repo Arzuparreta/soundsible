@@ -6,7 +6,7 @@
  * across a room. Two rules hold the composition together.
  *
  * 1. Content never changes the layout. Titles run from 3 to 90 characters and
- *    the autopilot's status line comes and goes every few minutes; neither may
+ *    Auto Mode's status line comes and goes as plans complete; neither may
  *    move the artwork. The title is a fixed two-line well whose type size comes
  *    from a length tier, the status line has a reserved slot, and the cover is
  *    sized from the space that is *left over* — never the other way round.
@@ -472,7 +472,7 @@
   white-space: nowrap;
 }
 
-/* ── Panel: title, artist, autopilot status, transport ── */
+/* ── Panel: title, artist, Auto Mode status, transport ── */
 .panel {
   display: flex;
   flex-direction: column;
@@ -528,7 +528,7 @@
   white-space: nowrap;
 }
 
-/* Reserved slot. The autopilot reports every few minutes and the report clears
+/* Reserved slot. Auto Mode reports as plans complete and the report clears
    itself after six seconds; without a fixed well the cover and title would jump
    twice per report. */
 .status {
@@ -855,7 +855,7 @@
   }
 }
 
-/* Tall landscape has room for the autopilot to speak in full. */
+/* Tall landscape has room for the Auto Mode status in full. */
 @media (min-width: 600px) and (min-aspect-ratio: 5 / 4) and (min-height: 760px) {
   .root { --auto-status-lines: 2; }
 }
@@ -982,7 +982,7 @@
     animation: none;
   }
 
-  /* The autopilot line rides in the empty band above the pinned artwork, in the
+  /* The Auto Mode status rides in the empty band above the pinned artwork, in the
      artwork's own column, so it reads as its caption. The panel below is laid
      out against the cover's flow position, not the pinned one, which is what put
      this line on top of the cover's bottom edge. The top comes from JS and is

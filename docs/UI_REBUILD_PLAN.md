@@ -19,7 +19,7 @@
 >
 > **Views done so far:** Library, **Favourites**, **Search** (client-side library filter), **Settings**
 > (connection, library reload/rescan, device name). Reusable `TrackList` (virtualized) + `ViewHeader`
-> extracted; tab bar IA has since converged on Buscar / Biblioteca / Listas / Podcasts / Ajustes.
+> extracted; tab bar IA has since converged on Biblioteca / Buscar / Listas / Podcasts / Ajustes.
 >
 > **Process (user decision 2026-06-16):** build ALL views first, then ONE full test-coverage pass at
 > the end — not test-as-you-go. Verify each batch with typecheck + build for now.
@@ -32,8 +32,9 @@
 > AbortController cancellation + in-memory cache), one-tap **preview** (`/api/preview/stream/<id>`,
 > no download, via the playback refactor where `currentTrack` is the object + `source:'preview'`),
 > one-tap **add to library** (`POST /api/downloader/queue`, row shows spinner → ✓ when the track lands
-> in the library via `library_updated`), and **radio** (`/api/downloader/youtube/related`) for endless
-> discovery. New `api.ts` methods: searchYouTube / relatedYouTube / enqueueDownload.
+> in the library via `library_updated`), and **radio** (now planned through
+> `/api/discovery/music/plan`) for continuous discovery. The low-level related
+> endpoint remains a provider primitive rather than a second queue engine.
 >
 > **Podcasts DONE** — `routes/Podcasts.tsx` (subscriptions grid + iTunes search → subscribe) +
 > `routes/PodcastShow.tsx` (`/podcasts/:id`, episodes via `createResource`, play via peek→token→stream,

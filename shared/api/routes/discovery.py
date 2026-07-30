@@ -10,7 +10,7 @@ import re
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import ThreadPoolExecutor, Future, wait
 
 import requests
 from flask import Blueprint, Response, jsonify, request
@@ -32,6 +32,12 @@ from shared.discovery_intelligence import (
     undo_discovery_feedback,
 )
 from shared.hardening import rate_limit
+from shared.listening_planner import (
+    AUTO_PROFILES,
+    LISTENING_INTENTS,
+    plan_generated_queue,
+)
+from shared.url_utils import validate_youtube_video_id
 
 from odst_tool.config import prefer_ytmusic
 
@@ -68,6 +74,7 @@ _DISCOVERY_FEED_STALE_SEC = 3600
 _DISCOVERY_FEED_INFLIGHT: set[str] = set()
 _DISCOVERY_FEED_LOCK = threading.Lock()
 _DISCOVERY_FEED_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="soundsible-discovery")
+_PLAN_RESOLVE_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="soundsible-plan-resolve")
 _LOOKUP_CHUNK = 40
 # Short search terms — merged and deduped when RSS chart is unavailable.
 _ITUNES_TOP_FALLBACK_TERMS = ("podcast", "news", "comedy", "technology", "sports")
@@ -671,7 +678,7 @@ def _cached_related_feed_candidates(
     sections: list[dict],
     limit: int,
 ) -> None:
-    """Add cached YouTube graph candidates without blocking Search.
+    """Add cached YouTube graph candidates without blocking feed consumers.
 
     Missing seeds are warmed in the existing bounded worker pool.
     """
@@ -888,6 +895,275 @@ def discovery_music_feed():
     revalidating = _schedule_discovery_feed_refresh(cache_key, user_id, limit)
     body.update({"cached": False, "stale": False, "revalidating": revalidating})
     return jsonify(body)
+
+
+def _planner_track_by_id(metadata, track_id: str):
+    for track in list(metadata.tracks if metadata and metadata.tracks else []):
+        if str(getattr(track, "id", "")) == track_id:
+            return track
+    return None
+
+
+def _planner_item_from_related(row: dict) -> dict | None:
+    video_id = str(row.get("video_id") or row.get("id") or "").strip()
+    if not validate_youtube_video_id(video_id):
+        return None
+    return {
+        "id": video_id,
+        "youtube_id": video_id,
+        "title": str(row.get("title") or "Unknown"),
+        "artist": str(row.get("channel") or row.get("uploader") or row.get("artist") or ""),
+        "duration": int(row.get("duration") or 0),
+        "cover": str(row.get("thumbnail") or ""),
+        "source": "preview",
+        "source_pool": "related",
+        "reason": row.get("reason"),
+        "reason_code": row.get("reason_code") or "seed_related",
+        "recommendation_identity": row.get("recommendation_identity") or f"music:youtube:{video_id}",
+        "score": float(row.get("score") or 0.5),
+        "external_ids": {"youtube_id": video_id},
+    }
+
+
+def _planner_item_from_feed(item: dict, *, pool: str) -> dict | None:
+    external = item.get("external_ids") if isinstance(item.get("external_ids"), dict) else {}
+    video_id = str(external.get("youtube_id") or item.get("youtube_id") or "").strip()
+    track_id = str(item.get("track_id") or "").strip()
+    if not track_id and not validate_youtube_video_id(video_id):
+        return None
+    item_id = track_id or video_id
+    return {
+        "id": item_id,
+        "track_id": track_id or None,
+        "youtube_id": video_id or None,
+        "title": str(item.get("title") or "Unknown"),
+        "artist": str(item.get("artist") or ""),
+        "album": str(item.get("album") or ""),
+        "duration": int(item.get("duration") or 0),
+        "cover": str(item.get("cover") or ""),
+        "source": "library" if track_id else "preview",
+        "source_pool": pool,
+        "reason": item.get("reason"),
+        "reason_code": item.get("reason_code"),
+        "recommendation_identity": item.get("recommendation_identity")
+        or (f"music:track:{track_id}" if track_id else f"music:youtube:{video_id}"),
+        "score": float(item.get("score") or 0.5),
+        "external_ids": {**external, **({"youtube_id": video_id} if video_id else {})},
+    }
+
+
+def _planner_resolve_artist_candidate(item: dict, user_id: str | None) -> dict | None:
+    from shared.api.routes.catalog import _resolve_candidates
+    from shared.user_context import user_context
+
+    with user_context(user_id):
+        best, _ = _resolve_candidates(
+            str(item.get("artist") or ""),
+            str(item.get("title") or ""),
+            int(item.get("duration") or 0) or None,
+        )
+    video_id = str(best.get("id") or "").strip()
+    if not validate_youtube_video_id(video_id):
+        return None
+    resolved = dict(item)
+    resolved["external_ids"] = {
+        **(item.get("external_ids") if isinstance(item.get("external_ids"), dict) else {}),
+        "youtube_id": video_id,
+    }
+    resolved["youtube_id"] = video_id
+    resolved["id"] = video_id
+    resolved["source"] = "preview"
+    resolved["recommendation_identity"] = f"music:youtube:{video_id}"
+    return _planner_item_from_feed(resolved, pool="related")
+
+
+def _planner_artist_candidates(seed_artist: str, user_id: str | None, limit: int) -> list[dict]:
+    if not seed_artist:
+        return []
+    try:
+        rows = _deezer_artist_top_rows(seed_artist, max(8, limit * 2))
+    except Exception as exc:
+        logger.info("Listening plan artist pool unavailable for %s: %s", seed_artist, exc)
+        return []
+    seeds: list[dict] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
+        album_row = row.get("album") if isinstance(row.get("album"), dict) else {}
+        title = str(row.get("title_short") or row.get("title") or "").strip()
+        artist = str(artist_row.get("name") or seed_artist).strip()
+        if not title or not artist:
+            continue
+        seeds.append({
+            "id": f"deezer:{row.get('id')}",
+            "title": title,
+            "artist": artist,
+            "album": str(album_row.get("title") or ""),
+            "duration": int(row.get("duration") or 0),
+            "cover": str(album_row.get("cover_medium") or album_row.get("cover") or ""),
+            "score": max(0.1, float(row.get("rank") or 0) / 1_000_000),
+            "reason": f"More from {seed_artist}.",
+            "reason_code": "seed_artist",
+            "external_ids": {"deezer_id": str(row.get("id") or "")},
+        })
+        if len(seeds) >= max(4, limit):
+            break
+    futures = {
+        _PLAN_RESOLVE_EXECUTOR.submit(_planner_resolve_artist_candidate, item, user_id): index
+        for index, item in enumerate(seeds)
+    }
+    done, pending = wait(futures, timeout=8)
+    for future in pending:
+        future.cancel()
+    resolved: list[tuple[int, dict]] = []
+    for future in done:
+        try:
+            item = future.result()
+        except Exception:
+            item = None
+        if item:
+            resolved.append((futures[future], item))
+    resolved.sort(key=lambda pair: pair[0])
+    return [item for _, item in resolved[:limit]]
+
+
+@discovery_bp.route("/api/discovery/music/plan", methods=["POST"])
+@rate_limit("discovery_music_plan", limit=60, window_sec=60)
+def discovery_music_plan():
+    """Build the final generated queue order for every music continuation."""
+    from shared.user_context import current_user_id
+
+    data = request.get_json(silent=True) or {}
+    intent = str(data.get("intent") or "").strip()
+    profile = str(data.get("profile") or "balanced").strip()
+    seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
+    exclude = data.get("exclude") if isinstance(data.get("exclude"), list) else []
+    if intent not in LISTENING_INTENTS:
+        return jsonify({"error": "intent must be autoplay, radio, or auto_mode"}), 400
+    if profile not in AUTO_PROFILES:
+        return jsonify({"error": "profile must be familiar, balanced, or explore"}), 400
+    if not seed:
+        return jsonify({"error": "seed is required"}), 400
+    try:
+        limit = min(16, max(1, int(data.get("limit") or 8)))
+    except (TypeError, ValueError):
+        return jsonify({"error": "limit must be an integer"}), 400
+
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    try:
+        lib.refresh_if_stale()
+    except Exception:
+        pass
+    metadata = getattr(lib, "metadata", None)
+    track_id = str(seed.get("track_id") or "").strip()
+    library_seed = _planner_track_by_id(metadata, track_id) if track_id else None
+    if library_seed and getattr(library_seed, "media_kind", None) == "podcast_episode":
+        return jsonify({"error": "music plans do not accept podcast seeds"}), 400
+    seed_title = str(seed.get("title") or getattr(library_seed, "title", "") or "").strip()
+    seed_artist = str(seed.get("artist") or getattr(library_seed, "artist", "") or "").strip()
+    seed_youtube_id = str(
+        seed.get("youtube_id")
+        or getattr(library_seed, "youtube_id", "")
+        or (seed.get("id") if seed.get("source") == "preview" else "")
+        or ""
+    ).strip()
+    if not validate_youtube_video_id(seed_youtube_id) and library_seed:
+        seed_youtube_id = _resolve_seed_yt_id(library_seed)
+    if not validate_youtube_video_id(seed_youtube_id) and seed_title and seed_artist:
+        try:
+            from shared.api.routes.catalog import _resolve_candidates
+
+            best, _ = _resolve_candidates(seed_artist, seed_title, int(seed.get("duration") or 0) or None)
+            seed_youtube_id = str(best.get("id") or "")
+        except Exception:
+            seed_youtube_id = ""
+    if (
+        not library_seed
+        and not validate_youtube_video_id(seed_youtube_id)
+        and not (seed_title and seed_artist)
+    ):
+        return jsonify({"error": "seed needs a track id, video id, or title and artist"}), 400
+
+    fav_ids = api["_mod"].favourite_library_ids()
+    local: list[dict] = []
+    local_error = False
+    try:
+        local_response = build_music_recommendations(metadata, fav_ids, limit=max(24, limit * 3))
+        for item in local_response.get("items") or []:
+            candidate = _planner_item_from_feed(item, pool="local")
+            if not candidate:
+                continue
+            local_track = _planner_track_by_id(metadata, str(candidate.get("track_id") or ""))
+            if local_track and getattr(local_track, "media_kind", None) == "podcast_episode":
+                continue
+            local.append(candidate)
+    except Exception as exc:
+        local_error = True
+        logger.info("Listening plan local pool unavailable: %s", exc)
+
+    related: list[dict] = []
+    related_error = False
+    if validate_youtube_video_id(seed_youtube_id):
+        try:
+            raw_related = instance_db().get_related_mix(seed_youtube_id)
+            if raw_related is None:
+                dl = api["get_downloader"](open_browser=False)
+                raw_related = dl.downloader.get_related_videos(
+                    seed_youtube_id,
+                    max_results=max(25, limit * 3),
+                    enrich=False,
+                )
+                instance_db().set_related_mix(seed_youtube_id, raw_related)
+            source = intent if intent in {"radio", "auto_mode"} else "autoplay"
+            related = [
+                candidate
+                for row in rank_recommendation_rows(raw_related, source=source)
+                if (candidate := _planner_item_from_related(row))
+            ]
+        except Exception as exc:
+            related_error = True
+            logger.info("Listening plan related pool unavailable for %s: %s", seed_youtube_id, exc)
+
+    discovery: list[dict] = []
+    discovery_error = False
+    try:
+        feed = _build_discovery_feed_body(max(8, limit), include_external=False)
+        discovery = [
+            candidate
+            for item in feed.get("items") or []
+            if (candidate := _planner_item_from_feed(item, pool="discovery"))
+            and not candidate.get("track_id")
+        ]
+    except Exception as exc:
+        discovery_error = True
+        logger.info("Listening plan discovery pool unavailable: %s", exc)
+    if intent == "auto_mode":
+        related.extend(_planner_artist_candidates(seed_artist, current_user_id(), min(6, limit)))
+
+    items = plan_generated_queue(
+        {"local": local, "related": related, "discovery": discovery},
+        intent=intent,
+        profile=profile,
+        limit=limit,
+        exclude=[str(value) for value in exclude[:200] if str(value).strip()],
+    )
+    return jsonify({
+        "v": 1,
+        "plan_id": str(uuid.uuid4()),
+        "intent": intent,
+        "profile": profile,
+        "seed_identity": seed_youtube_id or track_id or f"{seed_artist}:{seed_title}",
+        "items": items,
+        "degraded": len(items) < limit or local_error or related_error or discovery_error,
+        "pool_counts": {
+            "local": len(local),
+            "related": len(related),
+            "discovery": len(discovery),
+        },
+        "generated_at": int(time.time()),
+    })
 
 
 @discovery_bp.route("/api/discovery/music/recommendations", methods=["GET"])

@@ -1,14 +1,19 @@
 import { createStore } from 'solid-js/store';
 import { createMemo, createRoot, createSignal } from 'solid-js';
 import { createSocket, type AppSocket, dispatchDiscoverSeed } from '../lib/socket';
-import { api, type DeviceRegistration, type RemotePlaybackState } from '../lib/api';
+import {
+  api,
+  type DeviceRegistration,
+  type ListeningPlanItem,
+  type RemotePlaybackState,
+} from '../lib/api';
 import { audioEl, audioService, storedVolume } from '../lib/audio';
 import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers, playbackYoutubeId } from '../lib/media';
 import { prefetchPreviews, upcomingPreviewIds } from '../lib/prefetch';
 import { toast } from '../lib/toast';
 import { vibrate } from '../lib/haptics';
 import { isMusicTrack, isPodcastTrack, podcastEpisodeToTrack } from '../lib/track';
-import { libraryTrackFor, queueIdentity, queueIndexOf, resultToTrack } from '../lib/queueDiscovery';
+import { queueIdentity, queueIndexOf } from '../lib/queueDiscovery';
 import {
   buildIdentityIndex,
   catalogItemKeys,
@@ -21,8 +26,12 @@ import {
   withLinkedKeys,
 } from '../lib/playbackIdentity';
 import { savedFromTrack, savedToTrack, savedVideoId } from '../lib/saved';
-import { resolveTrackYoutubeId, relatedTracksFor } from '../lib/relatedDiscovery';
-import { AutopilotController, type AutoCandidate, type AutoModeState, type AutoPlanItem, type AutoProfile } from '../lib/autopilot';
+import {
+  GeneratedQueueController,
+  type AutoModeState,
+  type AutoPlanItem,
+  type AutoProfile,
+} from '../lib/generatedQueue';
 import { createShortcutHandler } from '../lib/shortcuts';
 import { t as tr } from '../lib/i18n';
 import { ListeningLearning } from '../lib/listeningLearning';
@@ -236,13 +245,8 @@ let librarySyncInFlight = false;
 let librarySyncPending = false;
 let librarySyncVersion = 0;
 let userPlaybackStartedThisSession = false;
-let autopilot: AutopilotController | null = null;
+let generatedQueue: GeneratedQueueController | null = null;
 let autoPlaybackPrefs: { shuffle: boolean; repeat: RepeatMode } | null = null;
-let autoplayAborter: AbortController | null = null;
-let autoplayGeneration = 0;
-let autoplayInFlight: Promise<boolean> | null = null;
-let radioAborter: AbortController | null = null;
-let radioGeneration = 0;
 const AUTOPLAY_TARGET = 8;
 const AUTOPLAY_PREPARE_THRESHOLD = 2;
 const AUTOPLAY_REFILL_THRESHOLD = 3;
@@ -367,10 +371,7 @@ function prefetchUpcoming(): void {
 }
 
 function discardFutureAutoplay(): void {
-  autoplayGeneration += 1;
-  autoplayAborter?.abort();
-  autoplayAborter = null;
-  autoplayInFlight = null;
+  generatedQueue?.stop('autoplay');
   const pb = state.playback;
   const queue = pb.queue.filter(
     (entry, index) => index <= pb.index || !(entry.queueLane === 'generated' && entry.queueSource === 'autoplay'),
@@ -379,30 +380,15 @@ function discardFutureAutoplay(): void {
 }
 
 function cancelPendingRadio(): void {
-  radioGeneration += 1;
-  radioAborter?.abort();
-  radioAborter = null;
-}
-
-function autoplayTrack(track: Track): Track {
-  const identity = track.youtube_id || track.id;
-  return {
-    ...track,
-    recommendation: {
-      identity: `music:${track.source === 'preview' || track.youtube_id ? 'youtube' : 'track'}:${identity}`,
-      source: 'autoplay',
-      reason: tr('autoplay.reason'),
-    },
-  };
+  generatedQueue?.stop('radio');
 }
 
 /**
- * Keep a small final lane of similar music warm. This is deliberately separate
- * from Radio and Auto Mode: it only runs when a finite music session is about
- * to end, and stale async results cannot attach to a newer session.
+ * Keep a small final lane of similar music warm. The shared generated-queue
+ * coordinator owns cancellation and asks the same server planner as Radio and
+ * Auto Mode; this gate only decides when invisible Autoplay is allowed to run.
  */
 async function ensureAutoplay(force = false): Promise<boolean> {
-  if (autoplayInFlight) return autoplayInFlight;
   const pb = state.playback;
   const current = pb.currentTrack;
   if (
@@ -427,42 +413,8 @@ async function ensureAutoplay(force = false): Promise<boolean> {
   if (!force && generated.length >= AUTOPLAY_REFILL_THRESHOLD) return false;
 
   const seed = generated.at(-1) ?? deterministic.at(-1) ?? current;
-  const needed = Math.max(0, AUTOPLAY_TARGET - generated.length);
-  if (needed === 0) return true;
-
-  const generation = ++autoplayGeneration;
-  autoplayAborter?.abort();
-  const aborter = new AbortController();
-  autoplayAborter = aborter;
-  setState('playback', 'autoplayLoading', true);
-  const task = (async () => {
-    try {
-      const related = await relatedTracksFor(seed, state.library.filter(isMusicTrack), aborter.signal);
-      if (generation !== autoplayGeneration || aborter.signal.aborted) return false;
-      const excluded = new Set(state.playback.queue.map(queueIdentity));
-      const accepted = related.tracks
-        .filter((track) => !excluded.has(queueIdentity(track)))
-        .slice(0, needed)
-        .map((track) => createQueueEntry(autoplayTrack(track), 'generated', 'autoplay'));
-      if (accepted.length === 0) return false;
-      setState('playback', 'queue', (queue) => [...queue, ...accepted]);
-      prefetchUpcoming();
-      return true;
-    } catch {
-      return false;
-    } finally {
-      if (generation === autoplayGeneration) {
-        autoplayAborter = null;
-        setState('playback', 'autoplayLoading', false);
-      }
-    }
-  })();
-  autoplayInFlight = task;
-  try {
-    return await task;
-  } finally {
-    if (autoplayInFlight === task) autoplayInFlight = null;
-  }
+  if (generated.length >= AUTOPLAY_TARGET) return true;
+  return ensureGeneratedQueue().ensureAutoplay(seed, force);
 }
 
 function updateMediaSession(track: Track | null): void {
@@ -563,7 +515,12 @@ function loadIndex(i: number, opts: { restart?: boolean; trigger?: PlaybackTrigg
   updateMediaSession(track);
   void audioService.load(trackUrl(track, attempt.id)).catch(() => onPlaybackFailed(generation, 'load'));
   prefetchUpcoming();
-  queueMicrotask(() => void ensureAutoplay());
+  queueMicrotask(() => {
+    void ensureAutoplay();
+    if (state.playback.radioMode || state.autoMode.active) {
+      void generatedQueue?.ensureRunway();
+    }
+  });
 }
 
 /**
@@ -786,6 +743,29 @@ function onEnded(): void {
   }
   if (pb.index < pb.queue.length - 1 || pb.repeat === 'all') {
     actions.next('ended');
+    return;
+  }
+  const continuousIntent = pb.radioMode
+    ? 'radio'
+    : state.autoMode.active
+      ? 'auto_mode'
+      : null;
+  if (continuousIntent) {
+    const endedQueueId = pb.queue[pb.index]?.queueId;
+    void generatedQueue?.refillNow().then((ready) => {
+      const current = state.playback.queue[state.playback.index];
+      if (
+        generatedQueue?.activeIntent() !== continuousIntent
+        || current?.queueId !== endedQueueId
+      ) {
+        return;
+      }
+      if (ready && state.playback.index < state.playback.queue.length - 1) {
+        loadIndex(state.playback.index + 1, { trigger: 'ended' });
+      } else {
+        setState('playback', { isPlaying: false, phase: 'paused' });
+      }
+    });
     return;
   }
   void ensureAutoplay(true).then((ready) => {
@@ -1231,12 +1211,12 @@ export const actions = {
       radioSeedId: null,
       queue: [...prefix, ...manual],
     });
-    ensureAutopilot().start();
+    void ensureGeneratedQueue().start('auto_mode', current, state.autoMode.profile);
   },
 
   /** Leave Auto while preserving playback and every track it prepared. */
   exitAutoMode(): void {
-    autopilot?.stop();
+    generatedQueue?.stop('auto_mode');
     if (autoPlaybackPrefs) {
       setState('playback', {
         shuffle: autoPlaybackPrefs.shuffle,
@@ -1253,17 +1233,17 @@ export const actions = {
       /* private mode / storage disabled */
     }
     setState('autoMode', 'profile', profile);
-    ensureAutopilot().setProfile(profile);
+    void ensureGeneratedQueue().setProfile(profile);
   },
 
   async autoSkip(): Promise<void> {
     const canAdvance = () => state.playback.index < state.playback.queue.length - 1;
     if (canAdvance()) {
-      void autopilot?.skipCurrent();
+      void generatedQueue?.refillNow();
       actions.next();
       return;
     }
-    await autopilot?.skipCurrent();
+    await generatedQueue?.refillNow();
     // A failed final URL can happen while a refill is already in flight. Wait
     // briefly for that real plan instead of leaving Auto stopped on the error.
     for (let attempt = 0; attempt < 28 && state.autoMode.active; attempt += 1) {
@@ -1549,6 +1529,9 @@ export const actions = {
     }
     setState('playback', 'queue', next);
     if (i < pb.index) setState('playback', 'index', pb.index - 1);
+    if (state.playback.radioMode || state.autoMode.active) {
+      void generatedQueue?.ensureRunway();
+    }
   },
 
   /** Reorder a queue entry, tracking the current index across the move. */
@@ -1600,10 +1583,11 @@ export const actions = {
     loadIndex(at);
   },
 
-  /** Start a radio station seeded from a track: plays it, then its YouTube mix.
-   * The mix is generated asynchronously — to keep click→sound latency at zero,
-   * we activate `radioMode` immediately and swap audio only when the seed
-   * isn't already playing. See `stopRadio` for the manual exit path.
+  /** Start a radio station seeded from a track.
+   *
+   * The seed starts immediately and the shared generated-queue coordinator
+   * fills behind every explicit request. Unlike the old one-shot related mix,
+   * the coordinator keeps Radio replenished until the listener stops it.
    *
    * Continuity semantics:
    * - If the seed is the currentTrack AND it's currently playing, we DON'T
@@ -1611,11 +1595,10 @@ export const actions = {
    *   finishes, the next mix track (different from A) plays.
    * - Otherwise (seed differs from currentTrack, or nothing playing), we
    *   swap to the seed immediately. The mix loads behind it.
-   * - If the async mix generation fails, we show a toast and exit radio mode;
-   *   the current track keeps playing and the queue is truncated to it.
+   * - If the first plan fails, we show a toast and exit Radio; later refill
+   *   failures degrade quietly and retry without interrupting playback.
    */
   async startRadio(seed: Track): Promise<void> {
-    // Podcast episodes have no meaningful YouTube mix; the seed id is a guid.
     if (isPodcastTrack(seed)) {
       toast.error(tr('toast.radioUnavailable'));
       return;
@@ -1624,45 +1607,16 @@ export const actions = {
     discardFutureAutoplay();
     cancelPendingRadio();
     if (state.autoMode.active) actions.exitAutoMode();
-    const generation = ++radioGeneration;
-    const aborter = new AbortController();
-    radioAborter = aborter;
-
-    // Resolve a youtube_id up front. This step CAN block (search round-trip
-    // for library tracks without a stored id) — but it has to happen before we
-    // can meaningfully claim "radio starting", so we keep it before the
-    // radioMode activation.
-    let ytId: string | null = null;
-    try {
-      ytId = await resolveTrackYoutubeId(seed);
-      if (generation !== radioGeneration || aborter.signal.aborted) {
-        t.dismiss();
-        return;
-      }
-      if (!ytId) {
-        t.update('error', tr('toast.noYtForRadio'));
-        return;
-      }
-    } catch (err) {
-      console.error('[startRadio] ytId resolve error', err, 'seed:', seed.id, seed.youtube_id);
-      t.update('error', tr('toast.radioFailed', { ytId: seed.youtube_id || tr('toast.radioFailedFallback') }));
-      return;
-    }
-
-    // Activate radio mode immediately. The badge lights up before the mix lands.
     setState('playback', {
       radioMode: true,
       radioLoading: true,
       radioSeedId: seed.id,
     });
 
-    // Decide the playback branch BEFORE doing the async work.
     const isCurrentPlaying =
       state.playback.currentTrack?.id === seed.id && state.playback.isPlaying;
 
     if (isCurrentPlaying) {
-      // A is already playing the seed. Keep audio running, retain explicit
-      // requests, and let the radio mix sit behind them.
       const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
       setState('playback', {
         queue: [
@@ -1674,60 +1628,33 @@ export const actions = {
           ...manual,
         ],
         index: 0,
-        // currentTrack/isPlaying/currentTime intentionally NOT patched.
       });
     } else {
-      // General case (B playing, start radio of C; or nothing playing): swap
-      // to the seed immediately so the user hears it now. The mix loads behind.
       actions.playFrom([seed], 0, { radio: true });
     }
 
-    try {
-      const related = await api.relatedYouTube(ytId, aborter.signal, false);
-      if (generation !== radioGeneration || aborter.signal.aborted) {
-        t.dismiss();
-        return;
-      }
-      const mix = related
-        .filter((r) => r.id !== ytId && (isCurrentPlaying || r.id !== seed.id))
-        .map(
-          (r): Track => ({
-            id: r.id,
-            title: r.title,
-            artist: r.channel ?? '',
-            duration: r.duration,
-            cover: r.thumbnail,
-            source: 'preview',
-          }),
-        );
-      if (mix.length === 0) {
-        throw new Error('noRelatedMix');
-      }
-      // Append the mix after the seed (which is now queue[0]). Don't touch
-      // index/currentTrack/currentTime — playback continues seamlessly.
-      setState('playback', 'queue', (q) => [
-        ...q,
-        ...mix.map((track) => createQueueEntry(track, 'generated', 'radio')),
-      ]);
-      prefetchUpcoming();
+    const ready = await ensureGeneratedQueue().start('radio', seed);
+    if (
+      generatedQueue?.activeIntent() !== 'radio'
+      || !state.playback.radioMode
+      || state.playback.radioSeedId !== seed.id
+    ) {
+      t.dismiss();
+      return;
+    }
+    if (ready) {
       void api.emitDiscoveryEvent('music_started_radio', {
         track_id: seed.source === 'preview' ? undefined : seed.id,
         title: seed.title,
         artist: seed.artist,
         album: seed.album,
-        youtube_id: ytId,
+        youtube_id: seed.youtube_id ?? (seed.source === 'preview' ? seed.id : undefined),
         source: seed.source ?? 'library',
       }).catch(() => {});
       t.update('success', tr('toast.radioStarted'));
-    } catch (err) {
-      if (generation !== radioGeneration || aborter.signal.aborted) {
-        t.dismiss();
-        return;
-      }
-      console.error('[startRadio] mix generation error', err, 'seed:', seed.id, seed.youtube_id);
+    } else {
       t.update('error', tr('toast.radioFailed', { ytId: seed.youtube_id || tr('toast.radioFailedFallback') }));
-      // Rollback: exit radio mode. Truncate queue to whatever is currently
-      // playing (the seed in both branches; A in the Bug 2 branch).
+      generatedQueue.stop('radio');
       const cur = state.playback.queue[state.playback.index];
       const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
       setState('playback', {
@@ -1737,11 +1664,6 @@ export const actions = {
         queue: cur ? [cur, ...manual] : manual,
         index: cur ? 0 : -1,
       });
-    } finally {
-      if (generation === radioGeneration) {
-        radioAborter = null;
-        setState('playback', 'radioLoading', false);
-      }
     }
   },
 
@@ -2208,118 +2130,157 @@ export const actions = {
   },
 };
 
-function ensureAutopilot(): AutopilotController {
-  if (autopilot) return autopilot;
-  autopilot = new AutopilotController(
-    {
-      snapshot: () => ({
-        currentTrack: state.playback.currentTrack,
-        queue: state.playback.queue.slice(),
-        index: state.playback.index,
-        library: state.library.filter(isMusicTrack),
-        // Auto Mode seeds from files it can play, so only the downloaded ones.
-        favorites: [...favouriteLibraryIds()],
-      }),
-      patchState: (patch) => setState('autoMode', patch),
-      append: (candidates) => {
-        const plan = { ...state.autoMode.plan };
-        const accepted = candidates
-          .filter((candidate) => queueIndexOf(state.playback.queue, candidate.track) === -1)
-          .map(withAutoRecommendation);
-        for (const candidate of accepted) {
-          const id = queueIdentity(candidate.track);
-          plan[id] = {
-            trackId: id,
-            source: candidate.source,
-            reasonKey: candidate.reasonKey,
-            reasonValues: candidate.reasonValues,
-          };
-        }
-        setState('playback', 'queue', (queue) => [
-          ...queue,
-          ...accepted.map((candidate) => createQueueEntry(candidate.track, 'generated', 'auto_mode')),
-        ]);
-        setState('autoMode', 'plan', plan);
-        prefetchUpcoming();
-        return accepted;
-      },
-      replaceUpcoming: (candidates) => {
-        const prefix = state.playback.queue.slice(0, state.playback.index + 1);
-        const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
-        const prefixIds = new Set(prefix.map(queueIdentity));
-        const accepted = candidates
-          .filter((candidate) => !prefixIds.has(queueIdentity(candidate.track)))
-          .map(withAutoRecommendation);
-        const plan: Record<string, AutoPlanItem> = {};
-        for (const candidate of accepted) {
-          const id = queueIdentity(candidate.track);
-          plan[id] = {
-            trackId: id,
-            source: candidate.source,
-            reasonKey: candidate.reasonKey,
-            reasonValues: candidate.reasonValues,
-          };
-        }
-        setState('playback', 'queue', [
-          ...prefix,
-          ...manual,
-          ...accepted.map((candidate) => createQueueEntry(candidate.track, 'generated', 'auto_mode')),
-        ]);
-        setState('autoMode', 'plan', plan);
-        prefetchUpcoming();
-        return accepted;
-      },
-      getRelated: async (track, signal) => (await relatedTracksFor(track, state.library.filter(isMusicTrack), signal)).tracks,
-      getNodeCandidates: async () => {
-        const nodes = await import('../lib/nodeDiscover');
-        const feed = await nodes.ensureNodeFeedReady();
-        const library = state.library.filter(isMusicTrack);
-        return feed.map((rec): AutoCandidate => ({
-          track: libraryTrackFor(library, rec) ?? resultToTrack(rec),
-          source: 'node',
-          reasonKey: rec.seedArtist ? 'autoMode.reason.nodeArtist' : 'autoMode.reason.node',
-          reasonValues: rec.seedArtist ? { artist: rec.seedArtist } : undefined,
-        }));
-      },
-      getChartCandidates: async (signal) => {
-        const pools = await import('../lib/discoveryPools');
-        return excludeOwned(await pools.chartCandidates(6, signal));
-      },
-      getArtistCandidates: async (track, signal) => {
-        const pools = await import('../lib/discoveryPools');
-        return excludeOwned(await pools.artistCandidates(track, 6, signal));
-      },
-    },
-    state.autoMode.profile,
-  );
-  return autopilot;
-}
+let generatedActivityId = 0;
 
-function withAutoRecommendation(candidate: AutoCandidate): AutoCandidate {
-  const track = candidate.track;
-  const identity = track.youtube_id || (track.source === 'preview' ? track.id : track.id);
+function planItemTrack(item: ListeningPlanItem): Track {
+  const local = item.track_id
+    ? state.library.find((track) => track.id === item.track_id)
+    : null;
+  const base: Track = local
+    ? { ...local }
+    : {
+        id: item.youtube_id || item.id,
+        title: item.title,
+        artist: item.artist,
+        album: item.album,
+        duration: item.duration,
+        cover: item.cover,
+        source: 'preview',
+      };
   return {
-    ...candidate,
-    track: {
-      ...track,
-      recommendation: {
-        identity: `music:${track.source === 'preview' || track.youtube_id ? 'youtube' : 'track'}:${identity}`,
-        source: 'auto_mode',
-        reason: tr(candidate.reasonKey, candidate.reasonValues),
-      },
+    ...base,
+    recommendation: {
+      identity: item.recommendation_identity,
+      source: item.recommendation_source,
+      reason: item.recommendation_source === 'autoplay' ? tr('autoplay.reason') : item.reason,
+      reason_code: item.reason_code,
     },
   };
 }
 
-/** Drop catalog-resolved candidates the listener already owns: Auto's discovery
- * pools should surface music that is *not* in the library. */
-function excludeOwned(candidates: AutoCandidate[]): AutoCandidate[] {
-  const owned = new Set<string>();
-  for (const track of state.library) {
-    owned.add(track.id);
-    if (track.youtube_id) owned.add(track.youtube_id);
-  }
-  return candidates.filter((candidate) => !owned.has(candidate.track.id));
+function autoReasonKey(item: ListeningPlanItem): string {
+  if (item.source_pool === 'related') return 'autoMode.reason.related';
+  if (item.source_pool === 'local') return 'autoMode.reason.library';
+  return 'autoMode.reason.node';
+}
+
+function ensureGeneratedQueue(): GeneratedQueueController {
+  if (generatedQueue) return generatedQueue;
+  generatedQueue = new GeneratedQueueController({
+    snapshot: () => ({
+      currentTrack: state.playback.currentTrack,
+      queue: state.playback.queue.slice(),
+      index: state.playback.index,
+    }),
+    identity: queueIdentity,
+    requestPlan: (intent, profile, seed, limit, exclude, signal) =>
+      api.planMusicQueue({
+        intent,
+        profile,
+        seed: {
+          id: seed.id,
+          track_id: seed.source === 'preview' ? undefined : seed.id,
+          youtube_id: seed.youtube_id ?? (seed.source === 'preview' ? seed.id : undefined),
+          source: seed.source,
+          title: seed.title,
+          artist: seed.artist,
+          album: seed.album,
+          duration: seed.duration,
+        },
+        exclude,
+        limit,
+      }, signal),
+    applyPlan: (intent, response, replace) => {
+      const retained = replace
+        ? [
+            ...state.playback.queue.slice(0, state.playback.index + 1),
+            ...futureEntries(state.playback.queue, state.playback.index, 'manual'),
+          ]
+        : state.playback.queue;
+      const candidates = response.items
+        .map((item) => ({ item, track: planItemTrack(item) }))
+        .filter(({ track }) => queueIndexOf(retained, track) === -1);
+      if (candidates.length === 0) return 0;
+      const entries = candidates.map(({ track }) => createQueueEntry(track, 'generated', intent));
+      if (replace) {
+        const prefix = state.playback.queue.slice(0, state.playback.index + 1);
+        const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
+        setState('playback', 'queue', [...prefix, ...manual, ...entries]);
+      } else {
+        setState('playback', 'queue', (queue) => [...queue, ...entries]);
+      }
+      if (intent === 'auto_mode') {
+        const plan: Record<string, AutoPlanItem> = replace ? {} : { ...state.autoMode.plan };
+        for (const { item, track } of candidates) {
+          const id = queueIdentity(track);
+          plan[id] = {
+            trackId: id,
+            source: item.source_pool,
+            reasonKey: autoReasonKey(item),
+            reasonValues: item.source_pool === 'related'
+              ? { title: state.playback.currentTrack?.title ?? '' }
+              : undefined,
+          };
+        }
+        setState('autoMode', 'plan', plan);
+      }
+      prefetchUpcoming();
+      return entries.length;
+    },
+    onStatus: (intent, status, response, replacing) => {
+      if (intent === 'autoplay') {
+        setState('playback', 'autoplayLoading', status === 'planning');
+        return;
+      }
+      if (intent === 'radio') {
+        setState('playback', 'radioLoading', status === 'planning');
+        return;
+      }
+      if (status === 'idle') {
+        setState('autoMode', { active: false, phase: 'idle' });
+        return;
+      }
+      if (status === 'planning') {
+        setState('autoMode', {
+          active: true,
+          phase: 'planning',
+          activity: {
+            id: ++generatedActivityId,
+            status: 'working',
+            key: replacing ? 'autoMode.agent.recalibrating' : 'autoMode.agent.searching',
+            values: replacing
+              ? { profile: `autoMode.profile.${state.autoMode.profile}` }
+              : { title: state.playback.currentTrack?.title ?? '' },
+          },
+        });
+        return;
+      }
+      const counts = response?.pool_counts ?? { local: 0, related: 0, discovery: 0 };
+      const degraded = status === 'degraded';
+      setState('autoMode', {
+        active: true,
+        phase: degraded ? 'degraded' : 'ready',
+        activity: {
+          id: ++generatedActivityId,
+          status: degraded ? 'error' : 'done',
+          key: degraded
+            ? 'autoMode.agent.retrying'
+            : replacing
+              ? 'autoMode.agent.steered'
+              : 'autoMode.agent.queued',
+          values: {
+            profile: `autoMode.profile.${state.autoMode.profile}`,
+            count: response?.items.length ?? 0,
+            tracks: response?.items.slice(0, 2).map((item) => item.title).join(' · ') ?? '',
+            related: counts.related,
+            node: counts.discovery,
+            local: counts.local,
+          },
+        },
+      });
+    },
+  });
+  return generatedQueue;
 }
 
 /** Whether the OS/browser currently prefers a dark colour scheme.
@@ -2671,7 +2632,8 @@ export function initStore(): void {
         }),
         {
           togglePlay: () => actions.togglePlay(),
-          // Auto Mode owns the queue: skipping has to go through the autopilot
+          // Auto Mode owns the queue: skipping has to go through the generated
+          // session coordinator
           // so it can pick a replacement, not walk a queue it is rewriting.
           next: () => {
             if (state.autoMode.active) void actions.autoSkip();

@@ -98,7 +98,7 @@ export function createShortcutHandler(
 
     if (e.key === 'Escape') {
       // Auto Mode is the outer state: leaving it first means one Escape never
-      // both stops the autopilot and hides the sheet that reports on it.
+      // both stops Auto Mode generation and hides the sheet that reports on it.
       if (ctx.autoModeActive) actions.exitAutoMode();
       else if (ctx.nowPlayingOpen) actions.closeNowPlaying();
       return;

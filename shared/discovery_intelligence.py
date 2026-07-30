@@ -415,6 +415,7 @@ def rank_recommendation_rows(
         "discover": ("Related to music in your library.", "library_graph"),
         "radio": ("Related to what you're playing.", "radio_related"),
         "auto_mode": ("Selected for Auto Mode.", "auto_mode_mix"),
+        "autoplay": ("Similar to what you were listening to.", "autoplay_related"),
         "podcast": ("Recommended from your local podcast activity.", "podcast_activity"),
     }
     signals = (
@@ -741,7 +742,8 @@ def compose_discovery_feed(
 
     Candidate builders may propose many sections. The feed keeps only useful
     sections, removes duplicate tracks across them, and caps artist repetition.
-    Search renders this contract when there is no explicit query.
+    Queue planners and recommendation surfaces can consume the same ranked
+    candidate foundation without coupling it to a particular UI.
     """
     if rollup is None:
         rollup = load_listening_event_rollups()

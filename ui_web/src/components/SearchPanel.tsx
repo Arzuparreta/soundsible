@@ -21,7 +21,7 @@ import { ensureDiscover, recentSaved, type RecentlySavedItem } from '../lib/disc
 import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed } from '../lib/nodeDiscover';
 import { libraryTrackFor, resultToTrack } from '../lib/queueDiscovery';
 import { catalogItemKeys } from '../lib/playbackIdentity';
-import { resolveTrackYoutubeId } from '../lib/relatedDiscovery';
+import { resolveTrackYoutubeId } from '../lib/trackResolution';
 import { prefetchPreviews } from '../lib/prefetch';
 import { isPodcastTrack } from '../lib/track';
 import { catalogPreviewId, itemToTrack } from '../lib/catalogItem';

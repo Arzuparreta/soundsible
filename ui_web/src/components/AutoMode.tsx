@@ -3,7 +3,7 @@ import { Portal } from 'solid-js/web';
 import { actions, isSavedTrack, state } from '../stores';
 import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
-import type { AutoActivity, AutoProfile } from '../lib/autopilot';
+import type { AutoActivity, AutoProfile } from '../lib/generatedQueue';
 import { isPodcastTrack } from '../lib/track';
 import { savedFromTrack } from '../lib/saved';
 import { FavouriteButton } from './FavouriteButton';
@@ -18,7 +18,7 @@ const IDLE_MS = 12_000;
 const SWIPE_MIN_Y = 110;
 const SWIPE_MAX_MS = 900;
 
-/** Breathing room the autopilot line keeps from the artwork and the top bar. */
+/** Breathing room the Auto Mode status keeps from the artwork and the top bar. */
 const STATUS_GAP = 12;
 const STATUS_MIN_GAP = 6;
 
@@ -80,7 +80,7 @@ export function AutoMode() {
   /**
    * On mobile the artwork is pinned to the Now Playing rectangle, so the panel
    * below it is laid out against the cover's *flow* position rather than the one
-   * it is actually drawn at — which is how the autopilot line ended up sitting
+   * it is actually drawn at — which is how the Auto Mode status ended up sitting
    * over the bottom edge of the artwork. There is nothing to reclaim below the
    * cover, but the band between the top bar and the pinned cover is empty on
    * every phone, so the line moves up into it. On a viewport where that band is

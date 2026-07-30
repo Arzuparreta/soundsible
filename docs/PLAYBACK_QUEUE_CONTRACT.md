@@ -23,15 +23,21 @@ continuation. Reordering cannot cross lane or generator boundaries.
 
 ## Generated playback
 
+- **One planner** owns candidate ranking, diversification, exclusions, and final
+  order for every generated music lane. The browser sends the intent, seed,
+  Auto Mode profile, and session exclusions to
+  `POST /api/discovery/music/plan`; it does not assemble provider pools.
 - **Autoplay** is an account preference, enabled by default. Near the end of a
   finite music context it prepares a small related tail. It never runs for
   podcasts, Radio, Auto Mode, or while repeat is active. Failure ends playback
   normally.
 - **Radio** preserves pending manual requests, places its generated mix behind
-  them, and resumes the mix afterwards. Starting a new context or stopping
-  Radio aborts in-flight generation.
+  them, resumes the mix afterwards, and replenishes its generated runway until
+  the listener stops Radio. Starting a new context or stopping Radio aborts
+  in-flight generation.
 - **Auto Mode** preserves every pending manual request and owns only the
-  generated tail behind it.
+  generated tail behind it. Familiar, Balanced, and Explore are policies of the
+  shared server planner; a profile change atomically replaces only that tail.
 
 Async results carry generation identity and may not attach to a newer playback
 session after cancellation.

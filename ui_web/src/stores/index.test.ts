@@ -26,6 +26,13 @@ async function loadStore(
   localStorage.clear();
   localStorage.setItem('device_id', 'dev1');
 
+  const relatedYouTube = (
+    apiOverrides.relatedYouTube as ((
+      id: string,
+      signal?: AbortSignal,
+      enrich?: boolean,
+    ) => Promise<Array<Record<string, unknown>>>) | undefined
+  ) ?? vi.fn().mockResolvedValue([]);
   const api = {
     getLibrary: vi.fn().mockResolvedValue({ tracks: [], playlists: {}, settings: {}, podcast_subscriptions: [] }),
     getSaved: vi.fn().mockResolvedValue([]),
@@ -38,13 +45,44 @@ async function loadStore(
     putPlaybackState: vi.fn().mockResolvedValue({ status: 'ok' }),
     deleteTrack: vi.fn().mockResolvedValue({ status: 'ok' }),
     searchYouTube: vi.fn(),
-    relatedYouTube: vi.fn(),
+    relatedYouTube,
     emitDiscoveryEvent: vi.fn().mockResolvedValue(undefined),
     sendPlayTiming: vi.fn().mockResolvedValue({ status: 'ok' }),
     getDiscoverySettings: vi.fn().mockResolvedValue({ learning_enabled: true, autoplay_enabled: true }),
     setAutoplayEnabled: vi.fn().mockResolvedValue({ autoplay_enabled: true }),
     ...apiOverrides,
-  };
+  } as Record<string, any>;
+  if (!apiOverrides.planMusicQueue) {
+    api.planMusicQueue = vi.fn(async (body: {
+      intent: 'autoplay' | 'radio' | 'auto_mode';
+      profile: 'familiar' | 'balanced' | 'explore';
+      seed: { youtube_id?: string };
+    }, signal?: AbortSignal) => {
+      const rows = await relatedYouTube(body.seed.youtube_id ?? '', signal, false);
+      return {
+        v: 1,
+        plan_id: `plan-${body.intent}`,
+        intent: body.intent,
+        profile: body.profile,
+        seed_identity: body.seed.youtube_id ?? '',
+        degraded: rows.length === 0,
+        generated_at: 1,
+        pool_counts: { local: 0, related: rows.length, discovery: 0 },
+        items: rows.map((row: Record<string, unknown>) => ({
+          id: String(row.id ?? ''),
+          youtube_id: String(row.id ?? ''),
+          title: String(row.title ?? ''),
+          artist: String(row.channel ?? ''),
+          duration: typeof row.duration === 'number' ? row.duration : undefined,
+          cover: typeof row.thumbnail === 'string' ? row.thumbnail : undefined,
+          source: 'preview',
+          source_pool: 'related',
+          recommendation_identity: `music:youtube:${String(row.id ?? '')}`,
+          recommendation_source: body.intent,
+        })),
+      };
+    });
+  }
   const audioService = {
     load: vi.fn().mockResolvedValue(undefined),
     recover: vi.fn().mockResolvedValue(undefined),
@@ -596,6 +634,47 @@ describe('Radio mode', () => {
     expect(state.playback.queue.map((t) => t.id)).toEqual(['seed2', 'mix02']);
   });
 
+  it('refills Radio continuously as its generated runway is consumed', async () => {
+    let batch = 0;
+    const planMusicQueue = vi.fn(async (body: {
+      intent: 'radio';
+      profile: 'balanced';
+    }) => {
+      batch += 1;
+      return {
+        v: 1,
+        plan_id: `radio-${batch}`,
+        intent: body.intent,
+        profile: body.profile,
+        seed_identity: seed.id,
+        degraded: false,
+        generated_at: batch,
+        pool_counts: { local: 0, related: 8, discovery: 0 },
+        items: Array.from({ length: 8 }, (_, index) => ({
+          id: `batch-${batch}-${index}`,
+          youtube_id: `batch-${batch}-${index}`,
+          title: `Batch ${batch} Track ${index}`,
+          artist: `Artist ${index}`,
+          source: 'preview',
+          source_pool: 'related',
+          recommendation_identity: `music:youtube:batch-${batch}-${index}`,
+          recommendation_source: 'radio',
+        })),
+      };
+    });
+    const { actions, state } = await loadStore({ planMusicQueue });
+    actions.playFrom([seed], 0);
+    await actions.startRadio(seed);
+    expect(planMusicQueue).toHaveBeenCalledTimes(1);
+
+    actions.jumpTo(6);
+    await vi.waitFor(() => expect(planMusicQueue).toHaveBeenCalledTimes(2));
+
+    expect(state.playback.radioMode).toBe(true);
+    expect(state.playback.queue.filter((entry) => entry.queueSource === 'radio')).toHaveLength(17);
+    actions.stopRadio();
+  });
+
   it('exits radio mode, keeps current track, on mix generation failure', async () => {
     const { actions, state } = await loadStore({
       searchYouTube: vi.fn(),
@@ -629,6 +708,7 @@ describe('Radio mode', () => {
     const pending = deferred<Array<{ id: string; title: string; channel: string }>>();
     const relatedYouTube = vi.fn().mockReturnValue(pending.promise);
     const { actions, state } = await loadStore({ relatedYouTube });
+    await actions.setAutoplayEnabled(false);
     actions.playFrom([seed], 0);
 
     const starting = actions.startRadio(seed);

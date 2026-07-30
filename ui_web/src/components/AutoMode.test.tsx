@@ -198,7 +198,7 @@ describe('AutoMode environment', () => {
     expect(screen.getByRole('heading', { name: 'Current song' }).closest('[aria-live]')).toBeTruthy();
   });
 
-  it('lifts the autopilot line into the band above the pinned cover, and only when it fits', () => {
+  it('lifts the Auto Mode status into the band above the pinned cover, and only when it fits', () => {
     // The pinned cover is not where the panel below it was laid out, so in flow
     // the status line lands on the artwork. It belongs in the empty band between
     // the top bar and the cover — but never on top of the top bar.

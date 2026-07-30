@@ -162,6 +162,81 @@ def test_save_empty_body_returns_400(tmp_path):
     assert res.status_code == 400
 
 
+def test_music_plan_validates_intent_profile_and_seed(tmp_path):
+    _make_runtime(tmp_path)
+    client = _make_app().test_client()
+
+    assert client.post("/api/discovery/music/plan", json={}).status_code == 400
+    assert client.post(
+        "/api/discovery/music/plan",
+        json={"intent": "search", "seed": {"title": "Song"}},
+    ).status_code == 400
+    assert client.post(
+        "/api/discovery/music/plan",
+        json={"intent": "auto_mode", "profile": "chaos", "seed": {"title": "Song"}},
+    ).status_code == 400
+    assert client.post(
+        "/api/discovery/music/plan",
+        json={"intent": "radio", "seed": {"title": "Song"}},
+    ).status_code == 400
+
+
+def test_music_plan_returns_server_ordered_playable_radio_items(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    seed = _track("seed-track", "Seed Song", "Seed Artist")
+    seed.youtube_id = "seed0000001"
+    metadata = LibraryMetadata(version=1, tracks=[seed], playlists={}, settings={})
+    related = [
+        {
+            "id": f"video00000{i}",
+            "title": f"Related {i}",
+            "channel": f"Artist {i}",
+            "duration": 180,
+            "thumbnail": "",
+        }
+        for i in range(1, 9)
+    ]
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (_FakeLibrary(metadata), None, None)
+    mock_api["_mod"].favourite_library_ids.return_value = []
+    mock_api["get_downloader"].return_value.downloader.get_related_videos.return_value = related
+
+    with (
+        patch.object(_disc_routes, "_get_api", return_value=mock_api),
+        patch.object(
+            _disc_routes,
+            "_build_discovery_feed_body",
+            side_effect=RuntimeError("discovery unavailable"),
+        ),
+    ):
+        res = _make_app().test_client().post(
+            "/api/discovery/music/plan",
+            json={
+                "intent": "radio",
+                "seed": {
+                    "track_id": seed.id,
+                    "youtube_id": seed.youtube_id,
+                    "title": seed.title,
+                    "artist": seed.artist,
+                },
+                "exclude": ["music:youtube:video000001"],
+                "limit": 6,
+            },
+        )
+
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["intent"] == "radio"
+    assert body["plan_id"]
+    assert body["degraded"] is True
+    assert len(body["items"]) == 6
+    assert all(item["source_pool"] == "related" for item in body["items"])
+    assert all(item["source"] == "preview" for item in body["items"])
+    assert "video000001" not in [item["id"] for item in body["items"]]
+    mock_api["get_downloader"].return_value.downloader.get_related_videos.assert_called_once()
+
+
 def test_music_feed_without_taste_returns_seed_state_not_generic_rows(tmp_path):
     _make_runtime(tmp_path)
     metadata = LibraryMetadata(

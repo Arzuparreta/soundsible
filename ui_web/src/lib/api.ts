@@ -136,6 +136,40 @@ export interface DiscoveryMusicFeed {
   };
 }
 
+export type ListeningPlanIntent = 'autoplay' | 'radio' | 'auto_mode';
+export type ListeningPlanProfile = 'familiar' | 'balanced' | 'explore';
+
+export interface ListeningPlanItem {
+  id: string;
+  track_id?: string | null;
+  youtube_id?: string | null;
+  title: string;
+  artist: string;
+  album?: string;
+  duration?: number;
+  cover?: string;
+  source: 'library' | 'preview';
+  source_pool: 'local' | 'related' | 'discovery';
+  reason?: string;
+  reason_code?: string;
+  recommendation_identity: string;
+  recommendation_source: ListeningPlanIntent;
+  score?: number;
+  external_ids?: Record<string, string | number | boolean | null | undefined>;
+}
+
+export interface ListeningPlanResponse {
+  v: 1;
+  plan_id: string;
+  intent: ListeningPlanIntent;
+  profile: ListeningPlanProfile;
+  seed_identity: string;
+  items: ListeningPlanItem[];
+  degraded: boolean;
+  pool_counts: Record<'local' | 'related' | 'discovery', number>;
+  generated_at: number;
+}
+
 export interface DiscoverySaveCandidate {
   id?: string;
   video_id?: string;
@@ -633,6 +667,31 @@ export const api = {
     request<DiscoveryMusicFeed>('/api/discovery/music/feed?limit=10', {
       signal,
       timeoutMs: 15000,
+    }),
+  planMusicQueue: (
+    body: {
+      intent: ListeningPlanIntent;
+      profile?: ListeningPlanProfile;
+      seed: {
+        id?: string;
+        track_id?: string;
+        youtube_id?: string;
+        source?: string;
+        title: string;
+        artist: string;
+        album?: string;
+        duration?: number;
+      };
+      exclude?: string[];
+      limit?: number;
+    },
+    signal?: AbortSignal,
+  ) =>
+    request<ListeningPlanResponse>('/api/discovery/music/plan', {
+      method: 'POST',
+      body,
+      signal,
+      timeoutMs: 45000,
     }),
   saveDiscoveryTrack: (body: {
     artist: string;
