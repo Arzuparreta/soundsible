@@ -7,7 +7,6 @@ import os
 import threading
 import time
 
-import requests
 from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context, redirect
 
 from shared import preview_cache
@@ -81,28 +80,99 @@ def _preview_stream_rate_limit(ip: str) -> bool:
     return True
 
 
+def _current_egress() -> str:
+    return "relay" if os.getenv("SOUNDSIBLE_YT_PROXY", "").strip() else "direct"
+
+
+def _durable_stream_cache_get(video_id: str) -> ResolvedStream | None:
+    """A stream URL this station already resolved, still inside its own expiry.
+
+    The signed URL lives about six hours; the in-process memo lives five minutes
+    and dies with the process. Without this step a station pays the extraction
+    again after every restart, and on a relayed station that extraction is the
+    most expensive thing it does.
+    """
+    try:
+        from shared.database import instance_db
+
+        row = instance_db().get_cached_stream_url(video_id, _current_egress())
+    except Exception as exc:  # pragma: no cover — cache must never break playback
+        logger.debug("API: [Preview] durable stream cache read failed for %s: %s", video_id, exc)
+        return None
+    if not row:
+        return None
+    proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
+    return ResolvedStream(
+        url=row["url"],
+        egress="relay" if row["egress"] == "relay" else "direct",
+        resolved_at=float(row["resolved_at"]),
+        expires_at=float(row["expires_at"]),
+        proxy_url=proxy or None if row["egress"] == "relay" else None,
+    )
+
+
+def _durable_stream_cache_put(video_id: str, stream: ResolvedStream) -> None:
+    if stream.expires_at is None:
+        # No expiry in the URL means no idea how long it is good for; the
+        # in-process memo's short TTL is the safe ceiling for that case.
+        return
+    try:
+        from shared.database import instance_db
+
+        instance_db().set_cached_stream_url(
+            video_id,
+            stream.url,
+            stream.egress,
+            stream.resolved_at,
+            stream.expires_at,
+        )
+    except Exception as exc:  # pragma: no cover — cache must never break playback
+        logger.debug("API: [Preview] durable stream cache write failed for %s: %s", video_id, exc)
+
+
+def _invalidate_stream(video_id: str) -> None:
+    """Forget a URL the CDN rejected, in both cache layers."""
+    _preview_stream_urls.invalidate(video_id)
+    try:
+        from shared.database import instance_db
+
+        instance_db().invalidate_cached_stream_url(video_id)
+    except Exception as exc:  # pragma: no cover
+        logger.debug("API: [Preview] durable stream cache invalidate failed for %s: %s", video_id, exc)
+
+
 def _get_preview_stream_cached(api, video_id: str) -> ResolvedStream | None:
     """Resolve a preview stream URL, at most once per video id at a time.
 
-    Concurrent callers for the same id — repeated taps, a range request landing
-    while the first fetch is still resolving, a prefetch racing a click — share
-    one yt-dlp extraction instead of each paying for their own.
+    Three layers, cheapest first: the in-process memo, the durable SQLite cache
+    (good for the URL's full six hours, across restarts and every listener on
+    the station), then the yt-dlp extraction. Concurrent callers for the same id
+    — repeated taps, a range request landing while the first fetch is still
+    resolving, a prefetch racing a click — share one extraction rather than each
+    paying for their own.
     """
 
     def resolve() -> ResolvedStream | str:
+        durable = _durable_stream_cache_get(video_id)
+        if durable is not None:
+            return durable
         dl = api["get_downloader"](open_browser=False)
         resolver = getattr(dl.downloader, "get_resolved_stream", None)
         if callable(resolver):
-            return resolver(video_id) or ""
-        url = dl.downloader.get_stream_url(video_id) or ""
-        if not url:
-            return ""
-        proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
-        return resolved_stream(
-            url,
-            egress="relay" if proxy else "direct",
-            proxy_url=proxy or None,
-        )
+            stream = resolver(video_id) or ""
+        else:
+            url = dl.downloader.get_stream_url(video_id) or ""
+            if not url:
+                return ""
+            proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
+            stream = resolved_stream(
+                url,
+                egress="relay" if proxy else "direct",
+                proxy_url=proxy or None,
+            )
+        if isinstance(stream, ResolvedStream):
+            _durable_stream_cache_put(video_id, stream)
+        return stream
 
     try:
         value = _preview_stream_urls.resolve(video_id, resolve)
@@ -144,6 +214,7 @@ def warm_preview_stream_cache(
         proxy_url=proxy or None,
     )
     _preview_stream_urls.put(video_id, stream, ttl_sec=min(ttl_sec, stream.cache_ttl(ttl_sec)))
+    _durable_stream_cache_put(video_id, stream)
 
 
 def _get_api():
@@ -299,7 +370,9 @@ def _preview_upstream(api, video_id: str, headers: dict[str, str]):
         if not stream:
             return None, None, "unavailable", resolve_ms, 0
         upstream_started = time.monotonic()
-        response = requests.get(
+        # Pooled on purpose: a browser fetches audio as a series of ranges, and
+        # a fresh TCP+TLS handshake per range is ~330 ms of silence each time.
+        response = preview_cache.upstream_session().get(
             stream.url,
             stream=True,
             headers=headers,
@@ -316,9 +389,28 @@ def _preview_upstream(api, video_id: str, headers: dict[str, str]):
                 ttfb_ms,
             )
         response.close()
-        _preview_stream_urls.invalidate(video_id)
+        _invalidate_stream(video_id)
         cache_was_warm = False
     return None, None, "unavailable", 0, 0
+
+
+def _request_cache_fill(api, video_id: str) -> None:
+    """Queue one background download of the whole preview into the disk cache.
+
+    Best-effort and deduplicated by `request_prefetch`: repeat range requests
+    for the same track queue nothing extra, and a track already on disk is
+    skipped before it reaches the lane.
+    """
+    if preview_cache.cache_limit_bytes() <= 0:
+        return
+    try:
+        preview_cache.request_prefetch(
+            [video_id],
+            download=True,
+            resolver=lambda vid: _get_preview_stream_cached(api, vid),
+        )
+    except Exception as exc:  # pragma: no cover — never block playback on this
+        logger.debug("API: [Preview] could not queue cache fill for %s: %s", video_id, exc)
 
 
 @playback_bp.route("/api/preview/stream/<video_id>", methods=["GET"])
@@ -351,6 +443,20 @@ def preview_stream_proxy(video_id):
 
     if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
         return jsonify({"error": "Too many requests"}), 429
+
+    # Not cached yet: start filling the disk cache in the background, now.
+    #
+    # The tee below only commits when one request happens to carry the whole
+    # file from byte 0 to the end — which is exactly what a media element never
+    # does. It asks for ranges, and it abandons the first request as soon as it
+    # has buffered enough, so the tee is thrown away and the next play pays the
+    # network again. A station that had been streaming for months held 28 files
+    # in a 2 GB cache for that reason.
+    #
+    # One sequential background fetch is a second of relay time and turns every
+    # later request for this track — the ranges still to come in this very
+    # playback, the replay tomorrow — into a local `send_file`.
+    _request_cache_fill(api, video_id)
 
     try:
         range_header = request.headers.get("Range")
@@ -419,8 +525,15 @@ def preview_stream_proxy(video_id):
                 if writer:
                     writer.abandon()
                 raise
-            if writer:
-                writer.commit()
+            else:
+                if writer:
+                    writer.commit()
+            finally:
+                # A media element abandons ranges constantly. Closing here is
+                # what returns the connection to the pool instead of stranding
+                # it — without this the pool drains and every later range pays
+                # for a new handshake again.
+                resp.close()
 
         return Response(
             stream_with_context(iter_chunks()),

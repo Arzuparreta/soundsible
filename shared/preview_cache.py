@@ -47,6 +47,42 @@ STALE_PART_SEC = 3600
 _writers_lock = threading.Lock()
 _active_writers: set[str] = set()
 
+# ── Upstream connection reuse ────────────────────────────────────────────────
+# A browser plays audio by asking for ranges, not by asking for the file: one
+# click can mean a dozen requests, and each one used to open its own TCP+TLS
+# connection to googlevideo. Measured on a relayed station, that handshake costs
+# ~330 ms every time; reused, the same range answers in ~90 ms. Pooling here is
+# the difference between a track that starts and one that stalls its way in.
+#
+# The pool is keyed by (proxy, host) inside urllib3, so relay and direct egress
+# never share a connection — which matters, because a signed URL only works from
+# the address that resolved it.
+_session_lock = threading.Lock()
+_session: Optional[requests.Session] = None
+#: Enough for several listeners plus prefetch without evicting live playback.
+_POOL_MAXSIZE = 32
+
+
+def upstream_session() -> requests.Session:
+    """The shared session every preview fetch goes through."""
+    global _session
+    if _session is not None:
+        return _session
+    with _session_lock:
+        if _session is None:
+            session = requests.Session()
+            adapter = requests.adapters.HTTPAdapter(
+                pool_connections=8,
+                pool_maxsize=_POOL_MAXSIZE,
+                # Retries are decided by the caller: a 403 here means the signed
+                # URL died and needs re-resolving, not another attempt.
+                max_retries=0,
+            )
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
+            _session = session
+    return _session
+
 
 def cache_limit_bytes() -> int:
     raw = os.getenv("SOUNDSIBLE_PREVIEW_CACHE_MB", "")
@@ -269,7 +305,7 @@ def _download_to_cache(video_id: str, stream: Union[ResolvedStream, str]) -> Non
         return
     # bytes=0- matters: googlevideo throttles DASH URLs fetched without a
     # Range header to roughly realtime; an open-ended range runs at full speed.
-    with requests.get(
+    with upstream_session().get(
         resolved.url,
         stream=True,
         timeout=(5, 90),
@@ -308,26 +344,33 @@ def _worker_loop(jobs: "queue.Queue[tuple[str, Resolver]]", *, download: bool) -
             jobs.task_done()
 
 
+#: Workers per lane. One download worker meant the track a listener just started
+#: waited behind whatever the queue had warmed first — and a whole track now
+#: arrives in about a second, so two in flight cost little and hide the wait.
+_LANE_WORKERS = 2
+
+
 def _ensure_worker() -> None:
     if _worker_started.is_set():
         return
     with _pending_lock:
         if _worker_started.is_set():
             return
-        threading.Thread(
-            target=_worker_loop,
-            args=(_resolve_queue,),
-            kwargs={"download": False},
-            name="preview-resolve",
-            daemon=True,
-        ).start()
-        threading.Thread(
-            target=_worker_loop,
-            args=(_download_queue,),
-            kwargs={"download": True},
-            name="preview-download",
-            daemon=True,
-        ).start()
+        for index in range(_LANE_WORKERS):
+            threading.Thread(
+                target=_worker_loop,
+                args=(_resolve_queue,),
+                kwargs={"download": False},
+                name=f"preview-resolve-{index}",
+                daemon=True,
+            ).start()
+            threading.Thread(
+                target=_worker_loop,
+                args=(_download_queue,),
+                kwargs={"download": True},
+                name=f"preview-download-{index}",
+                daemon=True,
+            ).start()
         _worker_started.set()
 
 

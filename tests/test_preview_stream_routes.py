@@ -24,6 +24,21 @@ from shared.stream_resolution import resolved_stream
 VID = "dQw4w9WgXcQ"
 
 
+def _patch_upstream(monkeypatch, fake_get):
+    """Stand in for the pooled upstream session preview fetches go through."""
+    monkeypatch.setattr(preview_cache, "upstream_session", lambda: SimpleNamespace(get=fake_get))
+
+
+def _no_cache_fill(monkeypatch):
+    """Isolate the proxy from the background lane that fills the disk cache.
+
+    Serving a request and warming the cache are separate jobs; a test about
+    what the proxy returns should not race a worker thread resolving the same
+    id. `test_preview_stream_queues_cache_fill` covers the queuing itself.
+    """
+    monkeypatch.setattr(playback_routes, "_request_cache_fill", lambda api, vid: None)
+
+
 def _make_runtime(tmp_path):
     runtime = RuntimeConfig(
         host="127.0.0.1",
@@ -134,7 +149,8 @@ def test_preview_stream_proxy_passes_content_type_and_tees_to_cache(tmp_path, mo
         # googlevideo answers an open-ended range with a 206 covering the file.
         return _FakeUpstream(data, "audio/webm", status_code=206, content_range=f"bytes 0-{len(data) - 1}/{len(data)}")
 
-    monkeypatch.setattr(playback_routes.requests, "get", fake_get)
+    _patch_upstream(monkeypatch, fake_get)
+    _no_cache_fill(monkeypatch)
 
     client = _make_app().test_client()
     response = client.get(f"/api/preview/stream/{VID}")
@@ -175,9 +191,8 @@ def test_preview_stream_proxy_does_not_tee_partial_ranges(tmp_path, monkeypatch)
         "_get_preview_stream_cached",
         lambda api, vid: resolved_stream("http://upstream.invalid/a", egress="direct"),
     )
-    monkeypatch.setattr(
-        playback_routes.requests, "get", lambda url, **kwargs: _FakeUpstream(data, "audio/webm")
-    )
+    _patch_upstream(monkeypatch, lambda url, **kwargs: _FakeUpstream(data, "audio/webm"))
+    _no_cache_fill(monkeypatch)
 
     response = _make_app().test_client().get(
         f"/api/preview/stream/{VID}", headers={"Range": "bytes=500-"}
@@ -207,7 +222,8 @@ def test_preview_refresh_keeps_each_resolutions_egress(tmp_path, monkeypatch):
             return _FakeUpstream(b"", "audio/mp4", status_code=403)
         return _FakeUpstream(b"fresh", "audio/mp4", status_code=206, content_range="bytes 0-4/5")
 
-    monkeypatch.setattr(playback_routes.requests, "get", fake_get)
+    _patch_upstream(monkeypatch, fake_get)
+    _no_cache_fill(monkeypatch)
     response = _make_app().test_client().get(f"/api/preview/stream/{VID}")
 
     assert response.status_code == 200
@@ -216,6 +232,62 @@ def test_preview_refresh_keeps_each_resolutions_egress(tmp_path, monkeypatch):
         ("http://upstream.invalid/fresh", None),
     ]
     assert response.headers["X-Soundsible-Playback-Egress"] == "direct"
+
+
+def test_preview_stream_queues_cache_fill(tmp_path, monkeypatch):
+    """A range request must still put the whole track on disk.
+
+    Media elements ask for ranges and abandon them, so the inline tee almost
+    never commits — which is how a long-running station ends up streaming the
+    same track from the network forever. The proxy asks the background lane for
+    a full copy instead, and asks for it on a partial range too.
+    """
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    monkeypatch.setattr(
+        playback_routes,
+        "_get_preview_stream_cached",
+        lambda api, vid: resolved_stream("http://upstream.invalid/a", egress="direct"),
+    )
+    _patch_upstream(monkeypatch, lambda url, **kwargs: _FakeUpstream(b"partial", "audio/webm"))
+    queued = []
+
+    def fake_request_prefetch(video_ids, *, download, resolver):
+        queued.append((list(video_ids), download))
+        return list(video_ids)
+
+    monkeypatch.setattr(playback_routes.preview_cache, "request_prefetch", fake_request_prefetch)
+
+    response = _make_app().test_client().get(
+        f"/api/preview/stream/{VID}", headers={"Range": "bytes=500-"}
+    )
+
+    assert response.status_code == 200
+    assert queued == [([VID], True)]
+
+
+def test_preview_stream_cache_hit_skips_cache_fill(tmp_path, monkeypatch):
+    """A disk hit must not re-queue a download of what is already on disk."""
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    root = preview_cache.preview_cache_dir()
+    root.mkdir(parents=True, exist_ok=True)
+    (root / f"{VID}{preview_cache.AUDIO_SUFFIX}").write_bytes(b"cached")
+    (root / f"{VID}{preview_cache.META_SUFFIX}").write_text('{"content_type": "audio/mp4"}')
+    queued = []
+    monkeypatch.setattr(
+        playback_routes.preview_cache,
+        "request_prefetch",
+        lambda video_ids, **kw: queued.append(list(video_ids)) or [],
+    )
+
+    response = _make_app().test_client().get(f"/api/preview/stream/{VID}")
+
+    assert response.status_code == 200
+    assert response.headers["X-Soundsible-Playback-Cache"] == "disk"
+    assert queued == []
 
 
 def test_preview_prefetch_queues_valid_ids(tmp_path, monkeypatch):

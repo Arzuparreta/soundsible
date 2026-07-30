@@ -12,6 +12,7 @@ The contract that matters for playback UX:
 import os
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -19,6 +20,11 @@ from shared import preview_cache
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 
 VID = "dQw4w9WgXcQ"
+
+
+def _patch_upstream(monkeypatch, fake_get):
+    """Stand in for the pooled upstream session preview fetches go through."""
+    monkeypatch.setattr(preview_cache, "upstream_session", lambda: SimpleNamespace(get=fake_get))
 
 
 @pytest.fixture
@@ -143,7 +149,7 @@ def test_download_to_cache_lands_complete_file(runtime, monkeypatch):
         assert kwargs.get("stream") is True
         return _FakeResponse(data)
 
-    monkeypatch.setattr(preview_cache.requests, "get", fake_get)
+    _patch_upstream(monkeypatch, fake_get)
     preview_cache._download_to_cache(VID, "http://example.invalid/stream")
 
     cached = preview_cache.get_cached(VID)
@@ -155,7 +161,7 @@ def test_download_to_cache_lands_complete_file(runtime, monkeypatch):
 
 def test_request_prefetch_dedupes_and_downloads(runtime, monkeypatch):
     data = b"q" * 2048
-    monkeypatch.setattr(preview_cache.requests, "get", lambda url, **kw: _FakeResponse(data))
+    _patch_upstream(monkeypatch, lambda url, **kw: _FakeResponse(data))
     release = threading.Event()
 
     def resolver(vid: str) -> str:

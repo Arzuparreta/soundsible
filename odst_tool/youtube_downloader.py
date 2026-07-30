@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import re
 import uuid
@@ -103,6 +104,85 @@ def _apply_ytdlp_network_options(opts: Dict[str, Any]) -> Dict[str, Any]:
         opts["source_address"] = "0.0.0.0"
     apply_ytdlp_ffmpeg_options(opts)
     return opts
+
+
+# ── YouTube session reuse ────────────────────────────────────────────────────
+# Resolving a stream normally makes yt-dlp download the video's watch page —
+# about 1 MB of HTML — for no reason other than to pick a session identifier out
+# of it. The identifier is not per-video, so fetching it once and reusing it lets
+# every later resolution skip that megabyte: measured 1338 KB -> 451 KB per
+# resolution, which on a relayed station is the difference that shows.
+#
+# Without one YouTube answers "Sign in to confirm you're not a bot", so a stale
+# or missing value must fall back to the full path rather than fail.
+_VISITOR_DATA_URL = "https://www.youtube.com/sw.js_data"
+_VISITOR_DATA_TTL_SEC = 3600
+_visitor_data_lock = threading.Lock()
+_visitor_data_cache: Dict[str, Any] = {"value": None, "fetched_at": 0.0}
+
+
+def _parse_visitor_data(payload: str) -> Optional[str]:
+    """Pull the visitor identifier out of the sw.js_data envelope."""
+    body = payload.lstrip()
+    if body.startswith(")]}'"):
+        body = body.split("\n", 1)[-1]
+    try:
+        import json as _json
+
+        def walk(node: Any) -> Optional[str]:
+            if isinstance(node, str) and len(node) > 20 and node[:2] in ("Cg", "Ch", "Cs"):
+                return node
+            if isinstance(node, list):
+                for child in node:
+                    found = walk(child)
+                    if found:
+                        return found
+            return None
+
+        found = walk(_json.loads(body))
+        if found:
+            return found
+    except Exception:
+        pass
+    match = re.search(r'"(C[a-zA-Z0-9_%-]{20,140})"', payload)
+    return match.group(1) if match else None
+
+
+def _youtube_visitor_data() -> Optional[str]:
+    """A cached visitor identifier, refreshed hourly, or None if unavailable."""
+    now = time.time()
+    cached = _visitor_data_cache.get("value")
+    if cached and now - float(_visitor_data_cache.get("fetched_at") or 0) < _VISITOR_DATA_TTL_SEC:
+        return cached
+    with _visitor_data_lock:
+        cached = _visitor_data_cache.get("value")
+        if cached and now - float(_visitor_data_cache.get("fetched_at") or 0) < _VISITOR_DATA_TTL_SEC:
+            return cached
+        yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
+        proxies = {"http": yt_proxy, "https": yt_proxy} if yt_proxy else None
+        try:
+            response = requests.get(
+                _VISITOR_DATA_URL,
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=15,
+                proxies=proxies,
+            )
+            response.raise_for_status()
+            value = _parse_visitor_data(response.text)
+        except Exception as exc:
+            logger.debug("[Preview] visitor_data fetch failed: %s", exc)
+            value = None
+        if value:
+            _visitor_data_cache["value"] = value
+            _visitor_data_cache["fetched_at"] = now
+        return value
+
+
+def _reset_visitor_data_cache() -> None:
+    """Drop the cached identifier so the next resolution fetches a fresh one."""
+    with _visitor_data_lock:
+        _visitor_data_cache["value"] = None
+        _visitor_data_cache["fetched_at"] = 0.0
 
 
 def _yt_thumbnail_url(video_id: Optional[str]) -> Optional[str]:
@@ -1224,9 +1304,46 @@ class YouTubeDownloader:
             "extractor_args": {"youtube": {"player_client": ["default", "android", "ios"]}},
         }
 
+        yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
+
+        # Fast path first. `android_vr` is the only client of the three below
+        # whose formats survive today — the android and ios responses are
+        # fetched and then discarded for want of a PO token — so asking for it
+        # alone drops two round trips, and a reused session identifier drops the
+        # 1 MB watch page. Measured on a relayed station: 2658 ms and 1590 KB
+        # down to 1774 ms and 451 KB.
+        #
+        # Everything below stays as the fallback: this path leans on a session
+        # identifier and a single client, and both are YouTube's to break.
+        visitor = _youtube_visitor_data()
+        if visitor:
+            fast_opts: Dict[str, Any] = {
+                **base_opts,
+                "extractor_args": {
+                    "youtube": {
+                        "player_client": ["android_vr"],
+                        "player_skip": ["webpage", "configs"],
+                        "visitor_data": [visitor],
+                    }
+                },
+            }
+            if yt_proxy:
+                fast_opts["proxy"] = yt_proxy
+            elif _yt_dlp_force_ipv4():
+                fast_opts["source_address"] = "0.0.0.0"
+            result, _hard_error = _try(
+                fast_opts,
+                egress="relay" if yt_proxy else "direct",
+                proxy_url=yt_proxy or None,
+            )
+            if result:
+                return result
+            # A rejected identifier looks like a hard error; drop it so the next
+            # resolution fetches a fresh one instead of failing the same way.
+            _reset_visitor_data_cache()
+
         # A relay is the primary path when configured. Its result retains the
         # proxy URL so every later byte follows the same egress.
-        yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
         if yt_proxy:
             opts = _apply_ytdlp_network_options({**base_opts, "proxy": yt_proxy})
             result, hard_error = _try(opts, egress="relay", proxy_url=yt_proxy)

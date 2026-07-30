@@ -7,6 +7,7 @@ import sqlite3
 import json
 import logging
 import threading
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from shared.models import Track, LibraryMetadata
@@ -43,6 +44,7 @@ INSTANCE_TABLES = (
     "pairing_sessions",
     "youtube_resolution_cache",
     "related_mix_cache",
+    "stream_url_cache",
     "track_lyrics",
 )
 
@@ -235,6 +237,36 @@ class DatabaseManager:
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_related_mix_cache_updated
             ON related_mix_cache (last_updated)
+        """)
+
+    @staticmethod
+    def _create_stream_url_cache_table(conn):
+        """Persistent cache for resolved googlevideo URLs, keyed by video id.
+
+        A signed stream URL is good for about six hours, but resolving one costs
+        a multi-second yt-dlp extraction — and on a relayed station that
+        extraction is roughly 1.5 MB dragged through the residential egress. The
+        in-process memo only survived five minutes and died with the process, so
+        a station that had already paid for a URL paid again on the next
+        restart, and again five minutes later.
+
+        ``egress`` is stored because it is part of the key in practice: the CDN
+        signs the resolving IP into the URL, so one resolved through the relay is
+        worthless to a direct fetch and vice versa. Rows whose egress no longer
+        matches the running configuration are ignored rather than served.
+        """
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS stream_url_cache (
+                video_id TEXT PRIMARY KEY,
+                url TEXT NOT NULL,
+                egress TEXT NOT NULL,
+                resolved_at REAL NOT NULL,
+                expires_at REAL NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_stream_url_cache_expires
+            ON stream_url_cache (expires_at)
         """)
 
     @staticmethod
@@ -454,6 +486,7 @@ class DatabaseManager:
             self._migrate_tracks_columns(conn)
             self._create_youtube_cache_table(conn)
             self._create_related_mix_cache_table(conn)
+            self._create_stream_url_cache_table(conn)
             self._create_users_table(conn)
             self._create_invites_table(conn)
             self._create_auth_tables(conn)
@@ -755,6 +788,68 @@ class DatabaseManager:
             except Exception as e:
                 conn.execute("ROLLBACK")
                 raise e
+
+    # Note: Resolved stream URL cache
+
+    def get_cached_stream_url(self, video_id: str, egress: str) -> Optional[Dict[str, Any]]:
+        """Return a live cached stream URL for this video and egress, or None.
+
+        Expired rows are reported as a miss and left for `prune_stream_urls` to
+        clear; a read path should not pay for a write.
+        """
+        if not video_id or not egress:
+            return None
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("""
+                SELECT url, egress, resolved_at, expires_at
+                FROM stream_url_cache
+                WHERE video_id = ? AND egress = ? AND expires_at > ?
+            """, (video_id, egress, time.time())).fetchone()
+            return dict(row) if row else None
+
+    def set_cached_stream_url(
+        self,
+        video_id: str,
+        url: str,
+        egress: str,
+        resolved_at: float,
+        expires_at: float,
+    ) -> None:
+        """Remember a resolved stream URL until its own signature expires."""
+        if not video_id or not url or not egress:
+            return
+        if expires_at <= time.time():
+            return
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute("""
+                    INSERT INTO stream_url_cache (video_id, url, egress, resolved_at, expires_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(video_id) DO UPDATE SET
+                        url=excluded.url,
+                        egress=excluded.egress,
+                        resolved_at=excluded.resolved_at,
+                        expires_at=excluded.expires_at
+                """, (video_id, url, egress, resolved_at, expires_at))
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
+
+    def invalidate_cached_stream_url(self, video_id: str) -> None:
+        """Drop a stream URL the CDN has started rejecting."""
+        if not video_id:
+            return
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM stream_url_cache WHERE video_id = ?", (video_id,))
+
+    def prune_stream_urls(self) -> int:
+        """Delete expired rows. Returns how many went."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("DELETE FROM stream_url_cache WHERE expires_at <= ?", (time.time(),))
+            return cursor.rowcount or 0
 
     # Note: Youtube resolution cache
 
