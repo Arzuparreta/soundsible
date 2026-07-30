@@ -2,8 +2,14 @@
   --player-chrome-top: max(14px, env(safe-area-inset-top, 0px));
   --player-chrome-size: 48px;
   --player-chrome-gap: 14px;
+  --player-mobile-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --player-carousel-height: 30px;
+  --player-carousel-bottom: max(10px, var(--player-mobile-safe-bottom));
   --player-mobile-footer-clearance:
-    calc(max(10px, env(safe-area-inset-bottom, 0px)) + 38px);
+    calc(
+      var(--player-carousel-height) + 8px
+      + max(0px, calc(var(--player-carousel-bottom) - var(--player-mobile-safe-bottom)))
+    );
   position: fixed;
   top: 0;
   right: 0;
@@ -209,12 +215,12 @@
 .carouselNav {
   position: absolute;
   z-index: 45;
-  bottom: max(10px, env(safe-area-inset-bottom));
+  bottom: var(--player-carousel-bottom);
   left: 50%;
   display: none;
   align-items: center;
   gap: 7px;
-  min-height: 30px;
+  min-height: var(--player-carousel-height);
   padding: 0 10px;
   background: rgba(10, 10, 12, 0.48);
   border: 1px solid rgba(255, 255, 255, 0.09);

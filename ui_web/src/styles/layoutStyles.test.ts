@@ -66,15 +66,21 @@ describe('unified player geometry', () => {
   const nowPlaying = path.resolve(process.cwd(), 'src/components/NowPlaying.module.css');
   const surface = path.resolve(process.cwd(), 'src/components/PlayerSurface.module.css');
 
-  it('uses the visual viewport and reserves the top chrome through shared geometry', () => {
-    expect(scopedDeclarations(surface, '.surface')).toMatchObject({
+  it('uses the visual viewport and reserves both device safe areas through shared geometry', () => {
+    const surfaceGeometry = scopedDeclarations(surface, '.surface');
+    expect(surfaceGeometry).toMatchObject({
       height: 'var(--app-viewport-height, 100dvh)',
       '--player-chrome-top': 'max(14px, env(safe-area-inset-top, 0px))',
+      '--player-mobile-safe-bottom': 'env(safe-area-inset-bottom, 0px)',
+      '--player-carousel-bottom': 'max(10px, var(--player-mobile-safe-bottom))',
     });
+    expect(surfaceGeometry['--player-mobile-footer-clearance'].replace(/\s+/g, ' ')).toBe(
+      'calc( var(--player-carousel-height) + 8px + max(0px, calc(var(--player-carousel-bottom) - var(--player-mobile-safe-bottom))) )',
+    );
     expect(scopedDeclarations(nowPlaying, '.workspace', 'max-width: 1023px')).toMatchObject({
       'padding-top':
         'calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap))',
-      'padding-bottom': '0',
+      'padding-bottom': 'var(--player-mobile-safe-bottom)',
     });
   });
 

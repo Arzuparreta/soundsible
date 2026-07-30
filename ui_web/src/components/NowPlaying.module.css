@@ -1658,7 +1658,7 @@
     padding-top:
       calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap));
     padding-right: max(clamp(10px, 2.5vw, 20px), env(safe-area-inset-right, 0px));
-    padding-bottom: 0;
+    padding-bottom: var(--player-mobile-safe-bottom);
     padding-left: max(clamp(10px, 2.5vw, 20px), env(safe-area-inset-left, 0px));
   }
 
