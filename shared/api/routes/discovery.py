@@ -37,6 +37,14 @@ from shared.listening_planner import (
     LISTENING_INTENTS,
     plan_generated_queue,
 )
+from shared.dj_engine import (
+    DJ_PROFILES,
+    analyse_audio,
+    analysis_identity,
+    order_route,
+    route_to_request,
+)
+from shared.path_resolver import resolve_local_track_path
 from shared.url_utils import validate_youtube_video_id
 
 
@@ -1026,27 +1034,24 @@ def _planner_artist_candidates(seed_artist: str, user_id: str | None, limit: int
     return [item for _, item in resolved[:limit]]
 
 
-@discovery_bp.route("/api/discovery/music/plan", methods=["POST"])
-@rate_limit("discovery_music_plan", limit=60, window_sec=60)
-def discovery_music_plan():
-    """Build the final generated queue order for every music continuation."""
+def _build_music_plan(data: dict) -> tuple[dict, int]:
+    """Build one generated queue payload without binding it to a Flask route."""
     from shared.user_context import current_user_id
 
-    data = request.get_json(silent=True) or {}
     intent = str(data.get("intent") or "").strip()
     profile = str(data.get("profile") or "balanced").strip()
     seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
     exclude = data.get("exclude") if isinstance(data.get("exclude"), list) else []
     if intent not in LISTENING_INTENTS:
-        return jsonify({"error": "intent must be autoplay, radio, or auto_mode"}), 400
+        return {"error": "intent must be autoplay, radio, or auto_mode"}, 400
     if profile not in AUTO_PROFILES:
-        return jsonify({"error": "profile must be familiar, balanced, or explore"}), 400
+        return {"error": "profile must be familiar, balanced, or explore"}, 400
     if not seed:
-        return jsonify({"error": "seed is required"}), 400
+        return {"error": "seed is required"}, 400
     try:
         limit = min(16, max(1, int(data.get("limit") or 8)))
     except (TypeError, ValueError):
-        return jsonify({"error": "limit must be an integer"}), 400
+        return {"error": "limit must be an integer"}, 400
 
     api = _get_api()
     lib, _, _ = api["get_core"]()
@@ -1058,7 +1063,7 @@ def discovery_music_plan():
     track_id = str(seed.get("track_id") or "").strip()
     library_seed = _planner_track_by_id(metadata, track_id) if track_id else None
     if library_seed and getattr(library_seed, "media_kind", None) == "podcast_episode":
-        return jsonify({"error": "music plans do not accept podcast seeds"}), 400
+        return {"error": "music plans do not accept podcast seeds"}, 400
     seed_title = str(seed.get("title") or getattr(library_seed, "title", "") or "").strip()
     seed_artist = str(seed.get("artist") or getattr(library_seed, "artist", "") or "").strip()
     seed_youtube_id = str(
@@ -1082,7 +1087,7 @@ def discovery_music_plan():
         and not validate_youtube_video_id(seed_youtube_id)
         and not (seed_title and seed_artist)
     ):
-        return jsonify({"error": "seed needs a track id, video id, or title and artist"}), 400
+        return {"error": "seed needs a track id, video id, or title and artist"}, 400
 
     fav_ids = api["_mod"].favourite_library_ids()
     local: list[dict] = []
@@ -1147,7 +1152,7 @@ def discovery_music_plan():
         limit=limit,
         exclude=[str(value) for value in exclude[:200] if str(value).strip()],
     )
-    return jsonify({
+    return {
         "v": 1,
         "plan_id": str(uuid.uuid4()),
         "intent": intent,
@@ -1161,6 +1166,193 @@ def discovery_music_plan():
             "discovery": len(discovery),
         },
         "generated_at": int(time.time()),
+    }, 200
+
+
+@discovery_bp.route("/api/discovery/music/plan", methods=["POST"])
+@rate_limit("discovery_music_plan", limit=60, window_sec=60)
+def discovery_music_plan():
+    """Build the final generated queue order for every music continuation."""
+    payload, status = _build_music_plan(request.get_json(silent=True) or {})
+    return jsonify(payload), status
+
+
+def _dj_item_analysis(metadata, item: dict) -> dict:
+    track_id = str(item.get("track_id") or "").strip()
+    video_id = str(item.get("youtube_id") or (item.get("id") if item.get("source") == "preview" else "") or "").strip()
+    path = None
+    if track_id:
+        track = _planner_track_by_id(metadata, track_id)
+        if track:
+            path = resolve_local_track_path(track)
+    elif validate_youtube_video_id(video_id):
+        from shared import preview_cache
+
+        cached = preview_cache.get_cached(video_id)
+        if cached:
+            path = str(cached[0])
+        else:
+            # The browser already prefetches the runway.  Asking for the full
+            # file here makes a later re-plan use real analysis without making
+            # this request wait on a download.
+            try:
+                from shared.api.routes.playback import _get_preview_stream_cached
+
+                api = _get_api()
+                preview_cache.request_prefetch(
+                    [video_id],
+                    download=True,
+                    resolver=lambda vid: _get_preview_stream_cached(api, vid),
+                )
+            except Exception:
+                pass
+    return analyse_audio(
+        path or "",
+        analysis_identity(item),
+        duration_hint=float(item.get("duration") or 0),
+    )
+
+
+def _normalise_dj_request(raw: dict) -> dict | None:
+    track = raw.get("track") if isinstance(raw.get("track"), dict) else raw
+    is_preview = str(track.get("source") or "") == "preview"
+    video_id = str(track.get("youtube_id") or (track.get("id") if is_preview else "") or "").strip()
+    track_id = str(track.get("track_id") or (track.get("id") if not is_preview else "") or "").strip()
+    title = str(track.get("title") or "").strip()
+    artist = str(track.get("artist") or track.get("channel") or "").strip()
+    if not title or not artist or (not track_id and not validate_youtube_video_id(video_id)):
+        return None
+    is_preview = not track_id
+    return {
+        "id": video_id if is_preview else track_id,
+        "track_id": track_id or None,
+        "youtube_id": video_id if is_preview else track.get("youtube_id"),
+        "title": title,
+        "artist": artist,
+        "album": str(track.get("album") or ""),
+        "duration": int(track.get("duration") or 0),
+        "cover": str(track.get("cover") or track.get("thumbnail") or ""),
+        "source": "preview" if is_preview else "library",
+        "source_pool": "related",
+        "reason": "Requested by the listener",
+        "reason_code": "dj_request",
+        "recommendation_identity": str(track.get("recommendation_identity") or f"dj-request:{track_id or video_id}"),
+        "recommendation_source": "auto_mode",
+        "score": 1.0,
+        "request_id": str(raw.get("id") or uuid.uuid4()),
+    }
+
+
+@discovery_bp.route("/api/discovery/music/dj-plan", methods=["POST"])
+@rate_limit("discovery_music_dj_plan", limit=60, window_sec=60)
+def discovery_music_dj_plan():
+    """Build a short transition-aware route exclusively for Auto Mode."""
+    data = request.get_json(silent=True) or {}
+    profile = str(data.get("dj_profile") or "adaptive").strip()
+    if profile not in DJ_PROFILES:
+        return jsonify({"error": "unsupported dj_profile"}), 400
+    seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
+    if not seed:
+        return jsonify({"error": "seed is required"}), 400
+    direction = data.get("direction") if isinstance(data.get("direction"), dict) else {}
+    try:
+        familiarity = float(direction.get("familiarity") or 0)
+        requested_limit = min(8, max(3, int(data.get("limit") or 8)))
+    except (TypeError, ValueError):
+        return jsonify({"error": "direction and limit must be numeric"}), 400
+    source_profile = "familiar" if familiarity >= 0.35 else "explore" if familiarity <= -0.35 else "balanced"
+    base, status = _build_music_plan({
+        "intent": "auto_mode",
+        "profile": source_profile,
+        "seed": seed,
+        "exclude": data.get("exclude") or [],
+        "limit": 12,
+    })
+    if status != 200:
+        return jsonify(base), status
+
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    metadata = getattr(lib, "metadata", None)
+    seed_analysis = _dj_item_analysis(metadata, seed)
+    try:
+        energy_delta = max(-1.0, min(1.0, float(direction.get("energy") or 0)))
+    except (TypeError, ValueError):
+        return jsonify({"error": "direction energy must be numeric"}), 400
+    desired_energy = max(0.0, min(1.0, float(seed_analysis.get("energy") or 0.5) + energy_delta * 0.35))
+    include_terms = [
+        str(value).strip().casefold()
+        for value in (direction.get("include") if isinstance(direction.get("include"), list) else [])
+        if str(value).strip()
+    ]
+    exclude_terms = [
+        str(value).strip().casefold()
+        for value in (direction.get("exclude") if isinstance(direction.get("exclude"), list) else [])
+        if str(value).strip()
+    ]
+    candidates = []
+    for candidate in base.get("items") or []:
+        haystack = f"{candidate.get('artist', '')} {candidate.get('title', '')} {candidate.get('album', '')}".casefold()
+        if any(term in haystack for term in exclude_terms):
+            continue
+        candidate_analysis = _dj_item_analysis(metadata, candidate)
+        energy_fit = 1 - abs(float(candidate_analysis.get("energy") or 0.5) - desired_energy)
+        include_fit = 1.0 if include_terms and any(term in haystack for term in include_terms) else 0.0
+        candidate["score"] = max(
+            0.0,
+            min(1.0, float(candidate.get("score") or 0.5) * 0.65 + energy_fit * 0.25 + include_fit * 0.1),
+        )
+        candidates.append((candidate, candidate_analysis))
+    requests = [
+        item
+        for raw in (data.get("requests") if isinstance(data.get("requests"), list) else [])
+        if isinstance(raw, dict) and (item := _normalise_dj_request(raw))
+    ]
+
+    route: list[dict] = []
+    previous = seed_analysis
+    remaining = list(candidates)
+    max_items = requested_limit
+    for requested in requests:
+        if len(route) >= max_items:
+            break
+        requested_analysis = _dj_item_analysis(metadata, requested)
+        segment = route_to_request(
+            previous,
+            remaining,
+            (requested, requested_analysis),
+            profile=profile,
+            max_starts=min(3, max_items - len(route)),
+        )
+        route.extend(segment)
+        used = {str(item.get("recommendation_identity") or item.get("id")) for item in segment}
+        remaining = [
+            (item, analysis)
+            for item, analysis in remaining
+            if str(item.get("recommendation_identity") or item.get("id")) not in used
+        ]
+        previous = requested_analysis
+    if len(route) < max_items:
+        route.extend(order_route(previous, remaining, profile=profile, limit=max_items - len(route)))
+
+    return jsonify({
+        **base,
+        "v": 2,
+        "dj_profile": profile,
+        "source_profile": source_profile,
+        "seed_analysis": seed_analysis,
+        "items": route,
+        "requests": [
+            {
+                "id": item["request_id"],
+                "track_identity": item["recommendation_identity"],
+                "eta_tracks": next(
+                    (index + 1 for index, row in enumerate(route) if row.get("request_id") == item["request_id"]),
+                    None,
+                ),
+            }
+            for item in requests
+        ],
     })
 
 

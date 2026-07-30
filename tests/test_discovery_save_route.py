@@ -181,6 +181,85 @@ def test_music_plan_validates_intent_profile_and_seed(tmp_path):
     ).status_code == 400
 
 
+def test_dj_plan_validates_profile_and_requires_seed(tmp_path):
+    _make_runtime(tmp_path)
+    client = _make_app().test_client()
+    assert client.post("/api/discovery/music/dj-plan", json={}).status_code == 400
+    assert client.post(
+        "/api/discovery/music/dj-plan",
+        json={"dj_profile": "mystery", "seed": {"title": "Song", "artist": "Artist"}},
+    ).status_code == 400
+
+
+def test_dj_plan_places_an_exact_request_inside_three_tracks(tmp_path):
+    _make_runtime(tmp_path)
+    base_items = [
+        {
+            "id": f"bridge0000{i}",
+            "youtube_id": f"bridge0000{i}",
+            "title": f"Bridge {i}",
+            "artist": "Bridge Artist",
+            "duration": 180,
+            "source": "preview",
+            "source_pool": "related",
+            "recommendation_identity": f"music:youtube:bridge0000{i}",
+            "recommendation_source": "auto_mode",
+            "score": 0.6,
+        }
+        for i in range(4)
+    ]
+    base = {
+        "v": 1,
+        "plan_id": "base-plan",
+        "intent": "auto_mode",
+        "profile": "balanced",
+        "seed_identity": "seed",
+        "items": base_items,
+        "degraded": False,
+        "pool_counts": {"local": 0, "related": 4, "discovery": 0},
+        "generated_at": 1,
+    }
+    features = {
+        "duration": 180,
+        "bpm": 120,
+        "key": "C",
+        "mode": "major",
+        "energy": 0.5,
+        "confidence": 0.9,
+        "outro_cue": 130,
+        "intro_cue": 8,
+        "bar_seconds": 2,
+    }
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (_FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None)
+    with (
+        patch.object(_disc_routes, "_get_api", return_value=mock_api),
+        patch.object(_disc_routes, "_build_music_plan", return_value=(base, 200)),
+        patch.object(_disc_routes, "_dj_item_analysis", return_value=features),
+    ):
+        response = _make_app().test_client().post(
+            "/api/discovery/music/dj-plan",
+            json={
+                "dj_profile": "adaptive",
+                "seed": {"id": "seed", "title": "Seed", "artist": "Artist", "duration": 180},
+                "requests": [{
+                    "id": "request-1",
+                    "track": {
+                        "id": "request0001",
+                        "title": "Requested",
+                        "artist": "Listener",
+                        "duration": 200,
+                    },
+                }],
+                "limit": 8,
+            },
+        )
+    assert response.status_code == 200
+    body = response.get_json()
+    request_index = next(index for index, row in enumerate(body["items"]) if row.get("request_id") == "request-1")
+    assert request_index <= 2
+    assert body["requests"][0]["eta_tracks"] == request_index + 1
+    assert all(row.get("transition") for row in body["items"])
 def test_music_plan_returns_server_ordered_playable_radio_items(tmp_path):
     runtime = _make_runtime(tmp_path)
     init_telemetry(runtime)
