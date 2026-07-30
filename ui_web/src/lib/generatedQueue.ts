@@ -1,4 +1,7 @@
 import type {
+  DjDirection,
+  DjProfile,
+  DjTransitionPlan,
   ListeningPlanIntent,
   ListeningPlanProfile,
   ListeningPlanResponse,
@@ -22,11 +25,30 @@ export interface AutoPlanItem {
   source: AutoSource;
   reasonKey: string;
   reasonValues?: Record<string, string | number>;
+  transition?: DjTransitionPlan;
+  bpm?: number;
+  key?: string | null;
+  requestId?: string;
+}
+
+export interface AutoRequest {
+  id: string;
+  track: Track;
+  status: 'queued' | 'planned' | 'playing' | 'failed';
+  etaTracks: number | null;
 }
 
 export interface AutoModeState {
   active: boolean;
   profile: AutoProfile;
+  djProfile: DjProfile;
+  direction: DjDirection;
+  requests: AutoRequest[];
+  transition: {
+    status: 'idle' | 'preparing' | 'mixing';
+    technique?: DjTransitionPlan['technique'];
+    nextTrackId?: string;
+  };
   phase: AutoPhase;
   activity: AutoActivity | null;
   plan: Record<string, AutoPlanItem>;

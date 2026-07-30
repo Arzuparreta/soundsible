@@ -54,8 +54,8 @@ export function OmniBar() {
       <button
         class={styles.openArea}
         type="button"
-        disabled={!current()}
-        onClick={() => current() && setNowPlayingOpen(true)}
+        aria-label={current() ? undefined : t('autoMode.enter')}
+        onClick={() => current() ? setNowPlayingOpen(true) : actions.enterAutoMode()}
       >
         <div class={styles.cover} style={coverBg()} />
         <div class={styles.meta}>
@@ -63,8 +63,8 @@ export function OmniBar() {
             when={current()}
             fallback={
               <>
-                <span class={styles.title}>{t('omnibar.nothingPlaying')}</span>
-                <span class={styles.sub}>{state.online ? t('omnibar.engineConnected') : t('common.offline')}</span>
+                <span class={styles.title}>{t('autoMode.startDj')}</span>
+                <span class={styles.sub}>{state.online ? t('autoMode.startDjHint') : t('common.offline')}</span>
               </>
             }
           >

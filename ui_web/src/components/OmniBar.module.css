@@ -9,13 +9,12 @@
   background: linear-gradient(180deg, var(--ambient-highlight), transparent);
 }
 
-/* On a phone an idle mini-player is not information, it is a permanent empty
-   banner that steals a row of content. Desktop keeps the quiet idle affordance
-   because the full-width transport area is otherwise structurally useful. */
-@media (max-width: 1023px) {
-  .empty {
-    display: none;
-  }
+.empty .cover {
+  border-color: var(--accent-soft);
+  background:
+    radial-gradient(circle at 50% 50%, var(--accent) 0 3px, transparent 4px),
+    repeating-radial-gradient(circle at 50% 50%, transparent 0 6px, var(--hairline-strong) 7px 8px),
+    var(--bg-raised);
 }
 
 .progress {

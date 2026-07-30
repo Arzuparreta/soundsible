@@ -4,6 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const { actions, state } = vi.hoisted(() => ({
   actions: {
     setAutoProfile: vi.fn(),
+    setAutoDjProfile: vi.fn(),
+    setAutoDirection: vi.fn(),
+    requestAutoTrack: vi.fn(),
+    cancelAutoRequest: vi.fn(),
     exitAutoMode: vi.fn(),
     setVolume: vi.fn(),
     autoSkip: vi.fn().mockResolvedValue(undefined),
@@ -30,6 +34,10 @@ const { actions, state } = vi.hoisted(() => ({
     autoMode: {
       active: true,
       profile: 'balanced' as const,
+      djProfile: 'adaptive' as const,
+      direction: { energy: 0, familiarity: 0, prompt: '', include: [], exclude: [] },
+      requests: [],
+      transition: { status: 'idle' as const },
       phase: 'ready' as const,
       activity: {
         id: 1,
@@ -84,10 +92,28 @@ describe('AutoMode environment', () => {
     fireEvent.wheel(queue, { deltaY: 80, deltaX: 0 });
     expect(queue.scrollLeft).toBe(80);
 
-    fireEvent.click(screen.getByRole('button', { name: 'autoMode.changeProfile:autoMode.profile.balanced' }));
-    expect(actions.setAutoProfile).toHaveBeenCalledWith('explore');
+    fireEvent.click(screen.getByRole('button', { name: 'Cambiar DJ. Actual: Adaptativo' }));
+    fireEvent.click(screen.getByRole('option', { name: /Cortes y drops/ }));
+    expect(actions.setAutoDjProfile).toHaveBeenCalledWith('cuts_drops');
     fireEvent.click(screen.getByRole('button', { name: 'autoMode.exit' }));
     expect(actions.exitAutoMode).toHaveBeenCalledOnce();
+  });
+
+  it('keeps DJ technique separate from musical direction and opens requests in place', () => {
+    render(() => <AutoMode />);
+
+    const command = screen.getByRole('textbox', { name: 'Redirigir la sesión' });
+    fireEvent.input(command, { target: { value: 'Más energía y sorpréndeme' } });
+    fireEvent.submit(command.closest('form')!);
+    expect(actions.setAutoDirection).toHaveBeenCalledWith(expect.objectContaining({
+      energy: 0.35,
+      familiarity: -0.35,
+      prompt: 'Más energía y sorpréndeme',
+    }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pedir canción' }));
+    expect(screen.getByRole('complementary', { name: 'Pedir una canción al DJ' })).toBeInTheDocument();
+    expect(screen.getByText(/próximas tres canciones/)).toBeInTheDocument();
   });
 
   it('exits on a swipe down over the backdrop, but not on one that scrolls the queue', () => {

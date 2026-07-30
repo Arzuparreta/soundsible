@@ -1,9 +1,12 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { actions, isSavedTrack, state } from '../stores';
+import { api, type DjProfile } from '../lib/api';
 import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
-import type { AutoActivity, AutoProfile } from '../lib/generatedQueue';
+import type { AutoActivity } from '../lib/generatedQueue';
+import { parseDjDirection } from '../lib/djDirection';
+import { queueIdentity } from '../lib/queueDiscovery';
 import { isPodcastTrack } from '../lib/track';
 import { savedFromTrack } from '../lib/saved';
 import { FavouriteButton } from './FavouriteButton';
@@ -11,6 +14,7 @@ import { CollectionButton } from './CollectionButton';
 import { LyricsPanel } from './LyricsPanel';
 import styles from './AutoMode.module.css';
 import { clockTime } from '../lib/format';
+import type { CatalogItem, Track } from '../types/music';
 
 const IDLE_MS = 12_000;
 
@@ -21,6 +25,12 @@ const SWIPE_MAX_MS = 900;
 /** Breathing room the Auto Mode status keeps from the artwork and the top bar. */
 const STATUS_GAP = 12;
 const STATUS_MIN_GAP = 6;
+const DJ_PROFILES: Array<{ id: DjProfile; title: string; trait: string }> = [
+  { id: 'adaptive', title: 'Adaptativo', trait: 'Elige la mezcla según cada pareja' },
+  { id: 'long_blend', title: 'Mezcla larga', trait: 'Armónico · 16–32 compases · pocos efectos' },
+  { id: 'cuts_drops', title: 'Cortes y drops', trait: '90–150 s · cambios marcados · echo cuts' },
+  { id: 'open_format', title: 'Open format', trait: 'Saltos amplios · puentes · cambios estructurales' },
+];
 
 /**
  * Type-size tier for a track title.
@@ -61,6 +71,14 @@ export function AutoMode() {
   const [chromeVisible, setChromeVisible] = createSignal(true);
   const [agentVisible, setAgentVisible] = createSignal(false);
   const [lyricsOpen, setLyricsOpen] = createSignal(false);
+  const [djPickerOpen, setDjPickerOpen] = createSignal(false);
+  const [requestOpen, setRequestOpen] = createSignal(false);
+  const [prompt, setPrompt] = createSignal('');
+  const [requestQuery, setRequestQuery] = createSignal('');
+  const [requestResults, setRequestResults] = createSignal<CatalogItem[]>([]);
+  const [requestBusy, setRequestBusy] = createSignal(false);
+  let requestAborter: AbortController | null = null;
+  let requestTimer: ReturnType<typeof setTimeout> | null = null;
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let agentTimer: ReturnType<typeof setTimeout> | null = null;
   let rootEl: HTMLDivElement | undefined;
@@ -193,6 +211,8 @@ export function AutoMode() {
   onCleanup(() => {
     if (idleTimer) clearTimeout(idleTimer);
     if (agentTimer) clearTimeout(agentTimer);
+    if (requestTimer) clearTimeout(requestTimer);
+    requestAborter?.abort();
     clearMobileCoverAnchor();
     if (typeof document !== 'undefined') delete document.documentElement.dataset.autoMode;
   });
@@ -211,11 +231,86 @@ export function AutoMode() {
     return url ? { 'background-image': `url("${url}")` } : {};
   };
 
-  const cycleProfile = () => {
-    const profiles: AutoProfile[] = ['familiar', 'balanced', 'explore'];
-    const currentIndex = profiles.indexOf(state.autoMode.profile);
-    actions.setAutoProfile(profiles[(currentIndex + 1) % profiles.length]);
+  const activeDj = createMemo(() =>
+    DJ_PROFILES.find((profile) => profile.id === (state.autoMode.djProfile ?? 'adaptive')) ?? DJ_PROFILES[0],
+  );
+  const autoRequests = createMemo(() => state.autoMode.requests ?? []);
+  const transitionState = createMemo(() => state.autoMode.transition ?? { status: 'idle' as const });
+
+  const submitDirection = () => {
+    const value = prompt().trim();
+    if (!value) return;
+    actions.setAutoDirection(parseDjDirection(value, state.autoMode.direction ?? {
+      energy: 0,
+      familiarity: 0,
+      prompt: '',
+      include: [],
+      exclude: [],
+    }));
+    setPrompt('');
     armIdle();
+  };
+
+  const nudgeDirection = (key: 'energy' | 'familiarity', delta: number) => {
+    actions.setAutoDirection({
+      [key]: Math.max(-1, Math.min(1, (state.autoMode.direction?.[key] ?? 0) + delta)),
+      prompt: '',
+    });
+    armIdle();
+  };
+
+  const searchRequests = (value: string) => {
+    setRequestQuery(value);
+    if (requestTimer) clearTimeout(requestTimer);
+    requestAborter?.abort();
+    if (value.trim().length < 2) {
+      setRequestResults([]);
+      return;
+    }
+    requestTimer = setTimeout(() => {
+      const aborter = new AbortController();
+      requestAborter = aborter;
+      setRequestBusy(true);
+      void api.searchCatalog(value.trim(), aborter.signal, 'track')
+        .then((result) => setRequestResults(result.items.filter((item) => item.type !== 'artist').slice(0, 12)))
+        .catch(() => {
+          if (!aborter.signal.aborted) setRequestResults([]);
+        })
+        .finally(() => {
+          if (requestAborter === aborter) setRequestBusy(false);
+        });
+    }, 220);
+  };
+
+  const requestItem = async (item: CatalogItem) => {
+    setRequestBusy(true);
+    try {
+      const local = item.track_id ? state.library.find((track) => track.id === item.track_id) : null;
+      let track: Track | null = local ?? null;
+      if (!track) {
+        const resolved = await api.resolveCatalogItem({
+          artist: item.artist ?? item.subtitle ?? '',
+          title: item.title,
+          duration: item.duration,
+        });
+        if (!resolved.video_id) throw new Error('unresolved');
+        track = {
+          id: resolved.video_id,
+          title: item.title,
+          artist: item.artist ?? item.subtitle ?? '',
+          album: item.album,
+          duration: item.duration,
+          cover: item.cover,
+          source: 'preview',
+        };
+      }
+      actions.requestAutoTrack(track);
+      setRequestOpen(false);
+      setRequestQuery('');
+      setRequestResults([]);
+    } finally {
+      setRequestBusy(false);
+    }
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -274,13 +369,17 @@ export function AutoMode() {
             <button
               class={styles.profile}
               type="button"
-              aria-label={t('autoMode.changeProfile', { profile: t(`autoMode.profile.${state.autoMode.profile}`) })}
-              onClick={cycleProfile}
+              aria-label={`Cambiar DJ. Actual: ${activeDj().title}`}
+              aria-expanded={djPickerOpen()}
+              onClick={() => {
+                setDjPickerOpen((open) => !open);
+                armIdle();
+              }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                 <circle cx="12" cy="12" r="8" /><path d="m15.5 8.5-2.1 4.9-4.9 2.1 2.1-4.9z" />
               </svg>
-              {t(`autoMode.profile.${state.autoMode.profile}`)}
+              {activeDj().title}
             </button>
             <button class={styles.exit} type="button" aria-label={t('autoMode.exit')} onClick={() => actions.exitAutoMode()}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -289,6 +388,36 @@ export function AutoMode() {
             </button>
           </div>
         </header>
+
+        <Show when={djPickerOpen()}>
+          <div class={styles.djPicker} role="listbox" aria-label="Seleccionar DJ">
+            <For each={DJ_PROFILES}>
+              {(profile) => (
+                <button
+                  type="button"
+                  classList={{ [styles.djCard]: true, [styles.djCardActive]: profile.id === (state.autoMode.djProfile ?? 'adaptive') }}
+                  role="option"
+                  aria-selected={profile.id === (state.autoMode.djProfile ?? 'adaptive')}
+                  onClick={() => {
+                    actions.setAutoDjProfile(profile.id);
+                    setDjPickerOpen(false);
+                  }}
+                >
+                  <strong>{profile.title}</strong>
+                  <span>{profile.trait}</span>
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
+
+        <Show when={!current()}>
+          <div class={styles.emptyDj} role="status">
+            <span class={styles.emptyDisc} aria-hidden="true" />
+            <strong>El DJ está buscando por dónde empezar</strong>
+            <span>Usando tu biblioteca y tu historial</span>
+          </div>
+        </Show>
 
         <Show when={current()}>
           <main class={styles.stage}>
@@ -349,6 +478,48 @@ export function AutoMode() {
                 </Show>
               </div>
 
+              <div class={styles.djControls}>
+                <form
+                  class={styles.command}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    submitDirection();
+                  }}
+                >
+                  <input
+                    value={prompt()}
+                    onInput={(event) => setPrompt(event.currentTarget.value)}
+                    placeholder="Dile al DJ hacia dónde ir…"
+                    aria-label="Redirigir la sesión"
+                  />
+                  <button type="submit" disabled={!prompt().trim()} aria-label="Enviar instrucción">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="m4 4 17 8-17 8 3-8z" /></svg>
+                  </button>
+                </form>
+                <div class={styles.quickControls}>
+                  <button type="button" onClick={() => nudgeDirection('energy', 0.3)}>+ energía</button>
+                  <button type="button" onClick={() => nudgeDirection('energy', -0.3)}>− energía</button>
+                  <button type="button" onClick={() => nudgeDirection('familiarity', 0.3)}>Más conocido</button>
+                  <button type="button" onClick={() => nudgeDirection('familiarity', -0.3)}>Más descubrimiento</button>
+                  <button class={styles.requestButton} type="button" onClick={() => setRequestOpen(true)}>Pedir canción</button>
+                </div>
+                <Show when={autoRequests().length > 0}>
+                  <div class={styles.requests} aria-label="Peticiones al DJ">
+                    <For each={autoRequests()}>
+                      {(request) => (
+                        <span class={styles.requestChip}>
+                          <span>
+                            {request.track.title}
+                            <Show when={request.etaTracks}> · en ≤{request.etaTracks}</Show>
+                          </span>
+                          <button type="button" aria-label={`Cancelar ${request.track.title}`} onClick={() => actions.cancelAutoRequest(request.id)}>×</button>
+                        </span>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+              </div>
+
               <div class={styles.controls}>
                 <div class={styles.seek}>
                   <span class={styles.time}>{clockTime(state.playback.currentTime)}</span>
@@ -394,7 +565,11 @@ export function AutoMode() {
 
           <Show when={upcoming().length > 0}>
             <section class={styles.upStrip} aria-label={t('autoMode.upNext')}>
-              <span class={styles.upHead}>{t('autoMode.upNext')}</span>
+              <span class={styles.upHead}>
+                {transitionState().status === 'idle'
+                  ? t('autoMode.upNext')
+                  : `${transitionState().status === 'preparing' ? 'Preparando' : 'Mezclando'} · ${transitionState().technique?.replaceAll('_', ' ')}`}
+              </span>
               <div
                 class={styles.filmstrip}
                 data-rail=""
@@ -405,9 +580,10 @@ export function AutoMode() {
                   event.preventDefault();
                 }}
               >
-                <For each={upcoming()}>
+                <For each={upcoming().slice(0, 3)}>
                   {(track, index) => {
                     const image = () => track.cover ?? coverUrl(track.id);
+                    const plan = () => state.autoMode.plan[queueIdentity(track)];
                     return (
                       <button
                         class={styles.nextCard}
@@ -419,6 +595,9 @@ export function AutoMode() {
                         <span class={styles.nextMeta}>
                           <strong>{track.title}</strong>
                           <span>{track.artist}</span>
+                          <Show when={plan()?.transition}>
+                            <small>{plan()!.transition!.technique.replaceAll('_', ' ')} · {plan()?.bpm ? `${Math.round(plan()!.bpm!)} BPM` : 'analizando'}</small>
+                          </Show>
                         </span>
                       </button>
                     );
@@ -427,6 +606,38 @@ export function AutoMode() {
               </div>
             </section>
           </Show>
+        </Show>
+
+        <Show when={requestOpen()}>
+          <aside class={styles.requestPanel} aria-label="Pedir una canción al DJ">
+            <div class={styles.requestHead}>
+              <div>
+                <strong>Pedir canción</strong>
+                <span>Sonará en las próximas tres canciones como máximo</span>
+              </div>
+              <button type="button" aria-label={t('common.close')} onClick={() => setRequestOpen(false)}>×</button>
+            </div>
+            <input
+              class={styles.requestSearch}
+              autofocus
+              value={requestQuery()}
+              onInput={(event) => searchRequests(event.currentTarget.value)}
+              placeholder="Canción o artista"
+            />
+            <div class={styles.requestResults}>
+              <Show when={!requestBusy()} fallback={<p class={styles.requestEmpty}>Buscando…</p>}>
+                <For each={requestResults()} fallback={<p class={styles.requestEmpty}>Busca una canción exacta</p>}>
+                  {(item) => (
+                    <button type="button" onClick={() => void requestItem(item)}>
+                      <span class={styles.resultCover} style={{ 'background-image': item.cover ? `url("${item.cover}")` : undefined }} />
+                      <span><strong>{item.title}</strong><small>{item.artist ?? item.subtitle}</small></span>
+                      <b>Pedir</b>
+                    </button>
+                  )}
+                </For>
+              </Show>
+            </div>
+          </aside>
         </Show>
       </div>
     </Portal>

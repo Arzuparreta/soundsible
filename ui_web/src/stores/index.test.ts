@@ -94,6 +94,8 @@ async function loadStore(
     setVolume: vi.fn(),
     setMuted: vi.fn(),
     getVolume: vi.fn(() => 1),
+    cancelDjTransition: vi.fn(),
+    scheduleDjTransition: vi.fn().mockResolvedValue(undefined),
     ...audioOverrides,
   };
 

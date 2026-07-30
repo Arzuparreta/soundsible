@@ -81,6 +81,9 @@ export const fr: Dict = {
     aria: 'Lecteur autonome Auto Mode',
     label: 'AUTO',
     enter: 'Entrer dans Auto Mode',
+    startDj: 'Démarrer une session DJ',
+    startDjHint: 'Auto choisira le premier morceau',
+    noSeed: 'Auto ne trouve aucun morceau pour commencer.',
     exit: 'Quitter Auto',
     changeProfile: 'Changer de profil. Actuel : {profile}',
     profile: {

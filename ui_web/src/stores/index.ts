@@ -3,6 +3,9 @@ import { createMemo, createRoot, createSignal } from 'solid-js';
 import { createSocket, type AppSocket, dispatchDiscoverSeed } from '../lib/socket';
 import {
   api,
+  type DjDirection,
+  type DjPlanResponse,
+  type DjProfile,
   type DeviceRegistration,
   type ListeningPlanItem,
   type RemotePlaybackState,
@@ -31,6 +34,7 @@ import {
   type AutoModeState,
   type AutoPlanItem,
   type AutoProfile,
+  type AutoRequest,
 } from '../lib/generatedQueue';
 import { createShortcutHandler } from '../lib/shortcuts';
 import { t as tr } from '../lib/i18n';
@@ -149,6 +153,21 @@ function initialAutoProfile(): AutoProfile {
   return value === 'familiar' || value === 'explore' ? value : 'balanced';
 }
 
+function initialDjProfile(): DjProfile {
+  const value = localStorage.getItem('auto:dj-profile');
+  return value === 'long_blend' || value === 'cuts_drops' || value === 'open_format'
+    ? value
+    : 'adaptive';
+}
+
+const initialDjDirection = (): DjDirection => ({
+  energy: 0,
+  familiarity: 0,
+  prompt: '',
+  include: [],
+  exclude: [],
+});
+
 /**
  * UUID v4 that also works in insecure contexts (LAN/Tailscale over plain HTTP),
  * where `crypto.randomUUID` is undefined — only secure contexts (HTTPS /
@@ -227,6 +246,10 @@ const [state, setState] = createStore<AppState>({
   autoMode: {
     active: false,
     profile: initialAutoProfile(),
+    djProfile: initialDjProfile(),
+    direction: initialDjDirection(),
+    requests: [],
+    transition: { status: 'idle' },
     phase: 'idle',
     activity: null,
     plan: {},
@@ -740,6 +763,77 @@ function restoreSameDevicePlayback(remote: RemotePlaybackState): void {
   audioService.prime(trackUrl(track), pos);
 }
 
+let scheduledDjTransition = '';
+
+function resetDjTransitionState(): void {
+  scheduledDjTransition = '';
+  audioService.cancelDjTransition();
+  if (state.autoMode.active) setState('autoMode', 'transition', { status: 'idle' });
+}
+
+function maybeStartDjTransition(immediate = false): boolean {
+  if (!state.autoMode.active || state.autoMode.transition.status !== 'idle') return false;
+  const pb = state.playback;
+  const nextIndex = pb.index + 1;
+  const next = pb.queue[nextIndex];
+  if (!next || !pb.currentTrack) return false;
+  const identity = queueIdentity(next);
+  const plan = state.autoMode.plan[identity]?.transition;
+  if (!plan) return false;
+  const triggerAt = immediate ? pb.currentTime : plan.out_cue - 8;
+  if (!immediate && pb.currentTime < Math.max(0, triggerAt)) return false;
+  const key = `${pb.index}:${identity}:${plan.out_cue}`;
+  if (scheduledDjTransition === key) return false;
+  scheduledDjTransition = key;
+  const livePlan = immediate
+    ? { ...plan, out_cue: pb.currentTime + 0.35, overlap_seconds: Math.min(5, plan.overlap_seconds) }
+    : plan;
+  setState('autoMode', 'transition', {
+    status: 'preparing',
+    technique: livePlan.technique,
+    nextTrackId: identity,
+  });
+  void audioService.scheduleDjTransition(trackUrl(next), livePlan, {
+    onDominant: () => {
+      if (!state.autoMode.active || state.playback.queue[nextIndex]?.queueId !== next.queueId) return;
+      activeAttempt = null;
+      setState('playback', {
+        currentTrack: next,
+        index: nextIndex,
+        currentTime: livePlan.in_cue + livePlan.overlap_seconds / 2,
+        duration: next.duration ?? 0,
+        isPlaying: true,
+        isLoading: false,
+        loadError: false,
+        phase: 'playing',
+      });
+      setState('autoMode', 'transition', {
+        status: 'mixing',
+        technique: livePlan.technique,
+        nextTrackId: identity,
+      });
+      setState('autoMode', 'requests', (requests) =>
+        requests.filter((request) => request.track.id !== next.id),
+      );
+      updateMediaSession(next);
+      pushPlaybackState();
+    },
+    onComplete: (position) => {
+      scheduledDjTransition = '';
+      setState('playback', { currentTime: position, duration: audioEl().duration || next.duration || 0 });
+      setState('autoMode', 'transition', { status: 'idle' });
+      void generatedQueue?.refillNow();
+    },
+    onError: () => {
+      scheduledDjTransition = '';
+      setState('autoMode', 'transition', { status: 'idle' });
+      // The request/route remains intact; normal playback is the safe fallback.
+      loadIndex(nextIndex, { trigger: 'next' });
+    },
+  });
+  return true;
+}
+
 function onEnded(): void {
   const pb = state.playback;
   if (pb.repeat === 'one') {
@@ -1203,7 +1297,39 @@ export const actions = {
    * track or discarding any manually prepared queue. */
   enterAutoMode(): void {
     const current = state.playback.currentTrack;
-    if (!current || isPodcastTrack(current) || state.autoMode.active) return;
+    if (state.autoMode.active || (current && isPodcastTrack(current))) return;
+    if (!current) {
+      const localSeed = state.library.find((track) => !isPodcastTrack(track));
+      if (localSeed) {
+        actions.playTrack(localSeed);
+        queueMicrotask(() => actions.enterAutoMode());
+        return;
+      }
+      void api.getDiscoveryMusicFeed()
+        .then((feed) => {
+          const item = (feed.items ?? []).find((row) =>
+            Boolean(row.track_id || row.external_ids?.youtube_id),
+          );
+          if (!item) throw new Error('no music seed');
+          const owned = item.track_id
+            ? state.library.find((track) => track.id === item.track_id)
+            : null;
+          const videoId = String(item.external_ids?.youtube_id ?? '');
+          const seed: Track = owned ?? {
+            id: videoId,
+            title: item.title,
+            artist: item.artist,
+            album: item.album,
+            duration: item.duration,
+            cover: item.cover,
+            source: 'preview',
+          };
+          actions.playTrack(seed);
+          queueMicrotask(() => actions.enterAutoMode());
+        })
+        .catch(() => toast.error(tr('autoMode.noSeed')));
+      return;
+    }
     autoPlaybackPrefs = {
       shuffle: state.playback.shuffle,
       repeat: state.playback.repeat,
@@ -1223,11 +1349,22 @@ export const actions = {
       radioSeedId: null,
       queue: [...prefix, ...manual],
     });
+    setState('autoMode', {
+      active: true,
+      phase: 'planning',
+      activity: null,
+      plan: {},
+      transition: { status: 'idle' },
+    });
     void ensureGeneratedQueue().start('auto_mode', current, state.autoMode.profile);
   },
 
   /** Leave Auto while preserving playback and every track it prepared. */
   exitAutoMode(): void {
+    // Once the incoming deck is dominant, let the already audible handoff
+    // finish before returning to normal playback. Cancelling it would revive
+    // the faded-out song while the UI names the new one.
+    if (state.autoMode.transition.status !== 'mixing') resetDjTransitionState();
     generatedQueue?.stop('auto_mode');
     if (autoPlaybackPrefs) {
       setState('playback', {
@@ -1248,11 +1385,47 @@ export const actions = {
     void ensureGeneratedQueue().setProfile(profile);
   },
 
+  setAutoDjProfile(profile: DjProfile): void {
+    try {
+      localStorage.setItem('auto:dj-profile', profile);
+    } catch {
+      /* private mode / storage disabled */
+    }
+    setState('autoMode', 'djProfile', profile);
+    if (state.autoMode.active) void ensureGeneratedQueue().setProfile(state.autoMode.profile);
+  },
+
+  setAutoDirection(direction: Partial<DjDirection>): void {
+    setState('autoMode', 'direction', (current) => ({ ...current, ...direction }));
+    if (state.autoMode.active) void ensureGeneratedQueue().setProfile(state.autoMode.profile);
+  },
+
+  requestAutoTrack(track: Track): void {
+    if (!state.autoMode.active || isPodcastTrack(track)) return;
+    const duplicate = state.autoMode.requests.some((request) =>
+      queueIdentity(request.track) === queueIdentity(track),
+    );
+    if (duplicate) return;
+    const request: AutoRequest = {
+      id: randomId(),
+      track,
+      status: 'queued',
+      etaTracks: null,
+    };
+    setState('autoMode', 'requests', (requests) => [...requests, request]);
+    void ensureGeneratedQueue().setProfile(state.autoMode.profile);
+  },
+
+  cancelAutoRequest(id: string): void {
+    setState('autoMode', 'requests', (requests) => requests.filter((request) => request.id !== id));
+    if (state.autoMode.active) void ensureGeneratedQueue().setProfile(state.autoMode.profile);
+  },
+
   async autoSkip(): Promise<void> {
     const canAdvance = () => state.playback.index < state.playback.queue.length - 1;
     if (canAdvance()) {
       void generatedQueue?.refillNow();
-      actions.next();
+      if (!maybeStartDjTransition(true)) actions.next();
       return;
     }
     await generatedQueue?.refillNow();
@@ -1419,6 +1592,7 @@ export const actions = {
   },
 
   next(trigger: PlaybackTrigger = 'next'): void {
+    if (state.autoMode.transition.status !== 'idle') resetDjTransitionState();
     const pb = state.playback;
     if (pb.queue.length === 0) return;
     if (pb.index < pb.queue.length - 1) loadIndex(pb.index + 1, { trigger });
@@ -1444,6 +1618,7 @@ export const actions = {
   },
 
   seek(t: number): void {
+    if (state.autoMode.transition.status !== 'idle') resetDjTransitionState();
     audioService.seek(t);
     setState('playback', 'currentTime', Math.max(0, t));
     pushPlaybackState();
@@ -2185,23 +2360,29 @@ function ensureGeneratedQueue(): GeneratedQueueController {
       index: state.playback.index,
     }),
     identity: queueIdentity,
-    requestPlan: (intent, profile, seed, limit, exclude, signal) =>
-      api.planMusicQueue({
-        intent,
-        profile,
-        seed: {
-          id: seed.id,
-          track_id: seed.source === 'preview' ? undefined : seed.id,
-          youtube_id: seed.youtube_id ?? (seed.source === 'preview' ? seed.id : undefined),
-          source: seed.source,
-          title: seed.title,
-          artist: seed.artist,
-          album: seed.album,
-          duration: seed.duration,
-        },
-        exclude,
-        limit,
-      }, signal),
+    requestPlan: (intent, profile, seed, limit, exclude, signal) => {
+      const seedBody = {
+        id: seed.id,
+        track_id: seed.source === 'preview' ? undefined : seed.id,
+        youtube_id: seed.youtube_id ?? (seed.source === 'preview' ? seed.id : undefined),
+        source: seed.source,
+        title: seed.title,
+        artist: seed.artist,
+        album: seed.album,
+        duration: seed.duration,
+      };
+      if (intent === 'auto_mode' && typeof api.planDjQueue === 'function') {
+        return api.planDjQueue({
+          dj_profile: state.autoMode.djProfile,
+          direction: state.autoMode.direction,
+          seed: seedBody,
+          requests: state.autoMode.requests.map(({ id, track }) => ({ id, track })),
+          exclude,
+          limit,
+        }, signal);
+      }
+      return api.planMusicQueue({ intent, profile, seed: seedBody, exclude, limit }, signal);
+    },
     applyPlan: (intent, response, replace) => {
       const retained = replace
         ? [
@@ -2232,9 +2413,24 @@ function ensureGeneratedQueue(): GeneratedQueueController {
             reasonValues: item.source_pool === 'related'
               ? { title: state.playback.currentTrack?.title ?? '' }
               : undefined,
+            transition: item.transition,
+            bpm: item.analysis?.bpm,
+            key: item.analysis?.key,
+            requestId: item.request_id,
           };
         }
         setState('autoMode', 'plan', plan);
+        const djRequests = (response as Partial<DjPlanResponse>).requests;
+        if (Array.isArray(djRequests)) {
+          const statuses = new Map<string, number | null>(
+            djRequests.map((request) => [request.id, request.eta_tracks]),
+          );
+          setState('autoMode', 'requests', (requests) => requests.map((request) => (
+            statuses.has(request.id)
+              ? { ...request, status: 'planned', etaTracks: statuses.get(request.id) ?? null }
+              : request
+          )));
+        }
       }
       prefetchUpcoming();
       return entries.length;
@@ -2499,6 +2695,7 @@ export function initStore(): void {
     const position = a.currentTime || 0;
     setState('playback', 'currentTime', position);
     listeningLearning.update(state.playback.currentTrack, position, !a.paused && !a.ended);
+    if (state.autoMode.active) maybeStartDjTransition();
   });
   const setDur = () => {
     setState('playback', 'duration', Number.isFinite(a.duration) ? a.duration : 0);
@@ -2640,7 +2837,7 @@ export function initStore(): void {
           autoModeActive: state.autoMode.active,
           nowPlayingOpen: nowPlayingOpen(),
           autoModeAvailable:
-            !!state.playback.currentTrack && !isPodcastTrack(state.playback.currentTrack),
+            !state.playback.currentTrack || !isPodcastTrack(state.playback.currentTrack),
         }),
         {
           togglePlay: () => actions.togglePlay(),

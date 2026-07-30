@@ -81,6 +81,9 @@ export const zh: Dict = {
     aria: 'Auto Mode 自动播放器',
     label: 'AUTO',
     enter: '进入 Auto Mode',
+    startDj: '开始 DJ 会话',
+    startDjHint: '自动模式会选择第一首歌',
+    noSeed: '自动模式找不到可开始播放的歌曲。',
     exit: '退出 Auto',
     changeProfile: '切换模式。当前：{profile}',
     profile: {

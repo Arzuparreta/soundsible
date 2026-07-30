@@ -507,7 +507,7 @@ export function NowPlaying() {
               <path d="M21 21l-4.3-4.3" />
             </svg>
           </button>
-          <Show when={t() && !isPodcast()}>
+          <Show when={!t() || !isPodcast()}>
             <button
               class={styles.autoToggle}
               type="button"

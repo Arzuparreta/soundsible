@@ -80,6 +80,9 @@ export const en = {
     aria: 'Auto Mode autonomous player',
     label: 'AUTO',
     enter: 'Enter Auto Mode',
+    startDj: 'Start a DJ session',
+    startDjHint: 'Auto will choose the first track',
+    noSeed: 'Auto could not find a track to start with.',
     exit: 'Exit Auto',
     changeProfile: 'Change profile. Current: {profile}',
     profile: {

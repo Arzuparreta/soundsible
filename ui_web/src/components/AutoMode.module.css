@@ -788,6 +788,266 @@
   white-space: nowrap;
 }
 
+.nextMeta small {
+  overflow: hidden;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+/* ── DJ controls ── */
+.djPicker {
+  position: fixed;
+  z-index: 8;
+  top: calc(var(--auto-top-h) + var(--auto-pad-block) + 10px);
+  right: var(--auto-gutter);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(190px, 1fr));
+  gap: 8px;
+  width: min(520px, calc(100vw - var(--auto-gutter) * 2));
+  padding: 10px;
+  background: rgba(14, 14, 17, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.52);
+  backdrop-filter: blur(24px);
+}
+
+.djCard {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 13px 14px;
+  color: var(--ink-primary);
+  text-align: left;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.djCard strong { font-size: 14px; }
+.djCard span { color: var(--ink-secondary); font-size: 11px; line-height: 1.4; }
+.djCardActive { border-color: var(--accent); background: rgba(249, 122, 18, 0.12); }
+
+.djControls {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.command {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  height: 42px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-full);
+}
+
+.command:focus-within { border-color: rgba(249, 122, 18, 0.68); }
+
+.command input {
+  min-width: 0;
+  padding: 0 15px;
+  color: var(--ink-primary);
+  font: inherit;
+  font-size: 13px;
+  background: transparent;
+  border: 0;
+  outline: 0;
+}
+
+.command input::placeholder { color: rgba(242, 242, 245, 0.46); }
+
+.command button {
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.command button:disabled { color: var(--ink-tertiary); cursor: default; }
+.command svg { width: 19px; height: 19px; }
+
+.quickControls {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.quickControls::-webkit-scrollbar { display: none; }
+
+.quickControls button {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  color: rgba(242, 242, 245, 0.76);
+  font: inherit;
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.quickControls .requestButton {
+  color: var(--ink-on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.requests {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.requestChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 6px 5px 10px;
+  color: rgba(242, 242, 245, 0.78);
+  font-size: 11px;
+  background: rgba(249, 122, 18, 0.1);
+  border: 1px solid rgba(249, 122, 18, 0.24);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+.requestChip button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: inherit;
+  font-size: 17px;
+  line-height: 1;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.requestPanel {
+  position: fixed;
+  z-index: 12;
+  inset: 0 0 0 auto;
+  display: flex;
+  width: min(440px, 100vw);
+  flex-direction: column;
+  gap: 14px;
+  padding: max(22px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
+  color: var(--ink-primary);
+  background: rgba(10, 10, 12, 0.97);
+  border-left: 1px solid rgba(255, 255, 255, 0.11);
+  box-shadow: -30px 0 90px rgba(0, 0, 0, 0.54);
+  backdrop-filter: blur(28px);
+}
+
+.requestHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.requestHead div { display: flex; flex-direction: column; gap: 4px; }
+.requestHead strong { font-size: 22px; }
+.requestHead span { color: var(--ink-secondary); font-size: 12px; }
+.requestHead button {
+  width: 38px;
+  height: 38px;
+  color: var(--ink-primary);
+  font-size: 24px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.requestSearch {
+  height: 46px;
+  padding: 0 14px;
+  color: var(--ink-primary);
+  font: inherit;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-md);
+  outline: 0;
+}
+
+.requestSearch:focus { border-color: var(--accent); }
+.requestResults { min-height: 0; overflow-y: auto; }
+
+.requestResults > button {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 8px;
+  color: var(--ink-primary);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .requestResults > button:hover { background: rgba(255, 255, 255, 0.07); }
+}
+.requestResults > button > span:not(.resultCover) { display: flex; min-width: 0; flex-direction: column; }
+.requestResults strong, .requestResults small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.requestResults small { color: var(--ink-secondary); }
+.requestResults b { color: var(--accent); font-size: 12px; }
+
+.resultCover {
+  width: 48px;
+  height: 48px;
+  background-color: var(--bg-raised);
+  background-position: center;
+  background-size: cover;
+  border-radius: var(--radius-sm);
+}
+
+.requestEmpty { color: var(--ink-secondary); font-size: 13px; text-align: center; }
+
+.emptyDj {
+  grid-area: stage;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: var(--ink-secondary);
+  text-align: center;
+}
+
+.emptyDj strong { color: var(--ink-primary); font-size: clamp(20px, 3vw, 34px); }
+.emptyDisc {
+  width: 100px;
+  height: 100px;
+  margin-bottom: 12px;
+  background: repeating-radial-gradient(circle, var(--accent) 0 4px, #18181c 5px 12px);
+  border-radius: 50%;
+  animation: autoSpin 2.4s linear infinite;
+}
+
+@keyframes autoSpin { to { transform: rotate(360deg); } }
+
 .nextMeta strong {
   font-size: var(--auto-card-title);
   font-weight: var(--fw-semibold);
@@ -929,6 +1189,30 @@
 
   .active {
     transform: none;
+  }
+
+  .djPicker {
+    top: calc(var(--auto-top-h) + var(--auto-pad-block) + 4px);
+    grid-template-columns: 1fr;
+    max-height: calc(100vh - var(--auto-top-h) - 40px);
+    overflow-y: auto;
+  }
+
+  .djControls {
+    gap: 6px;
+  }
+
+  .command {
+    height: 38px;
+  }
+
+  .quickControls button {
+    padding-block: 6px;
+  }
+
+  .requestPanel {
+    width: 100vw;
+    border-left: 0;
   }
 
   /* The anchor rectangle is in viewport coordinates, so the frame it drives has

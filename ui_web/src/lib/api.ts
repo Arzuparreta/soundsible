@@ -138,6 +138,27 @@ export interface DiscoveryMusicFeed {
 
 export type ListeningPlanIntent = 'autoplay' | 'radio' | 'auto_mode';
 export type ListeningPlanProfile = 'familiar' | 'balanced' | 'explore';
+export type DjProfile = 'adaptive' | 'long_blend' | 'cuts_drops' | 'open_format';
+
+export interface DjDirection {
+  energy: number;
+  familiarity: number;
+  prompt: string;
+  include: string[];
+  exclude: string[];
+}
+
+export interface DjTransitionPlan {
+  technique: 'long_blend' | 'bass_swap' | 'filter_blend' | 'echo_cut' | 'structural_fade' | 'safe_fade';
+  out_cue: number;
+  in_cue: number;
+  overlap_seconds: number;
+  overlap_bars: number;
+  playback_rate: number;
+  score: number;
+  confidence: number;
+  fallback: boolean;
+}
 
 export interface ListeningPlanItem {
   id: string;
@@ -156,10 +177,21 @@ export interface ListeningPlanItem {
   recommendation_source: ListeningPlanIntent;
   score?: number;
   external_ids?: Record<string, string | number | boolean | null | undefined>;
+  transition?: DjTransitionPlan;
+  analysis?: {
+    duration: number;
+    bpm: number;
+    key?: string | null;
+    mode?: string | null;
+    energy: number;
+    confidence: number;
+    analysed: boolean;
+  };
+  request_id?: string;
 }
 
 export interface ListeningPlanResponse {
-  v: 1;
+  v: 1 | 2;
   plan_id: string;
   intent: ListeningPlanIntent;
   profile: ListeningPlanProfile;
@@ -168,6 +200,14 @@ export interface ListeningPlanResponse {
   degraded: boolean;
   pool_counts: Record<'local' | 'related' | 'discovery', number>;
   generated_at: number;
+}
+
+export interface DjPlanResponse extends ListeningPlanResponse {
+  v: 2;
+  dj_profile: DjProfile;
+  source_profile: ListeningPlanProfile;
+  items: ListeningPlanItem[];
+  requests: Array<{ id: string; track_identity: string; eta_tracks: number | null }>;
 }
 
 export interface DiscoverySaveCandidate {
@@ -692,6 +732,32 @@ export const api = {
       body,
       signal,
       timeoutMs: 45000,
+    }),
+  planDjQueue: (
+    body: {
+      dj_profile: DjProfile;
+      direction: DjDirection;
+      seed: {
+        id?: string;
+        track_id?: string;
+        youtube_id?: string;
+        source?: string;
+        title: string;
+        artist: string;
+        album?: string;
+        duration?: number;
+      };
+      requests?: Array<{ id: string; track: Track }>;
+      exclude?: string[];
+      limit?: number;
+    },
+    signal?: AbortSignal,
+  ) =>
+    request<DjPlanResponse>('/api/discovery/music/dj-plan', {
+      method: 'POST',
+      body,
+      signal,
+      timeoutMs: 90000,
     }),
   saveDiscoveryTrack: (body: {
     artist: string;

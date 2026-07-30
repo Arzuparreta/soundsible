@@ -81,6 +81,9 @@ export const es: Dict = {
     aria: 'Reproductor autónomo de Auto Mode',
     label: 'AUTO',
     enter: 'Entrar en Auto Mode',
+    startDj: 'Empezar una sesión de DJ',
+    startDjHint: 'Auto elegirá la primera canción',
+    noSeed: 'Auto no encontró una canción con la que empezar.',
     exit: 'Salir de Auto',
     changeProfile: 'Cambiar perfil. Actual: {profile}',
     profile: {
