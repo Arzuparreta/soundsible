@@ -541,10 +541,19 @@ export const api = {
       timeoutMs: 15000,
     }),
   /** Lyrics for tracks not in the library (previews), looked up by metadata. */
-  getLyricsByMetadata: (p: { artist: string; title: string; album?: string; duration?: number }) => {
+  getLyricsByMetadata: (p: {
+    artist: string;
+    title: string;
+    album?: string;
+    duration?: number;
+    persist?: boolean;
+    refresh?: boolean;
+  }) => {
     const params = new URLSearchParams({ artist: p.artist, title: p.title });
     if (p.album) params.set('album', p.album);
     if (p.duration) params.set('duration', String(Math.round(p.duration)));
+    if (p.persist) params.set('persist', '1');
+    if (p.refresh) params.set('refresh', '1');
     return request<LyricsResponse>(`/api/lyrics?${params.toString()}`, { timeoutMs: 15000 });
   },
 

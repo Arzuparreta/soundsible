@@ -9,6 +9,7 @@ as a short, bounded fallback when LRCLIB returns no candidates.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import threading
@@ -36,7 +37,7 @@ _MIN_FALLBACK_BUDGET_SEC = 1.0
 _MIN_MATCH_SCORE = 0.72
 _MIN_TITLE_SCORE = 0.68
 
-RESOLVER_SOURCE = "lrclib:v2"
+RESOLVER_SOURCE = "lrclib:v3"
 
 _LOOKUP_WORKERS = 2
 
@@ -240,11 +241,25 @@ def _pick_best(
     return item
 
 
-def _lrclib_search(artist: str, title: str, deadline: float) -> list[Dict[str, Any]]:
-    query = " ".join(part for part in (artist, title) if part).strip()
+def _lrclib_search(
+    artist: str,
+    title: str,
+    album: Optional[str],
+    deadline: float,
+) -> list[Dict[str, Any]]:
+    # LRCLIB's broad ``q`` search can be dramatically slower than its
+    # structured index (and, in practice, may time out while the same exact
+    # record answers in a few hundred milliseconds). Keep the normalized
+    # metadata separate so the provider can use that index.
+    params: Dict[str, Any] = {
+        "artist_name": artist,
+        "track_name": title,
+    }
+    if album:
+        params["album_name"] = album
     results = _lrclib_get(
         "/api/search",
-        {"q": query},
+        params,
         _remaining(deadline, _LRCLIB_TIMEOUT_SEC),
     )
     return results if isinstance(results, list) else []
@@ -268,7 +283,7 @@ def fetch_lyrics(
     deadline = time.monotonic() + _TOTAL_BUDGET_SEC
     clean_artist, clean_title = _canonical_metadata(artist, title)
     try:
-        results = _lrclib_search(clean_artist, clean_title, deadline)
+        results = _lrclib_search(clean_artist, clean_title, album, deadline)
         best = _pick_best(results, clean_artist, clean_title, album, duration)
         if best:
             return _result_to_record(best)
@@ -309,7 +324,12 @@ def fetch_lyrics(
         canonical_query = _fold(f"{canonical_artist} {canonical_title}")
         if canonical_query == old_query:
             return {"synced": None, "plain": None, "instrumental": False, "source": RESOLVER_SOURCE}
-        retry_results = _lrclib_search(canonical_artist, canonical_title, deadline)
+        retry_results = _lrclib_search(
+            canonical_artist,
+            canonical_title,
+            canonical_album,
+            deadline,
+        )
         retry_best = _pick_best(
             retry_results,
             canonical_artist,
@@ -391,6 +411,22 @@ def _lookup_key(artist: str, title: str, album: Optional[str], duration: Optiona
             str(int(duration or 0)),
         )
     )
+
+
+def metadata_cache_key(
+    artist: str,
+    title: str,
+    album: Optional[str] = None,
+    duration: Optional[int] = None,
+) -> str:
+    """Stable, opaque cache identity for a metadata-only streaming track.
+
+    Preview ids are transport identities and may change, but the normalized
+    signature used to resolve the lyrics is stable. Hashing also avoids
+    persisting user-supplied metadata verbatim as a SQLite primary key.
+    """
+    digest = hashlib.sha256(_lookup_key(artist, title, album, duration).encode("utf-8")).hexdigest()
+    return f"metadata-lyrics:{digest}"
 
 
 def poll_lyrics(

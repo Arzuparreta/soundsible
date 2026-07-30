@@ -1453,6 +1453,7 @@ def health_check():
     ``admin:instance``.
     """
     from shared.ffmpeg_runtime import ffmpeg_status
+    from shared.build_info import source_revision
     from shared.hardening import request_is_admin_user
 
     runtime = get_runtime_config()
@@ -1507,6 +1508,7 @@ def health_check():
             "lan_enabled": runtime.lan_enabled,
             "config_exists": config_exists,
             "accounts": accounts,
+            "source_revision": source_revision(_REPO_ROOT),
             "jobs": {
                 "active_count": len(orchestrator.active_jobs),
                 "active_ids": sorted(orchestrator.active_jobs.keys()),

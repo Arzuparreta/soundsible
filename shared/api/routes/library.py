@@ -19,6 +19,23 @@ logger = logging.getLogger(__name__)
 library_bp = Blueprint("library", __name__, url_prefix="")
 
 
+def _lyrics_payload(record=None, *, cached=False, status=None):
+    if status is None:
+        status = (
+            "ready"
+            if record and (record.get("synced") or record.get("plain") or record.get("instrumental"))
+            else "not_found"
+        )
+    return {
+        "status": status,
+        "synced": record.get("synced") if record else None,
+        "plain": record.get("plain") if record else None,
+        "instrumental": bool(record and record.get("instrumental")),
+        "cached": cached,
+        "pending": status == "pending",
+    }
+
+
 def _playlist_mutation_response(metadata, status: str = "success"):
     """Stable shape for web client: playlists plus library settings (e.g. playlist_covers)."""
     return jsonify({"status": status, "playlists": metadata.playlists, "settings": metadata.settings})
@@ -203,31 +220,14 @@ def get_track_lyrics(track_id):
     if not refresh:
         cached = db.get_lyrics(track_id)
         if cached:
-            return jsonify({
-                "synced": cached["synced"],
-                "plain": cached["plain"],
-                "instrumental": cached["instrumental"],
-                "cached": True,
-            })
+            return jsonify(_lyrics_payload(cached, cached=True))
 
     lookup_status, record = poll_lyrics(track.artist, track.title, track.album, track.duration)
     if lookup_status != "complete":
-        return jsonify({
-            "synced": None,
-            "plain": None,
-            "instrumental": False,
-            "cached": False,
-            "pending": True,
-        }), 202
+        return jsonify(_lyrics_payload(status="pending")), 202
     if record is None:
         # Provider unreachable: don't cache, let a later request retry.
-        return jsonify({
-            "synced": None,
-            "plain": None,
-            "instrumental": False,
-            "cached": False,
-            "pending": False,
-        })
+        return jsonify(_lyrics_payload(status="unavailable"))
     db.set_lyrics(
         track_id,
         synced=record["synced"],
@@ -235,22 +235,17 @@ def get_track_lyrics(track_id):
         instrumental=record["instrumental"],
         source=record["source"],
     )
-    return jsonify({
-        "synced": record["synced"],
-        "plain": record["plain"],
-        "instrumental": record["instrumental"],
-        "cached": False,
-        "pending": False,
-    })
+    return jsonify(_lyrics_payload(record))
 
 
 @library_bp.route("/api/lyrics", methods=["GET"])
 @rate_limit("lyrics_lookup", limit=60, window_sec=60)
 def get_lyrics_by_metadata():
     """Lyrics lookup by metadata, for tracks not in the library (previews).
-    No persistent caching: preview ids are ephemeral; cold provider work runs
-    through the bounded lyrics coordinator."""
-    from shared.lyrics import poll_lyrics
+    Saved previews may opt into a persistent cache keyed by their normalized
+    metadata; cold provider work runs through the bounded coordinator."""
+    from shared.database import instance_db
+    from shared.lyrics import metadata_cache_key, poll_lyrics
 
     artist = (request.args.get("artist") or "").strip()
     title = (request.args.get("title") or "").strip()
@@ -262,30 +257,29 @@ def get_lyrics_by_metadata():
     if not artist or not title:
         return jsonify({"error": "artist and title are required"}), 400
 
+    persist = request.args.get("persist") in ("1", "true")
+    refresh = request.args.get("refresh") in ("1", "true")
+    db = instance_db()
+    cache_key = metadata_cache_key(artist, title, album, duration)
+    if persist and not refresh:
+        cached = db.get_lyrics(cache_key)
+        if cached:
+            return jsonify(_lyrics_payload(cached, cached=True))
+
     lookup_status, record = poll_lyrics(artist, title, album, duration)
     if lookup_status != "complete":
-        return jsonify({
-            "synced": None,
-            "plain": None,
-            "instrumental": False,
-            "cached": False,
-            "pending": True,
-        }), 202
+        return jsonify(_lyrics_payload(status="pending")), 202
     if record is None:
-        return jsonify({
-            "synced": None,
-            "plain": None,
-            "instrumental": False,
-            "cached": False,
-            "pending": False,
-        })
-    return jsonify({
-        "synced": record["synced"],
-        "plain": record["plain"],
-        "instrumental": record["instrumental"],
-        "cached": False,
-        "pending": False,
-    })
+        return jsonify(_lyrics_payload(status="unavailable"))
+    if persist:
+        db.set_lyrics(
+            cache_key,
+            synced=record["synced"],
+            plain=record["plain"],
+            instrumental=record["instrumental"],
+            source=record["source"],
+        )
+    return jsonify(_lyrics_payload(record))
 
 
 @library_bp.route("/api/library/tracks/<track_id>/metadata", methods=["POST"])

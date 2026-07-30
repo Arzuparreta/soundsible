@@ -1009,7 +1009,7 @@ class DatabaseManager:
     # Note: Lyrics cache
 
     _LYRICS_NEGATIVE_TTL_SEC = 7 * 24 * 3600
-    _LYRICS_RESOLVER_SOURCE = "lrclib:v2"
+    _LYRICS_RESOLVER_SOURCE = "lrclib:v3"
 
     def get_lyrics(self, track_id: str) -> Optional[Dict[str, Any]]:
         """Return the cached lyrics record for a track, or None if missing.

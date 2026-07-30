@@ -684,6 +684,8 @@ export const en = {
     noTrack: 'Play something to see its lyrics.',
     loading: 'Loading lyrics',
     error: 'Lyrics could not be loaded.',
+    unavailable: 'The lyrics provider is not responding right now.',
+    retry: 'Try again',
     instrumental: 'Instrumental track.',
     notFound: 'No lyrics found for this track.',
   },

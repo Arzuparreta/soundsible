@@ -696,6 +696,8 @@ export const fr: Dict = {
     noTrack: 'Lancez un titre pour voir ses paroles.',
     loading: 'Chargement des paroles',
     error: 'Impossible de charger les paroles.',
+    unavailable: 'Le fournisseur de paroles ne répond pas pour le moment.',
+    retry: 'Réessayer',
     instrumental: 'Titre instrumental.',
     notFound: 'Aucunes paroles trouvées pour ce titre.',
   },

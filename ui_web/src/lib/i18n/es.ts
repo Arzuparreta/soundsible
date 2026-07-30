@@ -688,6 +688,8 @@ export const es: Dict = {
     noTrack: 'Reproduce algo para ver su letra.',
     loading: 'Cargando letra',
     error: 'No se pudo cargar la letra.',
+    unavailable: 'El proveedor de letras no responde ahora mismo.',
+    retry: 'Reintentar',
     instrumental: 'Pista instrumental.',
     notFound: 'No se encontró letra para esta canción.',
   },

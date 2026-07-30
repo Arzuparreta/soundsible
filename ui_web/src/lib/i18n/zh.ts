@@ -674,6 +674,8 @@ export const zh: Dict = {
     noTrack: '播放歌曲后即可查看歌词。',
     loading: '正在加载歌词',
     error: '歌词加载失败。',
+    unavailable: '歌词服务暂时没有响应。',
+    retry: '重试',
     instrumental: '纯音乐。',
     notFound: '未找到这首歌的歌词。',
   },

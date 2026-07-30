@@ -1,13 +1,18 @@
 [Unit]
 Description=Soundsible Core API & Watcher
 After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Service]
-Type=simple
+Type=exec
 WorkingDirectory={{ROOT_DIR}}
+ExecStartPre={{PYTHON_EXE}} -m shared.service_guard preflight
 ExecStart={{PYTHON_EXE}} run.py --daemon
-Restart=always
-RestartSec=10
+ExecStartPost={{PYTHON_EXE}} -m shared.service_guard ready --pid ${MAINPID} --timeout 30
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=45
 
 [Install]
 WantedBy=default.target

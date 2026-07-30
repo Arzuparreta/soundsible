@@ -60,6 +60,7 @@ export interface RecommendationContext {
 }
 
 export interface LyricsResponse {
+  status: 'pending' | 'ready' | 'not_found' | 'unavailable';
   synced: string | null;
   plain: string | null;
   instrumental: boolean;

@@ -12,6 +12,7 @@ const { actions, api, state } = vi.hoisted(() => ({
   },
   state: {
     library: [] as Track[],
+    saved: [] as Array<{ keys: string[]; title: string; artist?: string }>,
     playback: {
       currentTrack: null as Track | null,
       currentTime: 0,
@@ -32,15 +33,18 @@ describe('LyricsPanel', () => {
     Element.prototype.scrollIntoView = vi.fn();
     const track: Track = { id: 'song', title: 'Song', artist: 'Artist' };
     state.library = [track];
+    state.saved = [];
     state.playback.currentTrack = track;
     state.playback.currentTime = 0;
     api.getTrackLyrics.mockResolvedValue({
+      status: 'ready',
       synced: '[00:00.00]First line\n[00:05.00]Second line',
       plain: null,
       instrumental: false,
       cached: true,
     });
     api.getLyricsByMetadata.mockResolvedValue({
+      status: 'not_found',
       synced: null,
       plain: null,
       instrumental: false,
@@ -95,6 +99,7 @@ describe('LyricsPanel', () => {
     // own scrollTop instead, or synced lyrics sit frozen while the song plays.
     state.playback.currentTime = 25;
     api.getTrackLyrics.mockResolvedValue({
+      status: 'ready',
       synced: Array.from({ length: 6 }, (_, i) => `[00:${String(i * 5).padStart(2, '0')}.00]Line ${i}`).join('\n'),
       plain: null,
       instrumental: false,
@@ -153,5 +158,50 @@ describe('LyricsPanel', () => {
 
     expect(api.getTrackLyrics).not.toHaveBeenCalled();
     expect(api.getLyricsByMetadata).not.toHaveBeenCalled();
+  });
+
+  it('persists metadata lyrics when the streaming song is saved', async () => {
+    state.library = [];
+    state.saved = [{ keys: ['yt:song'], title: 'Song', artist: 'Artist' }];
+    state.playback.currentTrack = {
+      id: 'song',
+      title: 'Song',
+      artist: 'Artist',
+      source: 'preview',
+    };
+
+    render(() => <LyricsPanel />);
+
+    await screen.findByText('lyricsPanel.notFound');
+    expect(api.getLyricsByMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      artist: 'Artist',
+      title: 'Song',
+      persist: true,
+    }));
+  });
+
+  it('reports a provider outage honestly and lets the listener retry', async () => {
+    state.library = [];
+    state.playback.currentTrack = {
+      id: 'song',
+      title: 'Song',
+      artist: 'Artist',
+      source: 'preview',
+    };
+    api.getLyricsByMetadata.mockResolvedValue({
+      status: 'unavailable',
+      synced: null,
+      plain: null,
+      instrumental: false,
+      cached: false,
+      pending: false,
+    });
+
+    render(() => <LyricsPanel />);
+
+    expect(await screen.findByText('lyricsPanel.unavailable')).toBeInTheDocument();
+    expect(screen.queryByText('lyricsPanel.notFound')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'lyricsPanel.retry' }));
+    await vi.waitFor(() => expect(api.getLyricsByMetadata).toHaveBeenCalledTimes(2));
   });
 });

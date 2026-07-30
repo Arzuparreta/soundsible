@@ -32,6 +32,29 @@
   color: var(--ink-secondary);
 }
 
+.unavailable {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin: var(--space-md) var(--space-2xs);
+}
+
+.unavailable .hint {
+  margin: 0;
+}
+
+.unavailable button {
+  padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink-primary);
+  font: inherit;
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
+
 .loading {
   margin: var(--space-xl) auto;
   width: 22px;

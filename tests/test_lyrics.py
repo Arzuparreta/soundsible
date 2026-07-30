@@ -102,6 +102,7 @@ def test_lyrics_fetch_and_cache(monkeypatch):
     client = _make_app().test_client()
     body = _get_until_ready(client, "/api/library/tracks/track-1/lyrics").get_json()
     assert body == {
+        "status": "ready",
         "synced": "[00:01.00] hello",
         "plain": "hello",
         "instrumental": False,
@@ -122,15 +123,17 @@ def test_lyrics_not_found_negative_cache(monkeypatch):
         "synced": None,
         "plain": None,
         "instrumental": False,
-        "source": "lrclib:v2",
+        "source": "lrclib:v3",
     })
     monkeypatch.setattr(lyrics_module, "fetch_lyrics", fetch)
 
     client = _make_app().test_client()
     body = _get_until_ready(client, "/api/library/tracks/track-1/lyrics").get_json()
+    assert body["status"] == "not_found"
     assert body["synced"] is None and body["cached"] is False
 
     body = _get_until_ready(client, "/api/library/tracks/track-1/lyrics").get_json()
+    assert body["status"] == "not_found"
     assert body["cached"] is True
     assert fetch.call_count == 1
 
@@ -143,6 +146,7 @@ def test_lyrics_provider_error_not_cached(monkeypatch):
     client = _make_app().test_client()
     body = _get_until_ready(client, "/api/library/tracks/track-1/lyrics").get_json()
     assert body == {
+        "status": "unavailable",
         "synced": None,
         "plain": None,
         "instrumental": False,
@@ -151,6 +155,51 @@ def test_lyrics_provider_error_not_cached(monkeypatch):
     }
 
     _get_until_ready(client, "/api/library/tracks/track-1/lyrics")
+    assert fetch.call_count == 2
+
+
+def test_saved_streaming_lyrics_are_persisted_by_metadata(monkeypatch):
+    fetch = MagicMock(return_value={
+        "synced": "[00:01.00] cached line",
+        "plain": "cached line",
+        "instrumental": False,
+        "source": "lrclib:v3",
+    })
+    monkeypatch.setattr(lyrics_module, "fetch_lyrics", fetch)
+    url = (
+        "/api/lyrics?artist=Juice+WRLD&title=Lucid+Dreams"
+        "&album=Goodbye+%26+Good+Riddance&duration=239&persist=1"
+    )
+
+    client = _make_app().test_client()
+    first = _get_until_ready(client, url).get_json()
+    assert first["status"] == "ready"
+    assert first["cached"] is False
+
+    second = _get_until_ready(client, url).get_json()
+    assert second["status"] == "ready"
+    assert second["cached"] is True
+    assert second["synced"] == "[00:01.00] cached line"
+    fetch.assert_called_once_with(
+        "Juice WRLD",
+        "Lucid Dreams",
+        "Goodbye & Good Riddance",
+        239,
+    )
+
+
+def test_streaming_provider_error_is_unavailable_and_never_cached(monkeypatch):
+    fetch = MagicMock(return_value=None)
+    monkeypatch.setattr(lyrics_module, "fetch_lyrics", fetch)
+    url = "/api/lyrics?artist=Artist&title=Song&persist=1"
+
+    client = _make_app().test_client()
+    first = _get_until_ready(client, url).get_json()
+    second = _get_until_ready(client, url).get_json()
+
+    assert first["status"] == "unavailable"
+    assert second["status"] == "unavailable"
+    assert first["cached"] is False
     assert fetch.call_count == 2
 
 
@@ -178,7 +227,7 @@ def test_lyrics_track_not_found(monkeypatch):
 
 def test_db_negative_cache_expires(tmp_path):
     db = instance_db()
-    db.set_lyrics("t1", synced=None, plain=None, instrumental=False, source="lrclib:v2")
+    db.set_lyrics("t1", synced=None, plain=None, instrumental=False, source="lrclib:v3")
     assert db.get_lyrics("t1") is not None
     with db._get_connection() as conn:
         conn.execute(
@@ -239,7 +288,7 @@ def test_fetch_lyrics_no_match_within_tolerance(monkeypatch):
     )
     monkeypatch.setattr(lyrics_module, "_deezer_search", lambda artist, title, timeout_sec: [])
     record = lyrics_module.fetch_lyrics("Artist", "Song", "Album", 200)
-    assert record == {"synced": None, "plain": None, "instrumental": False, "source": "lrclib:v2"}
+    assert record == {"synced": None, "plain": None, "instrumental": False, "source": "lrclib:v3"}
 
 
 def test_fetch_lyrics_normalizes_youtube_video_metadata_in_one_request(monkeypatch):
@@ -269,7 +318,47 @@ def test_fetch_lyrics_normalizes_youtube_video_metadata_in_one_request(monkeypat
 
     assert record["synced"] == "[00:01.00] letra"
     assert len(calls) == 1
-    assert calls[0][1] == {"q": "Extremoduro So Payaso"}
+    assert calls[0][1] == {
+        "artist_name": "Extremoduro",
+        "track_name": "So Payaso",
+    }
+    deezer.assert_not_called()
+
+
+def test_fetch_lyrics_finds_lucid_dreams_through_structured_search(monkeypatch):
+    calls = []
+
+    def fake_get(path, params, timeout_sec):
+        calls.append((path, params, timeout_sec))
+        return [{
+            "id": 34565905,
+            "trackName": "Lucid Dreams",
+            "artistName": "Juice WRLD",
+            "albumName": "Goodbye & Good Riddance",
+            # The provider's recording is longer than the playable video, but
+            # still close enough to be the same version.
+            "duration": 253,
+            "syncedLyrics": "[00:01.00] synced",
+            "plainLyrics": "plain",
+        }]
+
+    monkeypatch.setattr(lyrics_module, "_lrclib_get", fake_get)
+    deezer = MagicMock()
+    monkeypatch.setattr(lyrics_module, "_deezer_search", deezer)
+
+    record = lyrics_module.fetch_lyrics(
+        "Juice Wrld",
+        "Lucid Dreams",
+        "Goodbye & Good Riddance",
+        239,
+    )
+
+    assert record["synced"] == "[00:01.00] synced"
+    assert calls[0][1] == {
+        "artist_name": "Juice Wrld",
+        "track_name": "Lucid Dreams",
+        "album_name": "Goodbye & Good Riddance",
+    }
     deezer.assert_not_called()
 
 
@@ -277,7 +366,7 @@ def test_fetch_lyrics_deezer_fallback_is_only_used_after_empty_lrclib(monkeypatc
     lrclib_calls = []
 
     def fake_get(path, params, timeout_sec):
-        lrclib_calls.append(params["q"])
+        lrclib_calls.append(params)
         if len(lrclib_calls) == 1:
             return []
         return [{
@@ -300,7 +389,17 @@ def test_fetch_lyrics_deezer_fallback_is_only_used_after_empty_lrclib(monkeypatc
     record = lyrics_module.fetch_lyrics("Canonical Artist", "Canonical Song", None, 200)
 
     assert record["plain"] == "found"
-    assert lrclib_calls == ["Canonical Artist Canonical Song", "The Canonical Artist Canonical Song"]
+    assert lrclib_calls == [
+        {
+            "artist_name": "Canonical Artist",
+            "track_name": "Canonical Song",
+        },
+        {
+            "artist_name": "The Canonical Artist",
+            "track_name": "Canonical Song",
+            "album_name": "Canonical Album",
+        },
+    ]
 
 
 def test_fetch_lyrics_skips_fallback_when_budget_is_spent(monkeypatch):

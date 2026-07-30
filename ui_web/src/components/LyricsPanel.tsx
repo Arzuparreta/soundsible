@@ -4,6 +4,7 @@ import { actions, state } from '../stores';
 import { activeLineIndex, parseLrc } from '../lib/lrc';
 import { isPodcastTrack } from '../lib/track';
 import { createResponsiveTap } from '../lib/responsiveTap';
+import { trackKeys } from '../lib/playbackIdentity';
 import { t } from '../lib/i18n';
 import type { LyricsResponse } from '../types/music';
 import styles from './LyricsPanel.module.css';
@@ -25,6 +26,7 @@ export function LyricsPanel(props: {
   const lyricsKey = createMemo(() => {
     const cur = current();
     if (!cur || isPodcastTrack(cur) || !cur.artist || !cur.title) return null;
+    const keys = new Set(trackKeys(cur));
     return {
       id: cur.id,
       artist: cur.artist,
@@ -32,10 +34,11 @@ export function LyricsPanel(props: {
       album: cur.album,
       duration: cur.duration,
       inLibrary: state.library.some((tk) => tk.id === cur.id),
+      saved: state.saved.some((entry) => entry.keys.some((key) => keys.has(key))),
     };
   });
 
-  const [lyrics] = createResource(lyricsKey, async (key): Promise<LyricsResponse> => {
+  const [lyrics, { refetch }] = createResource(lyricsKey, async (key): Promise<LyricsResponse> => {
     // Cold LRCLIB calls run on two dedicated, zero-backlog server workers.
     // Polling keeps this resource in its loading state without tying up an API
     // worker while LRCLIB responds (typically several seconds on a cold miss).
@@ -47,6 +50,7 @@ export function LyricsPanel(props: {
             title: key.title,
             album: key.album,
             duration: key.duration,
+            persist: key.saved,
           });
       if (!result.pending) return result;
       await new Promise((resolve) => window.setTimeout(resolve, 750));
@@ -177,7 +181,7 @@ export function LyricsPanel(props: {
 
   const empty = createMemo(() => {
     const res = lyrics();
-    return !!res && !res.synced && !res.plain && !res.instrumental;
+    return !!res && res.status !== 'unavailable' && !res.synced && !res.plain && !res.instrumental;
   });
 
   return (
@@ -193,41 +197,53 @@ export function LyricsPanel(props: {
       <Show when={current()} fallback={<p class={styles.hint}>{t('lyricsPanel.noTrack')}</p>}>
         <Show when={!lyrics.loading} fallback={<div class={styles.loading} aria-label={t('lyricsPanel.loading')} />}>
           <Show when={!lyrics.error} fallback={<p class={styles.hint}>{t('lyricsPanel.error')}</p>}>
-            <Show when={!lyrics()?.instrumental} fallback={<p class={styles.hint}>{t('lyricsPanel.instrumental')}</p>}>
-              <Show when={!empty()} fallback={<p class={styles.hint}>{t('lyricsPanel.notFound')}</p>}>
-                <Show
-                  when={parsed().length > 0}
-                  fallback={<pre class={styles.plain}>{lyrics()?.plain ?? ''}</pre>}
-                >
-                  <div class={styles.synced}>
-                    <For each={parsed()}>
-                      {(line, i) => {
-                        const tap = createResponsiveTap({
-                          onTap: () => {
-                            // The tap that seeks also set a touch hold; drop it
-                            // so the view follows the new position immediately.
-                            holdUntil = 0;
-                            actions.seek(line.time);
-                          },
-                        });
-                        return (
-                          <button
-                            type="button"
-                            data-line={i()}
-                            data-pressable
-                            classList={{
-                              [styles.line]: true,
-                              [styles.lineActive]: i() === activeIdx(),
-                              [styles.linePast]: i() < activeIdx(),
-                            }}
-                            {...tap}
-                          >
-                            {line.text || '♪'}
-                          </button>
-                        );
-                      }}
-                    </For>
-                  </div>
+            <Show
+              when={lyrics()?.status !== 'unavailable'}
+              fallback={
+                <div class={styles.unavailable} role="status">
+                  <p class={styles.hint}>{t('lyricsPanel.unavailable')}</p>
+                  <button type="button" onClick={() => void refetch()}>
+                    {t('lyricsPanel.retry')}
+                  </button>
+                </div>
+              }
+            >
+              <Show when={!lyrics()?.instrumental} fallback={<p class={styles.hint}>{t('lyricsPanel.instrumental')}</p>}>
+                <Show when={!empty()} fallback={<p class={styles.hint}>{t('lyricsPanel.notFound')}</p>}>
+                  <Show
+                    when={parsed().length > 0}
+                    fallback={<pre class={styles.plain}>{lyrics()?.plain ?? ''}</pre>}
+                  >
+                    <div class={styles.synced}>
+                      <For each={parsed()}>
+                        {(line, i) => {
+                          const tap = createResponsiveTap({
+                            onTap: () => {
+                              // The tap that seeks also set a touch hold; drop it
+                              // so the view follows the new position immediately.
+                              holdUntil = 0;
+                              actions.seek(line.time);
+                            },
+                          });
+                          return (
+                            <button
+                              type="button"
+                              data-line={i()}
+                              data-pressable
+                              classList={{
+                                [styles.line]: true,
+                                [styles.lineActive]: i() === activeIdx(),
+                                [styles.linePast]: i() < activeIdx(),
+                              }}
+                              {...tap}
+                            >
+                              {line.text || '♪'}
+                            </button>
+                          );
+                        }}
+                      </For>
+                    </div>
+                  </Show>
                 </Show>
               </Show>
             </Show>
