@@ -6,12 +6,24 @@ Handles local metadata storage, rapid searching, and manifest synchronization.
 import sqlite3
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from shared.models import Track, LibraryMetadata
 from shared.runtime import get_config_dir
 
 logger = logging.getLogger(__name__)
+
+# How long a writer waits for a competing write lock before giving up. Every
+# request builds a DatabaseManager (see `instance_db`), so brief overlap between
+# a request and a background cache write is normal rather than exceptional.
+BUSY_TIMEOUT_MS = 10_000
+
+# Schema setup is idempotent but not free: it rewrites the FTS5 triggers and so
+# takes a write lock every time it runs. Once per file per process is enough,
+# keyed by the `schema_version` this process last reconciled the file at.
+_SCHEMA_READY: dict[str, int] = {}
+_SCHEMA_LOCK = threading.Lock()
 
 # The engine keeps two SQLite files. `instance.db` holds everything that belongs
 # to the machine — accounts, credentials, pairing, and the content-addressed
@@ -80,10 +92,11 @@ class DatabaseManager:
         self._init_db()
 
     def _get_connection(self):
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=BUSY_TIMEOUT_MS / 1000)
         # Note: Enable WAL mode for high concurrency
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
         return conn
 
     # ------------------------------------------------------------------
@@ -176,7 +189,6 @@ class DatabaseManager:
         for col, defn in _TRACKS_COLUMNS.items():
             if col not in columns:
                 conn.execute(f"ALTER TABLE tracks ADD COLUMN {col} {defn}")
-        conn.execute("UPDATE tracks SET local_path = NULL WHERE local_path IS NOT NULL")
 
     @staticmethod
     def _create_youtube_cache_table(conn):
@@ -411,27 +423,48 @@ class DatabaseManager:
         Both files get the full schema. The unused tables cost nothing, and it
         means a pre-multiuser `library.db` still answers auth queries while its
         instance rows are being migrated into `instance.db`.
+
+        Runs at most once per file per process. The statements are idempotent,
+        but recreating the FTS5 triggers is a schema write, so repeating it on
+        every construction would take a write lock on every request.
         """
-        with self._get_connection() as conn:
-            try:
-                conn.execute("BEGIN TRANSACTION")
-                self._create_tracks_table(conn)
-                self._create_library_info_table(conn)
-                self._create_fts5_triggers(conn)
-                self._migrate_tracks_columns(conn)
-                self._create_youtube_cache_table(conn)
-                self._create_related_mix_cache_table(conn)
-                self._create_users_table(conn)
-                self._create_invites_table(conn)
-                self._create_auth_tables(conn)
-                self._create_pairing_table(conn)
-                self._create_lyrics_table(conn)
-                self._create_discovery_tables(conn)
-                self._create_performance_indexes(conn)
-                conn.execute("COMMIT")
-            except Exception as e:
-                conn.execute("ROLLBACK")
-                raise e
+        key = str(self.db_path)
+        with _SCHEMA_LOCK:
+            with self._get_connection() as conn:
+                # `schema_version` bumps on every DDL statement, so a file
+                # altered by another process — or by a test — is re-reconciled
+                # instead of being trusted because this process saw it once.
+                if _SCHEMA_READY.get(key) == self._schema_version(conn):
+                    return
+                self._apply_schema(conn)
+                _SCHEMA_READY[key] = self._schema_version(conn)
+
+    @staticmethod
+    def _schema_version(conn) -> int:
+        return int(conn.execute("PRAGMA schema_version").fetchone()[0])
+
+    def _apply_schema(self, conn):
+        try:
+            # IMMEDIATE: this transaction always writes, and a deferred one that
+            # upgrades mid-flight gets SQLITE_BUSY without honouring busy_timeout.
+            conn.execute("BEGIN IMMEDIATE")
+            self._create_tracks_table(conn)
+            self._create_library_info_table(conn)
+            self._create_fts5_triggers(conn)
+            self._migrate_tracks_columns(conn)
+            self._create_youtube_cache_table(conn)
+            self._create_related_mix_cache_table(conn)
+            self._create_users_table(conn)
+            self._create_invites_table(conn)
+            self._create_auth_tables(conn)
+            self._create_pairing_table(conn)
+            self._create_lyrics_table(conn)
+            self._create_discovery_tables(conn)
+            self._create_performance_indexes(conn)
+            conn.execute("COMMIT")
+        except Exception as e:
+            conn.execute("ROLLBACK")
+            raise e
 
     def sync_from_metadata(self, metadata: LibraryMetadata):
         """
@@ -439,7 +472,7 @@ class DatabaseManager:
         Uses an atomic transaction for safety.
         """
         with self._get_connection() as conn:
-            conn.execute("BEGIN TRANSACTION")
+            conn.execute("BEGIN IMMEDIATE")
             try:
                 # Note: Update version
                 conn.execute("INSERT OR REPLACE INTO library_info (key, value) VALUES ('version', ?)", (str(metadata.version),))
@@ -708,7 +741,7 @@ class DatabaseManager:
     def clear_all(self):
         """Wipe all data from the local database."""
         with self._get_connection() as conn:
-            conn.execute("BEGIN TRANSACTION")
+            conn.execute("BEGIN IMMEDIATE")
             try:
                 conn.execute("DELETE FROM tracks")
                 conn.execute("DELETE FROM library_info")
@@ -761,7 +794,7 @@ class DatabaseManager:
         candidates = result.get("candidates") or []
         candidates_json = _json.dumps(candidates) if candidates else None
         with self._get_connection() as conn:
-            conn.execute("BEGIN TRANSACTION")
+            conn.execute("BEGIN IMMEDIATE")
             try:
                 conn.execute("""
                     INSERT INTO youtube_resolution_cache
@@ -836,7 +869,7 @@ class DatabaseManager:
             return
         payload = json.dumps(results)
         with self._get_connection() as conn:
-            conn.execute("BEGIN TRANSACTION")
+            conn.execute("BEGIN IMMEDIATE")
             try:
                 conn.execute(
                     """
@@ -906,7 +939,7 @@ class DatabaseManager:
         if not track_id:
             return
         with self._get_connection() as conn:
-            conn.execute("BEGIN TRANSACTION")
+            conn.execute("BEGIN IMMEDIATE")
             try:
                 conn.execute(
                     """
