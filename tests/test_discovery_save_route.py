@@ -112,7 +112,7 @@ def _track(track_id: str, title: str, artist: str) -> Track:
 def _mock_api(search_results=None, queue_add_return=None, parse_fn=None):
     """Build a mock api dict wired into _get_api()."""
     mock_dl_service = MagicMock()
-    mock_dl_service.downloader.search_youtube.return_value = search_results or []
+    mock_dl_service.downloader.search_match_candidates.return_value = search_results or []
 
     mock_qm = MagicMock()
     mock_qm.is_processing = False
@@ -380,7 +380,7 @@ def test_save_high_confidence_cache_hit_queues_without_search(tmp_path):
     assert body["status"] == "queued"
     assert body["video_id"] == "cachedvideo01"
     # Search should NOT be called — cache was sufficient
-    mock_api["get_downloader"].return_value.downloader.search_youtube.assert_not_called()
+    mock_api["get_downloader"].return_value.downloader.search_match_candidates.assert_not_called()
 
 
 def test_save_medium_confidence_cache_hit_returns_needs_review(tmp_path):
@@ -486,7 +486,7 @@ def test_save_empty_search_results_returns_not_found(tmp_path):
 def test_save_search_exception_returns_502(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_downloader"].return_value.downloader.search_youtube.side_effect = RuntimeError("network error")
+    mock_api["get_downloader"].return_value.downloader.search_match_candidates.side_effect = RuntimeError("network error")
 
     with patch.object(_disc_routes, "_get_api", return_value=mock_api):
         res = _make_app().test_client().post("/api/discovery/save", json={

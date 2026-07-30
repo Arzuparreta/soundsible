@@ -43,34 +43,42 @@ class _FakeYoutubeDL:
 
 
 def test_ytmusic_search_enriches_flat_entries_with_artist(monkeypatch, tmp_path):
+    """The creator comes from oembed, not from a full extraction.
+
+    YouTube Music returns ids and titles only, so every row needs a creator
+    filled in. Doing it with `extract_info` measured 5.2 s for eight rows and
+    was the bulk of a cold resolve; oembed answers the same question for eight
+    rows in ~120 ms. It carries no duration, and nothing here pretends
+    otherwise — callers that score candidates ask `search_match_candidates`,
+    whose search returns durations of its own.
+    """
     monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _FakeYoutubeDL)
-
     downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
+    monkeypatch.setattr(
+        downloader,
+        "peek_brief",
+        lambda video_id: (_ for _ in ()).throw(AssertionError("enrichment must not extract")),
+    )
+    asked = []
 
-    def fake_peek_brief(video_id):
-        assert video_id == "bSnlKl_PoQU"
-        return {
-            "id": video_id,
-            "title": "Bohemian Rhapsody (Remastered 2011)",
-            "artist": "Queen",
-            "channel": "Queen",
-            "duration": 354,
-            "thumbnail": "https://example.test/queen.webp",
-        }
+    def fake_oembed(video_id):
+        asked.append(video_id)
+        return "Queen - Topic"
 
-    monkeypatch.setattr(downloader, "peek_brief", fake_peek_brief)
+    monkeypatch.setattr(yd, "_oembed_creator", fake_oembed)
 
     results = downloader.search_youtube("bohemian rhapsody", max_results=1, use_ytmusic=True)
 
+    assert asked == ["bSnlKl_PoQU"]
     assert results == [
         {
             "id": "bSnlKl_PoQU",
             "title": "Bohemian Rhapsody",
-            "duration": 354,
+            "duration": 0,
             "thumbnail": "https://img.youtube.com/vi/bSnlKl_PoQU/mqdefault.jpg",
             "webpage_url": "https://www.youtube.com/watch?v=bSnlKl_PoQU",
-            "channel": "Queen",
-            "artist": "Queen",
+            "channel": "Queen - Topic",
+            "artist": "Queen - Topic",
         }
     ]
 

@@ -22,7 +22,6 @@ from shared.hardening import (
     require_scope,
 )
 
-from odst_tool.config import prefer_ytmusic
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +238,12 @@ def agent_play():
         else:
             try:
                 dl = api["get_downloader"](open_browser=False)
-                results = dl.downloader.search_youtube(query, max_results=1, use_ytmusic=prefer_ytmusic())
+                # Plain search: the payload built below wants a duration, and
+                # YouTube Music's does not carry one — recovering it would cost
+                # a full extraction for the single row we asked for.
+                results = dl.downloader.search_youtube(
+                    query, max_results=1, use_ytmusic=False, enrich_missing=False
+                )
             except Exception as e:
                 logger.warning("API: Agent search failed: %s", e)
                 return jsonify({"error": "Search failed"}), 502

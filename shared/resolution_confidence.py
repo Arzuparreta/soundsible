@@ -26,6 +26,55 @@ _FILLER_WORDS = frozenset(
 CONFIDENCE_HIGH = 0.75
 CONFIDENCE_MEDIUM = 0.40
 
+#: Words that make a recording a different thing from the track that was asked
+#: for. `_norm` strips bracketed text before comparing, so "(Live at Wembley)"
+#: and "(Karaoke Version)" vanish and the take ties the studio recording on
+#: title alone. With a running time close enough — a live cut usually is — that
+#: was worth 0.90 and a silent save of the wrong version.
+#:
+#: The comparison runs both ways. A marker the request never asked for means the
+#: candidate is the wrong recording; a marker the request *did* ask for and the
+#: candidate lacks means the same thing from the other side, so someone looking
+#: for a remix is not handed the original.
+_VERSION_MARKERS = (
+    "live",
+    "cover",
+    "karaoke",
+    "instrumental",
+    "remix",
+    "acoustic",
+    "unplugged",
+    "sped up",
+    "slowed",
+    "nightcore",
+    "8d",
+    "reverb",
+    "tribute",
+    "medley",
+    "mashup",
+    "parody",
+    "backing track",
+)
+#: Enough to put an unrequested version below the recording it was competing
+#: with, and below the bar for saving without asking.
+_VERSION_PENALTY = 0.20
+
+_MARKER_RES = {
+    marker: re.compile(rf"(?<!\w){re.escape(marker)}(?!\w)", re.IGNORECASE)
+    for marker in _VERSION_MARKERS
+}
+
+
+def _version_mismatch(sought_title: str, candidate_title: str) -> bool:
+    """True when request and candidate disagree about which version this is."""
+    if not candidate_title:
+        return False
+    sought = sought_title or ""
+    return any(
+        bool(pattern.search(candidate_title)) != bool(pattern.search(sought))
+        for pattern in _MARKER_RES.values()
+    )
+
 
 def _norm(text: str) -> str:
     """Lowercase, strip parens/brackets, punctuation, filler words, collapse whitespace."""
@@ -109,13 +158,23 @@ def score_candidate(
             duration_score = -0.10
         score += duration_score
 
+    # — Unrequested version (flat penalty) —
+    # Applied after the three components because it is not a similarity signal:
+    # a live take can match title, artist and running time perfectly and still
+    # be the wrong recording to save.
+    wrong_version = _version_mismatch(title, candidate.get("title") or "")
+    if wrong_version:
+        score -= _VERSION_PENALTY
+
     score = max(0.0, min(1.0, score))
 
     # Build reason code
     has_title = title_score >= 0.25
     has_artist = artist_score >= 0.15
     has_duration = duration_score >= 0.08
-    if has_title and has_artist and has_duration:
+    if wrong_version:
+        reason = "other_version"
+    elif has_title and has_artist and has_duration:
         reason = "title_artist_duration"
     elif has_title and has_artist:
         reason = "title_artist"

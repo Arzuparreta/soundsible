@@ -39,7 +39,6 @@ from shared.listening_planner import (
 )
 from shared.url_utils import validate_youtube_video_id
 
-from odst_tool.config import prefer_ytmusic
 
 logger = logging.getLogger(__name__)
 
@@ -264,8 +263,7 @@ def discovery_save():
     # — Search YouTube for candidates —
     try:
         dl = api["get_downloader"](open_browser=False)
-        q = f"{title} {artist}".strip()
-        raw_results = dl.downloader.search_youtube(q, max_results=6, use_ytmusic=prefer_ytmusic())
+        raw_results = dl.downloader.search_match_candidates(artist, title, max_results=6)
     except Exception as exc:
         logger.warning("discovery/save: YouTube search failed: %s", exc)
         return jsonify({"status": "failed", "reason": "search_error", "candidates": []}), 502
@@ -1552,13 +1550,11 @@ def _resolve_seed_yt_id(track) -> str:
     cached = db.get_cached_resolution(artist, title)
     if cached and cached.get("id"):
         return str(cached["id"])
-    # Note: Cold resolve — ytmusic search + best_candidate, then cache forever.
+    # Note: Cold resolve — candidate search + best_candidate, then cache forever.
     try:
         api = _get_api()
         dl = api["get_downloader"](open_browser=False)
-        raw = dl.downloader.search_youtube(
-            f"{title} {artist}".strip(), max_results=6, use_ytmusic=prefer_ytmusic()
-        )
+        raw = dl.downloader.search_match_candidates(artist, title, max_results=6)
         if not raw:
             db.set_cached_resolution(artist, title, {
                 "id": "", "failure_state": "not_found", "confidence": 0.0,

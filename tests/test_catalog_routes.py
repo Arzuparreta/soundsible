@@ -224,7 +224,7 @@ def test_resolve_candidates_warms_preview_stream_cache_for_best_id(monkeypatch, 
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     fake_api = _fake_api(metadata)
     fake_dl = MagicMock()
-    fake_dl.downloader.search_youtube.return_value = [
+    fake_dl.downloader.search_match_candidates.return_value = [
         {
             "id": "abcdefghijk",
             "title": "Bohemian Rhapsody",

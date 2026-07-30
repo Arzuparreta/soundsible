@@ -120,6 +120,64 @@ _VISITOR_DATA_TTL_SEC = 3600
 _visitor_data_lock = threading.Lock()
 _visitor_data_cache: Dict[str, Any] = {"value": None, "fetched_at": 0.0}
 
+_OEMBED_URL = "https://www.youtube.com/oembed"
+_meta_session_lock = threading.Lock()
+_meta_session: Optional[requests.Session] = None
+
+
+def _youtube_meta_session() -> requests.Session:
+    """Pooled session for the small YouTube metadata calls (oembed, sw.js_data).
+
+    These are a fan-out to one host, and on a relayed station every fresh
+    connection is a ~330 ms handshake before the first byte. Pooling turns a
+    row of them into one handshake plus cheap follow-ups.
+    """
+    global _meta_session
+    if _meta_session is not None:
+        return _meta_session
+    with _meta_session_lock:
+        if _meta_session is None:
+            session = requests.Session()
+            adapter = requests.adapters.HTTPAdapter(
+                pool_connections=4, pool_maxsize=16, max_retries=0
+            )
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
+            _meta_session = session
+    return _meta_session
+
+
+def _youtube_proxies() -> Optional[Dict[str, str]]:
+    """Relay settings for a plain YouTube request, when one is configured."""
+    yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
+    return {"http": yt_proxy, "https": yt_proxy} if yt_proxy else None
+
+
+def _oembed_creator(video_id: str) -> Optional[str]:
+    """The channel behind a video, from YouTube's public oembed endpoint.
+
+    One small JSON response instead of a full extraction: eight of these run in
+    ~120 ms against ~5.2 s for eight `extract_info` calls. It carries no
+    duration, which is why anything that scores candidates asks a search that
+    returns one rather than leaning on enrichment.
+    """
+    if not _is_valid_youtube_video_id(video_id):
+        return None
+    try:
+        response = _youtube_meta_session().get(
+            _OEMBED_URL,
+            params={"url": f"https://www.youtube.com/watch?v={video_id}", "format": "json"},
+            timeout=10,
+            proxies=_youtube_proxies(),
+        )
+        if not response.ok:
+            return None
+        author = (response.json() or {}).get("author_name")
+        return author.strip() if isinstance(author, str) and author.strip() else None
+    except Exception as exc:
+        logger.debug("[Search] oembed lookup failed for %s: %s", video_id, exc)
+        return None
+
 
 def _parse_visitor_data(payload: str) -> Optional[str]:
     """Pull the visitor identifier out of the sw.js_data envelope."""
@@ -1065,6 +1123,19 @@ class YouTubeDownloader:
             }
 
         def enrich_missing_creators(items: List[Dict[str, Any]]) -> None:
+            """Fill in the channel for rows that came back without one.
+
+            YouTube Music's search returns ids and titles and nothing else, so
+            every row needs this. It used to run a full extraction per row —
+            8 rows measured 5.2 s, on top of a 0.9 s search — which is what made
+            a cold resolve feel broken. The oembed endpoint answers the same
+            question in a fraction of that: 8 rows in ~120 ms.
+
+            Duration is deliberately not recovered here. oembed does not carry
+            one, and the callers that actually need a duration score candidates
+            against a known track — those ask `search_match_candidates`, whose
+            search returns durations in the first place.
+            """
             missing = [
                 item
                 for item in items
@@ -1074,29 +1145,18 @@ class YouTubeDownloader:
             if not missing:
                 return
 
-            def fetch_brief(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-                try:
-                    return self.peek_brief(str(item.get("id") or ""))
-                except Exception as exc:
-                    logger.debug("YouTube Music search metadata enrichment failed for %s: %s", item.get("id"), exc)
-                    return None
-
-            max_workers = min(4, len(missing))
+            max_workers = min(8, len(missing))
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {executor.submit(fetch_brief, item): item for item in missing}
+                futures = {
+                    executor.submit(_oembed_creator, str(item.get("id") or "")): item
+                    for item in missing
+                }
                 for future in as_completed(futures):
                     item = futures[future]
-                    brief = future.result()
-                    if not brief:
-                        continue
-                    creator = (brief.get("artist") or brief.get("channel") or "").strip()
+                    creator = future.result()
                     if creator:
                         item["artist"] = creator
                         item["channel"] = creator
-                    if not item.get("duration"):
-                        item["duration"] = brief.get("duration") or 0
-                    if not item.get("thumbnail"):
-                        item["thumbnail"] = brief.get("thumbnail") or item.get("thumbnail") or ""
 
         out: List[Dict[str, Any]] = []
         try:
@@ -1121,6 +1181,29 @@ class YouTubeDownloader:
             # Note: No silent fallback -- let the caller decide or propagate the error
             raise e
         return out
+
+    def search_match_candidates(
+        self, artist: str, title: str, max_results: int = 8
+    ) -> List[Dict[str, Any]]:
+        """Candidates to score against a track we already know.
+
+        Deliberately the plain YouTube surface rather than the configured browse
+        source. Scoring weighs title, channel and duration, and YouTube Music's
+        search carries none of the last two: recovering them costs a full
+        extraction per candidate — 5.2 s for eight — while plain search returns
+        all three in one 0.9 s call. The ranking YouTube Music would add is
+        redundant here anyway, because `best_candidate` re-ranks every result
+        against the artist, title and duration we already hold.
+        """
+        query = f"{title} {artist}".strip()
+        if not query:
+            return []
+        return self.search_youtube(
+            query,
+            max_results=max_results,
+            use_ytmusic=False,
+            enrich_missing=False,
+        )
 
     def get_related_videos(
         self,
@@ -1406,10 +1489,17 @@ class YouTubeDownloader:
         if not query:
             return None
         try:
+            # No enrichment: the only field wanted here is the thumbnail, and
+            # `to_item` already derives that from the video id. Asking for a
+            # creator name would buy a full extraction to throw it away.
             primary = prefer_ytmusic()
-            results = self.search_youtube(query, max_results=1, use_ytmusic=primary)
+            results = self.search_youtube(
+                query, max_results=1, use_ytmusic=primary, enrich_missing=False
+            )
             if not results:
-                results = self.search_youtube(query, max_results=1, use_ytmusic=not primary)
+                results = self.search_youtube(
+                    query, max_results=1, use_ytmusic=not primary, enrich_missing=False
+                )
             if results and results[0].get("thumbnail"):
                 return results[0]["thumbnail"]
             return None

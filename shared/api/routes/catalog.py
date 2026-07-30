@@ -24,7 +24,6 @@ from shared.resolution_confidence import best_candidate, classify_confidence
 from shared.text_utils import sanitize_cli_message
 from shared.url_utils import validate_youtube_video_id
 
-from odst_tool.config import prefer_ytmusic
 
 logger = logging.getLogger(__name__)
 
@@ -716,7 +715,7 @@ def _resolve_candidates_uncached(
     db = instance_db()
     api = _get_api()
     dl = api["get_downloader"](open_browser=False)
-    raw_results = dl.downloader.search_youtube(f"{title} {artist}".strip(), max_results=8, use_ytmusic=prefer_ytmusic())
+    raw_results = dl.downloader.search_match_candidates(artist, title, max_results=8)
     if not raw_results:
         db.set_cached_resolution(artist, title, {"id": "", "failure_state": "not_found", "confidence": 0.0})
         return {}, []
