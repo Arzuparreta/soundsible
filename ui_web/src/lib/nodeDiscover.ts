@@ -21,7 +21,7 @@
  * - Pure logic (seedWeight / pickWeighted / interleave) is exported and
  *   unit-tested independently of the server.
  */
-import { createSignal } from 'solid-js';
+import { createEffect, createRoot, createSignal, untrack } from 'solid-js';
 import { api } from './api';
 import { favouriteLibraryIds, state } from '../stores';
 import { isPodcastTrack } from './track';
@@ -190,8 +190,41 @@ function normalizeRec(r: Record<string, unknown>): SearchResult {
 /* ── Feed state ── */
 
 const [nodeFeed, setNodeFeed] = createSignal<NodeRec[]>([]);
-const [nodeLoading, setNodeLoading] = createSignal(false);
+const [rebuilding, setRebuilding] = createSignal(false);
+/** A rebuild was asked for before the library had arrived; it is queued on the
+ * first sync instead of being answered with "you have nothing". */
+const [awaitingLibrary, setAwaitingLibrary] = createSignal(false);
+/** Busy from the view's point of view: an actual rebuild, or the wait for the
+ * library that a rebuild needs. Both mean "skeletons", never the seed state. */
+const nodeLoading = () => rebuilding() || awaitingLibrary();
 export { nodeFeed, nodeLoading };
+
+/**
+ * Cold boot lands on Search before the first library sync resolves, so the feed
+ * cannot be built yet. One app-lifetime watcher retries the queued rebuild the
+ * moment the library exists — and gives up on it if the sync settles empty,
+ * which is the one case where "search for music to get started" is the truth.
+ */
+let watchingLibrary = false;
+function watchLibrary(): void {
+  if (watchingLibrary) return;
+  watchingLibrary = true;
+  createRoot(() => {
+    createEffect(() => {
+      const hasTracks = state.library.length > 0;
+      const settled = state.libraryReady;
+      if (!untrack(awaitingLibrary)) return;
+      if (hasTracks) {
+        setAwaitingLibrary(false);
+        untrack(() => ensureNodeFeed());
+      } else if (settled) {
+        // Genuinely empty library: nothing to seed from, so stop waiting.
+        setAwaitingLibrary(false);
+        setNodeFeed([]);
+      }
+    });
+  });
+}
 
 let hydratedFor: string | null = null;
 function hydrate(): void {
@@ -242,7 +275,7 @@ function finalize(rs: RebuildState): void {
   if (rs.timer) clearTimeout(rs.timer);
   if (currentRebuild === rs) currentRebuild = null;
   setDiscoverSeedHandler(null);
-  if (rs === currentRebuild || currentRebuild === null) setNodeLoading(false);
+  if (rs === currentRebuild || currentRebuild === null) setRebuilding(false);
   // Warm the first rows so the eventual tap starts near-instantly.
   prefetchPreviews(nodeFeed().slice(0, 4).map((r) => r.id));
 }
@@ -250,7 +283,14 @@ function finalize(rs: RebuildState): void {
 function startRebuild(): Promise<void> {
   const library = state.library.filter((t) => !isPodcastTrack(t));
   if (library.length === 0) {
-    setNodeFeed([]);
+    // Before the first sync settles an empty list is "not yet", not "nothing":
+    // keep the cached feed on screen, show it as loading, and let the library
+    // watcher run this again once tracks land.
+    if (state.libraryReady) setNodeFeed([]);
+    else {
+      setAwaitingLibrary(true);
+      watchLibrary();
+    }
     return Promise.resolve();
   }
 
@@ -261,7 +301,7 @@ function startRebuild(): Promise<void> {
     currentRebuild.done = true;
   }
 
-  setNodeLoading(true);
+  setRebuilding(true);
   const aborter = new AbortController();
 
   const favs = favouriteLibraryIds();
@@ -377,13 +417,15 @@ export function ensureNodeFeed(): void {
  * Auto Mode awaits this so the node pool isn't dead on the first plan the way a
  * fire-and-forget `ensureNodeFeed()` + immediate `nodeFeed()` read leaves it.
  * When there is nothing to wait for (feed already populated, or no rebuild is
- * possible because the library is empty), it returns immediately.
+ * possible because the library really is empty), it returns immediately — but a
+ * library that has not synced yet counts as something to wait for.
  */
 export async function ensureNodeFeedReady(timeoutMs = 6000): Promise<NodeRec[]> {
   ensureNodeFeed();
-  if (nodeFeed().length > 0 || inFlight === null) return nodeFeed();
+  const pending = () => inFlight !== null || untrack(awaitingLibrary);
+  if (nodeFeed().length > 0 || !pending()) return nodeFeed();
   const deadline = Date.now() + timeoutMs;
-  while (nodeFeed().length === 0 && inFlight !== null && Date.now() < deadline) {
+  while (nodeFeed().length === 0 && pending() && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
   return nodeFeed();

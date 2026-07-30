@@ -125,6 +125,11 @@ export interface AppState {
    * had before — possibly nothing. Lets the empty state say "couldn't reach
    * your station" instead of the untrue "your library is empty". */
   libraryError: boolean;
+  /** A library sync has settled at least once, so `library` is now an answer
+   * rather than an absence. Anything that treats an empty library as a fact —
+   * empty states, discovery seeds — must wait for this instead of reading the
+   * boot-time empty array. */
+  libraryReady: boolean;
   /** Tracks with a file behind them, as the engine scanned them. */
   library: Track[];
   /** Songs in the library that are not (or not only) a file, newest first.
@@ -193,6 +198,7 @@ const [state, setState] = createStore<AppState>({
   haptics: localStorage.getItem('haptics') !== 'off',
   loading: false,
   libraryError: false,
+  libraryReady: false,
   library: [],
   saved: [],
   playlists: {},
@@ -1099,7 +1105,13 @@ export const actions = {
       // library, and the view says so.
       if (syncVersion === librarySyncVersion) setState('libraryError', true);
     } finally {
-      if (syncVersion === librarySyncVersion) setState('loading', false);
+      if (syncVersion === librarySyncVersion) {
+        setState('loading', false);
+        // Settled either way: success means the list is the library, failure is
+        // reported through `libraryError`. Both are answers, so stop making
+        // callers wait on a sync that is over.
+        setState('libraryReady', true);
+      }
       librarySyncInFlight = false;
       const runAgain = librarySyncPending;
       librarySyncPending = false;
