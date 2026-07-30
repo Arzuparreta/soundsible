@@ -92,8 +92,8 @@ describe('AutoMode environment', () => {
     fireEvent.wheel(queue, { deltaY: 80, deltaX: 0 });
     expect(queue.scrollLeft).toBe(80);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cambiar DJ. Actual: Adaptativo' }));
-    fireEvent.click(screen.getByRole('option', { name: /Cortes y drops/ }));
+    fireEvent.click(screen.getByRole('button', { name: /autoMode\.dj\.changeCurrent/ }));
+    fireEvent.click(screen.getByRole('option', { name: /autoMode\.dj\.cutsDrops/ }));
     expect(actions.setAutoDjProfile).toHaveBeenCalledWith('cuts_drops');
     fireEvent.click(screen.getByRole('button', { name: 'autoMode.exit' }));
     expect(actions.exitAutoMode).toHaveBeenCalledOnce();
@@ -102,7 +102,7 @@ describe('AutoMode environment', () => {
   it('keeps DJ technique separate from musical direction and opens requests in place', () => {
     render(() => <AutoMode />);
 
-    const command = screen.getByRole('textbox', { name: 'Redirigir la sesión' });
+    const command = screen.getByRole('textbox', { name: 'autoMode.dj.commandAria' });
     fireEvent.input(command, { target: { value: 'Más energía y sorpréndeme' } });
     fireEvent.submit(command.closest('form')!);
     expect(actions.setAutoDirection).toHaveBeenCalledWith(expect.objectContaining({
@@ -111,9 +111,24 @@ describe('AutoMode environment', () => {
       prompt: 'Más energía y sorpréndeme',
     }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pedir canción' }));
-    expect(screen.getByRole('complementary', { name: 'Pedir una canción al DJ' })).toBeInTheDocument();
-    expect(screen.getByText(/próximas tres canciones/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /autoMode\.dj\.request/ }));
+    expect(screen.getByRole('complementary', { name: 'autoMode.dj.requestPanelAria' })).toBeInTheDocument();
+    expect(screen.getByText('autoMode.dj.requestPromise')).toBeInTheDocument();
+  });
+
+  it('presents musical direction as explicit, selected choices', () => {
+    render(() => <AutoMode />);
+
+    const balanced = screen.getAllByRole('button', { name: 'autoMode.dj.balanced' });
+    expect(balanced).toHaveLength(2);
+    expect(balanced[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(balanced[1]).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'autoMode.dj.energyHigh' }));
+    expect(actions.setAutoDirection).toHaveBeenCalledWith({ energy: 0.65, prompt: '' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'autoMode.dj.discover' }));
+    expect(actions.setAutoDirection).toHaveBeenCalledWith({ familiarity: -0.65, prompt: '' });
   });
 
   it('exits on a swipe down over the backdrop, but not on one that scrolls the queue', () => {

@@ -73,11 +73,18 @@ transient engine activity and a horizontal three-track runway. Additions are
 action-oriented rather than a technical dashboard:
 
 - functional DJ selector with visible mixing traits;
-- natural-language command bar;
-- energy/familiarity quick controls;
+- natural-language command bar grouped under a plain-language musical direction;
+- explicit three-position energy and discovery/familiarity selectors, with the
+  current choice always visible;
 - request search inside Auto (desktop side panel, full mobile panel);
 - request chips with track ETA and cancellation;
-- transition technique and available BPM on runway cards.
+- a numbered, human-readable prepared route with translated transition
+  techniques and available BPM on runway cards.
+
+The complete DJ control surface consumes Soundsible's semantic typography,
+control, segment, pill, row and spacing tokens. Compact, Normal and Large
+therefore reflow Auto through the shared interface-size engine; Auto does not
+use CSS zoom or a private fixed-size control recipe.
 
 Auto is also reachable from the idle mini-player. Mobile retains the shared
 cover handoff with Now Playing, reduced-motion behaviour and dashboard-safe

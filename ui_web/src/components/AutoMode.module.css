@@ -67,6 +67,15 @@
   --auto-head: clamp(10px, 2.6vw, 12px);
   --auto-stage-gap: clamp(14px, 2.4vh, 26px);
   --auto-cover-radius: clamp(14px, 1.6vw, 28px);
+  /* Auto owns the composition, but the app owns density. These semantic
+     aliases make Compact / Normal / Large reflow this surface through the same
+     scale engine as the rest of Soundsible. */
+  --auto-ui-body: var(--text-body);
+  --auto-ui-label: var(--text-label);
+  --auto-ui-caption: var(--text-caption);
+  --auto-control-h: var(--control-h);
+  --auto-pill-h: var(--pill-h);
+  --auto-segment-h: var(--segment-h);
 }
 
 .active {
@@ -212,17 +221,48 @@
 }
 
 .profile {
-  gap: 8px;
-  padding: 0 clamp(14px, 1.1vw, 22px);
-  font-size: clamp(13px, 0.9vw, 17px);
-  font-weight: var(--fw-semibold);
+  gap: var(--space-sm);
+  min-width: min(240px, 56vw);
+  padding: 4px clamp(12px, 1.1vw, 20px);
+  font-size: var(--auto-ui-label);
   white-space: nowrap;
 }
 
 .profile svg {
-  width: 1.1em;
-  height: 1.1em;
+  width: var(--icon-md);
+  height: var(--icon-md);
   flex: 0 0 auto;
+}
+
+.profileText {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.1;
+}
+
+.profileText small {
+  color: var(--ink-tertiary);
+  font-size: var(--text-nano);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.profileText strong {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--ink-primary);
+  font-size: var(--auto-ui-label);
+  text-overflow: ellipsis;
+}
+
+.profileChange {
+  color: var(--accent);
+  font-size: var(--auto-ui-caption);
+  font-weight: var(--fw-semibold);
 }
 
 .exit {
@@ -593,7 +633,7 @@
 .time {
   color: rgba(242, 242, 245, 0.62);
   font-family: var(--font-mono);
-  font-size: var(--auto-time);
+  font-size: max(var(--auto-time), var(--text-mono));
   font-variant-numeric: tabular-nums;
 }
 
@@ -704,7 +744,7 @@
 .upHead {
   padding-inline: var(--auto-gutter);
   color: rgba(242, 242, 245, 0.55);
-  font-size: var(--auto-head);
+  font-size: max(var(--auto-head), var(--text-nano));
   font-weight: var(--fw-bold);
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -739,8 +779,8 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: var(--auto-card);
-  min-width: var(--auto-card);
+  width: max(var(--auto-card), calc(var(--row-h) * 2.35));
+  min-width: max(var(--auto-card), calc(var(--row-h) * 2.35));
   padding: clamp(7px, 0.5vw, 11px);
   text-align: left;
   /* Deliberately not backdrop-filter: eight blurred cards on top of an already
@@ -798,17 +838,26 @@
   white-space: nowrap;
 }
 
+.nextMeta .routePosition {
+  color: var(--ink-tertiary);
+  font-family: var(--font-sans);
+  font-size: var(--text-nano);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 /* ── DJ controls ── */
 .djPicker {
   position: fixed;
   z-index: 8;
   top: calc(var(--auto-top-h) + var(--auto-pad-block) + 10px);
   right: var(--auto-gutter);
-  display: grid;
-  grid-template-columns: repeat(2, minmax(190px, 1fr));
-  gap: 8px;
-  width: min(520px, calc(100vw - var(--auto-gutter) * 2));
-  padding: 10px;
+  display: flex;
+  width: min(660px, calc(100vw - var(--auto-gutter) * 2));
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-lg);
   background: rgba(14, 14, 17, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: var(--radius-lg);
@@ -816,12 +865,28 @@
   backdrop-filter: blur(24px);
 }
 
+.djPickerHead {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.djPickerHead strong { font-size: var(--text-h3); }
+.djPickerHead span { color: var(--ink-secondary); font-size: var(--auto-ui-caption); }
+
+.djPickerGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(210px, 1fr));
+  gap: var(--space-sm);
+}
+
 .djCard {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 4px;
-  padding: 13px 14px;
+  gap: 6px;
+  min-height: calc(var(--auto-control-h) * 1.65);
+  padding: var(--space-md) var(--space-lg);
   color: var(--ink-primary);
   text-align: left;
   background: rgba(255, 255, 255, 0.055);
@@ -830,21 +895,79 @@
   cursor: pointer;
 }
 
-.djCard strong { font-size: 14px; }
-.djCard span { color: var(--ink-secondary); font-size: 11px; line-height: 1.4; }
+.djCard strong { font-size: var(--auto-ui-body); }
+.djCard span { color: var(--ink-secondary); font-size: var(--auto-ui-caption); line-height: 1.4; }
 .djCardActive { border-color: var(--accent); background: rgba(249, 122, 18, 0.12); }
 
 .djControls {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: rgba(9, 9, 12, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  border-radius: var(--radius-lg);
+}
+
+.controlHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.controlHeading > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.controlHeading strong {
+  font-size: var(--auto-ui-body);
+  line-height: 1.2;
+}
+
+.controlHeading > div > span {
+  color: var(--ink-secondary);
+  font-size: var(--auto-ui-caption);
+  line-height: 1.35;
+}
+
+.requestButton {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  min-height: var(--auto-control-h);
+  padding: 5px var(--space-md);
+  color: var(--ink-on-accent);
+  font: inherit;
+  font-size: var(--auto-ui-label);
+  font-weight: var(--fw-bold);
+  line-height: 1.1;
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.requestButton > span {
+  grid-row: 1 / 3;
+  margin-right: 7px;
+  font-size: 1.4em;
+}
+
+.requestButton small {
+  color: color-mix(in srgb, var(--ink-on-accent) 75%, transparent);
+  font-size: var(--text-nano);
+  font-weight: var(--fw-medium);
 }
 
 .command {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 38px;
-  height: 42px;
+  grid-template-columns: minmax(0, 1fr) var(--auto-control-h);
+  height: var(--auto-control-h);
   overflow: hidden;
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -855,10 +978,10 @@
 
 .command input {
   min-width: 0;
-  padding: 0 15px;
+  padding: 0 var(--space-lg);
   color: var(--ink-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--auto-ui-body);
   background: transparent;
   border: 0;
   outline: 0;
@@ -876,41 +999,81 @@
 }
 
 .command button:disabled { color: var(--ink-tertiary); cursor: default; }
-.command svg { width: 19px; height: 19px; }
+.command svg { width: var(--icon-md); height: var(--icon-md); }
 
-.quickControls {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  scrollbar-width: none;
+.directionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
 }
 
-.quickControls::-webkit-scrollbar { display: none; }
+.directionControl {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 
-.quickControls button {
-  flex: 0 0 auto;
-  padding: 7px 10px;
-  color: rgba(242, 242, 245, 0.76);
-  font: inherit;
-  font-size: 11px;
+.directionControl legend {
+  margin-bottom: 5px;
+  color: var(--ink-secondary);
+  font-size: var(--auto-ui-caption);
   font-weight: var(--fw-semibold);
+}
+
+.directionControl > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 3px;
   background: rgba(255, 255, 255, 0.055);
   border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-md);
+}
+
+.directionControl button {
+  min-width: 0;
+  min-height: calc(var(--auto-segment-h) - 6px);
+  padding: 4px 7px;
+  overflow: hidden;
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: var(--auto-ui-caption);
+  font-weight: var(--fw-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 3px);
   cursor: pointer;
 }
 
-.quickControls .requestButton {
-  color: var(--ink-on-accent);
-  background: var(--accent);
-  border-color: var(--accent);
+.directionControl button[aria-pressed='true'] {
+  color: var(--ink-primary);
+  background: rgba(255, 255, 255, 0.13);
+  box-shadow: var(--shadow-1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .djCard:hover { background: rgba(255, 255, 255, 0.1); }
+  .directionControl button:hover { color: var(--ink-primary); background: rgba(255, 255, 255, 0.08); }
+  .requestButton:hover { background: var(--accent-hover); }
 }
 
 .requests {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: var(--space-sm);
   overflow-x: auto;
+  padding-top: 2px;
+}
+
+.requestsLabel {
+  flex: 0 0 auto;
+  color: var(--ink-tertiary);
+  font-size: var(--text-nano);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .requestChip {
@@ -918,9 +1081,10 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  padding: 5px 6px 5px 10px;
+  min-height: var(--auto-pill-h);
+  padding: 4px 7px 4px 12px;
   color: rgba(242, 242, 245, 0.78);
-  font-size: 11px;
+  font-size: var(--auto-ui-caption);
   background: rgba(249, 122, 18, 0.1);
   border: 1px solid rgba(249, 122, 18, 0.24);
   border-radius: var(--radius-full);
@@ -928,8 +1092,8 @@
 }
 
 .requestChip button {
-  width: 22px;
-  height: 22px;
+  width: calc(var(--auto-pill-h) - 10px);
+  height: calc(var(--auto-pill-h) - 10px);
   padding: 0;
   color: inherit;
   font-size: 17px;
@@ -945,10 +1109,10 @@
   z-index: 12;
   inset: 0 0 0 auto;
   display: flex;
-  width: min(440px, 100vw);
+  width: min(520px, 100vw);
   flex-direction: column;
-  gap: 14px;
-  padding: max(22px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
+  gap: var(--space-lg);
+  padding: max(var(--space-xl), env(safe-area-inset-top)) var(--space-xl) max(var(--space-xl), env(safe-area-inset-bottom));
   color: var(--ink-primary);
   background: rgba(10, 10, 12, 0.97);
   border-left: 1px solid rgba(255, 255, 255, 0.11);
@@ -963,12 +1127,12 @@
   gap: 16px;
 }
 
-.requestHead div { display: flex; flex-direction: column; gap: 4px; }
-.requestHead strong { font-size: 22px; }
-.requestHead span { color: var(--ink-secondary); font-size: 12px; }
+.requestHead div { display: flex; flex-direction: column; gap: 5px; }
+.requestHead strong { font-size: var(--text-h2); }
+.requestHead span { color: var(--ink-secondary); font-size: var(--auto-ui-caption); line-height: 1.45; }
 .requestHead button {
-  width: 38px;
-  height: 38px;
+  width: var(--auto-control-h);
+  height: var(--auto-control-h);
   color: var(--ink-primary);
   font-size: 24px;
   background: rgba(255, 255, 255, 0.08);
@@ -978,10 +1142,11 @@
 }
 
 .requestSearch {
-  height: 46px;
-  padding: 0 14px;
+  height: var(--auto-control-h);
+  padding: 0 var(--space-lg);
   color: var(--ink-primary);
   font: inherit;
+  font-size: var(--auto-ui-body);
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-md);
@@ -993,11 +1158,12 @@
 
 .requestResults > button {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
+  grid-template-columns: var(--row-h) minmax(0, 1fr) auto;
   align-items: center;
-  gap: 11px;
+  gap: var(--space-md);
   width: 100%;
-  padding: 8px;
+  min-height: calc(var(--row-h) + var(--space-md));
+  padding: var(--space-sm);
   color: var(--ink-primary);
   text-align: left;
   background: transparent;
@@ -1011,19 +1177,20 @@
 }
 .requestResults > button > span:not(.resultCover) { display: flex; min-width: 0; flex-direction: column; }
 .requestResults strong, .requestResults small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.requestResults small { color: var(--ink-secondary); }
-.requestResults b { color: var(--accent); font-size: 12px; }
+.requestResults strong { font-size: var(--auto-ui-body); }
+.requestResults small { color: var(--ink-secondary); font-size: var(--auto-ui-caption); }
+.requestResults b { color: var(--accent); font-size: var(--auto-ui-label); }
 
 .resultCover {
-  width: 48px;
-  height: 48px;
+  width: var(--row-h);
+  height: var(--row-h);
   background-color: var(--bg-raised);
   background-position: center;
   background-size: cover;
   border-radius: var(--radius-sm);
 }
 
-.requestEmpty { color: var(--ink-secondary); font-size: 13px; text-align: center; }
+.requestEmpty { color: var(--ink-secondary); font-size: var(--auto-ui-body); text-align: center; }
 
 .emptyDj {
   grid-area: stage;
@@ -1049,14 +1216,14 @@
 @keyframes autoSpin { to { transform: rotate(360deg); } }
 
 .nextMeta strong {
-  font-size: var(--auto-card-title);
+  font-size: max(var(--auto-card-title), var(--text-label));
   font-weight: var(--fw-semibold);
   line-height: 1.3;
 }
 
 .nextMeta span {
   color: var(--ink-secondary);
-  font-size: var(--auto-card-artist);
+  font-size: max(var(--auto-card-artist), var(--text-caption));
   line-height: 1.35;
 }
 
@@ -1136,6 +1303,9 @@
 
   .upHead { display: none; }
   .nextMeta { display: none; }
+  .djControls { gap: 5px; padding: 8px; }
+  .controlHeading > div > span,
+  .requestButton small { display: none; }
 }
 
 /* Short portrait (small phones, and any phone at high browser zoom). */
@@ -1193,22 +1363,13 @@
 
   .djPicker {
     top: calc(var(--auto-top-h) + var(--auto-pad-block) + 4px);
-    grid-template-columns: 1fr;
     max-height: calc(100vh - var(--auto-top-h) - 40px);
     overflow-y: auto;
   }
 
-  .djControls {
-    gap: 6px;
-  }
-
-  .command {
-    height: 38px;
-  }
-
-  .quickControls button {
-    padding-block: 6px;
-  }
+  .djPickerGrid { grid-template-columns: 1fr; }
+  .djControls { gap: var(--space-sm); }
+  .directionGrid { grid-template-columns: 1fr; }
 
   .requestPanel {
     width: 100vw;

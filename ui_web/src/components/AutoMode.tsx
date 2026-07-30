@@ -25,12 +25,27 @@ const SWIPE_MAX_MS = 900;
 /** Breathing room the Auto Mode status keeps from the artwork and the top bar. */
 const STATUS_GAP = 12;
 const STATUS_MIN_GAP = 6;
-const DJ_PROFILES: Array<{ id: DjProfile; title: string; trait: string }> = [
-  { id: 'adaptive', title: 'Adaptativo', trait: 'Elige la mezcla según cada pareja' },
-  { id: 'long_blend', title: 'Mezcla larga', trait: 'Armónico · 16–32 compases · pocos efectos' },
-  { id: 'cuts_drops', title: 'Cortes y drops', trait: '90–150 s · cambios marcados · echo cuts' },
-  { id: 'open_format', title: 'Open format', trait: 'Saltos amplios · puentes · cambios estructurales' },
+const DJ_PROFILES: Array<{ id: DjProfile; titleKey: string; traitKey: string }> = [
+  { id: 'adaptive', titleKey: 'autoMode.dj.adaptive', traitKey: 'autoMode.dj.adaptiveTrait' },
+  { id: 'long_blend', titleKey: 'autoMode.dj.longBlend', traitKey: 'autoMode.dj.longBlendTrait' },
+  { id: 'cuts_drops', titleKey: 'autoMode.dj.cutsDrops', traitKey: 'autoMode.dj.cutsDropsTrait' },
+  { id: 'open_format', titleKey: 'autoMode.dj.openFormat', traitKey: 'autoMode.dj.openFormatTrait' },
 ];
+
+const DIRECTION_LEVELS = [-0.65, 0, 0.65] as const;
+
+function directionLevel(value: number): number {
+  if (value < -0.25) return -0.65;
+  if (value > 0.25) return 0.65;
+  return 0;
+}
+
+function techniqueText(technique?: string): string {
+  if (!technique) return t('autoMode.dj.analysing');
+  const key = `autoMode.dj.technique.${technique}`;
+  const translated = t(key);
+  return translated === key ? technique.replaceAll('_', ' ') : translated;
+}
 
 /**
  * Type-size tier for a track title.
@@ -251,9 +266,9 @@ export function AutoMode() {
     armIdle();
   };
 
-  const nudgeDirection = (key: 'energy' | 'familiarity', delta: number) => {
+  const setDirectionLevel = (key: 'energy' | 'familiarity', value: number) => {
     actions.setAutoDirection({
-      [key]: Math.max(-1, Math.min(1, (state.autoMode.direction?.[key] ?? 0) + delta)),
+      [key]: value,
       prompt: '',
     });
     armIdle();
@@ -369,7 +384,7 @@ export function AutoMode() {
             <button
               class={styles.profile}
               type="button"
-              aria-label={`Cambiar DJ. Actual: ${activeDj().title}`}
+              aria-label={t('autoMode.dj.changeCurrent', { dj: t(activeDj().titleKey) })}
               aria-expanded={djPickerOpen()}
               onClick={() => {
                 setDjPickerOpen((open) => !open);
@@ -379,7 +394,11 @@ export function AutoMode() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                 <circle cx="12" cy="12" r="8" /><path d="m15.5 8.5-2.1 4.9-4.9 2.1 2.1-4.9z" />
               </svg>
-              {activeDj().title}
+              <span class={styles.profileText}>
+                <small>{t('autoMode.dj.label')}</small>
+                <strong>{t(activeDj().titleKey)}</strong>
+              </span>
+              <span class={styles.profileChange}>{t('autoMode.dj.change')}</span>
             </button>
             <button class={styles.exit} type="button" aria-label={t('autoMode.exit')} onClick={() => actions.exitAutoMode()}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -390,24 +409,30 @@ export function AutoMode() {
         </header>
 
         <Show when={djPickerOpen()}>
-          <div class={styles.djPicker} role="listbox" aria-label="Seleccionar DJ">
-            <For each={DJ_PROFILES}>
-              {(profile) => (
-                <button
-                  type="button"
-                  classList={{ [styles.djCard]: true, [styles.djCardActive]: profile.id === (state.autoMode.djProfile ?? 'adaptive') }}
-                  role="option"
-                  aria-selected={profile.id === (state.autoMode.djProfile ?? 'adaptive')}
-                  onClick={() => {
-                    actions.setAutoDjProfile(profile.id);
-                    setDjPickerOpen(false);
-                  }}
-                >
-                  <strong>{profile.title}</strong>
-                  <span>{profile.trait}</span>
-                </button>
-              )}
-            </For>
+          <div class={styles.djPicker} role="dialog" aria-label={t('autoMode.dj.choose')}>
+            <div class={styles.djPickerHead}>
+              <strong>{t('autoMode.dj.choose')}</strong>
+              <span>{t('autoMode.dj.chooseHint')}</span>
+            </div>
+            <div class={styles.djPickerGrid} role="listbox" aria-label={t('autoMode.dj.choose')}>
+              <For each={DJ_PROFILES}>
+                {(profile) => (
+                  <button
+                    type="button"
+                    classList={{ [styles.djCard]: true, [styles.djCardActive]: profile.id === (state.autoMode.djProfile ?? 'adaptive') }}
+                    role="option"
+                    aria-selected={profile.id === (state.autoMode.djProfile ?? 'adaptive')}
+                    onClick={() => {
+                      actions.setAutoDjProfile(profile.id);
+                      setDjPickerOpen(false);
+                    }}
+                  >
+                    <strong>{t(profile.titleKey)}</strong>
+                    <span>{t(profile.traitKey)}</span>
+                  </button>
+                )}
+              </For>
+            </div>
           </div>
         </Show>
 
@@ -479,6 +504,17 @@ export function AutoMode() {
               </div>
 
               <div class={styles.djControls}>
+                <div class={styles.controlHeading}>
+                  <div>
+                    <strong>{t('autoMode.dj.direction')}</strong>
+                    <span>{t('autoMode.dj.directionHint')}</span>
+                  </div>
+                  <button class={styles.requestButton} type="button" onClick={() => setRequestOpen(true)}>
+                    <span aria-hidden="true">＋</span>
+                    {t('autoMode.dj.request')}
+                    <small>{t('autoMode.dj.requestEta')}</small>
+                  </button>
+                </div>
                 <form
                   class={styles.command}
                   onSubmit={(event) => {
@@ -489,30 +525,64 @@ export function AutoMode() {
                   <input
                     value={prompt()}
                     onInput={(event) => setPrompt(event.currentTarget.value)}
-                    placeholder="Dile al DJ hacia dónde ir…"
-                    aria-label="Redirigir la sesión"
+                    placeholder={t('autoMode.dj.commandPlaceholder')}
+                    aria-label={t('autoMode.dj.commandAria')}
                   />
-                  <button type="submit" disabled={!prompt().trim()} aria-label="Enviar instrucción">
+                  <button type="submit" disabled={!prompt().trim()} aria-label={t('autoMode.dj.send')}>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="m4 4 17 8-17 8 3-8z" /></svg>
                   </button>
                 </form>
-                <div class={styles.quickControls}>
-                  <button type="button" onClick={() => nudgeDirection('energy', 0.3)}>+ energía</button>
-                  <button type="button" onClick={() => nudgeDirection('energy', -0.3)}>− energía</button>
-                  <button type="button" onClick={() => nudgeDirection('familiarity', 0.3)}>Más conocido</button>
-                  <button type="button" onClick={() => nudgeDirection('familiarity', -0.3)}>Más descubrimiento</button>
-                  <button class={styles.requestButton} type="button" onClick={() => setRequestOpen(true)}>Pedir canción</button>
+                <div class={styles.directionGrid}>
+                  <fieldset class={styles.directionControl}>
+                    <legend>{t('autoMode.dj.energy')}</legend>
+                    <div>
+                      <For each={DIRECTION_LEVELS}>
+                        {(value, index) => (
+                          <button
+                            type="button"
+                            aria-pressed={directionLevel(state.autoMode.direction?.energy ?? 0) === value}
+                            onClick={() => setDirectionLevel('energy', value)}
+                          >
+                            {[t('autoMode.dj.energySoft'), t('autoMode.dj.balanced'), t('autoMode.dj.energyHigh')][index()]}
+                          </button>
+                        )}
+                      </For>
+                    </div>
+                  </fieldset>
+                  <fieldset class={styles.directionControl}>
+                    <legend>{t('autoMode.dj.selection')}</legend>
+                    <div>
+                      <For each={DIRECTION_LEVELS}>
+                        {(value, index) => (
+                          <button
+                            type="button"
+                            aria-pressed={directionLevel(state.autoMode.direction?.familiarity ?? 0) === value}
+                            onClick={() => setDirectionLevel('familiarity', value)}
+                          >
+                            {[t('autoMode.dj.discover'), t('autoMode.dj.balanced'), t('autoMode.dj.familiar')][index()]}
+                          </button>
+                        )}
+                      </For>
+                    </div>
+                  </fieldset>
                 </div>
                 <Show when={autoRequests().length > 0}>
-                  <div class={styles.requests} aria-label="Peticiones al DJ">
+                  <div class={styles.requests} aria-label={t('autoMode.dj.requests')}>
+                    <span class={styles.requestsLabel}>{t('autoMode.dj.requests')}</span>
                     <For each={autoRequests()}>
                       {(request) => (
                         <span class={styles.requestChip}>
                           <span>
                             {request.track.title}
-                            <Show when={request.etaTracks}> · en ≤{request.etaTracks}</Show>
+                            <Show when={request.etaTracks}> · {t('autoMode.dj.withinTracks', { count: request.etaTracks! })}</Show>
                           </span>
-                          <button type="button" aria-label={`Cancelar ${request.track.title}`} onClick={() => actions.cancelAutoRequest(request.id)}>×</button>
+                          <button
+                            type="button"
+                            aria-label={t('autoMode.dj.cancelRequest', { title: request.track.title })}
+                            onClick={() => actions.cancelAutoRequest(request.id)}
+                          >
+                            ×
+                          </button>
                         </span>
                       )}
                     </For>
@@ -567,8 +637,8 @@ export function AutoMode() {
             <section class={styles.upStrip} aria-label={t('autoMode.upNext')}>
               <span class={styles.upHead}>
                 {transitionState().status === 'idle'
-                  ? t('autoMode.upNext')
-                  : `${transitionState().status === 'preparing' ? 'Preparando' : 'Mezclando'} · ${transitionState().technique?.replaceAll('_', ' ')}`}
+                  ? t('autoMode.dj.route')
+                  : `${transitionState().status === 'preparing' ? t('autoMode.dj.preparing') : t('autoMode.dj.mixing')} · ${techniqueText(transitionState().technique)}`}
               </span>
               <div
                 class={styles.filmstrip}
@@ -593,10 +663,14 @@ export function AutoMode() {
                       >
                         <span class={styles.nextCover} style={{ 'background-image': `url("${image()}")` }} />
                         <span class={styles.nextMeta}>
+                          <small class={styles.routePosition}>
+                            {index() + 1}
+                            <Show when={plan()?.requestId}> · {t('autoMode.dj.requested')}</Show>
+                          </small>
                           <strong>{track.title}</strong>
                           <span>{track.artist}</span>
                           <Show when={plan()?.transition}>
-                            <small>{plan()!.transition!.technique.replaceAll('_', ' ')} · {plan()?.bpm ? `${Math.round(plan()!.bpm!)} BPM` : 'analizando'}</small>
+                            <small>{techniqueText(plan()!.transition!.technique)} · {plan()?.bpm ? `${Math.round(plan()!.bpm!)} BPM` : t('autoMode.dj.analysing')}</small>
                           </Show>
                         </span>
                       </button>
@@ -609,11 +683,11 @@ export function AutoMode() {
         </Show>
 
         <Show when={requestOpen()}>
-          <aside class={styles.requestPanel} aria-label="Pedir una canción al DJ">
+          <aside class={styles.requestPanel} aria-label={t('autoMode.dj.requestPanelAria')}>
             <div class={styles.requestHead}>
               <div>
-                <strong>Pedir canción</strong>
-                <span>Sonará en las próximas tres canciones como máximo</span>
+                <strong>{t('autoMode.dj.request')}</strong>
+                <span>{t('autoMode.dj.requestPromise')}</span>
               </div>
               <button type="button" aria-label={t('common.close')} onClick={() => setRequestOpen(false)}>×</button>
             </div>
@@ -622,16 +696,17 @@ export function AutoMode() {
               autofocus
               value={requestQuery()}
               onInput={(event) => searchRequests(event.currentTarget.value)}
-              placeholder="Canción o artista"
+              placeholder={t('autoMode.dj.searchPlaceholder')}
+              aria-label={t('autoMode.dj.searchPlaceholder')}
             />
             <div class={styles.requestResults}>
-              <Show when={!requestBusy()} fallback={<p class={styles.requestEmpty}>Buscando…</p>}>
-                <For each={requestResults()} fallback={<p class={styles.requestEmpty}>Busca una canción exacta</p>}>
+              <Show when={!requestBusy()} fallback={<p class={styles.requestEmpty}>{t('autoMode.dj.searching')}</p>}>
+                <For each={requestResults()} fallback={<p class={styles.requestEmpty}>{t('autoMode.dj.searchEmpty')}</p>}>
                   {(item) => (
                     <button type="button" onClick={() => void requestItem(item)}>
                       <span class={styles.resultCover} style={{ 'background-image': item.cover ? `url("${item.cover}")` : undefined }} />
                       <span><strong>{item.title}</strong><small>{item.artist ?? item.subtitle}</small></span>
-                      <b>Pedir</b>
+                      <b>{t('autoMode.dj.requestAction')}</b>
                     </button>
                   )}
                 </For>
