@@ -30,17 +30,11 @@ Soundsible is a music app you run on your **own** machine. Browse, stream, and s
 
 **What you get**
 
-- 🎨 **Clean metadata & cover art** — accurate, not algorithmically mangled
-- 🧠 **Private recommendations** built from *your own* listening history
-- 📻 **Radio mode** for endless discovery without leaving your station
-- 🗂️ **Everything in one place** — discover, search, podcasts, favourites, playlists, downloads
-- 👥 **One server, everyone's music** — each person gets their own library, playlists and history; the files are shared, so nothing downloads twice
-- 🧹 **Resilient downloads** — failed items stay visible with retry/remove, queue self-heals on restart
-- ⚡ **Honest playback** — the row you tapped shows it is working, impatient taps cost nothing, and a dead track skips itself instead of leaving you at a silent play button
-- 🔒 **Real lock-screen controls** — title, album, artwork *and* a working scrubber on your phone, watch, laptop and car stereo
-- 📴 **Opens even when your station doesn't answer** — the installed app launches offline and says so, instead of showing a browser error page
-- ⌨️ **Keyboard-first on desktop** — play/pause, seek, skip, volume, mute, favourite, shuffle and repeat without touching the mouse; every song row is reachable by tab
-- 🔐 **It's your server** — your data never leaves it
+- 🔐 **Your own private music service** — self-hosted, free, with no ads, tracking, or subscription
+- 🌍 **A huge catalog that becomes your library** — find music through YouTube and YouTube Music, then save it alongside the music you already own
+- 🧠 **Personal discovery without giving up your profile** — recommendations and endless radio learn from your listening history on your own server
+- 🎤 **Synced lyrics while you listen** — follow songs line by line on mobile or desktop
+- 📱 **One polished player everywhere** — your library, playlists, favourites, podcasts, and playback follow you across devices
 
 > *"I built Soundsible because I'm a musician who understands how predatory music streaming has become — and a sysadmin with the tools to build a private, free alternative that doesn't sacrifice a thing."* — **Arzuparreta**
 
@@ -48,28 +42,20 @@ Soundsible is a music app you run on your **own** machine. Browse, stream, and s
 
 ## Screenshots
 
+<details>
+<summary><b>See Soundsible on mobile and desktop</b></summary>
+<br>
 <div align="center">
-
-### Mobile
-
-<p>
-  <img src="docs/images/mobile-search.PNG" alt="Mobile search" width="190">
-  <img src="docs/images/mobile-library.PNG" alt="Mobile library" width="190">
-  <img src="docs/images/mobile-discover.PNG" alt="Mobile discover" width="190">
-  <img src="docs/images/mobile-np.PNG" alt="Mobile now playing" width="190">
-</p>
-
-<sub>Search · Library · Discover · Now Playing</sub>
-
-### Desktop
-
-<img src="docs/images/desktop-library.png" alt="Desktop library" width="760">
-<br><sub>Library</sub>
-<br><br>
-<img src="docs/images/desktop-np.png" alt="Desktop now playing" width="760">
-<br><sub>Now Playing</sub>
-
+  <p>
+    <img src="docs/images/mobile-library.PNG" alt="Soundsible mobile library" width="210">
+    <img src="docs/images/mobile-now-playing-lyrics.PNG" alt="Soundsible mobile Now Playing with synced lyrics" width="210">
+  </p>
+  <sub>Library · Now Playing with synced lyrics</sub>
+  <br><br>
+  <img src="docs/images/now-playing-desktop.png" alt="Soundsible desktop Now Playing with lyrics and queue" width="720">
+  <br><sub>Desktop Now Playing with lyrics and queue</sub>
 </div>
+</details>
 
 ---
 
