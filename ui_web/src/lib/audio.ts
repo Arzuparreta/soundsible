@@ -451,6 +451,10 @@ export const audioService = {
   },
   /** Resume playback. A frozen blend resumes on both decks together. */
   resume(): Promise<void> {
+    // Once the decks are routed through the graph, their output only exists
+    // inside it. Resuming here costs nothing and means any play gesture can
+    // recover a context the browser suspended behind our back.
+    if (audioContext?.state === 'suspended') void audioContext.resume().catch(() => {});
     const current = mix;
     if (current && current.phase !== 'armed') {
       const partner = decks()[current.dominant ? current.fromIndex : current.toIndex];
