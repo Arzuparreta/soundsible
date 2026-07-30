@@ -87,4 +87,18 @@ describe('TrackList reactivity', () => {
     const [list, index] = vi.mocked(actions.playFrom).mock.calls.at(-1)!;
     expect((list as Track[])[index as number].title).toBe('Fresh download');
   });
+
+  it('keeps download before and outside the fixed duration, heart and menu stripe', () => {
+    render(() => <TrackList tracks={[{ ...track('a', 'Streamed song'), duration: 180 }]} />);
+
+    const download = screen.getByRole('button', { name: 'collection.download' });
+    const duration = screen.getByText('3:00');
+    const heart = screen.getByRole('button', { name: 'trackActions.addFav' });
+    const menu = screen.getByRole('button', { name: 'songRow.ariaMore' });
+
+    expect(download.compareDocumentPosition(duration) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(download.parentElement).not.toBe(duration.parentElement);
+    expect(heart.parentElement).toBe(duration.parentElement);
+    expect(menu.parentElement).toBe(duration.parentElement);
+  });
 });

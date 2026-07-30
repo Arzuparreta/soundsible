@@ -126,37 +126,40 @@ export default function SongRow(props: SongRowProps) {
       <Show when={props.badge}>
         <span class={styles.badge}>{props.badge}</span>
       </Show>
-      <span class={styles.duration}>{formatDuration(props.track.duration)}</span>
-      {/* Downloaded or not, a song in the library gets a heart — the mark is
-        * about which of your songs stand out, not about where they live. What
-        * it never gets is a heart before it is yours: `entry()` is only saved
-        * once the row is part of the collection. */}
-      <Show when={props.favouritable !== false && isSavedTrack(props.track)}>
-        <FavouriteButton favourite={entry()} class={styles.rowHeart} />
-      </Show>
       {/* The one row control that changes state: an arrow while the song has no
         * file, a spinner while it lands, nothing once it is on disk. Its
         * presence is how a streamed song announces itself — there is no second
-        * badge saying the same thing. */}
+        * badge saying the same thing. It deliberately sits before the stable
+        * duration/heart/menu stripe, so appearing never shifts those controls. */}
       <Show when={props.favouritable !== false}>
         <CollectionButton entry={entry()} class={styles.rowCollect} hideOwned />
       </Show>
-      <Show when={props.onMenu}>
-        <button
-          class={styles.iconBtn}
-          aria-label={t('songRow.ariaMore')}
-          onClick={(e) => {
-            e.stopPropagation();
-            openMenu(e);
-          }}
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
-            <circle cx="5" cy="12" r="2" />
-            <circle cx="12" cy="12" r="2" />
-            <circle cx="19" cy="12" r="2" />
-          </svg>
-        </button>
-      </Show>
+      <div class={styles.actionStripe}>
+        <span class={styles.duration}>{formatDuration(props.track.duration)}</span>
+        {/* Downloaded or not, a song in the library gets a heart — the mark is
+          * about which of your songs stand out, not about where they live. What
+          * it never gets is a heart before it is yours: `entry()` is only saved
+          * once the row is part of the collection. */}
+        <Show when={props.favouritable !== false && isSavedTrack(props.track)}>
+          <FavouriteButton favourite={entry()} class={styles.rowHeart} />
+        </Show>
+        <Show when={props.onMenu}>
+          <button
+            class={styles.iconBtn}
+            aria-label={t('songRow.ariaMore')}
+            onClick={(e) => {
+              e.stopPropagation();
+              openMenu(e);
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+              <circle cx="5" cy="12" r="2" />
+              <circle cx="12" cy="12" r="2" />
+              <circle cx="19" cy="12" r="2" />
+            </svg>
+          </button>
+        </Show>
+      </div>
     </div>
   );
 }
