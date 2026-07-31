@@ -12,6 +12,7 @@ import { savedFromTrack } from '../lib/saved';
 import { FavouriteButton } from './FavouriteButton';
 import { CollectionButton } from './CollectionButton';
 import { LyricsPanel } from './LyricsPanel';
+import { KaraokeMicIcon } from './icons';
 import styles from './AutoMode.module.css';
 import { clockTime } from '../lib/format';
 import type { CatalogItem, Track } from '../types/music';
@@ -610,9 +611,7 @@ export function AutoMode() {
                       armIdle();
                     }}
                   >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                      <path d="M5 6h14M5 10h10M5 14h14M5 18h8" />
-                    </svg>
+                    <KaraokeMicIcon />
                   </button>
                 </Show>
               </div>

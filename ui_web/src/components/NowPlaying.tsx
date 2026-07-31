@@ -18,6 +18,7 @@ import { NowPlayingLayoutControl } from './NowPlayingLayoutControl';
 import { RadioBadge, onStopRadio } from './RadioBadge';
 import { Spinner } from './Spinner';
 import { LyricsPanel } from './LyricsPanel';
+import { KaraokeMicIcon } from './icons';
 import { openActionMenu } from './ActionMenu';
 import { buildTrackMenu } from './trackActions';
 import {
@@ -654,9 +655,7 @@ export function NowPlaying(props: {
                   aria-pressed={mobileVisual().content === 'lyrics'}
                   onClick={() => setMobileVisual(toggleMobileLyrics)}
                 >
-                  <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                    <path d="M5 6h14M5 10h10M5 14h14M5 18h8" />
-                  </svg>
+                  <KaraokeMicIcon size={21} />
                 </button>
               </Show>
               <Show when={desktopLyricsActive()}>
@@ -685,9 +684,7 @@ export function NowPlaying(props: {
                       </svg>
                     }
                   >
-                    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                      <path d="M5 6h14M5 10h10M5 14h14M5 18h8" />
-                    </svg>
+                    <KaraokeMicIcon size={21} />
                   </Show>
                 </button>
               </Show>
