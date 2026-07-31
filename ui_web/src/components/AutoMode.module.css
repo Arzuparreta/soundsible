@@ -38,7 +38,7 @@
   min-height: 0;
   overflow: hidden;
   color: var(--ink-primary);
-  background: #08080a;
+  background: var(--stage-base);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -93,7 +93,7 @@
 /* D-pad and keyboard navigation are the primary input on a TV: the ring has to
    read from the sofa, so it is heavier than the app-wide one. */
 .root :focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--accent-ink);
   outline-offset: 3px;
 }
 
@@ -110,7 +110,8 @@
   z-index: -3;
   background-position: center;
   background-size: cover;
-  filter: blur(56px) saturate(1.35) brightness(0.56);
+  filter: var(--stage-backdrop);
+  opacity: var(--stage-backdrop-opacity);
   transform: scale(1.18);
 }
 
@@ -123,15 +124,13 @@
 .wash {
   z-index: -2;
   inset: 0;
-  background:
-    radial-gradient(120% 80% at 50% 30%, rgba(249, 122, 18, 0.11), transparent 58%),
-    linear-gradient(180deg, rgba(8, 8, 10, 0.7), rgba(8, 8, 10, 0.36) 44%, rgba(8, 8, 10, 0.9));
+  background: var(--stage-wash-auto);
 }
 
 .grain {
   z-index: -1;
   inset: 0;
-  opacity: 0.06;
+  opacity: var(--stage-grain-opacity);
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
 }
 
@@ -214,8 +213,8 @@
   height: clamp(40px, 3vw, 54px);
   min-height: var(--control-h);
   color: var(--ink-secondary);
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: var(--stage-material);
+  border: 1px solid var(--stage-line);
   border-radius: var(--radius-full);
   transition: color var(--dur-short), background var(--dur-short), transform var(--dur-micro);
 }
@@ -260,7 +259,7 @@
 }
 
 .profileChange {
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: var(--auto-ui-caption);
   font-weight: var(--fw-semibold);
 }
@@ -281,7 +280,7 @@
 .profile:hover,
 .exit:hover {
   color: var(--ink-primary);
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--stage-material-hover);
 }
 }
 
@@ -346,8 +345,8 @@
 }
 
 .cover {
-  background-color: var(--bg-raised);
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  background-color: var(--stage-material);
+  box-shadow: var(--stage-shadow-lg), inset 0 0 0 1px var(--stage-rim);
 }
 
 .active .cover {
@@ -355,14 +354,8 @@
 }
 
 .lyricsSurface {
-  /* Auto is an intentionally dark environment even when the app underneath
-     uses its light theme. Keep the shared LyricsPanel legible without leaking
-     these overrides outside the cover. */
-  --ink-primary: #f2f2f5;
-  --ink-secondary: #a0a0a8;
-  --ink-tertiary: #6a6a72;
-  --hairline: #26262b;
-  --accent: #f97a12;
+  /* The lyrics take over the cover as a sheet of the room's own glass, so they
+     read the stage tokens like every other panel — no pinned palette. */
   --lyrics-line-size: clamp(16px, 1.2vw, 24px);
   --lyrics-plain-size: clamp(15px, 1vw, 21px);
   --lyrics-overlay-clearance: clamp(66px, 5vw, 82px);
@@ -375,10 +368,10 @@
   min-height: 0;
   overflow: hidden;
   color: var(--ink-primary);
-  background: color-mix(in srgb, #08080a 90%, var(--bg-raised));
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--stage-sheet);
+  border: 1px solid var(--stage-line);
   border-radius: var(--auto-cover-radius);
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58);
+  box-shadow: var(--stage-shadow-lg);
 }
 
 .lyricsToggle {
@@ -393,10 +386,10 @@
   height: clamp(44px, 3.4vw, 56px);
   padding: 0;
   color: var(--ink-primary);
-  background: rgba(8, 8, 10, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: var(--stage-chrome);
+  border: 1px solid var(--stage-line-strong);
   border-radius: var(--radius-full);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--stage-shadow-sm);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   cursor: pointer;
@@ -456,6 +449,9 @@
   flex-direction: column;
   gap: 1px;
   padding: 9px clamp(11px, 3.2vw, 15px) 10px;
+  /* This band is printed on the photograph, not on glass, so it keeps light ink
+     and a scrim in both themes. */
+  color: var(--stage-on-art-ink);
   border-radius: 0 0 var(--auto-cover-radius) var(--auto-cover-radius);
   transition: opacity 320ms var(--ease-out);
 }
@@ -478,7 +474,7 @@
   inset: -20px 0 0;
   z-index: -1;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(8, 8, 10, 0.1), rgba(8, 8, 10, 0.64));
+  background: var(--stage-on-art-scrim);
   backdrop-filter: blur(14px) saturate(1.25);
   -webkit-backdrop-filter: blur(14px) saturate(1.25);
   -webkit-mask-image: linear-gradient(180deg, transparent, #000 46%);
@@ -497,18 +493,18 @@
   letter-spacing: -0.02em;
   line-height: 1.2;
   overflow-wrap: break-word;
-  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.45);
+  text-shadow: var(--stage-on-art-shadow);
 }
 
 .capArtist {
   margin: 0;
   overflow: hidden;
-  color: rgba(242, 242, 245, 0.76);
+  color: var(--stage-on-art-ink-soft);
   font-size: clamp(11.5px, 3.2vw, 14px);
   font-weight: var(--fw-medium);
   line-height: 1.3;
   text-overflow: ellipsis;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
+  text-shadow: var(--stage-on-art-shadow);
   white-space: nowrap;
 }
 
@@ -560,7 +556,7 @@
 .artist {
   margin: 2px 0 0;
   overflow: hidden;
-  color: rgba(242, 242, 245, 0.78);
+  color: var(--ink-secondary);
   font-size: var(--auto-artist);
   font-weight: var(--fw-medium);
   line-height: 1.3;
@@ -583,7 +579,7 @@
   align-items: flex-start;
   gap: 9px;
   min-width: 0;
-  color: rgba(242, 242, 245, 0.66);
+  color: var(--ink-secondary);
   font-family: var(--font-mono);
   font-size: var(--auto-status);
   line-height: 1.5;
@@ -631,7 +627,7 @@
 }
 
 .time {
-  color: rgba(242, 242, 245, 0.62);
+  color: var(--ink-secondary);
   font-family: var(--font-mono);
   font-size: max(var(--auto-time), var(--text-mono));
   font-variant-numeric: tabular-nums;
@@ -640,7 +636,7 @@
 .progress {
   position: relative;
   height: clamp(5px, 0.45vh, 8px);
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--stage-rail);
   border-radius: var(--radius-full);
 }
 
@@ -694,8 +690,8 @@
   width: var(--auto-btn);
   height: var(--auto-btn);
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: var(--stage-material);
+  border: 1px solid var(--stage-line);
   border-radius: 50%;
   transition: color var(--dur-short), background var(--dur-short), transform var(--dur-micro);
 }
@@ -707,7 +703,7 @@
 
 @media (hover: hover) and (pointer: fine) {
 
-.transport button:hover { color: var(--accent); background: rgba(255, 255, 255, 0.15); }
+.transport button:hover { color: var(--accent-ink); background: var(--stage-material-hover); }
 }
 .transport button:active { transform: scale(0.92); }
 
@@ -725,9 +721,9 @@
 .transport .play:hover { color: var(--ink-on-accent); background: var(--accent-hover); }
 }
 @media (hover: hover) and (pointer: fine) {
-.transport .secondaryAction:hover { color: var(--accent); }
+.transport .secondaryAction:hover { color: var(--accent-ink); }
 }
-.transport .liked { color: var(--accent); }
+.transport .liked { color: var(--accent-ink); }
 
 /* ── Queue rail ── */
 .upStrip {
@@ -743,7 +739,7 @@
 
 .upHead {
   padding-inline: var(--auto-gutter);
-  color: rgba(242, 242, 245, 0.55);
+  color: var(--ink-tertiary);
   font-size: max(var(--auto-head), var(--text-nano));
   font-weight: var(--fw-bold);
   letter-spacing: 0.18em;
@@ -759,7 +755,7 @@
   padding: 2px var(--auto-gutter) 8px;
   scroll-padding-inline: var(--auto-gutter);
   scroll-snap-type: x proximity;
-  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  scrollbar-color: var(--stage-rail) transparent;
   scrollbar-width: thin;
   /* Soft right edge: on touch there is no scrollbar to say "there is more". */
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 56px), transparent 100%);
@@ -767,13 +763,13 @@
 }
 
 .filmstrip:focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--accent-ink);
   outline-offset: -3px;
 }
 
 .filmstrip::-webkit-scrollbar { height: 4px; }
 .filmstrip::-webkit-scrollbar-track { background: transparent; }
-.filmstrip::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.22); border-radius: 8px; }
+.filmstrip::-webkit-scrollbar-thumb { background: var(--stage-rail); border-radius: 8px; }
 
 .nextCard {
   display: flex;
@@ -786,8 +782,8 @@
   /* Deliberately not backdrop-filter: eight blurred cards on top of an already
      blurred backdrop is the single most expensive thing this screen can do, and
      over that backdrop a flat translucent fill is indistinguishable. */
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: var(--stage-material);
+  border: 1px solid var(--stage-line);
   border-radius: var(--radius-md);
   scroll-snap-align: start;
   transition: background var(--dur-short), border-color var(--dur-short), transform var(--dur-short);
@@ -797,8 +793,8 @@
 @media (hover: hover) and (pointer: fine) {
 
 .nextCard:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--stage-material-hover);
+  border-color: var(--stage-line-strong);
   transform: translateY(-3px);
 }
 }
@@ -810,8 +806,8 @@
    anything past it would drop a mix the DJ has already prepared. The card is
    disabled, so the reactions above skip it. */
 .nextCardCued {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.28);
+  background: var(--stage-material-active);
+  border-color: var(--stage-line-strong);
   cursor: default;
 }
 
@@ -823,7 +819,7 @@
 .nextCover {
   width: 100%;
   aspect-ratio: 1;
-  background-color: var(--bg-raised);
+  background-color: var(--stage-material);
   background-position: center;
   background-size: cover;
   border-radius: var(--radius-sm);
@@ -845,7 +841,7 @@
 
 .nextMeta small {
   overflow: hidden;
-  color: var(--accent);
+  color: var(--accent-ink);
   font-family: var(--font-mono);
   font-size: 10px;
   text-overflow: ellipsis;
@@ -873,10 +869,10 @@
   flex-direction: column;
   gap: var(--space-md);
   padding: var(--space-lg);
-  background: rgba(14, 14, 17, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: var(--stage-sheet);
+  border: 1px solid var(--stage-line);
   border-radius: var(--radius-lg);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.52);
+  box-shadow: var(--stage-shadow-md);
   backdrop-filter: blur(24px);
 }
 
@@ -904,8 +900,8 @@
   padding: var(--space-md) var(--space-lg);
   color: var(--ink-primary);
   text-align: left;
-  background: rgba(255, 255, 255, 0.055);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--stage-material-quiet);
+  border: 1px solid var(--stage-line-soft);
   border-radius: var(--radius-md);
   cursor: pointer;
 }
@@ -925,7 +921,7 @@
   background: var(--accent-soft);
 }
 
-.djCardActive strong { color: var(--accent); }
+.djCardActive strong { color: var(--accent-ink); }
 
 /* Which pair of hands is on the decks reads at a glance, without a tick that
    would collide with the trait line. */
@@ -962,8 +958,8 @@
   flex-direction: column;
   gap: var(--space-sm);
   padding: var(--space-md);
-  background: rgba(9, 9, 12, 0.52);
-  border: 1px solid var(--hairline-soft);
+  background: var(--stage-panel);
+  border: 1px solid var(--stage-line-soft);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
@@ -985,7 +981,7 @@
   gap: var(--space-md);
   min-width: 0;
   padding-bottom: var(--space-sm);
-  border-bottom: 1px solid var(--hairline-soft);
+  border-bottom: 1px solid var(--stage-line-soft);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--auto-ui-caption);
@@ -1022,7 +1018,7 @@
 /* The key is the one piece of the readout a DJ scans for, so it is the one
    piece that carries the accent. */
 .deck i {
-  color: var(--accent);
+  color: var(--accent-ink);
   font-style: normal;
   font-weight: var(--fw-semibold);
 }
@@ -1060,7 +1056,7 @@
   flex: 0 0 auto;
   margin-left: auto;
   padding: 0 var(--space-md);
-  color: var(--accent);
+  color: var(--accent-ink);
   font: inherit;
   font-family: var(--font-mono);
   font-size: var(--auto-ui-caption);
@@ -1075,7 +1071,7 @@
 }
 
 .requestButton small {
-  color: color-mix(in srgb, var(--accent) 72%, transparent);
+  color: var(--accent-ink);
   font-size: var(--text-nano);
   font-weight: var(--fw-medium);
   letter-spacing: 0;
@@ -1089,8 +1085,8 @@
   align-items: center;
   min-height: var(--auto-control-h);
   padding-left: var(--space-sm);
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--hairline);
+  background: var(--stage-well);
+  border: 1px solid var(--stage-line);
   border-radius: var(--radius-sm);
   transition: border-color var(--dur-short);
 }
@@ -1098,7 +1094,7 @@
 .talkback:focus-within { border-color: rgba(249, 122, 18, 0.6); }
 
 .caret {
-  color: var(--accent);
+  color: var(--accent-ink);
   font-family: var(--font-mono);
   font-size: var(--auto-ui-body);
   line-height: 1;
@@ -1125,13 +1121,13 @@
 .talkback button {
   align-self: stretch;
   padding: 0 var(--space-md);
-  color: var(--accent);
+  color: var(--accent-ink);
   font: inherit;
   font-size: var(--auto-ui-label);
   font-weight: var(--fw-bold);
   background: transparent;
   border: 0;
-  border-left: 1px solid var(--hairline);
+  border-left: 1px solid var(--stage-line);
   border-radius: 0 calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0;
   cursor: pointer;
   transition: color var(--dur-short), background var(--dur-short);
@@ -1172,8 +1168,8 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 3px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--hairline);
+  background: var(--stage-well);
+  border: 1px solid var(--stage-line);
   border-radius: var(--radius-sm);
 }
 
@@ -1185,10 +1181,10 @@
   bottom: 3px;
   left: 3px;
   width: calc((100% - 6px) / 3);
-  background: rgba(255, 255, 255, 0.11);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: var(--stage-material-active);
+  border: 1px solid var(--stage-line);
   border-radius: calc(var(--radius-sm) - 3px);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--stage-shadow-sm);
   transform: translateX(calc(var(--switch-pos, 0) * 100%));
   transition: transform var(--dur-short) var(--ease-out);
 }
@@ -1221,7 +1217,7 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .djCard:hover { background: rgba(255, 255, 255, 0.1); }
+  .djCard:hover { background: var(--stage-material-hover); }
   .switchTrack button:not([aria-pressed='true']):hover { color: var(--ink-secondary); }
   .requestButton:hover {
     background: rgba(249, 122, 18, 0.22);
@@ -1266,7 +1262,7 @@
 }
 
 .requestChip em {
-  color: var(--accent);
+  color: var(--accent-ink);
   font-family: var(--font-mono);
   font-size: var(--text-nano);
   font-style: normal;
@@ -1309,9 +1305,9 @@
   gap: var(--space-lg);
   padding: max(var(--space-xl), env(safe-area-inset-top)) var(--space-xl) max(var(--space-xl), env(safe-area-inset-bottom));
   color: var(--ink-primary);
-  background: rgba(10, 10, 12, 0.97);
-  border-left: 1px solid rgba(255, 255, 255, 0.11);
-  box-shadow: -30px 0 90px rgba(0, 0, 0, 0.54);
+  background: var(--stage-sheet);
+  border-left: 1px solid var(--stage-line);
+  box-shadow: var(--stage-shadow-side);
   backdrop-filter: blur(28px);
 }
 
@@ -1330,7 +1326,7 @@
   height: var(--auto-control-h);
   color: var(--ink-primary);
   font-size: 24px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--stage-material);
   border: 0;
   border-radius: 50%;
   cursor: pointer;
@@ -1342,8 +1338,8 @@
   color: var(--ink-primary);
   font: inherit;
   font-size: var(--auto-ui-body);
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--stage-well);
+  border: 1px solid var(--stage-line);
   border-radius: var(--radius-md);
   outline: 0;
 }
@@ -1368,18 +1364,18 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .requestResults > button:hover { background: rgba(255, 255, 255, 0.07); }
+  .requestResults > button:hover { background: var(--stage-row-hover); }
 }
 .requestResults > button > span:not(.resultCover) { display: flex; min-width: 0; flex-direction: column; }
 .requestResults strong, .requestResults small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .requestResults strong { font-size: var(--auto-ui-body); }
 .requestResults small { color: var(--ink-secondary); font-size: var(--auto-ui-caption); }
-.requestResults b { color: var(--accent); font-size: var(--auto-ui-label); }
+.requestResults b { color: var(--accent-ink); font-size: var(--auto-ui-label); }
 
 .resultCover {
   width: var(--row-h);
   height: var(--row-h);
-  background-color: var(--bg-raised);
+  background-color: var(--stage-material);
   background-position: center;
   background-size: cover;
   border-radius: var(--radius-sm);
@@ -1403,7 +1399,7 @@
   width: 100px;
   height: 100px;
   margin-bottom: 12px;
-  background: repeating-radial-gradient(circle, var(--accent) 0 4px, #18181c 5px 12px);
+  background: repeating-radial-gradient(circle, var(--accent) 0 4px, var(--stage-base) 5px 12px);
   border-radius: 50%;
   animation: autoSpin 2.4s linear infinite;
 }
@@ -1458,10 +1454,7 @@
   }
 
   .wash {
-    background:
-      radial-gradient(90% 90% at 22% 45%, rgba(249, 122, 18, 0.1), transparent 60%),
-      linear-gradient(96deg, rgba(8, 8, 10, 0.46), rgba(8, 8, 10, 0.72) 46%, rgba(8, 8, 10, 0.9)),
-      linear-gradient(180deg, rgba(8, 8, 10, 0.5), transparent 34%, rgba(8, 8, 10, 0.66));
+    background: var(--stage-wash-auto-wide);
   }
 
   .stage {
@@ -1700,9 +1693,9 @@
 }
 
 .embeddedTools .profile {
-  background: rgba(10, 10, 13, 0.46);
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.22), inset 0 1px rgba(255, 255, 255, 0.06);
+  background: var(--stage-chrome);
+  border-color: var(--stage-line);
+  box-shadow: var(--stage-shadow-sm), inset 0 1px var(--stage-rim);
   backdrop-filter: blur(22px) saturate(1.15);
   -webkit-backdrop-filter: blur(22px) saturate(1.15);
 }
@@ -1710,16 +1703,16 @@
 .booth,
 .djPicker,
 .requestPanel {
-  background: color-mix(in srgb, #0b0b0e 68%, transparent);
-  border-color: rgba(255, 255, 255, 0.11);
-  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.28), inset 0 1px rgba(255, 255, 255, 0.055);
+  background: var(--stage-sheet);
+  border-color: var(--stage-line);
+  box-shadow: var(--stage-shadow-md), inset 0 1px var(--stage-rim);
   backdrop-filter: blur(24px) saturate(1.14);
   -webkit-backdrop-filter: blur(24px) saturate(1.14);
 }
 
 .nextCard {
-  background: color-mix(in srgb, #0b0b0e 58%, transparent);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--stage-panel);
+  border-color: var(--stage-line);
   backdrop-filter: blur(16px) saturate(1.1);
   -webkit-backdrop-filter: blur(16px) saturate(1.1);
 }
@@ -1760,7 +1753,7 @@
   .djPicker,
   .requestPanel,
   .nextCard {
-    background: rgba(12, 12, 15, 0.94);
+    background: var(--stage-panel-opaque);
   }
 }
 
@@ -1934,10 +1927,10 @@
     padding: 6px 10px;
     color: var(--ink-primary);
     text-align: left;
-    background: rgba(10, 10, 13, 0.52);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--stage-chrome);
+    border: 1px solid var(--stage-line);
     border-radius: var(--radius-md);
-    box-shadow: inset 0 1px rgba(255, 255, 255, 0.045);
+    box-shadow: var(--stage-shadow-sm), inset 0 1px var(--stage-rim);
     backdrop-filter: blur(18px) saturate(1.1);
     -webkit-backdrop-filter: blur(18px) saturate(1.1);
   }
@@ -1975,7 +1968,7 @@
     width: 34px;
     height: 34px;
     padding: 8px;
-    color: var(--accent);
+    color: var(--accent-ink);
     background: var(--accent-soft);
     border-radius: var(--radius-sm);
   }
@@ -1993,7 +1986,7 @@
   .mobileRouteCover {
     width: 34px;
     height: 34px;
-    background-color: rgba(255, 255, 255, 0.08);
+    background-color: var(--stage-material);
     background-position: center;
     background-size: cover;
     border-radius: var(--radius-sm);
@@ -2005,7 +1998,7 @@
     inset: 0;
     display: block;
     padding: 0;
-    background: rgba(2, 2, 4, 0.54);
+    background: var(--stage-scrim);
     border: 0;
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
@@ -2037,11 +2030,11 @@
     overflow-x: hidden;
     overflow-y: auto;
     color: var(--ink-primary);
-    background: color-mix(in srgb, #0b0b0e 94%, transparent);
-    border: 1px solid rgba(255, 255, 255, 0.13);
+    background: var(--stage-sheet);
+    border: 1px solid var(--stage-line);
     border-bottom: 0;
     border-radius: 24px 24px 0 0;
-    box-shadow: 0 -24px 80px rgba(0, 0, 0, 0.48), inset 0 1px rgba(255, 255, 255, 0.07);
+    box-shadow: var(--stage-shadow-md), inset 0 1px var(--stage-rim);
     backdrop-filter: blur(30px) saturate(1.12);
     -webkit-backdrop-filter: blur(30px) saturate(1.12);
   }
@@ -2054,7 +2047,7 @@
     justify-content: space-between;
     gap: 16px;
     padding-bottom: 10px;
-    border-bottom: 1px solid var(--hairline-soft);
+    border-bottom: 1px solid var(--stage-line-soft);
   }
 
   .mobileSheetHead > div {
@@ -2065,7 +2058,7 @@
   }
 
   .mobileSheetHead small {
-    color: var(--accent);
+    color: var(--accent-ink);
     font-size: var(--text-nano);
     font-weight: var(--fw-bold);
     letter-spacing: 0.16em;
@@ -2086,7 +2079,7 @@
     color: var(--ink-primary);
     font: inherit;
     font-size: 24px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--stage-material);
     border: 0;
     border-radius: 50%;
   }
@@ -2100,13 +2093,13 @@
     padding: 7px 10px;
     color: var(--ink-primary);
     text-align: left;
-    background: rgba(255, 255, 255, 0.055);
-    border: 1px solid rgba(255, 255, 255, 0.09);
+    background: var(--stage-material-quiet);
+    border: 1px solid var(--stage-line-soft);
     border-radius: var(--radius-sm);
   }
 
   .mobileDjProfile b {
-    color: var(--accent);
+    color: var(--accent-ink);
     font-size: var(--auto-ui-caption);
   }
 
@@ -2202,7 +2195,7 @@
       max(18px, env(safe-area-inset-bottom, 0px))
       max(16px, env(safe-area-inset-left, 0px));
     overflow-y: auto;
-    border: 1px solid rgba(255, 255, 255, 0.13);
+    border: 1px solid var(--stage-line);
     border-bottom: 0;
     border-radius: 24px 24px 0 0;
   }

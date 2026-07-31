@@ -23,7 +23,7 @@
      though no scrollbar was visible. `clip` removes that hidden scrollport. */
   overflow: clip;
   color: var(--ink-primary);
-  background: #08080a;
+  background: var(--stage-base);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -65,13 +65,16 @@
   opacity: 0;
   background-position: center;
   background-size: cover;
-  filter: blur(62px) saturate(1.42) brightness(0.5);
+  filter: var(--stage-backdrop);
   transform: scale(1.2);
   transition: opacity 720ms var(--ease-out);
 }
 
+/* Not 1 in the light theme: the artwork is laid over a near-white base, and the
+   part of it that does not reach the eye is exactly the luminance floor that
+   keeps dark ink readable over a black cover. */
 .backdropActive {
-  opacity: 1;
+  opacity: var(--stage-backdrop-opacity);
 }
 
 .open .backdropActive {
@@ -80,21 +83,16 @@
 
 .wash {
   z-index: -2;
-  background:
-    radial-gradient(100% 80% at 50% 24%, rgba(255, 255, 255, 0.055), transparent 60%),
-    radial-gradient(90% 70% at 72% 18%, rgba(249, 122, 18, 0.08), transparent 60%),
-    linear-gradient(180deg, rgba(5, 5, 8, 0.58), rgba(6, 6, 9, 0.36) 48%, rgba(5, 5, 8, 0.84));
+  background: var(--stage-wash);
 }
 
 .auto .wash {
-  background:
-    radial-gradient(100% 78% at 50% 26%, rgba(249, 122, 18, 0.1), transparent 60%),
-    linear-gradient(180deg, rgba(5, 5, 8, 0.62), rgba(6, 6, 9, 0.3) 44%, rgba(5, 5, 8, 0.88));
+  background: var(--stage-wash-auto);
 }
 
 .grain {
   z-index: -1;
-  opacity: 0.055;
+  opacity: var(--stage-grain-opacity);
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
 }
 
@@ -121,13 +119,13 @@
   width: var(--control-h);
   height: var(--control-h);
   padding: 0;
-  color: rgba(242, 242, 245, 0.72);
-  background: rgba(12, 12, 15, 0.42);
-  border: 1px solid rgba(255, 255, 255, 0.11);
+  color: var(--ink-secondary);
+  background: var(--stage-chrome);
+  border: 1px solid var(--stage-line);
   border-radius: var(--radius-full);
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.22), inset 0 1px rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(18px) saturate(1.16);
-  -webkit-backdrop-filter: blur(18px) saturate(1.16);
+  box-shadow: var(--stage-shadow-sm), inset 0 1px var(--stage-rim);
+  backdrop-filter: var(--stage-material-filter);
+  -webkit-backdrop-filter: var(--stage-material-filter);
   cursor: pointer;
   transition:
     color var(--dur-short),
@@ -172,8 +170,8 @@
 
 .chromeButtonActive {
   color: var(--ink-primary);
-  background: rgba(28, 28, 32, 0.72);
-  border-color: rgba(255, 255, 255, 0.19);
+  background: var(--stage-chrome-active);
+  border-color: var(--stage-line-strong);
 }
 
 .modePill {
@@ -182,18 +180,18 @@
   width: clamp(244px, 23vw, 320px);
   min-height: 48px;
   padding: 4px;
-  background: rgba(10, 10, 12, 0.68);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: var(--stage-chrome);
+  border: 1px solid var(--stage-line);
   border-radius: var(--radius-full);
-  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.28), inset 0 1px rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(22px) saturate(1.12);
-  -webkit-backdrop-filter: blur(22px) saturate(1.12);
+  box-shadow: var(--stage-shadow-md), inset 0 1px var(--stage-rim);
+  backdrop-filter: var(--stage-material-filter);
+  -webkit-backdrop-filter: var(--stage-material-filter);
 }
 
 .modeOption {
   min-width: 0;
   padding: 0 16px;
-  color: rgba(242, 242, 245, 0.58);
+  color: var(--ink-secondary);
   font: inherit;
   font-size: var(--text-label);
   font-weight: var(--fw-semibold);
@@ -210,12 +208,13 @@
 
 .modeSelected {
   color: var(--ink-primary);
-  background: rgba(255, 255, 255, 0.085);
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.06);
+  background: var(--stage-material-active);
+  box-shadow: var(--stage-shadow-sm), inset 0 1px var(--stage-rim);
 }
 
 .modeOption:disabled {
-  color: rgba(242, 242, 245, 0.2);
+  color: var(--ink-tertiary);
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -250,8 +249,8 @@
   gap: var(--carousel-gap);
   min-height: var(--player-carousel-height);
   padding: 0 10px;
-  background: rgba(10, 10, 12, 0.48);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: var(--stage-chrome);
+  border: 1px solid var(--stage-line);
   border-radius: var(--radius-full);
   backdrop-filter: blur(16px);
   transform: translateX(-50%);
@@ -264,7 +263,7 @@
   width: 15px;
   height: 5px;
   pointer-events: none;
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--ink-primary);
   border-radius: var(--radius-full);
   transform:
     translateX(calc(var(--carousel-index) * (var(--carousel-dot-size) + var(--carousel-gap))))
@@ -290,7 +289,7 @@
   height: 5px;
   margin: auto;
   content: '';
-  background: rgba(255, 255, 255, 0.34);
+  background: var(--stage-rail);
   border-radius: inherit;
   transition:
     opacity 150ms var(--ease-out),
@@ -306,7 +305,7 @@
   .chromeButton:hover,
   .modeOption:not(:disabled):hover {
     color: var(--ink-primary);
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: var(--stage-material-hover);
   }
 }
 
@@ -359,7 +358,7 @@
   .chromeButton,
   .modePill,
   .carouselNav {
-    background: rgba(16, 16, 19, 0.94);
+    background: var(--stage-sheet);
   }
 }
 

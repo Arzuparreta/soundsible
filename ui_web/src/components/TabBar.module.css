@@ -27,7 +27,7 @@
 }
 
 .active {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .label {

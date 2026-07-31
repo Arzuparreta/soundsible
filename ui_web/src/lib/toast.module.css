@@ -54,7 +54,7 @@
   border: 0;
   padding: 0;
   background: transparent;
-  color: var(--accent);
+  color: var(--accent-ink);
   font: inherit;
   font-weight: var(--fw-semibold);
   cursor: pointer;

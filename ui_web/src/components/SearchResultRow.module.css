@@ -22,7 +22,7 @@
 
 /* Wash and marker rail: app.css, [data-now-playing]. */
 [data-now-playing] .title {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .cover {
@@ -100,7 +100,7 @@
 }
 
 .addBtn {
-  color: var(--accent);
+  color: var(--accent-ink);
   transition: background var(--dur-short) var(--ease-out);
 }
 @media (hover: hover) and (pointer: fine) {

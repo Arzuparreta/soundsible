@@ -108,7 +108,7 @@
   border: 1px solid var(--accent-soft);
   border-radius: var(--radius-pill, 999px);
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
   cursor: pointer;
   transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
 }
@@ -171,7 +171,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
 .ctrl:hover {
-  color: var(--accent);
+  color: var(--accent-ink);
   background: var(--accent-faint);
 }
 }
@@ -240,7 +240,7 @@
   }
 
   .soundBtn:focus-visible {
-    color: var(--accent);
+    color: var(--accent-ink);
     background: var(--accent-soft);
     outline: none;
   }
@@ -368,7 +368,7 @@
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
 
   .soundBtn:hover {
-    color: var(--accent);
+    color: var(--accent-ink);
     background: var(--accent-soft);
     outline: none;
   }

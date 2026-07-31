@@ -46,8 +46,8 @@
   align-items: center;
   padding: var(--space-md) var(--gutter);
   padding-top: max(var(--space-md), env(safe-area-inset-top, 0));
-  background: color-mix(in srgb, var(--bg-base) 86%, transparent);
-  border-bottom: 1px solid var(--hairline-soft);
+  background: var(--stage-panel);
+  border-bottom: 1px solid var(--stage-line-soft);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
 }
@@ -69,7 +69,7 @@
 @media (hover: hover) and (pointer: fine) {
 .iconBtn:hover {
   color: var(--ink-primary);
-  background: var(--bg-raised);
+  background: var(--stage-material);
 }
 }
 
@@ -117,7 +117,7 @@
 
 .autoToggle:hover {
   color: var(--ink-primary);
-  background: var(--bg-raised);
+  background: var(--stage-material);
 }
 }
 
@@ -233,8 +233,8 @@
   flex-shrink: 0;
   margin: 0 auto;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--hairline-soft);
-  box-shadow: var(--shadow-3), 0 0 0 1px rgba(255, 255, 255, 0.025) inset;
+  border: 1px solid var(--stage-line-soft);
+  box-shadow: var(--stage-shadow-lg), 0 0 0 1px var(--stage-rim) inset;
 }
 
 .info {
@@ -265,7 +265,7 @@
 .losslessBadge {
   flex-shrink: 0;
   padding: 2px 6px;
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--stage-line-strong);
   border-radius: var(--radius-sm);
   color: var(--ink-secondary);
   font-size: 9px;
@@ -285,7 +285,7 @@
   border: 1px solid var(--accent-soft);
   border-radius: var(--radius-full);
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
   cursor: pointer;
   transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
 }
@@ -294,7 +294,7 @@
 
 .radioBadge:hover {
   background: var(--accent);
-  color: var(--bg-raised, #fff);
+  color: var(--ink-on-accent);
 }
 }
 
@@ -331,7 +331,7 @@
 @media (hover: hover) and (pointer: fine) {
 
 .artistLink:hover {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: underline;
 }
 }
@@ -377,7 +377,7 @@
   background: linear-gradient(
     to right,
     var(--accent) var(--fill),
-    var(--hairline-strong) var(--fill)
+    var(--stage-line-strong) var(--fill)
   );
 }
 .volRange::-webkit-slider-runnable-track {
@@ -394,7 +394,7 @@
   border: none;
   border-radius: var(--radius-full);
   background: var(--ink-primary);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--stage-shadow-sm);
   opacity: 0;
   transform: scale(0.6);
   transition: opacity var(--dur-short) var(--ease-out), transform var(--dur-short) var(--ease-out);
@@ -426,7 +426,7 @@
 .volRange::-moz-range-track {
   height: 5px;
   border-radius: var(--radius-full);
-  background: var(--hairline-strong);
+  background: var(--stage-line-strong);
 }
 .volRange::-moz-range-track {
   height: 4px;
@@ -449,7 +449,7 @@
   border: none;
   border-radius: var(--radius-full);
   background: var(--ink-primary);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--stage-shadow-sm);
   opacity: 0;
   transition: opacity var(--dur-short) var(--ease-out);
 }
@@ -525,7 +525,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
 .ctrl:hover {
-  color: var(--accent);
+  color: var(--accent-ink);
   background: var(--accent-faint);
 }
 }
@@ -544,15 +544,15 @@
 @media (hover: hover) and (pointer: fine) {
 .toggle:hover {
   color: var(--ink-secondary);
-  background: var(--bg-hover);
+  background: var(--stage-row-hover);
 }
 }
 .on {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 @media (hover: hover) and (pointer: fine) {
 .on:hover {
-  color: var(--accent-hover);
+  color: var(--accent-ink-hover);
 }
 }
 
@@ -576,7 +576,7 @@
   border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 14px 36px var(--accent-glow);
+  box-shadow: 0 1px 0 var(--stage-gloss) inset, 0 14px 36px var(--accent-glow);
   transition:
     background var(--dur-short) var(--ease-out),
     box-shadow var(--dur-short) var(--ease-out),
@@ -585,7 +585,7 @@
 @media (hover: hover) and (pointer: fine) {
 .play:hover {
   background: var(--accent-hover);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.22) inset, 0 18px 42px var(--accent-glow);
+  box-shadow: 0 1px 0 var(--stage-gloss) inset, 0 18px 42px var(--accent-glow);
   transform: scale(1.035);
 }
 }
@@ -619,11 +619,11 @@
 @media (hover: hover) and (pointer: fine) {
 .actBtn:hover {
   color: var(--ink-primary);
-  background: var(--bg-hover);
+  background: var(--stage-row-hover);
 }
 }
 .actOn {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .actPulse {
@@ -667,10 +667,10 @@
   width: 100%;
   height: 100%;
   min-height: 0;
-  background: var(--bg-elevated);
-  border: 1px solid var(--hairline);
+  background: var(--stage-material-hover);
+  border: 1px solid var(--stage-line);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--stage-shadow-md);
 }
 
 .mobileLyrics {
@@ -680,10 +680,10 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: color-mix(in srgb, var(--bg-inset) 76%, var(--bg-base));
-  border: 1px solid var(--hairline);
+  background: var(--stage-sheet);
+  border: 1px solid var(--stage-line);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--stage-shadow-md);
 }
 
 .mobileLyricsToggle {
@@ -696,10 +696,10 @@
   width: var(--control-h);
   height: var(--control-h);
   color: var(--ink-primary);
-  background: color-mix(in srgb, var(--bg-base) 72%, transparent);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--stage-material);
+  border: 1px solid var(--stage-line);
   border-radius: var(--radius-full);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--stage-shadow-sm);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   cursor: pointer;
@@ -763,7 +763,7 @@
   gap: var(--space-md);
   min-height: 44px;
   padding: 0 var(--space-sm) 0 var(--space-md);
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--stage-line);
 }
 
 .queueHeading {
@@ -795,8 +795,8 @@
   font-variant-numeric: tabular-nums;
   text-align: center;
   color: var(--ink-secondary);
-  background: var(--bg-raised);
-  border: 1px solid var(--hairline);
+  background: var(--stage-material);
+  border: 1px solid var(--stage-line);
   border-radius: var(--radius-full);
 }
 
@@ -819,7 +819,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
 .queueClear:hover {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 }
 .queueClear:disabled {
@@ -848,7 +848,7 @@
 .queueSection + .queueSection {
   margin-top: var(--space-sm);
   padding-top: var(--space-sm);
-  border-top: 1px solid var(--hairline-soft);
+  border-top: 1px solid var(--stage-line-soft);
 }
 
 .queueSectionHead {
@@ -883,8 +883,8 @@
 
 @media (hover: hover) and (pointer: fine) {
   .queueExpand:hover {
-    color: var(--accent);
-    background: var(--bg-hover);
+    color: var(--accent-ink);
+    background: var(--stage-row-hover);
   }
 }
 
@@ -906,21 +906,21 @@
 }
 @media (hover: hover) and (pointer: fine) {
 .qRow:hover {
-  background: var(--bg-hover);
-  border-color: var(--hairline-soft);
+  background: var(--stage-row-hover);
+  border-color: var(--stage-line-soft);
 }
 }
 
 .qActive {
   background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
-  border-color: rgba(249, 122, 18, 0.14);
+  border-color: var(--accent-soft);
 }
 
 @media (hover: hover) and (pointer: fine) {
 
 .qActive:hover {
   background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
-  border-color: rgba(249, 122, 18, 0.14);
+  border-color: var(--accent-soft);
 }
 }
 
@@ -976,7 +976,7 @@
 }
 
 .qActive .qTitle {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .qIndex {
@@ -1097,7 +1097,7 @@
 @media (min-width: 768px) {
   .head {
     padding: var(--space-sm) var(--space-md);
-    border-bottom: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--stage-line);
   }
 
   /* Tablet & up: room for the labelled accent pill again. Height tracks the
@@ -1107,9 +1107,9 @@
     height: var(--control-h);
     gap: 7px;
     padding: 0 13px;
-    color: var(--accent);
+    color: var(--accent-ink);
     background: var(--accent-soft);
-    border: 1px solid rgba(249, 122, 18, 0.28);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   }
 
   .autoWord {
@@ -1172,9 +1172,9 @@
     display: flex;
     width: clamp(280px, 24vw, 360px);
     flex-shrink: 0;
-    background: color-mix(in srgb, var(--bg-inset) 58%, var(--bg-base));
-    border-left: 1px solid var(--hairline-soft);
-    box-shadow: -12px 0 36px rgba(0, 0, 0, 0.12);
+    background: var(--stage-panel);
+    border-left: 1px solid var(--stage-line-soft);
+    box-shadow: var(--stage-shadow-side);
   }
 
   .mobileQueue,
@@ -1222,7 +1222,9 @@
     min-height: 0;
     align-items: stretch;
     overflow: hidden;
-    background: var(--bg-base);
+    /* Transparent on purpose: the tiles are glass, and what they are glass over
+       is the room's wallpaper. An opaque fill here would seal it off. */
+    background: transparent;
   }
 
   .tile {
@@ -1268,7 +1270,7 @@
     left: 2px;
     width: 2px;
     content: '';
-    background: var(--hairline);
+    background: var(--stage-line);
     opacity: 0;
     transition:
       opacity var(--dur-short),
@@ -1328,7 +1330,7 @@
     top: 6px;
     left: 50%;
     transform: translateX(-50%);
-    background: color-mix(in srgb, var(--bg-base) 68%, transparent);
+    background: var(--stage-material);
     backdrop-filter: blur(10px);
   }
 
@@ -1343,10 +1345,10 @@
     width: var(--control-h);
     height: var(--control-h);
     color: var(--ink-primary);
-    background: color-mix(in srgb, var(--bg-base) 68%, transparent);
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: var(--stage-material);
+    border: 1px solid var(--stage-line);
     border-radius: var(--radius-full);
-    box-shadow: var(--shadow-1);
+    box-shadow: var(--stage-shadow-sm);
     backdrop-filter: blur(16px);
     cursor: pointer;
   }
@@ -1382,11 +1384,11 @@
     max-width: none;
     aspect-ratio: auto;
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid var(--stage-line);
     border-radius: 28px;
-    box-shadow: var(--shadow-3), inset 0 1px rgba(255, 255, 255, 0.08);
-    background: color-mix(in srgb, var(--bg-inset) 70%, transparent);
-    backdrop-filter: blur(24px) saturate(1.08);
+    box-shadow: var(--stage-shadow-lg), inset 0 1px var(--stage-rim);
+    background: var(--stage-panel);
+    backdrop-filter: var(--stage-material-filter);
   }
 
   .desktopLyricsStage .art {
@@ -1398,7 +1400,7 @@
     aspect-ratio: auto;
     border: 0;
     border-radius: 0;
-    filter: blur(30px) brightness(0.34) saturate(1.2);
+    filter: var(--stage-media-filter);
     transform: scale(1.08);
     box-shadow: none;
   }
@@ -1409,9 +1411,7 @@
     inset: 0;
     pointer-events: none;
     content: '';
-    background:
-      linear-gradient(180deg, rgba(5, 5, 7, 0.2), rgba(5, 5, 7, 0.52)),
-      radial-gradient(circle at 30% 15%, rgba(255, 255, 255, 0.08), transparent 46%);
+    background: var(--stage-media-veil);
   }
 
   .desktopLyrics {
@@ -1531,11 +1531,11 @@
     grid-column: 1 / -1;
     grid-row: 2;
     display: block;
-    border: 1px solid rgba(255, 255, 255, 0.13);
+    border: 1px solid var(--stage-line);
     border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--bg-inset) 66%, transparent);
-    box-shadow: var(--shadow-2), inset 0 1px rgba(255, 255, 255, 0.07);
-    backdrop-filter: blur(22px) saturate(1.1);
+    background: var(--stage-material);
+    box-shadow: var(--stage-shadow-md), inset 0 1px var(--stage-rim);
+    backdrop-filter: var(--stage-material-filter);
   }
 
   @container (max-width: 620px) {
@@ -1621,7 +1621,7 @@
 
 .workspace .empty {
   height: 100%;
-  color: rgba(242, 242, 245, 0.68);
+  color: var(--ink-secondary);
 }
 
 .main {
@@ -1632,14 +1632,12 @@
 }
 
 .tile {
-  background: color-mix(in srgb, var(--bg-base) 46%, transparent);
-  border: 1px solid rgba(255, 255, 255, 0.105);
+  background: var(--stage-panel);
+  border: 1px solid var(--stage-line);
   border-radius: clamp(18px, 1.7vw, 28px);
-  box-shadow:
-    0 24px 72px rgba(0, 0, 0, 0.26),
-    inset 0 1px rgba(255, 255, 255, 0.055);
-  backdrop-filter: blur(24px) saturate(1.16);
-  -webkit-backdrop-filter: blur(24px) saturate(1.16);
+  box-shadow: var(--stage-shadow-md), inset 0 1px var(--stage-rim);
+  backdrop-filter: var(--stage-material-filter);
+  -webkit-backdrop-filter: var(--stage-material-filter);
 }
 
 .tile > .body,
@@ -1771,7 +1769,7 @@
   .splitter::after {
     left: 6px;
     width: 2px;
-    background: rgba(255, 255, 255, 0.11);
+    background: var(--stage-line-strong);
   }
 
   .desktopQueue {
@@ -1781,6 +1779,6 @@
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .tile {
-    background: color-mix(in srgb, var(--bg-base) 92%, #111116);
+    background: var(--stage-panel-opaque);
   }
 }

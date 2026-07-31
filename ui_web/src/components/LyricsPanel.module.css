@@ -23,7 +23,7 @@
 .stage .line {
   padding-block: clamp(5px, 1cqh, 12px);
   line-height: 1.25;
-  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.34);
+  text-shadow: var(--stage-text-halo);
 }
 
 .hint {
@@ -46,7 +46,7 @@
 
 .unavailable button {
   padding: var(--space-2xs) var(--space-sm);
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--stage-line-strong);
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--ink-primary);
@@ -59,7 +59,7 @@
   margin: var(--space-xl) auto;
   width: 22px;
   height: 22px;
-  border: 2px solid var(--hairline);
+  border: 2px solid var(--stage-line);
   border-top-color: var(--accent);
   border-radius: var(--radius-full);
   animation: lyricsSpin 0.8s linear infinite;

@@ -21,7 +21,7 @@
 }
 
 .heart[data-saved] {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .heart:active {
@@ -51,7 +51,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .heart:hover {
-    color: var(--accent-hover);
+    color: var(--accent-ink-hover);
     background: var(--bg-elevated);
   }
 }

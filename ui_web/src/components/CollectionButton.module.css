@@ -41,7 +41,7 @@
 
 /* Already yours. Stated, not offered — so it takes no cursor and no hover. */
 .slot[data-state='owned'] {
-  color: var(--accent);
+  color: var(--accent-ink);
   cursor: default;
   opacity: 0.75;
 }

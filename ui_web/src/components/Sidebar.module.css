@@ -45,7 +45,7 @@
   justify-self: center;
   width: 18px;
   height: 26px;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .wordmark {
@@ -114,7 +114,7 @@
 }
 
 .active .icon {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .icon {

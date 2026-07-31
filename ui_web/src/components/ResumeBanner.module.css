@@ -24,7 +24,7 @@
   width: 40px;
   height: 40px;
   flex-shrink: 0;
-  color: var(--accent);
+  color: var(--accent-ink);
   background: var(--accent-soft);
   border-radius: var(--radius-full);
 }

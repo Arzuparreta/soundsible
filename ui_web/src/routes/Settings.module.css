@@ -129,7 +129,7 @@
 }
 
 .catCurrent .catTitle {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .catIcon {
@@ -149,7 +149,7 @@
 }
 
 .catIcon[data-tone='accent'] {
-  color: var(--accent);
+  color: var(--accent-ink);
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 

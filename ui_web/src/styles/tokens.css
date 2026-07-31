@@ -4,17 +4,7 @@
  * (comfortable on mobile, denser on desktop), orange (#f97a12) as the signature accent.
  * Continuity preserved with the existing player/Tauri shell (DESIGN.md).
  */
-/* ── Themed palette ──
-   Dark is the base palette, and it is also the palette of the fullscreen
-   player. That surface is a photographic stage — blurred artwork, dark washes,
-   glass chrome and hairlines drawn in white alpha — so it opts out of the light
-   theme through [data-immersive-dark] and keeps reading these values, exactly
-   as Spotify, Apple Music and YouTube Music keep their expanded player dark.
-   Anything the light theme re-declares must live in THIS block, not in the
-   plain :root block below, or the player inherits half a light theme: dark ink
-   on a near-black stage and white cards floating over the artwork. */
-:root,
-:root[data-theme='light'] [data-immersive-dark] {
+:root {
   color-scheme: dark;
   /* ── Surfaces (layered near-black for depth, subtle elevation — no heavy shadows) ── */
   --bg-base: #0c0c0e; /* app background */
@@ -31,34 +21,21 @@
   --ink-primary: #f2f2f5;
   --ink-secondary: #a0a0a8;
   --ink-tertiary: #6a6a72;
-
-  /* ── Accent tints (the accent hue itself is theme-independent) ── */
-  --accent-soft: rgba(249, 122, 18, 0.14); /* tints, active row wash */
-  --accent-faint: rgba(249, 122, 18, 0.075);
-  --accent-glow: rgba(249, 122, 18, 0.24);
-
-  /* ── Atmosphere + loading ── */
-  --ambient-accent: rgba(249, 122, 18, 0.055);
-  --ambient-highlight: rgba(255, 255, 255, 0.025);
-  --skeleton-base: #17171b;
-  --skeleton-highlight: #24242a;
-
-  /* ── Elevation (subtle — "pro" restraint) ── */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --shadow-3: 0 18px 48px rgba(0, 0, 0, 0.58);
-  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.6);
-  --shadow-accent: 0 8px 24px rgba(249, 122, 18, 0.2);
-}
-
-:root {
-  /* ── Ink on fills ── */
   --ink-on-accent: #1a0e02; /* text on orange fills */
 
   /* ── Accent + brand ── */
   --accent: #f97a12;
   --accent-hover: #ff8d2e;
   --accent-press: #d8630a;
+  /* The accent as INK — text, icons, focus rings. On a dark surface the signature
+     orange carries itself (8.2:1 on #0c0c0e); on a light one it is 2.9:1, which
+     fails both AA text and the 3:1 floor for focus indicators, so the light theme
+     deepens it. Fills, borders and brand marks keep --accent in both themes. */
+  --accent-ink: var(--accent);
+  --accent-ink-hover: var(--accent-hover);
+  --accent-soft: rgba(249, 122, 18, 0.14); /* tints, active row wash */
+  --accent-faint: rgba(249, 122, 18, 0.075);
+  --accent-glow: rgba(249, 122, 18, 0.24);
   --brand-gold: #e0bc00; /* badge/mark only — never a primary fill */
 
   /* ── Status ── */
@@ -118,6 +95,19 @@
   --radius-full: 999px;
   /* Compatibility alias used by older player modules. */
   --radius-pill: var(--radius-full);
+
+  /* ── Elevation (subtle — "pro" restraint) ── */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 18px 48px rgba(0, 0, 0, 0.58);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --shadow-accent: 0 8px 24px rgba(249, 122, 18, 0.2);
+
+  /* ── Atmosphere + loading ── */
+  --ambient-accent: rgba(249, 122, 18, 0.055);
+  --ambient-highlight: rgba(255, 255, 255, 0.025);
+  --skeleton-base: #17171b;
+  --skeleton-highlight: #24242a;
 
   /* Compatibility alias retained for modules authored before tokens.css settled. */
   --accent-primary: var(--accent);
@@ -242,11 +232,17 @@
 
   --ink-primary: #16161a;
   --ink-secondary: #55555f;
-  --ink-tertiary: #88888f;
+  /* Deepened from #88888f: at 3.2:1 the old value failed even the 3:1 floor for
+     non-text, and captions on player glass fell under it. */
+  --ink-tertiary: #6f6f78;
 
   --accent-soft: rgba(249, 122, 18, 0.12);
   --accent-faint: rgba(249, 122, 18, 0.065);
   --accent-glow: rgba(249, 122, 18, 0.18);
+  /* 6.2:1 on white, 4.5:1 on the palest player glass — the same hue family,
+     burnt down until it is readable as text. */
+  --accent-ink: #9c4a08;
+  --accent-ink-hover: #7f3b05;
 
   --ambient-accent: rgba(249, 122, 18, 0.045);
   --ambient-highlight: rgba(255, 255, 255, 0.6);
@@ -261,12 +257,8 @@
 }
 
 /* Explicit low-vision palette. The regular themes remain visually untouched;
-   this mode spends subtlety on stronger text, control and focus separation.
-   The second selector is the same opt-out as above: an immersive surface inside
-   the light theme declares the dark palette on itself, which would otherwise
-   outrank the high-contrast values it inherits from the root. */
-:root[data-high-contrast='true'],
-:root[data-theme='light'][data-high-contrast='true'] [data-immersive-dark] {
+   this mode spends subtlety on stronger text, control and focus separation. */
+:root[data-high-contrast='true'] {
   --ink-primary: #ffffff;
   --ink-secondary: #d2d2da;
   --ink-tertiary: #b2b2bd;
@@ -291,9 +283,195 @@
   --accent: #a83e00;
   --accent-hover: #8d3300;
   --accent-press: #702900;
+  --accent-ink: #a83e00; /* 6.3:1 on white — the high-contrast accent is already ink-safe */
+  --accent-ink-hover: #8d3300;
   --accent-soft: rgba(168, 62, 0, 0.16);
   --accent-faint: rgba(168, 62, 0, 0.09);
   --ink-on-accent: #ffffff;
+}
+
+/* ── Player stage ──
+   The fullscreen player is one room: the cover art, blurred, is its wallpaper,
+   and every control sits on a sheet of glass laid over it. Both themes are
+   declared here, so no module inside the player writes a raw colour — that is
+   how the light theme used to end up as dark ink on a black stage.
+
+   The light theme follows Apple's answer to glass-on-photo legibility: the
+   material carries a HIGH alpha (0.6–0.9 white, not 0.07) and the wallpaper
+   gets a luminance floor — the artwork is brightened, laid at
+   --stage-backdrop-opacity over a near-white base, then veiled with at least
+   --stage-veil-floor of white. Even a pitch-black cover composites to ~0.72
+   relative luminance, which keeps every ink token above 4.5:1. Saturation in
+   the blur is what preserves the record's colour while luminance is pinned. */
+[data-player-stage] {
+  --stage-base: #08080a;
+  --stage-backdrop: blur(62px) saturate(1.42) brightness(0.5);
+  --stage-backdrop-opacity: 1;
+  --stage-veil-floor: 0.58;
+  --stage-wash:
+    radial-gradient(100% 80% at 50% 24%, rgba(255, 255, 255, 0.055), transparent 60%),
+    radial-gradient(90% 70% at 72% 18%, rgba(249, 122, 18, 0.08), transparent 60%),
+    linear-gradient(
+      180deg,
+      rgba(5, 5, 8, var(--stage-veil-floor)),
+      rgba(6, 6, 9, 0.36) 48%,
+      rgba(5, 5, 8, 0.84)
+    );
+  --stage-wash-auto:
+    radial-gradient(100% 78% at 50% 26%, rgba(249, 122, 18, 0.1), transparent 60%),
+    linear-gradient(
+      180deg,
+      rgba(5, 5, 8, calc(var(--stage-veil-floor) + 0.04)),
+      rgba(6, 6, 9, 0.3) 44%,
+      rgba(5, 5, 8, 0.88)
+    );
+  --stage-wash-auto-wide:
+    radial-gradient(90% 90% at 22% 45%, rgba(249, 122, 18, 0.1), transparent 60%),
+    linear-gradient(96deg, rgba(8, 8, 10, 0.46), rgba(8, 8, 10, 0.72) 46%, rgba(8, 8, 10, 0.9)),
+    linear-gradient(180deg, rgba(8, 8, 10, 0.5), transparent 34%, rgba(8, 8, 10, 0.66));
+  --stage-grain-opacity: 0.055;
+
+  /* Artwork used as the backdrop of a text panel (the lyrics stage): the same
+     floor-the-luminance contract as the room, at panel scale. */
+  --stage-media-filter: blur(30px) brightness(0.34) saturate(1.2);
+  --stage-media-veil:
+    linear-gradient(180deg, rgba(5, 5, 7, 0.2), rgba(5, 5, 7, 0.52)),
+    radial-gradient(circle at 30% 15%, rgba(255, 255, 255, 0.08), transparent 46%);
+
+  /* Materials, thinnest to thickest. */
+  --stage-material-quiet: rgba(255, 255, 255, 0.055);
+  --stage-material: rgba(255, 255, 255, 0.08);
+  --stage-material-hover: rgba(255, 255, 255, 0.12);
+  --stage-material-active: rgba(255, 255, 255, 0.16);
+  --stage-material-filter: blur(22px) saturate(1.16);
+  --stage-panel: color-mix(in srgb, var(--bg-base) 46%, transparent);
+  --stage-panel-opaque: color-mix(in srgb, var(--bg-base) 92%, #111116);
+  --stage-sheet: rgba(14, 14, 17, 0.94);
+  --stage-chrome: rgba(12, 12, 15, 0.42);
+  --stage-chrome-active: rgba(28, 28, 32, 0.72);
+  --stage-well: rgba(0, 0, 0, 0.3);
+  --stage-row-hover: rgba(255, 255, 255, 0.07);
+
+  /* Lines, rims and rails. */
+  --stage-line: rgba(255, 255, 255, 0.11);
+  --stage-line-soft: rgba(255, 255, 255, 0.07);
+  --stage-line-strong: rgba(255, 255, 255, 0.2);
+  --stage-rim: rgba(255, 255, 255, 0.06);
+  --stage-rail: rgba(255, 255, 255, 0.18);
+
+  --stage-shadow-sm: 0 10px 34px rgba(0, 0, 0, 0.22);
+  --stage-shadow-md: 0 24px 72px rgba(0, 0, 0, 0.3);
+  --stage-shadow-lg: 0 30px 90px rgba(0, 0, 0, 0.56);
+  --stage-shadow-side: -30px 0 90px rgba(0, 0, 0, 0.54);
+  --stage-scrim: rgba(0, 0, 0, 0.3);
+
+  /* Halo behind type that shares its box with artwork. Light glass drops it —
+     a dark halo on a bright panel only muddies the letterforms. */
+  --stage-text-halo: 0 2px 18px rgba(0, 0, 0, 0.34);
+
+  /* Painted ON the artwork itself — the cover caption, the gradient that
+     carries it, and the highlight along the top of a filled accent control.
+     These are theme-independent by design: a photograph and an orange fill are
+     not surfaces whose luminance we get to choose. */
+  --stage-on-art-ink: #ffffff;
+  --stage-on-art-ink-soft: rgba(255, 255, 255, 0.78);
+  --stage-on-art-shadow: 0 1px 10px rgba(0, 0, 0, 0.45);
+  --stage-on-art-scrim: linear-gradient(180deg, rgba(8, 8, 10, 0.1), rgba(8, 8, 10, 0.64));
+  --stage-gloss: rgba(255, 255, 255, 0.2);
+}
+
+:root[data-theme='light'] [data-player-stage] {
+  --stage-base: #f1f1f4;
+  --stage-backdrop: blur(64px) saturate(1.85) brightness(1.22);
+  --stage-backdrop-opacity: 0.58;
+  --stage-veil-floor: 0.78;
+  --stage-wash:
+    radial-gradient(100% 80% at 50% 22%, rgba(255, 255, 255, 0.5), transparent 62%),
+    radial-gradient(90% 70% at 72% 16%, rgba(249, 122, 18, 0.05), transparent 60%),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, var(--stage-veil-floor)),
+      rgba(255, 255, 255, 0.82) 48%,
+      rgba(255, 255, 255, 0.9)
+    );
+  --stage-wash-auto:
+    radial-gradient(100% 78% at 50% 26%, rgba(249, 122, 18, 0.07), transparent 60%),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, var(--stage-veil-floor)),
+      rgba(255, 255, 255, 0.8) 44%,
+      rgba(255, 255, 255, 0.92)
+    );
+  --stage-wash-auto-wide:
+    radial-gradient(90% 90% at 22% 45%, rgba(249, 122, 18, 0.06), transparent 60%),
+    linear-gradient(
+      96deg,
+      rgba(255, 255, 255, var(--stage-veil-floor)),
+      rgba(255, 255, 255, 0.84) 46%,
+      rgba(255, 255, 255, 0.9)
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent 34%, rgba(255, 255, 255, 0.6));
+  --stage-grain-opacity: 0.022;
+
+  --stage-media-filter: blur(30px) brightness(1.3) saturate(1.6);
+  --stage-media-veil:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.88)),
+    radial-gradient(circle at 30% 15%, rgba(255, 255, 255, 0.55), transparent 46%);
+
+  --stage-material-quiet: rgba(255, 255, 255, 0.46);
+  --stage-material: rgba(255, 255, 255, 0.64);
+  --stage-material-hover: rgba(255, 255, 255, 0.78);
+  --stage-material-active: rgba(255, 255, 255, 0.9);
+  --stage-material-filter: blur(24px) saturate(1.8);
+  --stage-panel: rgba(255, 255, 255, 0.6);
+  --stage-panel-opaque: #fbfbfd;
+  --stage-sheet: rgba(255, 255, 255, 0.92);
+  --stage-chrome: rgba(255, 255, 255, 0.7);
+  --stage-chrome-active: rgba(255, 255, 255, 0.92);
+  --stage-well: rgba(15, 15, 22, 0.05);
+  --stage-row-hover: rgba(15, 15, 22, 0.05);
+
+  --stage-line: rgba(15, 15, 22, 0.1);
+  --stage-line-soft: rgba(15, 15, 22, 0.06);
+  --stage-line-strong: rgba(15, 15, 22, 0.18);
+  --stage-rim: rgba(255, 255, 255, 0.9);
+  --stage-rail: rgba(15, 15, 22, 0.16);
+
+  --stage-shadow-sm: 0 8px 24px rgba(15, 15, 22, 0.08);
+  --stage-shadow-md: 0 18px 44px rgba(15, 15, 22, 0.1);
+  --stage-shadow-lg: 0 26px 64px rgba(15, 15, 22, 0.14);
+  --stage-shadow-side: -24px 0 60px rgba(15, 15, 22, 0.1);
+  --stage-scrim: rgba(15, 15, 22, 0.22);
+  --stage-text-halo: none;
+}
+
+/* High contrast spends the glass effect on separation: heavier lines, denser
+   material, so a control's edge is never carried by the wallpaper alone. */
+[data-high-contrast='true'] [data-player-stage] {
+  --stage-material-quiet: rgba(255, 255, 255, 0.1);
+  --stage-material: rgba(255, 255, 255, 0.16);
+  --stage-material-hover: rgba(255, 255, 255, 0.24);
+  --stage-material-active: rgba(255, 255, 255, 0.3);
+  --stage-line: rgba(255, 255, 255, 0.4);
+  --stage-line-soft: rgba(255, 255, 255, 0.28);
+  --stage-line-strong: rgba(255, 255, 255, 0.6);
+  --stage-rail: rgba(255, 255, 255, 0.42);
+  --stage-sheet: rgba(10, 10, 13, 0.98);
+  --stage-chrome: rgba(10, 10, 13, 0.82);
+}
+
+:root[data-theme='light'][data-high-contrast='true'] [data-player-stage] {
+  --stage-veil-floor: 0.88;
+  --stage-material-quiet: rgba(255, 255, 255, 0.72);
+  --stage-material: rgba(255, 255, 255, 0.86);
+  --stage-material-hover: rgba(255, 255, 255, 0.94);
+  --stage-material-active: #ffffff;
+  --stage-line: rgba(15, 15, 22, 0.34);
+  --stage-line-soft: rgba(15, 15, 22, 0.22);
+  --stage-line-strong: rgba(15, 15, 22, 0.5);
+  --stage-rail: rgba(15, 15, 22, 0.42);
+  --stage-sheet: #ffffff;
+  --stage-chrome: rgba(255, 255, 255, 0.94);
 }
 
 /* Theme cross-fade. `data-theme-transition` is set on <html> for the duration of a

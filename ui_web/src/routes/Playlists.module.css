@@ -12,7 +12,7 @@
   min-height: var(--control-h);
   margin-bottom: var(--space-lg);
   padding: var(--space-sm) var(--space-lg);
-  color: var(--accent);
+  color: var(--accent-ink);
   background: transparent;
   border: 1px dashed var(--hairline-strong);
   border-radius: var(--radius-sm);

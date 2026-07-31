@@ -226,10 +226,10 @@ export function PlayerSurface() {
 
   return (
     <Portal mount={typeof document !== 'undefined' ? document.body : undefined}>
-      {/* `data-immersive-dark` keeps the whole stage on the dark palette in
-          every theme: the backdrop is artwork blurred to near black and the
-          chrome is white-alpha glass, so light tokens would put dark ink on a
-          black stage and float white cards over the cover (tokens.css). */}
+      {/* `data-player-stage` hands the whole room its material palette: the
+          wallpaper filter, the glass, the lines and the rails all come from the
+          --stage-* tokens, which flip with the theme (tokens.css). Now Playing,
+          Auto and the browser panel are descendants, so they inherit it. */}
       <div
         ref={surfaceEl}
         classList={{
@@ -238,7 +238,7 @@ export function PlayerSurface() {
           [styles.auto]: auto(),
         }}
         data-player-surface-open={nowPlayingOpen() ? '' : undefined}
-        data-immersive-dark=""
+        data-player-stage=""
         aria-hidden={!nowPlayingOpen()}
         tabIndex={-1}
       >

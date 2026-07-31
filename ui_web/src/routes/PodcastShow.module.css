@@ -46,7 +46,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
 .epDownload:hover {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 }
 .epDownloaded {
@@ -208,7 +208,7 @@
 }
 /* Wash and marker rail: app.css, [data-now-playing]. */
 [data-now-playing] .epTitle {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .epSub {

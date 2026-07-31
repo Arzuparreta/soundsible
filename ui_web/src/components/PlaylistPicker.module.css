@@ -22,7 +22,7 @@
   width: 100%;
   min-height: var(--control-h);
   padding: var(--space-sm) var(--space-md);
-  color: var(--accent);
+  color: var(--accent-ink);
   background: transparent;
   border: 1px dashed var(--hairline-strong);
   border-radius: var(--radius-sm);

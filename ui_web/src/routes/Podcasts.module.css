@@ -208,7 +208,7 @@
 .retry {
   margin-left: var(--space-xs);
   padding: 0;
-  color: var(--accent);
+  color: var(--accent-ink);
   background: transparent;
   border: 0;
   font: inherit;

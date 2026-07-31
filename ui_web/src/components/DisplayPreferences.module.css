@@ -68,7 +68,7 @@
 
 .value {
   flex: 0 0 auto;
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: var(--text-label);
   font-weight: var(--fw-semibold);
 }
@@ -151,7 +151,7 @@
 }
 
 .range:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-ink);
   outline-offset: 3px;
   border-radius: var(--radius-full);
 }
@@ -240,7 +240,7 @@
 }
 
 .nativeSwitch:focus-visible + .switch {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-ink);
   outline-offset: 3px;
 }
 

@@ -27,7 +27,7 @@
    every list paints "this is sounding" identically. Only the title accent is
    local, because the class it colours is module-scoped. */
 [data-now-playing] .title {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .index {
@@ -101,7 +101,7 @@
 @media (hover: hover) and (pointer: fine) {
 
 .artistLink:hover {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: underline;
 }
 }
