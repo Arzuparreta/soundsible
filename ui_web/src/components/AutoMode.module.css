@@ -97,50 +97,13 @@
   outline-offset: 3px;
 }
 
-/* ── Backdrop ── */
-.backdrop,
-.wash,
-.grain {
-  position: absolute;
-  inset: -8%;
-  pointer-events: none;
-}
-
-.backdrop {
-  z-index: -3;
-  background-position: center;
-  background-size: cover;
-  filter: var(--stage-backdrop);
-  opacity: var(--stage-backdrop-opacity);
-  transform: scale(1.18);
-}
-
-/* Only drift while the surface is on screen — a blurred full-viewport layer is
-   the most expensive thing here, and it used to animate all session long.
-   `.active` alone did not say that: it tracks the DJ session, which outlives the
-   sheet by design, so this kept drifting behind a hidden surface. The surface
-   itself is what has to say it is up. */
-:global([data-player-surface-open]) .active .backdrop {
-  animation: autoDrift 38s ease-in-out infinite alternate;
-}
-
-.wash {
-  z-index: -2;
-  inset: 0;
-  background: var(--stage-wash-auto);
-}
-
-/* Tiled at its native 180px, as `stitchTiles` intends. Left to size itself the
-   SVG adopts the whole background area, and the fractal noise gets generated at
-   viewport resolution on every layout. */
-.grain {
-  z-index: -1;
-  inset: 0;
-  opacity: var(--stage-grain-opacity);
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 180px 180px;
-}
+/* No backdrop, wash or grain here: Auto renders inline inside the shared player
+   surface, which owns the room (PlayerSurface.module.css, and `.auto .wash`
+   there is what swaps in the Auto veil). The rules that used to sit at this
+   spot were never matched by anything — AutoMode.tsx renders no such element,
+   and a test pins that it must not. They still cost selector matching against
+   every node in the booth on each style recalculation, and they cost the next
+   reader a wrong mental model of where the wallpaper comes from. */
 
 /* ── Top chrome ── */
 .topbar {
@@ -356,6 +319,11 @@
 .cover {
   background-color: var(--stage-material);
   box-shadow: var(--stage-shadow-lg), inset 0 0 0 1px var(--stage-rim);
+  /* The breathe below really is a scale — it cannot be traded for a pan the way
+     the wallpaper's drift can. Declaring the layer is the next best thing: the
+     artwork and its large soft shadow get rasterised once and the 1.2% is
+     composited, instead of both being redrawn every frame. */
+  will-change: transform;
 }
 
 .active .cover {
@@ -1505,10 +1473,6 @@
     --auto-head: clamp(11px, 0.7vw, 15px);
   }
 
-  .wash {
-    background: var(--stage-wash-auto-wide);
-  }
-
   .stage {
     grid-template-rows: minmax(0, 1fr);
     grid-template-columns: var(--auto-art-col) minmax(0, 1fr);
@@ -1656,11 +1620,6 @@
   }
 }
 
-@keyframes autoDrift {
-  from { transform: scale(1.18) translate3d(-1.5%, -1%, 0); }
-  to { transform: scale(1.25) translate3d(1.5%, 1%, 0); }
-}
-
 @keyframes autoBreathe {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.012); }
@@ -1687,7 +1646,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .backdrop,
   .cover,
   .mark i,
   .agent,
