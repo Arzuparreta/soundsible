@@ -35,6 +35,7 @@ from shared.hardening import rate_limit
 from shared.listening_planner import (
     AUTO_PROFILES,
     LISTENING_INTENTS,
+    auto_source_sequence,
     plan_generated_queue,
 )
 from shared.dj_engine import (
@@ -89,6 +90,12 @@ _LOOKUP_CHUNK = 40
 # Short search terms — merged and deduped when RSS chart is unavailable.
 _ITUNES_TOP_FALLBACK_TERMS = ("podcast", "news", "comedy", "technology", "sports")
 _MAX_PERSONALIZED_SEEDS = 5
+_AUTO_CONTEXT_MAX = 5
+_AUTO_GRAPH_ANCHORS = 4
+_AUTO_GRAPH_FETCH_MISSES = 2
+_AUTO_RAW_LIMIT = 100
+_AUTO_SHORTLIST_LIMIT = 48
+_AUTO_ROUTER_LIMIT = 24
 
 
 def _invalidate_personalized_cache() -> None:
@@ -961,6 +968,303 @@ def _planner_item_from_feed(item: dict, *, pool: str) -> dict | None:
     }
 
 
+def _planner_artist_key(value: object) -> str:
+    artist = re.sub(
+        r"(?:\s*[-–—]\s*)?(?:topic|official(?:\s+music)?|vevo)$",
+        "",
+        str(value or "").strip(),
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"\s+", " ", artist).strip(" -–—").casefold()
+
+
+def _planner_video_id(metadata, item: dict) -> str:
+    video_id = str(
+        item.get("youtube_id")
+        or (
+            (item.get("external_ids") or {}).get("youtube_id")
+            if isinstance(item.get("external_ids"), dict)
+            else ""
+        )
+        or (item.get("id") if item.get("source") == "preview" else "")
+        or ""
+    ).strip()
+    if validate_youtube_video_id(video_id):
+        return video_id
+    track_id = str(item.get("track_id") or (item.get("id") if item.get("source") != "preview" else "") or "")
+    track = _planner_track_by_id(metadata, track_id) if track_id else None
+    candidate = str(getattr(track, "youtube_id", "") or "")
+    return candidate if validate_youtube_video_id(candidate) else ""
+
+
+def _planner_context(seed: dict, raw_context: object) -> list[dict]:
+    rows = [
+        dict(item)
+        for item in (raw_context if isinstance(raw_context, list) else [])
+        if isinstance(item, dict)
+    ][-_AUTO_CONTEXT_MAX:]
+    rows.append(dict(seed))
+    deduped: list[dict] = []
+    seen: set[str] = set()
+    for item in rows:
+        identity = str(
+            item.get("youtube_id")
+            or item.get("track_id")
+            or item.get("id")
+            or f"{item.get('artist', '')}:{item.get('title', '')}"
+        ).strip()
+        if not identity or identity in seen:
+            continue
+        seen.add(identity)
+        deduped.append(item)
+    return deduped[-_AUTO_CONTEXT_MAX:]
+
+
+def _planner_uncached_related(video_id: str) -> list[dict]:
+    api = _get_api()
+    rows = api["get_downloader"](open_browser=False).downloader.get_related_videos(
+        video_id,
+        max_results=25,
+        enrich=False,
+    )
+    instance_db().set_related_mix(video_id, rows)
+    return rows
+
+
+def _planner_context_related(metadata, context: list[dict]) -> tuple[list[dict], bool]:
+    """Collect a bounded semantic neighbourhood around the route that survives."""
+    anchors: list[tuple[str, float]] = []
+    for index, item in enumerate(context[-_AUTO_GRAPH_ANCHORS:]):
+        video_id = _planner_video_id(metadata, item)
+        if not video_id:
+            continue
+        recency = 0.64 + 0.36 * ((index + 1) / min(len(context), _AUTO_GRAPH_ANCHORS))
+        if all(existing != video_id for existing, _ in anchors):
+            anchors.append((video_id, recency))
+
+    mixes: dict[str, list[dict]] = {}
+    misses: list[str] = []
+    for video_id, _ in anchors:
+        cached = instance_db().get_related_mix(video_id)
+        if cached is None:
+            misses.append(video_id)
+        else:
+            mixes[video_id] = cached
+
+    futures = {
+        _PLAN_RESOLVE_EXECUTOR.submit(_planner_uncached_related, video_id): video_id
+        for video_id in misses[:_AUTO_GRAPH_FETCH_MISSES]
+    }
+    if futures:
+        done, pending = wait(futures, timeout=8)
+        for future in pending:
+            future.cancel()
+        for future in done:
+            try:
+                mixes[futures[future]] = future.result()
+            except Exception as exc:
+                logger.info("Auto context graph unavailable for %s: %s", futures[future], exc)
+
+    candidates: dict[str, dict] = {}
+    for video_id, recency in anchors:
+        rows = mixes.get(video_id) or []
+        for rank, raw in enumerate(rank_recommendation_rows(rows, source="auto_mode")[:25]):
+            item = _planner_item_from_related(raw)
+            if not item:
+                continue
+            semantic = max(0.18, recency * (1 - min(rank, 24) / 36))
+            identity = str(item["recommendation_identity"])
+            previous = candidates.get(identity)
+            if previous and float(previous.get("semantic_score") or 0) >= semantic:
+                continue
+            item.update({
+                "semantic_score": round(semantic, 6),
+                "semantic_basis": "related_track",
+                "score": round(
+                    max(0.0001, float(item.get("score") or 0.5) * (0.7 + semantic * 0.3)),
+                    6,
+                ),
+            })
+            candidates[identity] = item
+            if len(candidates) >= _AUTO_RAW_LIMIT:
+                break
+        if len(candidates) >= _AUTO_RAW_LIMIT:
+            break
+    return list(candidates.values()), bool(misses and not mixes)
+
+
+def _planner_related_artist_pool(
+    seed_artist: str,
+    user_id: str | None,
+    limit: int = 6,
+) -> tuple[list[str], list[dict]]:
+    """Return related artist names plus one playable representative per artist."""
+    if not seed_artist:
+        return [], []
+    try:
+        from shared.api.routes.catalog import (
+            _deezer_artist_top_tracks,
+            _deezer_related_artists,
+            _resolve_artist_id,
+        )
+
+        artist_id, _ = _resolve_artist_id(seed_artist)
+        if not artist_id:
+            return [], []
+        related_rows = _deezer_related_artists(artist_id, max(6, limit))[:limit]
+    except Exception as exc:
+        logger.info("Auto related artists unavailable for %s: %s", seed_artist, exc)
+        return [], []
+
+    names = [str(row.get("name") or "").strip() for row in related_rows if str(row.get("name") or "").strip()]
+    futures = {
+        _PLAN_RESOLVE_EXECUTOR.submit(_deezer_artist_top_tracks, str(row["deezer_id"]), 1): index
+        for index, row in enumerate(related_rows)
+        if row.get("deezer_id")
+    }
+    done, pending = wait(futures, timeout=5)
+    for future in pending:
+        future.cancel()
+    seeds: list[tuple[int, dict]] = []
+    for future in done:
+        try:
+            top = future.result()
+        except Exception:
+            top = []
+        if not top:
+            continue
+        item = dict(top[0])
+        item.update({
+            "score": 0.62,
+            "semantic_score": 0.62,
+            "semantic_basis": "related_artist",
+            "reason": f"Related to {seed_artist}.",
+            "reason_code": "related_artist",
+        })
+        seeds.append((futures[future], item))
+    seeds.sort(key=lambda pair: pair[0])
+
+    resolution_futures = {
+        _PLAN_RESOLVE_EXECUTOR.submit(_planner_resolve_artist_candidate, item, user_id): index
+        for index, item in seeds
+    }
+    done, pending = wait(resolution_futures, timeout=8)
+    for future in pending:
+        future.cancel()
+    resolved: list[tuple[int, dict]] = []
+    for future in done:
+        try:
+            item = future.result()
+        except Exception:
+            item = None
+        if item:
+            item["source_pool"] = "discovery"
+            item["semantic_score"] = 0.62
+            item["semantic_basis"] = "related_artist"
+            resolved.append((resolution_futures[future], item))
+    resolved.sort(key=lambda pair: pair[0])
+    return names, [item for _, item in resolved[:limit]]
+
+
+def _planner_local_item(track, *, semantic_score: float, basis: str, favourite: bool) -> dict:
+    video_id = str(getattr(track, "youtube_id", "") or "")
+    score = min(1.0, semantic_score * 0.82 + (0.16 if favourite else 0.06))
+    return {
+        "id": str(track.id),
+        "track_id": str(track.id),
+        "youtube_id": video_id or None,
+        "title": str(track.title or "Unknown"),
+        "artist": str(track.artist or track.album_artist or ""),
+        "album": str(track.album or ""),
+        "duration": int(track.duration or 0),
+        "cover": str(getattr(track, "cover_art_key", "") or ""),
+        "source": "library",
+        "source_pool": "local",
+        "reason": "From your library and inside this session's musical path.",
+        "reason_code": "session_library",
+        "recommendation_identity": f"music:track:{track.id}",
+        "score": round(score, 6),
+        "semantic_score": round(semantic_score, 6),
+        "semantic_basis": basis,
+        "personal_score": 1.0 if favourite else 0.55,
+        "external_ids": {"youtube_id": video_id} if video_id else {},
+    }
+
+
+def _build_auto_pools(
+    metadata,
+    context: list[dict],
+    *,
+    favourite_ids: set[str],
+    user_id: str | None,
+) -> tuple[dict[str, list[dict]], bool]:
+    related, graph_degraded = _planner_context_related(metadata, context)
+    seed_artist = str(context[-1].get("artist") or "") if context else ""
+    related_artists, discovery = _planner_related_artist_pool(seed_artist, user_id)
+    related_artist_keys = {_planner_artist_key(name) for name in related_artists}
+    context_artist_keys = {
+        _planner_artist_key(item.get("artist"))
+        for item in context
+        if _planner_artist_key(item.get("artist"))
+    }
+    semantic_by_video = {
+        str(item.get("youtube_id") or ""): float(item.get("semantic_score") or 0)
+        for item in related
+        if item.get("youtube_id")
+    }
+
+    local: list[dict] = []
+    for track in list(metadata.tracks if metadata and metadata.tracks else []):
+        artist_key = _planner_artist_key(track.artist or track.album_artist)
+        video_id = str(getattr(track, "youtube_id", "") or "")
+        if video_id and video_id in semantic_by_video:
+            semantic = semantic_by_video[video_id]
+            basis = "related_track"
+        elif artist_key and artist_key in context_artist_keys:
+            semantic = 0.76
+            basis = "same_artist"
+        elif artist_key and artist_key in related_artist_keys:
+            semantic = 0.62
+            basis = "related_artist"
+        else:
+            continue
+        local.append(_planner_local_item(
+            track,
+            semantic_score=semantic,
+            basis=basis,
+            favourite=str(track.id) in favourite_ids,
+        ))
+
+    local.sort(
+        key=lambda item: (
+            float(item.get("semantic_score") or 0),
+            float(item.get("personal_score") or 0),
+            float(item.get("score") or 0),
+        ),
+        reverse=True,
+    )
+    owned_video_ids = {
+        str(item.get("youtube_id") or "")
+        for item in local
+        if item.get("youtube_id")
+    }
+    related = [
+        item for item in related
+        if str(item.get("youtube_id") or "") not in owned_video_ids
+    ]
+    discovery = [
+        item for item in discovery
+        if str(item.get("youtube_id") or "") not in owned_video_ids
+    ]
+    related.sort(key=lambda item: float(item.get("semantic_score") or 0), reverse=True)
+    discovery.sort(key=lambda item: float(item.get("semantic_score") or 0), reverse=True)
+    return {
+        "local": local[:_AUTO_SHORTLIST_LIMIT],
+        "related": related[:_AUTO_SHORTLIST_LIMIT],
+        "discovery": discovery[:_AUTO_SHORTLIST_LIMIT],
+    }, graph_degraded
+
+
 def _planner_resolve_artist_candidate(item: dict, user_id: str | None) -> dict | None:
     from shared.api.routes.catalog import _resolve_candidates
     from shared.user_context import user_context
@@ -1052,7 +1356,7 @@ def _build_music_plan(data: dict) -> tuple[dict, int]:
     if not seed:
         return {"error": "seed is required"}, 400
     try:
-        limit = min(16, max(1, int(data.get("limit") or 8)))
+        limit = min(24, max(1, int(data.get("limit") or 8)))
     except (TypeError, ValueError):
         return {"error": "limit must be an integer"}, 400
 
@@ -1093,6 +1397,57 @@ def _build_music_plan(data: dict) -> tuple[dict, int]:
         return {"error": "seed needs a track id, video id, or title and artist"}, 400
 
     fav_ids = api["_mod"].favourite_library_ids()
+    if intent == "auto_mode":
+        session_id = str(data.get("session_id") or "").strip()[:80]
+        try:
+            segment_index = max(0, int(data.get("segment_index") or 0))
+        except (TypeError, ValueError):
+            return {"error": "segment_index must be a non-negative integer"}, 400
+        context_seed = {
+            **seed,
+            "track_id": track_id or None,
+            "youtube_id": seed_youtube_id or None,
+            "source": "library" if library_seed else "preview",
+            "title": seed_title,
+            "artist": seed_artist,
+        }
+        context = _planner_context(context_seed, data.get("context"))
+        pools, graph_degraded = _build_auto_pools(
+            metadata,
+            context,
+            favourite_ids={str(value) for value in fav_ids},
+            user_id=current_user_id(),
+        )
+        entropy = f"{session_id}:{segment_index}" if session_id else str(uuid.uuid4())
+        source_sequence = auto_source_sequence(profile, entropy=entropy)
+        items = plan_generated_queue(
+            pools,
+            intent=intent,
+            profile=profile,
+            limit=limit,
+            exclude=[str(value) for value in exclude[:200] if str(value).strip()],
+            entropy=entropy,
+            context_artists=[
+                str(item.get("artist") or "")
+                for item in context
+                if str(item.get("artist") or "").strip()
+            ],
+        )
+        return {
+            "v": 1,
+            "plan_id": str(uuid.uuid4()),
+            "intent": intent,
+            "profile": profile,
+            "seed_identity": seed_youtube_id or track_id or f"{seed_artist}:{seed_title}",
+            "session_id": session_id or None,
+            "segment_index": segment_index,
+            "source_sequence": list(source_sequence),
+            "items": items,
+            "degraded": len(items) < limit or graph_degraded,
+            "pool_counts": {pool: len(pools[pool]) for pool in ("local", "related", "discovery")},
+            "generated_at": int(time.time()),
+        }, 200
+
     local: list[dict] = []
     local_error = False
     try:
@@ -1145,9 +1500,6 @@ def _build_music_plan(data: dict) -> tuple[dict, int]:
     except Exception as exc:
         discovery_error = True
         logger.info("Listening plan discovery pool unavailable: %s", exc)
-    if intent == "auto_mode":
-        related.extend(_planner_artist_candidates(seed_artist, current_user_id(), min(6, limit)))
-
     items = plan_generated_queue(
         {"local": local, "related": related, "discovery": discovery},
         intent=intent,
@@ -1183,8 +1535,9 @@ def discovery_music_plan():
 def _dj_source_path(metadata, item: dict) -> str | None:
     """Where this item's audio already lives locally, if anywhere.
 
-    An uncached preview is queued for download rather than waited on: the route
-    it belongs to has to be answered now.
+    Candidate evaluation is read-only. Prefetching every preview considered by
+    the router made a wider crate expensive and gave already cached songs a
+    circular advantage. The browser prefetches only the accepted runway.
     """
     track_id = str(item.get("track_id") or "").strip()
     video_id = str(item.get("youtube_id") or (item.get("id") if item.get("source") == "preview" else "") or "").strip()
@@ -1198,23 +1551,10 @@ def _dj_source_path(metadata, item: dict) -> str | None:
     cached = preview_cache.get_cached(video_id)
     if cached:
         return str(cached[0])
-    # The browser already prefetches the runway. Asking for the full file here
-    # makes a later plan use real analysis without making this request wait.
-    try:
-        from shared.api.routes.playback import _get_preview_stream_cached
-
-        api = _get_api()
-        preview_cache.request_prefetch(
-            [video_id],
-            download=True,
-            resolver=lambda vid: _get_preview_stream_cached(api, vid),
-        )
-    except Exception:
-        pass
     return None
 
 
-def _dj_item_analysis(metadata, item: dict) -> dict:
+def _dj_item_analysis(metadata, item: dict, *, schedule: bool = False) -> dict:
     """Features for one route item, without ever blocking on FFmpeg.
 
     Planning is on the interaction path: a listener nudging the energy control
@@ -1231,7 +1571,8 @@ def _dj_item_analysis(metadata, item: dict) -> dict:
     cached = cached_analysis(path, identity)
     if cached is not None:
         return cached
-    request_analysis(path, identity, duration_hint=duration_hint)
+    if schedule:
+        request_analysis(path, identity, duration_hint=duration_hint)
     return _dj_fallback_analysis(duration_hint)
 
 
@@ -1357,8 +1698,11 @@ def discovery_music_dj_plan():
         "intent": "auto_mode",
         "profile": source_profile,
         "seed": seed,
+        "context": data.get("context") or [],
+        "session_id": data.get("session_id"),
+        "segment_index": data.get("segment_index"),
         "exclude": data.get("exclude") or [],
-        "limit": 12,
+        "limit": _AUTO_ROUTER_LIMIT,
     })
     if status != 200:
         return jsonify(base), status
@@ -1366,7 +1710,7 @@ def discovery_music_dj_plan():
     api = _get_api()
     lib, _, _ = api["get_core"]()
     metadata = getattr(lib, "metadata", None)
-    seed_analysis = _dj_item_analysis(metadata, seed)
+    seed_analysis = _dj_item_analysis(metadata, seed, schedule=True)
     try:
         energy_delta = max(-1.0, min(1.0, float(direction.get("energy") or 0)))
     except (TypeError, ValueError):
@@ -1388,11 +1732,24 @@ def discovery_music_dj_plan():
         if any(term in haystack for term in exclude_terms):
             continue
         candidate_analysis = _dj_item_analysis(metadata, candidate)
-        energy_fit = 1 - abs(float(candidate_analysis.get("energy") or 0.5) - desired_energy)
+        energy_fit = (
+            1 - abs(float(candidate_analysis.get("energy") or 0.5) - desired_energy)
+            if candidate_analysis.get("analysed")
+            else 0.5
+        )
         include_fit = 1.0 if include_terms and any(term in haystack for term in include_terms) else 0.0
+        semantic_fit = max(0.0, min(1.0, float(candidate.get("semantic_score") or 0.5)))
+        personal_fit = max(0.0, min(1.0, float(candidate.get("personal_score") or 0.5)))
         candidate["score"] = max(
             0.0,
-            min(1.0, float(candidate.get("score") or 0.5) * 0.65 + energy_fit * 0.25 + include_fit * 0.1),
+            min(
+                1.0,
+                semantic_fit * 0.5
+                + energy_fit * 0.2
+                + personal_fit * 0.15
+                + float(candidate.get("score") or 0.5) * 0.05
+                + include_fit * 0.1,
+            ),
         )
         candidates.append((candidate, candidate_analysis))
     requests = [
@@ -1481,11 +1838,24 @@ def discovery_music_dj_plan():
             "failure_code": None,
         })
     if len(route) < max_items:
-        route.extend(order_route(previous, remaining, profile=profile, limit=max_items - len(route)))
+        route.extend(order_route(
+            previous,
+            remaining,
+            profile=profile,
+            limit=max_items - len(route),
+            source_sequence=base.get("source_sequence") or auto_source_sequence(source_profile),
+            source_offset=len(route),
+        ))
+
+    # Only the accepted route is allowed to schedule local analysis. External
+    # previews are fetched by the existing browser runway prefetch, then refined
+    # shortly before their handoff.
+    for item in route:
+        _dj_item_analysis(metadata, item, schedule=True)
 
     return jsonify({
         **base,
-        "v": 3,
+        "v": 4,
         "dj_profile": profile,
         "source_profile": source_profile,
         "seed_analysis": seed_analysis,

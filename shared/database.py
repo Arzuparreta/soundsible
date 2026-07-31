@@ -9,7 +9,7 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Iterable
 from shared.models import Track, LibraryMetadata
 from shared.runtime import get_config_dir
 
@@ -430,7 +430,7 @@ class DatabaseManager:
                 artist TEXT,
                 show_title TEXT,
                 positive_weight REAL NOT NULL DEFAULT 0,
-                negative_count INTEGER NOT NULL DEFAULT 0,
+                negative_count REAL NOT NULL DEFAULT 0,
                 updated_at INTEGER NOT NULL
             )
         """)
@@ -441,7 +441,7 @@ class DatabaseManager:
                 identity TEXT NOT NULL,
                 media_type TEXT NOT NULL,
                 positive_delta REAL NOT NULL DEFAULT 0,
-                negative_delta INTEGER NOT NULL DEFAULT 0,
+                negative_delta REAL NOT NULL DEFAULT 0,
                 payload_json TEXT NOT NULL,
                 created_at INTEGER NOT NULL,
                 undone_at INTEGER
@@ -602,7 +602,7 @@ class DatabaseManager:
         identity: str,
         media_type: str,
         positive_delta: float,
-        negative_delta: int,
+        negative_delta: float,
         payload: Dict[str, Any],
         created_at: int,
     ) -> None:
@@ -622,7 +622,7 @@ class DatabaseManager:
                     identity,
                     media_type,
                     float(positive_delta),
-                    int(negative_delta),
+                    float(negative_delta),
                     json.dumps(payload, sort_keys=True, ensure_ascii=False),
                     int(created_at),
                 ),
@@ -649,7 +649,7 @@ class DatabaseManager:
                     str(payload.get("artist") or "")[:220],
                     str(payload.get("podcast_show_title") or "")[:220],
                     float(positive_delta),
-                    int(negative_delta),
+                    float(negative_delta),
                     int(created_at),
                 ),
             )
@@ -685,13 +685,76 @@ class DatabaseManager:
                 """,
                 (
                     float(row["positive_delta"]),
-                    int(row["negative_delta"]),
+                    float(row["negative_delta"]),
                     int(undone_at),
                     str(row["identity"]),
                 ),
             )
             conn.execute("COMMIT")
             return True
+
+    def discovery_profile_policy_version(self) -> str:
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT value FROM library_info WHERE key = 'discovery_profile_policy'"
+            ).fetchone()
+            return str(row[0]) if row else ""
+
+    def get_discovery_events(self) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM discovery_events ORDER BY created_at, id"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def replace_discovery_signals(
+        self,
+        aggregates: Iterable[Dict[str, Any]],
+        event_deltas: Dict[str, tuple[float, float]],
+        *,
+        policy_version: str,
+    ) -> None:
+        """Atomically rebuild derived recommendation weights, preserving audit rows."""
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("DELETE FROM discovery_signals")
+            for row in aggregates:
+                conn.execute(
+                    """
+                    INSERT INTO discovery_signals (
+                        identity, media_type, title, artist, show_title,
+                        positive_weight, negative_count, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(row.get("identity") or ""),
+                        str(row.get("media_type") or ""),
+                        str(row.get("title") or "")[:220],
+                        str(row.get("artist") or "")[:220],
+                        str(row.get("show_title") or "")[:220],
+                        float(row.get("positive_weight") or 0),
+                        float(row.get("negative_weight") or 0),
+                        int(row.get("updated_at") or 0),
+                    ),
+                )
+            for event_id, (positive, negative) in event_deltas.items():
+                conn.execute(
+                    """
+                    UPDATE discovery_events
+                    SET positive_delta = ?, negative_delta = ?
+                    WHERE id = ?
+                    """,
+                    (float(positive), float(negative), str(event_id)),
+                )
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO library_info (key, value)
+                VALUES ('discovery_profile_policy', ?)
+                """,
+                (str(policy_version),),
+            )
+            conn.execute("COMMIT")
 
     def get_discovery_signals(self) -> Dict[str, Dict[str, Any]]:
         with self._get_connection() as conn:

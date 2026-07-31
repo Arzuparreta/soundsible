@@ -328,11 +328,52 @@ def test_dj_plan_keeps_an_artist_request_until_a_playable_track_fulfils_it(tmp_p
 
     assert response.status_code == 200
     body = response.get_json()
-    assert body["v"] == 3
+    assert body["v"] == 4
     assert body["items"][0]["artist"] == "Oliver Heldens"
     assert body["items"][0]["request_id"] == "artist-request"
     assert body["requests"][0]["kind"] == "artist"
     assert body["requests"][0]["status"] == "planned"
+
+
+def test_auto_library_pool_only_promotes_tracks_inside_the_session_path(tmp_path):
+    _make_runtime(tmp_path)
+    techno = _track("techno-local", "Warehouse", "Techno Artist")
+    techno.youtube_id = "technovid01"
+    chant = _track("chant-favourite", "Aestimatus sum", "Lumen Valo")
+    chant.youtube_id = "chantvid001"
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[techno, chant],
+        playlists={},
+        settings={},
+    )
+    related = [{
+        "id": "technovid01",
+        "youtube_id": "technovid01",
+        "title": "Warehouse",
+        "artist": "Techno Artist",
+        "source": "preview",
+        "source_pool": "related",
+        "recommendation_identity": "music:youtube:technovid01",
+        "score": 0.8,
+        "semantic_score": 0.9,
+    }]
+
+    with (
+        patch.object(_disc_routes, "_planner_context_related", return_value=(related, False)),
+        patch.object(_disc_routes, "_planner_related_artist_pool", return_value=([], [])),
+    ):
+        pools, degraded = _disc_routes._build_auto_pools(
+            metadata,
+            [{"title": "Seed", "artist": "Techno Artist", "youtube_id": "seedvideo01"}],
+            favourite_ids={"chant-favourite"},
+            user_id="listener",
+        )
+
+    assert degraded is False
+    assert [item["track_id"] for item in pools["local"]] == ["techno-local"]
+    assert pools["related"] == []
+    assert all(item["title"] != "Aestimatus sum" for item in pools["local"])
 
 
 def test_dj_command_recognises_an_exact_artist_without_an_llm(tmp_path):
@@ -947,7 +988,7 @@ def test_dj_plan_never_decodes_audio_on_the_interaction_path(tmp_path):
     assert body["items"]
     # Unmeasured pairs are declared as such, so the player keeps them to a fade.
     assert body["items"][0]["transition"]["confidence"] < 0.35
-    assert queued, "the missing analysis was never queued"
+    assert len(queued) == 2, "only the seed and accepted route item should queue analysis"
 
 
 def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):

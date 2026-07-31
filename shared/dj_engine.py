@@ -698,17 +698,40 @@ def order_route(
     *,
     profile: str,
     limit: int = 3,
+    source_sequence: Iterable[str] | None = None,
+    source_offset: int = 0,
 ) -> list[dict[str, Any]]:
-    """Greedy lookahead over transition quality and recommendation relevance."""
+    """Greedy lookahead over transition quality and recommendation relevance.
+
+    Missing analysis is an absence of evidence, not evidence of a bad song.
+    Treating its conservative fallback as measured compatibility made every
+    cold external candidate lose to tracks already downloaded by an earlier
+    session, creating a self-reinforcing cache loop.
+    """
     remaining = list(candidates)
     route: list[dict[str, Any]] = []
     previous = current_analysis
+    sequence = tuple(source_sequence or ())
     while remaining and len(route) < limit:
+        preferred = sequence[(source_offset + len(route)) % len(sequence)] if sequence else None
+        eligible = (
+            [row for row in remaining if row[0].get("source_pool") == preferred]
+            if preferred
+            else remaining
+        )
+        if not eligible:
+            eligible = remaining
         scored = []
-        for index, (item, analysis) in enumerate(remaining):
+        for index, (item, analysis) in enumerate(eligible):
             transition = plan_transition(previous, analysis, profile=profile)
             relevance = max(0.0, min(1.0, float(item.get("score") or 0.5)))
-            score = transition["score"] * 0.72 + relevance * 0.28
+            transition_quality = (
+                float(transition["score"])
+                if previous.get("analysed", True) and analysis.get("analysed", True)
+                else 0.62
+            )
+            semantic = max(0.0, min(1.0, float(item.get("semantic_score") or 0.5)))
+            score = transition_quality * 0.42 + semantic * 0.38 + relevance * 0.20
             scored.append((score, -index, item, analysis, transition))
         _, _, item, analysis, transition = max(scored, key=lambda row: (row[0], row[1]))
         route.append({**item, "analysis": dict(analysis), "transition": transition})

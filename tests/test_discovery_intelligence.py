@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from shared.database import user_db
 from shared.discovery_intelligence import (
     ListeningRollup,
     build_music_recommendations,
@@ -114,6 +115,64 @@ def test_emit_discovery_event_respects_local_opt_out(tmp_path):
     assert events[0]["title"] == "Saved Track"
     assert "unsafe" not in events[0]
     assert "query" not in events[0]
+
+
+def test_generated_listening_does_not_reinforce_its_own_exact_choice(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    payload = {
+        "media_type": "music_track",
+        "youtube_id": "abcdefghijk",
+        "track_id": "local-track",
+        "title": "Generated Song",
+        "artist": "Generated Artist",
+        "source": "auto_mode",
+    }
+
+    assert emit_discovery_event("music_played_30s", payload)
+    assert recommendation_multiplier("music:youtube:abcdefghijk") == 1
+    assert "generated artist" not in load_listening_event_rollups().artist_plays
+
+    assert emit_discovery_event("music_generated_completed", payload)
+    rollup = load_listening_event_rollups()
+    assert rollup.artist_affinity["generated artist"] == pytest.approx(0.15, rel=0.01)
+    assert recommendation_multiplier("music:youtube:abcdefghijk") == 1
+
+    assert emit_discovery_event("music_generated_skipped_early", payload)
+    assert recommendation_multiplier("music:youtube:abcdefghijk") < 1
+
+    requested = {**payload, "youtube_id": "request0001"}
+    assert emit_discovery_event("music_requested_from_dj", requested)
+    assert recommendation_multiplier("music:youtube:request0001") > 1
+
+
+def test_profile_policy_rebuild_removes_historical_generated_play_bias(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    payload = {
+        "v": 2,
+        "event": "music_played_30s",
+        "media_type": "music_track",
+        "youtube_id": "abcdefghijk",
+        "title": "Old Auto Pick",
+        "artist": "Looped Artist",
+        "source": "auto_mode",
+    }
+    user_db().record_discovery_signal(
+        event_id="old-auto-event",
+        event="music_played_30s",
+        identity="music:youtube:abcdefghijk",
+        media_type="music_track",
+        positive_delta=1.0,
+        negative_delta=0,
+        payload=payload,
+        created_at=1,
+    )
+
+    assert recommendation_multiplier("music:youtube:abcdefghijk") == 1
+    assert recommendation_multiplier("music:youtube:abcdefghijk") == 1
+    events = user_db().get_discovery_events()
+    assert events[0]["positive_delta"] == 0
 
 
 def test_not_interested_is_monotonic_soft_and_undoable(tmp_path):

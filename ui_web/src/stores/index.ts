@@ -870,6 +870,8 @@ function commitTransition(
   manual: boolean,
 ): void {
   const toKey = queueIdentity(next);
+  const outgoing = state.playback.currentTrack;
+  const outgoingDuration = playingDuration();
   const fulfilledRequestId = state.autoMode.plan[toKey]?.requestId;
   const token = ++commitSeq;
   const owns = () => commitSeq === token;
@@ -883,6 +885,7 @@ function commitTransition(
   audioService.armTransition(trackUrl(next), plan, {
     onDominant: () => {
       if (!owns()) return;
+      if (!manual) listeningLearning.complete(outgoing, outgoingDuration);
       const queue = state.playback.queue;
       const index = queue.findIndex((entry) => entry.queueId === next.queueId);
       // The incoming deck is already audible; there is no undo. Follow it.
@@ -1069,6 +1072,7 @@ function onEnded(): void {
     void audioService.resume().catch(() => {});
     return;
   }
+  listeningLearning.complete(pb.currentTrack, playingDuration());
   if (pb.index < pb.queue.length - 1 || pb.repeat === 'all') {
     actions.next('ended');
     return;
@@ -1658,6 +1662,15 @@ export const actions = {
       etaTracks: null,
     };
     setState('autoMode', 'requests', (requests) => [...requests, request]);
+    void api.emitDiscoveryEvent('music_requested_from_dj', {
+      media_type: 'music_track',
+      track_id: track.source === 'preview' ? undefined : track.id,
+      youtube_id: track.youtube_id || (track.source === 'preview' ? track.id : undefined),
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      source: 'auto_mode',
+    }).catch(() => {});
     scheduleRunwayReplan(tr('autoMode.note.added', { title: track.title }));
   },
 
@@ -1677,6 +1690,12 @@ export const actions = {
       etaTracks: null,
     };
     setState('autoMode', 'requests', (requests) => [...requests, request]);
+    void api.emitDiscoveryEvent('music_requested_from_dj', {
+      media_type: 'music_track',
+      title: '',
+      artist,
+      source: 'auto_mode',
+    }).catch(() => {});
     scheduleRunwayReplan(tr('autoMode.note.added', { title: artist }));
   },
 
@@ -1701,6 +1720,7 @@ export const actions = {
       const pb = state.playback;
       const next = pb.queue[pb.index + 1];
       const current = pb.currentTrack;
+      listeningLearning.skip(current, playingDuration());
       if (audioService.mixPhase() !== 'idle') {
         // A blend was already prepared for this exact pair: bring it forward.
         audioService.startMixNow();
@@ -2679,7 +2699,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
     }),
     identity: queueIdentity,
     isCommitted: (entry) => committedTransition?.queueId === entry.queueId,
-    requestPlan: (intent, profile, seed, limit, exclude, signal) => {
+    requestPlan: (intent, profile, seed, limit, exclude, signal, generatedSession) => {
       const seedBody = {
         id: seed.id,
         track_id: seed.source === 'preview' ? undefined : seed.id,
@@ -2694,6 +2714,9 @@ function ensureGeneratedQueue(): GeneratedQueueController {
         return api.planDjQueue({
           dj_profile: state.autoMode.djProfile,
           direction: state.autoMode.direction,
+          session_id: generatedSession?.id,
+          segment_index: generatedSession?.segmentIndex,
+          context: generatedSession?.context.map(djItemRef),
           seed: seedBody,
           requests: state.autoMode.requests.map((request): DjRequestTarget | null => (
             request.kind === 'artist' && request.artist

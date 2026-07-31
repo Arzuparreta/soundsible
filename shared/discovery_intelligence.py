@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -16,6 +17,9 @@ from shared.telemetry import emit, user_telemetry_dir
 from shared.user_context import user_config_dir
 
 SETTINGS_VERSION = 1
+DISCOVERY_PROFILE_POLICY_VERSION = "2"
+_GENERATED_SOURCES = {"auto_mode", "autoplay", "radio"}
+_PROFILE_POLICY_LOCK = threading.Lock()
 DEFAULT_SETTINGS = {
     "v": SETTINGS_VERSION,
     "learning_enabled": True,
@@ -29,6 +33,9 @@ POSITIVE_LISTENING_EVENTS = {
     "music_added_to_playlist",
     "music_added_to_queue",
     "music_started_radio",
+    "music_generated_completed",
+    "music_generated_skipped_early",
+    "music_requested_from_dj",
     "podcast_episode_played_30s",
     "podcast_subscribed",
     "podcast_episode_saved",
@@ -41,9 +48,18 @@ _POSITIVE_WEIGHTS = {
     "music_added_to_playlist": 2.0,
     "music_added_to_queue": 0.35,
     "music_started_radio": 0.5,
+    # A generated completion teaches the artist/neighbourhood rollup weakly,
+    # never the exact identity multiplier that selected the song.
+    "music_generated_completed": 0.0,
+    "music_generated_skipped_early": 0.0,
+    "music_requested_from_dj": 1.0,
     "podcast_episode_played_30s": 1.0,
     "podcast_subscribed": 2.5,
     "podcast_episode_saved": 2.0,
+}
+
+_NEGATIVE_WEIGHTS = {
+    "music_generated_skipped_early": 0.15,
 }
 
 
@@ -97,6 +113,82 @@ def _listening_events_paths() -> list[Path]:
     return paths
 
 
+def _event_deltas(
+    event: str,
+    payload: dict[str, Any],
+    *,
+    stored_positive: float = 0.0,
+    stored_negative: float = 0.0,
+) -> tuple[float, float]:
+    source = _clean_str(payload.get("source"), 80).casefold()
+    if event == "music_played_30s" and source in _GENERATED_SOURCES:
+        return 0.0, 0.0
+    if event in _POSITIVE_WEIGHTS:
+        return float(_POSITIVE_WEIGHTS[event]), float(_NEGATIVE_WEIGHTS.get(event, 0.0))
+    return max(0.0, stored_positive), max(0.0, stored_negative)
+
+
+def ensure_discovery_profile_policy() -> None:
+    """Rebuild stale aggregates from their audit rows once per account.
+
+    The event log stays intact. Only derived deltas and aggregates change, so a
+    generated 30-second play recorded by the old policy can no longer keep
+    boosting the exact track or break a later undo.
+    """
+    with _PROFILE_POLICY_LOCK:
+        db = user_db()
+        if db.discovery_profile_policy_version() == DISCOVERY_PROFILE_POLICY_VERSION:
+            return
+        aggregates: dict[str, dict[str, Any]] = {}
+        event_deltas: dict[str, tuple[float, float]] = {}
+        for row in db.get_discovery_events():
+            try:
+                payload = json.loads(str(row.get("payload_json") or "{}"))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                payload = {}
+            if not isinstance(payload, dict):
+                payload = {}
+            positive, negative = _event_deltas(
+                str(row.get("event") or ""),
+                payload,
+                stored_positive=float(row.get("positive_delta") or 0),
+                stored_negative=float(row.get("negative_delta") or 0),
+            )
+            event_id = str(row.get("id") or "")
+            if event_id:
+                event_deltas[event_id] = (positive, negative)
+            if row.get("undone_at") is not None:
+                continue
+            identity = str(row.get("identity") or "")
+            if not identity:
+                continue
+            aggregate = aggregates.setdefault(identity, {
+                "identity": identity,
+                "media_type": str(row.get("media_type") or ""),
+                "title": "",
+                "artist": "",
+                "show_title": "",
+                "positive_weight": 0.0,
+                "negative_weight": 0.0,
+                "updated_at": 0,
+            })
+            aggregate["media_type"] = str(row.get("media_type") or aggregate["media_type"])
+            aggregate["title"] = str(payload.get("title") or aggregate["title"])
+            aggregate["artist"] = str(payload.get("artist") or aggregate["artist"])
+            aggregate["show_title"] = str(payload.get("podcast_show_title") or aggregate["show_title"])
+            aggregate["positive_weight"] += positive
+            aggregate["negative_weight"] += negative
+            aggregate["updated_at"] = max(
+                int(aggregate["updated_at"]),
+                int(row.get("created_at") or 0),
+            )
+        db.replace_discovery_signals(
+            aggregates.values(),
+            event_deltas,
+            policy_version=DISCOVERY_PROFILE_POLICY_VERSION,
+        )
+
+
 def load_listening_event_rollups(max_events: int = 2000) -> ListeningRollup:
     """
     Read the tail of listening-events.jsonl and aggregate signals.
@@ -142,7 +234,9 @@ def load_listening_event_rollups(max_events: int = 2000) -> ListeningRollup:
             event_ts = now
         age_days = max(0.0, (now - event_ts) / 86400)
         temporal_weight = math.pow(0.5, age_days / 45.0)
-        positive_weight = float(_POSITIVE_WEIGHTS.get(event, 0))
+        positive_weight, _ = _event_deltas(event, ev)
+        if event == "music_generated_completed":
+            positive_weight = 0.15
         if positive_weight > 0:
             rollup.event_count += 1
             rollup.last_event_ts = max(rollup.last_event_ts, event_ts)
@@ -151,13 +245,17 @@ def load_listening_event_rollups(max_events: int = 2000) -> ListeningRollup:
                     rollup.artist_affinity.get(artist, 0.0)
                     + positive_weight * temporal_weight
                 )
-            if track_id:
+            if track_id and event != "music_generated_completed":
                 rollup.track_affinity[track_id] = (
                     rollup.track_affinity.get(track_id, 0.0)
                     + positive_weight * temporal_weight
                 )
 
-        if event in ("music_played_30s", "music_search_played"):
+        generated_passive = (
+            event == "music_played_30s"
+            and _clean_str(ev.get("source"), 80).casefold() in _GENERATED_SOURCES
+        )
+        if event in ("music_played_30s", "music_search_played") and not generated_passive:
             if artist:
                 rollup.artist_plays[artist] = rollup.artist_plays.get(artist, 0) + 1
             if artist and album:
@@ -234,6 +332,7 @@ def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> b
     if not load_discovery_settings().get("learning_enabled", True):
         return False
 
+    ensure_discovery_profile_policy()
     payload = payload if isinstance(payload, dict) else {}
     safe: dict[str, Any] = {
         "v": 2,
@@ -266,13 +365,14 @@ def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> b
     identity, media_type = canonical_identity(safe)
     safe["identity"] = identity
     safe["media_type"] = media_type
+    positive_delta, negative_delta = _event_deltas(event_name, safe)
     user_db().record_discovery_signal(
         event_id=str(uuid.uuid4()),
         event=event_name,
         identity=identity,
         media_type=media_type,
-        positive_delta=_POSITIVE_WEIGHTS[event_name],
-        negative_delta=0,
+        positive_delta=positive_delta,
+        negative_delta=negative_delta,
         payload=safe,
         created_at=int(safe["ts"]),
     )
@@ -326,6 +426,7 @@ def record_not_interested(payload: dict[str, Any]) -> str:
     """Record an explicit soft-negative signal and return its undo id."""
     if not load_discovery_settings().get("learning_enabled", True):
         return ""
+    ensure_discovery_profile_policy()
     safe = {
         key: _clean_str(payload.get(key), 400)
         for key in (
@@ -386,6 +487,7 @@ def recommendation_multiplier(identity: str) -> float:
     """Soft learning multiplier. It can approach, but never reach, zero."""
     if not load_discovery_settings().get("learning_enabled", True):
         return 1.0
+    ensure_discovery_profile_policy()
     signal = user_db().get_discovery_signals().get(identity)
     return _signal_multiplier(signal)
 
@@ -394,7 +496,7 @@ def _signal_multiplier(signal: dict[str, Any] | None) -> float:
     if not signal:
         return 1.0
     positive = max(0.0, float(signal.get("positive_weight") or 0))
-    negatives = max(0, int(signal.get("negative_count") or 0))
+    negatives = max(0.0, float(signal.get("negative_count") or 0))
     positive_factor = min(1.75, 1.0 + math.log1p(positive) * 0.18)
     negative_factor = max(0.08, math.exp(-0.72 * negatives))
     return positive_factor * negative_factor
@@ -418,11 +520,10 @@ def rank_recommendation_rows(
         "autoplay": ("Similar to what you were listening to.", "autoplay_related"),
         "podcast": ("Recommended from your local podcast activity.", "podcast_activity"),
     }
-    signals = (
-        user_db().get_discovery_signals()
-        if load_discovery_settings().get("learning_enabled", True)
-        else {}
-    )
+    signals: dict[str, dict[str, Any]] = {}
+    if load_discovery_settings().get("learning_enabled", True):
+        ensure_discovery_profile_policy()
+        signals = user_db().get_discovery_signals()
     for index, raw in enumerate(rows):
         row = dict(raw)
         identity = _clean_str(row.get("recommendation_identity"), 500)

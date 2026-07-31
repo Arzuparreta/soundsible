@@ -42,6 +42,7 @@ function harness() {
     _limit: number,
     _exclude: string[],
     _signal: AbortSignal,
+    _session?: { id: string; segmentIndex: number; context: Track[] },
   ) => response(intent));
   const applyPlan = vi.fn((intent: ListeningPlanIntent, plan: ListeningPlanResponse, replace: boolean) => {
     const generated = plan.items.map((item) => createQueueEntry(
@@ -101,6 +102,11 @@ describe('GeneratedQueueController', () => {
     await auto.controller.start('auto_mode', seed, 'explore');
     expect(auto.requestPlan.mock.calls[0][0]).toBe('auto_mode');
     expect(auto.requestPlan.mock.calls[0][1]).toBe('explore');
+    expect(auto.requestPlan.mock.calls[0][6]).toMatchObject({
+      id: expect.any(String),
+      segmentIndex: 0,
+      context: [expect.objectContaining({ id: 'seed' })],
+    });
     auto.controller.stop();
   });
 
@@ -129,6 +135,11 @@ describe('GeneratedQueueController', () => {
       8,
       expect.any(Array),
       expect.any(AbortSignal),
+      expect.objectContaining({
+        id: expect.any(String),
+        segmentIndex: 1,
+        context: expect.any(Array),
+      }),
     );
     expect(h.applyPlan).toHaveBeenLastCalledWith(
       'auto_mode',
@@ -149,6 +160,28 @@ describe('GeneratedQueueController', () => {
       true,
     );
     h.controller.stop();
+  });
+
+  it('keeps one stateless session lineage and advances only accepted segments', async () => {
+    const h = harness();
+    await h.controller.start('auto_mode', seed);
+    const firstSession = h.requestPlan.mock.calls[0][6]!;
+
+    h.applyPlan.mockReturnValueOnce(0);
+    await h.controller.replan('balanced');
+    const rejected = h.requestPlan.mock.calls[1][6]!;
+    await h.controller.replan('balanced');
+    const retry = h.requestPlan.mock.calls[2][6]!;
+
+    expect(firstSession.id).toBe(rejected.id);
+    expect(rejected.segmentIndex).toBe(1);
+    expect(retry.segmentIndex).toBe(1);
+    h.controller.stop();
+
+    const next = harness();
+    await next.controller.start('auto_mode', seed);
+    expect(next.requestPlan.mock.calls[0][6]!.id).not.toBe(firstSession.id);
+    next.controller.stop();
   });
 
   it('reports a partial but playable plan as ready instead of a retry failure', async () => {

@@ -91,6 +91,11 @@ export interface GeneratedQueueDeps {
     limit: number,
     exclude: string[],
     signal: AbortSignal,
+    session?: {
+      id: string;
+      segmentIndex: number;
+      context: Track[];
+    },
   ) => Promise<ListeningPlanResponse>;
   applyPlan: (
     intent: ListeningPlanIntent,
@@ -117,6 +122,8 @@ interface GeneratedSession {
   profile: AutoProfile;
   seed: Track;
   continuous: boolean;
+  id?: string;
+  segmentIndex: number;
 }
 
 const TARGET_LOOKAHEAD = 8;
@@ -125,6 +132,17 @@ const REFILL_THRESHOLD: Record<ListeningPlanIntent, number> = {
   radio: 4,
   auto_mode: 4,
 };
+
+function sessionId(): string {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (!cryptoApi?.getRandomValues) {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  }
+  cryptoApi.getRandomValues(bytes);
+  return [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
+}
 const RETRY_DELAYS = [15_000, 30_000, 60_000];
 const RECENT_MAX = 80;
 
@@ -155,14 +173,27 @@ export class GeneratedQueueController {
     profile: AutoProfile = 'balanced',
   ): Promise<boolean> {
     this.stop();
-    this.session = { intent, seed, profile, continuous: true };
+    this.session = {
+      intent,
+      seed,
+      profile,
+      continuous: true,
+      id: intent === 'auto_mode' ? sessionId() : undefined,
+      segmentIndex: 0,
+    };
     return this.sync(true);
   }
 
   ensureAutoplay(seed: Track, force = false): Promise<boolean> {
     if (this.session && this.session.intent !== 'autoplay') return Promise.resolve(false);
     if (!this.session) {
-      this.session = { intent: 'autoplay', seed, profile: 'balanced', continuous: false };
+      this.session = {
+        intent: 'autoplay',
+        seed,
+        profile: 'balanced',
+        continuous: false,
+        segmentIndex: 0,
+      };
     } else {
       this.session.seed = seed;
     }
@@ -257,6 +288,10 @@ export class GeneratedQueueController {
     return this.retained(replace).at(-1) ?? snapshot.currentTrack ?? this.session!.seed;
   }
 
+  private context(replace: boolean): Track[] {
+    return this.retained(replace).slice(-5);
+  }
+
   private exclusions(replace = false): string[] {
     const values = new Set(this.recent);
     const retained = this.retained(replace);
@@ -302,6 +337,13 @@ export class GeneratedQueueController {
       needed,
       this.exclusions(replace),
       aborter.signal,
+      session.intent === 'auto_mode' && session.id
+        ? {
+            id: session.id,
+            segmentIndex: session.segmentIndex,
+            context: this.context(replace),
+          }
+        : undefined,
     ).then((response) => {
       if (generation !== this.generation || aborter.signal.aborted || this.session !== session) return false;
       const accepted = this.deps.applyPlan(session.intent, response, replace, seed);
@@ -311,6 +353,7 @@ export class GeneratedQueueController {
         return false;
       }
       for (const item of response.items) this.remember(item.recommendation_identity || item.id);
+      if (session.intent === 'auto_mode') session.segmentIndex += 1;
       this.retryStep = 0;
       if (this.retryTimer) clearTimeout(this.retryTimer);
       this.retryTimer = null;

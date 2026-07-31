@@ -195,6 +195,7 @@ export interface DjItemRef {
   source?: string;
   title: string;
   artist: string;
+  album?: string;
   duration?: number;
 }
 
@@ -229,7 +230,7 @@ export interface ListeningPlanItem {
 }
 
 export interface ListeningPlanResponse {
-  v: 1 | 2 | 3;
+  v: 1 | 2 | 3 | 4;
   plan_id: string;
   intent: ListeningPlanIntent;
   profile: ListeningPlanProfile;
@@ -238,10 +239,13 @@ export interface ListeningPlanResponse {
   degraded: boolean;
   pool_counts: Record<'local' | 'related' | 'discovery', number>;
   generated_at: number;
+  session_id?: string | null;
+  segment_index?: number;
+  source_sequence?: Array<'local' | 'related' | 'discovery'>;
 }
 
 export interface DjPlanResponse extends ListeningPlanResponse {
-  v: 2 | 3;
+  v: 2 | 3 | 4;
   dj_profile: DjProfile;
   source_profile: ListeningPlanProfile;
   /** Features of the track the route continues from — the only reading the
@@ -798,6 +802,9 @@ export const api = {
     body: {
       dj_profile: DjProfile;
       direction: DjDirection;
+      session_id?: string;
+      segment_index?: number;
+      context?: DjItemRef[];
       seed: {
         id?: string;
         track_id?: string;

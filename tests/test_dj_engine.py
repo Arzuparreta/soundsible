@@ -101,6 +101,32 @@ def test_route_order_considers_transition_quality_not_only_recommendation_score(
     assert route[0]["id"] == "clean-mix"
 
 
+def test_route_keeps_source_contract_and_does_not_penalise_cold_external_audio():
+    current = {**analysis(), "analysed": True}
+    cached_local = {
+        **item("cached-local", 0.95),
+        "source_pool": "local",
+        "semantic_score": 0.7,
+    }
+    cold_external = {
+        **item("cold-external", 0.8),
+        "source_pool": "related",
+        "semantic_score": 0.9,
+    }
+    route = order_route(
+        current,
+        [
+            (cached_local, {**analysis(), "analysed": True}),
+            (cold_external, {**analysis(confidence=0.18), "analysed": False}),
+        ],
+        profile="adaptive",
+        limit=2,
+        source_sequence=("related", "local"),
+    )
+
+    assert [row["id"] for row in route] == ["cold-external", "cached-local"]
+
+
 def test_analyser_decodes_in_memory_and_finds_a_real_pulse_grid(tmp_path, monkeypatch):
     source = tmp_path / "click.wav"
     sample_rate = 11025

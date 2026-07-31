@@ -88,3 +88,96 @@ def test_invalid_intent_and_profile_are_rejected():
         plan_generated_queue({}, intent="search")
     with pytest.raises(ValueError):
         plan_generated_queue({}, intent="auto_mode", profile="chaos")
+
+
+def test_auto_session_entropy_is_retry_stable_but_varies_between_sessions():
+    pools = {
+        pool: [_candidate(f"{pool}-{i}", pool, 0.8) for i in range(16)]
+        for pool in ("local", "related", "discovery")
+    }
+
+    first = plan_generated_queue(
+        pools,
+        intent="auto_mode",
+        profile="balanced",
+        entropy="session-a:0",
+    )
+    retry = plan_generated_queue(
+        pools,
+        intent="auto_mode",
+        profile="balanced",
+        entropy="session-a:0",
+    )
+    another_session = plan_generated_queue(
+        pools,
+        intent="auto_mode",
+        profile="balanced",
+        entropy="session-b:0",
+    )
+
+    assert [item["id"] for item in first] == [item["id"] for item in retry]
+    assert [item["id"] for item in first] != [item["id"] for item in another_session]
+    assert sum(item["source_pool"] == "local" for item in first) == 2
+
+
+def test_auto_normalises_channel_aliases_before_applying_artist_cap():
+    pools = {
+        "related": [
+            _candidate("one", "related", 1.0, "KREAM"),
+            _candidate("two", "related", 0.9, "KREAM - Topic"),
+            _candidate("three", "related", 0.8, "KREAM Official"),
+            _candidate("other", "related", 0.7, "Another Artist"),
+        ],
+    }
+
+    plan = plan_generated_queue(
+        pools,
+        intent="auto_mode",
+        profile="balanced",
+        entropy="alias-session:0",
+    )
+
+    assert sum(item["artist"].startswith("KREAM") for item in plan) == 1
+
+
+def test_a_shallow_local_pool_is_a_preference_not_a_mandatory_repeat():
+    pools = {
+        "local": [_candidate("only-compatible-local", "local", 0.95)],
+        "related": [_candidate(f"related-{i}", "related", 0.8) for i in range(16)],
+        "discovery": [_candidate(f"discovery-{i}", "discovery", 0.8) for i in range(16)],
+    }
+
+    appearances = sum(
+        any(
+            item["id"] == "only-compatible-local"
+            for item in plan_generated_queue(
+                pools,
+                intent="auto_mode",
+                profile="balanced",
+                entropy=f"session-{index}:0",
+            )
+        )
+        for index in range(32)
+    )
+
+    assert 0 < appearances < 32
+
+
+def test_auto_counts_recent_context_artists_before_building_the_next_segment():
+    pools = {
+        "related": [
+            _candidate("same", "related", 1.0, "KREAM"),
+            _candidate("collab", "related", 0.95, "KREAM and KOROLOVA"),
+            _candidate("next", "related", 0.9, "ARTBAT"),
+        ],
+    }
+
+    plan = plan_generated_queue(
+        pools,
+        intent="auto_mode",
+        profile="balanced",
+        entropy="context-session:1",
+        context_artists=["KREAM"],
+    )
+
+    assert [item["id"] for item in plan] == ["next"]
