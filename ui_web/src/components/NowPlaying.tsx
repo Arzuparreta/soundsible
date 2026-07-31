@@ -73,9 +73,22 @@ export function NowPlaying(props: {
   const [desktopLayout, setDesktopLayout] = createSignal(
     parseNowPlayingLayout(localStorage.getItem(NOW_PLAYING_LAYOUT_KEY), localStorage.getItem('np:panelSide')),
   );
-  const [desktopLyrics, setDesktopLyrics] = createSignal(
-    localStorage.getItem('np:desktopLyrics') === 'open' || localStorage.getItem('np:panelTab') === 'lyrics',
-  );
+  // `np:panelTab` is the pre-split-panel key: honour it once so an upgrade keeps
+  // the lyrics open, then drop it. Left as a standing fallback it outranked
+  // `np:desktopLyrics` on every load, so closing the lyrics never survived a reload.
+  const readDesktopLyrics = () => {
+    try {
+      const stored = localStorage.getItem('np:desktopLyrics');
+      if (stored !== null) return stored === 'open';
+      const legacy = localStorage.getItem('np:panelTab') === 'lyrics';
+      localStorage.removeItem('np:panelTab');
+      localStorage.setItem('np:desktopLyrics', legacy ? 'open' : 'closed');
+      return legacy;
+    } catch {
+      return false; /* storage disabled/full */
+    }
+  };
+  const [desktopLyrics, setDesktopLyrics] = createSignal(readDesktopLyrics());
   const [layoutBusy, setLayoutBusy] = createSignal(false);
   const desktopLyricsActive = createMemo(() => desktopLyrics() && !isPodcast());
   const renderedPanels = createMemo<NowPlayingPanelId[]>(() =>
