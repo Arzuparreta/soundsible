@@ -114,10 +114,16 @@
   background: var(--stage-wash-auto);
 }
 
+/* `stitchTiles` says it: this is a 180px tile. Say it to CSS too — an SVG with
+   no intrinsic dimensions otherwise takes the size of the background area, so
+   the fractal noise was being generated at full viewport resolution, and again
+   on every resize. Tiled, the filter runs once over 180×180. */
 .grain {
   z-index: -1;
   opacity: var(--stage-grain-opacity);
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 180px 180px;
 }
 
 .floatingChrome {

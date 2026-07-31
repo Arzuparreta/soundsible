@@ -116,8 +116,11 @@
 }
 
 /* Only drift while the surface is on screen — a blurred full-viewport layer is
-   the most expensive thing here, and it used to animate all session long. */
-.active .backdrop {
+   the most expensive thing here, and it used to animate all session long.
+   `.active` alone did not say that: it tracks the DJ session, which outlives the
+   sheet by design, so this kept drifting behind a hidden surface. The surface
+   itself is what has to say it is up. */
+:global([data-player-surface-open]) .active .backdrop {
   animation: autoDrift 38s ease-in-out infinite alternate;
 }
 
@@ -127,11 +130,16 @@
   background: var(--stage-wash-auto);
 }
 
+/* Tiled at its native 180px, as `stitchTiles` intends. Left to size itself the
+   SVG adopts the whole background area, and the fractal noise gets generated at
+   viewport resolution on every layout. */
 .grain {
   z-index: -1;
   inset: 0;
   opacity: var(--stage-grain-opacity);
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 180px 180px;
 }
 
 /* ── Top chrome ── */
@@ -174,8 +182,9 @@
 .mark i:nth-child(2) { height: 100%; }
 .mark i:nth-child(3) { height: 68%; }
 
-/* The mark is a playback indicator, not decoration: it moves while audio does. */
-.active[data-playing='true'] .mark i {
+/* The mark is a playback indicator, not decoration: it moves while audio does —
+   and only while anyone can see it. */
+:global([data-player-surface-open]) .active[data-playing='true'] .mark i {
   animation: autoBars 1.2s var(--ease-in-out) infinite;
 }
 
@@ -595,6 +604,7 @@
 }
 
 .agentPulse {
+  position: relative;
   width: 8px;
   height: 8px;
   flex: 0 0 auto;
@@ -603,8 +613,16 @@
   border-radius: 50%;
 }
 
-.agent[data-status='working'] .agentPulse {
-  box-shadow: 0 0 0 0 rgba(249, 122, 18, 0.4);
+/* The halo used to be an animated `box-shadow` spread: a property that cannot be
+   composited, so it repainted every frame for as long as an activity sat in
+   'working' — which nothing auto-clears. A pseudo-element expanding on transform
+   and opacity draws the same ring on the compositor instead. */
+.agent[data-status='working'] .agentPulse::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 4px solid rgba(249, 122, 18, 0.4);
+  border-radius: 50%;
   animation: agentPulse 1.4s ease-out infinite;
 }
 
@@ -634,22 +652,40 @@
 }
 
 .progress {
+  --progress-h: clamp(5px, 0.45vh, 8px);
+  /* The pill radius as a real length, because the fill has to divide by it. */
+  --progress-r: calc(var(--progress-h) / 2);
+
   position: relative;
-  height: clamp(5px, 0.45vh, 8px);
+  height: var(--progress-h);
   background: var(--stage-rail);
   border-radius: var(--radius-full);
 }
 
+/* Scale, not width: `timeupdate` restarts this transition every ~250ms, exactly
+   its own duration, so it never settles — it is the one animation running for
+   as long as Auto Mode is on screen, over a room full of blurred layers.
+   `transform` composites; `width` would relayout and repaint every frame.
+   The floor keeps the head marker below rendering at 0:00, where a literal
+   scaleX(0) would collapse it along with the bar. */
 .progressFill {
+  --p-safe: max(0.001, var(--p, 0));
+
   position: absolute;
-  inset: 0 auto 0 0;
+  inset: 0;
   background: var(--accent);
-  border-radius: inherit;
-  transition: width 250ms linear;
+  /* Elliptical radii, pre-divided on the axis the scale squashes, so the cap
+     comes out of the transform as the same round end `inherit` used to draw. */
+  border-radius: calc(var(--progress-r) / var(--p-safe)) / var(--progress-r);
+  transform: scaleX(var(--p-safe));
+  transform-origin: left center;
+  transition: transform 250ms linear;
 }
 
 /* A head marker: from across a room the position is read from the dot, not
-   from the width of a five-pixel bar. */
+   from the width of a five-pixel bar. It has to stay a circle, so it undoes the
+   bar's scale on its own axis; anchoring both to the right edge keeps the two
+   scales centred on the same point, which is where the dot belongs. */
 .progressFill::after {
   content: '';
   position: absolute;
@@ -657,7 +693,10 @@
   right: 0;
   width: clamp(10px, 0.9vh, 15px);
   height: clamp(10px, 0.9vh, 15px);
-  transform: translate(50%, -50%);
+  transform: scaleX(calc(1 / var(--p-safe))) translate(50%, -50%);
+  transform-origin: right center;
+  /* Matches the bar so the two scales stay reciprocal while they move. */
+  transition: transform 250ms linear;
   background: var(--accent);
   border-radius: 50%;
   box-shadow: 0 0 0 4px rgba(249, 122, 18, 0.18);
@@ -1046,6 +1085,13 @@
   background: var(--accent);
   border-radius: 50%;
   animation: boothCue 1.6s var(--ease-in-out) infinite;
+  /* A blend is armed 45s before every out-cue, so with the sheet closed this
+     beat alone would cover most of the session. */
+  animation-play-state: paused;
+}
+
+:global([data-player-surface-open]) .blendMark {
+  animation-play-state: running;
 }
 
 .requestButton {
@@ -1401,7 +1447,13 @@
   margin-bottom: 12px;
   background: repeating-radial-gradient(circle, var(--accent) 0 4px, var(--stage-base) 5px 12px);
   border-radius: 50%;
+  /* Repainting a repeating gradient every frame; only worth it on screen. */
   animation: autoSpin 2.4s linear infinite;
+  animation-play-state: paused;
+}
+
+:global([data-player-surface-open]) .emptyDisc {
+  animation-play-state: running;
 }
 
 @keyframes autoSpin { to { transform: rotate(360deg); } }
@@ -1625,7 +1677,8 @@
 }
 
 @keyframes agentPulse {
-  70%, 100% { box-shadow: 0 0 0 8px rgba(249, 122, 18, 0); }
+  0% { transform: scale(1); opacity: 1; }
+  70%, 100% { transform: scale(2.6); opacity: 0; }
 }
 
 @keyframes nextCardIn {
@@ -1639,7 +1692,9 @@
   .mark i,
   .agent,
   .agentPulse,
+  .agentPulse::after,
   .blendMark,
+  .emptyDisc,
   .nextCard { animation: none !important; }
 
   .switchThumb { transition: none !important; }

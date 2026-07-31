@@ -2,6 +2,11 @@ const VOLUME_KEY = 'volume';
 
 /** Media-clock supervision. Audio gain itself is sample-accurate automation. */
 const TICK_MS = 40;
+/** Supervision rate during the long `armed` wait, where a tick only compares
+ * the media clock against the preroll point. See `tickInterval`. */
+const ARMED_TICK_MS = 250;
+/** Runway left, in seconds, at which `armed` goes back to watching at TICK_MS. */
+const ARMED_FINE_LEAD = 2;
 /** Longest silent head start given to the incoming deck. */
 const MAX_PREROLL = 4;
 const MIN_OVERLAP = 1.2;
@@ -18,6 +23,9 @@ let deckGains: GainNode[] | null = null;
 interface DeckEffects {
   low?: BiquadFilterNode;
   filter?: BiquadFilterNode;
+  /** Where the echo send taps the deck, kept so it can be built on demand. */
+  source?: MediaElementAudioSourceNode;
+  delay?: DelayNode;
   echoWet?: GainNode;
   echoFeedback?: GainNode;
 }
@@ -157,20 +165,8 @@ export function ensureMixGraph(): boolean {
         filter.frequency.value = 22000;
         filter.Q.value = 0.7;
         source.connect(low).connect(filter).connect(gain).connect(master);
-        const effect: DeckEffects = { low, filter };
-        if (typeof context.createDelay === 'function') {
-          const delay = context.createDelay(1);
-          delay.delayTime.value = 0.28;
-          const wet = context.createGain();
-          wet.gain.value = 0;
-          const feedback = context.createGain();
-          feedback.gain.value = 0.32;
-          source.connect(delay).connect(wet).connect(master);
-          delay.connect(feedback).connect(delay);
-          effect.echoWet = wet;
-          effect.echoFeedback = feedback;
-        }
-        effects.push(effect);
+        // No echo send here: see `ensureEcho`.
+        effects.push({ low, filter, source });
       } else {
         source.connect(gain).connect(master);
         effects.push({});
@@ -242,8 +238,48 @@ interface ActiveMix {
 
 let mix: ActiveMix | null = null;
 let mixGeneration = 0;
-let mixTimer: ReturnType<typeof setInterval> | null = null;
+let mixTimer: ReturnType<typeof setTimeout> | null = null;
 let rateTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Build the echo send for a deck, if it does not have one.
+ *
+ * Only `echo_cut` ever uses this, and only on the outgoing deck — but a delay
+ * line inside a feedback loop can never be proved silent, so Web Audio has to
+ * render it regardless of the send being at zero. Built up front, that was two
+ * permanently running delay lines for every session that so much as opened Auto
+ * Mode. Built here and torn down in `resetDeckEffects`, it only costs the audio
+ * thread anything during the blend that asked for it.
+ */
+function ensureEcho(index: number): void {
+  const effect = deckEffects?.[index];
+  if (!effect || effect.echoWet || !audioContext || !masterGain) return;
+  const source = effect.source;
+  if (!source || typeof audioContext.createDelay !== 'function') return;
+  const delay = audioContext.createDelay(1);
+  delay.delayTime.value = 0.28;
+  const wet = audioContext.createGain();
+  wet.gain.value = 0;
+  const feedback = audioContext.createGain();
+  feedback.gain.value = 0.32;
+  source.connect(delay).connect(wet).connect(masterGain);
+  delay.connect(feedback).connect(delay);
+  effect.delay = delay;
+  effect.echoWet = wet;
+  effect.echoFeedback = feedback;
+}
+
+/** Break the feedback loop so the graph can drop it. The send is already at
+ * zero by the time this runs, so nothing audible is being cut. */
+function disposeEcho(effect: DeckEffects): void {
+  if (!effect.echoWet) return;
+  effect.echoFeedback?.disconnect();
+  effect.echoWet.disconnect();
+  effect.delay?.disconnect();
+  effect.delay = undefined;
+  effect.echoWet = undefined;
+  effect.echoFeedback = undefined;
+}
 
 function resetDeckEffects(index: number): void {
   const effect = deckEffects?.[index];
@@ -259,7 +295,7 @@ function resetDeckEffects(index: number): void {
   effect.low?.gain.setValueAtTime(0, now);
   effect.filter?.frequency.setValueAtTime(22000, now);
   effect.echoWet?.gain.setValueAtTime(0, now);
-  effect.echoFeedback?.gain.setValueAtTime(0.32, now);
+  disposeEcho(effect);
 }
 
 function scheduleCurve(param: AudioParam | undefined, values: number[], duration: number): void {
@@ -301,12 +337,51 @@ function scheduleCrossfade(current: ActiveMix): void {
     scheduleCurve(inEffect?.filter?.frequency, [900, 1600, 4200, 10000, 18000, 22000], current.overlap);
   }
   if (current.technique === 'echo_cut') {
+    ensureEcho(current.fromIndex);
     scheduleCurve(outEffect?.echoWet?.gain, [0, 0.05, 0.12, 0.24, 0.32, 0.18], current.overlap);
   }
 }
 
+/**
+ * How long the supervisor waits before looking at the media clock again.
+ *
+ * `armed` is a long wait: the DJ commits a transition COMMIT_LEAD_SECONDS (45)
+ * before the out-cue, and every look until the preroll point does nothing but
+ * compare two numbers. Watching that at mix resolution is ~1100 timer wakeups
+ * per track, which on a low-power laptop is enough on its own to keep the CPU
+ * out of its deeper idle states for most of the song. The coarse rate still
+ * lands far inside the head start the preroll allows (MIN_OVERLAP is 1.2s), and
+ * a late start is what `prerolling`'s phase correction exists to absorb —
+ * everything that actually needs resolution runs from that phase on.
+ */
+function tickInterval(): number {
+  const current = mix;
+  if (!current || current.phase !== 'armed') return TICK_MS;
+  const from = decks()[current.fromIndex];
+  const runway = current.outCue - current.preroll - (from.currentTime || 0);
+  return runway > ARMED_FINE_LEAD ? ARMED_TICK_MS : TICK_MS;
+}
+
+/** Bumped by every stop, so a timeout already in flight cannot re-arm itself. */
+let tickerToken = 0;
+
+function startTicker(): void {
+  stopTicker();
+  const token = tickerToken;
+  const run = () => {
+    mixTimer = null;
+    tick();
+    // tick() may have finished, failed or cancelled the mix, each of which
+    // stops the ticker. Reviving it here would outlive the transition.
+    if (token !== tickerToken) return;
+    mixTimer = setTimeout(run, tickInterval());
+  };
+  mixTimer = setTimeout(run, tickInterval());
+}
+
 function stopTicker(): void {
-  if (mixTimer) clearInterval(mixTimer);
+  tickerToken += 1;
+  if (mixTimer) clearTimeout(mixTimer);
   mixTimer = null;
 }
 
@@ -740,8 +815,10 @@ export const audioService = {
     };
     callbacks.onArmed?.();
     stopTicker();
-    mixTimer = setInterval(tick, TICK_MS);
-    // A manual skip should not wait a whole tick to become audible.
+    // A manual skip should not wait a whole tick to become audible. Running it
+    // before the ticker starts also means the first interval is picked from the
+    // phase the skip left behind rather than from `armed`.
     if (manual) tick();
+    if (mix) startTicker();
   },
 };

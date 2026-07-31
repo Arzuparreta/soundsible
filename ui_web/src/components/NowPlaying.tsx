@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch, untrack, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { state, actions, isSavedTrack } from '../stores';
 import { coverUrl } from '../lib/media';
@@ -278,9 +278,22 @@ export function NowPlaying(props: {
       : { background: 'var(--bg-raised)' };
   };
 
+  /**
+   * Playback position, but only while the sheet is on screen.
+   *
+   * The sheet is mounted whether it is open or not, so a plain read of
+   * `currentTime` rewrites the scrubber, its gradient track and both clocks on
+   * every `timeupdate` — four times a second, for the whole song, behind a
+   * surface nobody can see. Closed, this holds its last value and stops
+   * subscribing; reopening recomputes it before the first frame.
+   */
+  const position = createMemo(() => (
+    props.surfaceOpen ? state.playback.currentTime : untrack(() => state.playback.currentTime)
+  ));
+
   const seekPct = () => {
     const d = state.playback.duration;
-    return d > 0 ? Math.min(100, (state.playback.currentTime / d) * 100) : 0;
+    return d > 0 ? Math.min(100, (position() / d) * 100) : 0;
   };
   const volPct = () => Math.round((state.playback.muted ? 0 : state.playback.volume) * 100);
   const [contextExpanded, setContextExpanded] = createSignal(false);
@@ -791,14 +804,14 @@ export function NowPlaying(props: {
               type="range"
               min={0}
               max={Math.max(1, Math.floor(state.playback.duration))}
-              value={Math.floor(state.playback.currentTime)}
+              value={Math.floor(position())}
               step={1}
               style={{ '--fill': `${seekPct()}%` }}
               aria-label={tr('nowPlaying.seekLabel')}
               onInput={(e) => actions.seek(Number(e.currentTarget.value))}
             />
             <div class={styles.times}>
-              <span>{clockTime(state.playback.currentTime)}</span>
+              <span>{clockTime(position())}</span>
               <span>{clockTime(state.playback.duration)}</span>
             </div>
             </div>

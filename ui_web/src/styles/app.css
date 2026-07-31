@@ -70,14 +70,48 @@ body {
 #app {
   height: 100%;
   transform-origin: center;
-  transition: transform 520ms var(--ease-out), filter 420ms var(--ease-out), opacity 420ms var(--ease-out);
+  transition:
+    transform 520ms var(--ease-out),
+    filter 420ms var(--ease-out),
+    opacity 420ms var(--ease-out),
+    visibility 0s linear 0s;
+}
+
+/* The player surface is a portal onto <body>: full viewport, fixed, and opaque
+   (--stage-base). Once it has finished opening there is not one pixel of the app
+   shell left on screen — yet the browser kept rendering all of it, including a
+   dock that repaints whenever the progress line moves, and, under Auto, kept
+   re-running the blur below over that invisible tree every frame.
+   `visibility` because it preserves layout and scroll offsets: reopening is free
+   and scroll restoration still reads the right numbers. The flip waits out the
+   handoff, then the shell simply stops existing for the renderer — and for
+   screen readers, which could previously still walk the library underneath. */
+html[data-player-surface] #app {
+  pointer-events: none;
+}
+
+/* Not while a close gesture is dragging the surface off: that uncovers the shell
+   progressively, so it has to be there. PlayerSurface sets the flag in the same
+   step that claims the drag, before the surface has moved a pixel. */
+html[data-player-surface]:not([data-player-swiping]) #app {
+  visibility: hidden;
+  /* Hide late (after the surface has landed), reveal immediately on the way back
+     — the base rule's 0s delay handles the return. */
+  transition-delay: 0s, 0s, 0s, 520ms;
 }
 
 html[data-player-surface='auto'] #app {
   opacity: 0.42;
   filter: blur(16px) saturate(0.75);
   transform: scale(0.96);
-  pointer-events: none;
+}
+
+/* Reduced motion collapses the durations (tokens.css) but not the delays, and a
+   handoff that no longer animates has nothing to wait out. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-player-surface]:not([data-player-swiping]) #app {
+    transition-delay: 0s;
+  }
 }
 
 /* A transform or filter on #app makes it the containing block for fixed

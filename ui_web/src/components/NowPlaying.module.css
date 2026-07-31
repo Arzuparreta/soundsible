@@ -1006,6 +1006,11 @@
   background: var(--accent);
   transform-origin: bottom;
   animation: eqBar 1s var(--ease-in-out) infinite;
+  /* The sheet stays mounted while it is closed — PlayerSurface keeps it around
+     so the carousel and the mobile panels survive a reopen — so the default is
+     stopped and the surface has to say it is on screen. Otherwise these run for
+     the whole song behind a hidden surface. */
+  animation-play-state: paused;
 }
 .eq i:nth-child(2) {
   animation-delay: 0.3s;
@@ -1013,6 +1018,10 @@
 .eq i:nth-child(3) {
   animation-delay: 0.6s;
 }
+:global([data-player-surface-open]) .eq i {
+  animation-play-state: running;
+}
+/* Last: same specificity as the rule above, and paused has to win. */
 .eq[data-paused] i {
   animation-play-state: paused;
 }

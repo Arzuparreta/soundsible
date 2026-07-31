@@ -48,7 +48,7 @@ export function OmniBar() {
           transport spinner and the subtitle, so it stays quiet until there is a
           real position to show. */}
       <div class={styles.progress}>
-        <div class={styles.progressFill} style={{ width: `${pct()}%` }} />
+        <div class={styles.progressFill} style={{ '--p': pct() / 100 }} />
       </div>
 
       <button

@@ -66,6 +66,8 @@ const { actions, apiMock, state } = vi.hoisted(() => ({
 vi.mock('../stores', () => ({
   actions,
   state,
+  // These tests render the booth on screen, which is what the surface flag means.
+  nowPlayingOpen: () => true,
   isFavouriteKeys: () => false,
   isSavedTrack: () => true,
   isSavedKeys: () => true,

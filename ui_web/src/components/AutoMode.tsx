@@ -1,5 +1,5 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import { actions, isSavedTrack, state } from '../stores';
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
+import { actions, isSavedTrack, nowPlayingOpen, state } from '../stores';
 import { api, type DjProfile } from '../lib/api';
 import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
@@ -259,9 +259,20 @@ export function AutoMode() {
     return track ? track.cover ?? coverUrl(track.id) : '';
   });
   const upcoming = createMemo(() => state.playback.queue.slice(Math.max(0, state.playback.index + 1)));
+  /**
+   * Playback position, but only while the booth is on screen.
+   *
+   * Closing the sheet does not end an Auto session — that is the point of it —
+   * so this component stays mounted and, without the gate, keeps feeding the
+   * progress bar, the clock and the cue countdown four times a second from
+   * behind a hidden surface. Reopening recomputes before the first frame.
+   */
+  const position = createMemo(() => (
+    nowPlayingOpen() ? state.playback.currentTime : untrack(() => state.playback.currentTime)
+  ));
   const progress = createMemo(() => {
     const duration = state.playback.duration;
-    return duration > 0 ? Math.min(100, (state.playback.currentTime / duration) * 100) : 0;
+    return duration > 0 ? Math.min(100, (position() / duration) * 100) : 0;
   });
   const backdropStyle = (): JSX.CSSProperties => {
     const url = art();
@@ -288,7 +299,7 @@ export function AutoMode() {
   const cueCountdown = createMemo(() => {
     const at = state.autoMode.transition.at;
     if (transitionState().status !== 'armed' || !at) return '';
-    const left = at - state.playback.currentTime;
+    const left = at - position();
     return left > 0 && left < 100 ? clockTime(left) : '';
   });
 
@@ -775,9 +786,9 @@ export function AutoMode() {
 
               <div class={styles.controls} inert={mobilePanel() !== 'closed' ? true : undefined}>
                 <div class={styles.seek}>
-                  <span class={styles.time}>{clockTime(state.playback.currentTime)}</span>
+                  <span class={styles.time}>{clockTime(position())}</span>
                   <div class={styles.progress}>
-                    <div class={styles.progressFill} style={{ width: `${progress()}%` }} />
+                    <div class={styles.progressFill} style={{ '--p': progress() / 100 }} />
                   </div>
                   <span class={styles.time}>{clockTime(state.playback.duration)}</span>
                 </div>

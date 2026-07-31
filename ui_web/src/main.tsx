@@ -51,8 +51,15 @@ function installViewportHeightSync() {
   const viewport = window.visualViewport;
   if (!viewport) return;
 
+  // `scroll` fires continuously while a page scrolls on mobile, and writing a
+  // custom property on <html> invalidates style for the whole document — so the
+  // height it did not change has to not be written.
+  let last = '';
   const sync = () => {
-    root.style.setProperty('--app-viewport-height', `${viewport.height}px`);
+    const next = `${viewport.height}px`;
+    if (next === last) return;
+    last = next;
+    root.style.setProperty('--app-viewport-height', next);
   };
 
   sync();

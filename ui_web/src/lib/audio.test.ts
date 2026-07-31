@@ -110,10 +110,17 @@ async function armed() {
   return { ...module, outgoing, incoming, handlers };
 }
 
-/** Move a deck's own clock, then let the mixer observe it. */
+/**
+ * Move a deck's own clock, then let the mixer observe it.
+ *
+ * Long enough to cover the coarse rate the supervisor drops to during the long
+ * `armed` wait — these tests jump the clock in whole seconds, which real
+ * playback never does, so they skip straight past the window where it tightens
+ * back up. The cadence itself is covered separately.
+ */
 async function play(deck: FakeAudio, position: number) {
   deck.currentTime = position;
-  await vi.advanceTimersByTimeAsync(50);
+  await vi.advanceTimersByTimeAsync(300);
 }
 
 beforeEach(() => {
@@ -187,6 +194,28 @@ describe('two-deck mixer', () => {
     await vi.advanceTimersByTimeAsync(5_000);
     expect(incoming.volume).toBe(held);
     expect(audioEl()).toBe(outgoing as unknown as HTMLAudioElement);
+  });
+
+  it('watches the armed runway coarsely and tightens up before the cue', async () => {
+    const { audioService, outgoing } = await armed();
+
+    // A transition is armed 45s ahead of the out-cue. Supervising that wait at
+    // mix resolution is ~1100 timer wakeups a track for a comparison that
+    // cannot come true yet, and it is enough on its own to keep a low-power CPU
+    // out of its deeper idle states. Far out, one tick does not fire in 40ms.
+    outgoing.currentTime = 101;
+    await vi.advanceTimersByTimeAsync(40);
+    expect(audioService.mixPhase()).toBe('armed');
+
+    // Inside the last couple of seconds of runway it is back to mix resolution,
+    // so the preroll still opens within a tick of the right moment. The cue is
+    // at 108: out_cue 110 less the 2s head start in_cue asks for.
+    await vi.advanceTimersByTimeAsync(300);
+    outgoing.currentTime = 107;
+    await vi.advanceTimersByTimeAsync(300);
+    outgoing.currentTime = 108.1;
+    await vi.advanceTimersByTimeAsync(40);
+    expect(audioService.mixPhase()).toBe('prerolling');
   });
 
   it('does not open both decks while their beat cues are still out of phase', async () => {

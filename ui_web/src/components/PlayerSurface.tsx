@@ -114,7 +114,12 @@ export function PlayerSurface() {
     const open = nowPlayingOpen();
     const activeAuto = open && auto();
     if (typeof document !== 'undefined') {
-      if (activeAuto) document.documentElement.dataset.playerSurface = 'auto';
+      // Which surface is up, not just whether it is Auto. The surface is a
+      // portal onto <body> at full viewport with an opaque base, so once it has
+      // finished opening the entire app shell behind it is unreachable and
+      // unseen — and app.css uses this to stop rendering it. Auto keeps its own
+      // value because it also owns the blurred handoff.
+      if (open) document.documentElement.dataset.playerSurface = activeAuto ? 'auto' : 'now-playing';
       else delete document.documentElement.dataset.playerSurface;
     }
     if (open && !wasOpen) {
@@ -162,12 +167,29 @@ export function PlayerSurface() {
     setPanel('stage');
   };
 
+  /**
+   * Claim or release the close gesture.
+   *
+   * Mirrored onto <html> because app.css stops rendering the app shell while the
+   * surface is up, and a drag uncovers it a few pixels at a time — the shell has
+   * to be back before the surface moves at all, or the gap behind it is blank.
+   */
+  const setSwiping = (on: boolean) => {
+    if (surfaceEl) {
+      if (on) surfaceEl.dataset.swiping = '';
+      else delete surfaceEl.dataset.swiping;
+    }
+    if (typeof document === 'undefined') return;
+    if (on) document.documentElement.dataset.playerSwiping = '';
+    else delete document.documentElement.dataset.playerSwiping;
+  };
+
   const closeSurface = (fromY = 0) => {
     if (!nowPlayingOpen()) return;
     if (surfaceEl) {
       // Synchronously, before `.open` goes: an inline transform left over from
       // the gesture would otherwise outrank the exit for a frame.
-      delete surfaceEl.dataset.swiping;
+      setSwiping(false);
       surfaceEl.style.transform = '';
       surfaceEl.style.setProperty('--surface-exit-from', `${Math.max(0, fromY)}px`);
     }
@@ -194,8 +216,8 @@ export function PlayerSurface() {
   const resetSwipe = () => {
     swipeStart = null;
     swipeActive = false;
+    setSwiping(false);
     if (!surfaceEl) return;
-    delete surfaceEl.dataset.swiping;
     surfaceEl.style.transform = '';
   };
 
@@ -249,7 +271,7 @@ export function PlayerSurface() {
         return;
       }
       swipeActive = true;
-      surfaceEl.dataset.swiping = '';
+      setSwiping(true);
     }
     if (event.cancelable) event.preventDefault();
     surfaceEl.style.transform = `translateY(${Math.max(0, dy)}px)`;
@@ -293,6 +315,7 @@ export function PlayerSurface() {
       surfaceEl?.removeEventListener('touchend', finishSwipe);
       surfaceEl?.removeEventListener('touchcancel', cancelSwipe);
       delete document.documentElement.dataset.playerSurface;
+      delete document.documentElement.dataset.playerSwiping;
     });
   });
 
