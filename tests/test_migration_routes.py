@@ -309,3 +309,43 @@ def test_play_timing_v2_bounds_samples_and_keeps_attempt_dimensions(tmp_path, mo
     assert row["egress"] == "relay"
     assert row["segments"]["click_to_playing_ms"] == 750
     assert "impossible_ms" not in row["segments"]
+
+
+def test_play_timing_keeps_audio_context_dimensions(tmp_path, monkeypatch):
+    """A silent player is only diagnosable with the audio session's own state.
+
+    Whether the context was running and whether the app was an installed PWA or
+    a browser tab are the two facts that separate "the mixing graph stopped
+    sounding" from "the stream never arrived", and neither fits in `segments`,
+    which only carries numbers.
+    """
+    monkeypatch.delenv("SOUNDSIBLE_TELEMETRY_ENABLED", raising=False)
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    app = Flask(__name__)
+    app.register_blueprint(playback_bp)
+    client = app.test_client()
+    play_tok = _agent_play(instance_db())
+
+    res = client.post(
+        "/api/playback/play-timing",
+        json={
+            "v": 2,
+            "phase": "ui_graph_state",
+            "failure_reason": "silent_output",
+            "context_state": "interrupted",
+            "display_mode": "standalone",
+            "segments": {"position_sec": 96, "resumed": True},
+        },
+        headers={"Authorization": f"Bearer {play_tok}"},
+    )
+    assert res.status_code == 200
+    row = json.loads(
+        (user_telemetry_dir() / "play-timing.jsonl").read_text(encoding="utf-8").strip().splitlines()[-1]
+    )
+    assert row["phase"] == "ui_graph_state"
+    assert row["context_state"] == "interrupted"
+    assert row["display_mode"] == "standalone"
+    # Seconds, not milliseconds: an `_ms` key over five minutes is dropped, and
+    # a podcast duration passes that comfortably.
+    assert row["segments"] == {"position_sec": 96, "resumed": True}

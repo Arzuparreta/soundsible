@@ -24,14 +24,48 @@ class FakeGainNode extends FakeAudioNode {
   gain = new FakeAudioParam();
 }
 
+class FakeAnalyserNode extends FakeAudioNode {
+  frequencyBinCount = 128;
+  fftSize = 256;
+  /** 128 is digital silence for 8-bit time-domain data. */
+  level = 200;
+  getByteTimeDomainData = vi.fn((target: Uint8Array) => target.fill(this.level));
+}
+
+const contexts: FakeAudioContext[] = [];
+
 class FakeAudioContext {
-  currentTime = 10;
+  constructor() {
+    contexts.push(this);
+  }
+
+  /** A context that is really rendering advances its own clock; the liveness
+   * probe reads exactly this. */
+  get currentTime() {
+    return this.state === 'running' ? Date.now() / 1000 : this.frozenAt;
+  }
+  frozenAt = 10;
   state = 'running';
   destination = new FakeAudioNode();
+  analyser = new FakeAnalyserNode();
   resume = vi.fn(async () => { this.state = 'running'; });
   suspend = vi.fn(async () => { this.state = 'suspended'; });
+  close = vi.fn(async () => { this.state = 'closed'; });
+  addEventListener = vi.fn();
   createGain = () => new FakeGainNode();
   createMediaElementSource = () => new FakeAudioNode();
+  createAnalyser = () => this.analyser;
+  sampleRate = 44100;
+  createBuffer = () => ({});
+  createBufferSource = () => ({ buffer: null, connect: () => {}, start: () => {} });
+}
+
+/** A context whose clock never moves: `running` in name only, which is how an
+ * interrupted iOS session presents itself. */
+class DeadAudioContext extends FakeAudioContext {
+  override get currentTime() {
+    return 10;
+  }
 }
 
 class FakeAudio extends EventTarget {
@@ -57,10 +91,13 @@ class FakeAudio extends EventTarget {
   play = vi.fn(async () => {
     this.paused = false;
     this.currentSrc = this.src;
+    this.dispatchEvent(new Event('play'));
   });
 
   pause = vi.fn(() => {
+    const wasPlaying = !this.paused;
     this.paused = true;
+    if (wasPlaying) this.dispatchEvent(new Event('pause'));
   });
 
   load = vi.fn();
@@ -125,6 +162,7 @@ async function play(deck: FakeAudio, position: number) {
 
 beforeEach(() => {
   created.length = 0;
+  contexts.length = 0;
   automatedCurves.length = 0;
   vi.useFakeTimers();
   vi.stubGlobal('Audio', FakeAudio);
@@ -235,6 +273,9 @@ describe('two-deck mixer', () => {
 
   it('schedules one continuous equal-power curve on the audio graph', async () => {
     vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    // The graph is built from a gesture now, never from the mixer's ticker.
+    expect(module.audioService.unlockAudio()).toBe(true);
     const { audioService, outgoing, incoming } = await armed();
     await play(outgoing, 108.5);
     incoming.currentTime = 2;
@@ -257,6 +298,103 @@ describe('two-deck mixer', () => {
     expect(outgoing.src).toBe('/current');
     expect(outgoing.volume).toBe(1);
     expect(incoming.src).toBe('');
+  });
+
+  it('spends a silent sample on every deck so a later start needs no gesture', async () => {
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+
+    // Playback permission is per element. The deck that will carry the *next*
+    // track is asked to play from an `ended` handler, which is not a gesture —
+    // so both decks have to have played once by the time that happens.
+    expect(created).toHaveLength(2);
+    for (const deck of created) {
+      expect(deck.play).toHaveBeenCalledOnce();
+      expect(deck.src).toMatch(/^data:audio\/wav/);
+    }
+
+    await vi.advanceTimersByTimeAsync(0);
+    // …and each gives its stream straight back, unmuted and empty.
+    for (const deck of created) {
+      expect(deck.src).toBe('');
+      expect(deck.muted).toBe(false);
+    }
+  });
+
+  it('never lets the unlock clip disturb a track that claimed the deck', async () => {
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    await module.audioService.load('/current');
+
+    await vi.advanceTimersByTimeAsync(0);
+    const active = module.audioEl() as unknown as FakeAudio;
+    expect(active.src).toBe('/current');
+    expect(active.paused).toBe(false);
+  });
+
+  it('keeps a staged deck so the next track starts without a request', async () => {
+    const module = await import('./audio');
+    const first = module.audioEl() as unknown as FakeAudio;
+    await module.audioService.load('/one');
+
+    module.audioService.stage('/two');
+    const idle = created.find((deck) => deck !== first)!;
+    expect(idle.src).toBe('/two');
+    expect(idle.load).toHaveBeenCalledTimes(1);
+    expect(idle.play).not.toHaveBeenCalled();
+
+    // The handover touches neither `src` nor the network: it is a deck swap.
+    const taken = module.audioService.takeStaged('/two');
+    expect(taken).not.toBeNull();
+    await taken;
+    expect(module.audioEl()).toBe(idle as unknown as HTMLAudioElement);
+    expect(idle.play).toHaveBeenCalledOnce();
+    expect(idle.load).toHaveBeenCalledTimes(1);
+    // The deck that finished released its stream instead of holding it open.
+    expect(first.src).toBe('');
+  });
+
+  it('refuses a staged deck that is holding a different track', async () => {
+    const module = await import('./audio');
+    await module.audioService.load('/one');
+    module.audioService.stage('/two');
+    expect(module.audioService.takeStaged('/three')).toBeNull();
+  });
+
+  it('abandons a graph that stops sounding and keeps the music going', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    const failures: unknown[] = [];
+    module.setGraphReporter((failure) => failures.push(failure));
+    expect(module.audioService.unlockAudio()).toBe(true);
+    expect(module.audioService.graphReady()).toBe(true);
+
+    const deck = module.audioEl() as unknown as FakeAudio;
+    await module.audioService.load('/current');
+    deck.currentTime = 10;
+    // Silence on the master bus while the media clock advances: the samples are
+    // not reaching the speakers, whatever the element and the context claim.
+    contexts.at(-1)!.analyser.level = 128;
+    for (let step = 0; step < 8; step += 1) {
+      deck.currentTime += 1;
+      await vi.advanceTimersByTimeAsync(500);
+    }
+
+    expect(module.audioService.graphReady()).toBe(false);
+    expect(failures).toHaveLength(1);
+    // New, unrouted decks, cued back to where the music was and playing again.
+    const rebuilt = module.audioEl() as unknown as FakeAudio;
+    expect(rebuilt).not.toBe(deck);
+    expect(rebuilt.src).toBe('/current');
+    expect(rebuilt.play).toHaveBeenCalled();
+  });
+
+  it('gives up on a context whose clock never starts, before routing anything', async () => {
+    vi.stubGlobal('AudioContext', DeadAudioContext);
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(module.audioService.graphReady()).toBe(false);
   });
 
   it('lets a listener skip straight into the blend that was already prepared', async () => {

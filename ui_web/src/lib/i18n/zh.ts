@@ -44,6 +44,8 @@ export const zh: Dict = {
     loading: '加载中…',
     buffering: '缓冲中…',
     reconnecting: '正在重新连接…',
+    findingMore: '正在寻找更多音乐…',
+    needsGesture: '点按播放以继续',
     unavailable: '不可用 — 点击重试',
   },
   nowPlaying: {
@@ -840,6 +842,7 @@ export const zh: Dict = {
     playlistCoverFailed: '无法更换封面',
     trackUnavailable: '无法播放这首歌曲',
     trackUnavailableSkipping: '歌曲不可用 — 跳到下一首',
+    audioNeedsGesture: '音频被中断 — 点按播放以继续',
   },
   password: {
     new: '新密码',

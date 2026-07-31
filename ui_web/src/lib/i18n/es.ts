@@ -44,6 +44,8 @@ export const es: Dict = {
     loading: 'Cargando…',
     buffering: 'Almacenando en búfer…',
     reconnecting: 'Reconectando…',
+    findingMore: 'Buscando más música…',
+    needsGesture: 'Toca play para reanudar',
     unavailable: 'No disponible — toca para reintentar',
   },
   nowPlaying: {
@@ -855,6 +857,7 @@ export const es: Dict = {
     playlistCoverFailed: 'No se pudo cambiar la portada',
     trackUnavailable: 'No se pudo reproducir esta canción',
     trackUnavailableSkipping: 'Canción no disponible — pasando a la siguiente',
+    audioNeedsGesture: 'El audio se interrumpió — toca play para reanudar',
   },
   password: {
     new: 'Contraseña nueva',

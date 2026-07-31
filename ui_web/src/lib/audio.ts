@@ -2,6 +2,15 @@ const VOLUME_KEY = 'volume';
 
 /** Media-clock supervision. Audio gain itself is sample-accurate automation. */
 const TICK_MS = 40;
+/** How often the output is checked for digital silence while a deck plays. */
+const AUDIBILITY_TICK_MS = 500;
+/** Silence this long, with the media clock advancing, means the graph is dead
+ * rather than the music being quiet. */
+const DEAD_GRAPH_MS = 2_500;
+/** 8-bit samples centre on 128; anything this close to it is not sound. */
+const SILENCE_EPSILON = 2;
+/** How long the context clock is given to prove it is running. */
+const PROBE_MS = 300;
 /** Supervision rate during the long `armed` wait, where a tick only compares
  * the media clock against the preroll point. See `tickInterval`. */
 const ARMED_TICK_MS = 250;
@@ -33,6 +42,36 @@ let deckEffects: DeckEffects[] | null = null;
 let masterGain: GainNode | null = null;
 let masterVolume = storedVolume();
 let allMuted = false;
+/** Peak limiter on the master bus, transparent until a blend needs it. */
+let limiter: DynamicsCompressorNode | null = null;
+/** Master-bus tap used to tell "quiet music" from "no output at all". */
+let analyser: AnalyserNode | null = null;
+
+/**
+ * Whether the decks are routed through the mixing graph.
+ *
+ * `unavailable` is always a decision about *this* page load and is never
+ * persisted: a context that could not run once — an iOS audio session that was
+ * interrupted, a device that had just switched to Bluetooth — says nothing about
+ * the next launch, and writing that verdict down would quietly leave a device
+ * without the real mixer for good.
+ */
+type GraphState = 'untested' | 'ready' | 'unavailable';
+let graphState: GraphState = 'untested';
+
+export interface GraphFailure {
+  reason: 'context_stalled' | 'silent_output';
+  /** Whether playback was restored on the replacement decks by itself. */
+  resumed: boolean;
+  contextState: string;
+  positionSec: number;
+}
+let graphReporter: ((failure: GraphFailure) => void) | null = null;
+
+/** Register the store's handler for a mixing graph that had to be abandoned. */
+export function setGraphReporter(fn: (failure: GraphFailure) => void): void {
+  graphReporter = fn;
+}
 
 /** Read the persisted volume without forcing the lazy elements into existence. */
 export function storedVolume(): number {
@@ -41,10 +80,33 @@ export function storedVolume(): number {
   return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
 }
 
+/**
+ * Deck-level listeners, kept so replacement decks inherit them.
+ *
+ * The store binds playback events once, at startup. Recovering from a dead
+ * mixing graph means throwing both elements away and building new ones (their
+ * output only exists inside a graph that has stopped sounding), and listeners
+ * bound directly to the old elements would not follow. Registering them here
+ * makes deck replacement an operation the rest of the app never has to know
+ * about.
+ */
+interface DeckBinding {
+  type: string;
+  handler: (event: Event) => void;
+}
+const deckBindings: DeckBinding[] = [];
+
+/** Bind `handler` to every deck, now and after any replacement. */
+export function onDeckEvent(type: string, handler: (event: Event) => void): void {
+  deckBindings.push({ type, handler });
+  if (elements) for (const deck of elements) deck.addEventListener(type, handler);
+}
+
 function createDeck(): HTMLAudioElement {
   const deck = new Audio();
   deck.preload = 'auto';
   if ('preservesPitch' in deck) deck.preservesPitch = true;
+  for (const binding of deckBindings) deck.addEventListener(binding.type, binding.handler);
   return deck;
 }
 
@@ -117,37 +179,63 @@ function setDeckGain(index: number, value: number): void {
 }
 
 /**
- * Build the mixing graph.
+ * Wake the audio session, from the first user gesture of the session.
  *
- * Called from the gesture that opens Auto Mode, never from a timer: once an
- * element is routed through an AudioContext its output only exists inside the
- * graph, so a context that cannot leave `suspended` would silence playback
- * outright. Inside a user gesture `resume()` is reliable, and a context that
- * still refuses to run leaves the elements untouched and the mixer falls back
- * to element volume.
+ * Order is everything here, and getting it wrong is what silenced Auto Mode in
+ * the installed iOS app. Routing an element that is *already playing* into a
+ * freshly created context, with a `resume()` nobody waited for, is the one
+ * sequence WebKit punishes — and `createMediaElementSource` is irreversible, so
+ * the punishment is total silence with the transport still claiming to play.
+ *
+ * So: create and unlock the context in the gesture, prime the session with a
+ * silent buffer (what actually flips WebKit's audio session into a playback
+ * category), and route the decks *before either has ever played*. That is the
+ * sequence that works, and it is why this runs at the first tap rather than at
+ * the tap that opens Auto Mode.
+ *
+ * Idempotent and safe to call from anywhere. `probeContext` and the audibility
+ * watch behind it are the proof that it worked; neither is trusted on faith.
  */
-export function ensureMixGraph(): boolean {
-  if (audioContext && deckGains && masterGain) return true;
+export function unlockAudio(): boolean {
+  unlockDecks();
+  if (graphState !== 'untested') {
+    resumeContext();
+    return graphState === 'ready';
+  }
   const Context = globalThis.AudioContext
     ?? (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!Context) return false;
+  if (!Context) {
+    graphState = 'unavailable';
+    return false;
+  }
   try {
     const list = decks();
     const context = new Context();
     void context.resume?.().catch(() => {});
+    primeAudioSession(context);
     const master = context.createGain();
     // Reach the speakers before anything is routed in: a graph that throws
     // halfway would otherwise leave a deck connected to nothing audible.
     if (typeof context.createDynamicsCompressor === 'function') {
-      const limiter = context.createDynamicsCompressor();
-      limiter.threshold.value = -6;
-      limiter.knee.value = 8;
-      limiter.ratio.value = 6;
-      limiter.attack.value = 0.003;
-      limiter.release.value = 0.18;
-      master.connect(limiter).connect(context.destination);
+      const peak = context.createDynamicsCompressor();
+      // Idle threshold is 0 dBFS — nothing below full scale is touched, so
+      // ordinary playback sounds exactly as it does with no graph at all. Only
+      // a blend, where two tracks sum, pulls it down to catch the overshoot.
+      peak.threshold.value = 0;
+      peak.knee.value = 8;
+      peak.ratio.value = 6;
+      peak.attack.value = 0.003;
+      peak.release.value = 0.18;
+      master.connect(peak).connect(context.destination);
+      limiter = peak;
     } else {
       master.connect(context.destination);
+    }
+    if (typeof context.createAnalyser === 'function') {
+      const tap = context.createAnalyser();
+      tap.fftSize = 256;
+      master.connect(tap);
+      analyser = tap;
     }
     master.gain.value = masterVolume;
     const effects: DeckEffects[] = [];
@@ -178,14 +266,300 @@ export function ensureMixGraph(): boolean {
     deckGains = gains;
     deckEffects = effects;
     masterGain = master;
+    graphState = 'ready';
+    bindAudibilityTriggers();
+    watchContextState(context);
+    probeContext(context);
+    if (!decks()[activeIndex].paused) startAudibilityWatch();
     return true;
   } catch {
-    audioContext = null;
-    deckGains = null;
-    deckEffects = null;
-    masterGain = null;
+    discardGraph();
+    graphState = 'unavailable';
     applyDeckVolume();
     return false;
+  }
+}
+
+/** A 44-byte WAV holding one silent sample. */
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
+
+/**
+ * Let each deck play once, from inside the gesture.
+ *
+ * Playback permission is granted per element, not per page: a deck that has
+ * never sounded is still locked, and the first thing it is ever asked to do is
+ * start the next track — from an `ended` handler or the mixer's ticker, neither
+ * of which carries a gesture. Spending one silent sample on each deck here is
+ * what makes those later, gestureless starts legal.
+ *
+ * Only ever touches an empty deck, and re-checks before cleaning up, so it can
+ * never interfere with a real track that started in the same gesture.
+ */
+const unlockedDecks = new WeakSet<HTMLAudioElement>();
+
+function unlockDecks(): void {
+  for (const deck of decks()) {
+    // Once per element, and never over a deck that is holding a track: this is
+    // called from every gesture, including typing in a search field. A deck only
+    // counts as unlocked once a play actually succeeded, so a call that was not
+    // really a gesture leaves it to be retried by the next one.
+    if (unlockedDecks.has(deck)) continue;
+    if (deck.getAttribute('src') !== null || deck.currentSrc) continue;
+    deck.muted = true;
+    deck.src = SILENT_WAV;
+    const release = () => {
+      deck.muted = allMuted;
+      if (deck.src !== SILENT_WAV) return; // a real track claimed this deck
+      deck.pause();
+      deck.removeAttribute('src');
+      deck.load();
+    };
+    void deck.play().then(
+      () => {
+        unlockedDecks.add(deck);
+        release();
+      },
+      release,
+    );
+  }
+}
+
+/**
+ * Start and immediately end one silent sample.
+ *
+ * A context can report `running` while the platform has not actually given the
+ * page an audio session; pushing a real buffer through it is what claims one.
+ */
+function primeAudioSession(context: AudioContext): void {
+  if (typeof context.createBuffer !== 'function' || typeof context.createBufferSource !== 'function') return;
+  try {
+    const buffer = context.createBuffer(1, 1, context.sampleRate || 44100);
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+    source.start(0);
+  } catch {
+    /* a context that refuses a one-sample buffer is caught by the probe */
+  }
+}
+
+/** True once `resume()` has been asked for; the answer is the probe's job. */
+function resumeContext(): void {
+  if (audioContext && audioContext.state !== 'running') {
+    void audioContext.resume?.().catch(() => {});
+  }
+}
+
+/**
+ * Confirm the context is really rendering.
+ *
+ * `state === 'running'` is a claim, not evidence: an interrupted iOS context can
+ * report it while its clock stands still. A clock that advances is the only
+ * proof that samples are being produced, and by the time this runs the decks are
+ * already routed — so a failure here has to be recovered from, not just noted.
+ */
+function probeContext(context: AudioContext): void {
+  const startedAt = context.currentTime;
+  setTimeout(() => {
+    if (audioContext !== context || graphState !== 'ready') return;
+    if (context.state === 'running' && context.currentTime > startedAt) return;
+    void context.resume?.().catch(() => {});
+    setTimeout(() => {
+      if (audioContext !== context || graphState !== 'ready') return;
+      if (context.state === 'running' && context.currentTime > startedAt) return;
+      abandonGraph('context_stalled');
+    }, PROBE_MS);
+  }, PROBE_MS);
+}
+
+/** A context can be interrupted behind our back — a call, Siri, a Bluetooth
+ * route change on the way into a car. None of those resume on their own. */
+function watchContextState(context: AudioContext): void {
+  if (typeof context.addEventListener !== 'function') return;
+  context.addEventListener('statechange', () => {
+    if (audioContext !== context || graphState !== 'ready') return;
+    if (context.state !== 'running') void context.resume?.().catch(() => {});
+  });
+}
+
+let audibilityTimer: ReturnType<typeof setInterval> | null = null;
+let silenceSince: number | null = null;
+let lastAudiblePosition = -1;
+let silenceProbe: Uint8Array<ArrayBuffer> | null = null;
+let audibilityBound = false;
+
+/** Watch only while something is playing: a paused player is silent on purpose,
+ * and a timer that runs anyway is exactly the kind of idle wakeup the player
+ * just finished getting rid of. */
+function bindAudibilityTriggers(): void {
+  if (audibilityBound) return;
+  audibilityBound = true;
+  onDeckEvent('play', (event) => {
+    if (isActiveDeck(event.currentTarget)) startAudibilityWatch();
+  });
+  onDeckEvent('pause', (event) => {
+    if (isActiveDeck(event.currentTarget)) stopAudibilityWatch();
+  });
+}
+
+function startAudibilityWatch(): void {
+  if (audibilityTimer || graphState !== 'ready' || !analyser) return;
+  silenceSince = null;
+  lastAudiblePosition = -1;
+  audibilityTimer = setInterval(checkAudible, AUDIBILITY_TICK_MS);
+}
+
+function stopAudibilityWatch(): void {
+  if (audibilityTimer) clearInterval(audibilityTimer);
+  audibilityTimer = null;
+  silenceSince = null;
+}
+
+/**
+ * Catch a graph that has stopped sounding.
+ *
+ * Only a deck whose media clock is advancing can be judged: a buffering or
+ * paused deck is legitimately silent. Against that, digital silence on the
+ * master bus means the samples are not reaching the speakers, whatever the
+ * element and the context claim.
+ */
+function checkAudible(): void {
+  if (graphState !== 'ready' || !analyser) {
+    stopAudibilityWatch();
+    return;
+  }
+  const deck = decks()[activeIndex];
+  if (deck.paused || deck.ended) {
+    silenceSince = null;
+    return;
+  }
+  const position = deck.currentTime || 0;
+  const advancing = position > lastAudiblePosition + 0.05;
+  lastAudiblePosition = position;
+  if (!advancing) {
+    // Buffering, not silence. The store's own stall recovery owns this case.
+    silenceSince = null;
+    return;
+  }
+  if (audioContext && audioContext.state !== 'running') void audioContext.resume?.().catch(() => {});
+  if (!silenceProbe || silenceProbe.length !== analyser.frequencyBinCount) {
+    silenceProbe = new Uint8Array(analyser.frequencyBinCount);
+  }
+  analyser.getByteTimeDomainData(silenceProbe);
+  let peak = 0;
+  for (const sample of silenceProbe) peak = Math.max(peak, Math.abs(sample - 128));
+  if (peak > SILENCE_EPSILON) {
+    silenceSince = null;
+    return;
+  }
+  if (silenceSince === null) {
+    silenceSince = Date.now();
+    return;
+  }
+  if (Date.now() - silenceSince >= DEAD_GRAPH_MS) abandonGraph('silent_output');
+}
+
+function discardGraph(): void {
+  stopAudibilityWatch();
+  const context = audioContext;
+  audioContext = null;
+  deckGains = null;
+  deckEffects = null;
+  masterGain = null;
+  limiter = null;
+  analyser = null;
+  silenceProbe = null;
+  if (context && typeof context.close === 'function') void context.close().catch(() => {});
+}
+
+/**
+ * Give up on a graph that is not sounding, without giving up on the music.
+ *
+ * There is no way to unroute an element, so the elements go too: new decks are
+ * built, the listeners registered through `onDeckEvent` follow them, and what
+ * was playing is restored where it left off. The mixer keeps working on element
+ * volume for the rest of this page load, and the next one tries the real graph
+ * again — a device is never written off.
+ */
+function abandonGraph(reason: GraphFailure['reason']): void {
+  if (graphState !== 'ready') return;
+  const contextState = audioContext?.state ?? 'closed';
+  const previous = decks()[activeIndex];
+  const restore = {
+    url: previous.currentSrc || previous.getAttribute('src') || '',
+    position: previous.currentTime || 0,
+    rate: previous.playbackRate || 1,
+    wasPlaying: !previous.paused && !previous.ended,
+  };
+  graphState = 'unavailable';
+  cancelMix('failed');
+  stopRateReturn();
+  for (const deck of decks()) deck.pause();
+  discardGraph();
+
+  loadSeq += 1;
+  elements = [createDeck(), createDeck()];
+  activeIndex = 0;
+  mixGains[0] = 1;
+  mixGains[1] = 0;
+  stagedUrl = '';
+  applyDeckVolume();
+  for (const deck of elements) deck.muted = allMuted;
+
+  let resumed = false;
+  if (restore.url) {
+    const deck = elements[0];
+    const token = loadSeq;
+    deck.src = restore.url;
+    deck.playbackRate = restore.rate;
+    const cue = () => {
+      if (token !== loadSeq) return;
+      const duration = deck.duration;
+      deck.currentTime = Number.isFinite(duration) && duration > 0
+        ? Math.min(restore.position, Math.max(0, duration - 0.05))
+        : restore.position;
+    };
+    if (deck.readyState >= 1) cue();
+    else deck.addEventListener('loadedmetadata', cue, { once: true });
+    if (restore.wasPlaying) {
+      resumed = true;
+      void deck.play().catch(() => {
+        // Some platforms want a fresh gesture for an element that has never
+        // played. The store turns this into a visible "tap to resume".
+        graphReporter?.({ reason, resumed: false, contextState, positionSec: restore.position });
+      });
+    }
+  }
+  // Whichever deck is still empty is locked again; unlock it now so the track
+  // after this one can start without a gesture the listener will not be there
+  // to give. Best effort — this does not run from one.
+  unlockDecks();
+  graphReporter?.({ reason, resumed, contextState, positionSec: restore.position });
+}
+
+/** Whether the decks are routed through a graph that is believed to be sounding. */
+export function graphReady(): boolean {
+  return graphState === 'ready' && Boolean(audioContext && deckGains && masterGain);
+}
+
+/**
+ * Arm or release the master limiter.
+ *
+ * Two decks summing can overshoot; one deck cannot. Keeping the threshold at
+ * full scale outside a blend is what lets every listener stay routed through the
+ * graph without the mixer colouring ordinary playback.
+ */
+function setBlendLimiter(active: boolean): void {
+  if (!limiter || !audioContext) return;
+  const now = audioContext.currentTime;
+  const target = active ? -6 : 0;
+  const param = limiter.threshold;
+  param.cancelScheduledValues(now);
+  param.setValueAtTime(param.value, now);
+  if (typeof param.linearRampToValueAtTime === 'function') {
+    param.linearRampToValueAtTime(target, now + 0.25);
+  } else {
+    param.value = target;
   }
 }
 
@@ -314,6 +688,7 @@ function scheduleCurve(param: AudioParam | undefined, values: number[], duration
 /** Schedule one continuous curve; the supervisory timer never rewrites it. */
 function scheduleCrossfade(current: ActiveMix): void {
   if (!deckGains || !audioContext) return;
+  setBlendLimiter(true);
   const points = 96;
   const incoming = Array.from(
     { length: points },
@@ -439,6 +814,7 @@ function cancelMix(reason: MixCancelReason): void {
   mixGeneration += 1;
   stopTicker();
   mix = null;
+  setBlendLimiter(false);
   if (!current) return;
   const keep = current.dominant ? current.toIndex : current.fromIndex;
   const drop = 1 - keep;
@@ -458,6 +834,7 @@ function finishMix(): void {
   const incoming = decks()[current.toIndex];
   stopTicker();
   mix = null;
+  setBlendLimiter(false);
   setDeckGain(current.toIndex, 1);
   setDeckGain(current.fromIndex, 0);
   resetDeckEffects(current.toIndex);
@@ -477,6 +854,7 @@ function failMix(error: unknown): void {
   mixGeneration += 1;
   stopTicker();
   mix = null;
+  setBlendLimiter(false);
   const keep = current.dominant ? current.toIndex : current.fromIndex;
   activeIndex = keep;
   setDeckGain(keep, 1);
@@ -580,6 +958,9 @@ export function isCurrentLoad(token: number): boolean {
   return token === loadSeq;
 }
 
+/** The URL cued up on the idle deck, if any. See `stage`. */
+let stagedUrl = '';
+
 export const audioService = {
   /**
    * Point the active deck at `url` and start playing.
@@ -671,12 +1052,19 @@ export const audioService = {
     }
     return audioEl().play();
   },
-  /** Pause playback. During a blend both decks stop together and the crossfade
-   * freezes where it stands, because it advances on the media clock. */
+  /**
+   * Pause playback. During a blend both decks stop together and the crossfade
+   * freezes where it stands, because it advances on the media clock.
+   *
+   * The context is deliberately left running. Suspending it costs nothing to
+   * resume from a page gesture but a great deal from anywhere else, and the
+   * play that follows a pause in a car arrives through MediaSession — a
+   * lock-screen or steering-wheel button, not a tap on the page. A suspended
+   * context that will not come back is silence; an idle one is a rounding error.
+   */
   pause(): void {
     if (mix) {
       for (const deck of decks()) deck.pause();
-      if (audioContext?.state === 'running') void audioContext.suspend().catch(() => {});
       return;
     }
     audioEl().pause();
@@ -686,7 +1074,9 @@ export const audioService = {
   stop(): void {
     loadSeq += 1;
     cancelMix('stop');
+    stagedUrl = '';
     detach(audioEl());
+    detach(decks()[1 - activeIndex]);
   },
   seek(t: number): void {
     cancelMix('seek');
@@ -712,7 +1102,69 @@ export const audioService = {
     allMuted = muted;
     for (const deck of decks()) deck.muted = muted;
   },
-  ensureMixGraph,
+  unlockAudio,
+  graphReady,
+
+  /**
+   * Cue the next track on the idle deck without playing it.
+   *
+   * This is the whole answer to "the song ended and nothing followed". A track
+   * that ends with its successor already loaded hands over inside the `ended`
+   * handler itself — no network, no `src` assignment, no gap — which is both
+   * instant and the only shape of continuation a phone with its screen off
+   * reliably allows. Waiting until the track is over to ask the network for the
+   * next one is what turned a moment of bad signal into silence for the rest of
+   * the journey.
+   */
+  stage(url: string): void {
+    if (mix || !url) return;
+    const index = 1 - activeIndex;
+    const idle = decks()[index];
+    if (stagedUrl === url && (idle.getAttribute('src') !== null || idle.currentSrc)) return;
+    stagedUrl = url;
+    setDeckGain(index, 0);
+    idle.muted = allMuted;
+    idle.playbackRate = 1;
+    idle.src = url;
+    idle.load();
+  },
+
+  /** Release the idle deck's stream — the staged track is no longer next. */
+  clearStaged(): void {
+    if (mix || !stagedUrl) return;
+    stagedUrl = '';
+    detach(decks()[1 - activeIndex]);
+  },
+
+  /**
+   * Hand playback to the staged deck, if it is holding exactly `url`.
+   *
+   * Returns null when there is nothing usable staged, so the caller falls back
+   * to an ordinary load.
+   */
+  takeStaged(url: string): Promise<void> | null {
+    if (mix || !url || stagedUrl !== url) return null;
+    const toIndex = 1 - activeIndex;
+    const to = decks()[toIndex];
+    if (to.readyState < 2) return null;
+    const fromIndex = activeIndex;
+    const token = ++loadSeq;
+    stagedUrl = '';
+    stopRateReturn();
+    to.playbackRate = 1;
+    // Ownership moves first: the outgoing deck's `pause` and `error` from the
+    // release below then belong to a deck the store is no longer listening to.
+    activeIndex = toIndex;
+    setDeckGain(toIndex, 1);
+    setDeckGain(fromIndex, 0);
+    const started = to.play().catch((err: unknown) => {
+      if (token !== loadSeq) return;
+      if (err instanceof Error && err.name === 'AbortError') return;
+      throw err;
+    });
+    detach(decks()[fromIndex]);
+    return started;
+  },
   mixPhase(): MixPhase {
     return mix?.phase ?? 'idle';
   },
@@ -754,11 +1206,13 @@ export const audioService = {
   ): void {
     cancelMix('superseded');
     const generation = ++mixGeneration;
-    ensureMixGraph();
+    // No graph is built here. Routing an element into an AudioContext is
+    // irreversible, and this runs from the mixer's ticker — a timer is the one
+    // place it must never happen. `unlockAudio` owns that, from a gesture.
     // Deliberately not awaited: the mix has to be armed before this function
-    // returns, or the caller's own "is a handoff prepared?" check races it. The
-    // graph is only touched later, by which point the context has resumed.
-    if (audioContext?.state === 'suspended') void audioContext.resume().catch(() => {});
+    // returns, or the caller's own "is a handoff prepared?" check races it.
+    if (audioContext && audioContext.state !== 'running') void audioContext.resume?.().catch(() => {});
+    stagedUrl = '';
 
     const fromIndex = activeIndex;
     const toIndex = 1 - activeIndex;

@@ -44,6 +44,8 @@ export const fr: Dict = {
     loading: 'Chargement…',
     buffering: 'Mise en mémoire tampon…',
     reconnecting: 'Reconnexion…',
+    findingMore: 'Recherche d’autres morceaux…',
+    needsGesture: 'Appuyez sur lecture pour reprendre',
     unavailable: 'Indisponible — touchez pour réessayer',
   },
   nowPlaying: {
@@ -863,6 +865,7 @@ export const fr: Dict = {
     playlistCoverFailed: 'Impossible de changer la pochette',
     trackUnavailable: 'Impossible de lire ce morceau',
     trackUnavailableSkipping: 'Morceau indisponible — on passe au suivant',
+    audioNeedsGesture: 'Audio interrompu — appuyez sur lecture pour reprendre',
   },
   password: {
     new: 'Nouveau mot de passe',

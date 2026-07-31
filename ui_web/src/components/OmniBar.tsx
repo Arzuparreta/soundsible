@@ -15,6 +15,8 @@ export function OmniBar() {
    * there is something more urgent to report. */
   const subtitle = createMemo(() => {
     if (failed()) return t('omnibar.unavailable');
+    if (state.playback.needsGesture) return t('omnibar.needsGesture');
+    if (state.playback.phase === 'starved') return t('omnibar.findingMore');
     if (state.playback.phase === 'recovering') return t('omnibar.reconnecting');
     if (state.playback.phase === 'buffering') return t('omnibar.buffering');
     if (loading()) return t('omnibar.loading');

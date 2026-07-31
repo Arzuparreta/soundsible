@@ -127,10 +127,18 @@ interface GeneratedSession {
 }
 
 const TARGET_LOOKAHEAD = 8;
+/**
+ * How thin the generated lane may get before it is refilled.
+ *
+ * Sized for a bad connection rather than a good one: on a drive, the refill that
+ * matters is the one that had time to fail, back off and succeed before the
+ * listener reaches the end of the lane. Three tracks of warning was enough on
+ * Wi-Fi and not enough on a phone changing cells.
+ */
 const REFILL_THRESHOLD: Record<ListeningPlanIntent, number> = {
-  autoplay: 3,
-  radio: 4,
-  auto_mode: 4,
+  autoplay: 5,
+  radio: 5,
+  auto_mode: 5,
 };
 
 function sessionId(): string {
@@ -245,8 +253,17 @@ export class GeneratedQueueController {
     this.recent = [identity, ...this.recent.filter((value) => value !== identity)].slice(0, RECENT_MAX);
   }
 
+  /**
+   * Try again after a failed plan.
+   *
+   * Runs for every intent, including Autoplay. It used to be limited to
+   * `continuous` sessions, which meant a single failed request — one tunnel, one
+   * cell handover — left the invisible lane empty for good, and the music simply
+   * ended when the queue ran out. Autoplay is no less continuous to the listener
+   * than Radio is; it just does not say so on screen.
+   */
   private scheduleRetry(): void {
-    if (!this.session?.continuous || this.retryTimer) return;
+    if (!this.session || this.retryTimer) return;
     const delay = RETRY_DELAYS[Math.min(this.retryStep, RETRY_DELAYS.length - 1)];
     this.retryStep += 1;
     this.retryTimer = setTimeout(() => {

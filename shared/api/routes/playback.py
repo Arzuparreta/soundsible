@@ -877,6 +877,11 @@ def playback_play_timing():
             "terminal_state": 32,
             "egress": 32,
             "failure_reason": 64,
+            # Web Audio context state and standalone-vs-browser, so a silent
+            # player can be told apart from a suspended audio session after the
+            # fact instead of being guessed at.
+            "context_state": 32,
+            "display_mode": 32,
         }
         for key, max_len in string_fields.items():
             value = data.get(key)

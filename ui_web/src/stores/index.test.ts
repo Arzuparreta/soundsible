@@ -94,7 +94,11 @@ async function loadStore(
     setVolume: vi.fn(),
     setMuted: vi.fn(),
     getVolume: vi.fn(() => 1),
-    ensureMixGraph: vi.fn(() => false),
+    unlockAudio: vi.fn(() => false),
+    graphReady: vi.fn(() => false),
+    stage: vi.fn(),
+    clearStaged: vi.fn(),
+    takeStaged: vi.fn(() => null),
     mixPhase: vi.fn(() => 'idle' as const),
     mixIsDominant: vi.fn(() => false),
     cancelMix: vi.fn(),
@@ -103,12 +107,26 @@ async function loadStore(
     ...audioOverrides,
   };
 
-  vi.doMock('../lib/api', () => ({ api }));
+  // `request` is the raw helper the discover cache uses directly; initStore
+  // warms it, so the mock has to cover it too.
+  vi.doMock('../lib/api', () => ({ api, request: vi.fn().mockResolvedValue({}) }));
   const deck = { duration: 180, currentTime: 0, paused: false, ended: false } as HTMLAudioElement;
+  /** Media events the store bound, so a test can fire one the way a deck would. */
+  const deckHandlers = new Map<string, ((event: Event) => void)[]>();
+  const fireDeckEvent = (type: string) => {
+    for (const handler of deckHandlers.get(type) ?? []) {
+      handler({ currentTarget: deck } as unknown as Event);
+    }
+  };
   vi.doMock('../lib/audio', () => ({
     audioEl: vi.fn(() => deck),
-    eachDeck: vi.fn(),
+    onDeckEvent: vi.fn((type: string, handler: (event: Event) => void) => {
+      const list = deckHandlers.get(type) ?? [];
+      list.push(handler);
+      deckHandlers.set(type, list);
+    }),
     isActiveDeck: vi.fn(() => true),
+    setGraphReporter: vi.fn(),
     audioService,
     storedVolume: () => 1,
     isCurrentLoad: () => true,
@@ -131,10 +149,13 @@ async function loadStore(
     },
   }));
   vi.doMock('../lib/haptics', () => ({ vibrate: vi.fn() }));
-  vi.doMock('../lib/socket', () => ({ createSocket: vi.fn() }));
+  vi.doMock('../lib/socket', () => ({
+    createSocket: vi.fn(() => ({ on: vi.fn(), emit: vi.fn(), disconnect: vi.fn() })),
+    dispatchDiscoverSeed: vi.fn(),
+  }));
 
   const store = await import('./index');
-  return { ...store, api, audioService };
+  return { ...store, api, audioService, deck, fireDeckEvent };
 }
 
 beforeEach(() => {
@@ -1061,3 +1082,62 @@ function state_favourite_after_delete() {
     },
   ];
 }
+
+describe('the end of a track', () => {
+  /** A store with the media listeners bound, one track playing, and the deck
+   * reporting whatever the test needs it to. */
+  async function playing(queue = [t1, t2]) {
+    const store = await loadStore();
+    store.initStore();
+    store.actions.playFrom(queue, 0);
+    return { ...store, deck: store.deck as unknown as { duration: number; currentTime: number } };
+  }
+
+  it('recovers a stream that was cut instead of skipping the rest of the song', async () => {
+    const { state, deck, fireDeckEvent, audioService } = await playing();
+
+    // The proxied stream ended at 1:12 of a 3:00 track: that is a cut
+    // connection, not a song that finished.
+    deck.currentTime = 72;
+    fireDeckEvent('ended');
+
+    expect(audioService.recover).toHaveBeenCalledWith('/stream/t1', 72);
+    expect(state.playback.currentTrack?.id).toBe('t1');
+    expect(state.playback.phase).toBe('recovering');
+  });
+
+  it('leaves the transport reading complete, never frozen half way', async () => {
+    const { state, deck, fireDeckEvent } = await playing([t1]);
+
+    // The page was frozen with the screen off, so the store's own clock stopped
+    // at 1:30 while the music played on to the end.
+    state.playback.currentTime = 90;
+    deck.currentTime = 180;
+    fireDeckEvent('ended');
+
+    expect(state.playback.currentTime).toBe(180);
+  });
+
+  it('runs out of music as starved, not paused, so something can resume it', async () => {
+    const { state, deck, fireDeckEvent } = await playing([t1]);
+
+    deck.currentTime = 180;
+    fireDeckEvent('ended');
+    await Promise.resolve();
+
+    // `paused` is a decision the listener made and nothing looks at it again.
+    // This is a promise still owed to them.
+    expect(state.playback.phase).toBe('starved');
+    expect(state.playback.isPlaying).toBe(false);
+  });
+
+  it('advances immediately when the queue still has a successor', async () => {
+    const { state, deck, fireDeckEvent } = await playing();
+
+    deck.currentTime = 180;
+    fireDeckEvent('ended');
+
+    expect(state.playback.currentTrack?.id).toBe('t2');
+    expect(state.playback.index).toBe(1);
+  });
+});

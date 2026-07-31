@@ -386,7 +386,14 @@ def apply_security_headers(resp):
     resp.headers.setdefault(
         "Content-Security-Policy",
         "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; "
-        "img-src 'self' data: https:; media-src 'self' https:; "
+        # `data:` media is the silent one-sample clip the player pushes through
+        # each audio element inside the first user gesture. Browsers unlock
+        # playback per element, so the deck that will carry the *next* track has
+        # to be unlocked before it is asked to play one from a media event that
+        # no longer counts as a gesture. Inert content, and it must not depend on
+        # the network — an unlock that fails when the station is unreachable is
+        # an unlock that fails in a car.
+        "img-src 'self' data: https:; media-src 'self' data: https:; "
         "style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; "
         "script-src 'self' 'unsafe-inline'; "
         "connect-src 'self' http: https: ws: wss:;",

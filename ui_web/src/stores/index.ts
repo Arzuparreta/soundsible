@@ -15,8 +15,9 @@ import {
 import {
   audioEl,
   audioService,
-  eachDeck,
   isActiveDeck,
+  onDeckEvent,
+  setGraphReporter,
   storedVolume,
   type LiveTransitionPlan,
 } from '../lib/audio';
@@ -77,7 +78,15 @@ export type Theme = 'dark' | 'light' | 'system';
 /** Concrete appearance applied to the document (never `system`). */
 export type ResolvedTheme = 'dark' | 'light';
 export type RepeatMode = 'off' | 'all' | 'one';
-export type PlaybackPhase = 'idle' | 'loading' | 'playing' | 'paused' | 'buffering' | 'recovering' | 'failed';
+/**
+ * `starved` is the end of the queue with nothing to follow *yet* — the generated
+ * lane ran dry and the plan that would extend it has not arrived. It is
+ * deliberately not `paused`: paused is a decision the listener made, starved is
+ * a promise the player still owes them, and something is always on its way to
+ * resolve it.
+ */
+export type PlaybackPhase =
+  | 'idle' | 'loading' | 'playing' | 'paused' | 'buffering' | 'recovering' | 'failed' | 'starved';
 
 export interface DownloadsState {
   /** Live queue (pending/downloading/failed). Completed items leave the queue. */
@@ -101,6 +110,11 @@ export interface PlaybackState {
   loadError: boolean;
   /** Detailed transport state; isLoading/loadError remain compatibility views. */
   phase: PlaybackPhase;
+  /** The platform refused to resume without a fresh gesture — after recovering
+   * from a dead audio graph, or after a `play()` that arrived too late to ride
+   * the previous one. The transport turns this into a visible invitation to tap
+   * instead of a player that simply stopped. */
+  needsGesture: boolean;
   currentTime: number;
   duration: number;
   queue: PlaybackQueueEntry[];
@@ -239,6 +253,7 @@ const [state, setState] = createStore<AppState>({
     isLoading: false,
     loadError: false,
     phase: 'idle',
+    needsGesture: false,
     currentTime: 0,
     duration: 0,
     queue: [],
@@ -289,7 +304,9 @@ let generatedQueue: GeneratedQueueController | null = null;
 let autoPlaybackPrefs: { shuffle: boolean; repeat: RepeatMode } | null = null;
 const AUTOPLAY_TARGET = 8;
 const AUTOPLAY_PREPARE_THRESHOLD = 2;
-const AUTOPLAY_REFILL_THRESHOLD = 3;
+/** Matches REFILL_THRESHOLD.autoplay in generatedQueue: deep enough that a
+ * refill has room to fail and retry before the lane actually runs out. */
+const AUTOPLAY_REFILL_THRESHOLD = 5;
 type PlaybackTrigger = 'selection' | 'next' | 'ended' | 'retry' | 'resume' | 'recovery' | 'podcast';
 type PlaybackSourceKind = 'local' | 'preview' | 'podcast';
 
@@ -357,6 +374,37 @@ function emitAttempt(
     .catch(() => {});
 }
 
+/**
+ * Report a playback event that is not tied to a load attempt.
+ *
+ * `emitAttempt` needs one and most of these do not have one: a queue that ran
+ * dry, an audio graph that stopped sounding, a page that came back from being
+ * frozen. They go to the same place, so a drive that went wrong can be read back
+ * afterwards instead of reconstructed from memory.
+ */
+function emitPlaybackEvent(
+  phase: string,
+  extra: Record<string, number | boolean> = {},
+  strings: { failure_reason?: string; context_state?: string; display_mode?: string } = {},
+): void {
+  void api
+    .sendPlayTiming({
+      v: 2,
+      attempt_id: activeAttempt?.id,
+      track_id: state.playback.currentTrack?.id,
+      device_id: state.device.device_id,
+      phase,
+      trigger: activeAttempt?.trigger,
+      terminal_state: state.playback.phase,
+      // Every one of these events reads differently depending on whether the
+      // decks were routed through the mixing graph at the time, so it travels
+      // with all of them rather than only with the graph's own report.
+      segments: { graph: audioService.graphReady(), ...extra },
+      ...strings,
+    })
+    .catch(() => {});
+}
+
 function cancelActiveAttempt(reason = 'superseded'): void {
   clearStallTimer();
   const attempt = activeAttempt;
@@ -377,10 +425,11 @@ function createPlaybackAttempt(
   track: Track,
   generation: number,
   trigger: PlaybackTrigger,
+  id = randomId(),
 ): PlaybackAttempt {
   cancelActiveAttempt();
   const attempt: PlaybackAttempt = {
-    id: randomId(),
+    id,
     trackId: track.id,
     sourceKind: playbackSourceKind(track),
     trigger,
@@ -402,12 +451,49 @@ function createPlaybackAttempt(
  * Skipped in shuffle mode — the next pick is random, prefetch would guess wrong. */
 function prefetchUpcoming(): void {
   const pb = state.playback;
+  // Same job, one level closer to the speakers: whenever what comes next
+  // changes, the deck holding it has to change with it.
+  stageNext();
   if (pb.shuffle) return;
   const ids = upcomingPreviewIds(pb.queue, pb.index, pb.repeat === 'all', 5);
-  const downloads = ids.slice(0, 2);
+  // Only one full download here: the track immediately after this one is held
+  // open on the idle deck by `stageNext`, and fetching it twice is the engine
+  // resolving and proxying the same stream for nobody.
+  const downloads = ids.slice(0, 1);
   if (downloads.length > 0) prefetchPreviews(downloads, { download: true });
   const warmOnly = ids.slice(2);
   if (warmOnly.length > 0) prefetchPreviews(warmOnly);
+}
+
+/**
+ * Keep the next track loaded on the idle deck.
+ *
+ * Warming the HTTP cache is not enough: what makes `ended` able to continue
+ * without touching the network — and what a phone with its screen off will
+ * actually allow — is an element that is already holding the stream. Skipped in
+ * shuffle (the next pick is random) and while a DJ handoff is armed, because the
+ * idle deck is the incoming one and already belongs to the mixer.
+ */
+let stagedEntry: { queueId: string; attemptId: string; url: string } | null = null;
+
+function stageNext(): void {
+  const pb = state.playback;
+  // Auto Mode's DJ loads the incoming track onto that same deck itself, cued to
+  // its own in-point. Staging there would fetch the same stream twice and lose
+  // the race anyway.
+  if (state.autoMode.active || audioService.mixPhase() !== 'idle') return;
+  const next = !pb.shuffle && pb.repeat !== 'one' ? pb.queue[pb.index + 1] : undefined;
+  if (!next || isPodcastTrack(next)) {
+    stagedEntry = null;
+    audioService.clearStaged();
+    return;
+  }
+  if (stagedEntry?.queueId === next.queueId) return;
+  // The attempt id is minted here rather than at playback: it travels in the
+  // stream URL, and the URL is fixed the moment the deck starts loading it.
+  const attemptId = randomId();
+  stagedEntry = { queueId: next.queueId, attemptId, url: trackUrl(next, attemptId) };
+  audioService.stage(stagedEntry.url);
 }
 
 function discardFutureAutoplay(): void {
@@ -542,18 +628,33 @@ function loadIndex(i: number, opts: { restart?: boolean; trigger?: PlaybackTrigg
   }
   userPlaybackStartedThisSession = true;
   const generation = beginLoad();
-  const attempt = createPlaybackAttempt(track, generation, opts.trigger ?? 'selection');
+  // A deck already holding this exact stream takes over without a request and
+  // without an `src` assignment. From `ended` that keeps the handover inside the
+  // media event, which is what lets it continue at all on a locked phone.
+  const staged = stagedEntry?.queueId === track.queueId
+    ? audioService.takeStaged(stagedEntry.url)
+    : null;
+  const attempt = createPlaybackAttempt(
+    track,
+    generation,
+    opts.trigger ?? 'selection',
+    staged ? stagedEntry!.attemptId : undefined,
+  );
+  if (staged) stagedEntry = null;
   setState('playback', {
     currentTrack: track,
     index: i,
     isPlaying: true,
     isLoading: true,
     loadError: false,
+    needsGesture: false,
     phase: 'loading',
     currentTime: 0,
+    duration: staged ? audioEl().duration || 0 : 0,
   });
   updateMediaSession(track);
-  void audioService.load(trackUrl(track, attempt.id)).catch(() => onPlaybackFailed(generation, 'load'));
+  void (staged ?? audioService.load(trackUrl(track, attempt.id)))
+    .catch(() => onPlaybackFailed(generation, 'load'));
   prefetchUpcoming();
   queueMicrotask(() => {
     void ensureAutoplay();
@@ -623,9 +724,13 @@ function recoverCurrent(reason: 'load' | 'error' | 'stall'): boolean {
 
 function scheduleStallRecovery(delayMs = STALL_RECOVERY_MS): void {
   clearStallTimer();
-  if (document.visibilityState === 'hidden') return;
   const attempt = activeAttempt;
   if (!attempt) return;
+  // A hidden page that has never made a sound has nobody waiting on it, so
+  // recovering costs bandwidth for nothing. A hidden page whose music just
+  // stalled is a phone in a pocket, and recovery is the only way the music comes
+  // back on its own — refusing to try there is what ended drives in silence.
+  if (document.visibilityState === 'hidden' && attempt.audibleAt == null) return;
   stallRecoveryTimer = setTimeout(() => {
     stallRecoveryTimer = null;
     if (activeAttempt !== attempt || state.playback.phase !== 'buffering') return;
@@ -1062,17 +1167,118 @@ function cancelRunwayReplan(): void {
   setState('autoMode', 'pendingDirection', false);
 }
 
+/**
+ * How far short of the duration an `ended` is treated as a cut stream.
+ *
+ * A track that really finished ends within a frame of its duration. One that
+ * ends thirty seconds early did not finish — the stream was cut, which over a
+ * patchy mobile link is the common case, and advancing the queue there loses the
+ * rest of a song the listener was in the middle of.
+ */
+const PREMATURE_END_SECONDS = 3;
+
+/** The queue entry playback ran out on, so a late plan knows what it resumes. */
+let starvedQueueId: string | null = null;
+
+/**
+ * Out of music, but not done.
+ *
+ * Everything that could bring the next track is already in flight or scheduled —
+ * the generated-queue retry backoff, a reconnecting socket, the app coming back
+ * to the foreground — and each of those calls `resumeFromStarved`. The old code
+ * set `paused` here, which was indistinguishable from a listener pausing and so
+ * nothing ever looked at it again: on a drive, one bad minute of signal ended
+ * the music for the rest of the journey.
+ */
+function enterStarved(): void {
+  starvedQueueId = state.playback.queue[state.playback.index]?.queueId ?? null;
+  setState('playback', { isPlaying: false, isLoading: false, phase: 'starved' });
+  emitPlaybackEvent('ui_queue_starved', {
+    lane_remaining: futureEntries(state.playback.queue, state.playback.index).length,
+    auto_mode: state.autoMode.active,
+    radio: state.playback.radioMode,
+  });
+}
+
+/** Pick the music back up if the runway has since been extended. */
+function resumeFromStarved(): void {
+  if (state.playback.phase !== 'starved') return;
+  const pb = state.playback;
+  if (pb.queue[pb.index]?.queueId !== starvedQueueId) return;
+  if (pb.index >= pb.queue.length - 1) {
+    // Nothing yet. Ask again — for autoplay this is also what re-arms the
+    // controller's own retry, which is otherwise only started by a failure.
+    void ensureAutoplay(true);
+    void generatedQueue?.refillNow();
+    return;
+  }
+  starvedQueueId = null;
+  loadIndex(pb.index + 1, { trigger: 'ended' });
+}
+
+/** Inside the last minute of a track, a thin lane is refilled without waiting
+ * for the track change that would otherwise have triggered it. */
+const RUNWAY_LEAD_SECONDS = 60;
+let runwayCheckedFor = '';
+
+/**
+ * Notice a lane running out before the music does.
+ *
+ * Refills used to be requested only when a track *started*. If the request that
+ * followed a track change failed, nothing asked again until the next track
+ * change — which, at the end of the lane, never came. Riding `timeupdate` costs
+ * one comparison per event and gives a thin lane a whole minute of runway to be
+ * filled in, retries included.
+ */
+function watchRunway(deck: HTMLAudioElement): void {
+  const pb = state.playback;
+  const duration = deck.duration;
+  if (!Number.isFinite(duration) || duration <= 0) return;
+  if (duration - (deck.currentTime || 0) > RUNWAY_LEAD_SECONDS) return;
+  const key = pb.queue[pb.index]?.queueId ?? '';
+  if (!key || runwayCheckedFor === key) return;
+  runwayCheckedFor = key;
+  // Also re-stages: an entry that landed after this track started would not
+  // otherwise be cued up on the idle deck in time to matter.
+  stageNext();
+  void ensureAutoplay();
+  if (pb.radioMode || state.autoMode.active) void generatedQueue?.ensureRunway();
+}
+
 function onEnded(): void {
   // A committed handoff owns the end of this track: the mixer starts the blend
   // off the same moment, and advancing the queue here would cancel it.
   if (audioService.mixPhase() !== 'idle') return;
+  const deck = audioEl();
+  const duration = playingDuration();
+  const position = deck.currentTime || 0;
+  // The store's clock only advances while the page is awake, so after a spell
+  // with the screen off it is stale. The element is the authority at this point.
+  setState('playback', { currentTime: position, duration });
+  const premature = duration > 0 && position < duration - PREMATURE_END_SECONDS;
+  // Seconds, not milliseconds: the endpoint drops any `_ms` value over five
+  // minutes, which a podcast duration passes comfortably.
+  emitPlaybackEvent('ui_track_ended', {
+    position_sec: Math.round(position),
+    duration_sec: Math.round(duration),
+    premature,
+  });
+  if (premature && recoverCurrent('stall')) {
+    // A cut stream, not a finished song: reload and carry on from here rather
+    // than skipping the rest of it.
+    emitPlaybackEvent('ui_premature_end', { position_sec: Math.round(position) });
+    return;
+  }
   const pb = state.playback;
   if (pb.repeat === 'one') {
     audioService.seek(0);
     void audioService.resume().catch(() => {});
     return;
   }
-  listeningLearning.complete(pb.currentTrack, playingDuration());
+  // Whatever happens next, the track that just played is over: leave the
+  // transport reading complete instead of frozen wherever the page last looked.
+  if (duration > 0) setState('playback', 'currentTime', duration);
+  listeningLearning.complete(pb.currentTrack, duration);
   if (pb.index < pb.queue.length - 1 || pb.repeat === 'all') {
     actions.next('ended');
     return;
@@ -1082,30 +1288,22 @@ function onEnded(): void {
     : state.autoMode.active
       ? 'auto_mode'
       : null;
-  if (continuousIntent) {
-    const endedQueueId = pb.queue[pb.index]?.queueId;
-    void generatedQueue?.refillNow().then((ready) => {
-      const current = state.playback.queue[state.playback.index];
-      if (
-        generatedQueue?.activeIntent() !== continuousIntent
-        || current?.queueId !== endedQueueId
-      ) {
-        return;
-      }
-      if (ready && state.playback.index < state.playback.queue.length - 1) {
-        loadIndex(state.playback.index + 1, { trigger: 'ended' });
-      } else {
-        setState('playback', { isPlaying: false, phase: 'paused' });
-      }
-    });
+  if (!continuousIntent && !pb.autoplayEnabled) {
+    // The listener turned continuous play off: the end of the queue is the end,
+    // and saying "finding more music" would be a lie.
+    setState('playback', { isPlaying: false, isLoading: false, phase: 'paused' });
     return;
   }
-  void ensureAutoplay(true).then((ready) => {
-    if (ready && state.playback.index < state.playback.queue.length - 1) {
-      loadIndex(state.playback.index + 1, { trigger: 'ended' });
-    } else {
-      setState('playback', { isPlaying: false, phase: 'paused' });
-    }
+  const endedQueueId = pb.queue[pb.index]?.queueId;
+  const extend = continuousIntent
+    ? generatedQueue?.refillNow() ?? Promise.resolve(false)
+    : ensureAutoplay(true);
+  enterStarved();
+  void extend.then((ready) => {
+    const current = state.playback.queue[state.playback.index];
+    if (state.playback.phase !== 'starved' || current?.queueId !== endedQueueId) return;
+    if (continuousIntent && generatedQueue?.activeIntent() !== continuousIntent) return;
+    if (ready && state.playback.index < state.playback.queue.length - 1) resumeFromStarved();
   });
 }
 
@@ -1589,10 +1787,11 @@ export const actions = {
       transition: { status: 'idle' },
       pendingDirection: false,
     });
-    // Entering Auto Mode is a user gesture, which is the only reliable moment to
-    // build the mixing graph: an AudioContext that cannot leave `suspended`
-    // would silence the decks routed into it.
-    audioService.ensureMixGraph();
+    // Normally a no-op — the graph was built at the session's first touch — but
+    // it also covers a listener who reached Auto Mode without one (a keyboard
+    // shortcut, a restored session) and resumes a context that was interrupted
+    // while the app sat in the background.
+    audioService.unlockAudio();
     void ensureGeneratedQueue().start('auto_mode', current, state.autoMode.profile);
   },
 
@@ -1882,6 +2081,15 @@ export const actions = {
     // A failed track's transport button is a retry, not a play button.
     if (pb.loadError) {
       actions.retryCurrent();
+      return;
+    }
+    // The track this deck holds is over. Play means "carry on", not "hear that
+    // one again" — and this is also the gesture a platform may have been waiting
+    // for, so it is the moment to reclaim the audio session.
+    if (pb.phase === 'starved') {
+      audioService.unlockAudio();
+      setState('playback', 'needsGesture', false);
+      resumeFromStarved();
       return;
     }
     if (pb.isPlaying) {
@@ -2829,6 +3037,12 @@ function ensureGeneratedQueue(): GeneratedQueueController {
         }
       }
       prefetchUpcoming();
+      // New runway. If the music ran out waiting for exactly this, start it
+      // again — the plan arriving is the event, and nothing else is watching.
+      if (entries.length > 0) {
+        stageNext();
+        resumeFromStarved();
+      }
       return entries.length;
     },
     onStatus: (intent, status, response, replacing) => {
@@ -2994,8 +3208,53 @@ const listeningLearning = new ListeningLearning((event, payload) => {
 
 /** Single source of truth bootstrap: wires audio + engine events, Media Session,
  * and pulls the initial library. */
+/** `standalone` for an installed PWA, `browser` for a tab. */
+function displayMode(): string {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'unknown';
+  return window.matchMedia('(display-mode: standalone)').matches
+    || (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+    ? 'standalone'
+    : 'browser';
+}
+
+/**
+ * Claim the audio session at the first touch of the session.
+ *
+ * Not at the tap that opens Auto Mode: by then a deck is already playing, and
+ * routing a sounding element into a brand new AudioContext is the exact sequence
+ * that left the installed app silent. Here the decks have never played, the
+ * gesture is real, and `unlockAudio` can prove the context runs before anything
+ * depends on it.
+ */
+function installAudioUnlock(): void {
+  if (typeof window === 'undefined') return;
+  const unlock = () => {
+    audioService.unlockAudio();
+    if (state.playback.needsGesture) {
+      setState('playback', 'needsGesture', false);
+      void audioService.resume().catch(() => {});
+    }
+  };
+  // Capture, so it runs ahead of the click handler that starts the first track.
+  window.addEventListener('pointerdown', unlock, { capture: true });
+  window.addEventListener('touchend', unlock, { capture: true });
+  window.addEventListener('keydown', unlock, { capture: true });
+}
+
 export function initStore(): void {
   if (socket) return;
+
+  installAudioUnlock();
+  setGraphReporter((failure) => {
+    emitPlaybackEvent(
+      'ui_graph_state',
+      { resumed: failure.resumed, position_sec: Math.round(failure.positionSec) },
+      { failure_reason: failure.reason, context_state: failure.contextState, display_mode: displayMode() },
+    );
+    if (failure.resumed) return;
+    setState('playback', { isPlaying: false, needsGesture: true });
+    toast.error(tr('toast.audioNeedsGesture'));
+  });
 
   applyVisualPreferences({
     interfaceSize: state.interfaceSize,
@@ -3029,11 +3288,9 @@ export function initStore(): void {
    * listener is already leaving.
    */
   const a = { addEventListener: (type: string, handler: (event: Event) => void) => {
-    eachDeck((deck) => {
-      deck.addEventListener(type, (event: Event) => {
-        if (!isActiveDeck(event.currentTarget)) return;
-        handler(event);
-      });
+    onDeckEvent(type, (event: Event) => {
+      if (!isActiveDeck(event.currentTarget)) return;
+      handler(event);
     });
   } };
   a.addEventListener('play', () => {
@@ -3112,6 +3369,7 @@ export function initStore(): void {
     setState('playback', 'currentTime', position);
     listeningLearning.update(state.playback.currentTrack, position, !deck.paused && !deck.ended);
     evaluateDjRunway();
+    watchRunway(deck);
   });
   const setDur = () => {
     const duration = audioEl().duration;
@@ -3124,12 +3382,39 @@ export function initStore(): void {
   // to re-anchor the OS scrubber or it keeps counting from the old position.
   a.addEventListener('seeked', updatePositionState);
   a.addEventListener('ratechange', updatePositionState);
+  let hiddenSince: number | null = null;
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && state.playback.phase === 'buffering') {
+    if (document.visibilityState === 'hidden') {
+      hiddenSince = Date.now();
+      return;
+    }
+    // Coming back from a freeze. The store's clock stopped where the page did,
+    // so anything derived from it — the scrubber, the OS position, the DJ
+    // runway — has been reading a position the music left behind long ago.
+    const deck = audioEl();
+    const position = deck.currentTime || 0;
+    const drift = Math.abs(position - (state.playback.currentTime || 0));
+    if (state.playback.currentTrack) {
+      const duration = deck.duration;
+      setState('playback', {
+        currentTime: position,
+        duration: Number.isFinite(duration) && duration > 0 ? duration : state.playback.duration,
+        isPlaying: !deck.paused && !deck.ended,
+      });
+      updatePositionState();
+      if (hiddenSince !== null && drift > 1) {
+        emitPlaybackEvent('ui_visibility_resume', {
+          hidden_sec: Math.round((Date.now() - hiddenSince) / 1000),
+          drift_sec: Math.round(drift),
+        });
+      }
+    }
+    hiddenSince = null;
+    // Whatever stopped while we were away gets one more chance now.
+    resumeFromStarved();
+    if (state.playback.phase === 'buffering') {
       const attempt = activeAttempt;
       scheduleStallRecovery(attempt?.audibleAt == null ? STARTUP_RECOVERY_MS : STALL_RECOVERY_MS);
-    } else if (document.visibilityState === 'hidden') {
-      clearStallTimer();
     }
   });
 
@@ -3170,6 +3455,9 @@ export function initStore(): void {
     socket!.emit('playback_register', state.device);
     void api.registerDevice(state.device).catch(() => {});
     void actions.loadDownloads(); // re-seed the queue after a (re)connect
+    // The station is reachable again: if the music ran out while it was not,
+    // this is the moment that ends the silence.
+    resumeFromStarved();
   });
   socket.on('disconnect', () => setState('online', false));
   socket.on('library_updated', () => {

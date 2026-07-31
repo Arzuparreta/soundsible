@@ -521,6 +521,11 @@ export const api = {
     terminal_state?: string;
     egress?: 'direct' | 'relay' | 'unknown';
     failure_reason?: string;
+    /** State of the Web Audio context when the event was recorded. */
+    context_state?: string;
+    /** `standalone` for an installed PWA, `browser` for a tab — the two behave
+     * differently enough around audio that an event is ambiguous without it. */
+    display_mode?: string;
     segments?: Record<string, number | boolean | string>;
   }) => request<{ status?: string }>('/api/playback/play-timing', { method: 'POST', body, timeoutMs: 5000 }),
 

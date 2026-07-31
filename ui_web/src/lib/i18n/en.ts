@@ -43,6 +43,8 @@ export const en = {
     loading: 'Loading…',
     buffering: 'Buffering…',
     reconnecting: 'Reconnecting…',
+    findingMore: 'Finding more music…',
+    needsGesture: 'Tap play to resume',
     unavailable: 'Unavailable — tap to retry',
   },
   nowPlaying: {
@@ -851,6 +853,7 @@ export const en = {
     playlistCoverFailed: 'Could not change the cover',
     trackUnavailable: 'This track could not be played',
     trackUnavailableSkipping: 'Track unavailable — skipping',
+    audioNeedsGesture: 'Audio was interrupted — tap play to resume',
   },
   password: {
     new: 'New password',
