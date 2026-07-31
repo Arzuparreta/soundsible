@@ -1,4 +1,5 @@
 .body {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -56,7 +57,9 @@
 }
 
 .loading {
-  margin: var(--space-xl) auto;
+  position: absolute;
+  inset: 0;
+  margin: auto;
   width: 22px;
   height: 22px;
   border: 2px solid var(--stage-line);
