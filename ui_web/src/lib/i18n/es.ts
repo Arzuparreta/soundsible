@@ -135,6 +135,13 @@ export const es: Dict = {
       opening: 'Eligiendo por dónde empezar',
       openingHint: 'Leyendo tu biblioteca y lo que has estado poniendo',
     },
+    mobile: {
+      controls: 'Paneles de modo Auto',
+      booth: 'Cabina',
+      route: 'Ruta',
+      routeEmpty: 'El DJ aún está preparando lo siguiente',
+      closePanel: 'Cerrar panel de modo Auto',
+    },
     note: {
       quoted: '«{text}»',
       direction: 'un rumbo nuevo',

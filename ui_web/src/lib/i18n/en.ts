@@ -134,6 +134,13 @@ export const en = {
       opening: 'Picking somewhere to start',
       openingHint: 'Reading your library and what you have been playing',
     },
+    mobile: {
+      controls: 'Auto Mode panels',
+      booth: 'Booth',
+      route: 'Route',
+      routeEmpty: 'The DJ is still preparing what comes next',
+      closePanel: 'Close Auto Mode panel',
+    },
     note: {
       quoted: '“{text}”',
       direction: 'a new heading',

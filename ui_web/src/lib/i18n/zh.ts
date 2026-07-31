@@ -135,6 +135,13 @@ export const zh: Dict = {
       opening: '正在挑选开场',
       openingHint: '读取你的资料库和最近的收听',
     },
+    mobile: {
+      controls: '自动模式面板',
+      booth: 'DJ 台',
+      route: '路线',
+      routeEmpty: 'DJ 正在准备接下来的曲目',
+      closePanel: '关闭自动模式面板',
+    },
     note: {
       quoted: '「{text}」',
       direction: '新的方向',

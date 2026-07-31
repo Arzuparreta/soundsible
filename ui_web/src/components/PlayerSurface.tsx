@@ -75,6 +75,11 @@ export function PlayerSurface() {
 
   createEffect(() => {
     const active = auto();
+    requestAnimationFrame(() => {
+      if (!surfaceEl) return;
+      surfaceEl.scrollLeft = 0;
+      surfaceEl.scrollTop = 0;
+    });
     if (active && !wasAuto) {
       setNowPlayingOpen(true);
       setMobilePanel('stage');

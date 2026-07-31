@@ -18,6 +18,10 @@
   height: var(--app-viewport-height, 100dvh);
   z-index: var(--z-auto);
   overflow: hidden;
+  /* `hidden` is still a programmatic scroll container. A focused control in an
+     oversized Auto child could therefore move the entire fixed surface even
+     though no scrollbar was visible. `clip` removes that hidden scrollport. */
+  overflow: clip;
   color: var(--ink-primary);
   background: #08080a;
   opacity: 0;

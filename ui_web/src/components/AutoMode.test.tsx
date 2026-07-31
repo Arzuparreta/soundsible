@@ -98,6 +98,30 @@ afterEach(() => {
 });
 
 describe('AutoMode environment', () => {
+  it('uses dedicated booth and route sheets on compact viewports', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    render(() => <AutoMode />);
+
+    const dock = screen.getByRole('navigation', { name: 'autoMode.mobile.controls' });
+    const boothButton = screen.getByRole('button', { name: /autoMode\.mobile\.booth/ });
+    const routeButton = screen.getByRole('button', { name: /autoMode\.mobile\.route/ });
+    expect(dock).toContainElement(boothButton);
+    expect(dock).toContainElement(routeButton);
+    expect(document.querySelector('[data-auto-cover-slot]')).toBeTruthy();
+
+    fireEvent.click(boothButton);
+    expect(screen.getByRole('dialog', { name: 'autoMode.booth.aria' })).toBeInTheDocument();
+    expect(boothButton).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.keyDown(screen.getByRole('region', { name: 'autoMode.aria' }), { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'autoMode.booth.aria' })).not.toBeInTheDocument();
+
+    fireEvent.click(routeButton);
+    expect(screen.getByRole('dialog', { name: 'autoMode.upNext' })).toBeInTheDocument();
+    expect(routeButton).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'autoMode.mobile.closePanel' }));
+    expect(routeButton).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('renders playback, a concrete live action and a horizontally navigable queue', () => {
     render(() => <AutoMode />);
 

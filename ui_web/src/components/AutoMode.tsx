@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { actions, isSavedTrack, state } from '../stores';
 import { api, type DjProfile } from '../lib/api';
 import { coverUrl } from '../lib/media';
@@ -17,6 +17,7 @@ import { clockTime } from '../lib/format';
 import type { CatalogItem, Track } from '../types/music';
 
 const IDLE_MS = 12_000;
+type AutoMobilePanel = 'closed' | 'booth' | 'route';
 
 const DJ_PROFILES: Array<{ id: DjProfile; titleKey: string; traitKey: string }> = [
   { id: 'adaptive', titleKey: 'autoMode.dj.adaptive', traitKey: 'autoMode.dj.adaptiveTrait' },
@@ -124,6 +125,10 @@ export function AutoMode() {
   const [lyricsOpen, setLyricsOpen] = createSignal(false);
   const [djPickerOpen, setDjPickerOpen] = createSignal(false);
   const [requestOpen, setRequestOpen] = createSignal(false);
+  const [mobilePanel, setMobilePanel] = createSignal<AutoMobilePanel>('closed');
+  const [mobileLayout, setMobileLayout] = createSignal(
+    typeof window !== 'undefined' && window.innerWidth <= 1023,
+  );
   const [prompt, setPrompt] = createSignal('');
   const [requestQuery, setRequestQuery] = createSignal('');
   const [requestResults, setRequestResults] = createSignal<CatalogItem[]>([]);
@@ -134,6 +139,54 @@ export function AutoMode() {
   let spokenRequestSeq = 0;
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let agentTimer: ReturnType<typeof setTimeout> | null = null;
+  let rootEl: HTMLDivElement | undefined;
+  let mobileMedia: MediaQueryList | undefined;
+
+  const closeMobilePanel = () => {
+    setMobilePanel('closed');
+    setDjPickerOpen(false);
+    setRequestOpen(false);
+  };
+
+  const openMobilePanel = (panel: Exclude<AutoMobilePanel, 'closed'>) => {
+    setDjPickerOpen(false);
+    setRequestOpen(false);
+    setMobilePanel(panel);
+    armIdle();
+  };
+
+  const syncMobileCoverAnchor = () => {
+    if (!rootEl || window.innerWidth > 1023) return;
+    const slot = document.querySelector<HTMLElement>('[data-now-playing-cover-slot]');
+    if (!slot) return;
+    const rect = slot.getBoundingClientRect();
+    const surfaceRect = slot.closest<HTMLElement>('[data-player-surface-open]')?.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    // The shared surface may still be completing its vertical entrance when
+    // Auto is selected quickly. Store coordinates inside that surface, not its
+    // transient viewport translation, so the cover never inherits a +100dvh
+    // offset from the opening animation.
+    rootEl.style.setProperty('--auto-mobile-cover-left', `${rect.left - (surfaceRect?.left ?? 0)}px`);
+    rootEl.style.setProperty('--auto-mobile-cover-top', `${rect.top - (surfaceRect?.top ?? 0)}px`);
+    rootEl.style.setProperty('--auto-mobile-cover-width', `${rect.width}px`);
+    rootEl.style.setProperty('--auto-mobile-cover-height', `${rect.height}px`);
+    rootEl.dataset.mobileCoverAnchored = '';
+  };
+
+  const releaseMobileCoverAnchor = () => {
+    if (!rootEl) return;
+    rootEl.style.removeProperty('--auto-mobile-cover-left');
+    rootEl.style.removeProperty('--auto-mobile-cover-top');
+    rootEl.style.removeProperty('--auto-mobile-cover-width');
+    rootEl.style.removeProperty('--auto-mobile-cover-height');
+    delete rootEl.dataset.mobileCoverAnchored;
+  };
+
+  const syncMobileLayout = () => {
+    const compact = mobileMedia?.matches ?? window.innerWidth <= 1023;
+    setMobileLayout(compact);
+    if (!compact) closeMobilePanel();
+  };
 
   const armIdle = () => {
     if (idleTimer) clearTimeout(idleTimer);
@@ -148,6 +201,7 @@ export function AutoMode() {
       clearTimeout(idleTimer);
       idleTimer = null;
     }
+    if (!active()) closeMobilePanel();
   });
 
   createEffect(() => {
@@ -178,6 +232,25 @@ export function AutoMode() {
     if (requestTimer) clearTimeout(requestTimer);
     requestAborter?.abort();
     spokenRequestAborter?.abort();
+    mobileMedia?.removeEventListener('change', syncMobileLayout);
+    window.removeEventListener('resize', releaseMobileCoverAnchor);
+    window.removeEventListener('orientationchange', releaseMobileCoverAnchor);
+  });
+
+  onMount(() => {
+    if (typeof window.matchMedia === 'function') {
+      mobileMedia = window.matchMedia('(max-width: 1023px)');
+      mobileMedia.addEventListener('change', syncMobileLayout);
+    }
+    syncMobileLayout();
+    // Match Now Playing only for the handoff itself. Once the viewport changes
+    // (rotation, keyboard, split-screen), release those measured coordinates
+    // and let Auto's responsive composition own the new geometry. The hidden
+    // Now Playing carousel is not a reliable resize reference.
+    window.addEventListener('resize', releaseMobileCoverAnchor);
+    window.addEventListener('orientationchange', releaseMobileCoverAnchor);
+    syncMobileCoverAnchor();
+    requestAnimationFrame(syncMobileCoverAnchor);
   });
 
   const art = createMemo(() => {
@@ -412,6 +485,20 @@ export function AutoMode() {
    */
   const onKeyDown = (event: KeyboardEvent) => {
     armIdle();
+    if (event.key === 'Escape') {
+      if (requestOpen()) {
+        setRequestOpen(false);
+        return;
+      }
+      if (djPickerOpen()) {
+        setDjPickerOpen(false);
+        return;
+      }
+      if (mobilePanel() !== 'closed') {
+        closeMobilePanel();
+        return;
+      }
+    }
     const target = event.target as HTMLElement | null;
     if (target?.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return;
     if (event.key === 'ArrowUp') actions.setVolume(state.playback.volume + 0.05);
@@ -421,10 +508,12 @@ export function AutoMode() {
 
   return (
     <div
+      ref={rootEl}
       classList={{ [styles.root]: true, [styles.active]: active(), [styles.ambient]: !chromeVisible() }}
       role="region"
       aria-label={t('autoMode.aria')}
       data-playing={state.playback.isPlaying ? 'true' : 'false'}
+      data-mobile-panel={mobilePanel()}
       tabIndex={-1}
       onPointerMove={armIdle}
       onKeyDown={onKeyDown}
@@ -488,9 +577,14 @@ export function AutoMode() {
         </Show>
 
         <Show when={current()}>
-          <main class={styles.stage}>
+          <div class={styles.stage}>
             <div class={styles.coverStage}>
-              <div class={styles.coverFrame} data-lyrics-open={lyricsOpen() ? '' : undefined}>
+              <div
+                class={styles.coverFrame}
+                data-auto-cover-slot=""
+                data-lyrics-open={lyricsOpen() ? '' : undefined}
+                inert={mobilePanel() !== 'closed' ? true : undefined}
+              >
                 <div class={styles.coverGlow} style={backdropStyle()} aria-hidden="true" />
                 <div class={styles.cover} style={backdropStyle()} role="img" aria-label={current()!.title} />
                 <Show when={lyricsOpen()}>
@@ -546,7 +640,37 @@ export function AutoMode() {
                 </Show>
               </div>
 
-              <section class={styles.booth} aria-label={t('autoMode.booth.aria')}>
+              <section
+                class={styles.booth}
+                aria-label={t('autoMode.booth.aria')}
+                role={mobilePanel() === 'booth' ? 'dialog' : undefined}
+                aria-modal={mobilePanel() === 'booth' ? 'true' : undefined}
+                data-auto-mobile-sheet="booth"
+              >
+                <Show when={mobileLayout()}>
+                  <div class={styles.mobileSheetHead}>
+                    <div>
+                      <small>{t('autoMode.label')}</small>
+                      <strong>{t('autoMode.mobile.booth')}</strong>
+                    </div>
+                    <button type="button" aria-label={t('common.close')} onClick={closeMobilePanel}>×</button>
+                  </div>
+
+                  <button
+                    class={styles.mobileDjProfile}
+                    type="button"
+                    aria-label={t('autoMode.dj.changeCurrent', { dj: t(activeDj().titleKey) })}
+                    aria-expanded={djPickerOpen()}
+                    onClick={() => setDjPickerOpen((open) => !open)}
+                  >
+                    <span>
+                      <small>{t('autoMode.dj.label')}</small>
+                      <strong>{t(activeDj().titleKey)}</strong>
+                    </span>
+                    <b>{t('autoMode.dj.change')}</b>
+                  </button>
+                </Show>
+
                 {/* The decks, in the booth's own units. Everything here is
                     measured — an unread track shows a dash, never a guess. */}
                 <div class={styles.readout}>
@@ -650,7 +774,7 @@ export function AutoMode() {
                 </Show>
               </section>
 
-              <div class={styles.controls}>
+              <div class={styles.controls} inert={mobilePanel() !== 'closed' ? true : undefined}>
                 <div class={styles.seek}>
                   <span class={styles.time}>{clockTime(state.playback.currentTime)}</span>
                   <div class={styles.progress}>
@@ -690,11 +814,60 @@ export function AutoMode() {
                   </div>
                 </div>
               </div>
+
+              <Show when={mobileLayout()}>
+                <nav class={styles.mobileDock} aria-label={t('autoMode.mobile.controls')} data-no-surface-swipe="">
+                <button
+                  type="button"
+                  aria-expanded={mobilePanel() === 'booth'}
+                  onClick={() => openMobilePanel('booth')}
+                >
+                  <span class={styles.mobileDockMark} aria-hidden="true"><i /><i /><i /></span>
+                  <span>
+                    <small>{t('autoMode.mobile.booth')}</small>
+                    <strong>{t(activeDj().titleKey)}</strong>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-expanded={mobilePanel() === 'route'}
+                  onClick={() => openMobilePanel('route')}
+                >
+                  <span
+                    class={styles.mobileRouteCover}
+                    style={{ 'background-image': upcoming()[0] ? `url("${upcoming()[0].cover ?? coverUrl(upcoming()[0].id)}")` : undefined }}
+                    aria-hidden="true"
+                  />
+                  <span>
+                    <small>{t('autoMode.mobile.route')}</small>
+                    <strong>
+                      {upcoming()[0]?.title ?? t('autoMode.mobile.routeEmpty')}
+                      <Show when={upcoming().length > 1}> · +{upcoming().length - 1}</Show>
+                    </strong>
+                  </span>
+                </button>
+                </nav>
+              </Show>
             </div>
-          </main>
+          </div>
 
           <Show when={upcoming().length > 0}>
-            <section class={styles.upStrip} aria-label={t('autoMode.upNext')}>
+            <section
+              class={styles.upStrip}
+              aria-label={t('autoMode.upNext')}
+              role={mobilePanel() === 'route' ? 'dialog' : undefined}
+              aria-modal={mobilePanel() === 'route' ? 'true' : undefined}
+              data-auto-mobile-sheet="route"
+            >
+              <Show when={mobileLayout()}>
+                <div class={styles.mobileSheetHead}>
+                  <div>
+                    <small>{t('autoMode.label')}</small>
+                    <strong>{t('autoMode.mobile.route')}</strong>
+                  </div>
+                  <button type="button" aria-label={t('common.close')} onClick={closeMobilePanel}>×</button>
+                </div>
+              </Show>
               <span class={styles.upHead}>
                 {transitionState().status === 'idle'
                   ? t('autoMode.dj.route')
@@ -753,6 +926,33 @@ export function AutoMode() {
               </div>
             </section>
           </Show>
+          <Show when={mobileLayout() && mobilePanel() === 'route' && upcoming().length === 0}>
+            <section
+              classList={{ [styles.upStrip]: true, [styles.routeEmptyPanel]: true }}
+              aria-label={t('autoMode.upNext')}
+              role="dialog"
+              aria-modal="true"
+              data-auto-mobile-sheet="route"
+            >
+              <div class={styles.mobileSheetHead}>
+                <div>
+                  <small>{t('autoMode.label')}</small>
+                  <strong>{t('autoMode.mobile.route')}</strong>
+                </div>
+                <button type="button" aria-label={t('common.close')} onClick={closeMobilePanel}>×</button>
+              </div>
+              <p>{t('autoMode.mobile.routeEmpty')}</p>
+            </section>
+          </Show>
+        </Show>
+
+        <Show when={mobileLayout() && mobilePanel() !== 'closed'}>
+          <button
+            class={styles.mobileSheetBackdrop}
+            type="button"
+            aria-label={t('autoMode.mobile.closePanel')}
+            onClick={closeMobilePanel}
+          />
         </Show>
 
         <Show when={requestOpen()}>

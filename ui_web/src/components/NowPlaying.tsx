@@ -104,15 +104,17 @@ export function NowPlaying(props: {
     if (isPodcast() || state.autoMode.active) setMobileVisual(initialMobileVisualState);
   });
 
-  let requestedMobilePanel: NowPlayingMobilePanel | null = null;
   let carouselFrame = 0;
+  let carouselSettleTimer: number | undefined;
   let carouselAligned = false;
   let previousSurfaceOpen = props.surfaceOpen;
-  const releaseCarouselRequest = () => {
-    // A real gesture always wins over a pending programmatic alignment.
-    // An opening jump does not necessarily emit a final scroll event, so
-    // leaving this request latched can otherwise pin the state to the stage.
-    requestedMobilePanel = null;
+  const beginCarouselGesture = () => {
+    // Once the finger is down the native scroller owns the destination. Keep
+    // the previously settled panel interactive until the snap completes: making
+    // the touched tile inert mid-gesture leaves Mobile Safari with a visible
+    // panel whose whole subtree no longer accepts taps.
+    window.clearTimeout(carouselSettleTimer);
+    carouselSettleTimer = undefined;
   };
   const jumpToTile = (tile: HTMLElement) => {
     if (!workspaceEl) return;
@@ -129,10 +131,11 @@ export function NowPlaying(props: {
     if (!mobileLayout() || !workspaceEl) return;
     const tile = workspaceEl.querySelector<HTMLElement>(`[data-now-playing-tile="${panel}"]`);
     if (!tile) return;
-    requestedMobilePanel = panel;
     cancelAnimationFrame(carouselFrame);
     const alignImmediately = !surfaceOpen || opening || !carouselAligned;
     carouselAligned = surfaceOpen;
+    const alreadyAligned = Math.abs(tile.offsetLeft - workspaceEl.scrollLeft) <= 2;
+    if (alreadyAligned) return;
     if (alignImmediately) jumpToTile(tile);
     carouselFrame = requestAnimationFrame(() => {
       if (alignImmediately) jumpToTile(tile);
@@ -140,24 +143,25 @@ export function NowPlaying(props: {
     });
   });
 
-  const onCarouselScroll = () => {
+  const settleCarousel = () => {
     if (!props.surfaceOpen || !mobileLayout() || !workspaceEl) return;
-    cancelAnimationFrame(carouselFrame);
-    carouselFrame = requestAnimationFrame(() => {
-      if (!workspaceEl) return;
-      const panels = [...workspaceEl.querySelectorAll<HTMLElement>('[data-now-playing-tile]')];
-      if (requestedMobilePanel) {
-        const requested = panels.find((element) => element.dataset.nowPlayingTile === requestedMobilePanel);
-        if (requested && Math.abs(requested.offsetLeft - workspaceEl.scrollLeft) <= 2) requestedMobilePanel = null;
-        else return;
-      }
-      const nearest = panels.reduce<{ panel: NowPlayingMobilePanel; distance: number } | null>((best, element) => {
-        const panel = element.dataset.nowPlayingTile as NowPlayingMobilePanel;
-        const distance = Math.abs(element.offsetLeft - workspaceEl!.scrollLeft);
-        return !best || distance < best.distance ? { panel, distance } : best;
-      }, null);
-      if (nearest && nearest.panel !== props.mobilePanel) props.onMobilePanelChange(nearest.panel);
-    });
+    window.clearTimeout(carouselSettleTimer);
+    carouselSettleTimer = undefined;
+    const panels = [...workspaceEl.querySelectorAll<HTMLElement>('[data-now-playing-tile]')];
+    const nearest = panels.reduce<{ panel: NowPlayingMobilePanel; distance: number } | null>((best, element) => {
+      const panel = element.dataset.nowPlayingTile as NowPlayingMobilePanel;
+      const distance = Math.abs(element.offsetLeft - workspaceEl!.scrollLeft);
+      return !best || distance < best.distance ? { panel, distance } : best;
+    }, null);
+    if (nearest && nearest.panel !== props.mobilePanel) props.onMobilePanelChange(nearest.panel);
+  };
+
+  const onCarouselScroll = () => {
+    if (!props.surfaceOpen || !mobileLayout()) return;
+    window.clearTimeout(carouselSettleTimer);
+    // `scrollend` is present in current Chromium/WebKit, while this fallback
+    // covers older installed PWAs and scroll-snap implementations.
+    carouselSettleTimer = window.setTimeout(settleCarousel, 140);
   };
 
   onMount(() => {
@@ -171,10 +175,13 @@ export function NowPlaying(props: {
       }
     };
     window.addEventListener('keydown', onKeyDown);
+    workspaceEl?.addEventListener('scrollend', settleCarousel);
     onCleanup(() => {
       media.removeEventListener('change', syncLayout);
       window.removeEventListener('keydown', onKeyDown);
+      workspaceEl?.removeEventListener('scrollend', settleCarousel);
       cancelAnimationFrame(carouselFrame);
+      window.clearTimeout(carouselSettleTimer);
     });
   });
   /** Library tracks link to their artist; preview/podcast sources do not. */
@@ -601,10 +608,11 @@ export function NowPlaying(props: {
           ref={workspaceEl}
           style={{ 'grid-template-columns': gridColumns() }}
           data-layout-busy={layoutBusy() ? '' : undefined}
+          data-now-playing-carousel=""
           onScroll={onCarouselScroll}
-          onPointerDown={releaseCarouselRequest}
-          onTouchStart={releaseCarouselRequest}
-          onWheel={releaseCarouselRequest}
+          onPointerDown={beginCarouselGesture}
+          onTouchStart={beginCarouselGesture}
+          onWheel={beginCarouselGesture}
         >
         <For each={renderedPanels()}>
           {(panel, index) => (
@@ -625,6 +633,7 @@ export function NowPlaying(props: {
           <div class={styles.media}>
             <div
               class={styles.visualSlot}
+              data-now-playing-cover-slot=""
               data-lyrics-morph=""
               data-lyrics-open={mobileVisual().content === 'lyrics' ? '' : undefined}
             >
