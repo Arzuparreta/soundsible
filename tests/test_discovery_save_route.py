@@ -25,7 +25,12 @@ def _load_module(name: str, rel_path: str):
 _dq = _load_module("download_queue_under_test", "shared/api/download_queue.py")
 parse_intake_item = _dq.parse_intake_item
 
-_disc_routes = _load_module("discovery_routes_under_test", "shared/api/routes/discovery.py")
+# Imported normally: the route modules no longer drag `shared.api` in at import
+# time, so the load-by-path shim these used is unnecessary — and it would give
+# each module its own copy of the shared blueprint.
+import shared.api.routes.discovery as _disc_routes
+import shared.api.routes.auto_mode as _auto_mode
+import shared.api.routes.discovery_feed as _disc_feed
 discovery_bp = _disc_routes.discovery_bp
 
 import json
@@ -234,9 +239,9 @@ def test_dj_plan_eventually_places_an_exact_request_and_prefers_it_next(tmp_path
     mock_api = _mock_api()
     mock_api["get_core"].return_value = (_FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None)
     with (
-        patch.object(_disc_routes, "_get_api", return_value=mock_api),
-        patch.object(_disc_routes, "_build_music_plan", return_value=(base, 200)),
-        patch.object(_disc_routes, "_dj_item_analysis", return_value=features),
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_build_music_plan", return_value=(base, 200)),
+        patch.object(_auto_mode, "_dj_item_analysis", return_value=features),
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-plan",
@@ -307,10 +312,10 @@ def test_dj_plan_keeps_an_artist_request_until_a_playable_track_fulfils_it(tmp_p
         _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
     )
     with (
-        patch.object(_disc_routes, "_get_api", return_value=mock_api),
-        patch.object(_disc_routes, "_build_music_plan", return_value=(base, 200)),
-        patch.object(_disc_routes, "_planner_artist_candidates", return_value=[target]),
-        patch.object(_disc_routes, "_dj_item_analysis", return_value=features),
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_build_music_plan", return_value=(base, 200)),
+        patch.object(_auto_mode, "_planner_artist_candidates", return_value=[target]),
+        patch.object(_auto_mode, "_dj_item_analysis", return_value=features),
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-plan",
@@ -361,8 +366,8 @@ def test_auto_library_pool_only_promotes_tracks_inside_the_session_path(tmp_path
     }]
 
     with (
-        patch.object(_disc_routes, "_planner_context_related", return_value=(related, False)),
-        patch.object(_disc_routes, "_planner_related_artist_pool", return_value=([], [])),
+        patch.object(_auto_mode, "_planner_context_related", return_value=(related, False)),
+        patch.object(_auto_mode, "_planner_related_artist_pool", return_value=([], [])),
     ):
         pools, degraded = _disc_routes._build_auto_pools(
             metadata,
@@ -380,7 +385,7 @@ def test_auto_library_pool_only_promotes_tracks_inside_the_session_path(tmp_path
 def test_dj_command_recognises_an_exact_artist_without_an_llm(tmp_path):
     _make_runtime(tmp_path)
     with patch.object(
-        _disc_routes,
+        _auto_mode,
         "_deezer_artist_top_rows",
         return_value=[{"artist": {"id": 1, "name": "Oliver Heldens"}}],
     ):
@@ -419,9 +424,9 @@ def test_music_plan_returns_server_ordered_playable_radio_items(tmp_path):
     mock_api["get_downloader"].return_value.downloader.get_related_videos.return_value = related
 
     with (
-        patch.object(_disc_routes, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
         patch.object(
-            _disc_routes,
+            _auto_mode,
             "_build_discovery_feed_body",
             side_effect=RuntimeError("discovery unavailable"),
         ),
@@ -462,7 +467,7 @@ def test_music_feed_without_taste_returns_seed_state_not_generic_rows(tmp_path):
         settings={},
     )
 
-    with patch.object(_disc_routes, "_deezer_json", return_value={"data": []}):
+    with patch.object(_disc_feed, "_deezer_json", return_value={"data": []}):
         body = _disc_routes._build_music_feed(metadata, [], limit=12)
 
     assert body["needs_seed"] is True
@@ -510,7 +515,7 @@ def test_music_feed_uses_taste_artist_before_generic_external(tmp_path):
             }
         return {"tracks": {"data": []}, "data": []}
 
-    with patch.object(_disc_routes, "_deezer_json", side_effect=fake_deezer):
+    with patch.object(_disc_feed, "_deezer_json", side_effect=fake_deezer):
         body = _disc_routes._build_music_feed(metadata, ["fav-1"], limit=12)
 
     assert body["sections"][0]["id"] == "because_you_listen_taste_artist"
@@ -857,7 +862,7 @@ def test_enriched_music_feed_includes_taste_based_external_tracks_and_local_recs
             })
         raise AssertionError(url)
 
-    with patch.object(_disc_routes, "_get_api", return_value=api), \
+    with patch.object(_disc_feed, "_get_api", return_value=api), \
          patch.object(deezer, "session", return_value=MagicMock(get=MagicMock(side_effect=fake_get))):
         body = _disc_routes._build_discovery_feed_body(12, include_external=True)
 
@@ -883,9 +888,9 @@ def test_music_feed_uses_cache_when_fresh(tmp_path):
         "_mod": mod,
     }
 
-    with patch.object(_disc_routes, "_get_api", return_value=api), \
+    with patch.object(_disc_feed, "_get_api", return_value=api), \
          patch.object(deezer, "session", return_value=MagicMock(get=MagicMock(return_value=_FakeResponse({"tracks": {"data": []}})))), \
-         patch.object(_disc_routes, "_schedule_discovery_feed_refresh", return_value=False):
+         patch.object(_disc_feed, "_schedule_discovery_feed_refresh", return_value=False):
         first = _make_app().test_client().get("/api/discovery/music/feed?limit=12")
         second = _make_app().test_client().get("/api/discovery/music/feed?limit=12")
 
@@ -915,10 +920,10 @@ def test_discovery_feed_ranks_server_sections_and_reuses_fresh_cache(tmp_path):
         "_mod": mod,
     }
 
-    with patch.object(_disc_routes, "_get_api", return_value=api), \
-         patch.object(_disc_routes, "_deezer_json", return_value={"data": []}), \
-         patch.object(_disc_routes, "_cached_related_feed_candidates"), \
-         patch.object(_disc_routes, "_schedule_discovery_feed_refresh", return_value=False):
+    with patch.object(_disc_feed, "_get_api", return_value=api), \
+         patch.object(_disc_feed, "_deezer_json", return_value={"data": []}), \
+         patch.object(_disc_feed, "_cached_related_feed_candidates"), \
+         patch.object(_disc_feed, "_schedule_discovery_feed_refresh", return_value=False):
         first = _make_app().test_client().get("/api/discovery/music/feed?limit=6")
         second = _make_app().test_client().get("/api/discovery/music/feed?limit=6")
 
@@ -968,11 +973,11 @@ def test_dj_plan_never_decodes_audio_on_the_interaction_path(tmp_path):
     )
     queued: list[str] = []
     with (
-        patch.object(_disc_routes, "_get_api", return_value=mock_api),
-        patch.object(_disc_routes, "_build_music_plan", return_value=(base, 200)),
-        patch.object(_disc_routes, "_dj_source_path", return_value="/library/candidate.mp3"),
-        patch.object(_disc_routes, "cached_analysis", return_value=None),
-        patch.object(_disc_routes, "request_analysis", side_effect=lambda *a, **k: queued.append(a[1])),
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_build_music_plan", return_value=(base, 200)),
+        patch.object(_auto_mode, "_dj_source_path", return_value="/library/candidate.mp3"),
+        patch.object(_auto_mode, "cached_analysis", return_value=None),
+        patch.object(_auto_mode, "request_analysis", side_effect=lambda *a, **k: queued.append(a[1])),
         patch("shared.dj_engine._decode", side_effect=AssertionError("decoded during a plan request")),
     ):
         response = _make_app().test_client().post(
@@ -1015,9 +1020,9 @@ def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):
         "to": {"id": "b", "track_id": "b", "title": "B", "artist": "Artist", "duration": 220},
     }
     with (
-        patch.object(_disc_routes, "_get_api", return_value=mock_api),
-        patch.object(_disc_routes, "_dj_source_path", return_value="/library/track.mp3"),
-        patch.object(_disc_routes, "cached_analysis", return_value=measured),
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_dj_source_path", return_value="/library/track.mp3"),
+        patch.object(_auto_mode, "cached_analysis", return_value=measured),
     ):
         response = _make_app().test_client().post("/api/discovery/music/dj-transition", json=pair)
 
@@ -1031,8 +1036,8 @@ def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):
     # Nothing measured yet: answer immediately with the conservative plan
     # rather than making the player wait for a decode it cannot use in time.
     with (
-        patch.object(_disc_routes, "_get_api", return_value=mock_api),
-        patch.object(_disc_routes, "_dj_source_path", return_value=None),
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_dj_source_path", return_value=None),
     ):
         response = _make_app().test_client().post("/api/discovery/music/dj-transition", json=pair)
     assert response.get_json()["measured"] is False

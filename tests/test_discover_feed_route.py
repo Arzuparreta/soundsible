@@ -25,7 +25,8 @@ def _load_module(name: str, rel_path: str):
     return mod
 
 
-_disc_routes = _load_module("discover_feed_routes_under_test", "shared/api/routes/discovery.py")
+import shared.api.routes.discovery as _disc_routes
+import shared.api.routes.discovery_graph as _disc_graph
 discovery_bp = _disc_routes.discovery_bp
 
 import pytest
@@ -125,9 +126,9 @@ def _reset(tmp_path, monkeypatch):
     reset_telemetry()
     _make_runtime(tmp_path)
     # Reset the discover executor and inflight state between tests.
-    _disc_routes._discover_executor = None
-    _disc_routes._discover_inflight.clear()
-    _disc_routes._discover_request_seeds.clear()
+    _disc_graph._discover_executor = None
+    _disc_graph._discover_inflight.clear()
+    _disc_graph._discover_request_seeds.clear()
     yield
     reset_telemetry()
     reset_runtime()
@@ -143,13 +144,13 @@ def test_feed_returns_cache_hits_immediately(monkeypatch):
         settings={},
     )
     api, mock_dl, fake_sio = _mock_api(metadata)
-    monkeypatch.setattr(_disc_routes, "_get_api", lambda: api)
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: api)
 
     cached_recs = [{"id": "rec1111111", "title": "Related", "channel": "Other", "duration": 200}]
     mock_db = MagicMock()
     mock_db.get_related_mix.return_value = cached_recs
     mock_db.get_cached_resolution.return_value = None
-    monkeypatch.setattr(_disc_routes, "instance_db", lambda: mock_db)
+    monkeypatch.setattr(_disc_graph, "instance_db", lambda: mock_db)
 
     client = _make_app().test_client()
     res = client.get("/api/discover/feed?seeds=t1&limit=10")
@@ -178,12 +179,12 @@ def test_feed_schedules_async_expansion_for_cache_miss(monkeypatch):
         metadata,
         related_results=[{"id": "rel1111111", "title": "Related", "channel": "Other"}],
     )
-    monkeypatch.setattr(_disc_routes, "_get_api", lambda: api)
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: api)
 
     mock_db = MagicMock()
     mock_db.get_related_mix.return_value = None  # cache miss
     mock_db.get_cached_resolution.return_value = None
-    monkeypatch.setattr(_disc_routes, "instance_db", lambda: mock_db)
+    monkeypatch.setattr(_disc_graph, "instance_db", lambda: mock_db)
 
     # Use a real (inline) executor so the expansion runs synchronously enough
     # to verify the side effects. We patch the executor to run inline.
@@ -198,7 +199,7 @@ def test_feed_schedules_async_expansion_for_cache_miss(monkeypatch):
                 fut.set_exception(e)
             return fut
 
-    monkeypatch.setattr(_disc_routes, "_get_discover_executor", lambda: _InlineExecutor())
+    monkeypatch.setattr(_disc_graph, "_get_discover_executor", lambda: _InlineExecutor())
 
     client = _make_app().test_client()
     res = client.get("/api/discover/feed?seeds=t1&limit=10")
@@ -230,19 +231,19 @@ def test_feed_inflight_dedup_does_not_double_extract(monkeypatch):
         metadata,
         related_results=[{"id": "rel", "title": "R"}],
     )
-    monkeypatch.setattr(_disc_routes, "_get_api", lambda: api)
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: api)
 
     mock_db = MagicMock()
     mock_db.get_related_mix.return_value = None
     mock_db.get_cached_resolution.return_value = None
-    monkeypatch.setattr(_disc_routes, "instance_db", lambda: mock_db)
+    monkeypatch.setattr(_disc_graph, "instance_db", lambda: mock_db)
 
     # Simulate an already-in-flight future for this video_id.
     from concurrent.futures import Future
 
     existing_fut = Future()
     existing_fut.set_running_or_notify_cancel()
-    _disc_routes._discover_inflight[_VID3] = existing_fut
+    _disc_graph._discover_inflight[_VID3] = existing_fut
 
     client = _make_app().test_client()
     res = client.get("/api/discover/feed?seeds=t1&limit=10")
@@ -264,7 +265,7 @@ def test_feed_skips_unknown_track_ids(monkeypatch):
     """A seed id that doesn't exist in the library is silently skipped."""
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     api, mock_dl, fake_sio = _mock_api(metadata)
-    monkeypatch.setattr(_disc_routes, "_get_api", lambda: api)
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: api)
 
     client = _make_app().test_client()
     res = client.get("/api/discover/feed?seeds=nonexistent&limit=10")
@@ -284,12 +285,12 @@ def test_feed_resolves_seed_without_youtube_id_via_resolution_cache(monkeypatch)
         settings={},
     )
     api, mock_dl, fake_sio = _mock_api(metadata)
-    monkeypatch.setattr(_disc_routes, "_get_api", lambda: api)
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: api)
 
     mock_db = MagicMock()
     mock_db.get_related_mix.return_value = [{"id": "hit", "title": "Cached Rec"}]
     mock_db.get_cached_resolution.return_value = {"id": _VID4}
-    monkeypatch.setattr(_disc_routes, "instance_db", lambda: mock_db)
+    monkeypatch.setattr(_disc_graph, "instance_db", lambda: mock_db)
 
     client = _make_app().test_client()
     res = client.get("/api/discover/feed?seeds=t1&limit=10")
@@ -311,12 +312,12 @@ def test_warm_endpoint_schedules_expansion_for_misses(monkeypatch):
         settings={},
     )
     api, mock_dl, fake_sio = _mock_api(metadata)
-    monkeypatch.setattr(_disc_routes, "_get_api", lambda: api)
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: api)
 
     mock_db = MagicMock()
     mock_db.get_related_mix.return_value = None  # miss
     mock_db.get_cached_resolution.return_value = None
-    monkeypatch.setattr(_disc_routes, "instance_db", lambda: mock_db)
+    monkeypatch.setattr(_disc_graph, "instance_db", lambda: mock_db)
 
     # Inline executor so we can verify the scheduling without real threads.
     from concurrent.futures import Future
@@ -330,7 +331,7 @@ def test_warm_endpoint_schedules_expansion_for_misses(monkeypatch):
                 fut.set_exception(e)
             return fut
 
-    monkeypatch.setattr(_disc_routes, "_get_discover_executor", lambda: _InlineExecutor())
+    monkeypatch.setattr(_disc_graph, "_get_discover_executor", lambda: _InlineExecutor())
 
     client = _make_app().test_client()
     res = client.post("/api/discover/warm", json={"seeds": ["t1"]})
@@ -349,10 +350,10 @@ def test_warm_endpoint_auto_selects_when_no_seeds_given(monkeypatch):
         settings={},
     )
     api, mock_dl, fake_sio = _mock_api(metadata)
-    monkeypatch.setattr(_disc_routes, "_get_api", lambda: api)
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: api)
 
     called = MagicMock()
-    monkeypatch.setattr(_disc_routes, "warm_discover_top_seeds", called)
+    monkeypatch.setattr(_disc_graph, "warm_discover_top_seeds", called)
 
     client = _make_app().test_client()
     res = client.post("/api/discover/warm", json={})

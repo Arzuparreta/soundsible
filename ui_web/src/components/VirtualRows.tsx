@@ -52,13 +52,13 @@ function Rows<T>(props: {
   onMount(() => {
     const sync = () => setRowH(measure());
     sync();
-    const mq = window.matchMedia('(min-width: 1024px)');
-    mq.addEventListener('change', sync);
+    if (typeof window.matchMedia === 'function') {
+      const mq = window.matchMedia('(min-width: 1024px)');
+      mq.addEventListener('change', sync);
+      onCleanup(() => mq.removeEventListener('change', sync));
+    }
     window.addEventListener('orientationchange', sync);
-    onCleanup(() => {
-      mq.removeEventListener('change', sync);
-      window.removeEventListener('orientationchange', sync);
-    });
+    onCleanup(() => window.removeEventListener('orientationchange', sync));
   });
 
   // Accessibility sizing changes CSS custom properties without crossing a media
