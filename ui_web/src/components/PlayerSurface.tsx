@@ -226,6 +226,10 @@ export function PlayerSurface() {
 
   return (
     <Portal mount={typeof document !== 'undefined' ? document.body : undefined}>
+      {/* `data-immersive-dark` keeps the whole stage on the dark palette in
+          every theme: the backdrop is artwork blurred to near black and the
+          chrome is white-alpha glass, so light tokens would put dark ink on a
+          black stage and float white cards over the cover (tokens.css). */}
       <div
         ref={surfaceEl}
         classList={{
@@ -234,6 +238,7 @@ export function PlayerSurface() {
           [styles.auto]: auto(),
         }}
         data-player-surface-open={nowPlayingOpen() ? '' : undefined}
+        data-immersive-dark=""
         aria-hidden={!nowPlayingOpen()}
         tabIndex={-1}
       >

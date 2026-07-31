@@ -124,7 +124,10 @@
 
 .radioBadge:hover {
   background: var(--accent);
-  color: var(--bg-raised, #fff);
+  /* The glyph sits on the orange fill, so it reads the one token defined for
+     that job. `--bg-raised` resolved to white in the light theme, which is the
+     lowest-contrast ink orange can carry. */
+  color: var(--ink-on-accent);
 }
 }
 

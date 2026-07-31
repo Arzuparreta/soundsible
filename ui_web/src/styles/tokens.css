@@ -4,7 +4,17 @@
  * (comfortable on mobile, denser on desktop), orange (#f97a12) as the signature accent.
  * Continuity preserved with the existing player/Tauri shell (DESIGN.md).
  */
-:root {
+/* ── Themed palette ──
+   Dark is the base palette, and it is also the palette of the fullscreen
+   player. That surface is a photographic stage — blurred artwork, dark washes,
+   glass chrome and hairlines drawn in white alpha — so it opts out of the light
+   theme through [data-immersive-dark] and keeps reading these values, exactly
+   as Spotify, Apple Music and YouTube Music keep their expanded player dark.
+   Anything the light theme re-declares must live in THIS block, not in the
+   plain :root block below, or the player inherits half a light theme: dark ink
+   on a near-black stage and white cards floating over the artwork. */
+:root,
+:root[data-theme='light'] [data-immersive-dark] {
   color-scheme: dark;
   /* ── Surfaces (layered near-black for depth, subtle elevation — no heavy shadows) ── */
   --bg-base: #0c0c0e; /* app background */
@@ -21,15 +31,34 @@
   --ink-primary: #f2f2f5;
   --ink-secondary: #a0a0a8;
   --ink-tertiary: #6a6a72;
+
+  /* ── Accent tints (the accent hue itself is theme-independent) ── */
+  --accent-soft: rgba(249, 122, 18, 0.14); /* tints, active row wash */
+  --accent-faint: rgba(249, 122, 18, 0.075);
+  --accent-glow: rgba(249, 122, 18, 0.24);
+
+  /* ── Atmosphere + loading ── */
+  --ambient-accent: rgba(249, 122, 18, 0.055);
+  --ambient-highlight: rgba(255, 255, 255, 0.025);
+  --skeleton-base: #17171b;
+  --skeleton-highlight: #24242a;
+
+  /* ── Elevation (subtle — "pro" restraint) ── */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 18px 48px rgba(0, 0, 0, 0.58);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --shadow-accent: 0 8px 24px rgba(249, 122, 18, 0.2);
+}
+
+:root {
+  /* ── Ink on fills ── */
   --ink-on-accent: #1a0e02; /* text on orange fills */
 
   /* ── Accent + brand ── */
   --accent: #f97a12;
   --accent-hover: #ff8d2e;
   --accent-press: #d8630a;
-  --accent-soft: rgba(249, 122, 18, 0.14); /* tints, active row wash */
-  --accent-faint: rgba(249, 122, 18, 0.075);
-  --accent-glow: rgba(249, 122, 18, 0.24);
   --brand-gold: #e0bc00; /* badge/mark only — never a primary fill */
 
   /* ── Status ── */
@@ -89,19 +118,6 @@
   --radius-full: 999px;
   /* Compatibility alias used by older player modules. */
   --radius-pill: var(--radius-full);
-
-  /* ── Elevation (subtle — "pro" restraint) ── */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --shadow-3: 0 18px 48px rgba(0, 0, 0, 0.58);
-  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.6);
-  --shadow-accent: 0 8px 24px rgba(249, 122, 18, 0.2);
-
-  /* ── Atmosphere + loading ── */
-  --ambient-accent: rgba(249, 122, 18, 0.055);
-  --ambient-highlight: rgba(255, 255, 255, 0.025);
-  --skeleton-base: #17171b;
-  --skeleton-highlight: #24242a;
 
   /* Compatibility alias retained for modules authored before tokens.css settled. */
   --accent-primary: var(--accent);
@@ -245,8 +261,12 @@
 }
 
 /* Explicit low-vision palette. The regular themes remain visually untouched;
-   this mode spends subtlety on stronger text, control and focus separation. */
-:root[data-high-contrast='true'] {
+   this mode spends subtlety on stronger text, control and focus separation.
+   The second selector is the same opt-out as above: an immersive surface inside
+   the light theme declares the dark palette on itself, which would otherwise
+   outrank the high-contrast values it inherits from the root. */
+:root[data-high-contrast='true'],
+:root[data-theme='light'][data-high-contrast='true'] [data-immersive-dark] {
   --ink-primary: #ffffff;
   --ink-secondary: #d2d2da;
   --ink-tertiary: #b2b2bd;

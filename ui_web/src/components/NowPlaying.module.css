@@ -1276,15 +1276,18 @@
       box-shadow var(--dur-short);
   }
 
-  .splitter:focus-visible::after,
-  .splitter:active::after {
+  .splitter:focus-visible::after {
     opacity: 1;
     background: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-faint);
   }
 
+  /* Drag paint is pointer-only: on a touch screen `:active` sticks after the
+     gesture ends, which is what the input-capability policy exists to prevent.
+     The keyboard rail above stays unguarded. */
   @media (hover: hover) and (pointer: fine) {
-    .splitter:hover::after {
+    .splitter:hover::after,
+    .splitter:active::after {
       opacity: 1;
       background: var(--accent);
       box-shadow: 0 0 0 3px var(--accent-faint);
