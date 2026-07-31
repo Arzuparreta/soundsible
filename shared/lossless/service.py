@@ -23,7 +23,7 @@ from shared.path_resolver import resolve_local_track_path
 
 from .matching import metadata_match
 from .models import LosslessCandidate, LosslessProvider
-from .providers import allowed_download_url, default_providers
+from .providers import USER_AGENT, allowed_download_url, default_providers
 from .store import LosslessStore
 
 logger = logging.getLogger(__name__)
@@ -133,6 +133,11 @@ class LosslessUpgradeService:
 
     def wake(self) -> None:
         self._wake.set()
+
+    def reload_providers(self) -> None:
+        """Adopt provider credentials changed through the admin settings UI."""
+        self.providers = list(default_providers())
+        self.wake()
 
     # ── Manual run ────────────────────────────────────────────────────────
 
@@ -553,7 +558,7 @@ class LosslessUpgradeService:
                 timeout=(3, 15),
                 allow_redirects=False,
                 headers={
-                    "User-Agent": "SoundsibleLossless/1.0",
+                    "User-Agent": USER_AGENT,
                     "Accept": "audio/flac,audio/wav,application/octet-stream",
                 },
             )

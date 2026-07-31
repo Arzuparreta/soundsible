@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import quote, urlparse
@@ -9,11 +10,12 @@ from urllib.parse import quote, urlparse
 import requests
 from dotenv import dotenv_values
 
+from shared.music_identity import canonical_music_identity
 from shared.models import Track
 
 from .models import LosslessCandidate
 
-USER_AGENT = "SoundsibleLossless/1.0"
+USER_AGENT = "SoundsibleLosslessBot/1.0 (https://github.com/Arzuparreta/soundsible)"
 SEARCH_TIMEOUT = (2.0, 5.0)
 
 _FREE_LICENSE_TOKENS = (
@@ -82,6 +84,11 @@ def _clear_session_cookies(session: requests.Session) -> None:
         jar.clear()
 
 
+def _canonical_track(track: Track) -> Track:
+    identity = canonical_music_identity(track.artist, track.title, channel=track.artist)
+    return replace(track, artist=identity.artist, title=identity.title)
+
+
 class JamendoProvider:
     name = "jamendo"
     api_url = "https://api.jamendo.com/v3.0/tracks/"
@@ -102,9 +109,35 @@ class JamendoProvider:
     def available(self) -> bool:
         return bool(self.client_id)
 
+    def validate(self) -> bool:
+        """Verify a configured Client ID without exposing or persisting it."""
+        if not self.available:
+            return False
+        _clear_session_cookies(self.session)
+        response = self.session.get(
+            self.api_url,
+            params={
+                "client_id": self.client_id,
+                "format": "json",
+                "limit": 1,
+                "order": "relevance",
+            },
+            headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+            timeout=SEARCH_TIMEOUT,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        headers = payload.get("headers") if isinstance(payload, dict) else None
+        return bool(
+            isinstance(headers, dict)
+            and headers.get("status") == "success"
+            and int(headers.get("code") or 0) == 0
+        )
+
     def search(self, track: Track, *, limit: int = 3) -> list[LosslessCandidate]:
         if not self.available:
             return []
+        track = _canonical_track(track)
         _clear_session_cookies(self.session)
         response = self.session.get(
             self.api_url,
@@ -161,6 +194,7 @@ class WikimediaProvider:
         return True
 
     def search(self, track: Track, *, limit: int = 3) -> list[LosslessCandidate]:
+        track = _canonical_track(track)
         _clear_session_cookies(self.session)
         response = self.session.get(
             self.api_url,
@@ -224,6 +258,7 @@ class InternetArchiveProvider:
         return True
 
     def search(self, track: Track, *, limit: int = 3) -> list[LosslessCandidate]:
+        track = _canonical_track(track)
         _clear_session_cookies(self.session)
         query = (
             f'mediatype:audio AND title:("{track.title}") AND '

@@ -38,6 +38,7 @@ from shared.listening_planner import (
     auto_source_sequence,
     plan_generated_queue,
 )
+from shared.music_identity import canonical_music_identity
 from shared.dj_engine import (
     DJ_PROFILES,
     analyse_audio,
@@ -86,6 +87,7 @@ _DISCOVERY_FEED_INFLIGHT: set[str] = set()
 _DISCOVERY_FEED_LOCK = threading.Lock()
 _DISCOVERY_FEED_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="soundsible-discovery")
 _PLAN_RESOLVE_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="soundsible-plan-resolve")
+_CANONICAL_RESOLVE_BUDGET_SEC = 2.5
 _LOOKUP_CHUNK = 40
 # Short search terms — merged and deduped when RSS chart is unavailable.
 _ITUNES_TOP_FALLBACK_TERMS = ("podcast", "news", "comedy", "technology", "sports")
@@ -924,11 +926,19 @@ def _planner_item_from_related(row: dict) -> dict | None:
     video_id = str(row.get("video_id") or row.get("id") or "").strip()
     if not validate_youtube_video_id(video_id):
         return None
+    title = str(row.get("title") or "Unknown")
+    channel = str(row.get("channel") or row.get("uploader") or row.get("artist") or "")
+    identity = canonical_music_identity("", title, channel=channel)
     return {
         "id": video_id,
         "youtube_id": video_id,
-        "title": str(row.get("title") or "Unknown"),
-        "artist": str(row.get("channel") or row.get("uploader") or row.get("artist") or ""),
+        "discovery_youtube_id": video_id,
+        "title": identity.title,
+        "artist": identity.artist,
+        "source_title": title,
+        "source_artist": channel,
+        "playback_source_kind": identity.source_kind,
+        "canonical_identity": identity.key,
         "duration": int(row.get("duration") or 0),
         "cover": str(row.get("thumbnail") or ""),
         "source": "preview",
@@ -948,12 +958,21 @@ def _planner_item_from_feed(item: dict, *, pool: str) -> dict | None:
     if not track_id and not validate_youtube_video_id(video_id):
         return None
     item_id = track_id or video_id
+    title = str(item.get("title") or "Unknown")
+    artist = str(item.get("artist") or "")
+    source_title = str(item.get("source_title") or title)
+    source_artist = str(item.get("source_artist") or artist)
+    identity = canonical_music_identity(artist, source_title, channel=source_artist)
     return {
         "id": item_id,
         "track_id": track_id or None,
         "youtube_id": video_id or None,
-        "title": str(item.get("title") or "Unknown"),
-        "artist": str(item.get("artist") or ""),
+        "title": identity.title,
+        "artist": identity.artist,
+        "source_title": source_title,
+        "source_artist": source_artist,
+        "playback_source_kind": identity.source_kind,
+        "canonical_identity": identity.key,
         "album": str(item.get("album") or ""),
         "duration": int(item.get("duration") or 0),
         "cover": str(item.get("cover") or ""),
@@ -980,7 +999,8 @@ def _planner_artist_key(value: object) -> str:
 
 def _planner_video_id(metadata, item: dict) -> str:
     video_id = str(
-        item.get("youtube_id")
+        item.get("discovery_youtube_id")
+        or item.get("youtube_id")
         or (
             (item.get("external_ids") or {}).get("youtube_id")
             if isinstance(item.get("external_ids"), dict)
@@ -995,6 +1015,93 @@ def _planner_video_id(metadata, item: dict) -> str:
     track = _planner_track_by_id(metadata, track_id) if track_id else None
     candidate = str(getattr(track, "youtube_id", "") or "")
     return candidate if validate_youtube_video_id(candidate) else ""
+
+
+def _resolve_generated_playback(item: dict, user_id: str | None) -> dict:
+    """Prefer a canonical upload while retaining the discovery graph identity."""
+    from shared.api.routes.catalog import _resolve_candidates
+    from shared.resolution_confidence import CONFIDENCE_HIGH
+    from shared.user_context import user_context
+
+    current = canonical_music_identity(
+        item.get("artist"),
+        item.get("source_title") or item.get("title"),
+        channel=item.get("source_artist") or item.get("artist"),
+    )
+    with user_context(user_id):
+        best, candidates = _resolve_candidates(
+            current.artist,
+            current.title,
+            int(item.get("duration") or 0) or None,
+        )
+    if not best or float(best.get("confidence") or 0) < CONFIDENCE_HIGH:
+        return item
+    best_title = str(best.get("title") or current.title)
+    best_channel = str(best.get("channel") or best.get("uploader") or "")
+    resolved = canonical_music_identity(current.artist, best_title, channel=best_channel)
+    if resolved.version_tokens != current.version_tokens or resolved.source_rank <= current.source_rank:
+        return item
+    video_id = str(best.get("id") or "")
+    if not validate_youtube_video_id(video_id):
+        return item
+    discovery_id = str(item.get("discovery_youtube_id") or item.get("youtube_id") or item.get("id") or "")
+    return {
+        **item,
+        "id": video_id,
+        "youtube_id": video_id,
+        "discovery_youtube_id": discovery_id,
+        "title": resolved.title,
+        "artist": resolved.artist,
+        "source_title": best_title,
+        "source_artist": best_channel,
+        "playback_source_kind": resolved.source_kind,
+        "canonical_identity": resolved.key,
+        "external_ids": {
+            **(item.get("external_ids") if isinstance(item.get("external_ids"), dict) else {}),
+            "youtube_id": video_id,
+            "discovery_youtube_id": discovery_id,
+        },
+        # Feedback and generated-lane exclusions stay attached to the graph node
+        # that discovered the song, not to whichever upload happened to play it.
+        "recommendation_identity": item.get("recommendation_identity"),
+        "resolution_candidates": len(candidates),
+    }
+
+
+def _canonicalize_generated_items(items: list[dict], user_id: str | None) -> list[dict]:
+    """Bounded best-effort playback-source upgrade for an already chosen plan.
+
+    Song selection is finished before this runs. A failed/slow lookup therefore
+    cannot remove discovery: it simply leaves the original video in place while
+    the single-flight resolver warms its cache for a later plan.
+    """
+    futures = {}
+    submitted = 0
+    for index, item in enumerate(items):
+        if item.get("source") != "preview":
+            continue
+        identity = canonical_music_identity(
+            item.get("artist"),
+            item.get("source_title") or item.get("title"),
+            channel=item.get("source_artist") or item.get("artist"),
+        )
+        if identity.source_kind in {"official_audio", "artist_audio"}:
+            continue
+        if submitted >= 3:
+            break
+        future = _PLAN_RESOLVE_EXECUTOR.submit(_resolve_generated_playback, dict(item), user_id)
+        futures[future] = index
+        submitted += 1
+    if not futures:
+        return items
+    done, _ = wait(futures, timeout=_CANONICAL_RESOLVE_BUDGET_SEC)
+    resolved = list(items)
+    for future in done:
+        try:
+            resolved[futures[future]] = future.result()
+        except Exception as exc:
+            logger.debug("Generated playback source resolve failed: %s", exc)
+    return resolved
 
 
 def _planner_context(seed: dict, raw_context: object) -> list[dict]:
@@ -1286,6 +1393,8 @@ def _planner_resolve_artist_candidate(item: dict, user_id: str | None) -> dict |
     resolved["youtube_id"] = video_id
     resolved["id"] = video_id
     resolved["source"] = "preview"
+    resolved["source_title"] = str(best.get("title") or item.get("title") or "")
+    resolved["source_artist"] = str(best.get("channel") or best.get("uploader") or "")
     resolved["recommendation_identity"] = f"music:youtube:{video_id}"
     return _planner_item_from_feed(resolved, pool="related")
 
@@ -1374,7 +1483,8 @@ def _build_music_plan(data: dict) -> tuple[dict, int]:
     seed_title = str(seed.get("title") or getattr(library_seed, "title", "") or "").strip()
     seed_artist = str(seed.get("artist") or getattr(library_seed, "artist", "") or "").strip()
     seed_youtube_id = str(
-        seed.get("youtube_id")
+        seed.get("discovery_youtube_id")
+        or seed.get("youtube_id")
         or getattr(library_seed, "youtube_id", "")
         or (seed.get("id") if seed.get("source") == "preview" else "")
         or ""
@@ -1407,6 +1517,7 @@ def _build_music_plan(data: dict) -> tuple[dict, int]:
             **seed,
             "track_id": track_id or None,
             "youtube_id": seed_youtube_id or None,
+            "discovery_youtube_id": str(seed.get("discovery_youtube_id") or "") or None,
             "source": "library" if library_seed else "preview",
             "title": seed_title,
             "artist": seed_artist,
@@ -1433,6 +1544,7 @@ def _build_music_plan(data: dict) -> tuple[dict, int]:
                 if str(item.get("artist") or "").strip()
             ],
         )
+        items = _canonicalize_generated_items(items, current_user_id())
         return {
             "v": 1,
             "plan_id": str(uuid.uuid4()),
@@ -1507,6 +1619,7 @@ def _build_music_plan(data: dict) -> tuple[dict, int]:
         limit=limit,
         exclude=[str(value) for value in exclude[:200] if str(value).strip()],
     )
+    items = _canonicalize_generated_items(items, current_user_id())
     return {
         "v": 1,
         "plan_id": str(uuid.uuid4()),

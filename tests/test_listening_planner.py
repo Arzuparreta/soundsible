@@ -181,3 +181,28 @@ def test_auto_counts_recent_context_artists_before_building_the_next_segment():
     )
 
     assert [item["id"] for item in plan] == ["next"]
+
+
+def test_same_song_keeps_the_official_audio_without_filtering_unique_reuploads():
+    lyrics = _candidate("lyrics", "related", 0.95, "Artist")
+    lyrics.update({
+        "canonical_identity": "artist\x00song\x00",
+        "playback_source_kind": "third_party_lyrics",
+    })
+    official = _candidate("official", "related", 0.8, "Artist - Topic")
+    official.update({
+        "canonical_identity": "artist\x00song\x00",
+        "playback_source_kind": "official_audio",
+    })
+    unique = _candidate("unique-reupload", "related", 0.7, "Small Channel")
+    unique.update({
+        "canonical_identity": "other\x00rare song\x00",
+        "playback_source_kind": "unverified",
+    })
+
+    plan = plan_generated_queue(
+        {"related": [lyrics, official, unique]},
+        intent="radio",
+    )
+
+    assert [item["id"] for item in plan] == ["official", "unique-reupload"]

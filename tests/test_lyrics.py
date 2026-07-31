@@ -123,7 +123,7 @@ def test_lyrics_not_found_negative_cache(monkeypatch):
         "synced": None,
         "plain": None,
         "instrumental": False,
-        "source": "lrclib:v3",
+        "source": "lrclib:v4",
     })
     monkeypatch.setattr(lyrics_module, "fetch_lyrics", fetch)
 
@@ -163,7 +163,7 @@ def test_saved_streaming_lyrics_are_persisted_by_metadata(monkeypatch):
         "synced": "[00:01.00] cached line",
         "plain": "cached line",
         "instrumental": False,
-        "source": "lrclib:v3",
+        "source": "lrclib:v4",
     })
     monkeypatch.setattr(lyrics_module, "fetch_lyrics", fetch)
     url = (
@@ -203,6 +203,46 @@ def test_streaming_provider_error_is_unavailable_and_never_cached(monkeypatch):
     assert fetch.call_count == 2
 
 
+def test_unverified_preview_keeps_plain_lyrics_but_hides_album_timed_lrc(monkeypatch):
+    fetch = MagicMock(return_value={
+        "synced": "[00:01.00] line",
+        "plain": "line",
+        "instrumental": False,
+        "source": "lrclib:v4",
+    })
+    monkeypatch.setattr(lyrics_module, "fetch_lyrics", fetch)
+
+    client = _make_app().test_client()
+    body = _get_until_ready(
+        client,
+        "/api/lyrics?artist=Artist&title=Song&duration=200&source_kind=third_party_lyrics",
+    ).get_json()
+
+    assert body["status"] == "ready"
+    assert body["synced"] is None
+    assert body["plain"] == "line"
+    assert body["timing_safe"] is False
+
+
+def test_official_audio_preview_keeps_synced_lyrics(monkeypatch):
+    fetch = MagicMock(return_value={
+        "synced": "[00:01.00] line",
+        "plain": "line",
+        "instrumental": False,
+        "source": "lrclib:v4",
+    })
+    monkeypatch.setattr(lyrics_module, "fetch_lyrics", fetch)
+
+    client = _make_app().test_client()
+    body = _get_until_ready(
+        client,
+        "/api/lyrics?artist=Artist&title=Song&duration=200&source_kind=official_audio",
+    ).get_json()
+
+    assert body["synced"] == "[00:01.00] line"
+    assert body["timing_safe"] is True
+
+
 def test_lyrics_refresh_bypasses_cache(monkeypatch):
     monkeypatch.setattr(library_routes, "_get_api", lambda: _fake_api(_track()))
     fetch = MagicMock(return_value={
@@ -227,7 +267,7 @@ def test_lyrics_track_not_found(monkeypatch):
 
 def test_db_negative_cache_expires(tmp_path):
     db = instance_db()
-    db.set_lyrics("t1", synced=None, plain=None, instrumental=False, source="lrclib:v3")
+    db.set_lyrics("t1", synced=None, plain=None, instrumental=False, source="lrclib:v4")
     assert db.get_lyrics("t1") is not None
     with db._get_connection() as conn:
         conn.execute(
@@ -288,7 +328,7 @@ def test_fetch_lyrics_no_match_within_tolerance(monkeypatch):
     )
     monkeypatch.setattr(lyrics_module, "_deezer_search", lambda artist, title, timeout_sec: [])
     record = lyrics_module.fetch_lyrics("Artist", "Song", "Album", 200)
-    assert record == {"synced": None, "plain": None, "instrumental": False, "source": "lrclib:v3"}
+    assert record == {"synced": None, "plain": None, "instrumental": False, "source": "lrclib:v4"}
 
 
 def test_fetch_lyrics_normalizes_youtube_video_metadata_in_one_request(monkeypatch):

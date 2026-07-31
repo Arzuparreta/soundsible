@@ -77,6 +77,19 @@ Main controls:
 
 - Selecting the search and download source (YouTube vs YouTube Music).
 - Choosing quality presets (lossless by default where available, with manual selection).
+
+### Optional lossless sources
+
+The lossless upgrader works without credentials through Wikimedia Commons and
+Internet Archive. Jamendo coverage is enabled with the read-only `client_id`
+assigned to a registered application at
+[`devportal.jamendo.com`](https://devportal.jamendo.com/).
+
+An instance administrator can enter that value in **Settings → Downloads →
+Lossless upgrades → Jamendo Client ID**. Soundsible validates it with Jamendo
+before storing it in the ignored `odst_tool/.env` file, never returns the value
+through the status API, and reloads the provider without a daemon restart.
+OAuth `client_secret` and access tokens are not needed and must not be entered.
 - Controlling parallelism and concurrency for faster downloads (subject to your bandwidth and hardware).
 
 Refer to `odst_tool/README.md` for more details on standalone ODST usage.

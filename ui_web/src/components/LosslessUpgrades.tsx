@@ -3,7 +3,7 @@ import { api, type LosslessStatus } from '../lib/api';
 import { t } from '../lib/i18n';
 import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/confirm';
-import { ActionRow, SettingsGroup, SwitchRow, ValueRow } from './SettingsRows';
+import { ActionRow, InputRow, SettingsGroup, SwitchRow, ValueRow } from './SettingsRows';
 
 /**
  * Manual control over the lossless upgrade worker.
@@ -36,12 +36,15 @@ function activityLabel(status: LosslessStatus): string {
 export function LosslessUpgrades() {
   const [status, setStatus] = createSignal<LosslessStatus | null>(null);
   const [busy, setBusy] = createSignal(false);
+  const [jamendoClientId, setJamendoClientId] = createSignal('');
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const running = () => status()?.manual?.state === 'running';
   const paused = () => status()?.manual?.state === 'paused';
   const count = (key: string) => status()?.counts?.[key] ?? 0;
   const pending = () => count('pending') + count('retry') + count('committing');
+  const jamendoReady = () =>
+    status()?.providers?.some((provider) => provider.name === 'jamendo' && provider.available) ?? false;
 
   const schedule = () => {
     clearTimeout(timer);
@@ -95,6 +98,26 @@ export function LosslessUpgrades() {
     await act(() => api.runLosslessNow(true), t('settings.losslessRunStarted'));
   };
 
+  const saveJamendo = async () => {
+    const value = jamendoClientId().trim();
+    if (!value || busy()) return;
+    setBusy(true);
+    try {
+      const result = await api.setJamendoClientId(value);
+      setJamendoClientId('');
+      await refresh();
+      toast.success(
+        result.jamendo_configured
+          ? t('settings.losslessJamendoSaved')
+          : t('settings.losslessJamendoInvalid'),
+      );
+    } catch {
+      toast.error(t('settings.losslessJamendoInvalid'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   onMount(refresh);
   onCleanup(() => clearTimeout(timer));
 
@@ -118,6 +141,25 @@ export function LosslessUpgrades() {
       <Show when={!(status()?.identity_verifier_available ?? true)}>
         <ValueRow label={t('settings.losslessVerifier')} value={t('settings.losslessUnavailable')} />
       </Show>
+
+      <ValueRow
+        label={t('settings.losslessJamendo')}
+        value={jamendoReady() ? t('settings.losslessJamendoReady') : t('settings.losslessJamendoMissing')}
+      />
+      <InputRow
+        label={t('settings.losslessJamendoClientId')}
+        hint={t('settings.losslessJamendoHint')}
+        value={jamendoClientId()}
+        placeholder={jamendoReady() ? '••••••••' : ''}
+        type="password"
+        autocomplete="off"
+        onInput={setJamendoClientId}
+      />
+      <ActionRow
+        label={t('settings.losslessJamendoSave')}
+        disabled={busy() || !jamendoClientId().trim()}
+        onClick={() => void saveJamendo()}
+      />
 
       <Show
         when={running() || paused()}

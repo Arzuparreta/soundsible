@@ -192,6 +192,7 @@ export interface DjItemRef {
   id?: string;
   track_id?: string;
   youtube_id?: string;
+  discovery_youtube_id?: string;
   source?: string;
   title: string;
   artist: string;
@@ -203,6 +204,9 @@ export interface ListeningPlanItem {
   id: string;
   track_id?: string | null;
   youtube_id?: string | null;
+  discovery_youtube_id?: string | null;
+  playback_source_kind?: string | null;
+  canonical_identity?: string | null;
   title: string;
   artist: string;
   album?: string;
@@ -609,12 +613,16 @@ export const api = {
     title: string;
     album?: string;
     duration?: number;
+    sourceKind?: string;
+    youtubeId?: string;
     persist?: boolean;
     refresh?: boolean;
   }) => {
     const params = new URLSearchParams({ artist: p.artist, title: p.title });
     if (p.album) params.set('album', p.album);
     if (p.duration) params.set('duration', String(Math.round(p.duration)));
+    if (p.sourceKind) params.set('source_kind', p.sourceKind);
+    if (p.youtubeId) params.set('youtube_id', p.youtubeId);
     if (p.persist) params.set('persist', '1');
     if (p.refresh) params.set('refresh', '1');
     return request<LyricsResponse>(`/api/lyrics?${params.toString()}`, { timeoutMs: 15000 });
@@ -804,6 +812,7 @@ export const api = {
         id?: string;
         track_id?: string;
         youtube_id?: string;
+        discovery_youtube_id?: string;
         source?: string;
         title: string;
         artist: string;
@@ -1046,6 +1055,14 @@ export const api = {
       method: 'PATCH',
       body: { enabled },
     }),
+  setJamendoClientId: (jamendoClientId: string) =>
+    request<{ status: string; enabled: boolean; jamendo_configured: boolean }>(
+      '/api/lossless/config',
+      {
+        method: 'PATCH',
+        body: { jamendo_client_id: jamendoClientId },
+      },
+    ),
   /** Run the upgrade queue now. `recheck` also re-asks the providers about
    * tracks that came back empty, instead of replaying the cached verdict. */
   runLosslessNow: (recheck = false) =>

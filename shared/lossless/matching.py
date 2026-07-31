@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from shared.music_identity import canonical_music_identity
 from shared.models import Track
 
 from .models import LosslessCandidate
@@ -32,11 +33,15 @@ def _markers(value: str) -> set[str]:
 
 
 def metadata_match(track: Track, candidate: LosslessCandidate) -> bool:
-    if normalize_text(track.title) != normalize_text(candidate.title):
+    track_identity = canonical_music_identity(track.artist, track.title, channel=track.artist)
+    candidate_identity = canonical_music_identity(
+        candidate.artist, candidate.title, channel=candidate.artist
+    )
+    if normalize_text(track_identity.title) != normalize_text(candidate_identity.title):
         return False
-    if normalize_text(track.artist) != normalize_text(candidate.artist):
+    if normalize_text(track_identity.artist) != normalize_text(candidate_identity.artist):
         return False
-    if _markers(track.title) != _markers(candidate.title):
+    if track_identity.version_tokens != candidate_identity.version_tokens:
         return False
     if track.duration and candidate.duration and abs(int(track.duration) - int(candidate.duration)) > 3:
         return False

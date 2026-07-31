@@ -245,15 +245,19 @@ export function InputRow(props: {
   value: string;
   placeholder?: string;
   onInput: (value: string) => void;
+  type?: 'text' | 'password';
+  autocomplete?: string;
 }) {
   return (
     <div class={styles.stackRow}>
       <RowText label={props.label} hint={props.hint} />
       <input
+        type={props.type ?? 'text'}
         class={styles.input}
         value={props.value}
         placeholder={props.placeholder}
         aria-label={props.label}
+        autocomplete={props.autocomplete}
         onInput={(event) => props.onInput(event.currentTarget.value)}
       />
     </div>

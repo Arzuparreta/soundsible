@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from shared.lossless.providers import (
     InternetArchiveProvider,
     JamendoProvider,
+    USER_AGENT,
     WikimediaProvider,
     allowed_download_url,
 )
@@ -83,6 +84,31 @@ def test_jamendo_returns_only_downloadable_free_flac_candidates():
     assert kwargs["params"]["audiodlformat"] == "flac"
     assert "Cookie" not in kwargs["headers"]
     assert "Referer" not in kwargs["headers"]
+    assert "github.com/Arzuparreta/soundsible" in kwargs["headers"]["User-Agent"]
+    assert kwargs["headers"]["User-Agent"] == USER_AGENT
+
+
+def test_provider_queries_use_canonical_youtube_metadata():
+    session = FakeSession(FakeResponse({"results": []}))
+    noisy = _track()
+    noisy.artist = "Abel York"
+    noisy.title = "Abel York - Where Are You | Official Music Video"
+
+    JamendoProvider(client_id="public-app-id", session=session).search(noisy)
+
+    _, kwargs = session.calls[0]
+    assert kwargs["params"]["search"] == "Abel York Where Are You"
+
+
+def test_jamendo_client_id_validation_uses_a_bounded_read_request():
+    session = FakeSession(
+        FakeResponse({"headers": {"status": "success", "code": 0}, "results": []})
+    )
+
+    assert JamendoProvider(client_id="private-app-id", session=session).validate()
+    _, kwargs = session.calls[0]
+    assert kwargs["params"]["client_id"] == "private-app-id"
+    assert kwargs["params"]["limit"] == 1
 
 
 def test_wikimedia_requires_original_lossless_file_and_free_license():

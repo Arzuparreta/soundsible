@@ -22,6 +22,8 @@ from typing import Any, Dict, Optional
 
 import requests
 
+from shared.music_identity import canonical_music_identity
+
 logger = logging.getLogger(__name__)
 
 _LRCLIB_HOST = "https://lrclib.net"
@@ -37,34 +39,11 @@ _MIN_FALLBACK_BUDGET_SEC = 1.0
 _MIN_MATCH_SCORE = 0.72
 _MIN_TITLE_SCORE = 0.68
 
-RESOLVER_SOURCE = "lrclib:v3"
+RESOLVER_SOURCE = "lrclib:v4"
 
 _LOOKUP_WORKERS = 2
 
-_BRACKET_RE = re.compile(r"\s*[\[(]([^\])]+)[\])]\s*")
 _SPACE_RE = re.compile(r"\s+")
-_SEPARATOR_RE = re.compile(r"\s+(?:-|–|—|:|\|)\s+")
-_CHANNEL_SUFFIX_RE = re.compile(
-    r"(?:\s*[-–—]\s*|\s+)?[\[(]?(?:official channel|canal oficial|official|oficial|topic|vevo)[\])]?\s*$",
-    re.IGNORECASE,
-)
-_NOISE_TOKENS = {
-    "4k",
-    "audio",
-    "clip",
-    "full",
-    "hd",
-    "hq",
-    "letra",
-    "letras",
-    "lyric",
-    "lyrics",
-    "music",
-    "official",
-    "oficial",
-    "video",
-    "videoclip",
-}
 _VERSION_TOKENS = {
     "acoustic",
     "acustico",
@@ -86,33 +65,9 @@ def _fold(value: Any) -> str:
     return _SPACE_RE.sub(" ", text).strip()
 
 
-def _strip_noise_groups(value: str) -> str:
-    def replace(match: re.Match[str]) -> str:
-        tokens = set(_fold(match.group(1)).split())
-        return " " if tokens and tokens <= _NOISE_TOKENS else match.group(0)
-
-    return _SPACE_RE.sub(" ", _BRACKET_RE.sub(replace, value or "")).strip()
-
-
 def _canonical_metadata(artist: str, title: str) -> tuple[str, str]:
-    clean_artist = _CHANNEL_SUFFIX_RE.sub("", (artist or "").strip()).strip(" -–—|:")
-    clean_title = _strip_noise_groups((title or "").strip())
-
-    # YouTube commonly stores "Artist - Track" as the title while also using
-    # the artist/channel in the artist field. Remove only a matching prefix.
-    parts = _SEPARATOR_RE.split(clean_title, maxsplit=1)
-    if len(parts) == 2:
-        prefix, remainder = parts
-        folded_artist = _fold(clean_artist)
-        folded_prefix = _fold(_CHANNEL_SUFFIX_RE.sub("", prefix))
-        if folded_artist and folded_prefix and (
-            folded_artist == folded_prefix
-            or folded_artist in folded_prefix
-            or folded_prefix in folded_artist
-        ):
-            clean_title = remainder.strip()
-
-    return clean_artist or (artist or "").strip(), clean_title or (title or "").strip()
+    identity = canonical_music_identity(artist, title, channel=artist)
+    return identity.artist, identity.title
 
 
 def _version_tokens(value: Any) -> set[str]:

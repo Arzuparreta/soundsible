@@ -15,6 +15,8 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from shared.music_identity import canonical_music_identity
+
 _PAREN_RE = re.compile(r"\s*[\(\[].*?[\)\]]")
 _PUNCT_RE = re.compile(r"[^\w\s]")
 _WS_RE = re.compile(r"\s+")
@@ -113,7 +115,15 @@ def is_official_source(candidate: dict) -> bool:
     )
 
 
-def _source_adjustment(candidate_title: str, candidate_channel: str) -> float:
+def _source_preference(artist: str, candidate_title: str, candidate_channel: str) -> int:
+    return canonical_music_identity(
+        artist,
+        candidate_title,
+        channel=candidate_channel,
+    ).source_rank
+
+
+def _source_adjustment(artist: str, candidate_title: str, candidate_channel: str) -> float:
     """Prefer the artist's own upload over somebody else's repost of it.
 
     An "official lyric video" earns both marks and nets out at zero, which is
@@ -122,12 +132,14 @@ def _source_adjustment(candidate_title: str, candidate_channel: str) -> float:
     title = candidate_title or ""
     channel = candidate_channel or ""
     adjustment = 0.0
-    lowered_channel = channel.casefold()
-    official = any(
-        re.search(rf"(?<!\w){re.escape(marker)}(?!\w)", title, re.IGNORECASE)
-        for marker in _OFFICIAL_TITLE_MARKERS
-    ) or any(marker in lowered_channel for marker in _OFFICIAL_CHANNEL_MARKERS)
-    if official:
+    kind = canonical_music_identity(artist, title, channel=channel).source_kind
+    if kind == "official_audio":
+        adjustment += _OFFICIAL_BONUS
+    elif kind == "artist_audio":
+        adjustment += 0.12
+    elif kind == "official_video":
+        adjustment += 0.08
+    elif kind in {"official_lyrics", "artist_upload"}:
         adjustment += _OFFICIAL_BONUS
     if any(pattern.search(title) for pattern in _REPACKAGE_RES):
         adjustment -= _REPACKAGE_PENALTY
@@ -236,10 +248,12 @@ def score_candidate(
         score -= _VERSION_PENALTY
 
     # — Source preference —
-    score += _source_adjustment(
-        candidate.get("title") or "",
-        candidate.get("channel") or candidate.get("uploader") or "",
-    )
+    if not wrong_version:
+        score += _source_adjustment(
+            artist,
+            candidate.get("title") or "",
+            candidate.get("channel") or candidate.get("uploader") or "",
+        )
 
     score = max(0.0, min(1.0, score))
 
@@ -304,7 +318,18 @@ def best_candidate(
     # "Equally credible" has to mean close, not merely the same band: `medium`
     # spans 0.40 to 0.74, wide enough that the wrong song from the right channel
     # would outrank the right song from somebody else's.
-    scored.sort(key=lambda x: (round(x[0], 1), is_official_source(x[2]), x[0]), reverse=True)
+    scored.sort(
+        key=lambda x: (
+            round(x[0], 1),
+            _source_preference(
+                artist,
+                x[2].get("title") or "",
+                x[2].get("channel") or x[2].get("uploader") or "",
+            ),
+            x[0],
+        ),
+        reverse=True,
+    )
 
     best_score, best_reason, best = scored[0]
 

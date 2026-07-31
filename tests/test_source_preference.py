@@ -110,3 +110,20 @@ def test_an_official_lyric_video_nets_out():
     with_neither, _ = score_candidate("Coldplay", "Yellow", 269, neither)
 
     assert with_both == pytest.approx(with_neither, abs=0.01)
+
+
+def test_topic_audio_wins_over_an_official_music_video_for_the_same_song():
+    video = {
+        "title": "Yellow (Official Music Video)",
+        "channel": "Coldplay",
+        "duration": 269,
+    }
+    audio = {
+        "title": "Yellow",
+        "channel": "Coldplay - Topic",
+        "duration": 269,
+    }
+
+    best, _, _, _ = best_candidate("Coldplay", "Yellow", 269, [video, audio])
+
+    assert best is audio

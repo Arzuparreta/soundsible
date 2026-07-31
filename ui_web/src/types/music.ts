@@ -6,6 +6,11 @@ export interface Track {
   album_artist?: string | null;
   duration?: number;
   youtube_id?: string | null;
+  /** Graph node that discovered this song. Playback may use a better upload. */
+  discovery_youtube_id?: string | null;
+  /** Trust/timeline class of the YouTube upload currently being played. */
+  playback_source_kind?: string | null;
+  canonical_identity?: string | null;
   media_kind?: string | null;
   podcast_episode_guid?: string | null;
   /** Original enclosure URL retained only for token refresh during recovery. */
@@ -57,6 +62,7 @@ export interface RecommendationContext {
   source: 'discover' | 'radio' | 'auto_mode' | 'autoplay' | 'podcast';
   reason?: string;
   reason_code?: string;
+  discovery_youtube_id?: string;
 }
 
 export interface LyricsResponse {
@@ -66,6 +72,7 @@ export interface LyricsResponse {
   instrumental: boolean;
   cached: boolean;
   pending?: boolean;
+  timing_safe?: boolean;
 }
 
 export interface SearchResult {

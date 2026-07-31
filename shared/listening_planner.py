@@ -36,6 +36,15 @@ _ARTIST_SUFFIX = re.compile(
     r"(?:\s*[-–—]\s*)?(?:topic|official(?:\s+music)?|vevo)$",
     re.IGNORECASE,
 )
+_SOURCE_RANK = {
+    "official_audio": 70,
+    "artist_audio": 65,
+    "official_video": 55,
+    "official_lyrics": 48,
+    "artist_upload": 45,
+    "unverified": 30,
+    "third_party_lyrics": 15,
+}
 
 
 def _clean(value: Any) -> str:
@@ -63,6 +72,7 @@ def _candidate_keys(row: Mapping[str, Any]) -> set[str]:
             _clean(row.get("track_id")),
             _clean(row.get("youtube_id")),
             _clean(external.get("youtube_id")),
+            _clean(row.get("canonical_identity")),
         )
         if value
     }
@@ -73,6 +83,30 @@ def _score(row: Mapping[str, Any]) -> float:
         return float(row.get("score") or 0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _source_rank(row: Mapping[str, Any]) -> int:
+    return _SOURCE_RANK.get(_clean(row.get("playback_source_kind")), 0)
+
+
+def _prefer_song_variants(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep the best upload for duplicate song identities, never the song out."""
+    selected: dict[str, tuple[int, dict[str, Any]]] = {}
+    passthrough: list[tuple[int, dict[str, Any]]] = []
+    for index, row in enumerate(rows):
+        identity = _clean(row.get("canonical_identity"))
+        if not identity:
+            passthrough.append((index, row))
+            continue
+        previous = selected.get(identity)
+        if previous is None or (_source_rank(row), _score(row)) > (
+            _source_rank(previous[1]),
+            _score(previous[1]),
+        ):
+            selected[identity] = (index, row)
+    combined = [*passthrough, *selected.values()]
+    combined.sort(key=lambda item: item[0])
+    return [row for _, row in combined]
 
 
 def _artist_key(value: Any) -> str:
@@ -153,11 +187,11 @@ def plan_generated_queue(
     )
     seen = {_clean(value) for value in exclude if _clean(value)}
     raw_pools = {
-        pool: [
+        pool: _prefer_song_variants([
             dict(row)
             for row in (pools.get(pool) or ())
             if isinstance(row, Mapping) and not (_candidate_keys(row) & seen)
-        ]
+        ])
         for pool in PLANNER_POOLS
     }
     if intent == "auto_mode" and entropy:

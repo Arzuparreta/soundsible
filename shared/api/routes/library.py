@@ -19,21 +19,28 @@ logger = logging.getLogger(__name__)
 library_bp = Blueprint("library", __name__, url_prefix="")
 
 
-def _lyrics_payload(record=None, *, cached=False, status=None):
+def _lyrics_payload(record=None, *, cached=False, status=None, source_kind=None):
+    from shared.music_identity import synced_lyrics_safe
+
     if status is None:
         status = (
             "ready"
             if record and (record.get("synced") or record.get("plain") or record.get("instrumental"))
             else "not_found"
         )
-    return {
+    synced = record.get("synced") if record else None
+    timing_safe = source_kind is None or synced_lyrics_safe(str(source_kind))
+    payload = {
         "status": status,
-        "synced": record.get("synced") if record else None,
+        "synced": synced if timing_safe else None,
         "plain": record.get("plain") if record else None,
         "instrumental": bool(record and record.get("instrumental")),
         "cached": cached,
         "pending": status == "pending",
     }
+    if source_kind is not None:
+        payload["timing_safe"] = timing_safe
+    return payload
 
 
 def _playlist_mutation_response(metadata, status: str = "success"):
@@ -250,6 +257,7 @@ def get_lyrics_by_metadata():
     artist = (request.args.get("artist") or "").strip()
     title = (request.args.get("title") or "").strip()
     album = (request.args.get("album") or "").strip() or None
+    source_kind = (request.args.get("source_kind") or "").strip() or None
     try:
         duration = int(request.args.get("duration") or 0) or None
     except ValueError:
@@ -264,7 +272,7 @@ def get_lyrics_by_metadata():
     if persist and not refresh:
         cached = db.get_lyrics(cache_key)
         if cached:
-            return jsonify(_lyrics_payload(cached, cached=True))
+            return jsonify(_lyrics_payload(cached, cached=True, source_kind=source_kind))
 
     lookup_status, record = poll_lyrics(artist, title, album, duration)
     if lookup_status != "complete":
@@ -279,7 +287,7 @@ def get_lyrics_by_metadata():
             instrumental=record["instrumental"],
             source=record["source"],
         )
-    return jsonify(_lyrics_payload(record))
+    return jsonify(_lyrics_payload(record, source_kind=source_kind))
 
 
 @library_bp.route("/api/library/tracks/<track_id>/metadata", methods=["POST"])

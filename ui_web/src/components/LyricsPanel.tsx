@@ -33,6 +33,8 @@ export function LyricsPanel(props: {
       title: cur.title,
       album: cur.album,
       duration: cur.duration,
+      sourceKind: cur.playback_source_kind,
+      youtubeId: cur.youtube_id ?? (cur.source === 'preview' ? cur.id : undefined),
       inLibrary: state.library.some((tk) => tk.id === cur.id),
       saved: state.saved.some((entry) => entry.keys.some((key) => keys.has(key))),
     };
@@ -50,6 +52,8 @@ export function LyricsPanel(props: {
             title: key.title,
             album: key.album,
             duration: key.duration,
+            sourceKind: key.sourceKind ?? undefined,
+            youtubeId: key.youtubeId ?? undefined,
             persist: key.saved,
           });
       if (!result.pending) return result;

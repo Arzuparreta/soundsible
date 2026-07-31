@@ -2674,11 +2674,16 @@ function planItemTrack(item: ListeningPlanItem): Track {
       };
   return {
     ...base,
+    youtube_id: item.youtube_id ?? base.youtube_id,
+    discovery_youtube_id: item.discovery_youtube_id,
+    playback_source_kind: item.playback_source_kind,
+    canonical_identity: item.canonical_identity,
     recommendation: {
       identity: item.recommendation_identity,
       source: item.recommendation_source,
       reason: item.recommendation_source === 'autoplay' ? tr('autoplay.reason') : item.reason,
       reason_code: item.reason_code,
+      discovery_youtube_id: item.discovery_youtube_id ?? undefined,
     },
   };
 }
@@ -2704,6 +2709,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
         id: seed.id,
         track_id: seed.source === 'preview' ? undefined : seed.id,
         youtube_id: seed.youtube_id ?? (seed.source === 'preview' ? seed.id : undefined),
+        discovery_youtube_id: seed.discovery_youtube_id ?? undefined,
         source: seed.source,
         title: seed.title,
         artist: seed.artist,
