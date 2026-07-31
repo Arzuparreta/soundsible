@@ -18,8 +18,9 @@ function renderTabs() {
   ));
 }
 
-beforeEach(() => {
-  setLocale('es');
+beforeEach(async () => {
+  // Non-English dictionaries load on demand now.
+  await setLocale('es');
   window.history.pushState({}, '', '/');
 });
 

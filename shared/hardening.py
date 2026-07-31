@@ -9,9 +9,8 @@ import time
 import threading
 import hashlib
 import logging
-from collections import defaultdict
 from functools import wraps
-from typing import Callable, Iterable, Optional
+from typing import Iterable, Optional
 
 from flask import g, jsonify, request
 
@@ -340,22 +339,45 @@ def require_instance_admin(*, allow_trusted_network: bool = True):
     return require_scope(SCOPE_ADMIN_INSTANCE, allow_trusted_network=allow_trusted_network)
 
 
+#: Keys tracked before the limiter sweeps elapsed windows. Keys are
+#: ``action:ip``, so this is roughly (decorated actions) × (recent clients).
+_RATE_LIMIT_MAX_KEYS = 2048
+
+
 class _WindowRateLimiter:
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._events: dict[str, list[float]] = defaultdict(list)
+        # key -> (window_sec, hit timestamps). The window is kept per key because
+        # actions are decorated with different ones, and pruning with the wrong
+        # window would drop a live entry and hand that client a fresh budget.
+        self._events: dict[str, tuple[int, list[float]]] = {}
 
     def allow(self, key: str, limit: int, window_sec: int) -> bool:
         now = time.time()
         with self._lock:
-            events = self._events.get(key, [])
-            events = [t for t in events if now - t < window_sec]
-            if len(events) >= limit:
-                self._events[key] = events
-                return False
-            events.append(now)
-            self._events[key] = events
-            return True
+            _, previous = self._events.get(key, (window_sec, []))
+            events = [t for t in previous if now - t < window_sec]
+            allowed = len(events) < limit
+            if allowed:
+                events.append(now)
+            self._events[key] = (window_sec, events)
+            if len(self._events) > _RATE_LIMIT_MAX_KEYS:
+                self._prune(now)
+            return allowed
+
+    def _prune(self, now: float) -> None:
+        """Drop keys whose own window has elapsed.
+
+        Without this, one entry per (action, client IP) lived for the process
+        lifetime — a slow leak on any station facing more than a handful of
+        clients. Callers hold the lock.
+        """
+        for stale in [
+            key
+            for key, (window_sec, events) in self._events.items()
+            if not events or now - events[-1] >= window_sec
+        ]:
+            self._events.pop(stale, None)
 
 
 _rate_limiter = _WindowRateLimiter()

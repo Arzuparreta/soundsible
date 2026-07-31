@@ -3,7 +3,6 @@ Player and app config routes.
 """
 
 import json
-from pathlib import Path
 
 from flask import Blueprint, request, jsonify
 
@@ -34,7 +33,6 @@ def get_config():
 @require_instance_admin()
 @rate_limit("config_update", limit=30, window_sec=60)
 def update_config():
-    api = _get_api()
     data = request.json or {}
     config_path = get_config_dir() / "config.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)

@@ -54,4 +54,12 @@ def isolated_runtime(tmp_path_factory):
             reset_telemetry()
         except Exception:
             pass
+        try:
+            from shared.database import reset_database_managers
+
+            # Managers are cached per database path; the next test gets a new
+            # runtime directory, so nothing may survive pointing at this one.
+            reset_database_managers()
+        except Exception:
+            pass
         reset_runtime()

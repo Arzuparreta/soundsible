@@ -11,17 +11,19 @@ import requests
 from flask import Blueprint, jsonify, request
 
 try:
-    import gevent
+    import gevent  # noqa: F401  # imported to probe availability
     from gevent import spawn, joinall
     _HAS_GEVENT = True
 except ImportError:  # pragma: no cover
     _HAS_GEVENT = False
 
+from shared import request_scope
 from shared.api.memo import Memo
 from shared.database import instance_db
+from shared.providers import deezer
 from shared.hardening import rate_limit
 from shared.resolution_confidence import best_candidate, classify_confidence
-from shared.text_utils import sanitize_cli_message
+from shared.text_utils import collapse_text, identity_key, normalize_text, sanitize_cli_message
 from shared.url_utils import validate_youtube_video_id
 
 
@@ -114,17 +116,11 @@ def _get_api():
 
 
 def _clean(value: object, max_len: int = 240) -> str:
-    text = str(value or "").strip()
-    text = re.sub(r"\s+", " ", text)
-    return text[:max_len]
+    return collapse_text(value, max_len)
 
 
-def _norm(value: object) -> str:
-    return re.sub(r"\s+", " ", str(value or "").strip().casefold())
-
-
-def _key(title: object, artist: object) -> str:
-    return f"{_norm(artist)}\x00{_norm(title)}"
+_norm = normalize_text
+_key = identity_key
 
 
 def _duration(value: object) -> int | None:
@@ -305,14 +301,7 @@ def _dedupe(
 
 
 def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
-    api = _get_api()
-    lib, _, _ = api["get_core"]()
-    try:
-        lib.refresh_if_stale()
-    except Exception:
-        pass
-    metadata = getattr(lib, "metadata", None)
-    tracks = list(metadata.tracks if metadata and metadata.tracks else [])
+    tracks = _library_tracks()
     q = _norm(query)
     out: list[dict[str, Any]] = []
     seen_artists: set[str] = set()
@@ -392,15 +381,7 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
 
 
 def _deezer_search(query: str, limit: int) -> list[dict[str, Any]]:
-    resp = requests.get(
-        f"{_DEEZER_HOST}/search",
-        params={"q": query, "limit": min(limit, 25)},
-        timeout=6,
-        headers={"User-Agent": "SoundsibleCatalog/1.0"},
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    rows = data.get("data") if isinstance(data, dict) and isinstance(data.get("data"), list) else []
+    rows = deezer.rows("search", {"q": query, "limit": min(limit, 25)}, timeout=6)
     out: list[dict[str, Any]] = []
     seen_artists: set[str] = set()
     seen_albums: set[str] = set()
@@ -877,15 +858,9 @@ def catalog_save():
 
 
 def _deezer_get(path: str, params: dict[str, Any] | None = None, timeout: int = 8) -> dict[str, Any]:
-    resp = requests.get(
-        f"{_DEEZER_HOST}/{path}",
-        params=params or {},
-        timeout=timeout,
-        headers={"User-Agent": "SoundsibleCatalog/1.0"},
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return data if isinstance(data, dict) else {}
+    """One artist page used to fire five of these, each uncached and on its own
+    connection. `shared.providers.deezer` pools and caches them."""
+    return deezer.get(path, params, timeout=timeout)
 
 
 def _deezer_artist_search(name: str, limit: int = 10) -> list[dict[str, Any]]:
@@ -1120,6 +1095,16 @@ def _extract_year(release_date: Any) -> int | None:
 
 
 def _library_tracks() -> list[Any]:
+    """The bound user's tracks, loaded once per request.
+
+    Every catalog and discovery helper that needs to know what is already owned
+    used to call this, and each call re-ran the staleness check and rebuilt the
+    list. One `/api/catalog/artist` did it three times over.
+    """
+    return request_scope.scoped("catalog_library_tracks", _load_library_tracks)
+
+
+def _load_library_tracks() -> list[Any]:
     api = _get_api()
     lib, _, _ = api["get_core"]()
     try:
@@ -1130,35 +1115,58 @@ def _library_tracks() -> list[Any]:
     return list(metadata.tracks if metadata and metadata.tracks else [])
 
 
+def _library_key_index() -> dict[str, Any]:
+    """Owned-track keys grouped by artist and by album, built in one pass.
+
+    The lookups below are answered from these maps instead of walking the whole
+    library per call, which is what made them O(library) per request.
+    """
+    return request_scope.scoped("catalog_library_key_index", _build_library_key_index)
+
+
+def _build_library_key_index() -> dict[str, Any]:
+    by_artist: dict[str, set[str]] = {}
+    by_album: dict[tuple[str, str], set[str]] = {}
+    everything: set[str] = set()
+    for track in _library_tracks():
+        artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
+        album = getattr(track, "album", "") or ""
+        key = _key(getattr(track, "title", "") or "", artist)
+        artist_key = _norm(artist)
+        everything.add(key)
+        by_artist.setdefault(artist_key, set()).add(key)
+        by_album.setdefault((_norm(album), artist_key), set()).add(key)
+    return {"by_artist": by_artist, "by_album": by_album, "all": everything}
+
+
 def _library_artist_keys(name: str) -> set[str]:
     """Normalized artist\x00title keys for library tracks credited to an artist.
 
     Callers only need these keys (to badge catalog rows as already-owned) and
-    whether the set is empty, so one pass over the library answers both.
+    whether the set is empty.
     """
+    index = _library_key_index()
     name_key = _norm(name)
-    keys: set[str] = set()
-    for track in _library_tracks():
-        artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
-        if name_key and _norm(artist) != name_key:
-            continue
-        keys.add(_key(getattr(track, "title", "") or "", artist))
-    return keys
+    if not name_key:
+        return set(index["all"])
+    return set(index["by_artist"].get(name_key, ()))
 
 
 def _library_album_keys(album_name: str, artist: str) -> set[str]:
     """Normalized artist\x00title keys for library tracks on a given album."""
+    index = _library_key_index()
     album_key = _norm(album_name)
     artist_key = _norm(artist)
+    if album_key and artist_key:
+        return set(index["by_album"].get((album_key, artist_key), ()))
+
     keys: set[str] = set()
-    for track in _library_tracks():
-        t_artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
-        t_album = getattr(track, "album", "") or ""
-        if album_key and _norm(t_album) != album_key:
+    for (track_album, track_artist), group in index["by_album"].items():
+        if album_key and track_album != album_key:
             continue
-        if artist_key and _norm(t_artist) != artist_key:
+        if artist_key and track_artist != artist_key:
             continue
-        keys.add(_key(getattr(track, "title", "") or "", t_artist))
+        keys |= group
     return keys
 
 

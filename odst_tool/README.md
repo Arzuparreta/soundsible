@@ -19,24 +19,14 @@ A powerful tool to download music from YouTube Music and YouTube links. Fully co
 
 ## Setup
 
-1. **Install Dependencies**
-   ```bash
-   chmod +x setup_env.sh
-   ./setup_env.sh
-   ```
-   *(Or manually: `python -m venv venv && ./venv/bin/pip install -r requirements.txt`)*
+Dependencies come from the project's root `requirements.txt` — this package is
+imported by the engine, not installed on its own.
 
-2. **Optional**: Create a `.env` file (e.g. from `odst_tool/.env.example`) to override `OUTPUT_DIR` or other options.
+**Optional**: create a `.env` file (e.g. from `odst_tool/.env.example`) to override `OUTPUT_DIR` or other options.
 
 ## Usage
 
-### Web (embedded)
-
 Use the **main Soundsible webapp**: start the API (e.g. from `run.py` → Launch Web Player), then open `http://localhost:5005/player/`. The downloader is built into the player UI (Search and **Discover**; Discover uses Deezer for browsing only, then the same YouTube search path to queue downloads — see `docs/ARCHITECTURE.md`).
 
-### Desktop GUI (legacy)
-
-```bash
-./downloader_gui.sh
-```
-Requires tkinter. If tkinter is missing, use the embedded downloader in the webapp instead.
+The standalone tkinter GUI and its `setup_env.sh` / `downloader_gui.sh` helpers
+were removed; the embedded downloader replaces them.

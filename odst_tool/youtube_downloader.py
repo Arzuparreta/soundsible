@@ -2,7 +2,6 @@ import logging
 import os
 import shutil
 import subprocess
-import sys
 import threading
 import time
 import re
@@ -18,11 +17,9 @@ from .config import (
     SEARCH_STRATEGY_PRIMARY,
     SEARCH_STRATEGY_FALLBACK,
     DURATION_TOLERANCE_SEC,
-    DEFAULT_BITRATE,
     DEFAULT_QUALITY,
     QUALITY_PROFILES,
     TRACKS_DIR,
-    MATCH_THRESHOLD_TITLE,
     FORBIDDEN_KEYWORDS,
     prefer_ytmusic,
 )

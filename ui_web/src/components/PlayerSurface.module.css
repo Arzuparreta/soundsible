@@ -229,12 +229,6 @@
   height: 21px;
 }
 
-.chromeButtonActive {
-  color: var(--ink-primary);
-  background: var(--stage-chrome-active);
-  border-color: var(--stage-line-strong);
-}
-
 .modePill {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -239,22 +239,6 @@
   font-weight: var(--fw-bold);
 }
 
-.railRow {
-  display: flex;
-  gap: var(--space-md);
-  min-width: 0;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  padding: var(--space-2xs) 0 var(--space-sm);
-  scroll-padding-inline: var(--gutter);
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
-}
-
-.railRow::-webkit-scrollbar {
-  display: none;
-}
-
 .discoverCard {
   position: relative;
   width: 132px;
@@ -462,7 +446,6 @@
   pointer-events: none;
 }
 
-.topSection,
 .section {
   min-width: 0;
 }
@@ -556,11 +539,6 @@
 
 /* Subordinate YouTube fallback: sits under the music results, visually quieter
    than a real section so it never competes with the catalog. */
-.ytFallback {
-  padding-top: var(--space-lg);
-  border-top: 1px solid var(--hairline);
-}
-
 .ytFallbackCta {
   display: inline-flex;
   align-items: center;
@@ -587,65 +565,6 @@
 
 .ytFallbackCta svg {
   opacity: 0.65;
-}
-
-.topCard {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  min-height: 132px;
-  padding: var(--space-md);
-  background: var(--bg-raised);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
-}
-
-.topMain {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  min-width: 0;
-  flex: 1;
-  padding: 0;
-  color: inherit;
-  background: transparent;
-  border: none;
-  text-align: left;
-  cursor: pointer;
-}
-
-.topCover {
-  position: relative;
-  width: 96px;
-  height: 96px;
-  flex-shrink: 0;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-1);
-}
-
-.topMeta,
-.songMeta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.topMeta {
-  gap: var(--space-2xs);
-}
-
-.topTitle {
-  color: var(--ink-primary);
-  font-size: var(--text-h1);
-  font-weight: var(--fw-bold);
-  overflow-wrap: anywhere;
-}
-
-.topSub,
-.cardSub,
-.songSub {
-  color: var(--ink-secondary);
 }
 
 .pill {
@@ -678,19 +597,6 @@
 }
 }
 
-/* Wash and marker rail: app.css, [data-now-playing]. */
-[data-now-playing] .songTitle {
-  color: var(--accent-ink);
-}
-
-.songCover {
-  position: relative;
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
-  border-radius: var(--radius-xs);
-}
-
 /* "Working on it" sits on the artwork of the row that was tapped, so the
    feedback is where the finger is instead of in a toast across the screen. */
 .coverBusy {
@@ -703,29 +609,10 @@
   background: rgba(0, 0, 0, 0.55);
 }
 
-.songMeta {
-  flex: 1;
-  gap: 1px;
-}
-
-.songTitle,
-.songSub,
-.cardTitle,
-.cardSub {
+.cardTitle {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.songTitle {
-  color: var(--ink-primary);
-  font-size: var(--text-body);
-  font-weight: var(--fw-medium);
-}
-
-.songSub,
-.cardSub {
-  font-size: var(--text-label);
 }
 
 .source,
@@ -758,7 +645,6 @@
 }
 
 
-.primaryIcon,
 .iconBtn,
 .done {
   display: inline-flex;
@@ -771,15 +657,10 @@
   border-radius: var(--radius-full);
 }
 
-.primaryIcon,
 .iconBtn {
   color: var(--accent-ink);
   background: transparent;
   cursor: pointer;
-}
-
-.primaryIcon {
-  background: var(--accent-soft);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -791,12 +672,6 @@
 
 .done {
   color: var(--success);
-}
-
-.cardGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  gap: var(--space-md);
 }
 
 .card {
@@ -943,25 +818,8 @@
 }
 
 @media (max-width: 640px) {
-  .topCard {
-    min-height: 112px;
-  }
-
-  .topCover {
-    width: 78px;
-    height: 78px;
-  }
-
-  .topTitle {
-    font-size: var(--text-h2);
-  }
-
   .source {
     display: none;
-  }
-
-  .cardGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .entityGrid {
@@ -975,7 +833,6 @@
     height: 34px;
   }
 
-  .primaryIcon,
   .iconBtn,
   .done {
     width: 38px;

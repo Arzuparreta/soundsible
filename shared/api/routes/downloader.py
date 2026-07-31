@@ -5,7 +5,6 @@ Downloader queue, YouTube search, discover, and downloader config routes.
 import hashlib
 import json
 import logging
-import time
 from pathlib import Path
 
 from flask import Blueprint, request, jsonify
@@ -13,9 +12,7 @@ from flask import Blueprint, request, jsonify
 from shared.api.memo import Memo
 from shared.text_utils import sanitize_cli_message
 from shared.hardening import (
-    SCOPE_ADMIN_CONFIG,
     SCOPE_DOWNLOAD_ADD,
-    SCOPE_LIBRARY_WRITE,
     rate_limit,
     require_instance_admin,
     require_scope,
@@ -371,7 +368,6 @@ def trigger_downloader_sync():
 @require_scope(SCOPE_DOWNLOAD_ADD, allow_trusted_network=True)
 @rate_limit("downloader_legacy_download", limit=60, window_sec=60)
 def start_download_legacy():
-    import threading
     api = _get_api()
     data = request.json
     url = data.get("url")
@@ -439,11 +435,10 @@ def get_downloader_config():
 @rate_limit("downloader_config_update", limit=20, window_sec=60)
 def update_downloader_config():
     import os
-    api = _get_api()
     data = request.json
     # Note: Keep writer in sync with reader and API startup: always use repo-root-based .env.
     env_path = Path(__file__).resolve().parents[3] / "odst_tool" / ".env"
-    from dotenv import set_key, dotenv_values
+    from dotenv import set_key
     # Note: Ensure parent directory exists before touching .env, regardless of CWD
     env_path.parent.mkdir(parents=True, exist_ok=True)
     if not env_path.exists():
@@ -481,4 +476,6 @@ def update_downloader_config():
                     pass
     import shared.api as api_mod
     api_mod.downloader_service = None
+    # The parsed .env is cached process-wide; this request just rewrote it.
+    api_mod._downloader_env_cache = None
     return jsonify({"status": "updated"})

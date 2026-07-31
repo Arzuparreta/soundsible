@@ -171,9 +171,7 @@ def wipe_library():
         api["emit_to_user"]("library_updated")
         return jsonify({"status": "success"})
     except Exception as e:
-        logger.error("API: Library wipe error: %s", e)
-        import traceback
-        traceback.print_exc()
+        logger.exception("API: Library wipe error: %s", e)
         return jsonify({"error": "Wipe failed"}), 500
 
 

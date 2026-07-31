@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 import threading
-from .config import DEFAULT_WORKERS, LIBRARY_FILENAME, DEFAULT_COOKIE_BROWSER, DEFAULT_QUALITY
+from .config import DEFAULT_WORKERS, LIBRARY_FILENAME, DEFAULT_QUALITY
 from .models import LibraryMetadata
 from .youtube_downloader import YouTubeDownloader
 from .cloud_sync import CloudSync

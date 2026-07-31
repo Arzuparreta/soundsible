@@ -4,7 +4,6 @@ Factory for creating storage provider instances.
 Simplifies provider selection and initialization.
 """
 
-from typing import Optional
 from shared.models import StorageProvider
 from .storage_provider import S3StorageProvider
 from .cloudflare_r2 import CloudflareR2Provider

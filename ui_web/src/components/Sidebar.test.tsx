@@ -4,8 +4,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { setLocale } from '../lib/i18n';
 import { Sidebar } from './Sidebar';
 
-beforeEach(() => {
-  setLocale('es');
+beforeEach(async () => {
+  // Non-English dictionaries load on demand now.
+  await setLocale('es');
   window.history.pushState({}, '', '/');
 });
 

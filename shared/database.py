@@ -26,6 +26,11 @@ BUSY_TIMEOUT_MS = 10_000
 _SCHEMA_READY: dict[str, int] = {}
 _SCHEMA_LOCK = threading.Lock()
 
+#: One `DatabaseManager` per database file, shared process-wide. See
+#: :func:`_manager_for`.
+_MANAGERS: dict[str, "DatabaseManager"] = {}
+_MANAGERS_LOCK = threading.Lock()
+
 # The engine keeps two SQLite files. `instance.db` holds everything that belongs
 # to the machine — accounts, credentials, pairing, and the content-addressed
 # caches every user benefits from. `users/<id>/library.db` holds one person's
@@ -95,15 +100,40 @@ class DatabaseManager:
         else:
             self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        # One connection per thread, reused. Opening a connection is not free —
+        # it costs a file open plus three PRAGMA round trips — and resolving who
+        # is calling a request touches this class several times before any
+        # handler runs. Thread-local rather than shared because a sqlite3
+        # connection may only be used from the thread that created it.
+        self._connections = threading.local()
 
         self._init_db()
 
     def _get_connection(self):
+        """This thread's connection to the database.
+
+        Returned rather than newly opened, so `with db._get_connection() as
+        conn:` keeps its existing meaning — sqlite3 connections commit on a
+        clean exit and roll back on an exception, and neither closes them.
+        """
+        existing = getattr(self._connections, "conn", None)
+        if existing is not None:
+            return existing
+
         conn = sqlite3.connect(self.db_path, timeout=BUSY_TIMEOUT_MS / 1000)
-        # Note: Enable WAL mode for high concurrency
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
+        # busy_timeout first: it is per-connection and always succeeds, and
+        # switching journal mode needs a lock. Without the timeout in place that
+        # switch fails immediately instead of waiting for a concurrent reader.
         conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
+        try:
+            # Note: Enable WAL mode for high concurrency
+            conn.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.OperationalError:
+            # WAL belongs to the file, not the connection — another connection
+            # has already set it.
+            logger.debug("Could not set WAL on %s; already set by another connection", self.db_path)
+        conn.execute("PRAGMA synchronous=NORMAL")
+        self._connections.conn = conn
         return conn
 
     # ------------------------------------------------------------------
@@ -853,11 +883,23 @@ class DatabaseManager:
         return Track.from_dict(data)
 
     def get_stats(self) -> Dict[str, int]:
+        """Track counts in one pass.
+
+        `is_local` and `compressed` are unindexed, so each of the three separate
+        COUNT(*) queries this replaced was its own full scan — on a liveness
+        probe that the desktop shell and the player poll continuously.
+        """
         with self._get_connection() as conn:
-            total = conn.execute("SELECT COUNT(*) FROM tracks").fetchone()[0]
-            local = conn.execute("SELECT COUNT(*) FROM tracks WHERE is_local = 1").fetchone()[0]
-            cloud = conn.execute("SELECT COUNT(*) FROM tracks WHERE compressed = 1").fetchone()[0] # Note: Approximation
-            return {"tracks": total, "local": local, "cloud": cloud}
+            row = conn.execute(
+                """
+                SELECT COUNT(*),
+                       COALESCE(SUM(is_local = 1), 0),
+                       COALESCE(SUM(compressed = 1), 0)
+                FROM tracks
+                """
+            ).fetchone()
+            # `cloud` stays an approximation, as before.
+            return {"tracks": row[0], "local": row[1], "cloud": row[2]}
 
     def clear_all(self):
         """Wipe all data from the local database."""
@@ -1043,6 +1085,37 @@ class DatabaseManager:
                 return json.loads(row["results_json"])
             except Exception:
                 return None
+
+    def get_related_mixes(self, video_ids: Iterable[str]) -> Dict[str, list]:
+        """Cached related mixes for several seeds, in one query.
+
+        The feed and the Auto Mode planner both look up a handful of seeds in a
+        loop; one round trip serves them all. Seeds that are missing or past the
+        TTL are simply absent from the result, so callers can treat a missing
+        key exactly like `get_related_mix` returning None.
+        """
+        wanted = [str(v) for v in video_ids if v]
+        if not wanted:
+            return {}
+        cutoff = int(self._RELATED_MIX_TTL_SEC)
+        placeholders = ",".join("?" * len(wanted))
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                f"""
+                SELECT video_id, results_json FROM related_mix_cache
+                WHERE video_id IN ({placeholders})
+                  AND last_updated >= datetime('now', ? || ' seconds')
+                """,
+                (*wanted, f"-{cutoff}"),
+            ).fetchall()
+        found: Dict[str, list] = {}
+        for row in rows:
+            try:
+                found[row["video_id"]] = json.loads(row["results_json"])
+            except Exception:
+                continue
+        return found
 
     def set_related_mix(self, video_id: str, results: list) -> None:
         """Persist related-mix results for a seed video id (upsert). Empty
@@ -1666,15 +1739,43 @@ class DatabaseManager:
             return int(conn.execute(f"SELECT COUNT(*) FROM users {clause}").fetchone()[0])
 
 
+def _manager_for(db_path: Path) -> DatabaseManager:
+    """A shared manager for ``db_path``, built once per path per process.
+
+    These factories are called from ~57 sites, several of them on the path that
+    resolves the caller of every request. Building a manager reconciles the
+    schema, so handing back the same one turns that from per-call work into
+    per-process work. Managers hold no per-request state; their connections are
+    thread-local.
+    """
+    key = str(db_path)
+    cached = _MANAGERS.get(key)
+    if cached is not None:
+        return cached
+    with _MANAGERS_LOCK:
+        cached = _MANAGERS.get(key)
+        if cached is None:
+            cached = DatabaseManager(key)
+            _MANAGERS[key] = cached
+        return cached
+
+
+def reset_database_managers() -> None:
+    """Drop every cached manager. Tests use this when they swap runtime dirs."""
+    with _MANAGERS_LOCK:
+        _MANAGERS.clear()
+    _SCHEMA_READY.clear()
+
+
 def instance_db() -> DatabaseManager:
     """Database holding accounts, credentials, pairing, and shared caches."""
     config_dir = get_config_dir()
     config_dir.mkdir(parents=True, exist_ok=True)
-    return DatabaseManager(str(config_dir / INSTANCE_DB_FILENAME))
+    return _manager_for(config_dir / INSTANCE_DB_FILENAME)
 
 
 def user_db(user_id: Optional[str] = None) -> DatabaseManager:
     """Track index for ``user_id`` (default: the bound user)."""
     from shared.user_context import user_config_dir
 
-    return DatabaseManager(str(user_config_dir(user_id) / USER_DB_FILENAME))
+    return _manager_for(user_config_dir(user_id) / USER_DB_FILENAME)

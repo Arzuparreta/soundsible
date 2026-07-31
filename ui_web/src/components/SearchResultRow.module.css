@@ -74,7 +74,6 @@
 
 
 .iconBtn,
-.addBtn,
 .done {
   display: inline-flex;
   align-items: center;
@@ -99,16 +98,6 @@
 }
 }
 
-.addBtn {
-  color: var(--accent-ink);
-  transition: background var(--dur-short) var(--ease-out);
-}
-@media (hover: hover) and (pointer: fine) {
-.addBtn:hover {
-  background: var(--accent-soft);
-}
-}
-
 .done {
   color: var(--success);
   cursor: default;
@@ -122,7 +111,6 @@
 
 @media (min-width: 1024px) {
   .iconBtn,
-  .addBtn,
   .done {
     width: 36px;
     height: 36px;

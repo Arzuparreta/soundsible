@@ -79,6 +79,49 @@ def test_schema_is_reconciled_when_the_file_changes_underneath(tmp_path):
     assert "youtube_id" in columns
 
 
+def test_one_shared_manager_serves_many_threads(tmp_path):
+    """`instance_db()` hands the same manager to every caller.
+
+    Its connections are thread-local, so eight threads driving one manager must
+    each get their own — sharing a sqlite3 connection across threads raises
+    ProgrammingError, and reopening per call is the cost this replaced.
+    """
+    path = tmp_path / "shared.db"
+    manager = DatabaseManager(str(path))
+    failures: list[BaseException] = []
+    connections: set[int] = set()
+    connections_lock = threading.Lock()
+
+    def worker(n: int) -> None:
+        try:
+            for i in range(20):
+                manager.set_related_mix(f"vid{n}_{i}", [{"id": "x", "title": "T"}])
+                assert manager.get_related_mix(f"vid{n}_{i}") is not None
+            with connections_lock:
+                connections.add(id(manager._get_connection()))
+        except BaseException as exc:  # noqa: BLE001 — the assertion reports it
+            failures.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(n,)) for n in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert not failures, f"{len(failures)} worker(s) failed, first: {failures[0]!r}"
+    assert len(connections) == 8, "each thread must hold its own connection"
+
+
+def test_repeated_calls_on_one_thread_reuse_a_single_connection(tmp_path):
+    manager = DatabaseManager(str(tmp_path / "reuse.db"))
+
+    first = manager._get_connection()
+    for i in range(10):
+        manager.set_related_mix(f"vid{i}", [{"id": "x", "title": "T"}])
+
+    assert manager._get_connection() is first
+
+
 def test_concurrent_writers_do_not_hit_database_is_locked(tmp_path):
     path = tmp_path / "instance.db"
     DatabaseManager(str(path))

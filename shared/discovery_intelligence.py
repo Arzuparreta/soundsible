@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
+from shared import request_scope
 from shared.models import LibraryMetadata, Track
 from shared.database import user_db
 from shared.telemetry import emit, user_telemetry_dir
@@ -193,7 +194,18 @@ def load_listening_event_rollups(max_events: int = 2000) -> ListeningRollup:
     """
     Read the tail of listening-events.jsonl and aggregate signals.
     Returns an empty rollup when learning is disabled or no events exist.
+
+    Memoized per request: building one discovery feed asked for this five times,
+    and each call re-read the event log and re-parsed up to `max_events` JSON
+    objects. The result is treated as read-only by callers.
     """
+    return request_scope.scoped(
+        f"listening_rollup:{user_config_dir()}:{max_events}",
+        lambda: _read_listening_event_rollups(max_events),
+    )
+
+
+def _read_listening_event_rollups(max_events: int = 2000) -> ListeningRollup:
     if not load_discovery_settings().get("learning_enabled", True):
         return ListeningRollup()
 
@@ -285,6 +297,15 @@ def _settings_path() -> Path:
 
 
 def load_discovery_settings() -> dict[str, Any]:
+    """Read this user's discovery settings, once per request.
+
+    A single feed build called this about nineteen times, each one an
+    `exists()` plus a read plus a `json.loads`.
+    """
+    return dict(request_scope.scoped(f"discovery_settings:{_settings_path()}", _read_discovery_settings))
+
+
+def _read_discovery_settings() -> dict[str, Any]:
     path = _settings_path()
     data: dict[str, Any] = {}
     try:
@@ -312,6 +333,10 @@ def save_discovery_settings(patch: dict[str, Any]) -> dict[str, Any]:
     path = _settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(current, indent=2, sort_keys=True), encoding="utf-8")
+    # A request that saves settings and then reads them back must see the write,
+    # and `learning_enabled` also gates the rollup.
+    request_scope.invalidate("discovery_settings:")
+    request_scope.invalidate("listening_rollup:")
     return current
 
 
@@ -377,6 +402,9 @@ def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> b
         created_at=int(safe["ts"]),
     )
     emit("listening-events", safe)
+    # The rollup is memoized per request; a request that records an event and
+    # then rebuilds a feed must see it.
+    request_scope.invalidate("listening_rollup:")
     return True
 
 
@@ -466,6 +494,7 @@ def record_not_interested(payload: dict[str, Any]) -> str:
         "ts": created_at,
         **safe,
     })
+    request_scope.invalidate("listening_rollup:")
     return event_id
 
 
@@ -475,6 +504,7 @@ def undo_discovery_feedback(event_id: str) -> bool:
 
 def reset_discovery_profile() -> None:
     """Clear the bound account's aggregate, audit rows, and listening log."""
+    request_scope.invalidate("listening_rollup:")
     user_db().clear_discovery_signals()
     for path in _listening_events_paths():
         try:

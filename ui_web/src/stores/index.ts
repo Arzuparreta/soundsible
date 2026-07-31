@@ -1,5 +1,3 @@
-import { createStore } from 'solid-js/store';
-import { createMemo, createRoot, createSignal } from 'solid-js';
 import { createSocket, type AppSocket, dispatchDiscoverSeed } from '../lib/socket';
 import {
   api,
@@ -8,7 +6,6 @@ import {
   type DjPlanResponse,
   type DjProfile,
   type DjRequestTarget,
-  type DeviceRegistration,
   type ListeningPlanItem,
   type RemotePlaybackState,
 } from '../lib/api';
@@ -18,31 +15,18 @@ import {
   isActiveDeck,
   onDeckEvent,
   setGraphReporter,
-  storedVolume,
   type LiveTransitionPlan,
 } from '../lib/audio';
 import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers, playbackYoutubeId } from '../lib/media';
 import { prefetchPreviews, upcomingPreviewIds } from '../lib/prefetch';
 import { toast } from '../lib/toast';
 import { vibrate } from '../lib/haptics';
-import { isMusicTrack, isPodcastTrack, podcastEpisodeToTrack } from '../lib/track';
+import { isPodcastTrack, podcastEpisodeToTrack } from '../lib/track';
 import { queueIdentity, queueIndexOf } from '../lib/queueDiscovery';
-import {
-  buildIdentityIndex,
-  catalogItemKeys,
-  collectIdentityKeys,
-  keysMatch,
-  podcastEpisodeKeys,
-  resolvePlayingKeys,
-  searchResultKeys,
-  trackKeys,
-  withLinkedKeys,
-} from '../lib/playbackIdentity';
-import { savedFromTrack, savedToTrack, savedVideoId } from '../lib/saved';
+import { savedFromTrack, savedVideoId } from '../lib/saved';
 import {
   GeneratedQueueController,
   type AutoActivity,
-  type AutoModeState,
   type AutoPlanItem,
   type AutoProfile,
   type AutoRequest,
@@ -62,243 +46,45 @@ import {
   type QueueSource,
 } from '../lib/playbackQueue';
 import { shuffled } from '../lib/shuffle';
-import type { Track, CatalogItem, SavedEntry, SearchResult, PlaylistMap, LibrarySettings } from '../types/music';
+import type { Track, SavedEntry, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
-import type { DownloadQueueItem, DownloadEvent, CompletedDownload } from '../types/download';
+import type { DownloadEvent } from '../types/download';
 import {
   applyVisualPreferences,
-  loadVisualPreferences,
   persistHighContrast,
   persistInterfaceSize,
   type InterfaceSize,
 } from '../lib/visualPreferences';
 
-/** User preference: explicit dark/light, or follow the OS via prefers-color-scheme. */
-export type Theme = 'dark' | 'light' | 'system';
-/** Concrete appearance applied to the document (never `system`). */
-export type ResolvedTheme = 'dark' | 'light';
-export type RepeatMode = 'off' | 'all' | 'one';
-/**
- * `starved` is the end of the queue with nothing to follow *yet* — the generated
- * lane ran dry and the plan that would extend it has not arrived. It is
- * deliberately not `paused`: paused is a decision the listener made, starved is
- * a promise the player still owes them, and something is always on its way to
- * resolve it.
- */
-export type PlaybackPhase =
-  | 'idle' | 'loading' | 'playing' | 'paused' | 'buffering' | 'recovering' | 'failed' | 'starved';
+// The store shape and its primitives live in `./core`; this module composes
+// behaviour on top of them and stays the public surface every component
+// imports from.
+export * from './core';
+export { invalidateLibrarySync, syncLibrary, syncLibrarySoon } from './library';
+import { invalidateLibrarySync, syncLibrary, syncLibrarySoon } from './library';
+export { addRecentCompleted, applyDownloadEvent, downloadCounts } from './downloads';
+import { applyDownloadEvent } from './downloads';
+export * from './identity';
+import {
+  isFavouriteKeys,
+  isSavedKeys,
+  ownedTrackForKeys,
+  savedEntryForKeys,
+  setCatalogLinks,
+} from './identity';
+import {
+  state,
+  setState,
+  nowPlayingOpen,
+  setNowPlayingOpen,
+  randomId,
+  resumeState,
+  setResumeState,
+  type PlaybackState,
+  type RepeatMode,
+  type Theme,
+} from './core';
 
-export interface DownloadsState {
-  /** Live queue (pending/downloading/failed). Completed items leave the queue. */
-  queue: DownloadQueueItem[];
-  /** Whether the engine pump is actively working. */
-  isProcessing: boolean;
-  /** Ephemeral "just finished" entries, auto-expired ~5s after completion. */
-  recent: CompletedDownload[];
-}
-
-export interface PlaybackState {
-  currentTrack: Track | null;
-  isPlaying: boolean;
-  /** Audio for `currentTrack` is being resolved/buffered and no sound is out yet.
-   * Previews pay a multi-second yt-dlp resolution on the engine, so this is the
-   * difference between "the app ignored my tap" and "it is working on it". Also
-   * set when a playing track re-buffers mid-stream. */
-  isLoading: boolean;
-  /** The current track could not be played at all. Keeps the transport showing a
-   * retry instead of a dead play button. */
-  loadError: boolean;
-  /** Detailed transport state; isLoading/loadError remain compatibility views. */
-  phase: PlaybackPhase;
-  /** The platform refused to resume without a fresh gesture — after recovering
-   * from a dead audio graph, or after a `play()` that arrived too late to ride
-   * the previous one. The transport turns this into a visible invitation to tap
-   * instead of a player that simply stopped. */
-  needsGesture: boolean;
-  currentTime: number;
-  duration: number;
-  queue: PlaybackQueueEntry[];
-  index: number;
-  shuffle: boolean;
-  repeat: RepeatMode;
-  /** 0..1, persisted via the audio service. */
-  volume: number;
-  muted: boolean;
-  /** Whether the queue came from a radio session. Reset to false on any
-   * non-radio play (playTrack/playFrom without `{ radio: true }`, playNow,
-   * playEpisode). The seed COULD already be playing when radio started;
-   * see `startRadio` for the keep-currentTrack branch. */
-  radioMode: boolean;
-  /** True while the radio mix is still loading in the background. The UI
-   * badge pulses during this window; falls back to plain radio badge after. */
-  radioLoading: boolean;
-  /** Track id of the seed used to start the current radio. Useful to
-   * preserve the seed vs mix identity without inferring from the queue. */
-  radioSeedId: string | null;
-  /** Account preference. Generated similar music is always the final lane,
-   * behind explicit requests and the finite playback context. */
-  autoplayEnabled: boolean;
-  autoplayLoading: boolean;
-}
-
-export interface AppState {
-  online: boolean;
-  device: DeviceRegistration;
-  theme: Theme;
-  interfaceSize: InterfaceSize;
-  highContrast: boolean;
-  haptics: boolean;
-  loading: boolean;
-  /** The last library sync did not complete. What is on screen is whatever we
-   * had before — possibly nothing. Lets the empty state say "couldn't reach
-   * your station" instead of the untrue "your library is empty". */
-  libraryError: boolean;
-  /** A library sync has settled at least once, so `library` is now an answer
-   * rather than an absence. Anything that treats an empty library as a fact —
-   * empty states, discovery seeds — must wait for this instead of reading the
-   * boot-time empty array. */
-  libraryReady: boolean;
-  /** Tracks with a file behind them, as the engine scanned them. */
-  library: Track[];
-  /** Songs in the library that are not (or not only) a file, newest first.
-   * Identity-keyed, so an entry follows its song across a download instead of
-   * pointing at one id. `favourite` on an entry is the heart, not the save. */
-  saved: SavedEntry[];
-  playlists: PlaylistMap;
-  librarySettings: LibrarySettings;
-  podcastSubscriptions: PodcastSubscription[];
-  playback: PlaybackState;
-  autoMode: AutoModeState;
-  downloads: DownloadsState;
-}
-
-function initialAutoProfile(): AutoProfile {
-  const value = localStorage.getItem('auto:profile');
-  return value === 'familiar' || value === 'explore' ? value : 'balanced';
-}
-
-function initialDjProfile(): DjProfile {
-  const value = localStorage.getItem('auto:dj-profile');
-  return value === 'long_blend' || value === 'cuts_drops' || value === 'open_format'
-    ? value
-    : 'adaptive';
-}
-
-const initialDjDirection = (): DjDirection => ({
-  energy: 0,
-  familiarity: 0,
-  prompt: '',
-  include: [],
-  exclude: [],
-});
-
-/**
- * UUID v4 that also works in insecure contexts (LAN/Tailscale over plain HTTP),
- * where `crypto.randomUUID` is undefined — only secure contexts (HTTPS /
- * localhost) expose it. `crypto.getRandomValues` is available everywhere.
- */
-function randomId(): string {
-  const c = globalThis.crypto;
-  if (c?.randomUUID) return c.randomUUID();
-  const bytes = new Uint8Array(16);
-  if (c?.getRandomValues) c.getRandomValues(bytes);
-  else for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
-  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
-  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10xx
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0'));
-  return `${hex.slice(0, 4).join('')}-${hex.slice(4, 6).join('')}-${hex
-    .slice(6, 8)
-    .join('')}-${hex.slice(8, 10).join('')}-${hex.slice(10, 16).join('')}`;
-}
-
-function loadDevice(): DeviceRegistration {
-  let id = localStorage.getItem('device_id');
-  if (!id) {
-    id = randomId();
-    localStorage.setItem('device_id', id);
-  }
-  return {
-    device_id: id,
-    device_name: localStorage.getItem('device_name') ?? 'Soundsible Web',
-    device_type: 'web',
-  };
-}
-
-function loadTheme(): Theme {
-  const raw = localStorage.getItem('theme');
-  if (raw === 'dark' || raw === 'light' || raw === 'system') return raw;
-  return 'system';
-}
-
-const initialVisualPreferences = loadVisualPreferences();
-
-const [state, setState] = createStore<AppState>({
-  online: false,
-  device: loadDevice(),
-  theme: loadTheme(),
-  interfaceSize: initialVisualPreferences.interfaceSize,
-  highContrast: initialVisualPreferences.highContrast,
-  haptics: localStorage.getItem('haptics') !== 'off',
-  loading: false,
-  libraryError: false,
-  libraryReady: false,
-  library: [],
-  saved: [],
-  playlists: {},
-  librarySettings: {},
-  podcastSubscriptions: [],
-  playback: {
-    currentTrack: null,
-    isPlaying: false,
-    isLoading: false,
-    loadError: false,
-    phase: 'idle',
-    needsGesture: false,
-    currentTime: 0,
-    duration: 0,
-    queue: [],
-    index: -1,
-    shuffle: false,
-    repeat: 'off',
-    volume: storedVolume(),
-    muted: false,
-    radioMode: false,
-    radioLoading: false,
-    radioSeedId: null,
-    autoplayEnabled: true,
-    autoplayLoading: false,
-  },
-  autoMode: {
-    active: false,
-    profile: initialAutoProfile(),
-    djProfile: initialDjProfile(),
-    direction: initialDjDirection(),
-    requests: [],
-    transition: { status: 'idle' },
-    pendingDirection: false,
-    phase: 'idle',
-    activity: null,
-    plan: {},
-  },
-  downloads: {
-    queue: [],
-    isProcessing: false,
-    recent: [],
-  },
-});
-
-export { state };
-
-/** Now-Playing sheet open state (UI-only). */
-export const [nowPlayingOpen, setNowPlayingOpen] = createSignal(false);
-
-/** Cross-device resume candidate: another device's playback state we can pick up.
- * Set once on boot, cleared when the user accepts or dismisses it. */
-export const [resumeState, setResumeState] = createSignal<RemotePlaybackState | null>(null);
-
-let librarySyncInFlight = false;
-let librarySyncPending = false;
-let librarySyncVersion = 0;
 let userPlaybackStartedThisSession = false;
 let generatedQueue: GeneratedQueueController | null = null;
 let autoPlaybackPrefs: { shuffle: boolean; repeat: RepeatMode } | null = null;
@@ -807,10 +593,6 @@ function pushEmptyPlaybackState(opts: { keepalive?: boolean } = {}): void {
   pushPlaybackState({ keepalive: opts.keepalive, body: playbackStateBody({ track: null, position_sec: 0, is_playing: false }) });
 }
 
-function invalidateLibrarySync(): void {
-  librarySyncVersion += 1;
-}
-
 function removeTrackReferences(id: string): void {
   setState('library', (l) => l.filter((t) => t.id !== id));
   // Favourites are deliberately left alone: deleting the file is not
@@ -1307,341 +1089,16 @@ function onEnded(): void {
   });
 }
 
-/** Push a "just finished" entry to the recent strip and auto-expire it. */
-function addRecentCompleted(entry: CompletedDownload): void {
-  if (state.downloads.recent.some((r) => r.id === entry.id)) return;
-  setState('downloads', 'recent', (r) => [entry, ...r].slice(0, 5));
-  setTimeout(() => {
-    setState('downloads', 'recent', (r) => r.filter((x) => x.id !== entry.id));
-  }, 5000);
-}
-
-/** Merge one `downloader_update` socket payload into the live queue. Mirrors the
- * legacy `mergeDownloaderEvent`: completed items leave the queue; unknown ids are
- * appended (covers events that arrive before the initial seed). */
-function applyDownloadEvent(detail: DownloadEvent): void {
-  const { id, status, track, ...rest } = detail;
-  if (!id) return;
-  if (status === 'completed') {
-    const finished = state.downloads.queue.find((i) => i.id === id);
-    setState('downloads', 'queue', (q) => q.filter((i) => i.id !== id));
-    addRecentCompleted({
-      id,
-      title: track?.title ?? finished?.display_title ?? finished?.podcast_title ?? tr('toast.trackFallback'),
-      artist: track?.artist ?? finished?.display_artist ?? finished?.podcast_show_title ?? '',
-    });
-    // A completed download is emitted by the server *after* it has written the
-    // new track to library.json (see shared/api/__init__.py), so the library is
-    // already authoritative here. Refresh it directly instead of waiting on the
-    // `library_updated` file-watcher event, which has a 2s debounce and can miss
-    // or coalesce filesystem events — that lag is why a freshly downloaded track
-    // wouldn't show up until the user re-entered the Library view. syncLibrary()
-    // coalesces concurrent calls, so bulk (album) completions collapse safely.
-    void actions.syncLibrary();
-    return;
-  }
-  setState('downloads', 'queue', (q) => {
-    const idx = q.findIndex((i) => i.id === id);
-    if (idx === -1) return [...q, { id, status: status ?? 'pending', ...rest } as DownloadQueueItem];
-    const next = q.slice();
-    next[idx] = { ...next[idx], ...rest, status: status ?? next[idx].status };
-    return next;
-  });
-}
-
 /** Apply a playlist mutation response (authoritative playlists + settings). */
 function applyPlaylistMutation(res: { playlists?: PlaylistMap; settings?: LibrarySettings }): void {
   if (res.playlists) setState('playlists', res.playlists);
   if (res.settings) setState('librarySettings', res.settings);
 }
 
-/** A saved song and the track it currently resolves to. */
-export interface SavedRow {
-  entry: SavedEntry;
-  track: Track;
-}
-
-/**
- * The music library: every song you have, downloaded or streaming, podcast
- * episodes excluded. Reactive: call inside a tracking scope (e.g. createMemo).
- *
- * Every music browse surface (Library, Artist, Album) reads this rather than
- * `state.library`, so a song you saved without downloading is browsable exactly
- * like one you own the file for — which is the whole point of saving it.
- * Surfaces that genuinely mean "files on disk" (the downloader's duplicate
- * check, the metadata editor) keep reading `state.library` directly.
- */
-export function musicLibrary(): Track[] {
-  return identity.libraryTracks();
-}
-
-/** Reactive download tallies — call inside a tracking scope (createMemo). */
-export function downloadCounts(): { active: number; failed: number } {
-  let active = 0;
-  let failed = 0;
-  for (const i of state.downloads.queue) {
-    if (i.status === 'failed' || i.status === 'interrupted') failed++;
-    else active++;
-  }
-  return { active, failed };
-}
-
-/* ── Playback identity ──
- *
- * One definition of "this is the thing that is playing", shared by every
- * surface. See `lib/playbackIdentity.ts` for why identity is a set of keys and
- * not an id.
- *
- * Two derived values, and nothing else moves:
- *
- * - `libraryIndex` maps every key the library answers to → its track. Rebuilt
- *   only when `state.library` actually changes.
- * - `playingKeys` is the current track's keys *plus* the keys of its library
- *   twin, looked up through that index.
- *
- * That second union is what closes the download case. Finishing a download
- * emits `downloader_update`, which already calls `syncLibrary()`; the new
- * library array invalidates `libraryIndex`, which invalidates `playingKeys`,
- * which now contains the freshly minted `lib:` id — and the row in the library
- * lights up on its own. Socket event → store write → memo → one class toggle.
- * No polling, no extra request, no timer.
- */
-
-/** Catalog row id → YouTube video id, learned when a row is resolved or saved.
- * The engine's search response cannot know this (the resolution happens after
- * the search), so a Deezer row you just downloaded would otherwise keep
- * offering "＋ add" until the query was run again. */
-const [catalogLinks, setCatalogLinks] = createSignal<ReadonlyMap<string, string>>(new Map());
-
-const identity = createRoot(() => {
-  const libraryIndex = createMemo(() => buildIdentityIndex(state.library));
-  const playingKeys = createMemo(() =>
-    resolvePlayingKeys(state.playback.currentTrack, libraryIndex(), catalogLinks()),
-  );
-  // Queue membership has the same identity problem as the playing highlight: a
-  // Deezer row already lined up must say so, whatever id the row holds.
-  const queuedKeys = createMemo(() =>
-    collectIdentityKeys(futureEntries(state.playback.queue, state.playback.index, 'manual')),
-  );
-  // Saved songs have the same identity problem, one hop further out: the row
-  // you saved in Search, the preview that played, and the file you downloaded
-  // are three ids for one song. Matching on keys is what makes every surface
-  // agree about what you own without any of them knowing where the song lives.
-  const savedKeys = createMemo(() => new Set(state.saved.flatMap((f) => f.keys)));
-  // The mark is a strict subset — a property of a saved song, never a way of
-  // holding one.
-  const favouriteKeys = createMemo(
-    () => new Set(state.saved.filter((f) => f.favourite).flatMap((f) => f.keys)),
-  );
-  // Each saved song as something playable: the owned track when we have it,
-  // a streaming preview when we don't. Resolved here rather than at save time,
-  // so a download promotes the entry with no write and no reordering. The entry
-  // is kept alongside its track, because only the entry knows whether a source
-  // has been attached to it yet — and whether it is marked.
-  const savedRows = createMemo(() =>
-    state.saved
-      .map((entry) => ({ entry, track: savedToTrack(entry, libraryIndex()) }))
-      .filter((row): row is SavedRow => !!row.track),
-  );
-  const favouriteRows = createMemo(() => savedRows().filter((row) => row.entry.favourite));
-  /**
-   * The library as the user thinks of it: everything they have claimed.
-   *
-   * Files first in the engine's own order, then the songs that have no file —
-   * a save is the most recent thing that happened to the collection, and
-   * `sortTracks` reverses this list for "recent", which floats them to the top
-   * where the user just put them. A saved song that has since been downloaded
-   * resolves to its library track and is dropped here rather than listed twice.
-   */
-  const libraryTracks = createMemo(() => {
-    const files = state.library.filter(isMusicTrack);
-    const streaming = savedRows()
-      .filter((row) => row.track.source === 'preview' && isMusicTrack(row.track))
-      .map((row) => row.track)
-      .reverse();
-    return streaming.length === 0 ? files : [...files, ...streaming];
-  });
-  // The marked subset that lives on disk, by library id — what the surfaces
-  // that only speak library ids (sort, radio seeds, Auto Mode) already expect.
-  const favouriteLibraryIds = createMemo(() => {
-    const owned = new Set<string>();
-    const index = libraryIndex();
-    for (const entry of state.saved) {
-      if (!entry.favourite) continue;
-      for (const key of entry.keys) {
-        const track = index.get(key);
-        if (track) {
-          owned.add(track.id);
-          break;
-        }
-      }
-    }
-    return owned as ReadonlySet<string>;
-  });
-  return {
-    libraryIndex,
-    playingKeys,
-    queuedKeys,
-    savedKeys,
-    savedRows,
-    favouriteKeys,
-    favouriteRows,
-    libraryTracks,
-    favouriteLibraryIds,
-  };
-});
-
-/** Keys the playing track answers to. Reactive: read in a tracking scope. */
-export const playingKeys = identity.playingKeys;
-
-/** Does anything with these identity keys own the transport right now? */
-export const isPlayingKeys = (keys: string[]): boolean =>
-  keysMatch(keys, identity.playingKeys(), catalogLinks());
-
-/** The row currently playing — whatever id the surface happens to hold. */
-export const isPlayingTrack = (track: Track): boolean => isPlayingKeys(trackKeys(track));
-export const isPlayingItem = (item: CatalogItem): boolean => isPlayingKeys(catalogItemKeys(item));
-export const isPlayingResult = (result: SearchResult): boolean =>
-  isPlayingKeys(searchResultKeys(result));
-export const isPlayingEpisode = (episodeKey: string): boolean =>
-  isPlayingKeys(podcastEpisodeKeys(episodeKey));
-
-/** Is anything with these identity keys sitting in the playback queue? */
-export const isQueuedKeys = (keys: string[]): boolean =>
-  keysMatch(keys, identity.queuedKeys(), catalogLinks());
-
-export const isQueuedTrack = (track: Track): boolean => isQueuedKeys(trackKeys(track));
-export const isQueuedItem = (item: CatalogItem): boolean => isQueuedKeys(catalogItemKeys(item));
-export const isQueuedResult = (result: SearchResult): boolean =>
-  isQueuedKeys(searchResultKeys(result));
-
-/** The library track this identity is owned as, if it is owned at all. */
-export function ownedTrackForKeys(keys: string[]): Track | null {
-  const index = identity.libraryIndex();
-  for (const key of withLinkedKeys(keys, catalogLinks())) {
-    const owned = index.get(key);
-    if (owned) return owned;
-  }
-  return null;
-}
-
-export const ownedTrackForItem = (item: CatalogItem): Track | null =>
-  ownedTrackForKeys(catalogItemKeys(item));
-export const ownedTrackForResult = (result: SearchResult): Track | null =>
-  ownedTrackForKeys(searchResultKeys(result));
-
-/**
- * Is anything with these identities in the library?
- *
- * True for a downloaded song *and* for one saved without a file: owning the
- * bytes is one way to have a song, not the definition of having it. This is
- * what every surface asks before offering the heart — a song you have not
- * claimed cannot be marked out among the ones you have.
- */
-export const isSavedKeys = (keys: string[]): boolean =>
-  !!ownedTrackForKeys(keys) || keysMatch(keys, identity.savedKeys(), catalogLinks());
-
-export const isSavedTrack = (track: Track): boolean => isSavedKeys(trackKeys(track));
-export const isSavedItem = (item: CatalogItem): boolean => isSavedKeys(catalogItemKeys(item));
-export const isSavedResult = (result: SearchResult): boolean =>
-  isSavedKeys(searchResultKeys(result));
-
-/** Is anything with these identities marked out among the songs you have? */
-export const isFavouriteKeys = (keys: string[]): boolean =>
-  keysMatch(keys, identity.favouriteKeys(), catalogLinks());
-
-export const isFavouriteTrack = (track: Track): boolean => isFavouriteKeys(trackKeys(track));
-export const isFavouriteItem = (item: CatalogItem): boolean =>
-  isFavouriteKeys(catalogItemKeys(item));
-export const isFavouriteResult = (result: SearchResult): boolean =>
-  isFavouriteKeys(searchResultKeys(result));
-
-/** Every saved song paired with the playable track it resolves to, newest
- * first. Owned tracks play their file; the rest stream. */
-export const savedRows = identity.savedRows;
-
-/** The marked subset of the same, in the same order. */
-export const favouriteRows = identity.favouriteRows;
-
-/** Every marked song as a playable track, newest first. */
-export const favouriteTracks = (): Track[] => identity.favouriteRows().map((row) => row.track);
-
-/** The saved entry behind these identities, if the library holds one. Used by
- * the surfaces that need to know *how* a song is held, not just whether. */
-export function savedEntryForKeys(keys: string[]): SavedEntry | null {
-  const all = withLinkedKeys(keys, catalogLinks());
-  for (const entry of state.saved) {
-    if (entry.keys.some((key) => all.includes(key))) return entry;
-  }
-  return null;
-}
-
-/** Is a download for this song in flight? Keyed off the video id, which is what
- * the downloader queue speaks — a failed or interrupted item is not in flight,
- * so its row offers the arrow again rather than spinning forever. */
-export function isDownloadingKeys(keys: string[]): boolean {
-  const videoIds = new Set(
-    withLinkedKeys(keys, catalogLinks())
-      .filter((key) => key.startsWith('yt:'))
-      .map((key) => key.slice(3)),
-  );
-  if (!videoIds.size) return false;
-  return state.downloads.queue.some(
-    (item) =>
-      !!item.video_id &&
-      videoIds.has(item.video_id) &&
-      item.status !== 'failed' &&
-      item.status !== 'interrupted',
-  );
-}
-
-export const isDownloadingTrack = (track: Track): boolean => isDownloadingKeys(trackKeys(track));
-
-/** Library ids of the marked songs we hold a file for. */
-export const favouriteLibraryIds = identity.favouriteLibraryIds;
 
 export const actions = {
-  async syncLibrary(): Promise<void> {
-    if (librarySyncInFlight) {
-      librarySyncPending = true;
-      return;
-    }
-    librarySyncInFlight = true;
-    const syncVersion = ++librarySyncVersion;
-    setState('loading', true);
-    try {
-      const [lib, saved] = await Promise.all([
-        api.getLibrary(),
-        api.getSaved().catch(() => state.saved.slice()),
-      ]);
-      if (syncVersion !== librarySyncVersion) return;
-      setState({
-        library: lib.tracks ?? [],
-        playlists: lib.playlists ?? {},
-        librarySettings: lib.settings ?? {},
-        podcastSubscriptions: lib.podcast_subscriptions ?? [],
-        saved,
-        libraryError: false,
-      });
-    } catch {
-      // Offline or engine down — keep whatever we have, but stop claiming it is
-      // the whole story. An empty list after a failed fetch is not an empty
-      // library, and the view says so.
-      if (syncVersion === librarySyncVersion) setState('libraryError', true);
-    } finally {
-      if (syncVersion === librarySyncVersion) {
-        setState('loading', false);
-        // Settled either way: success means the list is the library, failure is
-        // reported through `libraryError`. Both are answers, so stop making
-        // callers wait on a sync that is over.
-        setState('libraryReady', true);
-      }
-      librarySyncInFlight = false;
-      const runAgain = librarySyncPending;
-      librarySyncPending = false;
-      if (runAgain) queueMicrotask(() => void actions.syncLibrary());
-    }
-  },
+  syncLibrary,
+  syncLibrarySoon,
 
   /** Record that a catalog row resolved to this video. Cheap, local, and the
    * only way a Deezer row can know it is the song that just finished
@@ -2445,8 +1902,17 @@ export const actions = {
     if (meta.artist !== undefined) patch.artist = meta.artist;
     if (meta.album !== undefined) patch.album = meta.album;
     if (meta.album_artist !== undefined) patch.album_artist = meta.album_artist;
-    const prev = state.library;
-    setState('library', (l) => l.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    // Write through the row's path rather than rebuilding the array: `.map`
+    // hands the store a new array of new objects, so every subscriber to
+    // `state.library` re-runs — including the identity index — instead of the
+    // one row that changed.
+    const index = state.library.findIndex((t) => t.id === id);
+    if (index === -1) return false;
+    const restore: Partial<Track> = {};
+    for (const key of Object.keys(patch) as (keyof Track)[]) {
+      restore[key] = state.library[index][key] as never;
+    }
+    setState('library', index, patch);
     if (state.playback.currentTrack?.id === id)
       setState('playback', 'currentTrack', (c) => (c ? { ...c, ...patch } : c));
     try {
@@ -2454,7 +1920,7 @@ export const actions = {
       toast.success(tr('toast.dataUpdated'));
       return true;
     } catch {
-      setState('library', prev);
+      setState('library', index, restore);
       toast.error(tr('toast.updateFailed'));
       return false;
     }
@@ -2643,12 +2109,12 @@ export const actions = {
   },
 
   retryDownload(id: string): void {
-    setState('downloads', 'queue', (q) =>
-      q.map((i) =>
-        i.id === id
-          ? { ...i, status: 'pending', progress_percent: null, error: undefined, error_message: undefined }
-          : i,
-      ),
+    // Path write, so only the retried row's subscribers re-run.
+    setState(
+      'downloads',
+      'queue',
+      (item) => item.id === id,
+      { status: 'pending', progress_percent: null, error: undefined, error_message: undefined },
     );
     api.retryDownload(id).catch(() => void actions.loadDownloads()); // resync on failure
   },
@@ -3105,100 +2571,8 @@ function ensureGeneratedQueue(): GeneratedQueueController {
  * Universal across desktop and mobile (iOS Safari, Android Chrome, etc.)
  * via the CSS media query `prefers-color-scheme`. Falls back to dark when
  * matchMedia is unavailable. */
-export function systemPrefersDark(): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
-}
-
-/** Resolve a stored preference to the concrete dark/light tokens to apply. */
-export function resolveTheme(theme: Theme): ResolvedTheme {
-  if (theme === 'system') return systemPrefersDark() ? 'dark' : 'light';
-  return theme;
-}
-
-let systemMediaQuery: MediaQueryList | null = null;
-let systemMediaListener: ((event: MediaQueryListEvent) => void) | null = null;
-let systemVisibilityListener: (() => void) | null = null;
-
-/** Keep following OS changes while the preference is `system`; detach otherwise. */
-function syncSystemThemeListener(theme: Theme): void {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-
-  if (systemMediaQuery && systemMediaListener) {
-    if (typeof systemMediaQuery.removeEventListener === 'function') {
-      systemMediaQuery.removeEventListener('change', systemMediaListener);
-    } else {
-      // Safari < 14
-      systemMediaQuery.removeListener(systemMediaListener);
-    }
-  }
-  if (systemVisibilityListener) {
-    document.removeEventListener('visibilitychange', systemVisibilityListener);
-  }
-  systemMediaQuery = null;
-  systemMediaListener = null;
-  systemVisibilityListener = null;
-
-  if (theme !== 'system') return;
-
-  const mq = window.matchMedia('(prefers-color-scheme: dark)');
-  systemMediaListener = () => {
-    if (state.theme === 'system') applyResolvedTheme(resolveTheme('system'), true);
-  };
-  systemMediaQuery = mq;
-  if (typeof mq.addEventListener === 'function') {
-    mq.addEventListener('change', systemMediaListener);
-  } else {
-    mq.addListener(systemMediaListener);
-  }
-
-  // Installed PWAs get frozen in the background, where a change event may be
-  // dropped instead of queued. Re-reading the query on the way back to visible
-  // catches an OS flip that happened while we were suspended; when nothing
-  // changed, applyResolvedTheme is a no-op.
-  systemVisibilityListener = () => {
-    if (document.visibilityState !== 'visible') return;
-    if (state.theme === 'system') applyResolvedTheme(resolveTheme('system'), true);
-  };
-  document.addEventListener('visibilitychange', systemVisibilityListener);
-}
-
-/** Keep in sync with --dur-short in tokens.css (plus a little slack). */
-const THEME_TRANSITION_MS = 260;
-let themeTransitionTimer: ReturnType<typeof setTimeout> | null = null;
-
-/** Paint the resolved theme and the mobile status-bar colour. `animate` arms the
- * `[data-theme-transition]` cross-fade in tokens.css; the boot paint leaves it off
- * so the first frame is never animated. */
-function applyResolvedTheme(resolved: ResolvedTheme, animate = false): void {
-  if (typeof document === 'undefined') return;
-  const root = document.documentElement;
-  if (root.dataset.theme === resolved) return;
-
-  if (animate) {
-    root.dataset.themeTransition = '';
-    // Flush styles so the transition rule is in effect *before* the tokens flip;
-    // without it some engines coalesce both changes and skip the animation.
-    void root.offsetWidth;
-    if (themeTransitionTimer) clearTimeout(themeTransitionTimer);
-    themeTransitionTimer = setTimeout(() => {
-      delete root.dataset.themeTransition;
-      themeTransitionTimer = null;
-    }, THEME_TRANSITION_MS);
-  }
-
-  root.dataset.theme = resolved;
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', resolved === 'light' ? '#f6f6f7' : '#0c0c0e');
-}
-
-/** Apply the theme to the document (token overrides live in tokens.css) and
- * sync the mobile status-bar colour. When `system`, follows prefers-color-scheme
- * and re-applies if the OS preference changes. */
-export function applyTheme(theme: Theme, animate = false): void {
-  applyResolvedTheme(resolveTheme(theme), animate);
-  syncSystemThemeListener(theme);
-}
+export { applyTheme, resolveTheme, systemPrefersDark } from './theme';
+import { applyTheme } from './theme';
 
 let socket: AppSocket | null = null;
 let _warmTimer: ReturnType<typeof setTimeout> | null = null;
@@ -3461,7 +2835,9 @@ export function initStore(): void {
   });
   socket.on('disconnect', () => setState('online', false));
   socket.on('library_updated', () => {
-    void actions.syncLibrary();
+    // Shares the coalescing window with download completions, which arrive for
+    // the same writes moments earlier.
+    actions.syncLibrarySoon();
     // Note: Debounced discover cache warming — when the library changes (new
     // saves, favourites, deletes) the top seeds may shift, so re-warm the
     // persistent related-mix cache in the background. The server picks its own

@@ -717,3 +717,100 @@ def test_resolve_artist_id_returns_other_exact_matches_as_candidates(monkeypatch
 
     assert resolved == "2", "most-followed exact match wins"
     assert [c["deezer_id"] for c in candidates] == ["1"]
+
+
+# ── Owned-track key lookups ────────────────────────────────────────────────
+#
+# These used to walk the whole library per call, and a single /api/catalog/artist
+# call made three of them. They are answered from one indexed pass now, so these
+# tests check the index agrees with the scan it replaced.
+
+
+def _naive_artist_keys(tracks, name):
+    norm, key = catalog_routes._norm, catalog_routes._key
+    name_key = norm(name)
+    keys = set()
+    for track in tracks:
+        artist = track.artist or track.album_artist or ""
+        if name_key and norm(artist) != name_key:
+            continue
+        keys.add(key(track.title or "", artist))
+    return keys
+
+
+def _naive_album_keys(tracks, album_name, artist):
+    norm, key = catalog_routes._norm, catalog_routes._key
+    album_key, artist_key = norm(album_name), norm(artist)
+    keys = set()
+    for track in tracks:
+        t_artist = track.artist or track.album_artist or ""
+        if album_key and norm(track.album or "") != album_key:
+            continue
+        if artist_key and norm(t_artist) != artist_key:
+            continue
+        keys.add(key(track.title or "", t_artist))
+    return keys
+
+
+@pytest.fixture()
+def indexed_library(monkeypatch):
+    tracks = [
+        _track_full("t1", "Alpha", "Boards of Canada", album="Geogaddi"),
+        _track_full("t2", "Beta", "Boards of Canada", album="Geogaddi"),
+        _track_full("t3", "Gamma", "Boards of Canada", album="Tomorrow"),
+        _track_full("t4", "Delta", "Aphex Twin", album="Geogaddi"),
+        _track_full("t5", "Epsilon", "aphex twin", album="Drukqs"),
+    ]
+    monkeypatch.setattr(catalog_routes, "_load_library_tracks", lambda: tracks)
+    return tracks
+
+
+@pytest.mark.parametrize(
+    "artist",
+    ["Boards of Canada", "boards of canada", "Aphex Twin", "Nobody", ""],
+)
+def test_artist_keys_match_a_full_scan(indexed_library, artist):
+    from shared import request_scope
+
+    with request_scope.request_scope():
+        assert catalog_routes._library_artist_keys(artist) == _naive_artist_keys(
+            indexed_library, artist
+        )
+
+
+@pytest.mark.parametrize(
+    ("album", "artist"),
+    [
+        ("Geogaddi", "Boards of Canada"),
+        ("Geogaddi", ""),
+        ("", "Aphex Twin"),
+        ("", ""),
+        ("Unknown", "Boards of Canada"),
+    ],
+)
+def test_album_keys_match_a_full_scan(indexed_library, album, artist):
+    from shared import request_scope
+
+    with request_scope.request_scope():
+        assert catalog_routes._library_album_keys(album, artist) == _naive_album_keys(
+            indexed_library, album, artist
+        )
+
+
+def test_library_is_loaded_once_per_request(monkeypatch):
+    from shared import request_scope
+
+    calls = {"n": 0}
+
+    def counting_load():
+        calls["n"] += 1
+        return []
+
+    monkeypatch.setattr(catalog_routes, "_load_library_tracks", counting_load)
+
+    with request_scope.request_scope():
+        catalog_routes._library_artist_keys("A")
+        catalog_routes._library_album_keys("B", "C")
+        catalog_routes._library_tracks()
+
+    assert calls["n"] == 1

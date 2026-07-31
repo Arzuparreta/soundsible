@@ -16,7 +16,6 @@ from shared.hardening import SCOPE_ADMIN_CONFIG, apply_security_headers, rate_li
 from shared.daemon_launcher import (
     start_daemon_process,
     stop_daemon_process,
-    is_port_in_use,
     STATION_PORT,
 )
 from shared.runtime import get_config_dir

@@ -7,7 +7,6 @@ import sqlite3
 import os
 import shutil
 import threading
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -17,9 +16,18 @@ from shared.time_utils import utc_naive
 class CacheManager:
     """Manages local music file cache with LRU eviction."""
     
-    def __init__(self, cache_dir: str = "~/.cache/soundsible/media", 
+    def __init__(self, cache_dir: Optional[str] = None,
                  max_size_gb: int = DEFAULT_CACHE_SIZE_GB):
-        self.cache_dir = Path(cache_dir).expanduser()
+        # Default through RuntimeConfig rather than a hardcoded ~/.cache path:
+        # the desktop appliance sets a platform cache dir, and a literal default
+        # here put the media cache and its index outside the managed directory,
+        # where uninstall and portable builds never found them.
+        if cache_dir is None:
+            from shared.runtime import get_cache_dir
+
+            self.cache_dir = get_cache_dir() / "media"
+        else:
+            self.cache_dir = Path(cache_dir).expanduser()
         self.max_size_bytes = max_size_gb * 1024 * 1024 * 1024
         self.db_path = self.cache_dir.parent / "cache_index.db"
         
@@ -153,7 +161,7 @@ class CacheManager:
                         break
                 self.conn.commit()
                 # Note: Print(f"cache pruned {pruned_count} files to reach target size.")
-            except Exception as e:
+            except Exception:
                 pass
 
     def _ensure_space(self, new_bytes: int):
@@ -167,14 +175,14 @@ class CacheManager:
                 cursor = self.conn.execute("SELECT SUM(file_size) FROM cache_entries")
                 result = cursor.fetchone()[0]
                 return result if result else 0
-            except Exception as e:
+            except Exception:
                 return 0
 
     def clear_cache(self):
         """Delete all cached files and reset DB."""
         try:
              shutil.rmtree(self.cache_dir)
-        except Exception as e:
+        except Exception:
             pass
         self._init_cache()
         
@@ -199,7 +207,7 @@ class CacheManager:
                     try:
                         if os.path.exists(file_path):
                             os.remove(file_path)
-                    except OSError as e:
+                    except OSError:
                         pass
                 
                 self.conn.execute("DELETE FROM cache_entries WHERE track_id = ?", (track_id,))
