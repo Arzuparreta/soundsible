@@ -119,13 +119,6 @@
   transition: opacity 320ms var(--ease-out);
 }
 
-.brandBlock {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-
 .mark {
   display: inline-flex;
   align-items: flex-end;
@@ -153,19 +146,6 @@
 
 .active[data-playing='true'] .mark i:nth-child(2) { animation-delay: 180ms; }
 .active[data-playing='true'] .mark i:nth-child(3) { animation-delay: 360ms; }
-
-.autoLabel {
-  font-size: clamp(12px, 0.85vw, 16px);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.2em;
-}
-
-.topActions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-}
 
 .profile,
 .exit,
@@ -1533,10 +1513,6 @@
    transport. */
 @media (max-height: 400px) {
   .upStrip { display: none; }
-}
-
-@media (max-width: 380px) {
-  .autoLabel { display: none; }
 }
 
 /* Portrait: centre the artwork over left-aligned metadata, and keep the

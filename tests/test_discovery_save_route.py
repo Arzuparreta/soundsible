@@ -52,6 +52,7 @@ def _fake_parse_intake(item: dict):
         "output_dir": None,
     }, None
 from shared.database import instance_db
+from shared.providers import deezer
 from shared.models import LibraryMetadata, Track
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 from shared.telemetry import init_telemetry, reset_telemetry
@@ -801,7 +802,7 @@ class _FakeResponse:
 def test_enriched_music_feed_includes_taste_based_external_tracks_and_local_recs(tmp_path):
     _make_runtime(tmp_path)
     _disc_routes._DISCOVERY_FEED_CACHE.clear()
-    _disc_routes._DEEZER_JSON_CACHE.clear()
+    deezer.clear_cache()
 
     metadata = LibraryMetadata(
         version=1,
@@ -857,7 +858,7 @@ def test_enriched_music_feed_includes_taste_based_external_tracks_and_local_recs
         raise AssertionError(url)
 
     with patch.object(_disc_routes, "_get_api", return_value=api), \
-         patch.object(_disc_routes.requests, "get", side_effect=fake_get):
+         patch.object(deezer, "session", return_value=MagicMock(get=MagicMock(side_effect=fake_get))):
         body = _disc_routes._build_discovery_feed_body(12, include_external=True)
 
     assert any(s["id"] == "made_for_your_library" for s in body["sections"])
@@ -870,7 +871,7 @@ def test_enriched_music_feed_includes_taste_based_external_tracks_and_local_recs
 def test_music_feed_uses_cache_when_fresh(tmp_path):
     _make_runtime(tmp_path)
     _disc_routes._DISCOVERY_FEED_CACHE.clear()
-    _disc_routes._DEEZER_JSON_CACHE.clear()
+    deezer.clear_cache()
 
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     mod = MagicMock()
@@ -883,7 +884,7 @@ def test_music_feed_uses_cache_when_fresh(tmp_path):
     }
 
     with patch.object(_disc_routes, "_get_api", return_value=api), \
-         patch.object(_disc_routes.requests, "get", return_value=_FakeResponse({"tracks": {"data": []}})), \
+         patch.object(deezer, "session", return_value=MagicMock(get=MagicMock(return_value=_FakeResponse({"tracks": {"data": []}})))), \
          patch.object(_disc_routes, "_schedule_discovery_feed_refresh", return_value=False):
         first = _make_app().test_client().get("/api/discovery/music/feed?limit=12")
         second = _make_app().test_client().get("/api/discovery/music/feed?limit=12")

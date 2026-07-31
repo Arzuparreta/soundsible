@@ -5,10 +5,8 @@ This module handles audio metadata extraction, file hashing, and format conversi
 """
 
 import hashlib
-import os
 from typing import Optional, Dict, Any, Tuple
 from mutagen import File as MutagenFile
-from mutagen.easyid3 import EasyID3
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC
 from mutagen.oggvorbis import OggVorbis
@@ -317,7 +315,6 @@ class AudioProcessor:
             from mutagen.easyid3 import EasyID3
             from mutagen.flac import FLAC
             from mutagen.oggvorbis import OggVorbis
-            from mutagen.mp3 import MP3
             
             path_obj = Path(file_path)
             ext = path_obj.suffix.lower()
@@ -368,10 +365,8 @@ class AudioProcessor:
         Supports MP3 (ID3 APIC) and FLAC (Picture).
         """
         try:
-            import mutagen
             from mutagen.id3 import ID3, APIC, ID3NoHeaderError
             from mutagen.flac import FLAC, Picture
-            from mutagen.mp3 import MP3
             
             path_obj = Path(file_path)
             ext = path_obj.suffix.lower()

@@ -4,7 +4,6 @@ Streaming, cover, preview, and playback queue/state routes.
 
 import logging
 import os
-import threading
 import time
 
 from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context, redirect
@@ -12,7 +11,7 @@ from flask import Blueprint, request, jsonify, send_file, Response, stream_with_
 from shared import preview_cache
 from shared.api.memo import Memo
 from shared.constants import DEFAULT_CACHE_DIR
-from shared.hardening import SCOPE_PLAYBACK_CONTROL, rate_limit, require_scope
+from shared.hardening import SCOPE_PLAYBACK_CONTROL, _rate_limiter, rate_limit, require_scope
 from shared.path_resolver import resolve_local_track_path
 from shared.stream_resolution import ResolvedStream, resolved_stream
 from shared.url_utils import validate_youtube_video_id
@@ -33,10 +32,6 @@ COVER_CACHE_SEC = 900  # 15 minutes
 # cost a `send_file` and must never be what pushes a listener over the limit.
 PREVIEW_STREAM_LIMIT = 90
 PREVIEW_STREAM_WINDOW_SEC = 60
-#: Distinct client IPs tracked for rate limiting; oldest are dropped past this.
-PREVIEW_STREAM_MAX_CLIENTS = 512
-_preview_stream_timestamps: dict[str, list[float]] = {}
-_preview_stream_lock = threading.Lock()
 
 # Preview stream URLs, single-flighted: resolution is a multi-second yt-dlp
 # extraction, and repeated taps on the same row (or a prefetch racing the click
@@ -64,20 +59,15 @@ def _queue_snapshot(queue):
 
 
 def _preview_stream_rate_limit(ip: str) -> bool:
-    now = time.time()
-    with _preview_stream_lock:
-        timestamps = [t for t in _preview_stream_timestamps.get(ip, []) if now - t < PREVIEW_STREAM_WINDOW_SEC]
-        if len(timestamps) >= PREVIEW_STREAM_LIMIT:
-            _preview_stream_timestamps[ip] = timestamps
-            return False
-        timestamps.append(now)
-        _preview_stream_timestamps[ip] = timestamps
-        if len(_preview_stream_timestamps) > PREVIEW_STREAM_MAX_CLIENTS:
-            # Bound the tracker: without this, one entry per client IP lives for
-            # the process lifetime. Windows already elapsed are dead weight.
-            for stale in [k for k, ts in _preview_stream_timestamps.items() if not ts or now - ts[-1] >= PREVIEW_STREAM_WINDOW_SEC]:
-                _preview_stream_timestamps.pop(stale, None)
-    return True
+    """Per-client ceiling on preview stream starts.
+
+    This used to be a private sliding window here because the shared limiter in
+    `shared.hardening` grew without bound; now that it prunes elapsed windows,
+    there is one implementation.
+    """
+    return _rate_limiter.allow(
+        f"preview_stream:{ip}", PREVIEW_STREAM_LIMIT, PREVIEW_STREAM_WINDOW_SEC
+    )
 
 
 def _current_egress() -> str:

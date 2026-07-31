@@ -1,3 +1,4 @@
+import threading
 import math
 import struct
 import time
@@ -156,7 +157,13 @@ def test_analyser_decodes_in_memory_and_finds_a_real_pulse_grid(tmp_path, monkey
     assert result["phrase_boundaries"]
     assert result["sections"]
     assert result["tempo_confidence"] > 0
-    assert set(tmp_path.glob("*")) == {source, tmp_path / "analysis.sqlite3"}
+    # Decoding happens in memory: the only things on disk are the source and the
+    # analysis cache. `-wal`/`-shm` are that cache's own sidecars.
+    written = {
+        path for path in tmp_path.glob("*")
+        if not path.name.startswith("analysis.sqlite3-")
+    }
+    assert written == {source, tmp_path / "analysis.sqlite3"}
 
 
 def test_unknown_duration_yields_no_cue_rather_than_a_cue_at_zero():
@@ -220,3 +227,32 @@ def _click_track(path, seconds=18):
             frames.append(struct.pack("<h", int(value * 32767)))
         output.writeframes(b"".join(frames))
     return path
+
+
+def test_analysis_cache_survives_a_concurrent_reader(tmp_path, monkeypatch):
+    """Opening a connection while another thread reads must not fail.
+
+    `PRAGMA journal_mode=WAL` needs a lock a reader will not yield, so it has to
+    come after `busy_timeout` and tolerate failure. Getting that order wrong
+    made every background analysis die silently inside its worker.
+    """
+    monkeypatch.setattr("shared.dj_engine._cache_path", lambda: tmp_path / "analysis.sqlite3")
+    from shared.dj_engine import _connect
+
+    reader = _connect()
+    # Hold an open read against the same file.
+    reader.execute("SELECT * FROM audio_analysis").fetchall()
+
+    errors: list[BaseException] = []
+
+    def open_from_another_thread() -> None:
+        try:
+            _connect().execute("SELECT 1").fetchone()
+        except BaseException as exc:  # noqa: BLE001 — reported by the assertion
+            errors.append(exc)
+
+    thread = threading.Thread(target=open_from_another_thread)
+    thread.start()
+    thread.join()
+
+    assert not errors, f"second connection failed: {errors[0]!r}"

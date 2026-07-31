@@ -40,6 +40,7 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 import { SearchField } from '../components/SearchField';
 import { CatalogResultRow } from '../components/CatalogResultRow';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
+import { readSearchCache, writeSearchCache } from '../lib/searchCache';
 
 type SearchDomain = 'music' | 'youtube';
 type SearchTab = 'all' | 'track,library_track' | 'artist' | 'album';
@@ -126,7 +127,6 @@ export default function Search() {
   let suggestDebounce: number | undefined;
   let requestId = 0;
   let searchInput: HTMLInputElement | undefined;
-  const youtubeCache = new Map<string, SearchResult[]>();
 
   const songs = createMemo(() =>
     items().filter((item) => ['track', 'library_track'].includes(item.type)),
@@ -239,14 +239,29 @@ export default function Search() {
       setLoading(false);
       return;
     }
+    // Catalog results had no cache at all, so returning to Search re-ran the
+    // query the user had just made.
+    const cachedCatalog = readSearchCache<{ items: CatalogItem[]; interpretedAs: string }>(
+      `catalog:${nextTab}`,
+      query,
+    );
+    if (cachedCatalog) {
+      setItems(cachedCatalog.items);
+      setInterpretedAs(cachedCatalog.interpretedAs);
+      setLoading(false);
+      return;
+    }
     aborter = new AbortController();
     setLoading(true);
     api
       .searchCatalog(query, aborter.signal, nextTab)
       .then((res) => {
         if (current !== requestId) return;
-        setItems(res.items ?? []);
-        setInterpretedAs(res.interpreted_as ?? '');
+        const items = res.items ?? [];
+        const interpretedAs = res.interpreted_as ?? '';
+        writeSearchCache(`catalog:${nextTab}`, query, { items, interpretedAs });
+        setItems(items);
+        setInterpretedAs(interpretedAs);
       })
       .catch((e) => {
         if (current !== requestId || isAbort(e)) return;
@@ -302,7 +317,7 @@ export default function Search() {
       setYoutubeLoading(false);
       return;
     }
-    const cached = youtubeCache.get(query);
+    const cached = readSearchCache<SearchResult[]>('youtube', query);
     if (cached) {
       setYoutubeResults(cached);
       setYoutubeLoading(false);
@@ -314,7 +329,7 @@ export default function Search() {
       .searchYouTube(query, aborter.signal)
       .then((res) => {
         if (current !== requestId) return;
-        youtubeCache.set(query, res);
+        writeSearchCache('youtube', query, res);
         setYoutubeResults(res);
       })
       .catch((e) => {

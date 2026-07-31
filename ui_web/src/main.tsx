@@ -1,25 +1,34 @@
 /* SolidJS player entry point for mobile, desktop, PWA, and the desktop shell. */
 import { render } from 'solid-js/web';
-import { Show, createEffect, onMount } from 'solid-js';
+import { Show, createEffect, lazy, onMount } from 'solid-js';
 import { HashRouter, Route, useNavigate } from '@solidjs/router';
 import Shell from './app';
+// Library is the landing route; Login and Invite are the pre-auth screens. All
+// three stay in the entry chunk — and Login/Invite must, because they render
+// outside the router, which is what supplies the Suspense boundary a lazy
+// component needs to appear at all. Every other route is split out: the import
+// wizard alone is ~40 KB that most sessions never open, and it was downloaded
+// and parsed before the first track list could paint.
 import Library from './routes/Library';
-import Favourites from './routes/Favourites';
-import Search from './routes/Search';
-import Settings from './routes/Settings';
-import Playlists from './routes/Playlists';
-import PlaylistDetail from './routes/PlaylistDetail';
-import Podcasts from './routes/Podcasts';
-import PodcastShow from './routes/PodcastShow';
-import Downloads from './routes/Downloads';
-import Migrate from './routes/Migrate';
-import Artist from './routes/Artist';
-import Album from './routes/Album';
 import Login from './routes/Login';
 import Invite from './routes/Invite';
-import Users from './routes/Users';
-import { Placeholder } from './routes/Placeholder';
-import DesignPreview from './pages/DesignPreview';
+
+const Favourites = lazy(() => import('./routes/Favourites'));
+const Search = lazy(() => import('./routes/Search'));
+const Settings = lazy(() => import('./routes/Settings'));
+const Playlists = lazy(() => import('./routes/Playlists'));
+const PlaylistDetail = lazy(() => import('./routes/PlaylistDetail'));
+const Podcasts = lazy(() => import('./routes/Podcasts'));
+const PodcastShow = lazy(() => import('./routes/PodcastShow'));
+const Downloads = lazy(() => import('./routes/Downloads'));
+const Migrate = lazy(() => import('./routes/Migrate'));
+const Artist = lazy(() => import('./routes/Artist'));
+const Album = lazy(() => import('./routes/Album'));
+const Users = lazy(() => import('./routes/Users'));
+const DesignPreview = lazy(() => import('./pages/DesignPreview'));
+const Placeholder = lazy(() =>
+  import('./routes/Placeholder').then((m) => ({ default: m.Placeholder })),
+);
 import { initStore, state } from './stores';
 import { applyVisualPreferences } from './lib/visualPreferences';
 import { initLocale, t } from './lib/i18n';
@@ -69,7 +78,10 @@ function installViewportHeightSync() {
 }
 
 installViewportHeightSync();
-initLocale();
+// Locale dictionaries other than English load on demand. Nothing renders until
+// the session resolves anyway (see `App`), so this normally finishes first and
+// the interface never flashes English.
+void initLocale();
 installSessionGuard();
 registerServiceWorker();
 void refreshSession();

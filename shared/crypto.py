@@ -81,6 +81,6 @@ class CredentialManager:
             f = Fernet(key)
             return f.decrypt(encrypted_data.encode()).decode()
             
-        except Exception as e:
+        except Exception:
             # Note: Print(f"decryption failed {E}")
             return None

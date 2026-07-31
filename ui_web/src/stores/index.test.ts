@@ -1141,3 +1141,59 @@ describe('the end of a track', () => {
     expect(state.playback.index).toBe(1);
   });
 });
+
+describe('library refresh coalescing', () => {
+  // Downloads finish one per track, and each completion used to refetch the
+  // whole library — replacing `state.library` and rebuilding every derived
+  // list — on the device that is also decoding audio.
+
+  it('collapses a burst of background requests into one refresh', async () => {
+    vi.useFakeTimers();
+    try {
+      const { actions, api } = await loadStore();
+      await actions.syncLibrary();
+      const before = api.getLibrary.mock.calls.length;
+
+      for (let i = 0; i < 12; i += 1) actions.syncLibrarySoon();
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(api.getLibrary.mock.calls.length).toBe(before + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still refreshes directly when the user asked for it', async () => {
+    const { actions, api } = await loadStore();
+    const before = api.getLibrary.mock.calls.length;
+
+    await actions.syncLibrary();
+
+    expect(api.getLibrary.mock.calls.length).toBe(before + 1);
+  });
+});
+
+describe('download queue writes', () => {
+  it('patches the retried row without disturbing its neighbours', async () => {
+    const { actions, state, api } = await loadStore({
+      getDownloadQueue: vi.fn().mockResolvedValue({
+        queue: [
+          { id: 'a', status: 'failed', error: 'boom' },
+          { id: 'b', status: 'downloading', progress_percent: 40 },
+        ],
+        is_processing: true,
+      }),
+      retryDownload: vi.fn().mockResolvedValue({ status: 'ok' }),
+    });
+    await actions.loadDownloads();
+    const untouched = state.downloads.queue[1];
+
+    actions.retryDownload('a');
+
+    expect(state.downloads.queue[0].status).toBe('pending');
+    expect(state.downloads.queue[0].error).toBeUndefined();
+    // The other row is the very same object: nothing rebuilt the array.
+    expect(state.downloads.queue[1]).toBe(untouched);
+    expect(api.retryDownload).toHaveBeenCalledWith('a');
+  });
+});

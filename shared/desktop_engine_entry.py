@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 from pathlib import Path
 
 from shared.daemon_launcher import MSG_CONFIG_MISSING

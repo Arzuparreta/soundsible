@@ -299,6 +299,19 @@ export const [resumeState, setResumeState] = createSignal<RemotePlaybackState | 
 let librarySyncInFlight = false;
 let librarySyncPending = false;
 let librarySyncVersion = 0;
+let librarySyncTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Delay before a background library refresh actually fires.
+ *
+ * `syncLibrary` refetches the whole library, and replacing `state.library`
+ * rebuilds the identity index and every derived list. Downloads finish one per
+ * track, so an album used to trigger a burst of full refetches on the same
+ * device that is decoding audio. Bursts collapse into one refresh; the fetch
+ * itself is unchanged, and anything the user asked for directly still awaits
+ * `syncLibrary()` and stays immediate.
+ */
+const LIBRARY_SYNC_COALESCE_MS = 1500;
 let userPlaybackStartedThisSession = false;
 let generatedQueue: GeneratedQueueController | null = null;
 let autoPlaybackPrefs: { shuffle: boolean; repeat: RepeatMode } | null = null;
@@ -1332,20 +1345,32 @@ function applyDownloadEvent(detail: DownloadEvent): void {
     });
     // A completed download is emitted by the server *after* it has written the
     // new track to library.json (see shared/api/__init__.py), so the library is
-    // already authoritative here. Refresh it directly instead of waiting on the
+    // already authoritative here. Refresh it instead of waiting on the
     // `library_updated` file-watcher event, which has a 2s debounce and can miss
     // or coalesce filesystem events — that lag is why a freshly downloaded track
-    // wouldn't show up until the user re-entered the Library view. syncLibrary()
-    // coalesces concurrent calls, so bulk (album) completions collapse safely.
-    void actions.syncLibrary();
+    // wouldn't show up until the user re-entered the Library view.
+    //
+    // Coalesced: `syncLibrary` alone allows one in-flight plus one queued, so a
+    // twelve-track album still issued several full-library round trips while
+    // the device was decoding audio.
+    actions.syncLibrarySoon();
     return;
   }
-  setState('downloads', 'queue', (q) => {
-    const idx = q.findIndex((i) => i.id === id);
-    if (idx === -1) return [...q, { id, status: status ?? 'pending', ...rest } as DownloadQueueItem];
-    const next = q.slice();
-    next[idx] = { ...next[idx], ...rest, status: status ?? next[idx].status };
-    return next;
+  const index = state.downloads.queue.findIndex((item) => item.id === id);
+  if (index === -1) {
+    setState('downloads', 'queue', state.downloads.queue.length, {
+      id,
+      status: status ?? 'pending',
+      ...rest,
+    } as DownloadQueueItem);
+    return;
+  }
+  // Progress events arrive several times a second per active download. Copying
+  // the queue and respreading the row on each one re-ran every subscriber to
+  // `downloads.queue`; a path write touches only the row that moved.
+  setState('downloads', 'queue', index, {
+    ...rest,
+    status: status ?? state.downloads.queue[index].status,
   });
 }
 
@@ -1641,6 +1666,21 @@ export const actions = {
       librarySyncPending = false;
       if (runAgain) queueMicrotask(() => void actions.syncLibrary());
     }
+  },
+
+  /**
+   * Ask for a library refresh soon, collapsing a burst into one.
+   *
+   * For refreshes the engine prompts — a finished download, a file-watcher
+   * event — where being a second late costs nothing and refetching per event
+   * costs a full library payload and index rebuild each time.
+   */
+  syncLibrarySoon(): void {
+    if (librarySyncTimer) clearTimeout(librarySyncTimer);
+    librarySyncTimer = setTimeout(() => {
+      librarySyncTimer = undefined;
+      void actions.syncLibrary();
+    }, LIBRARY_SYNC_COALESCE_MS);
   },
 
   /** Record that a catalog row resolved to this video. Cheap, local, and the
@@ -2445,8 +2485,17 @@ export const actions = {
     if (meta.artist !== undefined) patch.artist = meta.artist;
     if (meta.album !== undefined) patch.album = meta.album;
     if (meta.album_artist !== undefined) patch.album_artist = meta.album_artist;
-    const prev = state.library;
-    setState('library', (l) => l.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    // Write through the row's path rather than rebuilding the array: `.map`
+    // hands the store a new array of new objects, so every subscriber to
+    // `state.library` re-runs — including the identity index — instead of the
+    // one row that changed.
+    const index = state.library.findIndex((t) => t.id === id);
+    if (index === -1) return false;
+    const restore: Partial<Track> = {};
+    for (const key of Object.keys(patch) as (keyof Track)[]) {
+      restore[key] = state.library[index][key] as never;
+    }
+    setState('library', index, patch);
     if (state.playback.currentTrack?.id === id)
       setState('playback', 'currentTrack', (c) => (c ? { ...c, ...patch } : c));
     try {
@@ -2454,7 +2503,7 @@ export const actions = {
       toast.success(tr('toast.dataUpdated'));
       return true;
     } catch {
-      setState('library', prev);
+      setState('library', index, restore);
       toast.error(tr('toast.updateFailed'));
       return false;
     }
@@ -2643,12 +2692,12 @@ export const actions = {
   },
 
   retryDownload(id: string): void {
-    setState('downloads', 'queue', (q) =>
-      q.map((i) =>
-        i.id === id
-          ? { ...i, status: 'pending', progress_percent: null, error: undefined, error_message: undefined }
-          : i,
-      ),
+    // Path write, so only the retried row's subscribers re-run.
+    setState(
+      'downloads',
+      'queue',
+      (item) => item.id === id,
+      { status: 'pending', progress_percent: null, error: undefined, error_message: undefined },
     );
     api.retryDownload(id).catch(() => void actions.loadDownloads()); // resync on failure
   },
@@ -3461,7 +3510,9 @@ export function initStore(): void {
   });
   socket.on('disconnect', () => setState('online', false));
   socket.on('library_updated', () => {
-    void actions.syncLibrary();
+    // Shares the coalescing window with download completions, which arrive for
+    // the same writes moments earlier.
+    actions.syncLibrarySoon();
     // Note: Debounced discover cache warming — when the library changes (new
     // saves, favourites, deletes) the top seeds may shift, so re-warm the
     // persistent related-mix cache in the background. The server picks its own

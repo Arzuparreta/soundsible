@@ -7,12 +7,12 @@ WITHOUT moving or uploading them.
 import os
 import concurrent.futures
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import Optional, Tuple
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn
 from rich.console import Console
 
 from shared.models import LibraryMetadata, Track, PlayerConfig
-from shared.constants import LIBRARY_METADATA_FILENAME, DEFAULT_CONFIG_DIR
+from shared.constants import DEFAULT_CONFIG_DIR
 from setup_tool.audio import AudioProcessor
 from setup_tool.provider_factory import StorageProviderFactory
 
@@ -82,7 +82,6 @@ class LibraryScanner:
             library = LibraryMetadata(1, [], {}, {})
 
         existing_tracks = {t.file_hash: t for t in library.tracks}
-        existing_paths = {t.local_path: t for t in library.tracks if t.local_path}
 
         # Note: 2. Find all audio files
         audio_files = []
@@ -198,6 +197,6 @@ class LibraryScanner:
             
             return track, True
             
-        except Exception as e:
+        except Exception:
             # Note: Console.print(f"error in worker {E}")
             return None, False

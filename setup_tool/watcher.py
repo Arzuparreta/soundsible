@@ -3,7 +3,6 @@ Music Folder Watcher.
 Monitors configured directories and triggers the scanner on changes.
 """
 
-import time
 import threading
 from pathlib import Path
 from watchdog.observers import Observer

@@ -73,81 +73,7 @@
 }
 }
 
-.headLabel {
-  font-size: var(--text-caption);
-  font-weight: var(--fw-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-tertiary);
-}
-
-.headLeading {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  justify-self: start;
-}
-
 .head > .iconBtn:last-child { justify-self: end; }
-
-.autoToggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  /* Mobile: a bare header control that reads like the search/close icons — no
-     pill, no circle, no accent. Just the equalizer mark (the same glyph shown
-     inside Auto Mode), in the neutral header ink so it sits quietly on the page. */
-  width: var(--control-h);
-  height: var(--control-h);
-  padding: 0;
-  color: var(--ink-secondary);
-  font: inherit;
-  font-size: var(--text-micro);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.14em;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: color var(--dur-short), background var(--dur-short), transform var(--dur-micro);
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.autoToggle:hover {
-  color: var(--ink-primary);
-  background: var(--stage-material);
-}
-}
-
-.autoWord {
-  display: none;
-}
-
-.autoToggle:active { transform: scale(0.96); }
-
-.autoGlyph {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 2px;
-  width: 16px;
-  height: 15px;
-}
-
-.autoGlyph i {
-  width: 3px;
-  border-radius: 2px;
-  background: currentColor;
-}
-
-.autoGlyph i:nth-child(1) { height: 45%; }
-.autoGlyph i:nth-child(2) { height: 100%; }
-.autoGlyph i:nth-child(3) { height: 68%; }
-
-@media (max-width: 420px) {
-  .headLabel { display: none; }
-}
 
 .empty {
   flex: 1;
@@ -657,20 +583,9 @@
 }
 
 .desktopQueue,
-.mobileQueue,
 .mobileLyrics,
 .mobileLyricsToggle {
   display: none;
-}
-
-.mobileQueue {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  background: var(--stage-material-hover);
-  border: 1px solid var(--stage-line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--stage-shadow-md);
 }
 
 .mobileLyrics {
@@ -746,13 +661,6 @@
 }
 
 @media (max-width: 767px) {
-  .visualSlot[data-queue-open] .art {
-    display: none;
-  }
-
-  .visualSlot[data-queue-open] .mobileQueue {
-    display: flex;
-  }
 }
 
 .queueHead {
@@ -1109,22 +1017,6 @@
     border-bottom: 1px solid var(--stage-line);
   }
 
-  /* Tablet & up: room for the labelled accent pill again. Height tracks the
-     header's icon buttons so the three header controls read as one weight. */
-  .autoToggle {
-    width: auto;
-    height: var(--control-h);
-    gap: 7px;
-    padding: 0 13px;
-    color: var(--accent-ink);
-    background: var(--accent-soft);
-    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  }
-
-  .autoWord {
-    display: inline;
-  }
-
   .main {
     display: flex;
     flex: 1;
@@ -1186,7 +1078,6 @@
     box-shadow: var(--stage-shadow-side);
   }
 
-  .mobileQueue,
   .mobileQueueToggle {
     display: none;
   }
@@ -1215,14 +1106,6 @@
     height: 40px;
   }
 }
-@media (min-width: 768px) and (hover: hover) and (pointer: fine) {
-
-  .autoToggle:hover {
-    color: var(--ink-on-accent);
-    background: var(--accent);
-  }
-}
-
 @media (min-width: 1024px) {
   .main {
     display: grid;
@@ -1598,13 +1481,6 @@
     display: inline-flex;
   }
 
-  :global(html[data-interface-size='large']) .visualSlot[data-queue-open] .art {
-    display: none;
-  }
-
-  :global(html[data-interface-size='large']) .visualSlot[data-queue-open] .mobileQueue {
-    display: flex;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1726,10 +1602,6 @@
     display: flex;
     width: 100%;
     height: 100%;
-  }
-
-  .mobileQueue {
-    display: none !important;
   }
 
   .mobileQueueToggle,

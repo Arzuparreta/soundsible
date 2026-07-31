@@ -22,6 +22,17 @@ LEGACY_CONFIG_DIR = Path("~/.config/soundsible").expanduser()
 LEGACY_CACHE_DIR = Path("~/.cache/soundsible").expanduser()
 LEGACY_DATA_DIR = Path("~/.local/share/soundsible").expanduser()
 
+# Cache entries that are bulk audio and cheaper to re-fetch than to copy.
+# `previews/` alone routinely holds several GB, so copying it on first launch
+# doubled the user's disk use and stalled boot to migrate bytes that the
+# preview cache would happily re-download. `media/` is the LRU media cache and
+# `cache_index.db` indexes it, so the two must be skipped together or the index
+# would describe files that were never copied. Everything else in the cache
+# (covers, DJ analysis) is small and expensive to rebuild, so it still moves.
+_CACHE_MIGRATION_SKIP = frozenset(
+    {"previews", "media", "cache_index.db", "cache_index.db-shm", "cache_index.db-wal"}
+)
+
 
 def _platform_dirs() -> PlatformDirs:
     return PlatformDirs(appname=APP_NAME, appauthor=False)
@@ -195,6 +206,21 @@ def ensure_runtime_directories(runtime_config: Optional[RuntimeConfig] = None) -
     return cfg
 
 
+def _ignore_bulk_cache(source: Path):
+    """copytree filter that drops the bulk audio caches at the top level only.
+
+    Scoped to the root so a track directory that happens to be called `media`
+    further down still migrates.
+    """
+
+    def _ignore(directory: str, names: list[str]) -> set[str]:
+        if Path(directory).resolve() != source.resolve():
+            return set()
+        return {name for name in names if name in _CACHE_MIGRATION_SKIP}
+
+    return _ignore
+
+
 def migrate_legacy_app_dirs(runtime_config: Optional[RuntimeConfig] = None) -> RuntimeConfig:
     cfg = runtime_config or get_runtime_config()
     migrations = (
@@ -209,7 +235,10 @@ def migrate_legacy_app_dirs(runtime_config: Optional[RuntimeConfig] = None) -> R
         if not source.exists() or target.exists():
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(source, target)
+        if target == cfg.cache_dir:
+            shutil.copytree(source, target, ignore=_ignore_bulk_cache(source))
+        else:
+            shutil.copytree(source, target)
     return cfg
 
 

@@ -37,7 +37,11 @@ The current runtime layer supports these top-level environment variables:
 - `SOUNDSIBLE_PORT`
 - `SOUNDSIBLE_CONFIG_DIR`
 - `SOUNDSIBLE_DATA_DIR`
-- `SOUNDSIBLE_CACHE_DIR`
+- `SOUNDSIBLE_CACHE_DIR` — everything here is rebuildable. When Soundsible moves
+  from the legacy `~/.cache/soundsible` to a platform cache directory it carries
+  covers and DJ analysis across but **not** `previews/` or `media/`: those are
+  bulk audio that re-downloads on demand, and copying them doubled disk use on
+  first launch.
 - `SOUNDSIBLE_LOG_DIR`
 - `SOUNDSIBLE_MUSIC_DIR`
 - `SOUNDSIBLE_UI_DIST`

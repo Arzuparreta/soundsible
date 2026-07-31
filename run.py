@@ -260,10 +260,8 @@ import socket
 import threading
 import time
 import webbrowser
-import json
 import atexit
 import signal
-from datetime import datetime
 from pathlib import Path
 
 from shared.constants import STATION_PORT
@@ -291,9 +289,6 @@ from shared.daemon_launcher import (
     MSG_KEEP_TERMINAL_OPEN,
     MSG_CONFIG_MISSING,
     MSG_SETUP_REQUIRED,
-)
-from shared.desktop_runtime import (
-    stop_owned_desktop_engine,
 )
 
 
@@ -381,7 +376,7 @@ try:
     from rich.panel import Panel
     from rich.prompt import Prompt
     from rich.table import Table
-    from rich.live import Live
+    from rich.live import Live  # noqa: F401  # imported to probe availability
 except ImportError:
     print("Error: 'rich' library not found even after bootstrap.")
     sys.exit(1)

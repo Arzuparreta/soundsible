@@ -13,17 +13,17 @@ import uuid
 import logging
 import time
 from html import escape as html_escape
-from datetime import datetime
 from pathlib import Path
-from flask import Flask, g, request, jsonify, send_file, send_from_directory, Response, stream_with_context, redirect, make_response
-from flask_socketio import SocketIO, emit, join_room
+from flask import Flask, g, request, jsonify, send_from_directory, Response, redirect, make_response
+from flask_socketio import SocketIO, join_room
 from flask_cors import CORS
 
 logger = logging.getLogger(__name__)
 API_STARTED_AT = time.time()
 
-from shared.models import PlayerConfig, Track, LibraryMetadata, StorageProvider
-from shared.constants import LIBRARY_METADATA_FILENAME, STATION_PORT, DEFAULT_OUTPUT_DIR_FALLBACK, SourceType
+from shared import request_scope
+from shared.models import Track, LibraryMetadata
+from shared.constants import STATION_PORT, DEFAULT_OUTPUT_DIR_FALLBACK, SourceType
 from shared.path_resolver import resolve_local_track_path
 from shared.app_config import set_output_dir as set_app_output_dir
 from shared.runtime import (
@@ -38,7 +38,7 @@ from shared.runtime import (
     RuntimeConfig,
 )
 from shared.ensure_ui_dist import ensure_ui_dist
-from shared.playback_state import (
+from shared.playback_state import (  # noqa: F401  # aliases re-exported to blueprints
     get_state as get_playback_state,
     put_state as put_playback_state,
     get_scope_from_request,
@@ -50,27 +50,24 @@ from player.library import LibraryManager
 from player.queue_manager import QueueManager
 from player.favourites_manager import FavouritesManager
 from odst_tool.odst_downloader import ODSTDownloader
-from odst_tool.cloud_sync import CloudSync
 from odst_tool.optimize_library import optimize_library
-from setup_tool.uploader import UploadEngine
-from setup_tool.provider_factory import StorageProviderFactory
 from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 
-import random
 import socket
 import requests
-import hashlib
 import tempfile
 from typing import Optional, Any
 
-from shared.url_utils import normalize_youtube_url, extract_youtube_video_id, validate_youtube_video_id
-from shared.security import is_trusted_network, is_safe_path
+from shared.url_utils import normalize_youtube_url
+# Re-exported for the blueprints, which reach back into this module rather than
+# importing `shared.security` directly (see `_get_api` in routes/).
+from shared.security import is_trusted_network, is_safe_path  # noqa: F401
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, apply_security_headers, get_request_auth_context
 from shared.telemetry import init_telemetry
 from shared.database import DatabaseManager
 
-from .download_queue import DownloadQueueManager, LibraryFileWatcher, parse_intake_item
+from .download_queue import DownloadQueueManager, LibraryFileWatcher, parse_intake_item  # noqa: F401  # re-export
+from .errors import register_error_handlers
 from .orchestrator import orchestrator
 
 
@@ -110,6 +107,9 @@ def get_active_endpoints():
     return endpoints
 
 app = Flask(__name__)
+# Anything a route does not catch answers JSON from here rather than escaping as
+# Flask's HTML 500 page, which a client parsing JSON cannot read.
+register_error_handlers(app)
 
 
 def _build_cors_origins():
@@ -286,6 +286,9 @@ def _bind_request_user():
     from shared.user_context import bind_user
     from shared.users import instance_requires_login
 
+    # Opened before anything reads: resolving the caller is itself one of the
+    # repeat readers this scope exists to collapse.
+    g._soundsible_scope_token = request_scope.begin()
     g._soundsible_user_token = None
     user_id = _resolve_request_user_id()
 
@@ -305,6 +308,11 @@ def _unbind_request_user(_exc=None):
     if token is not None:
         unbind_user(token)
         g._soundsible_user_token = None
+
+    scope_token = getattr(g, "_soundsible_scope_token", None)
+    if scope_token is not None:
+        request_scope.end(scope_token)
+        g._soundsible_scope_token = None
 
 
 USER_ROOM_PREFIX = "user:"
@@ -545,6 +553,8 @@ def serve_web_player_assets(path):
 playback_engine = None
 downloader_service = None
 _downloader_lock = threading.Lock()  # Note: Prevent concurrent init when many discover/resolve requests hit at once
+#: Parsed `odst_tool/.env`; see `_downloader_env`. Invalidated when it is written.
+_downloader_env_cache: Optional[dict] = None
 # One queue for the whole instance: downloads land in a shared pool, and a single
 # pump keeps total concurrency bounded no matter how many people are queueing.
 # Each item carries `user_id`, and the routes only ever show you your own.
@@ -687,6 +697,22 @@ def get_queue_manager(user_id: Optional[str] = None):
 def get_library_manager(user_id: Optional[str] = None):
     return get_user_core(user_id).library
 
+def _downloader_env() -> dict:
+    """`odst_tool/.env`, read from disk at most once per process.
+
+    This used to be parsed on every `get_downloader()` call — which sits on the
+    preview-stream, catalog-resolve and discovery-seed paths — even though only
+    the branch that actually constructs the downloader reads it.
+    """
+    global _downloader_env_cache
+    if _downloader_env_cache is None:
+        from dotenv import dotenv_values
+
+        env_path = Path(_REPO_ROOT) / "odst_tool" / ".env"
+        _downloader_env_cache = dict(dotenv_values(env_path)) if env_path.exists() else {}
+    return _downloader_env_cache
+
+
 def get_downloader(output_dir=None, open_browser=False, log_callback=None):
     global downloader_service
 
@@ -694,11 +720,6 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
         logger.info("API: %s", msg)
         if log_callback:
             log_callback(msg)
-
-    # Note: Load env once (used for quality/cookie_browser below)
-    from dotenv import dotenv_values
-    _env_path = Path(_REPO_ROOT) / "odst_tool" / ".env"
-    env_vars = dotenv_values(_env_path) if _env_path.exists() else {}
 
     # Note: 1. Determine the target output directory (prefer app_config set at startup)
     from shared.app_config import get_output_dir
@@ -708,7 +729,7 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
     elif _app_out is not None:
         target_path = _app_out
     else:
-        target_dir = env_vars.get("OUTPUT_DIR") or os.getenv("OUTPUT_DIR") or DEFAULT_OUTPUT_DIR_FALLBACK
+        target_dir = _downloader_env().get("OUTPUT_DIR") or os.getenv("OUTPUT_DIR") or DEFAULT_OUTPUT_DIR_FALLBACK
         target_path = Path(target_dir).expanduser().absolute()
 
     with _downloader_lock:
@@ -732,6 +753,7 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
             lib_core, _, _ = get_core()
 
             _log("Step 3/3: Starting Engine...")
+            env_vars = _downloader_env()
             quality = env_vars.get("DEFAULT_QUALITY", lib_core.config.quality_preference if lib_core.config else "high")
             from odst_tool.config import DEFAULT_WORKERS
             cookie_browser = env_vars.get("COOKIE_BROWSER") or os.getenv("COOKIE_BROWSER")
@@ -1115,9 +1137,7 @@ def process_queue_background(stop_event: Optional[threading.Event] = None):
                 time.sleep(1)
 
     except Exception as e:
-        logger.error("CRITICAL: Downloader background thread crashed: %s", e)
-        import traceback
-        traceback.print_exc()
+        logger.exception("CRITICAL: Downloader background thread crashed: %s", e)
     finally:
         queue_manager_dl.is_processing = False
 
@@ -1405,8 +1425,7 @@ def _run_sync_task_bound():
                 _sync_odst_to_main_core()
         except Exception as e:
             queue_manager_dl.add_log(f"❌ Critical Sync Error: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception("API: ODST sync failed")
 
     _task()
 
@@ -1777,9 +1796,7 @@ def start_api(
             logger.debug("API: Discover warming start skipped", exc_info=True)
 
     except Exception as e:
-        logger.error("FATAL: Core initialization failed: %s", e)
-        import traceback
-        traceback.print_exc()
+        logger.exception("FATAL: Core initialization failed: %s", e)
 
     # Note: Access summary
     logger.info("\n" + "="*40)
@@ -1801,7 +1818,7 @@ def start_api(
             logger.exception("API: readiness callback failed")
 
     try:
-        import gevent
+        import gevent  # noqa: F401  # imported to probe availability
         logger.info("API: gevent active — concurrent request handling enabled")
     except ImportError:
         logger.info("API: gevent not installed — single-threaded (long requests may block others)")

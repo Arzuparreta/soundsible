@@ -48,20 +48,51 @@ def _cache_path() -> Path:
     return root / "analysis.sqlite3"
 
 
+_CONNECTIONS = threading.local()
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS audio_analysis (
+    identity TEXT NOT NULL,
+    source_stamp TEXT NOT NULL,
+    analyser_version INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (identity, analyser_version)
+)
+"""
+
+
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(_cache_path(), timeout=10)
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS audio_analysis (
-            identity TEXT NOT NULL,
-            source_stamp TEXT NOT NULL,
-            analyser_version INTEGER NOT NULL,
-            payload TEXT NOT NULL,
-            updated_at INTEGER NOT NULL,
-            PRIMARY KEY (identity, analyser_version)
-        )
-        """
-    )
+    """This thread's connection to the analysis cache.
+
+    One `dj-plan` asks for cached analysis once per candidate — 30 to 60 times.
+    Each of those used to open a connection and run `CREATE TABLE IF NOT
+    EXISTS`. The connection is also configured with WAL and a busy timeout now,
+    which it never was: without them it contended with the background analysis
+    workers writing to the same file.
+    """
+    path = _cache_path()
+    existing = getattr(_CONNECTIONS, "conn", None)
+    if existing is not None and getattr(_CONNECTIONS, "path", None) == path:
+        return existing
+    if existing is not None:
+        # The runtime cache dir moved (tests, storage reconfiguration).
+        existing.close()
+
+    conn = sqlite3.connect(path, timeout=10)
+    # busy_timeout first: it is per-connection and always succeeds, and without
+    # it the journal_mode switch below fails outright rather than waiting.
+    conn.execute("PRAGMA busy_timeout=10000")
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+    except sqlite3.OperationalError:
+        # WAL is a property of the file, not the connection: another connection
+        # already set it, and switching needs a lock no reader will yield.
+        pass
+    conn.execute(_SCHEMA)
+    conn.commit()
+    _CONNECTIONS.conn = conn
+    _CONNECTIONS.path = path
     return conn
 
 

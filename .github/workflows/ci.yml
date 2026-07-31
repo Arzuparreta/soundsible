@@ -17,14 +17,17 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Phase 1 gates (pytest)
+      # One run, one signal. `--cov=.` used to include tests/ itself — ~12.5k
+      # lines that are covered by construction — which inflated the total enough
+      # that the 30% floor could not fail. Scoped to the source packages the
+      # real number is ~55%, so that is the ratchet.
+      - name: Phase 1 gates (pytest + coverage)
         env:
           PYTHONPATH: .
-        run: pytest -q
-      - name: Coverage report
-        env:
-          PYTHONPATH: .
-        run: pytest --cov=. --cov-report=term-missing --cov-fail-under=30 tests/
+        run: >-
+          pytest -q
+          --cov=shared --cov=player --cov=odst_tool --cov=setup_tool
+          --cov-report=term-missing --cov-fail-under=55
 
   lint:
     runs-on: ubuntu-latest
@@ -68,6 +71,10 @@ jobs:
           cache-dependency-path: ui_web/package-lock.json
       - name: Install JS dependencies
         run: npm ci
+      # Without this the ~58 vitest files were advisory only: a regression in
+      # the store or the playback contract merged green.
+      - name: Unit tests (vitest)
+        run: npm run test:unit
       - name: Build player bundle (vite + tailwind)
         run: npm run build
 

@@ -11,6 +11,11 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from shared.migration.models import MigrationManifest, SourcePlaylist, SourceTrack
+from shared.text_utils import collapse_text
+
+
+def _clean(value: Any, limit: int = 500) -> str:
+    return collapse_text(value, limit)
 
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 MAX_ARCHIVE_FILES = 100
@@ -30,8 +35,6 @@ class ParseError(ValueError):
     """Raised when an uploaded export cannot be interpreted safely."""
 
 
-def _clean(value: Any, limit: int = 500) -> str:
-    return " ".join(str(value or "").strip().split())[:limit]
 
 
 def _integer(value: Any) -> int:

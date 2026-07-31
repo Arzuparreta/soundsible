@@ -109,3 +109,33 @@ def test_related_mix_within_ttl_is_fresh():
     got = db.get_related_mix("vid666666666")
     assert got is not None
     assert got[0]["id"] == "fresh"
+
+
+def test_get_related_mixes_batches_lookups():
+    """The feed and the planner look up a handful of seeds at once."""
+    db = _make_db()
+    db.set_related_mix("aaa11111111", [{"id": "x", "title": "A"}])
+    db.set_related_mix("bbb22222222", [{"id": "y", "title": "B"}])
+
+    got = db.get_related_mixes(["aaa11111111", "bbb22222222", "missing0000"])
+
+    assert set(got) == {"aaa11111111", "bbb22222222"}
+    assert got["aaa11111111"][0]["title"] == "A"
+    assert got["bbb22222222"][0]["title"] == "B"
+
+
+def test_get_related_mixes_matches_single_lookups():
+    """Batched and single reads must agree, including on empty results."""
+    db = _make_db()
+    db.set_related_mix("aaa11111111", [])
+    db.set_related_mix("bbb22222222", [{"id": "y", "title": "B"}])
+    ids = ["aaa11111111", "bbb22222222", "ccc33333333"]
+
+    batched = db.get_related_mixes(ids)
+
+    for video_id in ids:
+        assert batched.get(video_id) == db.get_related_mix(video_id)
+
+
+def test_get_related_mixes_handles_no_input():
+    assert _make_db().get_related_mixes([]) == {}

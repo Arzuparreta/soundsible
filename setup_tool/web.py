@@ -1,14 +1,13 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 import os
 import threading
 from pathlib import Path
 from rich.console import Console
 
-from shared.models import PlayerConfig, StorageProvider
+from shared.models import PlayerConfig
 from shared.constants import DEFAULT_CONFIG_DIR
 from .uploader import UploadEngine
-from rich.progress import Progress
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.urandom(24)

@@ -1,10 +1,9 @@
 import os
 import boto3
-import json
 from pathlib import Path
-from typing import Optional, Dict, List, Any
+from typing import Dict, Any
 from botocore.exceptions import ClientError
-from .models import LibraryMetadata, Track
+from .models import LibraryMetadata
 
 class CloudSync:
     """Handles synchronization with Cloudflare R2 bucket."""

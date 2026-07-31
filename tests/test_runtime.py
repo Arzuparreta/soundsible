@@ -93,6 +93,69 @@ def test_migrate_legacy_dirs_copies_existing_data(tmp_path):
     assert (runtime.data_dir / "db.sqlite").read_text() == "db"
 
 
+def test_migrate_legacy_dirs_skips_bulk_audio_caches(tmp_path):
+    """Previews and the LRU media cache are re-fetchable, so they don't migrate.
+
+    Copying them doubled disk use on first launch — the real cache reached
+    several GB of preview audio — and made every test that pointed
+    SOUNDSIBLE_CACHE_DIR at a tmp dir clone the developer's whole cache.
+    """
+    legacy_cache = tmp_path / "legacy-cache"
+    (legacy_cache / "previews").mkdir(parents=True)
+    (legacy_cache / "media").mkdir()
+    (legacy_cache / "covers").mkdir()
+    (legacy_cache / "previews" / "abc.audio").write_text("bulk")
+    (legacy_cache / "media" / "track.opus").write_text("bulk")
+    (legacy_cache / "cache_index.db").write_text("index")
+    (legacy_cache / "covers" / "art.jpg").write_text("art")
+
+    runtime = RuntimeConfig(
+        host="127.0.0.1",
+        port=5005,
+        config_dir=tmp_path / "new-config",
+        data_dir=tmp_path / "new-data",
+        cache_dir=tmp_path / "new-cache",
+        log_dir=tmp_path / "new-logs",
+        music_dir=tmp_path / "music",
+        ui_dist=None,
+        owner_token_file=None,
+        lan_enabled=False,
+        advanced_mode=False,
+    )
+
+    from shared import runtime as runtime_module
+
+    original_cache = runtime_module.LEGACY_CACHE_DIR
+    runtime_module.LEGACY_CACHE_DIR = legacy_cache
+    try:
+        migrate_legacy_app_dirs(runtime)
+    finally:
+        runtime_module.LEGACY_CACHE_DIR = original_cache
+
+    # Small, expensive-to-rebuild entries still come across.
+    assert (runtime.cache_dir / "covers" / "art.jpg").read_text() == "art"
+    # Bulk audio and the index that describes it do not.
+    assert not (runtime.cache_dir / "previews").exists()
+    assert not (runtime.cache_dir / "media").exists()
+    assert not (runtime.cache_dir / "cache_index.db").exists()
+
+
+def test_cache_manager_defaults_under_the_runtime_cache_dir(isolated_runtime):
+    """CacheManager used to hardcode ~/.cache/soundsible/media.
+
+    That put the media cache and its SQLite index outside the directory the
+    desktop appliance manages, and made the test suite write into the
+    developer's real home despite conftest's isolated runtime.
+    """
+    from player.cache import CacheManager
+
+    manager = CacheManager()
+
+    assert manager.cache_dir == isolated_runtime.cache_dir / "media"
+    assert manager.db_path.parent == isolated_runtime.cache_dir
+    assert Path("~/.cache/soundsible").expanduser() not in manager.db_path.parents
+
+
 def test_runtime_uses_persisted_music_dir_when_env_unset(monkeypatch, tmp_path):
     cfg = tmp_path / "cfg"
     cfg.mkdir()

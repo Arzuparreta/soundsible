@@ -5,9 +5,11 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from shared.text_utils import collapse_text
+
 
 def _clean(value: Any, limit: int = 500) -> str:
-    return " ".join(str(value or "").strip().split())[:limit]
+    return collapse_text(value, limit)
 
 
 def metadata_key(title: str, artist: str, album: str = "") -> str:

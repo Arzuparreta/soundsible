@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from shared.migration.match import AUTO_ACCEPT_THRESHOLD, LibraryMatcher
-from shared.migration.models import MigrationManifest, SourceTrack
+from shared.migration.models import SourceTrack
 from shared.migration.store import MigrationStore
 from shared.resolution_confidence import classify_confidence
 from shared.user_context import user_context

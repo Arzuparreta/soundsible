@@ -16,7 +16,6 @@ from shared.hardening import (
     rate_limit,
     require_any_scope,
     require_instance_admin,
-    require_scope,
 )
 from shared.runtime import (
     configure_runtime,

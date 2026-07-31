@@ -15,7 +15,11 @@ from concurrent.futures import ThreadPoolExecutor, Future, wait
 import requests
 from flask import Blueprint, Response, jsonify, request
 
+from shared import request_scope
+from shared.api.memo import Memo
 from shared.database import instance_db
+from shared.providers import deezer
+from shared.text_utils import identity_key
 from shared.discovery_intelligence import (
     POSITIVE_LISTENING_EVENTS,
     build_music_recommendations,
@@ -57,7 +61,6 @@ logger = logging.getLogger(__name__)
 
 discovery_bp = Blueprint("discovery", __name__, url_prefix="")
 
-_DEEZER_HOST = "https://api.deezer.com"
 _ALLOWED_PATH = re.compile(
     r"^(playlist/\d+|chart|search|track/\d+|artist/\d+/top)$"
 )
@@ -76,9 +79,9 @@ _HTTP_HEADERS_RSS = {
 }
 _HTTP_HEADERS_ITUNES = {"User-Agent": "SoundsibleDiscovery/1.0"}
 
-_PODCAST_TOP_CACHE: dict[str, tuple[float, list]] = {}
 _PODCAST_TOP_TTL_SEC = 90
-_DEEZER_JSON_CACHE: dict[str, tuple[float, dict]] = {}
+#: Bounded and single-flighted, unlike the module dict this replaced.
+_podcast_top_memo: Memo[list] = Memo(ttl_sec=_PODCAST_TOP_TTL_SEC, maxsize=64, negative_ttl_sec=15)
 _DEEZER_TRACK_CACHE_TTL_SEC = 180
 _DISCOVERY_FEED_CACHE: dict[str, tuple[float, float, dict]] = {}
 _DISCOVERY_FEED_TTL_SEC = 180
@@ -231,7 +234,7 @@ def discovery_save():
       {status: "needs_review", confidence, confidence_level, candidates: [...]}
       {status: "failed",       reason, candidates: [...]}
     """
-    from shared.resolution_confidence import best_candidate, classify_confidence, CONFIDENCE_HIGH
+    from shared.resolution_confidence import best_candidate, classify_confidence
     from shared.database import instance_db
 
     data = request.get_json(silent=True) or {}
@@ -407,31 +410,17 @@ def _queue_confirmed(
     })
 
 
-def _norm_music_key(title: object, artist: object) -> str:
-    title_s = re.sub(r"\s+", " ", str(title or "").strip().casefold())
-    artist_s = re.sub(r"\s+", " ", str(artist or "").strip().casefold())
-    return f"{artist_s}\x00{title_s}"
+#: Same key `routes/catalog.py` builds, so a row matched in one view matches in
+#: the other. It was a second implementation of it until this became an alias.
+_norm_music_key = identity_key
 
 
 def _deezer_json(path: str, params: dict | None = None, ttl_sec: int = _DEEZER_TRACK_CACHE_TTL_SEC) -> dict:
-    params = params or {}
-    key = f"{path}?{tuple(sorted((str(k), str(v)) for k, v in params.items()))}"
-    now = time.time()
-    cached = _DEEZER_JSON_CACHE.get(key)
-    if cached and cached[0] > now:
-        return cached[1]
-    resp = requests.get(
-        f"{_DEEZER_HOST}/{path}",
-        params=params,
-        timeout=8,
-        headers={"User-Agent": "SoundsibleDiscovery/1.0"},
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    if not isinstance(data, dict):
-        data = {}
-    _DEEZER_JSON_CACHE[key] = (now + ttl_sec, data)
-    return data
+    """The cache behind this used to be a module-level dict that never evicted —
+    one entry per artist name ever searched, for the life of the process — and
+    it did not single-flight, so N concurrent identical requests each hit
+    Deezer. Both are properties of `shared.providers.deezer` now."""
+    return deezer.get(path, params, ttl_sec=ttl_sec)
 
 
 def _deezer_track_to_feed_item(row: dict, *, source: str, reason: str, reason_code: str, in_library: bool) -> dict | None:
@@ -737,9 +726,14 @@ def _cached_related_feed_candidates(
     known_ids = {str(item.get("id")) for item in items}
     added_sections = 0
     scheduled_misses = 0
-    for seed in seeds[:6]:
+    seed_batch = seeds[:6]
+    # One query for the whole batch instead of one per seed.
+    cached_mixes = instance_db().get_related_mixes(
+        str(getattr(seed, "youtube_id", "") or "") for seed in seed_batch
+    )
+    for seed in seed_batch:
         video_id = str(getattr(seed, "youtube_id", "") or "")
-        cached = instance_db().get_related_mix(video_id)
+        cached = cached_mixes.get(video_id)
         if cached is None:
             if scheduled_misses < 2:
                 _schedule_expand(video_id)
@@ -915,11 +909,26 @@ def discovery_music_feed():
     return jsonify(body)
 
 
+def _planner_track_index(metadata) -> dict:
+    """`{track_id: track}` for this library, built once per request.
+
+    `dj-plan` looks a track up once per candidate, once per request target and
+    once per accepted route item — up to ~40 times. Each lookup used to copy the
+    whole track list and scan it, so the handler was O(candidates x library).
+    """
+    tracks = getattr(metadata, "tracks", None) or []
+    if not tracks:
+        return {}
+    return request_scope.scoped(
+        f"planner_track_index:{id(metadata)}:{len(tracks)}",
+        lambda: {str(getattr(track, "id", "")): track for track in tracks},
+    )
+
+
 def _planner_track_by_id(metadata, track_id: str):
-    for track in list(metadata.tracks if metadata and metadata.tracks else []):
-        if str(getattr(track, "id", "")) == track_id:
-            return track
-    return None
+    if not track_id:
+        return None
+    return _planner_track_index(metadata).get(str(track_id))
 
 
 def _planner_item_from_related(row: dict) -> dict | None:
@@ -1151,8 +1160,9 @@ def _planner_context_related(metadata, context: list[dict]) -> tuple[list[dict],
 
     mixes: dict[str, list[dict]] = {}
     misses: list[str] = []
+    cached_mixes = instance_db().get_related_mixes(video_id for video_id, _ in anchors)
     for video_id, _ in anchors:
-        cached = instance_db().get_related_mix(video_id)
+        cached = cached_mixes.get(video_id)
         if cached is None:
             misses.append(video_id)
         else:
@@ -2299,24 +2309,25 @@ def _top_podcasts_itunes_search_fallback(country: str, limit: int, allow_explici
 
 def _podcast_top_results(country: str, limit: int, explicit_seg: str) -> list[dict]:
     cache_key = f"{country}:{limit}:{explicit_seg}"
-    now = time.time()
-    cached = _PODCAST_TOP_CACHE.get(cache_key)
-    if cached and cached[0] > now:
-        return cached[1]
-    try:
-        results = _top_podcasts_from_rss_chart(country, limit, explicit_seg)
-    except Exception as exc:
-        logger.info("Podcast top chart RSS unavailable (%s); using iTunes search mix.", exc)
-        results = []
-    if not results:
-        results = _top_podcasts_itunes_search_fallback(
-            country,
-            limit,
-            explicit_seg == "explicit",
-        )
-    if results:
-        _PODCAST_TOP_CACHE[cache_key] = (now + _PODCAST_TOP_TTL_SEC, results)
-    return results
+
+    def build() -> list[dict]:
+        try:
+            results = _top_podcasts_from_rss_chart(country, limit, explicit_seg)
+        except Exception as exc:
+            logger.info("Podcast top chart RSS unavailable (%s); using iTunes search mix.", exc)
+            results = []
+        if not results:
+            results = _top_podcasts_itunes_search_fallback(
+                country,
+                limit,
+                explicit_seg == "explicit",
+            )
+        return results
+
+    # `Memo` rather than a module dict: this used to keep one entry per
+    # (country, limit, explicit) combination forever, and an empty result was
+    # simply not stored, so a failing chart was re-fetched on every request.
+    return _podcast_top_memo.resolve(cache_key, build)
 
 
 @discovery_bp.route("/api/discovery/podcasts/top", methods=["GET"])
@@ -2336,14 +2347,11 @@ def itunes_podcast_top():
 def deezer_proxy(deezer_path: str):
     if not _ALLOWED_PATH.fullmatch(deezer_path):
         return jsonify({"error": "Unsupported Deezer path"}), 400
-    upstream = f"{_DEEZER_HOST}/{deezer_path}"
+    upstream = f"{deezer.HOST}/{deezer_path}"
     try:
-        resp = requests.get(
-            upstream,
-            params=request.args,
-            timeout=20,
-            headers={"User-Agent": "SoundsibleDiscovery/1.0"},
-        )
+        # The pooled session, but not the cache: this passes bytes and status
+        # straight through for arbitrary paths, so there is nothing to key on.
+        resp = deezer.session().get(upstream, params=request.args, timeout=20)
     except requests.RequestException as exc:
         logger.warning("Deezer proxy request failed: %s", exc)
         return jsonify({"error": "Deezer unreachable"}), 502
@@ -2590,15 +2598,19 @@ def discover_warm():
         warm_discover_top_seeds()
         return jsonify({"status": "scheduled", "warmed": -1})
     seed_ids = [str(s) for s in seed_ids if str(s).strip()][:_WARM_TOP_N]
-    warmed = 0
+    video_ids = []
     for tid in seed_ids:
         track = _track_by_id(tid)
         if track is None:
             continue
         vid = _resolve_seed_yt_id(track)
-        if not vid:
-            continue
-        if instance_db().get_related_mix(vid) is None:
+        if vid:
+            video_ids.append(vid)
+
+    already_cached = instance_db().get_related_mixes(video_ids)
+    warmed = 0
+    for vid in video_ids:
+        if vid not in already_cached:
             _schedule_expand(vid)
             warmed += 1
     return jsonify({"status": "scheduled", "warmed": warmed})
@@ -2608,18 +2620,26 @@ def warm_discover_seeds(track_ids: list[str]) -> None:
     """Server-side warming entry point (no request context). Used at startup
     and after library sync. Resolves each track, checks the persistent cache,
     and schedules expansion for misses. Never blocks."""
+    video_ids = []
     for tid in track_ids[:_WARM_TOP_N]:
         try:
             track = _track_by_id(tid)
             if track is None:
                 continue
             vid = _resolve_seed_yt_id(track)
-            if not vid:
-                continue
-            if instance_db().get_related_mix(vid) is None:
-                _schedule_expand(vid)
+            if vid:
+                video_ids.append(vid)
         except Exception as exc:
             logger.debug("discover warm: seed %s failed: %s", tid, exc)
+
+    try:
+        already_cached = instance_db().get_related_mixes(video_ids)
+    except Exception as exc:
+        logger.debug("discover warm: cache lookup failed: %s", exc)
+        return
+    for vid in video_ids:
+        if vid not in already_cached:
+            _schedule_expand(vid)
 
 
 def _top_warm_seed_ids(limit: int = _WARM_TOP_N) -> list[str]:

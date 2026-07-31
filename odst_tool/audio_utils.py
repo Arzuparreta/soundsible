@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 import requests
 import mutagen
-from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, TCON, APIC, COMM, USLT
+from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, APIC
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC, Picture
 

@@ -6,7 +6,7 @@ import os
 import concurrent.futures
 import traceback
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple, Any
+from typing import List, Dict, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
 from shared.models import PlayerConfig, Track, LibraryMetadata

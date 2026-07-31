@@ -42,6 +42,7 @@ import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import { openActionMenu } from './ActionMenu';
+import { VirtualRows } from './VirtualRows';
 import { Spinner } from './Spinner';
 import { SkeletonRows } from './Skeleton';
 import { toast } from '../lib/toast';
@@ -620,8 +621,13 @@ function LibraryView(props: {
         onSelect: () => setLibrarySort(value),
       })),
     });
+  // The panel body is the scrolling element; rows inside it are virtualized
+  // because a full library used to build every row up front. A signal, not a
+  // plain ref: the rows render inside this element, so they are created before
+  // it is assigned and have to react when it appears.
+  const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
   return (
-    <div class={styles.body}>
+    <div class={styles.body} ref={setScrollRef}>
       <ViewHeader title={t('nav.library')} onBack={props.onBack}>
         <button type="button" aria-label={t('nowPlayingBrowser.searchLibrary')} onClick={props.onSearch}><SearchIcon /></button>
       </ViewHeader>
@@ -635,24 +641,40 @@ function LibraryView(props: {
       <Show
         when={libraryTab() === 'songs'}
         fallback={
-          <For each={props.artists}>
-            {(artist) => (
-              <NavigationRow
-                title={artist.name}
-                subtitle={t('library.artistTrackCount', { count: artist.count })}
-                cover={coverUrl(artist.coverId)}
-                round
-                onClick={() => props.onArtist(artist.name)}
-              />
-            )}
-          </For>
+          <VirtualRows
+            items={props.artists}
+            scrollElement={scrollRef}
+            rowHeight={{ cssVar: '--row-h', fallback: 56 }}
+          >
+            {(artist) => {
+              const row = artist();
+              return row ? (
+                <NavigationRow
+                  title={row.name}
+                  subtitle={t('library.artistTrackCount', { count: row.count })}
+                  cover={coverUrl(row.coverId)}
+                  round
+                  onClick={() => props.onArtist(row.name)}
+                />
+              ) : null;
+            }}
+          </VirtualRows>
         }
       >
-        <For each={props.tracks}>
-          {(track, index) => props.renderTrack(track, () =>
-            actions.playFrom(props.tracks, index(), { context: { id: 'library', kind: 'library', label: t('nav.library') } }),
-          )}
-        </For>
+        <VirtualRows
+          items={props.tracks}
+          scrollElement={scrollRef}
+          rowHeight={{ cssVar: '--row-h', fallback: 56 }}
+        >
+          {(track, index) => {
+            const row = track();
+            return row
+              ? props.renderTrack(row, () =>
+                  actions.playFrom(props.tracks, index, { context: { id: 'library', kind: 'library', label: t('nav.library') } }),
+                )
+              : null;
+          }}
+        </VirtualRows>
       </Show>
     </div>
   );
@@ -668,14 +690,24 @@ function LibraryArtistView(props: {
       artistKey(track.artist) === artistKey(props.name) || artistKey(track.album_artist) === artistKey(props.name),
     ),
   );
+  const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
   return (
-    <div class={styles.body}>
+    <div class={styles.body} ref={setScrollRef}>
       <ViewHeader title={props.name} meta={`${tracks().length}`} onBack={props.onBack} />
-      <For each={tracks()}>
-        {(track, index) => props.renderTrack(track, () =>
-          actions.playFrom(tracks(), index(), { context: { id: `artist:${props.name}`, kind: 'artist', label: props.name } }),
-        )}
-      </For>
+      <VirtualRows
+        items={tracks()}
+        scrollElement={scrollRef}
+        rowHeight={{ cssVar: '--row-h', fallback: 56 }}
+      >
+        {(track, index) => {
+          const row = track();
+          return row
+            ? props.renderTrack(row, () =>
+                actions.playFrom(tracks(), index, { context: { id: `artist:${props.name}`, kind: 'artist', label: props.name } }),
+              )
+            : null;
+        }}
+      </VirtualRows>
     </div>
   );
 }

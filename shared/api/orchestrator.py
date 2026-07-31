@@ -4,7 +4,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, Future
 from pathlib import Path
-from typing import Callable, Any, Dict, Optional
+from typing import Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
