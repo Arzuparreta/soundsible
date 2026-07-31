@@ -43,10 +43,25 @@ vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
 vi.mock('../lib/track', () => ({ isPodcastTrack: (track: { podcast_guid?: string }) => Boolean(track.podcast_guid) }));
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 vi.mock('./NowPlaying', () => ({
-  NowPlaying: (props: { mobilePanel: string; onMobilePanelChange: (panel: string) => void }) => (
+  NowPlaying: (props: {
+    mobilePanel: string;
+    onMobilePanelChange: (panel: string) => void;
+    onCarouselProgress?: (index: number, live: boolean) => void;
+  }) => (
     <div data-testid="now-playing-view">
       {props.mobilePanel}
-      <button type="button" onClick={() => props.onMobilePanelChange('queue')}>simulate swipe</button>
+      {/* The real carousel reports the scroll position and the settled panel on
+          two separate channels: the marker follows the finger, the panel waits. */}
+      <button
+        type="button"
+        onClick={() => {
+          props.onCarouselProgress?.(2, false);
+          props.onMobilePanelChange('queue');
+        }}
+      >
+        simulate swipe
+      </button>
+      <button type="button" onClick={() => props.onCarouselProgress?.(1.4, true)}>simulate drag</button>
     </div>
   ),
 }));
@@ -82,6 +97,26 @@ afterEach(() => {
   harness.mobileViewport = false;
   delete document.documentElement.dataset.playerSurface;
 });
+
+/** jsdom has no touch input, so the gesture is fed the shape it reads: an
+    identified touch on `touches`, and the same one on `changedTouches`. */
+function touch(type: 'touchstart' | 'touchmove' | 'touchend', x: number, y: number) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  const point = { clientX: x, clientY: y, identifier: 1 };
+  const list = { length: 1, item: () => point };
+  Object.defineProperty(event, 'touches', {
+    value: type === 'touchend' ? { length: 0, item: () => null } : list,
+  });
+  Object.defineProperty(event, 'changedTouches', { value: list });
+  return event;
+}
+
+function swipeDown(target: Element) {
+  target.dispatchEvent(touch('touchstart', 100, 100));
+  target.dispatchEvent(touch('touchmove', 100, 140));
+  target.dispatchEvent(touch('touchmove', 100, 240));
+  target.dispatchEvent(touch('touchend', 100, 240));
+}
 
 describe('PlayerSurface', () => {
   it('uses the pill as the real Auto Mode switch', () => {
@@ -144,18 +179,72 @@ describe('PlayerSurface', () => {
     expect(nav).toHaveStyle('--carousel-index: 2');
   });
 
-  it('resets the compact carousel before every close and reopen', () => {
+  it('tracks a drag between panels without waiting for it to settle', () => {
+    render(() => <PlayerSurface />);
+    const nav = screen.getByRole('navigation', { name: 'nowPlaying.mobilePanels' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'simulate drag' }));
+
+    expect(nav).toHaveStyle('--carousel-index: 1.4');
+    expect(nav).toHaveAttribute('data-live');
+    // The panel itself has not settled yet, so focus and inertness stay put.
+    expect(screen.getByRole('button', { name: 'nowPlaying.panel.stage' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('resets the compact carousel only once the surface has animated out', () => {
     harness.mobileViewport = true;
     render(() => <PlayerSurface />);
+    const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]')!;
 
     fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.panel.browser' }));
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('browser');
 
+    // Realigning the carousel mid-exit is what used to flush layout on top of
+    // the close, so the reset waits for the surface to be off screen.
     fireEvent.click(screen.getByRole('button', { name: 'common.close' }));
+    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('browser');
+
+    fireEvent.animationEnd(surface);
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('stage');
 
     harness.setOpen?.(true);
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('stage');
+  });
+
+  it('closes on a swipe that starts on a button', () => {
+    // The queue rows and the browser cards are full-width buttons, so excluding
+    // buttons from the gesture left most of the surface unswipeable.
+    harness.mobileViewport = true;
+    render(() => <PlayerSurface />);
+    const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]')!;
+
+    swipeDown(screen.getByRole('button', { name: 'simulate swipe' }));
+
+    expect(surface).not.toHaveAttribute('data-player-surface-open');
+  });
+
+  it('leaves the gesture alone on controls that opted out', () => {
+    harness.mobileViewport = true;
+    render(() => <PlayerSurface />);
+    const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]')!;
+
+    swipeDown(screen.getByRole('button', { name: 'nowPlaying.panel.queue' }));
+
+    expect(surface).toHaveAttribute('data-player-surface-open');
+  });
+
+  it('ignores a swipe that reads as a horizontal panel change', () => {
+    harness.mobileViewport = true;
+    render(() => <PlayerSurface />);
+    const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]')!;
+    const target = screen.getByRole('button', { name: 'simulate swipe' });
+
+    target.dispatchEvent(touch('touchstart', 200, 100));
+    target.dispatchEvent(touch('touchmove', 180, 104));
+    target.dispatchEvent(touch('touchmove', 60, 240));
+    target.dispatchEvent(touch('touchend', 60, 240));
+
+    expect(surface).toHaveAttribute('data-player-surface-open');
   });
 
   it('opens the compact browser from the dedicated mobile search action', () => {

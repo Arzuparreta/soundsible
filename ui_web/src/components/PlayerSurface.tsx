@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, untrack } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { actions, nowPlayingOpen, setNowPlayingOpen, state } from '../stores';
 import { coverUrl } from '../lib/media';
@@ -12,8 +12,17 @@ const MOBILE_QUERY = '(max-width: 1023px)';
 const SWIPE_CLOSE_THRESHOLD = 80;
 const SWIPE_FAST_CLOSE_THRESHOLD = 32;
 const SWIPE_CLOSE_VELOCITY = 0.45;
-const SWIPE_ACTIVATE_THRESHOLD = 8;
-const HORIZONTAL_CANCEL_THRESHOLD = 12;
+const SWIPE_ACTIVATE_THRESHOLD = 2;
+const HORIZONTAL_CANCEL_THRESHOLD = 6;
+/** How much taller than wide a drag must be before it counts as a close. */
+const SWIPE_VERTICAL_BIAS = 1.5;
+const CLOSE_ANIMATION_TIMEOUT = 420;
+/* Controls that own the touch themselves. Plain buttons are deliberately absent:
+   in the mobile layout the queue rows and the browser cards *are* full-width
+   buttons, so excluding them left most of the surface unswipeable. A tap never
+   activates the gesture, and once it does the browser cancels the click. */
+const SWIPE_EXCLUDED = 'input, textarea, select, [data-rail], [data-lyrics-scroll], [data-no-surface-swipe]';
+const PANELS = ['browser', 'stage', 'queue'] as const;
 
 type BackdropState = {
   first: string;
@@ -21,7 +30,8 @@ type BackdropState = {
   active: 'first' | 'second';
 };
 
-function scrollableAtTop(target: EventTarget | null, boundary?: HTMLElement): boolean {
+/** Nearest scrolling ancestor below `boundary`, or null when there is none. */
+function scrollableAncestor(target: EventTarget | null, boundary?: HTMLElement): HTMLElement | null {
   let element = target instanceof HTMLElement ? target : target instanceof Node ? target.parentElement : null;
   while (element && element !== boundary) {
     const style = getComputedStyle(element);
@@ -29,11 +39,11 @@ function scrollableAtTop(target: EventTarget | null, boundary?: HTMLElement): bo
       /(auto|scroll)/.test(style.overflowY)
       && element.scrollHeight > element.clientHeight + 1
     ) {
-      return element.scrollTop <= 1;
+      return element;
     }
     element = element.parentElement;
   }
-  return true;
+  return null;
 }
 
 /** One fullscreen player environment shared by Now Playing and Auto Mode. */
@@ -46,6 +56,11 @@ export function PlayerSurface() {
     return track ? track.cover ?? coverUrl(track.id) : '';
   });
   const [mobilePanel, setMobilePanel] = createSignal<NowPlayingMobilePanel>('stage');
+  /* Fractional carousel position, fed by the scroller itself. The pager marker
+     follows it live; `mobilePanel` keeps the settled semantics (inert, focus). */
+  const [carouselProgress, setCarouselProgress] = createSignal(1);
+  const [carouselLive, setCarouselLive] = createSignal(false);
+  const [closing, setClosing] = createSignal(false);
   const [mobileLayout, setMobileLayout] = createSignal(
     typeof window !== 'undefined'
       && typeof window.matchMedia === 'function'
@@ -60,8 +75,9 @@ export function PlayerSurface() {
   let restoreFocus: HTMLElement | null = null;
   let wasOpen = false;
   let wasAuto = auto();
-  let swipeStart: { x: number; y: number; at: number; id: number } | null = null;
+  let swipeStart: { x: number; y: number; at: number; id: number; scroller: HTMLElement | null } | null = null;
   let swipeActive = false;
+  let closeTimer: number | undefined;
 
   createEffect(() => {
     const next = art();
@@ -73,6 +89,12 @@ export function PlayerSurface() {
       : { ...value, first: next, active: 'first' });
   });
 
+  const setPanel = (panel: NowPlayingMobilePanel) => {
+    setMobilePanel(panel);
+    setCarouselLive(false);
+    setCarouselProgress(PANELS.indexOf(panel));
+  };
+
   createEffect(() => {
     const active = auto();
     requestAnimationFrame(() => {
@@ -82,9 +104,9 @@ export function PlayerSurface() {
     });
     if (active && !wasAuto) {
       setNowPlayingOpen(true);
-      setMobilePanel('stage');
+      setPanel('stage');
     }
-    if (!active && wasAuto) setMobilePanel('stage');
+    if (!active && wasAuto) setPanel('stage');
     wasAuto = active;
   });
 
@@ -96,26 +118,65 @@ export function PlayerSurface() {
       else delete document.documentElement.dataset.playerSurface;
     }
     if (open && !wasOpen) {
+      // Reopening mid-exit: drop the exit animation before it can fight the
+      // entrance, and land on the stage card.
+      endClose();
       restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      setMobilePanel('stage');
+      setPanel('stage');
       requestAnimationFrame(() => surfaceEl?.focus({ preventScroll: true }));
     } else if (!open && wasOpen) {
-      // Reset while the surface is hidden so reopening never reveals the
-      // previous carousel card during a smooth snap back to the player.
-      setMobilePanel('stage');
+      beginClose();
       requestAnimationFrame(() => restoreFocus?.focus({ preventScroll: true }));
     }
     wasOpen = open;
   });
 
-  const closeSurface = () => {
-    setMobilePanel('stage');
+  /* The exit is a keyframe, not a transition. A transition needs the browser to
+     observe both the before and after value, and it loses to the inline
+     transform the swipe leaves behind; an animation is immune to both, so the
+     surface slides out even when a gesture or a layout flush lands mid-close. */
+  const beginClose = () => {
+    setClosing(true);
+    window.clearTimeout(closeTimer);
+    closeTimer = window.setTimeout(endClose, CLOSE_ANIMATION_TIMEOUT);
+    surfaceEl?.addEventListener('animationend', onCloseAnimationEnd);
+  };
+
+  const onCloseAnimationEnd = (event: AnimationEvent) => {
+    // Children animate too (the backdrop drifts on a loop); only the surface's
+    // own exit ends the close.
+    if (event.target === surfaceEl) endClose();
+  };
+
+  const endClose = () => {
+    window.clearTimeout(closeTimer);
+    closeTimer = undefined;
+    surfaceEl?.removeEventListener('animationend', onCloseAnimationEnd);
+    surfaceEl?.style.removeProperty('--surface-exit-from');
+    // Untracked: the open/close effect calls this, and taking a dependency on
+    // `closing` there would make it re-run on its own state change.
+    if (!untrack(closing)) return;
+    setClosing(false);
+    // Reset while the surface is off screen so reopening never reveals the
+    // previous carousel card during a smooth snap back to the player.
+    setPanel('stage');
+  };
+
+  const closeSurface = (fromY = 0) => {
+    if (!nowPlayingOpen()) return;
+    if (surfaceEl) {
+      // Synchronously, before `.open` goes: an inline transform left over from
+      // the gesture would otherwise outrank the exit for a frame.
+      delete surfaceEl.dataset.swiping;
+      surfaceEl.style.transform = '';
+      surfaceEl.style.setProperty('--surface-exit-from', `${Math.max(0, fromY)}px`);
+    }
     setNowPlayingOpen(false);
   };
 
   const showNowPlaying = () => {
     if (auto()) actions.exitAutoMode();
-    setMobilePanel('stage');
+    setPanel('stage');
   };
 
   const showAuto = () => {
@@ -125,25 +186,31 @@ export function PlayerSurface() {
 
   const browserAction = () => {
     if (auto()) actions.exitAutoMode();
-    setMobilePanel('browser');
+    setPanel('browser');
+  };
+
+  /** Drop the gesture and every trace of it. Every bail-out goes through here:
+      a leftover `data-swiping` pins `transition: none` on the surface forever. */
+  const resetSwipe = () => {
+    swipeStart = null;
+    swipeActive = false;
+    if (!surfaceEl) return;
+    delete surfaceEl.dataset.swiping;
+    surfaceEl.style.transform = '';
   };
 
   const beginTouch = (event: TouchEvent) => {
-    if (!nowPlayingOpen() || event.touches.length !== 1) {
-      swipeStart = null;
-      return;
-    }
+    resetSwipe();
+    if (!nowPlayingOpen() || event.touches.length !== 1) return;
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest('button, input, textarea, select, [data-rail], [data-lyrics-scroll], [data-no-surface-swipe]')) {
-      swipeStart = null;
-      return;
-    }
+    if (target?.closest(SWIPE_EXCLUDED)) return;
     const touch = event.touches.item(0);
-    if (!touch || !scrollableAtTop(event.target, surfaceEl)) {
-      swipeStart = null;
-      return;
-    }
-    swipeStart = { x: touch.clientX, y: touch.clientY, at: performance.now(), id: touch.identifier };
+    if (!touch) return;
+    // Resolved once: walking the ancestors with getComputedStyle on every move
+    // is a layout read per frame, mid-gesture.
+    const scroller = scrollableAncestor(event.target, surfaceEl);
+    if (scroller && scroller.scrollTop > 1) return;
+    swipeStart = { x: touch.clientX, y: touch.clientY, at: performance.now(), id: touch.identifier, scroller };
     swipeActive = false;
   };
 
@@ -163,16 +230,28 @@ export function PlayerSurface() {
     const dx = touch.clientX - swipeStart.x;
     const dy = touch.clientY - swipeStart.y;
     if (!swipeActive) {
-      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > HORIZONTAL_CANCEL_THRESHOLD) {
+      // The browser hands the touch to the nearest scroller the moment it sees
+      // an unprevented move, and every preventDefault after that is a silent
+      // no-op. So the first move that clearly reads as a downward drag has to
+      // claim the gesture outright — waiting for 8px was already too late.
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (Math.abs(dx) > HORIZONTAL_CANCEL_THRESHOLD) swipeStart = null;
+        return;
+      }
+      if (dy < -SWIPE_ACTIVATE_THRESHOLD) {
+        // Upward: this belongs to the list, not to us.
         swipeStart = null;
         return;
       }
-      if (dy <= SWIPE_ACTIVATE_THRESHOLD) return;
-      if (!scrollableAtTop(event.target, surfaceEl)) return;
+      if (dy <= SWIPE_ACTIVATE_THRESHOLD || dy <= Math.abs(dx) * SWIPE_VERTICAL_BIAS) return;
+      if (swipeStart.scroller && swipeStart.scroller.scrollTop > 1) {
+        swipeStart = null;
+        return;
+      }
       swipeActive = true;
       surfaceEl.dataset.swiping = '';
     }
-    event.preventDefault();
+    if (event.cancelable) event.preventDefault();
     surfaceEl.style.transform = `translateY(${Math.max(0, dy)}px)`;
   };
 
@@ -185,23 +264,14 @@ export function PlayerSurface() {
     const velocity = dy / elapsed;
     const close = swipeActive
       && (dy > SWIPE_CLOSE_THRESHOLD || (dy > SWIPE_FAST_CLOSE_THRESHOLD && velocity > SWIPE_CLOSE_VELOCITY));
-    swipeStart = null;
-    swipeActive = false;
-    delete surfaceEl.dataset.swiping;
-    if (close) closeSurface();
-    requestAnimationFrame(() => {
-      if (surfaceEl) surfaceEl.style.transform = '';
-    });
+    resetSwipe();
+    // Hand the exit the offset the finger let go at, so the surface carries on
+    // from where it was instead of snapping back up first.
+    if (close) closeSurface(dy);
   };
 
   const cancelSwipe = () => {
-    swipeStart = null;
-    swipeActive = false;
-    if (!surfaceEl) return;
-    delete surfaceEl.dataset.swiping;
-    requestAnimationFrame(() => {
-      if (surfaceEl) surfaceEl.style.transform = '';
-    });
+    resetSwipe();
   };
 
   onMount(() => {
@@ -215,7 +285,9 @@ export function PlayerSurface() {
     surfaceEl.addEventListener('touchend', finishSwipe, { passive: true });
     surfaceEl.addEventListener('touchcancel', cancelSwipe, { passive: true });
     onCleanup(() => {
+      window.clearTimeout(closeTimer);
       media?.removeEventListener('change', syncLayout);
+      surfaceEl?.removeEventListener('animationend', onCloseAnimationEnd);
       surfaceEl?.removeEventListener('touchstart', beginTouch);
       surfaceEl?.removeEventListener('touchmove', moveTouch);
       surfaceEl?.removeEventListener('touchend', finishSwipe);
@@ -235,6 +307,7 @@ export function PlayerSurface() {
         classList={{
           [styles.surface]: true,
           [styles.open]: nowPlayingOpen(),
+          [styles.closing]: closing() && !nowPlayingOpen(),
           [styles.auto]: auto(),
         }}
         data-player-surface-open={nowPlayingOpen() ? '' : undefined}
@@ -299,7 +372,7 @@ export function PlayerSurface() {
             classList={{ [styles.chromeButton]: true, [styles.closeButton]: true }}
             type="button"
             aria-label={t('common.close')}
-            onClick={closeSurface}
+            onClick={() => closeSurface()}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
               <path d="m6 9 6 6 6-6" />
@@ -317,8 +390,12 @@ export function PlayerSurface() {
           <NowPlaying
             mobilePanel={mobilePanel()}
             onMobilePanelChange={setMobilePanel}
+            onCarouselProgress={(index, live) => {
+              setCarouselLive(live);
+              setCarouselProgress(index);
+            }}
             surfaceOpen={nowPlayingOpen()}
-            onCloseSurface={closeSurface}
+            onCloseSurface={() => closeSurface()}
           />
         </div>
 
@@ -339,16 +416,22 @@ export function PlayerSurface() {
             class={styles.carouselNav}
             aria-label={t('nowPlaying.mobilePanels')}
             data-no-surface-swipe=""
-            style={`--carousel-index: ${(['browser', 'stage', 'queue'] as const).indexOf(mobilePanel())}`}
+            data-live={carouselLive() ? '' : undefined}
+            style={`--carousel-index: ${carouselProgress()}`}
           >
             <span class={styles.carouselMarker} aria-hidden="true" />
-            {(['browser', 'stage', 'queue'] as const).map((panel) => (
+            {PANELS.map((panel, index) => (
               <button
                 type="button"
-                classList={{ [styles.carouselDot]: true, [styles.carouselDotActive]: mobilePanel() === panel }}
+                classList={{
+                  [styles.carouselDot]: true,
+                  // Visually the dot follows the scroll, so it clears the moment
+                  // the marker covers it; `aria-current` waits for the settle.
+                  [styles.carouselDotActive]: Math.round(carouselProgress()) === index,
+                }}
                 aria-label={t(`nowPlaying.panel.${panel}`)}
                 aria-current={mobilePanel() === panel ? 'page' : undefined}
-                onClick={() => setMobilePanel(panel)}
+                onClick={() => setPanel(panel)}
               />
             ))}
           </nav>

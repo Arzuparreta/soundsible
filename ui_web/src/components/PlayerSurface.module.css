@@ -47,6 +47,30 @@
   transition-delay: 0s;
 }
 
+/* The exit is an animation, not the transition above. Animations outrank inline
+   styles in the cascade and do not need the browser to have observed the
+   starting value, so the surface still slides out when a swipe left a transform
+   behind or a layout flush landed in the same tick as the class change — both
+   of which happen on mobile and neither of which does on desktop.
+   `--surface-exit-from` lets a swipe-close continue from where the finger was. */
+.closing {
+  visibility: visible;
+  pointer-events: none;
+  animation: surfaceOut var(--dur-medium) var(--ease-out) forwards;
+}
+
+@keyframes surfaceOut {
+  from {
+    opacity: 1;
+    transform: translateY(var(--surface-exit-from, 0px));
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}
+
 .surface[data-swiping] {
   transition: none;
 }
@@ -268,8 +292,14 @@
   transform:
     translateX(calc(var(--carousel-index) * (var(--carousel-dot-size) + var(--carousel-gap))))
     translateY(-50%);
-  transition: transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 180ms var(--ease-out);
   will-change: transform;
+}
+
+/* While the value comes from the scroller the marker is already where the
+   finger is; easing on top of that is the lag people feel. */
+.carouselNav[data-live] .carouselMarker {
+  transition: none;
 }
 
 .carouselDot {

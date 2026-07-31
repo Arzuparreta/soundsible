@@ -67,7 +67,9 @@ async function snapCarousel(page: Page, panel: 'queue' | 'stage' | 'browser') {
     const target = carousel.querySelector<HTMLElement>(`[data-now-playing-tile="${destination}"]`)!;
     const previousBehavior = carousel.style.scrollBehavior;
     carousel.style.scrollBehavior = 'auto';
-    carousel.scrollLeft = target.offsetLeft;
+    // Measured off the rects, like the component does: `offsetLeft` is relative
+    // to the positioned workspace, not to the scroller, so it carries padding.
+    carousel.scrollLeft += target.getBoundingClientRect().left - carousel.getBoundingClientRect().left;
     carousel.dispatchEvent(new Event('scroll'));
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     carousel.style.scrollBehavior = previousBehavior;

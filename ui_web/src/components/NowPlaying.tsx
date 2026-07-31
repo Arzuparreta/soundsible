@@ -42,9 +42,14 @@ import {
 
 export type NowPlayingMobilePanel = 'browser' | 'stage' | 'queue';
 
+/** Trailing debounce that commits the settled panel when `scrollend` is absent. */
+const CAROUSEL_SETTLE_MS = 80;
+
 export function NowPlaying(props: {
   mobilePanel: NowPlayingMobilePanel;
   onMobilePanelChange: (panel: NowPlayingMobilePanel) => void;
+  /** Fractional carousel position, emitted while the scroller moves. */
+  onCarouselProgress?: (index: number, live: boolean) => void;
   surfaceOpen: boolean;
   onCloseSurface?: () => void;
 }) {
@@ -106,22 +111,46 @@ export function NowPlaying(props: {
   });
 
   let carouselFrame = 0;
+  let carouselProgressFrame = 0;
   let carouselSettleTimer: number | undefined;
   let carouselAligned = false;
+  let carouselHeld = false;
+  let panelFromScroll = false;
   let previousSurfaceOpen = props.surfaceOpen;
   const beginCarouselGesture = () => {
+    window.clearTimeout(carouselSettleTimer);
+    carouselSettleTimer = undefined;
+  };
+  const holdCarousel = () => {
     // Once the finger is down the native scroller owns the destination. Keep
     // the previously settled panel interactive until the snap completes: making
     // the touched tile inert mid-gesture leaves Mobile Safari with a visible
-    // panel whose whole subtree no longer accepts taps.
-    window.clearTimeout(carouselSettleTimer);
-    carouselSettleTimer = undefined;
+    // panel whose whole subtree no longer accepts taps. The marker still tracks
+    // the scroll while this holds — only the commit waits.
+    carouselHeld = true;
+    beginCarouselGesture();
+  };
+  const releaseCarousel = () => {
+    carouselHeld = false;
+    // A gesture that produced no scroll at all would otherwise leave the settle
+    // disarmed, and the panel stale until the next one.
+    if (carouselSettleTimer === undefined) carouselSettleTimer = window.setTimeout(settleCarousel, CAROUSEL_SETTLE_MS);
+  };
+  /* `offsetLeft` is measured against `.workspace` (the positioned ancestor),
+     not against `.main` (the scroller), so it carries the workspace padding and
+     never matches `scrollLeft`. Measuring off the rects is exact whatever the
+     containing block turns out to be. */
+  const tileOffset = (tile: HTMLElement) => {
+    if (!workspaceEl) return 0;
+    return tile.getBoundingClientRect().left
+      - workspaceEl.getBoundingClientRect().left
+      + workspaceEl.scrollLeft;
   };
   const jumpToTile = (tile: HTMLElement) => {
     if (!workspaceEl) return;
     const previousBehavior = workspaceEl.style.scrollBehavior;
     workspaceEl.style.scrollBehavior = 'auto';
-    workspaceEl.scrollLeft = tile.offsetLeft;
+    workspaceEl.scrollLeft = tileOffset(tile);
     workspaceEl.style.scrollBehavior = previousBehavior;
   };
   createEffect(() => {
@@ -130,39 +159,73 @@ export function NowPlaying(props: {
     previousSurfaceOpen = surfaceOpen;
     const panel = surfaceOpen ? props.mobilePanel : 'stage';
     if (!mobileLayout() || !workspaceEl) return;
+    // The scroller already put us here; scrolling back would fight the finger.
+    if (panelFromScroll) {
+      panelFromScroll = false;
+      carouselAligned = surfaceOpen;
+      return;
+    }
     const tile = workspaceEl.querySelector<HTMLElement>(`[data-now-playing-tile="${panel}"]`);
     if (!tile) return;
     cancelAnimationFrame(carouselFrame);
     const alignImmediately = !surfaceOpen || opening || !carouselAligned;
     carouselAligned = surfaceOpen;
-    const alreadyAligned = Math.abs(tile.offsetLeft - workspaceEl.scrollLeft) <= 2;
+    const alreadyAligned = Math.abs(tileOffset(tile) - workspaceEl.scrollLeft) <= 2;
     if (alreadyAligned) return;
     if (alignImmediately) jumpToTile(tile);
     carouselFrame = requestAnimationFrame(() => {
+      if (!workspaceEl) return;
       if (alignImmediately) jumpToTile(tile);
-      else workspaceEl?.scrollTo({ left: tile.offsetLeft, behavior: 'smooth' });
+      else workspaceEl.scrollTo({ left: tileOffset(tile), behavior: 'smooth' });
     });
   });
+
+  /** Where the scroller sits, in tiles: 0 = browser, 1 = stage, 2 = queue. */
+  const carouselPosition = () => {
+    if (!workspaceEl) return null;
+    const tiles = [...workspaceEl.querySelectorAll<HTMLElement>('[data-now-playing-tile]')];
+    if (tiles.length < 2) return null;
+    const first = tileOffset(tiles[0]);
+    const stride = tileOffset(tiles[1]) - first;
+    if (stride <= 0) return null;
+    const index = Math.max(0, Math.min(tiles.length - 1, (workspaceEl.scrollLeft - first) / stride));
+    return { index, panel: tiles[Math.round(index)].dataset.nowPlayingTile as NowPlayingMobilePanel };
+  };
 
   const settleCarousel = () => {
     if (!props.surfaceOpen || !mobileLayout() || !workspaceEl) return;
     window.clearTimeout(carouselSettleTimer);
     carouselSettleTimer = undefined;
-    const panels = [...workspaceEl.querySelectorAll<HTMLElement>('[data-now-playing-tile]')];
-    const nearest = panels.reduce<{ panel: NowPlayingMobilePanel; distance: number } | null>((best, element) => {
-      const panel = element.dataset.nowPlayingTile as NowPlayingMobilePanel;
-      const distance = Math.abs(element.offsetLeft - workspaceEl!.scrollLeft);
-      return !best || distance < best.distance ? { panel, distance } : best;
-    }, null);
-    if (nearest && nearest.panel !== props.mobilePanel) props.onMobilePanelChange(nearest.panel);
+    // Still under the finger: a pause mid-drag is not a destination.
+    if (carouselHeld) {
+      carouselSettleTimer = window.setTimeout(settleCarousel, CAROUSEL_SETTLE_MS);
+      return;
+    }
+    const settled = carouselPosition();
+    if (!settled) return;
+    props.onCarouselProgress?.(Math.round(settled.index), false);
+    if (settled.panel !== props.mobilePanel) {
+      panelFromScroll = true;
+      props.onMobilePanelChange(settled.panel);
+      panelFromScroll = false;
+    }
   };
 
   const onCarouselScroll = () => {
     if (!props.surfaceOpen || !mobileLayout()) return;
+    // The marker tracks the scroll frame by frame — waiting for the settle is
+    // what made the pager feel a beat and a half behind the finger.
+    if (props.onCarouselProgress && !carouselProgressFrame) {
+      carouselProgressFrame = requestAnimationFrame(() => {
+        carouselProgressFrame = 0;
+        const live = carouselPosition();
+        if (live) props.onCarouselProgress?.(live.index, true);
+      });
+    }
     window.clearTimeout(carouselSettleTimer);
     // `scrollend` is present in current Chromium/WebKit, while this fallback
     // covers older installed PWAs and scroll-snap implementations.
-    carouselSettleTimer = window.setTimeout(settleCarousel, 140);
+    carouselSettleTimer = window.setTimeout(settleCarousel, CAROUSEL_SETTLE_MS);
   };
 
   onMount(() => {
@@ -176,12 +239,22 @@ export function NowPlaying(props: {
       }
     };
     window.addEventListener('keydown', onKeyDown);
+    // A pointer released outside the carousel still ends the gesture; without
+    // this the settle would stay parked behind a hold that never lifted.
+    const releaseOutside = () => {
+      if (carouselHeld) releaseCarousel();
+    };
+    window.addEventListener('pointerup', releaseOutside);
+    window.addEventListener('pointercancel', releaseOutside);
     workspaceEl?.addEventListener('scrollend', settleCarousel);
     onCleanup(() => {
       media.removeEventListener('change', syncLayout);
       window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('pointerup', releaseOutside);
+      window.removeEventListener('pointercancel', releaseOutside);
       workspaceEl?.removeEventListener('scrollend', settleCarousel);
       cancelAnimationFrame(carouselFrame);
+      cancelAnimationFrame(carouselProgressFrame);
       window.clearTimeout(carouselSettleTimer);
     });
   });
@@ -611,9 +684,13 @@ export function NowPlaying(props: {
           data-layout-busy={layoutBusy() ? '' : undefined}
           data-now-playing-carousel=""
           onScroll={onCarouselScroll}
-          onPointerDown={beginCarouselGesture}
-          onTouchStart={beginCarouselGesture}
+          onPointerDown={holdCarousel}
+          onTouchStart={holdCarousel}
           onWheel={beginCarouselGesture}
+          onPointerUp={releaseCarousel}
+          onPointerCancel={releaseCarousel}
+          onTouchEnd={releaseCarousel}
+          onTouchCancel={releaseCarousel}
         >
         <For each={renderedPanels()}>
           {(panel, index) => (
