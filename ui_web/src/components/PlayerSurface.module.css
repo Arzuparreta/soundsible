@@ -131,6 +131,20 @@
   background: var(--stage-wash-auto);
 }
 
+/* Landscape Auto stands the room up sideways: artwork on the left, track and
+   route on the right (AutoMode.module.css, same breakpoint — the 5/4 floor is
+   what keeps 1280×1024 and 1400×1050 desktops out of the phone composition).
+   The veil has to turn with it, which is what --stage-wash-auto-wide is: the
+   glow moves off the top and in behind the artwork, and the darkening runs
+   across the frame instead of down it, so the side carrying the text is the
+   side that gets covered. It lived on a `.wash` in AutoMode that no element
+   ever had, so it had never once reached the screen. */
+@media (min-width: 600px) and (min-aspect-ratio: 5 / 4) {
+  .auto .wash {
+    background: var(--stage-wash-auto-wide);
+  }
+}
+
 /* `stitchTiles` says it: this is a 180px tile. Say it to CSS too — an SVG with
    no intrinsic dimensions otherwise takes the size of the background area, so
    the fractal noise was being generated at full viewport resolution, and again
