@@ -92,6 +92,40 @@ class LosslessStore:
             ).fetchone()
             return self._decode(row) if row else None
 
+    def ready_count(self, now: int | None = None) -> int:
+        current = int(now or time.time())
+        with self._connection() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS count FROM lossless_upgrade_jobs
+                WHERE status IN ('pending', 'retry', 'no_match', 'committing')
+                  AND next_attempt_at <= ?
+                """,
+                (current,),
+            ).fetchone()
+            return int(row["count"]) if row else 0
+
+    def requeue_all(self) -> int:
+        """Put unmatched and back-off jobs back in line, right now.
+
+        Provider answers are cached for as long as the no-match cooldown, so
+        clearing the cache is what makes a re-check actually re-ask instead of
+        replaying the same verdict.
+        """
+        now = int(time.time())
+        with self._connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE lossless_upgrade_jobs
+                SET status = 'pending', next_attempt_at = 0, attempts = 0,
+                    last_error = NULL, updated_at = ?
+                WHERE status IN ('no_match', 'retry')
+                """,
+                (now,),
+            )
+            conn.execute("DELETE FROM lossless_provider_cache")
+            return cursor.rowcount
+
     def recover_interrupted(self) -> int:
         now = int(time.time())
         with self._connection() as conn:

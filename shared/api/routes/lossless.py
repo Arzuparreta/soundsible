@@ -40,3 +40,42 @@ def lossless_config():
     service = get_lossless_service()
     service.wake()
     return jsonify({"status": "updated", "enabled": lossless_enabled()})
+
+
+@lossless_bp.route("/api/lossless/run", methods=["POST"])
+@require_instance_admin()
+@rate_limit("lossless_run", limit=20, window_sec=60)
+def lossless_run():
+    """Start (or restart) an explicit run, idle gate and daily cap suspended."""
+    data = request.get_json(silent=True) or {}
+    recheck = bool(data.get("recheck"))
+    service = get_lossless_service()
+    requeued = service.start_manual(recheck=recheck)
+    return jsonify({"status": "started", "requeued": requeued, **service.status()})
+
+
+@lossless_bp.route("/api/lossless/pause", methods=["POST"])
+@require_instance_admin()
+@rate_limit("lossless_run", limit=20, window_sec=60)
+def lossless_pause():
+    service = get_lossless_service()
+    changed = service.pause_manual()
+    return jsonify({"status": "paused" if changed else "unchanged", **service.status()})
+
+
+@lossless_bp.route("/api/lossless/resume", methods=["POST"])
+@require_instance_admin()
+@rate_limit("lossless_run", limit=20, window_sec=60)
+def lossless_resume():
+    service = get_lossless_service()
+    changed = service.resume_manual()
+    return jsonify({"status": "running" if changed else "unchanged", **service.status()})
+
+
+@lossless_bp.route("/api/lossless/cancel", methods=["POST"])
+@require_instance_admin()
+@rate_limit("lossless_run", limit=20, window_sec=60)
+def lossless_cancel():
+    service = get_lossless_service()
+    changed = service.cancel_manual()
+    return jsonify({"status": "cancelled" if changed else "unchanged", **service.status()})

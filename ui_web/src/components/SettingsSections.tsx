@@ -13,6 +13,7 @@ import { accessibleSections, findSectionById } from '../lib/settingsIndex';
 import { DevicesPanel } from './DeviceSheet';
 import { PairedDevicesPanel } from './PairDevice';
 import { DisplayPreferences } from './DisplayPreferences';
+import { LosslessUpgrades } from './LosslessUpgrades';
 import {
   ActionRow,
   InputRow,
@@ -436,8 +437,6 @@ function DownloadsSection() {
   const [quality, setQuality] = createSignal<(typeof QUALITY_OPTIONS)[number]>('high');
   const [autoUpdateYtdlp, setAutoUpdateYtdlp] = createSignal(false);
   const [autoUpdateCurlCffi, setAutoUpdateCurlCffi] = createSignal(false);
-  const [losslessEnabled, setLosslessEnabled] = createSignal(true);
-  const [losslessSummary, setLosslessSummary] = createSignal('');
 
   onMount(async () => {
     try {
@@ -447,22 +446,6 @@ function DownloadsSection() {
       if (typeof c.auto_update_curl_cffi === 'boolean') setAutoUpdateCurlCffi(c.auto_update_curl_cffi);
     } catch {
       /* keep defaults */
-    }
-    try {
-      const status = await api.getLosslessStatus();
-      setLosslessEnabled(status.enabled);
-      const upgraded = status.counts.completed ?? 0;
-      const pending =
-        (status.counts.pending ?? 0) + (status.counts.retry ?? 0) + (status.counts.committing ?? 0);
-      setLosslessSummary(
-        status.identity_verifier_available
-          ? t('settings.losslessStatus')
-              .replace('{upgraded}', String(upgraded))
-              .replace('{pending}', String(pending))
-          : t('settings.losslessUnavailable'),
-      );
-    } catch {
-      /* optional service status */
     }
   });
 
@@ -474,17 +457,6 @@ function DownloadsSection() {
       toast.success(t('settings.toast.qualityUpdated'));
     } catch {
       setQuality(previous);
-      toast.error(t('settings.toast.notSaved'));
-    }
-  };
-
-  const toggleLossless = async () => {
-    const next = !losslessEnabled();
-    setLosslessEnabled(next);
-    try {
-      await api.setLosslessEnabled(next);
-    } catch {
-      setLosslessEnabled(!next);
       toast.error(t('settings.toast.notSaved'));
     }
   };
@@ -520,13 +492,9 @@ function DownloadsSection() {
           value={quality()}
           onChange={changeQuality}
         />
-        <SwitchRow
-          label={t('settings.losslessUpgrades')}
-          hint={losslessSummary() || undefined}
-          checked={losslessEnabled()}
-          onChange={toggleLossless}
-        />
       </SettingsGroup>
+
+      <LosslessUpgrades />
 
       <SettingsGroup label={t('settings.group.updates')} note={t('settings.note.updates')}>
         <SwitchRow
@@ -723,6 +691,9 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     keywords: () => [
       t('settings.quality'),
       t('settings.losslessUpgrades'),
+      t('settings.losslessStatusLabel'),
+      t('settings.losslessRunNow'),
+      t('settings.losslessRecheck'),
       t('settings.autoUpdateYtdlp'),
       t('settings.autoUpdateCurlCffi'),
     ],

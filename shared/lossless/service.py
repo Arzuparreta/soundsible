@@ -37,6 +37,10 @@ NO_MATCH_TTL = 30 * 24 * 60 * 60
 TRANSIENT_RETRY_MAX = 24 * 60 * 60
 INVENTORY_INTERVAL = 60 * 60
 LOSSLESS_FORMATS = {"flac", "wav", "wave", "alac", "aiff", "aif"}
+# A player that is really playing republishes its state every 15s. Anything
+# older is a client that went away without saying goodbye (killed tab, phone
+# asleep, network drop) and must not keep the idle worker blocked forever.
+PLAYBACK_STATE_FRESH_SEC = 180
 
 
 class Preempted(RuntimeError):
@@ -95,6 +99,14 @@ class LosslessUpgradeService:
         self._activity_lock = threading.Lock()
         self._activity = "stopped"
         self._current_track_id: str | None = None
+        # Manual run: the user asking for upgrades *now*, which suspends the
+        # idle/quiet gate and the daily examination cap until the ready queue
+        # drains or they pause or cancel it.
+        self._manual_mode = "off"  # off | running | paused
+        self._manual_abort = threading.Event()
+        self._manual_processed = 0
+        self._manual_started_at: float | None = None
+        self._manual_inventoried = False
 
     def start(self) -> bool:
         if self._thread and self._thread.is_alive():
@@ -122,15 +134,92 @@ class LosslessUpgradeService:
     def wake(self) -> None:
         self._wake.set()
 
+    # ── Manual run ────────────────────────────────────────────────────────
+
+    def manual_state(self) -> str:
+        with self._activity_lock:
+            return self._manual_mode
+
+    def start_manual(self, *, recheck: bool = False) -> int:
+        """Run the queue now, ignoring the idle gate and the daily cap.
+
+        ``recheck`` also puts every previously unmatched track back in line and
+        drops the cached provider answers, so a manual run actually asks the
+        providers again instead of replaying a month-old "no match".
+        """
+        requeued = self.store.requeue_all() if recheck else 0
+        with self._activity_lock:
+            self._manual_mode = "running"
+            self._manual_processed = 0
+            self._manual_started_at = time.time()
+        self._manual_abort.clear()
+        self._manual_inventoried = False
+        self.start()
+        self.wake()
+        return requeued
+
+    def pause_manual(self) -> bool:
+        with self._activity_lock:
+            if self._manual_mode != "running":
+                return False
+            self._manual_mode = "paused"
+            self._activity = "paused"
+        self._manual_abort.set()
+        self.wake()
+        return True
+
+    def resume_manual(self) -> bool:
+        with self._activity_lock:
+            if self._manual_mode != "paused":
+                return False
+            self._manual_mode = "running"
+        self._manual_abort.clear()
+        self.wake()
+        return True
+
+    def cancel_manual(self) -> bool:
+        with self._activity_lock:
+            if self._manual_mode == "off":
+                return False
+            self._manual_mode = "off"
+            self._activity = "waiting"
+        self._manual_abort.set()
+        self.wake()
+        return True
+
+    def _end_manual(self, activity: str) -> None:
+        with self._activity_lock:
+            self._manual_mode = "off"
+            self._activity = activity
+            self._current_track_id = None
+        self._manual_abort.clear()
+
     def status(self) -> dict[str, Any]:
         summary = self.store.summary()
         with self._activity_lock:
             activity = self._activity
             current = self._current_track_id
+            manual_mode = self._manual_mode
+            processed = self._manual_processed
+            started_at = self._manual_started_at
+        thread = self._thread
+        budget = self.store.budget(self._day())
         return {
             "enabled": lossless_enabled(),
             "activity": activity,
             "current_track_id": current,
+            "running": bool(thread and thread.is_alive()),
+            "manual": {
+                "state": manual_mode,
+                "processed": processed,
+                "started_at": started_at,
+            },
+            "queued": self.store.ready_count(),
+            "budget": {
+                **budget,
+                "max_tracks": MAX_TRACKS_PER_DAY,
+                "max_bytes": MAX_BYTES_PER_DAY,
+            },
             "providers": [
                 {"name": provider.name, "available": bool(provider.available)}
                 for provider in self.providers
@@ -138,6 +227,35 @@ class LosslessUpgradeService:
             "identity_verifier_available": shutil.which("fpcalc") is not None,
             **summary,
         }
+
+    def run_once(self) -> bool:
+        """One scheduler iteration in whichever mode is active."""
+        if self.manual_state() == "off":
+            return self.run_once_if_idle()
+        return self.run_once_manual()
+
+    def run_once_manual(self) -> bool:
+        """One iteration of an explicitly requested run; public for tests."""
+        if self.manual_state() == "paused":
+            self._set_activity("paused")
+            return False
+        self._manual_abort.clear()
+        if shutil.which("fpcalc") is None:
+            self._end_manual("unavailable")
+            return False
+        if not self._manual_inventoried:
+            self._set_activity("inventory")
+            self._refresh_inventory()
+            self._last_inventory_at = time.monotonic()
+            self._manual_inventoried = True
+        job = self.store.next_ready()
+        if not job:
+            self._end_manual("idle")
+            return False
+        self._process_job(job)
+        with self._activity_lock:
+            self._manual_processed += 1
+        return self.manual_state() == "running"
 
     def run_once_if_idle(self) -> bool:
         """One scheduler iteration; public for deterministic tests."""
@@ -180,7 +298,7 @@ class LosslessUpgradeService:
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
-                worked = self.run_once_if_idle()
+                worked = self.run_once()
             except Exception:
                 logger.exception("Lossless idle scheduler iteration failed")
                 worked = False
@@ -192,9 +310,23 @@ class LosslessUpgradeService:
             self._activity = value
             self._current_track_id = track_id
 
+    def _yield_reason(self) -> str | None:
+        """Why the worker must drop what it is doing, or ``None`` to carry on."""
+        if self._stop.is_set():
+            return "shutdown requested"
+        if self._manual_abort.is_set():
+            return "manual run interrupted"
+        if self.manual_state() == "running":
+            return None
+        return "foreground work started" if self._foreground_busy() else None
+
+    def _should_yield(self) -> bool:
+        return self._yield_reason() is not None
+
     def _preempt_if_busy(self) -> None:
-        if self._stop.is_set() or self._foreground_busy():
-            raise Preempted("foreground work started")
+        reason = self._yield_reason()
+        if reason:
+            raise Preempted(reason)
 
     def _day(self) -> str:
         return datetime.now().astimezone().date().isoformat()
@@ -208,7 +340,7 @@ class LosslessUpgradeService:
 
     def _refresh_inventory(self) -> None:
         for track, path in self._inventory():
-            if self._stop.is_set() or self._foreground_busy():
+            if self._should_yield():
                 return
             fmt = str(getattr(track, "format", "") or "").casefold().lstrip(".")
             media_kind = str(getattr(track, "media_kind", "") or "music")
@@ -329,10 +461,13 @@ class LosslessUpgradeService:
                 last_error="; ".join(diagnostics)[:500] or None,
             )
         except Preempted as exc:
+            # A paused or cancelled manual run keeps the job at the head of the
+            # queue: the user interrupted it, so resuming should carry on here
+            # rather than serve a 60s penalty meant for foreground contention.
             self.store.update(
                 track_id,
                 "retry",
-                next_attempt_at=int(time.time()) + 60,
+                next_attempt_at=int(time.time()) + (0 if self.manual_state() != "off" else 60),
                 last_error=_safe_error(exc),
             )
             self._quiet_since = None
@@ -346,7 +481,10 @@ class LosslessUpgradeService:
                 last_error=_safe_error(exc),
             )
         finally:
-            self._set_activity("waiting")
+            mode = self.manual_state()
+            self._set_activity(
+                "paused" if mode == "paused" else "processing" if mode == "running" else "waiting"
+            )
 
     def _provider_candidates(
         self, provider: LosslessProvider, track: Track
@@ -711,14 +849,33 @@ class LosslessUpgradeService:
         try:
             from shared.user_context import users_config_root
 
-            for path in users_config_root().glob("*/playback_state*.json"):
-                try:
-                    if json.loads(path.read_text(encoding="utf-8")).get("is_playing"):
-                        return True
-                except (OSError, ValueError):
-                    continue
+            return LosslessUpgradeService.playback_live(users_config_root())
         except Exception:
             return True
+
+    @staticmethod
+    def playback_live(users_root: Path, now: float | None = None) -> bool:
+        """True while some device is actually playing something right now.
+
+        Only a *live* player counts. A client that died mid-song (killed tab,
+        phone asleep, network drop) leaves ``is_playing`` behind for good, and
+        without the freshness window that one stale file would suspend upgrades
+        for the whole instance, forever, for every user.
+        """
+        current = time.time() if now is None else now
+        for path in users_root.glob("*/playback_state*.json"):
+            try:
+                state = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if not isinstance(state, dict) or not state.get("is_playing"):
+                continue
+            try:
+                updated = float(state.get("updated_at") or 0)
+            except (TypeError, ValueError):
+                continue
+            if current - updated <= PLAYBACK_STATE_FRESH_SEC:
+                return True
         return False
 
 

@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from shared.lossless.models import LosslessCandidate
-from shared.lossless.service import LosslessUpgradeService, Preempted
+from shared.lossless.service import MAX_TRACKS_PER_DAY, LosslessUpgradeService, Preempted
 from shared.lossless.store import LosslessStore
 from shared.models import LibraryMetadata, Track
 
@@ -447,3 +449,117 @@ def test_commit_keeps_old_audio_when_any_user_manifest_fails(tmp_path, monkeypat
     assert service._commit_snapshot(old, upgraded, new_path, _candidate()) is False
     assert old_path.exists() is True
     assert store.get(old.id)["status"] == "committing"
+
+
+def test_manual_run_ignores_the_idle_gate_and_the_daily_cap(tmp_path, monkeypatch):
+    monkeypatch.setenv("SOUNDSIBLE_LOSSLESS_UPGRADES", "true")
+    audio = tmp_path / "song.m4a"
+    audio.write_bytes(b"audio")
+    provider = Provider([])
+    store = LosslessStore(tmp_path / "instance.db")
+    today = datetime.now().astimezone().date().isoformat()
+    store.add_budget(today, tracks=MAX_TRACKS_PER_DAY)
+    service = LosslessUpgradeService(
+        store=store,
+        providers=[provider],
+        foreground_busy=lambda: True,
+        inventory=lambda: [(_track(audio), str(audio))],
+        quiet_seconds=3600,
+    )
+    assert service.run_once_if_idle() is False
+    assert provider.calls == 0
+
+    # The worker thread would race the assertions below; drive it by hand.
+    monkeypatch.setattr(service, "start", lambda: False)
+    service.start_manual()
+    assert service.run_once_manual() is True
+    assert provider.calls == 1
+    assert store.get("stable-id")["status"] == "no_match"
+    assert store.budget(today)["tracks_examined"] > MAX_TRACKS_PER_DAY
+
+
+def test_manual_run_ends_itself_when_the_queue_drains(tmp_path, monkeypatch):
+    monkeypatch.setenv("SOUNDSIBLE_LOSSLESS_UPGRADES", "true")
+    service = LosslessUpgradeService(
+        store=LosslessStore(tmp_path / "instance.db"),
+        providers=[],
+        foreground_busy=lambda: True,
+        inventory=lambda: [],
+        quiet_seconds=3600,
+    )
+    # The worker thread would race the assertions below; drive it by hand.
+    monkeypatch.setattr(service, "start", lambda: False)
+    service.start_manual()
+    assert service.run_once_manual() is False
+    assert service.manual_state() == "off"
+    assert service.status()["activity"] == "idle"
+
+
+def test_pausing_a_manual_run_preempts_the_job_and_keeps_it_first_in_line(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("SOUNDSIBLE_LOSSLESS_UPGRADES", "true")
+    current = tmp_path / "song.m4a"
+    current.write_bytes(b"current")
+    track = _track(current)
+    service = LosslessUpgradeService(
+        store=LosslessStore(tmp_path / "instance.db"),
+        providers=[Provider([_candidate()])],
+        foreground_busy=lambda: False,
+        inventory=lambda: [(track, str(current))],
+        quiet_seconds=0,
+    )
+
+    def pause_mid_download(_candidate):
+        service.pause_manual()
+        service._preempt_if_busy()
+        raise AssertionError("preemption did not fire")
+
+    monkeypatch.setattr(service, "_download_candidate", pause_mid_download)
+    # The worker thread would race the assertions below; drive it by hand.
+    monkeypatch.setattr(service, "start", lambda: False)
+    service.start_manual()
+    service.run_once_manual()
+
+    job = service.store.get(track.id)
+    assert job["status"] == "retry"
+    assert job["next_attempt_at"] <= int(time.time())
+    assert service.manual_state() == "paused"
+    assert service.run_once_manual() is False
+    assert service.status()["activity"] == "paused"
+
+    assert service.resume_manual() is True
+    assert service.manual_state() == "running"
+    assert service.cancel_manual() is True
+    assert service.manual_state() == "off"
+
+
+def test_recheck_requeues_unmatched_tracks_and_drops_cached_verdicts(tmp_path):
+    store = LosslessStore(tmp_path / "instance.db")
+    store.enqueue("a", "yt-a")
+    store.enqueue("b", "yt-b")
+    store.update("a", "no_match", next_attempt_at=int(time.time()) + 30 * 86400)
+    store.update("b", "completed")
+    store.cache_put("a", "jamendo", [{"source_id": "x"}], 3600)
+
+    assert store.requeue_all() == 1
+    assert store.get("a")["status"] == "pending"
+    assert store.get("b")["status"] == "completed"
+    assert store.cache_get("a", "jamendo") is None
+    assert store.ready_count() == 1
+
+
+def test_a_client_that_died_mid_song_does_not_block_upgrades_forever(tmp_path):
+    users = tmp_path / "users"
+    (users / "alice").mkdir(parents=True)
+    state = users / "alice" / "playback_state.json"
+
+    state.write_text(
+        json.dumps({"is_playing": True, "updated_at": time.time()}), encoding="utf-8"
+    )
+    assert LosslessUpgradeService.playback_live(users) is True
+
+    state.write_text(
+        json.dumps({"is_playing": True, "updated_at": time.time() - 3600}), encoding="utf-8"
+    )
+    assert LosslessUpgradeService.playback_live(users) is False
