@@ -169,18 +169,29 @@ jobs:
 
       - name: Provision OpenSSL for Python cryptography (Windows ARM64)
         if: matrix.arch == 'arm64'
-        shell: pwsh
+        uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151
+        with:
+          repo: pyca/infra
+          workflow: build-windows-openssl.yml
+          branch: main
+          workflow_conclusion: success
+          name: openssl-arm64
+          path: C:/openssl-arm64
+          github_token: ${{ github.token }}
+
+      - name: Configure OpenSSL for Python cryptography (Windows ARM64)
+        if: matrix.arch == 'arm64'
+        shell: bash
         run: |
-          $root = Join-Path $env:RUNNER_TEMP "vcpkg"
-          git clone --depth 1 https://github.com/microsoft/vcpkg.git $root
-          & "$root/bootstrap-vcpkg.bat" -disableMetrics
-          & "$root/vcpkg.exe" install openssl:arm64-windows
-          "VCPKG_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "OPENSSL_DIR=$root/installed/arm64-windows" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "OPENSSL_STATIC=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "OPENSSL_DIR=C:/openssl-arm64" >> "$GITHUB_ENV"
+          echo "OPENSSL_STATIC=1" >> "$GITHUB_ENV"
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt pywinauto==0.6.9
+
+      - name: Validate ARM64 cryptography runtime
+        if: matrix.arch == 'arm64'
+        run: python -c "from cryptography.hazmat.bindings._rust import openssl"
 
       - name: Validate shell modules
         working-directory: desktop-shell
