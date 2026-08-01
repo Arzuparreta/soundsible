@@ -378,7 +378,6 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
             )
             win32gui.ShowWindow(window.handle, win32con.SW_SHOW)
             restored_window = main_window(process.pid, timeout=10)
-        restored_window.wait("visible", timeout=10)
         window = restored_window
         screenshot(artifact_path / "restored-from-tray.png")
 
