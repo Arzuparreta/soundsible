@@ -226,39 +226,18 @@ def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None
     invoke_or_click(control(window, "Choose folder"))
     dialog = folder_dialog()
     dump_tree(dialog, artifact_path / "picker-tree.txt")
-    address_bar = next(
+    folder_field = next(
         (
             item
             for item in dialog.descendants()
-            if item.element_info.control_type == "ToolBar"
-            and item.window_text().startswith("Address:")
+            if item.element_info.control_type == "Edit"
+            and item.element_info.automation_id == "1152"
         ),
         None,
     )
-    if address_bar is None:
-        raise RuntimeError("Native folder picker address bar was not found")
-    address_rectangle = address_bar.rectangle()
-    address_bar.click_input()
-
-    def address_editor():
-        return next(
-            (
-                item
-                for item in dialog.descendants(control_type="Edit")
-                if item.is_visible()
-                and item.rectangle().top >= address_rectangle.top - 5
-                and item.rectangle().bottom <= address_rectangle.bottom + 5
-            ),
-            None,
-        )
-
-    editor = wait_until(
-        address_editor,
-        "Native folder picker address editor did not appear",
-        timeout=10,
-    )
-    editor.set_edit_text(str(music_path))
-    editor.type_keys("{ENTER}")
+    if folder_field is None:
+        raise RuntimeError("Native folder picker Folder field was not found")
+    folder_field.set_edit_text(str(music_path))
     invoke_or_click(control(dialog, "Select Folder", timeout=10))
 
 
