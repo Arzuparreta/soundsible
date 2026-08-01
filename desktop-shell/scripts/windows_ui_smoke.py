@@ -184,10 +184,16 @@ def set_clipboard_text(value: str) -> None:
 
 
 def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None:
+    def reopen_picker_after_oobe() -> None:
+        # Explorer owns the foreground after Windows finishes its deferred
+        # privacy OOBE. Bring Soundsible back before using a physical UIA click.
+        window.set_focus()
+        time.sleep(0.5)
+        print("Reopening folder picker after runner privacy OOBE", flush=True)
+        control(window, "Choose folder", timeout=10).click_input()
+
     control(window, "Choose folder").click_input()
-    dialog = folder_dialog(
-        lambda: control(window, "Choose folder", timeout=10).click_input()
-    )
+    dialog = folder_dialog(reopen_picker_after_oobe)
     screenshot(artifact_path / "picker-cancel.png")
     dialog.set_focus()
     send_keys("{ESC}")
