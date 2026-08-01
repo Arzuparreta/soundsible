@@ -75,36 +75,47 @@ def control(window, title: str, control_type: str = "Button", timeout: float = 3
 def dismiss_runner_first_boot(desktop) -> bool:
     """Dismiss the hosted runner's privacy OOBE if Explorer starts it."""
 
-    controls = []
     for window in desktop.windows():
         try:
-            controls.extend(window.descendants())
+            controls = window.descendants()
         except Exception:
             continue
 
-    if not any(
-        item.window_text() == "Choose privacy settings for your device"
-        for item in controls
-    ):
-        return False
+        if not any(
+            item.window_text() == "Choose privacy settings for your device"
+            for item in controls
+        ):
+            continue
 
-    for label in ("Next", "Accept"):
+        buttons = [
+            item
+            for item in controls
+            if item.element_info.control_type == "Button"
+            and item.is_visible()
+            and item.is_enabled()
+        ]
         button = next(
             (
                 item
-                for item in controls
-                if item.element_info.control_type == "Button"
-                and item.window_text() == label
-                and item.is_visible()
-                and item.is_enabled()
+                for label in ("Next", "Accept")
+                for item in buttons
+                if item.window_text() == label
             ),
             None,
         )
+        # The ARM image occasionally loses the accessible label while the
+        # primary blue button remains visible. It is the rightmost button.
+        if button is None and buttons:
+            button = max(buttons, key=lambda item: item.rectangle().left)
+
         if button is not None:
             button.click_input()
-            time.sleep(0.75)
-            return True
-    return True
+        else:
+            window.set_focus()
+            send_keys("{ENTER}")
+        time.sleep(1.5)
+        return True
+    return False
 
 
 def folder_dialog():
