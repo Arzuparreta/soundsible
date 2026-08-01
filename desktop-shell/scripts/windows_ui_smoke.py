@@ -158,7 +158,8 @@ def folder_dialog(reopen_after_oobe=None):
                 (
                     candidate
                     for candidate in candidates
-                    if candidate.window_text().startswith(
+                    if candidate.is_visible()
+                    and candidate.window_text().startswith(
                         "Choose your music folder"
                     )
                 ),
@@ -214,6 +215,8 @@ def set_clipboard_text(value: str) -> None:
 
 
 def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None:
+    import win32gui
+
     def reopen_picker_after_oobe() -> None:
         # Explorer owns the foreground after Windows finishes its deferred
         # privacy OOBE. Invoke the covered WebView button through UIA instead
@@ -232,7 +235,14 @@ def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None
     control(window, "Choose folder").click_input()
     dialog = folder_dialog(reopen_picker_after_oobe)
     screenshot(artifact_path / "picker-cancel.png")
+    cancelled_handle = dialog.handle
     invoke_or_click(control(dialog, "Cancel", timeout=10))
+    wait_until(
+        lambda: not win32gui.IsWindow(cancelled_handle)
+        or not win32gui.IsWindowVisible(cancelled_handle),
+        "Cancelled folder picker did not close",
+        timeout=10,
+    )
     control(window, "Choose folder", timeout=10)
 
     invoke_or_click(control(window, "Choose folder"))
