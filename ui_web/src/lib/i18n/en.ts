@@ -127,6 +127,16 @@ export const en = {
       retrying: 'Nothing new landed across {related} related, {node} map and {local} library tracks · trying again',
     },
     upNext: 'Up next',
+    panel: {
+      booth: 'Booth',
+      stage: 'Now playing',
+      route: 'Route',
+    },
+    workspace: {
+      aria: 'Auto Mode panels',
+      stageOnly: 'Focus on player',
+      showAll: 'Show all panels',
+    },
     booth: {
       aria: 'DJ booth controls',
       now: 'On air', next: 'Next', bpm: 'BPM', in: 'in {time}',
@@ -166,6 +176,7 @@ export const en = {
       cutsDrops: 'Cuts & drops', cutsDropsTrait: 'Short runs · marked changes · echo cuts',
       openFormat: 'Open format', openFormatTrait: 'Wide jumps · bridge tracks · structural changes',
       direction: 'Music direction',
+      tellDj: 'Tell the DJ…',
       directionHint: 'Tell the booth where to take this. It handles the mixing.',
       commandPlaceholder: 'play oliver heldens · darker · nothing from the eighties',
       commandAria: 'Tell the booth where to take the session', send: 'Send',
@@ -176,9 +187,9 @@ export const en = {
       cued: 'Cued', appliesNext: 'Lands on the next track. What is cued stays cued.',
       promote: 'Play {title} sooner',
       requestPanelAria: 'Request a track from the booth',
-      requestPromise: 'It tries to play it after the current track; when the mix needs it, it builds a safe route within the next five.',
+      requestPromise: 'It tries to play it after the current track; when the mix needs it, it builds a safe route within the next three.',
       searchPlaceholder: 'Track or artist', searching: 'Searching…',
-      searchEmpty: 'Name the exact track you want', requestAction: 'Request',
+      searchEmpty: 'Name the exact track you want', requestAction: 'Request from the DJ',
       technique: {
         long_blend: 'Long blend', bass_swap: 'Bass swap', filter_blend: 'Filter blend',
         echo_cut: 'Echo cut', structural_fade: 'Structural change', safe_fade: 'Smooth fade',

@@ -1,0 +1,186 @@
+.workspace {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding:
+    calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap))
+    clamp(12px, 2vw, 28px)
+    clamp(18px, 2.4vh, 30px);
+  overflow: hidden;
+}
+
+.main {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.tile {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--stage-panel);
+  border: 1px solid var(--stage-line);
+  border-radius: clamp(18px, 1.7vw, 28px);
+  box-shadow: var(--stage-shadow-md), inset 0 1px var(--stage-rim);
+  backdrop-filter: var(--stage-material-filter);
+  -webkit-backdrop-filter: var(--stage-material-filter);
+}
+
+.tile[data-player-tile='stage'] {
+  container-type: inline-size;
+}
+
+.splitter,
+.panelGrip {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .workspace {
+    padding-top:
+      calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap));
+    padding-right: max(clamp(10px, 2.5vw, 20px), env(safe-area-inset-right, 0px));
+    padding-bottom: var(--player-mobile-safe-bottom);
+    padding-left: max(clamp(10px, 2.5vw, 20px), env(safe-area-inset-left, 0px));
+  }
+
+  .main {
+    display: flex;
+    align-items: stretch;
+    gap: clamp(10px, 2.2vw, 18px);
+    max-width: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .main::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tile {
+    display: flex;
+    flex: 0 0 100%;
+    width: 100%;
+    scroll-snap-align: center;
+    scroll-snap-stop: always;
+  }
+}
+
+@media (min-width: 1024px) {
+  .main {
+    display: grid;
+    align-items: stretch;
+    gap: 0;
+    overflow: visible;
+    background: transparent;
+  }
+
+  .tile {
+    display: block;
+  }
+
+  .splitter {
+    position: relative;
+    z-index: 8;
+    display: block;
+    width: 14px;
+    min-width: 14px;
+    cursor: col-resize;
+    touch-action: none;
+    background: transparent;
+  }
+
+  .splitter::after {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 6px;
+    width: 2px;
+    content: '';
+    background: var(--stage-line-strong);
+    opacity: 0;
+    transition:
+      opacity var(--dur-short),
+      background var(--dur-short),
+      box-shadow var(--dur-short);
+  }
+
+  .splitter:focus-visible::after {
+    opacity: 1;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-faint);
+  }
+
+  .panelGrip {
+    display: grid;
+    grid-template-columns: repeat(3, 3px);
+    grid-template-rows: repeat(2, 3px);
+    place-content: center;
+    gap: 3px;
+    width: 28px;
+    height: 32px;
+    flex: 0 0 auto;
+    padding: 0;
+    color: var(--ink-tertiary);
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-full);
+    cursor: grab;
+  }
+
+  .panelGrip:active {
+    cursor: grabbing;
+  }
+
+  .panelGrip i {
+    width: 3px;
+    height: 3px;
+    background: currentColor;
+    border-radius: 50%;
+  }
+
+  .tile[data-player-tile='stage'] > .panelGrip {
+    position: absolute;
+    z-index: 12;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--stage-material);
+    backdrop-filter: blur(10px);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .splitter:hover::after,
+    .splitter:active::after {
+      opacity: 1;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-faint);
+    }
+
+    .panelGrip:hover {
+      color: var(--ink-primary);
+      background: var(--stage-material-hover);
+    }
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tile {
+    background: var(--stage-panel-opaque);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main {
+    scroll-behavior: auto;
+  }
+}

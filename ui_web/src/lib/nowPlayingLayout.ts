@@ -1,10 +1,15 @@
-export type NowPlayingPanelId = 'browser' | 'stage' | 'queue';
+import {
+  clonePanelLayout,
+  movePanel as movePlayerPanel,
+  normalizePanelRatios as normalizePlayerPanelRatios,
+  parsePanelLayout,
+  reorderPanel as reorderPlayerPanel,
+  resizeAdjacentPanels as resizePlayerPanels,
+  type PlayerPanelLayout,
+} from './playerLayout';
 
-export interface NowPlayingDesktopLayout {
-  version: 1;
-  order: NowPlayingPanelId[];
-  ratios: Record<NowPlayingPanelId, number>;
-}
+export type NowPlayingPanelId = 'browser' | 'stage' | 'queue';
+export type NowPlayingDesktopLayout = PlayerPanelLayout<NowPlayingPanelId>;
 
 export type NowPlayingLayoutPresetId = 'balanced' | 'player' | 'explore' | 'queue';
 
@@ -37,12 +42,7 @@ export const NOW_PLAYING_LAYOUT_PRESETS: Record<NowPlayingLayoutPresetId, NowPla
 const IDS: NowPlayingPanelId[] = ['browser', 'stage', 'queue'];
 
 export function layoutFromPreset(preset: NowPlayingLayoutPresetId): NowPlayingDesktopLayout {
-  const layout = NOW_PLAYING_LAYOUT_PRESETS[preset];
-  return {
-    ...layout,
-    order: [...layout.order],
-    ratios: { ...layout.ratios },
-  };
+  return clonePanelLayout(NOW_PLAYING_LAYOUT_PRESETS[preset]);
 }
 
 function isPanelId(value: unknown): value is NowPlayingPanelId {
@@ -52,38 +52,14 @@ function isPanelId(value: unknown): value is NowPlayingPanelId {
 export function normalizePanelRatios(
   ratios: Partial<Record<NowPlayingPanelId, number>>,
 ): Record<NowPlayingPanelId, number> {
-  const safe = Object.fromEntries(
-    IDS.map((id) => [id, Number.isFinite(ratios[id]) && Number(ratios[id]) > 0 ? Number(ratios[id]) : DEFAULT_NOW_PLAYING_LAYOUT.ratios[id]]),
-  ) as Record<NowPlayingPanelId, number>;
-  const total = IDS.reduce((sum, id) => sum + safe[id], 0);
-  return Object.fromEntries(IDS.map((id) => [id, safe[id] / total])) as Record<NowPlayingPanelId, number>;
+  return normalizePlayerPanelRatios(IDS, ratios, DEFAULT_NOW_PLAYING_LAYOUT.ratios);
 }
 
 export function parseNowPlayingLayout(raw: string | null, legacySide?: string | null): NowPlayingDesktopLayout {
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as Partial<NowPlayingDesktopLayout>;
-      if (
-        parsed.version === 1
-        && Array.isArray(parsed.order)
-        && parsed.order.length === 3
-        && parsed.order.every(isPanelId)
-        && new Set(parsed.order).size === 3
-        && parsed.ratios
-      ) {
-        return {
-          version: 1,
-          order: [...parsed.order],
-          ratios: normalizePanelRatios(parsed.ratios),
-        };
-      }
-    } catch {
-      /* fall through to the safe migration/default */
-    }
-  }
-  return legacySide === 'right'
+  const fallback: NowPlayingDesktopLayout = legacySide === 'right'
     ? { ...DEFAULT_NOW_PLAYING_LAYOUT, order: ['stage', 'queue', 'browser'] }
-    : { ...DEFAULT_NOW_PLAYING_LAYOUT, order: [...DEFAULT_NOW_PLAYING_LAYOUT.order] };
+    : DEFAULT_NOW_PLAYING_LAYOUT;
+  return parsePanelLayout(raw, IDS, fallback, isPanelId);
 }
 
 export function movePanel(
@@ -91,12 +67,7 @@ export function movePanel(
   panel: NowPlayingPanelId,
   direction: -1 | 1,
 ): NowPlayingPanelId[] {
-  const from = order.indexOf(panel);
-  const to = from + direction;
-  if (from < 0 || to < 0 || to >= order.length) return order;
-  const next = [...order];
-  [next[from], next[to]] = [next[to], next[from]];
-  return next;
+  return movePlayerPanel(order, panel, direction);
 }
 
 export function reorderPanel(
@@ -104,9 +75,7 @@ export function reorderPanel(
   panel: NowPlayingPanelId,
   targetIndex: number,
 ): NowPlayingPanelId[] {
-  const next = order.filter((id) => id !== panel);
-  next.splice(Math.max(0, Math.min(targetIndex, next.length)), 0, panel);
-  return next;
+  return reorderPlayerPanel(order, panel, targetIndex);
 }
 
 export function resizeAdjacentPanels(
@@ -116,13 +85,13 @@ export function resizeAdjacentPanels(
   deltaRatio: number,
   minRatios: Partial<Record<NowPlayingPanelId, number>> = {},
 ): Record<NowPlayingPanelId, number> {
-  const pair = ratios[left] + ratios[right];
-  const leftMin = minRatios[left] ?? 0.08;
-  const rightMin = minRatios[right] ?? 0.08;
-  const nextLeft = Math.max(leftMin, Math.min(pair - rightMin, ratios[left] + deltaRatio));
-  return normalizePanelRatios({
-    ...ratios,
-    [left]: nextLeft,
-    [right]: pair - nextLeft,
-  });
+  return resizePlayerPanels(
+    IDS,
+    ratios,
+    DEFAULT_NOW_PLAYING_LAYOUT.ratios,
+    left,
+    right,
+    deltaRatio,
+    minRatios,
+  );
 }

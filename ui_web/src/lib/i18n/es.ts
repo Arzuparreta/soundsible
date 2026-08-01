@@ -128,6 +128,16 @@ export const es: Dict = {
       retrying: 'No ha entrado nada nuevo entre {related} afines, {node} del mapa y {local} de la biblioteca · reintentando',
     },
     upNext: 'A continuación',
+    panel: {
+      booth: 'Cabina',
+      stage: 'Sonando',
+      route: 'Ruta',
+    },
+    workspace: {
+      aria: 'Paneles de Auto Mode',
+      stageOnly: 'Solo reproductor',
+      showAll: 'Ver todos los paneles',
+    },
     booth: {
       aria: 'Controles de la cabina',
       now: 'Al aire', next: 'Sigue', bpm: 'BPM', in: 'en {time}',
@@ -167,6 +177,7 @@ export const es: Dict = {
       cutsDrops: 'Cortes y drops', cutsDropsTrait: 'Tramos cortos · cambios marcados · cortes con eco',
       openFormat: 'Open format', openFormatTrait: 'Saltos amplios · temas puente · cambios de estructura',
       direction: 'Dirección musical',
+      tellDj: 'Dile al DJ…',
       directionHint: 'Dile a la cabina hacia dónde tirar. De mezclar se encarga ella.',
       commandPlaceholder: 'pon el parrita · más oscuro · nada de los ochenta',
       commandAria: 'Dile a la cabina hacia dónde llevar la sesión', send: 'Enviar',
@@ -177,9 +188,9 @@ export const es: Dict = {
       cued: 'Preparada', appliesNext: 'Entra en el próximo tema. Lo que ya está preparado, sigue.',
       promote: 'Adelantar {title}',
       requestPanelAria: 'Pedir un tema a la cabina',
-      requestPromise: 'Intenta ponerlo después del tema actual; si la mezcla lo pide, construye una entrada segura dentro de los cinco siguientes.',
+      requestPromise: 'Intenta ponerlo después del tema actual; si la mezcla lo pide, construye una entrada segura dentro de los tres siguientes.',
       searchPlaceholder: 'Tema o artista', searching: 'Buscando…',
-      searchEmpty: 'Dinos el tema exacto que quieres', requestAction: 'Pedir',
+      searchEmpty: 'Dinos el tema exacto que quieres', requestAction: 'Pedir al DJ',
       technique: {
         long_blend: 'Mezcla larga', bass_swap: 'Cambio de graves', filter_blend: 'Mezcla filtrada',
         echo_cut: 'Corte con eco', structural_fade: 'Cambio de estructura', safe_fade: 'Fundido suave',

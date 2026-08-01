@@ -119,12 +119,12 @@ function swipeDown(target: Element) {
 }
 
 describe('PlayerSurface', () => {
-  it('uses the pill as the real Auto Mode switch', () => {
+  it('uses the pill as the real Auto Mode switch', async () => {
     render(() => <PlayerSurface />);
 
     fireEvent.click(screen.getByRole('tab', { name: 'autoMode.label' }));
     expect(harness.actions.enterAutoMode).toHaveBeenCalledOnce();
-    expect(screen.getByTestId('auto-mode-view')).toBeInTheDocument();
+    expect(await screen.findByTestId('auto-mode-view')).toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute('data-player-surface', 'auto');
 
     fireEvent.click(screen.getByRole('tab', { name: 'nowPlaying.modeLabel' }));
@@ -132,9 +132,10 @@ describe('PlayerSurface', () => {
     expect(screen.queryByTestId('auto-mode-view')).not.toBeInTheDocument();
   });
 
-  it('hides the surface without stopping a running Auto session', () => {
+  it('hides the surface without stopping a running Auto session', async () => {
     render(() => <PlayerSurface />);
     fireEvent.click(screen.getByRole('tab', { name: 'autoMode.label' }));
+    await screen.findByTestId('auto-mode-view');
 
     fireEvent.click(screen.getByRole('button', { name: 'common.close' }));
 

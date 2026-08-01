@@ -64,6 +64,7 @@ describe('route scroll containment', () => {
 
 describe('unified player geometry', () => {
   const nowPlaying = path.resolve(process.cwd(), 'src/components/NowPlaying.module.css');
+  const workspace = path.resolve(process.cwd(), 'src/components/PlayerWorkspace.module.css');
   const browser = path.resolve(process.cwd(), 'src/components/NowPlayingBrowser.module.css');
   const surface = path.resolve(process.cwd(), 'src/components/PlayerSurface.module.css');
   const tokens = path.resolve(process.cwd(), 'src/styles/tokens.css');
@@ -79,7 +80,7 @@ describe('unified player geometry', () => {
     expect(surfaceGeometry['--player-mobile-footer-clearance'].replace(/\s+/g, ' ')).toBe(
       'calc( var(--player-carousel-height) + 8px + max(0px, calc(var(--player-carousel-bottom) - var(--player-mobile-safe-bottom))) )',
     );
-    expect(scopedDeclarations(nowPlaying, '.workspace', 'max-width: 1023px')).toMatchObject({
+    expect(scopedDeclarations(workspace, '.workspace', 'max-width: 1023px')).toMatchObject({
       'padding-top':
         'calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap))',
       'padding-bottom': 'var(--player-mobile-safe-bottom)',

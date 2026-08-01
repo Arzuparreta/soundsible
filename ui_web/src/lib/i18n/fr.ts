@@ -128,6 +128,16 @@ export const fr: Dict = {
       retrying: 'Rien de neuf parmi {related} proches, {node} de la carte et {local} de la bibliothèque · nouvel essai',
     },
     upNext: 'À suivre',
+    panel: {
+      booth: 'Cabine',
+      stage: 'Lecture en cours',
+      route: 'Parcours',
+    },
+    workspace: {
+      aria: 'Panneaux Auto Mode',
+      stageOnly: 'Lecteur uniquement',
+      showAll: 'Afficher tous les panneaux',
+    },
     booth: {
       aria: 'Commandes de la cabine',
       now: 'À l’antenne', next: 'Ensuite', bpm: 'BPM', in: 'dans {time}',
@@ -167,6 +177,7 @@ export const fr: Dict = {
       cutsDrops: 'Coupes et drops', cutsDropsTrait: 'Passages courts · changements marqués · coupes écho',
       openFormat: 'Open format', openFormatTrait: 'Grands écarts · morceaux-ponts · changements structurels',
       direction: 'Direction musicale',
+      tellDj: 'Parlez au DJ…',
       directionHint: 'Dites à la cabine où aller. Elle s’occupe du mix.',
       commandPlaceholder: 'mets oliver heldens · plus sombre · rien des années 80',
       commandAria: 'Dites à la cabine où mener la session', send: 'Envoyer',
@@ -177,9 +188,9 @@ export const fr: Dict = {
       cued: 'Calée', appliesNext: 'Prend effet au morceau suivant. Ce qui est calé le reste.',
       promote: 'Avancer {title}',
       requestPanelAria: 'Demander un morceau à la cabine',
-      requestPromise: 'La cabine essaie de le passer juste après ; si nécessaire, elle prépare une entrée sûre dans les cinq morceaux suivants.',
+      requestPromise: 'La cabine essaie de le passer juste après ; si nécessaire, elle prépare une entrée sûre dans les trois morceaux suivants.',
       searchPlaceholder: 'Morceau ou artiste', searching: 'Recherche…',
-      searchEmpty: 'Nommez le morceau exact', requestAction: 'Demander',
+      searchEmpty: 'Nommez le morceau exact', requestAction: 'Demander au DJ',
       technique: {
         long_blend: 'Mix long', bass_swap: 'Échange de basses', filter_blend: 'Mix filtré',
         echo_cut: 'Coupe écho', structural_fade: 'Changement structurel', safe_fade: 'Fondu doux',

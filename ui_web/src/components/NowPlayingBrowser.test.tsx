@@ -38,6 +38,8 @@ const storeMock = vi.hoisted(() => {
       enqueue: vi.fn(),
       startRadio: vi.fn(),
       linkCatalogItem: vi.fn(),
+      requestAutoTrack: vi.fn(),
+      requestAutoArtist: vi.fn(),
     },
   };
 });
@@ -145,5 +147,40 @@ describe('NowPlayingBrowser', () => {
       expect.objectContaining({ id: '98u3AJVEL8Q', source: 'preview' }),
     ));
     expect(storeMock.actions.playFrom).not.toHaveBeenCalled();
+  });
+
+  it('reuses global search with request as the primary Auto action', async () => {
+    apiMock.searchCatalog.mockResolvedValue({
+      items: [{
+        id: 'youtube:track:requested',
+        type: 'track',
+        source: 'youtube',
+        title: 'Requested Song',
+        artist: 'Requested Artist',
+        raw: { id: 'yt-requested', title: 'Requested Song', artist: 'Requested Artist' },
+      }],
+      sections: [],
+    });
+    const onRequested = vi.fn();
+
+    render(() => (
+      <NowPlayingBrowser
+        purpose="auto-request"
+        onClose={vi.fn()}
+        onRequested={onRequested}
+      />
+    ));
+    vi.useFakeTimers();
+    fireEvent.input(screen.getByPlaceholderText('Track or artist'), { target: { value: 'requested song' } });
+    await vi.advanceTimersByTimeAsync(260);
+    vi.useRealTimers();
+    fireEvent.click(await screen.findByRole('button', { name: 'Request from the DJ: Requested Song' }));
+
+    await waitFor(() => expect(storeMock.actions.requestAutoTrack).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'yt-requested', source: 'preview' }),
+    ));
+    expect(storeMock.actions.playNow).not.toHaveBeenCalled();
+    expect(onRequested).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', { name: 'Add to queue' })).not.toBeInTheDocument();
   });
 });

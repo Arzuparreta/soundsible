@@ -1,12 +1,14 @@
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, untrack } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, Suspense, untrack } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { actions, nowPlayingOpen, setNowPlayingOpen, state } from '../stores';
 import { coverUrl } from '../lib/media';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
-import { AutoMode } from './AutoMode';
+import { AUTO_MODE_PANELS, type AutoModePanelId } from '../lib/autoModeLayout';
 import { NowPlaying, type NowPlayingMobilePanel } from './NowPlaying';
 import styles from './PlayerSurface.module.css';
+
+const AutoMode = lazy(() => import('./AutoMode').then((module) => ({ default: module.AutoMode })));
 
 const MOBILE_QUERY = '(max-width: 1023px)';
 const SWIPE_CLOSE_THRESHOLD = 80;
@@ -22,7 +24,8 @@ const CLOSE_ANIMATION_TIMEOUT = 420;
    buttons, so excluding them left most of the surface unswipeable. A tap never
    activates the gesture, and once it does the browser cancels the click. */
 const SWIPE_EXCLUDED = 'input, textarea, select, [data-rail], [data-lyrics-scroll], [data-no-surface-swipe]';
-const PANELS = ['browser', 'stage', 'queue'] as const;
+const NOW_PLAYING_PANELS = ['browser', 'stage', 'queue'] as const;
+type PlayerPanel = NowPlayingMobilePanel | AutoModePanelId;
 
 type BackdropState = {
   first: string;
@@ -55,7 +58,7 @@ export function PlayerSurface() {
     const track = current();
     return track ? track.cover ?? coverUrl(track.id) : '';
   });
-  const [mobilePanel, setMobilePanel] = createSignal<NowPlayingMobilePanel>('stage');
+  const [mobilePanel, setMobilePanel] = createSignal<PlayerPanel>('stage');
   /* Fractional carousel position, fed by the scroller itself. The pager marker
      follows it live; `mobilePanel` keeps the settled semantics (inert, focus). */
   const [carouselProgress, setCarouselProgress] = createSignal(1);
@@ -89,10 +92,11 @@ export function PlayerSurface() {
       : { ...value, first: next, active: 'first' });
   });
 
-  const setPanel = (panel: NowPlayingMobilePanel) => {
+  const panels = createMemo<readonly PlayerPanel[]>(() => auto() ? AUTO_MODE_PANELS : NOW_PLAYING_PANELS);
+  const setPanel = (panel: PlayerPanel) => {
     setMobilePanel(panel);
     setCarouselLive(false);
-    setCarouselProgress(PANELS.indexOf(panel));
+    setCarouselProgress(panels().indexOf(panel));
   };
 
   createEffect(() => {
@@ -352,7 +356,7 @@ export function PlayerSurface() {
         <div class={styles.grain} aria-hidden="true" />
 
         <div class={styles.floatingChrome} data-no-surface-swipe="">
-          <Show when={mobileLayout()}>
+          <Show when={mobileLayout() && !auto()}>
             <button
               classList={{ [styles.chromeButton]: true, [styles.browserButton]: true }}
               type="button"
@@ -411,8 +415,8 @@ export function PlayerSurface() {
           inert={auto() || !nowPlayingOpen() ? true : undefined}
         >
           <NowPlaying
-            mobilePanel={mobilePanel()}
-            onMobilePanelChange={setMobilePanel}
+            mobilePanel={mobilePanel() as NowPlayingMobilePanel}
+            onMobilePanelChange={setPanel}
             onCarouselProgress={(index, live) => {
               setCarouselLive(live);
               setCarouselProgress(index);
@@ -430,35 +434,45 @@ export function PlayerSurface() {
           inert={!auto() || !nowPlayingOpen() ? true : undefined}
         >
           <Show when={auto()}>
-            <AutoMode />
+            <Suspense fallback={<div class={styles.autoLoading} aria-hidden="true" />}>
+              <AutoMode
+                panel={mobilePanel() as AutoModePanelId}
+                onPanelChange={setPanel}
+                onCarouselProgress={(index, live) => {
+                  setCarouselLive(live);
+                  setCarouselProgress(index);
+                }}
+                surfaceOpen={nowPlayingOpen()}
+              />
+            </Suspense>
           </Show>
         </div>
 
-        <Show when={!auto()}>
-          <nav
-            class={styles.carouselNav}
-            aria-label={t('nowPlaying.mobilePanels')}
-            data-no-surface-swipe=""
-            data-live={carouselLive() ? '' : undefined}
-            style={`--carousel-index: ${carouselProgress()}`}
-          >
-            <span class={styles.carouselMarker} aria-hidden="true" />
-            {PANELS.map((panel, index) => (
+        <nav
+          class={styles.carouselNav}
+          aria-label={auto() ? t('autoMode.mobile.controls') : t('nowPlaying.mobilePanels')}
+          data-no-surface-swipe=""
+          data-live={carouselLive() ? '' : undefined}
+          style={`--carousel-index: ${carouselProgress()}`}
+        >
+          <span class={styles.carouselMarker} aria-hidden="true" />
+          <For each={panels()}>
+            {(panel, index) => (
               <button
                 type="button"
                 classList={{
                   [styles.carouselDot]: true,
                   // Visually the dot follows the scroll, so it clears the moment
                   // the marker covers it; `aria-current` waits for the settle.
-                  [styles.carouselDotActive]: Math.round(carouselProgress()) === index,
+                  [styles.carouselDotActive]: Math.round(carouselProgress()) === index(),
                 }}
-                aria-label={t(`nowPlaying.panel.${panel}`)}
+                aria-label={auto() ? t(`autoMode.panel.${panel}`) : t(`nowPlaying.panel.${panel}`)}
                 aria-current={mobilePanel() === panel ? 'page' : undefined}
                 onClick={() => setPanel(panel)}
               />
-            ))}
-          </nav>
-        </Show>
+            )}
+          </For>
+        </nav>
       </div>
     </Portal>
   );

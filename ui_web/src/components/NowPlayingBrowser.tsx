@@ -131,7 +131,10 @@ function trackCover(track: Track): string | undefined {
 export function NowPlayingBrowser(props: {
   onClose: () => void;
   dragHandle?: JSX.Element;
+  purpose?: 'browse' | 'auto-request';
+  onRequested?: () => void;
 }) {
+  const requestMode = () => props.purpose === 'auto-request';
   const [stack, setStack] = createSignal<BrowserView[]>([{ kind: 'root' }]);
   const [returnSearches, setReturnSearches] = createSignal<Array<SearchReturn | null>>([null]);
   const currentView = createMemo(() => stack()[stack().length - 1] ?? { kind: 'root' as const });
@@ -350,6 +353,11 @@ export function NowPlayingBrowser(props: {
     }
   };
 
+  const requestTrack = (track: Track) => {
+    actions.requestAutoTrack(track);
+    props.onRequested?.();
+  };
+
   createEffect(() => {
     const ids = [
       ...songs().map(catalogPreviewId).filter((id): id is string => !!id),
@@ -390,18 +398,22 @@ export function NowPlayingBrowser(props: {
   );
 
   return (
-    <aside class={styles.panel} aria-label={t('nowPlayingBrowser.aria')}>
+    <aside
+      class={styles.panel}
+      aria-label={requestMode() ? t('autoMode.dj.requestPanelAria') : t('nowPlayingBrowser.aria')}
+      data-purpose={requestMode() ? 'auto-request' : undefined}
+    >
       <header class={styles.topbar}>
         {props.dragHandle}
         <div class={styles.search}>
           <button
             class={styles.scopeButton}
             type="button"
-            aria-label={scope() === 'library' ? t('nowPlayingBrowser.globalSearch') : t('nowPlayingBrowser.search')}
-            onClick={() => scope() === 'library' && leaveLibrarySearch()}
+            aria-label={requestMode() ? t('autoMode.dj.searchPlaceholder') : scope() === 'library' ? t('nowPlayingBrowser.globalSearch') : t('nowPlayingBrowser.search')}
+            onClick={() => !requestMode() && scope() === 'library' && leaveLibrarySearch()}
           >
             <Show
-              when={scope() === 'library'}
+              when={!requestMode() && scope() === 'library'}
               fallback={<SearchIcon />}
             >
               <BackIcon />
@@ -411,8 +423,8 @@ export function NowPlayingBrowser(props: {
             ref={inputEl}
             type="search"
             value={query()}
-            placeholder={scope() === 'library' ? t('nowPlayingBrowser.searchLibrary') : t('nowPlayingBrowser.searchGlobal')}
-            aria-label={scope() === 'library' ? t('nowPlayingBrowser.searchLibrary') : t('nowPlayingBrowser.searchGlobal')}
+            placeholder={requestMode() ? t('autoMode.dj.searchPlaceholder') : scope() === 'library' ? t('nowPlayingBrowser.searchLibrary') : t('nowPlayingBrowser.searchGlobal')}
+            aria-label={requestMode() ? t('autoMode.dj.searchPlaceholder') : scope() === 'library' ? t('nowPlayingBrowser.searchLibrary') : t('nowPlayingBrowser.searchGlobal')}
             onInput={(event) => onInput(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (event.key === 'Escape' && query()) clear();
@@ -446,16 +458,23 @@ export function NowPlayingBrowser(props: {
         <Match when={globalSearching()}>
           <GlobalSearchView
             items={songs()}
-            entities={entities()}
+            entities={requestMode() ? entities().filter((item) => item.type === 'artist') : entities()}
             youtube={ytResults()}
             direct={direct()}
             loading={loading() || ytLoading()}
             failed={failed()}
             resolving={resolving()}
             onRetry={() => runSearch(query())}
-            onTrack={(item) => void useItem(item, actions.playNow)}
+            primaryLabel={requestMode() ? t('autoMode.dj.requestAction') : undefined}
+            hideSecondary={requestMode()}
+            onTrack={(item) => void useItem(item, requestMode() ? requestTrack : actions.playNow)}
             onQueue={(item) => void useItem(item, actions.enqueue)}
             onEntity={(item) => {
+              if (requestMode() && item.type === 'artist') {
+                actions.requestAutoArtist(itemArtist(item) || item.title);
+                props.onRequested?.();
+                return;
+              }
               if (item.type === 'artist') {
                 push({
                   kind: 'catalogArtist',
@@ -475,8 +494,13 @@ export function NowPlayingBrowser(props: {
                 }, true);
               }
             }}
-            onYoutube={(result) => actions.playNow(resultTrack(result))}
+            onYoutube={(result) => requestMode() ? requestTrack(resultTrack(result)) : actions.playNow(resultTrack(result))}
           />
+        </Match>
+        <Match when={requestMode()}>
+          <div class={styles.empty}>
+            <p>{t('autoMode.dj.requestPromise')}</p>
+          </div>
         </Match>
         <Match when={true}>
           <Switch>
@@ -800,6 +824,8 @@ function GlobalSearchView(props: {
   onQueue: (item: CatalogItem) => void;
   onEntity: (item: CatalogItem) => void;
   onYoutube: (result: SearchResult) => void;
+  primaryLabel?: string;
+  hideSecondary?: boolean;
 }) {
   return (
     <div class={styles.body} aria-busy={props.loading}>
@@ -828,16 +854,18 @@ function GlobalSearchView(props: {
             queued={isQueuedItem(item)}
             resolving={props.resolving.has(item.id)}
             owned={item.type === 'library_track' || !!ownedTrackForItem(item)}
+            primaryLabel={props.primaryLabel}
+            hideSecondary={props.hideSecondary}
             onPlay={() => props.onTrack(item)}
             onQueue={() => props.onQueue(item)}
           />
         )}
       </For>
       <Show when={props.direct}>
-        {(result) => <YoutubeRow result={result()} onPlay={() => props.onYoutube(result())} />}
+        {(result) => <YoutubeRow result={result()} onPlay={() => props.onYoutube(result())} primaryLabel={props.primaryLabel} hideSecondary={props.hideSecondary} />}
       </Show>
       <For each={props.youtube}>
-        {(result) => <YoutubeRow result={result} onPlay={() => props.onYoutube(result)} />}
+        {(result) => <YoutubeRow result={result} onPlay={() => props.onYoutube(result)} primaryLabel={props.primaryLabel} hideSecondary={props.hideSecondary} />}
       </For>
       <Show when={!props.loading && !props.direct && props.items.length === 0 && props.youtube.length === 0}>
         <div class={styles.empty}>
@@ -849,7 +877,12 @@ function GlobalSearchView(props: {
   );
 }
 
-function YoutubeRow(props: { result: SearchResult; onPlay: () => void }) {
+function YoutubeRow(props: {
+  result: SearchResult;
+  onPlay: () => void;
+  primaryLabel?: string;
+  hideSecondary?: boolean;
+}) {
   return (
     <BrowserTrackRow
       title={props.result.title}
@@ -859,6 +892,8 @@ function YoutubeRow(props: { result: SearchResult; onPlay: () => void }) {
       active={isPlayingResult(props.result)}
       queued={isQueuedResult(props.result)}
       owned={!!ownedTrackForResult(props.result)}
+      primaryLabel={props.primaryLabel}
+      hideSecondary={props.hideSecondary}
       onPlay={props.onPlay}
       onQueue={() => actions.enqueue(resultTrack(props.result))}
       onMenu={(event) => openTrackMenu(resultTrack(props.result), {}, event)}
@@ -1023,6 +1058,8 @@ function BrowserTrackRow(props: {
   onPlay: () => void;
   onQueue: () => void;
   onMenu?: (event: MouseEvent) => void;
+  primaryLabel?: string;
+  hideSecondary?: boolean;
 }) {
   const tap = createResponsiveTap({ onTap: props.onPlay });
   return (
@@ -1031,14 +1068,16 @@ function BrowserTrackRow(props: {
       event.preventDefault();
       props.onMenu(event);
     }}>
-      <button class={styles.trackMain} type="button" data-pressable {...tap}>
+      <button class={styles.trackMain} type="button" aria-label={props.primaryLabel ? `${props.primaryLabel}: ${props.title}` : undefined} data-pressable {...tap}>
         <span class={styles.trackCover} style={coverStyle(props.seed, props.cover)} />
         <span class={styles.trackMeta}><strong>{props.title}</strong><small>{props.subtitle}</small></span>
       </button>
       <Show when={props.resolving}><Spinner size={14} /></Show>
       <Show when={props.owned || props.queued}><span class={styles.check}>✓</span></Show>
-      <button class={styles.rowAction} type="button" aria-label={t('searchPanel.ariaAddQueue')} onClick={props.onQueue}><QueueIcon /></button>
-      <Show when={props.onMenu}><button class={styles.rowAction} type="button" aria-label={t('common.more')} onClick={(event) => props.onMenu?.(event)}>•••</button></Show>
+      <Show when={!props.hideSecondary}>
+        <button class={styles.rowAction} type="button" aria-label={t('searchPanel.ariaAddQueue')} onClick={props.onQueue}><QueueIcon /></button>
+      </Show>
+      <Show when={props.onMenu && !props.hideSecondary}><button class={styles.rowAction} type="button" aria-label={t('common.more')} onClick={(event) => props.onMenu?.(event)}>•••</button></Show>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 # Auto Mode DJ — product contract and UI rework
 
-Status: **engine live since July 2026; the presentation layer is being reworked.**
+Status: **engine live since July 2026; presentation rework implemented in August 2026.**
 This document is the contract for both. The critical audit that produced the
 engine work is `AUTO_MODE_AUDIT.md`.
 

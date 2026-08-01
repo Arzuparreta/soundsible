@@ -169,6 +169,8 @@
 }
 
 .title {
+  display: -webkit-box;
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
   margin: 0;
@@ -179,10 +181,14 @@
   letter-spacing: -0.01em;
   overflow-wrap: anywhere;
   text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .titleRow {
   display: flex;
+  width: 100%;
+  min-width: 0;
   align-items: center;
   justify-content: center;
   gap: var(--space-sm);
@@ -1490,8 +1496,8 @@
   }
 }
 
-/* ── Unified player surface ─────────────────────────────────────────────── */
-.workspace {
+/* Empty Now Playing still occupies the same room as the shared workspace. */
+.emptyWorkspace {
   position: relative;
   width: 100%;
   height: 100%;
@@ -1504,39 +1510,13 @@
   overflow: hidden;
 }
 
-.workspace .empty {
+.emptyWorkspace .empty {
   height: 100%;
   color: var(--ink-secondary);
 }
 
-.main {
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-}
-
-.tile {
-  background: var(--stage-panel);
-  border: 1px solid var(--stage-line);
-  border-radius: clamp(18px, 1.7vw, 28px);
-  box-shadow: var(--stage-shadow-md), inset 0 1px var(--stage-rim);
-  backdrop-filter: var(--stage-material-filter);
-  -webkit-backdrop-filter: var(--stage-material-filter);
-}
-
-.tile > .body,
-.tile > .desktopQueue {
-  background: transparent;
-}
-
-.tile > .desktopQueue {
-  border: 0;
-  box-shadow: none;
-}
-
 @media (max-width: 1023px) {
-  .workspace {
+  .emptyWorkspace {
     padding-top:
       calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap));
     padding-right: max(clamp(10px, 2.5vw, 20px), env(safe-area-inset-right, 0px));
@@ -1544,44 +1524,7 @@
     padding-left: max(clamp(10px, 2.5vw, 20px), env(safe-area-inset-left, 0px));
   }
 
-  .main,
-  :global(html[data-interface-size='large']) .main {
-    display: flex;
-    align-items: stretch;
-    gap: clamp(10px, 2.2vw, 18px);
-    max-width: none;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scroll-snap-type: x mandatory;
-    scroll-behavior: smooth;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-  }
-
-  .main::-webkit-scrollbar {
-    display: none;
-  }
-
-  .tile,
-  .tile[data-now-playing-tile='browser'] {
-    position: relative;
-    display: flex;
-    flex: 0 0 100%;
-    width: 100%;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-    scroll-snap-align: center;
-    scroll-snap-stop: always;
-  }
-
-  .splitter,
-  .panelGrip {
-    display: none !important;
-  }
-
-  .tile[data-now-playing-tile='stage'] > .body,
-  :global(html[data-interface-size='large']) .tile[data-now-playing-tile='stage'] > .body {
+  :global([data-player-workspace] [data-player-tile='stage']) > .body {
     width: 100%;
     height: 100%;
     max-width: none;
@@ -1593,17 +1536,6 @@
     overflow-y: auto;
   }
 
-  .tile[data-now-playing-tile='queue'] .queueRows {
-    padding-bottom: var(--player-mobile-footer-clearance);
-  }
-
-  .tile[data-now-playing-tile='queue'] > .desktopQueue,
-  :global(html[data-interface-size='large']) .tile[data-now-playing-tile='queue'] > .desktopQueue {
-    display: flex;
-    width: 100%;
-    height: 100%;
-  }
-
   .mobileQueueToggle,
   :global(html[data-interface-size='large']) .mobileQueueToggle {
     display: inline-flex;
@@ -1611,50 +1543,8 @@
 }
 
 @media (min-width: 1024px) {
-  .workspace {
+  .emptyWorkspace {
     padding-bottom: clamp(18px, 2.4vh, 30px);
-  }
-
-  .main {
-    display: grid;
-    align-items: stretch;
-    gap: 0;
-    overflow: visible;
-    background: transparent;
-  }
-
-  .tile,
-  .tile[data-now-playing-tile='browser'] {
-    position: relative;
-    display: block;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .tile[data-now-playing-tile='stage'] {
-    container-type: inline-size;
-  }
-
-  .tile > .body,
-  .tile > .desktopQueue {
-    width: 100%;
-    height: 100%;
-  }
-
-  .splitter {
-    width: 14px;
-    min-width: 14px;
-  }
-
-  .splitter::after {
-    left: 6px;
-    width: 2px;
-    background: var(--stage-line-strong);
-  }
-
-  .desktopQueue {
-    display: flex;
   }
 }
 

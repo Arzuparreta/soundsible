@@ -128,6 +128,16 @@ export const zh: Dict = {
       retrying: '相关 {related} 首、图谱 {node} 首、本地 {local} 首里没有新曲 · 正在重试',
     },
     upNext: '接下来播放',
+    panel: {
+      booth: 'DJ 台',
+      stage: '正在播放',
+      route: '路线',
+    },
+    workspace: {
+      aria: '自动模式面板',
+      stageOnly: '仅显示播放器',
+      showAll: '显示全部面板',
+    },
     booth: {
       aria: 'DJ 台控制',
       now: '正在放', next: '下一首', bpm: 'BPM', in: '{time} 后',
@@ -167,6 +177,7 @@ export const zh: Dict = {
       cutsDrops: '切换与落拍', cutsDropsTrait: '较短段落 · 明显切换 · 回声切换',
       openFormat: '开放格式', openFormatTrait: '大跨度 · 过桥曲目 · 结构切换',
       direction: '音乐方向',
+      tellDj: '告诉 DJ…',
       directionHint: '告诉 DJ 台往哪走，混音交给它。',
       commandPlaceholder: '放 Oliver Heldens · 更暗一些 · 不要八十年代的',
       commandAria: '告诉 DJ 台这场往哪走', send: '发送',
@@ -177,9 +188,9 @@ export const zh: Dict = {
       cued: '已就绪', appliesNext: '从下一首开始生效。已就绪的衔接保持不变。',
       promote: '提前播放 {title}',
       requestPanelAria: '向 DJ 台点播歌曲',
-      requestPromise: 'DJ 会优先安排在当前歌曲之后；如需保证混音安全，会在接下来的五首内安排。',
+      requestPromise: 'DJ 会优先安排在当前歌曲之后；如需保证混音安全，会在接下来的三首内安排。',
       searchPlaceholder: '歌曲或艺人', searching: '搜索中…',
-      searchEmpty: '说出你想要的确切歌曲', requestAction: '点播',
+      searchEmpty: '说出你想要的确切歌曲', requestAction: '向 DJ 点播',
       technique: {
         long_blend: '长混音', bass_swap: '低音切换', filter_blend: '滤波混音',
         echo_cut: '回声切换', structural_fade: '结构切换', safe_fade: '平滑淡化',

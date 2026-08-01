@@ -291,6 +291,11 @@
   transition-delay: 0s;
 }
 
+.autoLoading {
+  width: 100%;
+  height: 100%;
+}
+
 .carouselNav {
   --carousel-dot-size: 24px;
   --carousel-gap: 7px;

@@ -1,2240 +1,446 @@
-/*
- * Auto Mode — the listening room.
- *
- * This surface runs in three places that a normal player screen never has to
- * survive: a desktop window, a phone clamped to a car dashboard, and a TV
- * across a room. Two rules hold the composition together.
- *
- * 1. Content never changes the layout. Titles run from 3 to 90 characters and
- *    Auto Mode's status line comes and goes as plans complete; neither may
- *    move the artwork. The title is a fixed two-line well whose type size comes
- *    from a length tier, the status line has a reserved slot, and the cover is
- *    sized from the space that is *left over* — never the other way round.
- * 2. Landscape and portrait are two compositions, not one scaled. In landscape
- *    height is the scarce axis, so artwork and text sit side by side and the
- *    title gets half the screen's width. In portrait they stack.
- *
- * Sizes are viewport-relative with generous ceilings: at 1080p this is a
- * ten-foot UI (72px titles, 90px transport), not a desktop layout centred in
- * a large window.
- */
-
 .root {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-auto);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  /* The stage floor is `min-content`, not 0: if a viewport is too short for
-     everything, the queue rail is pushed out of frame rather than the
-     transport being clipped. The cover contributes nothing to min-content
-     (size containment on .coverStage), so it is always the part that yields. */
-  grid-template-rows: auto minmax(min-content, 1fr) auto;
-  grid-template-areas:
-    'topbar'
-    'stage'
-    'queue';
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  color: var(--ink-primary);
+}
+
+.workspace {
+  padding-top: clamp(5.6rem, 9vh, 7.4rem);
+}
+
+.tile {
+  background: color-mix(in srgb, var(--stage-panel) 72%, var(--bg-base));
+  animation: auto-panel-in 560ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+.tile:nth-of-type(3) {
+  animation-delay: 60ms;
+}
+
+.tile:nth-of-type(5) {
+  animation-delay: 120ms;
+}
+
+.focusToggle {
+  position: absolute;
+  z-index: 9;
+  top: clamp(5.7rem, 9vh, 7.5rem);
+  right: clamp(1rem, 2vw, 2rem);
+  min-height: 2rem;
+  padding: .35rem .72rem;
+  border: 1px solid var(--stage-line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  color: var(--ink-secondary);
+  font: 650 .7rem/1 var(--font-sans);
+  letter-spacing: .04em;
+  backdrop-filter: blur(14px);
+}
+
+.booth {
+  display: flex;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
-  color: var(--ink-primary);
-  background: var(--stage-base);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: scale(0.965);
-  transition:
-    opacity 420ms var(--ease-out),
-    transform 520ms var(--ease-out),
-    visibility 0s linear 520ms;
-  isolation: isolate;
-
-  /* ── Portrait/compact scale (mobile-first defaults) ── */
-  --auto-gutter: clamp(18px, 3.2vw, 64px);
-  --auto-pad-block: clamp(14px, 2.6vh, 40px);
-  --auto-top-h: clamp(48px, 6.4vh, 76px);
-  --auto-title: clamp(28px, 8vw, 44px);
-  --auto-title-min: 19px;
-  --auto-artist: clamp(15px, 4.2vw, 22px);
-  --auto-status: clamp(11px, 3vw, 14px);
-  --auto-status-lines: 1;
-  --auto-time: clamp(12px, 3.2vw, 15px);
-  --auto-btn: clamp(46px, 12vw, 56px);
-  --auto-btn-play: clamp(58px, 16vw, 72px);
-  --auto-card: clamp(96px, 26vw, 132px);
-  --auto-card-title: clamp(12px, 3.4vw, 14px);
-  --auto-card-artist: clamp(11px, 3vw, 13px);
-  --auto-head: clamp(10px, 2.6vw, 12px);
-  --auto-stage-gap: clamp(14px, 2.4vh, 26px);
-  --auto-cover-radius: clamp(14px, 1.6vw, 28px);
-  /* Auto owns the composition, but the app owns density. These semantic
-     aliases make Compact / Normal / Large reflow this surface through the same
-     scale engine as the rest of Soundsible. */
-  --auto-ui-body: var(--text-body);
-  --auto-ui-label: var(--text-label);
-  --auto-ui-caption: var(--text-caption);
-  --auto-control-h: var(--control-h);
-  --auto-pill-h: var(--pill-h);
-  --auto-segment-h: var(--segment-h);
+  height: 100%;
+  flex-direction: column;
 }
 
-.active {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transform: scale(1);
-  transition-delay: 0s;
-}
-
-.root:focus {
-  outline: none;
-}
-
-/* D-pad and keyboard navigation are the primary input on a TV: the ring has to
-   read from the sofa, so it is heavier than the app-wide one. */
-.root :focus-visible {
-  outline: 3px solid var(--accent-ink);
-  outline-offset: 3px;
-}
-
-/* No backdrop, wash or grain here: Auto renders inline inside the shared player
-   surface, which owns the room (PlayerSurface.module.css, and `.auto .wash`
-   there is what swaps in the Auto veil). The rules that used to sit at this
-   spot were never matched by anything — AutoMode.tsx renders no such element,
-   and a test pins that it must not. They still cost selector matching against
-   every node in the booth on each style recalculation, and they cost the next
-   reader a wrong mental model of where the wallpaper comes from. */
-
-/* ── Top chrome ── */
-.topbar {
-  grid-area: topbar;
-  z-index: 2;
+.boothHeader {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  height: var(--auto-top-h);
-  box-sizing: content-box;
-  padding: max(var(--auto-pad-block), env(safe-area-inset-top)) var(--auto-gutter) 0;
-  transition: opacity 320ms var(--ease-out);
+  gap: .65rem;
+  min-height: 3.4rem;
+  padding: .8rem .9rem .65rem;
+  border-bottom: 1px solid var(--stage-line);
 }
 
-.mark {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 2px;
-  width: clamp(18px, 1.5vw, 26px);
-  height: clamp(16px, 1.3vw, 23px);
-  flex: 0 0 auto;
+.boothHeader > span {
+  display: grid;
+  gap: .08rem;
 }
 
-.mark i {
-  width: 22%;
-  border-radius: 4px;
-  background: var(--accent);
-}
-
-.mark i:nth-child(1) { height: 42%; }
-.mark i:nth-child(2) { height: 100%; }
-.mark i:nth-child(3) { height: 68%; }
-
-/* The mark is a playback indicator, not decoration: it moves while audio does —
-   and only while anyone can see it. */
-:global([data-player-surface-open]) .active[data-playing='true'] .mark i {
-  animation: autoBars 1.2s var(--ease-in-out) infinite;
-}
-
-.active[data-playing='true'] .mark i:nth-child(2) { animation-delay: 180ms; }
-.active[data-playing='true'] .mark i:nth-child(3) { animation-delay: 360ms; }
-
-.profile,
-.exit,
-.transport button,
-.nextCard {
-  font: inherit;
-  color: inherit;
-  border: 0;
-  cursor: pointer;
-}
-
-.profile,
-.exit {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: clamp(40px, 3vw, 54px);
-  min-height: var(--control-h);
+.boothHeader small,
+.nextMix small {
   color: var(--ink-secondary);
-  background: var(--stage-material);
-  border: 1px solid var(--stage-line);
-  border-radius: var(--radius-full);
-  transition: color var(--dur-short), background var(--dur-short), transform var(--dur-micro);
+  font-size: .66rem;
+  font-weight: 750;
+  letter-spacing: .12em;
+  text-transform: uppercase;
 }
 
-.profile {
-  gap: var(--space-sm);
-  min-width: min(240px, 56vw);
-  padding: 4px clamp(12px, 1.1vw, 20px);
-  font-size: var(--auto-ui-label);
-  white-space: nowrap;
+.boothHeader strong {
+  font-size: .96rem;
 }
 
-.profile svg {
-  width: var(--icon-md);
-  height: var(--icon-md);
-  flex: 0 0 auto;
-}
-
-.profileText {
+.boothScroll {
   display: flex;
-  min-width: 0;
+  min-height: 0;
+  padding: .8rem;
   flex: 1;
   flex-direction: column;
-  align-items: flex-start;
-  line-height: 1.1;
-}
-
-.profileText small {
-  color: var(--ink-tertiary);
-  font-size: var(--text-nano);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.profileText strong {
-  overflow: hidden;
-  max-width: 100%;
-  color: var(--ink-primary);
-  font-size: var(--auto-ui-label);
-  text-overflow: ellipsis;
-}
-
-.profileChange {
-  color: var(--accent-ink);
-  font-size: var(--auto-ui-caption);
-  font-weight: var(--fw-semibold);
-}
-
-.exit {
-  width: clamp(40px, 3vw, 54px);
-  min-width: var(--control-h);
-  padding: 0;
-}
-
-.exit svg {
-  width: 55%;
-  height: 55%;
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.profile:hover,
-.exit:hover {
-  color: var(--ink-primary);
-  background: var(--stage-material-hover);
-}
-}
-
-.profile:active,
-.exit:active { transform: scale(0.94); }
-
-/* ── Stage ── */
-.stage {
-  grid-area: stage;
-  z-index: 1;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: var(--auto-stage-gap);
-  min-width: 0;
-  /* No `min-height: 0` here or on .panel: their automatic minimum size *is* the
-     guard — it is what makes the root's `minmax(min-content, 1fr)` row grow
-     rather than letting the transport be clipped on a short viewport. */
-  padding: var(--auto-stage-gap) var(--auto-gutter);
-}
-
-/* The artwork is the only elastic element in the composition. `container-type:
-   size` gives it size containment, so it contributes zero to the grid's
-   min-content height and can never push the transport off screen; `cqmin` then
-   resolves to the largest square that fits whatever space it was handed. */
-.coverStage {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-width: 0;
-  min-height: 0;
-  container-type: size;
-}
-
-.coverFrame {
-  position: relative;
-  width: 100cqmin;
-  height: 100cqmin;
-}
-
-@supports not (width: 1cqmin) {
-  .coverFrame {
-    width: min(100%, 46vh);
-    height: auto;
-    aspect-ratio: 1;
-  }
-}
-
-.coverGlow,
-.cover {
-  position: absolute;
-  inset: 0;
-  background-position: center;
-  background-size: cover;
-  border-radius: var(--auto-cover-radius);
-}
-
-.coverGlow {
-  inset: 6%;
-  filter: blur(48px) saturate(1.5);
-  opacity: 0.6;
-  transform: translateY(8%);
-}
-
-.cover {
-  background-color: var(--stage-material);
-  box-shadow: var(--stage-shadow-lg), inset 0 0 0 1px var(--stage-rim);
-  /* The breathe below really is a scale — it cannot be traded for a pan the way
-     the wallpaper's drift can. Declaring the layer is the next best thing: the
-     artwork and its large soft shadow get rasterised once and the 1.2% is
-     composited, instead of both being redrawn every frame. */
-  will-change: transform;
-}
-
-.active .cover {
-  animation: autoBreathe 9s ease-in-out infinite;
-}
-
-.lyricsSurface {
-  /* The lyrics take over the cover as a sheet of the room's own glass, so they
-     read the stage tokens like every other panel — no pinned palette. */
-  --lyrics-line-size: clamp(16px, 1.2vw, 24px);
-  --lyrics-plain-size: clamp(15px, 1vw, 21px);
-  --lyrics-overlay-clearance: clamp(66px, 5vw, 82px);
-
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  color: var(--ink-primary);
-  background: var(--stage-sheet);
-  border: 1px solid var(--stage-line);
-  border-radius: var(--auto-cover-radius);
-  box-shadow: var(--stage-shadow-lg);
-}
-
-.lyricsToggle {
-  position: absolute;
-  top: clamp(10px, 1.2vw, 18px);
-  right: clamp(10px, 1.2vw, 18px);
-  z-index: 4;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: clamp(44px, 3.4vw, 56px);
-  height: clamp(44px, 3.4vw, 56px);
-  padding: 0;
-  color: var(--ink-primary);
-  background: var(--stage-chrome);
-  border: 1px solid var(--stage-line-strong);
-  border-radius: var(--radius-full);
-  box-shadow: var(--stage-shadow-sm);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  cursor: pointer;
-  transition:
-    color var(--dur-short),
-    background var(--dur-short),
-    border-color var(--dur-short),
-    transform var(--dur-micro);
-}
-
-.lyricsToggle svg {
-  width: 48%;
-  height: 48%;
-}
-
-.lyricsToggleOn {
-  color: var(--ink-on-accent);
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .lyricsToggle:hover {
-    color: var(--ink-on-accent);
-    background: var(--accent);
-    border-color: var(--accent);
-  }
-}
-
-.lyricsToggle:active {
-  transform: scale(0.94);
-}
-
-.root .coverFrame[data-lyrics-open] .coverCaption {
-  display: none;
-}
-
-/* ── Cover caption ──
-   Mobile only — it is switched on in the phone block at the foot of this file,
-   where the artwork is pinned to the Now Playing rectangle and the panel below
-   it no longer has the height for a 44px title. Desktop keeps its metadata in
-   the panel, where there is room for it to be the largest thing on screen.
-
-   The band is deliberately short: two lines of type and the padding around
-   them, never a third of the artwork. */
-.coverCaption {
-  --cap-fit: 1;
-  --cap-title: max(14px, calc(clamp(16px, 4.6vw, 21px) * var(--cap-fit)));
-
-  position: absolute;
-  inset: auto 0 0;
-  /* Stacking context so ::before can sit under the type without falling behind
-     the artwork — z-index rather than `isolation`, which would cut the frosted
-     layer off from the backdrop it is meant to be sampling. */
-  z-index: 0;
-  display: none;
-  flex-direction: column;
-  gap: 1px;
-  padding: 9px clamp(11px, 3.2vw, 15px) 10px;
-  /* This band is printed on the photograph, not on glass, so it keeps light ink
-     and a scrim in both themes. */
-  color: var(--stage-on-art-ink);
-  border-radius: 0 0 var(--auto-cover-radius) var(--auto-cover-radius);
-  transition: opacity 320ms var(--ease-out);
-}
-
-/* The same length tiers as the panel title, gentler: this type is already
-   small, so it shrinks a little and wraps to a second line rather than
-   dwindling. Below 14px it stops and the clamp takes over. */
-.coverCaption[data-fit='md'] { --cap-fit: 0.88; }
-.coverCaption[data-fit='sm'] { --cap-fit: 0.78; }
-.coverCaption[data-fit='xs'] { --cap-fit: 0.7; }
-
-/* Frosted glass that dissolves upward. The mask fades the blur out with the
-   fill — a backdrop-filter is masked along with everything else the element
-   paints — so the band has no hard edge cutting across the artwork. It reaches
-   above the type block for the fade; where blur is unsupported the gradient
-   alone still carries the type. */
-.coverCaption::before {
-  content: '';
-  position: absolute;
-  inset: -20px 0 0;
-  z-index: -1;
-  border-radius: inherit;
-  background: var(--stage-on-art-scrim);
-  backdrop-filter: blur(14px) saturate(1.25);
-  -webkit-backdrop-filter: blur(14px) saturate(1.25);
-  -webkit-mask-image: linear-gradient(180deg, transparent, #000 46%);
-  mask-image: linear-gradient(180deg, transparent, #000 46%);
-}
-
-.capTitle {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  margin: 0;
-  font-size: var(--cap-title);
-  font-weight: var(--fw-bold);
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  overflow-wrap: break-word;
-  text-shadow: var(--stage-on-art-shadow);
-}
-
-.capArtist {
-  margin: 0;
-  overflow: hidden;
-  color: var(--stage-on-art-ink-soft);
-  font-size: clamp(11.5px, 3.2vw, 14px);
-  font-weight: var(--fw-medium);
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  text-shadow: var(--stage-on-art-shadow);
-  white-space: nowrap;
-}
-
-/* ── Panel: title, artist, Auto Mode status, transport ── */
-.panel {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: clamp(10px, 1.4vh, 18px);
-  min-width: 0;
-}
-
-/* Length tiers. Long titles get smaller type rather than more lines, so the
-   two-line well below is a promise the layout can always keep. */
-.meta {
-  --fit-scale: 1;
-  --title-size: max(var(--auto-title-min), calc(var(--auto-title) * var(--fit-scale)));
-  min-width: 0;
-}
-
-.meta[data-fit='md'] { --fit-scale: 0.78; }
-.meta[data-fit='sm'] { --fit-scale: 0.62; }
-.meta[data-fit='xs'] { --fit-scale: 0.5; }
-
-.titleBox {
-  display: flex;
-  align-items: flex-end;
-  /* Exactly two lines, always — a one-line title sits on the same baseline as
-     the second line of a two-line one, so neither the artwork above nor the
-     artist below moves when the track changes. */
-  min-height: calc(var(--title-size) * 2.36);
-}
-
-.title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  margin: 0;
-  font-size: var(--title-size);
-  font-weight: var(--fw-bold);
-  letter-spacing: -0.03em;
-  line-height: 1.18;
-  overflow-wrap: break-word;
-  text-wrap: pretty;
-}
-
-.artist {
-  margin: 2px 0 0;
-  overflow: hidden;
-  color: var(--ink-secondary);
-  font-size: var(--auto-artist);
-  font-weight: var(--fw-medium);
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Reserved slot. Auto Mode reports as plans complete and the report clears
-   itself after six seconds; without a fixed well the cover and title would jump
-   twice per report. */
-.status {
-  display: flex;
-  align-items: center;
-  min-height: calc(var(--auto-status) * 1.5 * var(--auto-status-lines));
-  transition: opacity 320ms var(--ease-out);
-}
-
-.agent {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  min-width: 0;
-  color: var(--ink-secondary);
-  font-family: var(--font-mono);
-  font-size: var(--auto-status);
-  line-height: 1.5;
-  animation: agentIn 240ms var(--ease-out) both;
-}
-
-.agentText {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: var(--auto-status-lines);
-  line-clamp: var(--auto-status-lines);
-  overflow: hidden;
-}
-
-.agentPulse {
-  position: relative;
-  width: 8px;
-  height: 8px;
-  flex: 0 0 auto;
-  margin-top: calc(var(--auto-status) * 0.55);
-  border: 2px solid var(--accent);
-  border-radius: 50%;
-}
-
-/* The halo used to be an animated `box-shadow` spread: a property that cannot be
-   composited, so it repainted every frame for as long as an activity sat in
-   'working' — which nothing auto-clears. A pseudo-element expanding on transform
-   and opacity draws the same ring on the compositor instead. */
-.agent[data-status='working'] .agentPulse::after {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border: 4px solid rgba(249, 122, 18, 0.4);
-  border-radius: 50%;
-  animation: agentPulse 1.4s ease-out infinite;
-}
-
-.agent[data-status='done'] .agentPulse { background: var(--accent); }
-.agent[data-status='error'] .agentPulse { border-color: var(--ink-tertiary); }
-
-/* ── Transport ── */
-.controls {
-  display: flex;
-  flex-direction: column;
-  gap: clamp(10px, 1.6vh, 20px);
-  transition: opacity 320ms var(--ease-out);
-}
-
-.seek {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: clamp(10px, 1vw, 18px);
-}
-
-.time {
-  color: var(--ink-secondary);
-  font-family: var(--font-mono);
-  font-size: max(var(--auto-time), var(--text-mono));
-  font-variant-numeric: tabular-nums;
-}
-
-.progress {
-  --progress-h: clamp(5px, 0.45vh, 8px);
-  /* The pill radius as a real length, because the fill has to divide by it. */
-  --progress-r: calc(var(--progress-h) / 2);
-
-  position: relative;
-  height: var(--progress-h);
-  background: var(--stage-rail);
-  border-radius: var(--radius-full);
-}
-
-/* Scale, not width: `timeupdate` restarts this transition every ~250ms, exactly
-   its own duration, so it never settles — it is the one animation running for
-   as long as Auto Mode is on screen, over a room full of blurred layers.
-   `transform` composites; `width` would relayout and repaint every frame.
-   The floor keeps the head marker below rendering at 0:00, where a literal
-   scaleX(0) would collapse it along with the bar. */
-.progressFill {
-  --p-safe: max(0.001, var(--p, 0));
-
-  position: absolute;
-  inset: 0;
-  background: var(--accent);
-  /* Elliptical radii, pre-divided on the axis the scale squashes, so the cap
-     comes out of the transform as the same round end `inherit` used to draw. */
-  border-radius: calc(var(--progress-r) / var(--p-safe)) / var(--progress-r);
-  transform: scaleX(var(--p-safe));
-  transform-origin: left center;
-  transition: transform 250ms linear;
-}
-
-/* A head marker: from across a room the position is read from the dot, not
-   from the width of a five-pixel bar. It has to stay a circle, so it undoes the
-   bar's scale on its own axis; anchoring both to the right edge keeps the two
-   scales centred on the same point, which is where the dot belongs. */
-.progressFill::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  right: 0;
-  width: clamp(10px, 0.9vh, 15px);
-  height: clamp(10px, 0.9vh, 15px);
-  transform: scaleX(calc(1 / var(--p-safe))) translate(50%, -50%);
-  transform-origin: right center;
-  /* Matches the bar so the two scales stay reciprocal while they move. */
-  transition: transform 250ms linear;
-  background: var(--accent);
-  border-radius: 50%;
-  box-shadow: 0 0 0 4px rgba(249, 122, 18, 0.18);
-}
-
-.transport {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-md);
-}
-
-.cluster {
-  display: flex;
-  align-items: center;
-  gap: clamp(12px, 1.5vw, 26px);
-}
-
-.extras {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.transport button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--auto-btn);
-  height: var(--auto-btn);
-  flex-shrink: 0;
-  background: var(--stage-material);
-  border: 1px solid var(--stage-line);
-  border-radius: 50%;
-  transition: color var(--dur-short), background var(--dur-short), transform var(--dur-micro);
-}
-
-.transport button svg {
-  width: 52%;
-  height: 52%;
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.transport button:hover { color: var(--accent-ink); background: var(--stage-material-hover); }
-}
-.transport button:active { transform: scale(0.92); }
-
-.transport .play {
-  width: var(--auto-btn-play);
-  height: var(--auto-btn-play);
-  color: var(--ink-on-accent);
-  background: var(--accent);
-  border-color: transparent;
-  box-shadow: 0 10px 34px rgba(249, 122, 18, 0.38);
-}
-
-.transport .play svg { width: 46%; height: 46%; }
-@media (hover: hover) and (pointer: fine) {
-.transport .play:hover { color: var(--ink-on-accent); background: var(--accent-hover); }
-}
-@media (hover: hover) and (pointer: fine) {
-.transport .secondaryAction:hover { color: var(--accent-ink); }
-}
-.transport .liked { color: var(--accent-ink); }
-
-/* ── Queue rail ── */
-.upStrip {
-  grid-area: queue;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  gap: clamp(6px, 0.9vh, 12px);
-  min-width: 0;
-  padding-bottom: max(var(--auto-pad-block), env(safe-area-inset-bottom));
-  transition: opacity 320ms var(--ease-out);
-}
-
-.upHead {
-  padding-inline: var(--auto-gutter);
-  color: var(--ink-tertiary);
-  font-size: max(var(--auto-head), var(--text-nano));
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.filmstrip {
-  display: flex;
-  gap: clamp(8px, 0.8vw, 16px);
-  min-width: 0;
-  overflow-x: auto;
-  overscroll-behavior-inline: contain;
-  padding: 2px var(--auto-gutter) 8px;
-  scroll-padding-inline: var(--auto-gutter);
-  scroll-snap-type: x proximity;
-  scrollbar-color: var(--stage-rail) transparent;
+  gap: .8rem;
+  overflow: auto;
   scrollbar-width: thin;
-  /* Soft right edge: on touch there is no scrollbar to say "there is more". */
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 56px), transparent 100%);
-  mask-image: linear-gradient(90deg, #000 calc(100% - 56px), transparent 100%);
 }
 
-.filmstrip:focus-visible {
-  outline: 3px solid var(--accent-ink);
-  outline-offset: -3px;
-}
-
-.filmstrip::-webkit-scrollbar { height: 4px; }
-.filmstrip::-webkit-scrollbar-track { background: transparent; }
-.filmstrip::-webkit-scrollbar-thumb { background: var(--stage-rail); border-radius: 8px; }
-
-.nextCard {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: max(var(--auto-card), calc(var(--row-h) * 2.35));
-  min-width: max(var(--auto-card), calc(var(--row-h) * 2.35));
-  padding: clamp(7px, 0.5vw, 11px);
-  text-align: left;
-  /* Deliberately not backdrop-filter: eight blurred cards on top of an already
-     blurred backdrop is the single most expensive thing this screen can do, and
-     over that backdrop a flat translucent fill is indistinguishable. */
-  background: var(--stage-material);
-  border: 1px solid var(--stage-line);
-  border-radius: var(--radius-md);
-  scroll-snap-align: start;
-  transition: background var(--dur-short), border-color var(--dur-short), transform var(--dur-short);
-  animation: nextCardIn 300ms cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.nextCard:not(:disabled):hover {
-  background: var(--stage-material-hover);
-  border-color: var(--stage-line-strong);
-  transform: translateY(-3px);
-}
-}
-
-.nextCard:not(:disabled):active { transform: translateY(-1px) scale(0.98); }
-
-/* The one track that is already loaded and cued. It reads as settled rather
-   than as an option, because at this point it is no longer one: promoting
-   anything past it would drop a mix the DJ has already prepared. The card is
-   disabled, so the reactions above skip it. */
-.nextCardCued {
-  background: var(--stage-material-active);
-  border-color: var(--stage-line-strong);
-  cursor: default;
-}
-
-.nextCardCued .routePosition {
-  color: var(--text);
-  opacity: 1;
-}
-
-.nextCover {
-  width: 100%;
-  aspect-ratio: 1;
-  background-color: var(--stage-material);
-  background-position: center;
-  background-size: cover;
-  border-radius: var(--radius-sm);
-}
-
-.nextMeta {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.nextMeta strong,
-.nextMeta span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.nextMeta small {
-  overflow: hidden;
-  color: var(--accent-ink);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  text-transform: capitalize;
-  white-space: nowrap;
-}
-
-.nextMeta .routePosition {
-  color: var(--ink-tertiary);
-  font-family: var(--font-sans);
-  font-size: var(--text-nano);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-/* ── DJ controls ── */
-.djPicker {
-  position: fixed;
-  z-index: 8;
-  top: calc(var(--auto-top-h) + var(--auto-pad-block) + 10px);
-  right: var(--auto-gutter);
-  display: flex;
-  width: min(660px, calc(100vw - var(--auto-gutter) * 2));
-  flex-direction: column;
-  gap: var(--space-md);
-  padding: var(--space-lg);
-  background: var(--stage-sheet);
-  border: 1px solid var(--stage-line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--stage-shadow-md);
-  backdrop-filter: blur(24px);
-}
-
-.djPickerHead {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.djPickerHead strong { font-size: var(--text-h3); }
-.djPickerHead span { color: var(--ink-secondary); font-size: var(--auto-ui-caption); }
-
-.djPickerGrid {
+.boothEmpty {
   display: grid;
-  grid-template-columns: repeat(2, minmax(210px, 1fr));
-  gap: var(--space-sm);
+  place-content: center;
+  gap: .35rem;
+  min-height: 0;
+  padding: 2rem;
+  flex: 1;
+  text-align: center;
 }
 
-.djCard {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 6px;
-  min-height: calc(var(--auto-control-h) * 1.65);
-  padding: var(--space-md) var(--space-lg);
-  color: var(--ink-primary);
-  text-align: left;
-  background: var(--stage-material-quiet);
-  border: 1px solid var(--stage-line-soft);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-.djCard strong { font-size: var(--auto-ui-body); }
-
-/* The traits are a spec sheet, so they are set like one. */
-.djCard span {
+.boothEmpty span {
+  max-width: 25ch;
   color: var(--ink-secondary);
-  font-family: var(--font-mono);
-  font-size: var(--auto-ui-caption);
+  font-size: .82rem;
   line-height: 1.45;
 }
 
-.djCardActive {
-  border-color: rgba(249, 122, 18, 0.55);
-  background: var(--accent-soft);
+.dj {
+  display: grid;
+  gap: .4rem;
 }
 
-.djCardActive strong { color: var(--accent-ink); }
-
-/* Which pair of hands is on the decks reads at a glance, without a tick that
-   would collide with the trait line. */
-.djCardActive::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 2px;
-  height: 100%;
-  background: var(--accent);
-}
-
-.djCard {
-  position: relative;
-  overflow: hidden;
-}
-
-/* ── The booth ─────────────────────────────────────────────────────────────
- *
- * Everything below is equipment, and it is styled as equipment: a console
- * plate rather than a floating card, squared corners rather than pills, and
- * every number in JetBrains Mono with tabular figures so a changing BPM does
- * not shuffle the layout under it.
- *
- * The gold hairline along the top edge is the shell's action-card signature
- * brought into the listening room. It is the one place brand gold appears
- * here, and it never becomes a fill.
- */
-.booth {
-  position: relative;
+.djCurrent {
   display: flex;
+  width: 100%;
   min-width: 0;
-  flex-direction: column;
-  gap: var(--space-sm);
-  padding: var(--space-md);
-  background: var(--stage-panel);
-  border: 1px solid var(--stage-line-soft);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.booth::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: clamp(48px, 12%, 96px);
-  height: 2px;
-  background: var(--brand-gold);
-}
-
-/* ── Deck readout ── */
-.readout {
-  display: flex;
   align-items: center;
-  gap: var(--space-md);
-  min-width: 0;
-  padding-bottom: var(--space-sm);
-  border-bottom: 1px solid var(--stage-line-soft);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--auto-ui-caption);
-  line-height: 1;
+  justify-content: space-between;
+  padding: .65rem .1rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
 }
 
-.deck {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
+.djCurrent > span:first-child {
+  display: grid;
   min-width: 0;
+  gap: .14rem;
 }
 
-.deck small {
-  color: var(--ink-tertiary);
-  font-size: var(--text-nano);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.14em;
+.djCurrent small {
+  color: var(--ink-secondary);
+  font-size: .66rem;
+  font-weight: 750;
+  letter-spacing: .1em;
   text-transform: uppercase;
 }
 
-.deck b {
-  color: var(--ink-primary);
-  font-size: calc(var(--auto-ui-body) * 1.12);
-  font-weight: var(--fw-semibold);
-}
-
-.unit {
-  color: var(--ink-tertiary);
-  font-size: var(--text-nano);
-  letter-spacing: 0.08em;
-}
-
-/* The key is the one piece of the readout a DJ scans for, so it is the one
-   piece that carries the accent. */
-.deck i {
-  color: var(--accent-ink);
-  font-style: normal;
-  font-weight: var(--fw-semibold);
-}
-
-.blend {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  flex: 1;
+.djCurrent strong {
   overflow: hidden;
-  color: var(--ink-tertiary);
+  font-size: 1.05rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.blend[data-live] { color: var(--ink-secondary); }
-
-/* A blend that is loaded and counting down deserves a heartbeat; a route that
-   is merely planned does not. */
-.blendMark {
-  width: 6px;
-  height: 6px;
+.djCurrent > span:last-child {
   flex: 0 0 auto;
-  background: var(--accent);
-  border-radius: 50%;
-  animation: boothCue 1.6s var(--ease-in-out) infinite;
-  /* A blend is armed 45s before every out-cue, so with the sheet closed this
-     beat alone would cover most of the session. */
-  animation-play-state: paused;
+  color: var(--ink-secondary);
+  font-size: 1.25rem;
 }
 
-:global([data-player-surface-open]) .blendMark {
-  animation-play-state: running;
+.djProfiles {
+  display: grid;
+  gap: .3rem;
+  padding: .35rem 0 .2rem;
+}
+
+.djProfiles button {
+  display: grid;
+  gap: .12rem;
+  padding: .65rem .7rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--stage-material-quiet);
+  color: inherit;
+  text-align: left;
+}
+
+.djProfiles button[aria-selected='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--stage-material-quiet));
+}
+
+.djProfiles small {
+  color: var(--ink-secondary);
+  font-size: .72rem;
+  line-height: 1.35;
 }
 
 .requestButton {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  min-height: var(--auto-control-h);
-  flex: 0 0 auto;
-  margin-left: auto;
-  padding: 0 var(--space-md);
-  color: var(--accent-ink);
-  font: inherit;
-  font-family: var(--font-mono);
-  font-size: var(--auto-ui-caption);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  background: var(--accent-soft);
-  border: 1px solid rgba(249, 122, 18, 0.34);
+  display: flex;
+  width: 100%;
+  min-height: 2.8rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: .65rem;
+  padding: .65rem .8rem;
+  border: 0;
   border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background var(--dur-short), border-color var(--dur-short);
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  text-align: left;
+}
+
+.requestButton strong {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: .82rem;
+  white-space: normal;
 }
 
 .requestButton small {
-  color: var(--accent-ink);
-  font-size: var(--text-nano);
-  font-weight: var(--fw-medium);
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-/* ── Talkback ── */
-.talkback {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  min-height: var(--auto-control-h);
-  padding-left: var(--space-sm);
-  background: var(--stage-well);
-  border: 1px solid var(--stage-line);
-  border-radius: var(--radius-sm);
-  transition: border-color var(--dur-short);
-}
-
-.talkback:focus-within { border-color: rgba(249, 122, 18, 0.6); }
-
-.caret {
-  color: var(--accent-ink);
-  font-family: var(--font-mono);
-  font-size: var(--auto-ui-body);
-  line-height: 1;
-}
-
-.talkback input {
+  flex: 0 1 auto;
   min-width: 0;
-  padding: 0 var(--space-sm);
-  color: var(--ink-primary);
-  font: inherit;
-  font-size: var(--auto-ui-body);
-  background: transparent;
-  border: 0;
-  outline: 0;
+  opacity: .78;
+  font-size: .65rem;
+  text-align: right;
+  white-space: normal;
 }
 
-.talkback input::placeholder {
-  color: var(--ink-tertiary);
-  font-family: var(--font-mono);
-  font-size: var(--auto-ui-caption);
-}
-
-/* Named action, not a paper plane: the booth is told things, not messaged. */
-.talkback button {
-  align-self: stretch;
-  padding: 0 var(--space-md);
-  color: var(--accent-ink);
-  font: inherit;
-  font-size: var(--auto-ui-label);
-  font-weight: var(--fw-bold);
-  background: transparent;
-  border: 0;
-  border-left: 1px solid var(--stage-line);
-  border-radius: 0 calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0;
-  cursor: pointer;
-  transition: color var(--dur-short), background var(--dur-short);
-}
-
-.talkback button:disabled {
-  color: var(--ink-tertiary);
-  cursor: default;
-}
-
-/* ── Switches ── */
-.switches {
+.command {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-sm);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .4rem;
+  padding: .35rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 62%, var(--stage-line));
+  border-radius: calc(var(--radius-sm) + 4px);
+  background: var(--accent-faint);
+}
+
+.command label {
+  grid-column: 1 / -1;
+  padding: .3rem .35rem 0;
+  font-size: .78rem;
+  font-weight: 750;
+}
+
+.command input {
+  min-width: 0;
+  height: 2.55rem;
+  padding: 0 .7rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.command button {
+  padding: 0 .7rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  font-weight: 700;
+}
+
+.direction {
+  display: grid;
+  gap: .75rem;
 }
 
 .switchGroup {
   min-width: 0;
-  margin: 0;
   padding: 0;
   border: 0;
 }
 
 .switchGroup legend {
-  margin-bottom: 5px;
-  padding: 0;
-  color: var(--ink-tertiary);
-  font-family: var(--font-mono);
-  font-size: var(--text-nano);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.16em;
+  margin-bottom: .4rem;
+  color: var(--ink-secondary);
+  font-size: .67rem;
+  font-weight: 750;
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
 
 .switchTrack {
+  --switch-gap: .2rem;
   position: relative;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 3px;
-  background: var(--stage-well);
-  border: 1px solid var(--stage-line);
-  border-radius: var(--radius-sm);
+  gap: var(--switch-gap);
+  padding: .2rem;
+  border-radius: 999px;
+  background: var(--stage-material-quiet);
 }
 
-/* The thumb travels; that is what makes this a switch with a setting rather
-   than three buttons with a highlight. */
 .switchThumb {
   position: absolute;
-  top: 3px;
-  bottom: 3px;
-  left: 3px;
-  width: calc((100% - 6px) / 3);
+  top: .2rem;
+  bottom: .2rem;
+  left: .2rem;
+  width: calc((100% - .8rem) / 3);
+  border-radius: 999px;
   background: var(--stage-material-active);
-  border: 1px solid var(--stage-line);
-  border-radius: calc(var(--radius-sm) - 3px);
-  box-shadow: var(--stage-shadow-sm);
-  transform: translateX(calc(var(--switch-pos, 0) * 100%));
-  transition: transform var(--dur-short) var(--ease-out);
+  box-shadow: var(--shadow-1);
+  transform: translateX(calc(var(--switch-pos) * (100% + var(--switch-gap))));
+  transition: transform 220ms ease;
 }
 
 .switchTrack button {
-  position: relative;
+  z-index: 1;
   min-width: 0;
-  min-height: calc(var(--auto-segment-h) - 6px);
-  padding: 4px 6px;
+  min-height: 2rem;
+  padding: .2rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: .66rem;
+}
+
+.switchTrack button[aria-pressed='true'] {
+  color: var(--ink-primary);
+  font-weight: 750;
+}
+
+.promise,
+.activity {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: .72rem;
+  line-height: 1.45;
+}
+
+.activity {
+  color: var(--ink-primary);
+}
+
+.activity[data-status='error'] {
+  color: var(--danger);
+}
+
+.nextMix {
+  display: grid;
+  gap: .2rem;
+  padding-top: .7rem;
+  border-top: 1px solid var(--stage-line);
+}
+
+.nextMix span {
   overflow: hidden;
-  color: var(--ink-tertiary);
-  font: inherit;
-  font-size: var(--auto-ui-caption);
-  font-weight: var(--fw-semibold);
+  font-size: .76rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+}
+
+.requests {
+  display: grid;
+  gap: .35rem;
+}
+
+.requests > strong {
+  color: var(--ink-secondary);
+  font-size: .66rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.requests > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: .4rem;
+  padding: .5rem .55rem;
+  border-radius: var(--radius-sm);
+  background: var(--stage-material-quiet);
+}
+
+.requests span {
+  overflow: hidden;
+  font-size: .76rem;
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  transition: color var(--dur-short);
 }
 
-.switchTrack button[aria-pressed='true'] { color: var(--ink-primary); }
+.requests small {
+  color: var(--ink-secondary);
+  font-size: .64rem;
+}
 
-.boothFoot {
-  margin: 0;
-  color: var(--ink-tertiary);
-  font-size: var(--auto-ui-caption);
-  line-height: 1.35;
+.requests button,
+.promote {
+  width: 1.8rem;
+  height: 1.8rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-secondary);
+}
+
+.resting[data-playing='true'] {
+  --auto-rest-opacity: .32;
+}
+
+.resting[data-playing='true'] .booth,
+.resting[data-playing='true'] :global([data-player-tile='route']) {
+  opacity: var(--auto-rest-opacity, 1);
+  transition: opacity 500ms ease;
+}
+
+@keyframes auto-panel-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+.root :global([data-player-stage-mode='auto']) h1 {
+  font-size: clamp(26px, 3vw, 42px);
+}
+
+.root :global([data-auto-cover-slot]) > div:first-child {
+  animation: auto-cover-breathe 9s ease-in-out infinite alternate;
+}
+
+@keyframes auto-cover-breathe {
+  from { transform: scale(1); }
+  to { transform: scale(1.012); }
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .djCard:hover { background: var(--stage-material-hover); }
-  .switchTrack button:not([aria-pressed='true']):hover { color: var(--ink-secondary); }
-  .requestButton:hover {
-    background: rgba(249, 122, 18, 0.22);
-    border-color: rgba(249, 122, 18, 0.5);
+  .resting[data-playing='true'] {
+    --auto-rest-opacity: 1;
   }
-  .talkback button:not(:disabled):hover { background: var(--accent-soft); }
-  .requestChip button:hover { color: var(--ink-primary); }
-}
-
-/* ── On deck ── */
-.requests {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  overflow-x: auto;
-  padding-top: 2px;
-}
-
-.requestsLabel {
-  flex: 0 0 auto;
-  color: var(--ink-tertiary);
-  font-family: var(--font-mono);
-  font-size: var(--text-nano);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.requestChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  min-height: var(--auto-pill-h);
-  padding: 3px 4px 3px 10px;
-  color: var(--ink-secondary);
-  font-size: var(--auto-ui-caption);
-  background: var(--accent-soft);
-  border: 1px solid rgba(249, 122, 18, 0.28);
-  border-radius: var(--radius-sm);
-  white-space: nowrap;
-}
-
-.requestChip em {
-  color: var(--accent-ink);
-  font-family: var(--font-mono);
-  font-size: var(--text-nano);
-  font-style: normal;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.requestChip button {
-  display: grid;
-  place-items: center;
-  width: calc(var(--auto-pill-h) - 12px);
-  height: calc(var(--auto-pill-h) - 12px);
-  padding: 0;
-  color: var(--ink-tertiary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: color var(--dur-short);
-}
-
-.requestChip button svg {
-  width: 62%;
-  height: 62%;
-}
-
-@keyframes boothCue {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.35; transform: scale(0.82); }
-}
-
-.requestPanel {
-  position: fixed;
-  z-index: 12;
-  inset: 0 0 0 auto;
-  display: flex;
-  width: min(520px, 100vw);
-  flex-direction: column;
-  gap: var(--space-lg);
-  padding: max(var(--space-xl), env(safe-area-inset-top)) var(--space-xl) max(var(--space-xl), env(safe-area-inset-bottom));
-  color: var(--ink-primary);
-  background: var(--stage-sheet);
-  border-left: 1px solid var(--stage-line);
-  box-shadow: var(--stage-shadow-side);
-  backdrop-filter: blur(28px);
-}
-
-.requestHead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.requestHead div { display: flex; flex-direction: column; gap: 5px; }
-.requestHead strong { font-size: var(--text-h2); }
-.requestHead span { color: var(--ink-secondary); font-size: var(--auto-ui-caption); line-height: 1.45; }
-.requestHead button {
-  width: var(--auto-control-h);
-  height: var(--auto-control-h);
-  color: var(--ink-primary);
-  font-size: 24px;
-  background: var(--stage-material);
-  border: 0;
-  border-radius: 50%;
-  cursor: pointer;
-}
-
-.requestSearch {
-  height: var(--auto-control-h);
-  padding: 0 var(--space-lg);
-  color: var(--ink-primary);
-  font: inherit;
-  font-size: var(--auto-ui-body);
-  background: var(--stage-well);
-  border: 1px solid var(--stage-line);
-  border-radius: var(--radius-md);
-  outline: 0;
-}
-
-.requestSearch:focus { border-color: var(--accent); }
-.requestResults { min-height: 0; overflow-y: auto; }
-
-.requestResults > button {
-  display: grid;
-  grid-template-columns: var(--row-h) minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-md);
-  width: 100%;
-  min-height: calc(var(--row-h) + var(--space-md));
-  padding: var(--space-sm);
-  color: var(--ink-primary);
-  text-align: left;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .requestResults > button:hover { background: var(--stage-row-hover); }
-}
-.requestResults > button > span:not(.resultCover) { display: flex; min-width: 0; flex-direction: column; }
-.requestResults strong, .requestResults small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.requestResults strong { font-size: var(--auto-ui-body); }
-.requestResults small { color: var(--ink-secondary); font-size: var(--auto-ui-caption); }
-.requestResults b { color: var(--accent-ink); font-size: var(--auto-ui-label); }
-
-.resultCover {
-  width: var(--row-h);
-  height: var(--row-h);
-  background-color: var(--stage-material);
-  background-position: center;
-  background-size: cover;
-  border-radius: var(--radius-sm);
-}
-
-.requestEmpty { color: var(--ink-secondary); font-size: var(--auto-ui-body); text-align: center; }
-
-.emptyDj {
-  grid-area: stage;
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 8px;
-  color: var(--ink-secondary);
-  text-align: center;
-}
-
-.emptyDj strong { color: var(--ink-primary); font-size: clamp(20px, 3vw, 34px); }
-.emptyDisc {
-  width: 100px;
-  height: 100px;
-  margin-bottom: 12px;
-  background: repeating-radial-gradient(circle, var(--accent) 0 4px, var(--stage-base) 5px 12px);
-  border-radius: 50%;
-  /* Repainting a repeating gradient every frame; only worth it on screen. */
-  animation: autoSpin 2.4s linear infinite;
-  animation-play-state: paused;
-}
-
-:global([data-player-surface-open]) .emptyDisc {
-  animation-play-state: running;
-}
-
-@keyframes autoSpin { to { transform: rotate(360deg); } }
-
-.nextMeta strong {
-  font-size: max(var(--auto-card-title), var(--text-label));
-  font-weight: var(--fw-semibold);
-  line-height: 1.3;
-}
-
-.nextMeta span {
-  color: var(--ink-secondary);
-  font-size: max(var(--auto-card-artist), var(--text-caption));
-  line-height: 1.35;
-}
-
-/* ── Ambient (idle) ──
-   Chrome recedes, but the transport stays live and reachable: in a car the old
-   behaviour cost two taps to pause — one to wake the surface, one to aim. Only
-   opacity changes, so nothing reflows when the screen wakes. */
-.ambient .topbar,
-.ambient .upStrip {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.ambient .status { opacity: 0; }
-.ambient .controls { opacity: 0.3; }
-@media (hover: hover) and (pointer: fine) {
-.ambient .controls:hover { opacity: 1; }
-}
-
-/* ── Landscape: artwork and text side by side ──
-   The 5/4 floor keeps 1280×1024 and 1400×1050 desktops out of the phone
-   composition, which is what the old `max-aspect-ratio: 4/3` rule did to them. */
-@media (min-width: 600px) and (min-aspect-ratio: 5 / 4) {
-  .root {
-    --auto-art-col: clamp(200px, 32vw, 680px);
-    --auto-title: clamp(30px, 4.2vw, 76px);
-    --auto-title-min: 21px;
-    --auto-artist: clamp(16px, 1.5vw, 30px);
-    --auto-status: clamp(11px, 0.85vw, 16px);
-    --auto-time: clamp(12px, 0.95vw, 19px);
-    --auto-btn: clamp(48px, 3.4vw, 68px);
-    --auto-btn-play: clamp(62px, 4.6vw, 92px);
-    --auto-card: clamp(100px, 7vw, 140px);
-    --auto-card-title: clamp(13px, 0.95vw, 18px);
-    --auto-card-artist: clamp(12px, 0.8vw, 15px);
-    --auto-head: clamp(11px, 0.7vw, 15px);
-  }
-
-  .stage {
-    grid-template-rows: minmax(0, 1fr);
-    grid-template-columns: var(--auto-art-col) minmax(0, 1fr);
-    align-items: stretch;
-    gap: clamp(24px, 3vw, 64px);
-  }
-
-  .panel {
-    justify-content: center;
-    gap: clamp(14px, 2.2vh, 30px);
-  }
-}
-
-/* Tall landscape has room for the Auto Mode status in full. */
-@media (min-width: 600px) and (min-aspect-ratio: 5 / 4) and (min-height: 760px) {
-  .root { --auto-status-lines: 2; }
-}
-
-/* Phone in a car mount / short laptop window: narrower art column, cover-only
-   queue cards, tighter type — the transport keeps its full size. */
-@media (min-aspect-ratio: 5 / 4) and (max-height: 560px) {
-  .root {
-    --auto-art-col: clamp(140px, 24vw, 260px);
-    --auto-title: clamp(22px, 2.9vw, 34px);
-    --auto-title-min: 18px;
-    --auto-artist: clamp(14px, 1.7vw, 20px);
-    --auto-top-h: 46px;
-    --auto-card: clamp(72px, 12vh, 96px);
-    --auto-btn: clamp(44px, 8vh, 52px);
-    --auto-btn-play: clamp(52px, 11vh, 62px);
-  }
-
-  .upHead { display: none; }
-  .nextMeta { display: none; }
-  .booth { gap: 5px; padding: 8px; }
-  /* A dashboard glance keeps the numbers and loses the prose. */
-  .boothFoot,
-  .requestButton small { display: none; }
-}
-
-/* Short portrait (small phones, and any phone at high browser zoom). */
-@media (aspect-ratio < 5 / 4) and (max-height: 700px) {
-  .root {
-    --auto-title: clamp(22px, 6.4vw, 30px);
-    --auto-artist: clamp(14px, 3.8vw, 18px);
-    --auto-top-h: 46px;
-    --auto-card: clamp(72px, 20vw, 92px);
-    --auto-btn: clamp(44px, 11vw, 50px);
-    --auto-btn-play: clamp(54px, 14vw, 62px);
-    --auto-stage-gap: clamp(10px, 1.6vh, 16px);
-  }
-
-  .upHead { display: none; }
-  .nextMeta { display: none; }
-}
-
-/* Nothing left to spend: the queue is the first thing to go, never the
-   transport. */
-@media (max-height: 400px) {
-  .upStrip { display: none; }
-}
-
-/* Portrait: centre the artwork over left-aligned metadata, and keep the
-   transport cluster centred with the like/save action on the right edge. */
-@media (aspect-ratio < 5 / 4) {
-  .transport {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  }
-
-  .cluster { grid-column: 2; }
-  .extras { grid-column: 3; }
-}
-
-/* Mobile keeps the complete Auto environment and every one of its controls,
-   reflowed inside the same shared player surface. */
-@media (max-width: 767px) {
-  .root {
-    transform: none;
-    transition:
-      opacity 360ms var(--ease-out),
-      visibility 0s linear 360ms;
-  }
-
-  .active {
-    transform: none;
-  }
-
-  .djPicker {
-    top: calc(var(--auto-top-h) + var(--auto-pad-block) + 4px);
-    max-height: calc(100vh - var(--auto-top-h) - 40px);
-    overflow-y: auto;
-  }
-
-  .djPickerGrid { grid-template-columns: 1fr; }
-  .booth { gap: var(--space-sm); }
-
-  /* Narrow: the two readings stay on one line and the request button drops to
-     its own, rather than four items fighting over a phone's width. */
-  .readout { flex-wrap: wrap; row-gap: var(--space-sm); }
-  .blend { flex-basis: 100%; order: 3; }
-  .requestButton { order: 2; }
-
-  .requestPanel {
-    width: 100vw;
-    border-left: 0;
-  }
-
-  .root:not(.active) .coverCaption {
-    opacity: 0;
-  }
-
-  .meta,
-  .status,
-  .controls,
-  .upStrip {
-    filter: none;
-    transition:
-      opacity 360ms var(--ease-out),
-      filter 420ms var(--ease-out);
-  }
-
-  .root:not(.active) .meta,
-  .root:not(.active) .status,
-  .root:not(.active) .controls,
-  .root:not(.active) .upStrip {
-    opacity: 0;
-    filter: blur(12px);
-  }
-
-  .cover {
-    filter: none;
-    transition:
-      opacity 320ms var(--ease-out),
-      filter 420ms var(--ease-out),
-      box-shadow 420ms var(--ease-out);
-  }
-
-  .root:not(.active) .cover {
-    opacity: 0;
-    filter: blur(10px);
-  }
-}
-
-@keyframes autoBreathe {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.012); }
-}
-
-@keyframes autoBars {
-  0%, 100% { transform: scaleY(0.55); }
-  50% { transform: scaleY(1); }
-}
-
-@keyframes agentIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes agentPulse {
-  0% { transform: scale(1); opacity: 1; }
-  70%, 100% { transform: scale(2.6); opacity: 0; }
-}
-
-@keyframes nextCardIn {
-  from { opacity: 0; transform: translateY(9px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .cover,
-  .mark i,
-  .agent,
-  .agentPulse,
-  .agentPulse::after,
-  .blendMark,
-  .emptyDisc,
-  .nextCard { animation: none !important; }
-
-  .switchThumb { transition: none !important; }
-
-  .topbar,
-  .panel,
-  .meta,
-  .status,
-  .controls,
-  .upStrip,
-  .cover {
-    filter: none !important;
-  }
-}
-
-/* Auto now lives inside PlayerSurface: it contributes the immersive content,
-   while the shared parent owns the viewport, artwork-derived backdrop and mode
-   chrome. */
-.root {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  grid-template-rows: minmax(min-content, 1fr) auto;
-  grid-template-areas:
-    'stage'
-    'queue';
-  padding-top:
-    calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap));
-  background: transparent;
-  transform: none;
-}
-
-.active {
-  transform: none;
-}
-
-.root .cover {
-  animation: none;
-}
-
-:global([data-player-surface-open]) .root.active .cover {
-  animation: autoBreathe 9s ease-in-out infinite;
-}
-
-.embeddedTools {
-  position: absolute;
-  z-index: 12;
-  top: clamp(78px, 10vh, 108px);
-  right: var(--auto-gutter);
-  transition: opacity 320ms var(--ease-out);
-}
-
-.embeddedTools .profile {
-  background: var(--stage-chrome);
-  border-color: var(--stage-line);
-  box-shadow: var(--stage-shadow-sm), inset 0 1px var(--stage-rim);
-  backdrop-filter: blur(22px) saturate(1.15);
-  -webkit-backdrop-filter: blur(22px) saturate(1.15);
-}
-
-.booth,
-.djPicker,
-.requestPanel {
-  background: var(--stage-sheet);
-  border-color: var(--stage-line);
-  box-shadow: var(--stage-shadow-md), inset 0 1px var(--stage-rim);
-  backdrop-filter: blur(24px) saturate(1.14);
-  -webkit-backdrop-filter: blur(24px) saturate(1.14);
-}
-
-.nextCard {
-  background: var(--stage-panel);
-  border-color: var(--stage-line);
-  backdrop-filter: blur(16px) saturate(1.1);
-  -webkit-backdrop-filter: blur(16px) saturate(1.1);
-}
-
-.ambient .embeddedTools {
-  opacity: 0;
-  pointer-events: none;
-}
-
-@media (max-width: 767px) {
-  .embeddedTools {
-    position: relative;
-    top: auto;
-    right: auto;
-    z-index: 5;
-    display: flex;
-    justify-content: center;
-    width: 100%;
-    margin-bottom: -4px;
-    padding: 0 var(--auto-gutter);
-    grid-column: 1;
-    grid-row: 1;
-    align-self: start;
-  }
-
-  .embeddedTools .profile {
-    min-width: min(240px, 72vw);
-  }
-
-  .stage {
-    padding-top: clamp(58px, 8vh, 76px);
-  }
-}
-
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .embeddedTools .profile,
-  .booth,
-  .djPicker,
-  .requestPanel,
-  .nextCard {
-    background: var(--stage-panel-opaque);
-  }
-}
-
-/* ── Dedicated compact Auto surface ───────────────────────────────────────
-   Desktop remains the full listening room above. On the shared compact player
-   breakpoint, playback gets one stable, glanceable screen; detailed DJ work
-   lives in two intentional sheets instead of being compressed around the art. */
-.mobileDock,
-.mobileSheetHead,
-.mobileDjProfile,
-.mobileSheetBackdrop {
-  display: none;
 }
 
 @media (max-width: 1023px) {
-  .root {
-    --auto-mobile-sheet-top: max(108px, 18dvh);
-    --auto-mobile-cover-width: min(calc(100vw - 32px), 360px, 42dvh);
-    --auto-mobile-cover-height: var(--auto-mobile-cover-width);
-    --auto-mobile-cover-left: calc((100vw - var(--auto-mobile-cover-width)) / 2);
-    --auto-mobile-cover-top:
-      calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap) + clamp(8px, 2dvh, 18px));
-
-    position: absolute;
-    inset: 0;
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    height: 100%;
-    padding: 0;
-    overflow: clip;
+  .workspace {
+    padding-top: 5rem;
   }
 
-  .embeddedTools {
+  .focusToggle {
     display: none;
   }
 
-  .stage {
-    position: absolute;
-    inset: 0;
-    display: block;
-    padding: 0;
+  .boothScroll {
+    padding-bottom: 4rem;
   }
 
-  .coverStage {
-    position: absolute;
-    inset: 0;
-    display: block;
-    min-width: 0;
-    min-height: 0;
-    container-type: normal;
+  .tile {
+    animation-delay: 0ms;
   }
 
-  .coverFrame {
-    position: fixed;
-    z-index: 3;
-    top: var(--auto-mobile-cover-top);
-    left: var(--auto-mobile-cover-left);
-    width: var(--auto-mobile-cover-width);
-    height: var(--auto-mobile-cover-height);
-    max-width: calc(100vw - 20px);
-    max-height: calc(100dvh - var(--auto-mobile-cover-top) - 190px);
-  }
-
-  .coverCaption {
-    display: flex;
-  }
-
-  .panel {
-    position: fixed;
-    z-index: 4;
-    top:
-      calc(
-        var(--auto-mobile-cover-top)
-        + min(var(--auto-mobile-cover-height), calc(100dvh - var(--auto-mobile-cover-top) - 190px))
-        + clamp(8px, 1.5dvh, 14px)
-      );
-    right: max(14px, env(safe-area-inset-right, 0px));
-    bottom: max(10px, env(safe-area-inset-bottom, 0px));
-    left: max(14px, env(safe-area-inset-left, 0px));
-    justify-content: flex-start;
-    gap: clamp(7px, 1.25dvh, 12px);
-    min-width: 0;
-    overflow: visible;
-  }
-
-  .meta {
-    display: none;
-  }
-
-  .status {
-    min-height: calc(var(--auto-status) * 1.5);
-    flex: 0 0 auto;
-  }
-
-  .agent {
-    align-items: center;
-    width: 100%;
-    white-space: nowrap;
-  }
-
-  .agentText {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .controls {
-    flex: 0 0 auto;
-    gap: clamp(7px, 1.2dvh, 11px);
-  }
-
-  .seek {
-    gap: 8px;
-  }
-
-  .progress {
-    height: 5px;
-  }
-
-  .progressFill::after {
-    width: 10px;
-    height: 10px;
-  }
-
-  .transport {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: 8px;
-  }
-
-  .cluster {
-    grid-column: 2;
-    gap: clamp(10px, 3vw, 16px);
-  }
-
-  .extras {
-    grid-column: 3;
-    gap: 6px;
-  }
-
-  .transport button {
-    width: clamp(44px, 11vw, 50px);
-    height: clamp(44px, 11vw, 50px);
-  }
-
-  .transport .play {
-    width: clamp(54px, 14vw, 64px);
-    height: clamp(54px, 14vw, 64px);
-  }
-
-  .booth,
-  .upStrip {
-    display: none;
-  }
-
-  .mobileDock {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    min-width: 0;
-    margin-top: auto;
-  }
-
-  .mobileDock > button {
-    display: grid;
-    grid-template-columns: 34px minmax(0, 1fr);
-    align-items: center;
-    gap: 9px;
-    min-width: 0;
-    min-height: max(50px, var(--control-h));
-    padding: 6px 10px;
-    color: var(--ink-primary);
-    text-align: left;
-    background: var(--stage-chrome);
-    border: 1px solid var(--stage-line);
-    border-radius: var(--radius-md);
-    box-shadow: var(--stage-shadow-sm), inset 0 1px var(--stage-rim);
-    backdrop-filter: blur(18px) saturate(1.1);
-    -webkit-backdrop-filter: blur(18px) saturate(1.1);
-  }
-
-  .mobileDock > button > span:last-child,
-  .mobileDjProfile > span {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .mobileDock small,
-  .mobileDjProfile small {
-    color: var(--ink-tertiary);
-    font-size: var(--text-nano);
-    font-weight: var(--fw-bold);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-
-  .mobileDock strong,
-  .mobileDjProfile strong {
-    overflow: hidden;
-    font-size: var(--auto-ui-label);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .mobileDockMark {
-    display: inline-flex;
-    align-items: flex-end;
-    justify-content: center;
-    gap: 2px;
-    width: 34px;
-    height: 34px;
-    padding: 8px;
-    color: var(--accent-ink);
-    background: var(--accent-soft);
-    border-radius: var(--radius-sm);
-  }
-
-  .mobileDockMark i {
-    width: 3px;
-    background: currentColor;
-    border-radius: 2px;
-  }
-
-  .mobileDockMark i:nth-child(1) { height: 45%; }
-  .mobileDockMark i:nth-child(2) { height: 100%; }
-  .mobileDockMark i:nth-child(3) { height: 68%; }
-
-  .mobileRouteCover {
-    width: 34px;
-    height: 34px;
-    background-color: var(--stage-material);
-    background-position: center;
-    background-size: cover;
-    border-radius: var(--radius-sm);
-  }
-
-  .mobileSheetBackdrop {
-    position: fixed;
-    z-index: 20;
-    inset: 0;
-    display: block;
-    padding: 0;
-    background: var(--stage-scrim);
-    border: 0;
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
-  }
-
-  .root[data-mobile-panel='booth'] .stage {
-    z-index: 21;
-    pointer-events: none;
-  }
-
-  .root[data-mobile-panel='booth'] .booth {
-    pointer-events: auto;
-  }
-
-  .root[data-mobile-panel='booth'] .booth,
-  .root[data-mobile-panel='route'] .upStrip {
-    position: fixed;
-    z-index: 30;
-    inset: var(--auto-mobile-sheet-top) 0 0;
-    display: flex;
-    width: 100%;
-    max-width: none;
-    min-height: 0;
-    margin: 0;
-    padding:
-      14px max(16px, env(safe-area-inset-right, 0px))
-      max(18px, env(safe-area-inset-bottom, 0px))
-      max(16px, env(safe-area-inset-left, 0px));
-    overflow-x: hidden;
-    overflow-y: auto;
-    color: var(--ink-primary);
-    background: var(--stage-sheet);
-    border: 1px solid var(--stage-line);
-    border-bottom: 0;
-    border-radius: 24px 24px 0 0;
-    box-shadow: var(--stage-shadow-md), inset 0 1px var(--stage-rim);
-    backdrop-filter: blur(30px) saturate(1.12);
-    -webkit-backdrop-filter: blur(30px) saturate(1.12);
-  }
-
-  .mobileSheetHead {
-    display: flex;
-    width: 100%;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--stage-line-soft);
-  }
-
-  .mobileSheetHead > div {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .mobileSheetHead small {
-    color: var(--accent-ink);
-    font-size: var(--text-nano);
-    font-weight: var(--fw-bold);
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-
-  .mobileSheetHead strong {
-    font-size: var(--text-h2);
-  }
-
-  .mobileSheetHead button {
-    display: grid;
-    place-items: center;
-    width: var(--control-h);
-    height: var(--control-h);
-    flex: 0 0 auto;
-    padding: 0;
-    color: var(--ink-primary);
-    font: inherit;
-    font-size: 24px;
-    background: var(--stage-material);
-    border: 0;
-    border-radius: 50%;
-  }
-
-  .mobileDjProfile {
-    display: flex;
-    min-height: var(--control-h);
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 7px 10px;
-    color: var(--ink-primary);
-    text-align: left;
-    background: var(--stage-material-quiet);
-    border: 1px solid var(--stage-line-soft);
-    border-radius: var(--radius-sm);
-  }
-
-  .mobileDjProfile b {
-    color: var(--accent-ink);
-    font-size: var(--auto-ui-caption);
-  }
-
-  .root[data-mobile-panel='booth'] .booth {
-    gap: 10px;
-  }
-
-  .root[data-mobile-panel='booth'] .readout {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: center;
-    gap: 9px 12px;
-  }
-
-  .root[data-mobile-panel='booth'] .blend {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-
-  .root[data-mobile-panel='booth'] .requestButton {
-    grid-column: 1 / -1;
-    grid-row: 3;
-    justify-content: center;
-    width: 100%;
-    margin-left: 0;
-    white-space: normal;
-  }
-
-  .root[data-mobile-panel='booth'] .switches {
-    grid-template-columns: 1fr;
-  }
-
-  .root[data-mobile-panel='route'] .upStrip {
-    gap: 10px;
-  }
-
-  .root[data-mobile-panel='route'] .upHead {
-    padding-inline: 2px;
-  }
-
-  .root[data-mobile-panel='route'] .filmstrip {
-    flex: 1;
-    flex-direction: column;
-    gap: 9px;
-    min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    padding: 2px 0 8px;
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
-
-  .root[data-mobile-panel='route'] .nextCard {
-    display: grid;
-    grid-template-columns: clamp(62px, 18vw, 78px) minmax(0, 1fr);
-    align-items: center;
-    gap: 11px;
-    width: 100%;
-    min-width: 0;
-    padding: 8px;
-  }
-
-  .root[data-mobile-panel='route'] .nextCover {
-    width: 100%;
-  }
-
-  .root[data-mobile-panel='route'] .nextMeta {
-    display: flex;
-  }
-
-  .routeEmptyPanel {
-    align-items: center;
-  }
-
-  .routeEmptyPanel > p {
-    margin: auto;
-    max-width: 280px;
-    color: var(--ink-secondary);
-    font-size: var(--auto-ui-body);
-    line-height: 1.5;
-    text-align: center;
-  }
-
-  .requestPanel,
-  .djPicker {
-    z-index: 42;
-    inset: var(--auto-mobile-sheet-top) 0 0;
-    width: 100%;
-    max-width: none;
-    max-height: none;
-    padding:
-      16px max(16px, env(safe-area-inset-right, 0px))
-      max(18px, env(safe-area-inset-bottom, 0px))
-      max(16px, env(safe-area-inset-left, 0px));
-    overflow-y: auto;
-    border: 1px solid var(--stage-line);
-    border-bottom: 0;
-    border-radius: 24px 24px 0 0;
-  }
-
-  .djPickerGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .requestResults > button {
-    grid-template-columns: var(--row-h) minmax(0, 1fr);
-  }
-
-  .requestResults b {
-    grid-column: 2;
+  .root :global([data-player-stage-mode='auto']) h1 {
+    font-size: clamp(22px, 7vw, 32px);
   }
 }
 
-@media (max-width: 1023px) and (max-height: 620px) {
-  .root {
-    --auto-mobile-sheet-top: max(68px, 12dvh);
+@media (prefers-reduced-motion: reduce) {
+  .tile {
+    animation: none;
   }
 
-  .panel {
-    gap: 5px;
-  }
-
-  .status {
-    display: none;
-  }
-
-  .mobileDock > button {
-    min-height: 44px;
-    padding-block: 4px;
-  }
-}
-
-@media (max-width: 1023px) and (orientation: landscape) and (max-height: 520px) {
-  .coverCaption {
-    padding-block: 5px 6px;
-  }
-
-  .capArtist {
-    display: none;
-  }
-
-  .controls {
-    gap: 5px;
-  }
-
-  .seek {
-    display: none;
+  .switchThumb,
+  .root :global([data-auto-cover-slot]) > div:first-child {
+    transition: none;
+    animation: none;
   }
 }
