@@ -277,7 +277,10 @@ def quit_via_global_shortcut(process: subprocess.Popen, window) -> bool:
         # then verify the registered global shortcut by observing process exit.
         send_keys("{ESC}")
         time.sleep(0.5)
-        window.set_focus()
+        try:
+            window.set_focus()
+        except Exception as error:
+            print(f"Could not focus before global quit: {error}", flush=True)
         global_shortcut("^%q")
         try:
             process.wait(timeout=5)
