@@ -70,6 +70,7 @@ export function CommunityBridge() {
   let previousTrack: Track | null = null;
   let lastTrack: Track | null = null;
   let publishing = false;
+  let wasPlaying = false;
 
   onMount(() => {
     void resumeCommunityIfActive();
@@ -96,11 +97,13 @@ export function CommunityBridge() {
         }
       }
       if (!publisherConnected()) return;
+      const playing = state.playback.isPlaying;
+      if (!playing && !wasPlaying) return;
 
       const active = mix.decks.find((item) => item.index === mix.activeIndex);
       const other = mix.decks.find((item) => item.index !== mix.activeIndex);
       const next = state.playback.queue[state.playback.index + 1] ?? null;
-      const secondaryTrack = mix.phase === 'idle'
+      const secondaryTrack = !playing || mix.phase === 'idle'
         ? null
         : mix.dominant
           ? previousTrack
@@ -111,10 +114,10 @@ export function CommunityBridge() {
         seq: seq++,
         emitted_at: Date.now(),
         program_time: mix.contextTime,
-        transport: state.playback.isPlaying ? 'playing' : 'paused',
+        transport: playing ? 'playing' : 'paused',
         primary: deck(current, active?.position ?? state.playback.currentTime, active?.duration ?? state.playback.duration, active?.gain ?? 1),
         secondary: deck(secondaryTrack, other?.position ?? 0, other?.duration ?? secondaryTrack?.duration ?? 0, other?.gain ?? 0),
-        transition: mix.phase === 'idle'
+        transition: !playing || mix.phase === 'idle'
           ? null
           : {
               technique: mix.technique ?? 'safe_fade',
@@ -124,6 +127,7 @@ export function CommunityBridge() {
             },
       };
       sendProgramEvent(payload);
+      wasPlaying = playing;
       if (mix.phase === 'idle') previousTrack = null;
     }, 250);
   });
@@ -131,6 +135,7 @@ export function CommunityBridge() {
   createEffect(() => {
     if (hostSession()) return;
     publishing = false;
+    wasPlaying = false;
     releaseBroadcastStream();
   });
 

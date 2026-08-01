@@ -140,6 +140,34 @@ def test_stale_host_disconnect_cannot_expire_replacement_socket(tmp_path, monkey
     second.disconnect()
 
 
+def test_deleted_session_rejects_late_program_events(tmp_path, monkeypatch):
+    monkeypatch.setenv("COMMUNITY_DB_PATH", str(tmp_path / "community.db"))
+    monkeypatch.setenv("COMMUNITY_ARTWORK_DIR", str(tmp_path / "artwork"))
+    monkeypatch.setenv("COMMUNITY_SOCKET_ASYNC_MODE", "threading")
+    import community_service.app as module
+    module = importlib.reload(module)
+    client = module.app.test_client()
+
+    body = {"title": "Finished", "profile": {"display_name": "DJ Test"}}
+    encoded, headers = _headers("POST", "/v1/sessions", body)
+    session = client.post("/v1/sessions", data=encoded, headers=headers).get_json()["session"]
+    host = module.socketio.test_client(module.app, auth={
+        "session_id": session["id"],
+        "host_token": session["host_token"],
+    })
+    host.emit("program_event", {"v": 1, "seq": 1, "transport": "playing"})
+    assert module._programs[session["id"]]["seq"] == 1
+
+    path = f"/v1/sessions/{session['id']}"
+    delete_body = {"profile": {"display_name": "DJ Test"}}
+    encoded, headers = _headers("DELETE", path, delete_body)
+    assert client.delete(path, data=encoded, headers=headers).status_code == 204
+    host.emit("program_event", {"v": 1, "seq": 2, "transport": "playing"})
+
+    assert session["id"] not in module._programs
+    assert client.get(path).status_code == 404
+
+
 def test_signed_resume_rotates_media_credentials(tmp_path, monkeypatch):
     monkeypatch.setenv("COMMUNITY_DB_PATH", str(tmp_path / "community.db"))
     monkeypatch.setenv("COMMUNITY_ARTWORK_DIR", str(tmp_path / "artwork"))

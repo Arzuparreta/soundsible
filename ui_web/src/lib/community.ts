@@ -441,13 +441,13 @@ async function clearHostState(): Promise<void> {
 
 export async function endHostSession(): Promise<void> {
   const session = hostSession();
+  await clearHostState();
   if (session) {
     await request<void>(`/api/community/sessions/${encodeURIComponent(session.id)}`, {
       method: 'DELETE',
       timeoutMs: 12000,
-    }).catch(() => {});
+    }).catch(() => setCommunityError('unavailable'));
   }
-  await clearHostState();
 }
 
 async function establishHostPublisher(stream: MediaStream, generation: number): Promise<void> {

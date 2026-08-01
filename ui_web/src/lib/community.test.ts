@@ -14,6 +14,7 @@ import {
   communityConfig,
   communityError,
   createHostSession,
+  endHostSession,
   joinLiveSession,
   leaveLiveSession,
   listenerState,
@@ -177,6 +178,23 @@ describe('Community client state', () => {
       'http://localhost:3000/api/community/sessions',
       `http://localhost:3000/api/community/sessions/${session.id}/resume`,
     ]);
+  });
+
+  it('disconnects the local publisher before requesting remote session deletion', async () => {
+    const order: string[] = [];
+    socket.disconnect.mockImplementationOnce(() => { order.push('disconnect'); });
+    vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'DELETE') {
+        order.push('delete');
+        return new Response(null, { status: 204 });
+      }
+      return json({ session }, 201);
+    }));
+    await createHostSession('Saturday');
+
+    await endHostSession();
+
+    expect(order).toEqual(['disconnect', 'delete']);
   });
 
   it('recovers WHIP with bounded backoff and reports the connection', async () => {

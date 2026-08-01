@@ -602,6 +602,11 @@ def program_event(payload):
     if not connection or not connection["host"] or not isinstance(payload, dict):
         return
     session_id = connection["session_id"]
+    if (
+        connection.get("generation") != _host_generation.get(session_id)
+        or _session_row(session_id) is None
+    ):
+        return
     seq = payload.get("seq")
     if not isinstance(seq, int) or seq < 0:
         return
