@@ -94,6 +94,26 @@ def test_station_bridge_uses_official_service_without_environment(monkeypatch):
     assert payload["identity"]["community_id"]
 
 
+def test_station_bridge_offers_tailscale_https_origin(monkeypatch):
+    monkeypatch.delenv("SOUNDSIBLE_HTTPS_URL", raising=False)
+    monkeypatch.setattr(routes, "current_user_id_from_request", lambda: TEST_USER_ID)
+    monkeypatch.setattr(routes.requests, "get", lambda *args, **kwargs: _HealthResponse())
+    monkeypatch.setattr(
+        routes.socket,
+        "gethostbyaddr",
+        lambda address: ("desktop-ruben.example.ts.net.", [], [address]),
+    )
+    app = Flask(__name__)
+    app.register_blueprint(routes.community_bp)
+
+    payload = app.test_client().get(
+        "/api/community/config",
+        headers={"Host": "100.91.167.48:5005"},
+    ).get_json()
+
+    assert payload["secure_url"] == "https://desktop-ruben.example.ts.net"
+
+
 def test_station_bridge_can_be_explicitly_disabled(monkeypatch):
     monkeypatch.setenv("SOUNDSIBLE_COMMUNITY_DISABLED", "true")
     monkeypatch.setenv("SOUNDSIBLE_COMMUNITY_URL", "https://ignored.example")

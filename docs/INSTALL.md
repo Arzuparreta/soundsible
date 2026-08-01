@@ -54,8 +54,19 @@ python3 run.py --daemon   # fixed port 5005, reachable on the LAN
 
 1. Install and log into Tailscale on the machine running Soundsible.
 2. Start the Station Engine.
-3. From any device on your tailnet, open `http://YOUR_TAILSCALE_IP:5005/player/`.
-4. Optionally install the web player as a PWA (see the [README](../README.md#listen-everywhere)).
+3. Allow your user to manage Tailscale Serve once, then publish the engine:
+
+   ```bash
+   sudo tailscale set --operator="$USER"
+   tailscale serve --bg --yes 5005
+   ```
+
+4. From any device on your tailnet, open the HTTPS URL printed by `tailscale
+   serve status`, followed by `/player/`. HTTPS is required for Live
+   broadcasting in browsers.
+5. If the `.ts.net` name does not resolve on a client, enable Tailscale DNS
+   there with `sudo tailscale set --accept-dns=true`.
+6. Optionally install the web player as a PWA (see the [README](../README.md#listen-everywhere)).
 
 ---
 

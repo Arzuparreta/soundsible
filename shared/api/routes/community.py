@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import ipaddress
+import socket
 from urllib.parse import urlparse
 
 import requests
@@ -14,6 +16,7 @@ from shared.hardening import current_user, current_user_id_from_request, rate_li
 community_bp = Blueprint("community", __name__, url_prefix="")
 
 OFFICIAL_COMMUNITY_URL = "https://live.84-247-161-82.sslip.io"
+TAILSCALE_NETWORK = ipaddress.ip_network("100.64.0.0/10")
 
 
 def _enabled_flag(value: str | None) -> bool:
@@ -92,6 +95,22 @@ def community_url() -> str:
     return str(community_configuration().get("api_url") or "")
 
 
+def _secure_station_origin() -> str | None:
+    configured = _valid_https_origin(os.getenv("SOUNDSIBLE_HTTPS_URL", ""))
+    if configured:
+        return configured
+    try:
+        address = ipaddress.ip_address(request.host.split(":", 1)[0])
+        if address not in TAILSCALE_NETWORK:
+            return None
+        hostname = socket.gethostbyaddr(str(address))[0].rstrip(".").lower()
+    except (OSError, ValueError):
+        return None
+    if not hostname.endswith(".ts.net"):
+        return None
+    return f"https://{hostname}"
+
+
 def _safe_error(response: requests.Response) -> tuple[dict, int]:
     try:
         payload = response.json()
@@ -166,7 +185,12 @@ def config():
                 "code": "community_unreachable",
                 "message": "Community relay is currently unreachable",
             }
-    return jsonify({**resolved, "identity": identity})
+    secure_origin = _secure_station_origin()
+    return jsonify({
+        **resolved,
+        "identity": identity,
+        **({"secure_url": secure_origin} if secure_origin else {}),
+    })
 
 
 @community_bp.post("/api/community/sessions")

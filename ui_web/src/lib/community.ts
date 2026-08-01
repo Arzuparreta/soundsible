@@ -97,6 +97,7 @@ export interface CommunityConfig {
   state: CommunityState;
   error?: { code: string; message: string } | null;
   identity?: { community_id: string } | null;
+  secure_url?: string | null;
 }
 
 const ACTIVE_HOST_KEY = 'community:active-host:v1';

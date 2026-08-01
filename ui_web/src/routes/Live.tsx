@@ -170,15 +170,10 @@ export default function Live() {
   const [editing, setEditing] = createSignal(false);
   let refreshTimer: number | undefined;
   const mediaSecure = liveMediaSecure();
-  const localLiveUrl = (() => {
-    if (typeof window === 'undefined') return 'http://localhost:5005/player/#/live';
-    const url = new URL(window.location.href);
-    url.protocol = 'http:';
-    url.hostname = 'localhost';
-    url.pathname = url.pathname.includes('/player') ? '/player/' : url.pathname;
-    url.hash = '#/live';
-    return url.href;
-  })();
+  const secureLiveUrl = () => {
+    const origin = communityConfig()?.secure_url;
+    return origin ? new URL('/player/#/live', origin).href : null;
+  };
 
   onMount(() => {
     setTitle(`Session by ${user()?.display_name ?? 'DJ'}`);
@@ -244,7 +239,9 @@ export default function Live() {
         <Show when={!mediaSecure}>
           <div class={styles.banner} data-state="secure_context">
             <span>{t('live.service.secure_context')}</span>
-            <a href={localLiveUrl}>{t('live.openLocalSecure')}</a>
+            <Show when={secureLiveUrl()}>
+              {(url) => <a href={url()}>{t('live.openSecure')}</a>}
+            </Show>
           </div>
         </Show>
 

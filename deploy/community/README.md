@@ -10,8 +10,8 @@ room; a listener can type a request like any other message.
 - `community-api`: signed DJ sessions, directory, synchronized programme
   metadata, presence, ephemeral cover cache and Socket.IO chat.
 - `mediamtx`: one Opus WHIP publisher and WHEP readers per active session.
-- `coturn`: STUN discovery plus an authenticated TCP TURN fallback for browsers
-  that cannot use the direct MediaMTX candidates.
+- `coturn`: STUN discovery plus authenticated TURN fallbacks on TLS/TCP 443,
+  UDP 443 and TCP 3478 for browsers behind restrictive networks.
 - Nginx: TLS and the single public origin.
 - Defaults: 5 concurrent sessions, 100 listeners per session, 250 listeners
   total, 90 seconds for the DJ to reconnect.
@@ -26,17 +26,35 @@ Copy `community_service/` and `deploy/community/` to a host with Docker Compose.
 Create `deploy/community/.env` from `.env.example`, replace
 `COMMUNITY_SECRET_KEY` and `COMMUNITY_TURN_SECRET` with separate long random
 values, install `nginx-bootstrap.conf`, obtain the matching TLS certificate,
-and replace it with `nginx.conf`. Then run:
+and replace it with `nginx.conf`. The official single-IP host also installs
+`libnginx-mod-stream`, includes `stream { include
+/etc/nginx/streams-enabled/*.conf; }` at Nginx's top level, installs
+`nginx-turn-stream.conf`, and moves its IPv4 HTTPS virtual hosts to
+`127.0.0.1:8443`. The stream router then sends the TURN hostname to Coturn and
+all other SNI names back to HTTPS. Adapt the hostname and public IP in both
+files for another deployment. Then run:
 
 ```bash
 docker compose --env-file deploy/community/.env \
   -f deploy/community/docker-compose.yml up -d --build
 ```
 
-Expose TCP 80/443/3478, UDP 3478, UDP and TCP 8189, and UDP 49152–49663. Port
-3478 provides STUN discovery over UDP and the TURN fallback over TCP; the
-bounded UDP range is used only for authenticated relay allocations. Ports
-18080 and 18889 intentionally bind only to loopback for Nginx.
+Before starting and after each TURN certificate renewal, place container-readable
+copies inside a root-protected directory:
+
+```bash
+install -d -m 700 deploy/community/certs
+install -m 644 /etc/letsencrypt/live/turn.example.org/fullchain.pem deploy/community/certs/turn.crt
+install -m 644 /etc/letsencrypt/live/turn.example.org/privkey.pem deploy/community/certs/turn.key
+docker compose --env-file deploy/community/.env \
+  -f deploy/community/docker-compose.yml restart coturn-tls
+```
+
+Expose TCP 80/443/3478, UDP 443/3478, UDP and TCP 8189, and UDP 49152–50687.
+TLS/TCP 443 is the primary TURN path because it survives networks that block
+3478 and non-HTTPS traffic; UDP 443 and TCP 3478 remain fallbacks. The bounded
+UDP range is used only for authenticated relay allocations. Ports 18080, 18889
+and TURN TLS 5349 intentionally bind only to loopback behind Nginx.
 
 Health and capacity can be checked with:
 

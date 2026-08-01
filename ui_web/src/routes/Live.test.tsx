@@ -2,7 +2,13 @@ import { fireEvent, render, screen } from '@solidjs/testing-library';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const community = vi.hoisted(() => ({
-  config: { enabled: true, source: 'official', state: 'available', api_url: 'https://relay.test' },
+  config: {
+    enabled: true,
+    source: 'official',
+    state: 'available',
+    api_url: 'https://relay.test',
+    secure_url: 'https://station.tail.test',
+  },
   error: null as string | null,
   host: null as Record<string, unknown> | null,
   publisherState: 'idle',
@@ -56,6 +62,7 @@ beforeEach(() => {
     source: 'official',
     state: 'available',
     api_url: 'https://relay.test',
+    secure_url: 'https://station.tail.test',
   };
   community.error = null;
   community.host = null;
@@ -123,8 +130,8 @@ describe('Live operational UI', () => {
     render(() => <Live />);
 
     expect(screen.getByRole('button', { name: 'Go live' })).toBeDisabled();
-    expect(screen.getByText(/Firefox needs a secure browser context/)).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Open Live on this computer' }))
-      .toHaveAttribute('href', 'http://localhost:3000/#/live');
+    expect(screen.getByText(/Live broadcasting needs HTTPS/)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Open the secure station' }))
+      .toHaveAttribute('href', 'https://station.tail.test/player/#/live');
   });
 });

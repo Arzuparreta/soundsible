@@ -54,6 +54,50 @@ await build({
   },
 });
 const communityWebrtcScript = await readFile(join(harnessDir, 'community-webrtc.js'), 'utf8');
+const listenSessionId = process.env.COMMUNITY_SMOKE_LISTEN_SESSION_ID;
+if (listenSessionId) {
+  let listenBrowser;
+  try {
+    const listing = await fetch(`${apiUrl}/v1/sessions`).then((response) => response.json());
+    const target = listing.sessions.find((item) => item.id === listenSessionId);
+    if (!target) throw new Error(`live session not found: ${listenSessionId}`);
+    listenBrowser = await browserType.launch({ headless: true });
+    const page = await listenBrowser.newPage();
+    await page.goto(listenerPageUrl);
+    await page.addScriptTag({ content: communityWebrtcScript });
+    const result = await page.evaluate(async ({ endpoint, relayOnly }) => {
+      let track;
+      const handle = await globalThis.SoundsibleCommunityWebrtc.openCommunityListener({
+        endpoint,
+        iceTransportPolicy: relayOnly ? 'relay' : 'all',
+        onTrack: (event) => { track = event.track; },
+      });
+      const started = Date.now();
+      let inbound;
+      while (Date.now() - started <= 12000) {
+        const stats = await handle.pc.getStats();
+        inbound = [...stats.values()].find((item) => item.type === 'inbound-rtp' && item.kind === 'audio');
+        if (track?.readyState === 'live' && inbound?.bytesReceived >= 1000) break;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+      const output = {
+        state: handle.pc.connectionState,
+        track: track?.readyState,
+        bytesReceived: inbound?.bytesReceived ?? 0,
+      };
+      handle.close();
+      return output;
+    }, { endpoint: target.whep_url, relayOnly: forceRelay });
+    if (result.state !== 'connected' || result.track !== 'live' || result.bytesReceived < 1000) {
+      throw new Error(`listener did not receive audio: ${JSON.stringify(result)}`);
+    }
+    console.log(JSON.stringify({ browser: browserName, session: listenSessionId, ...result }));
+  } finally {
+    await listenBrowser?.close();
+    await rm(harnessDir, { recursive: true, force: true });
+  }
+  process.exit(0);
+}
 
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -122,6 +166,25 @@ try {
     socket.once('connect_error', reject);
   }), { sessionId: session.id, hostToken: session.host_token, socketUrl: apiUrl });
   published = await publisherPage.evaluate(async ({ endpoint, token, relayOnly, inspectIce }) => {
+    if (inspectIce) {
+      const NativePeerConnection = globalThis.RTCPeerConnection;
+      globalThis.RTCPeerConnection = class DiagnosticPeerConnection extends NativePeerConnection {
+        constructor(configuration) {
+          super(configuration);
+          globalThis.__iceConfiguration = configuration;
+          globalThis.__iceCandidateErrors = [];
+          this.addEventListener('icecandidateerror', (event) => {
+            globalThis.__iceCandidateErrors.push({
+              url: event.url,
+              address: event.address,
+              port: event.port,
+              errorCode: event.errorCode,
+              errorText: event.errorText,
+            });
+          });
+        }
+      };
+    }
     const context = new AudioContext();
     const oscillator = context.createOscillator();
     const destination = context.createMediaStreamDestination();
@@ -157,6 +220,8 @@ try {
       const timer = setTimeout(() => reject(new Error(
         `publisher state ${pc.connectionState}; gathering ${pc.iceGatheringState}; candidates ${JSON.stringify(
           pc.localDescription?.sdp.match(/^a=candidate:.*$/gm) ?? [],
+        )}; configuration ${JSON.stringify(globalThis.__iceConfiguration)}; candidate errors ${JSON.stringify(
+          globalThis.__iceCandidateErrors,
         )}; ICE ${JSON.stringify(globalThis.__iceDiagnostic)}`,
       )), 12000);
       const check = () => {

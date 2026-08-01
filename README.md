@@ -163,7 +163,9 @@ Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`
 ### Listen everywhere
 
 - **On your phone (PWA)** — open the player on your phone, then *Share → Add to Home Screen* (iOS) or *Menu → Install app* (Android).
-- **From anywhere** — reach your station over [Tailscale](https://tailscale.com/) at `http://<your-tailscale-ip>:5005/player/`.
+- **From anywhere** — publish the station with `tailscale serve --bg --yes 5005`
+  and open the HTTPS `.ts.net/player/` URL it prints. HTTPS also enables Live
+  broadcasting from remote browsers.
 - **Servers, reverse proxies, security** — see the [Install & Deployment guide](docs/INSTALL.md).
 
 > 🖥️ **Desktop app (beta)** — a one-click Tauri app with no terminal is available for early testers. Install from [GitHub Releases](https://github.com/Arzuparreta/soundsible/releases) (tag `desktop-v*`) or build locally — see [docs/DESKTOP_BETA.md](docs/DESKTOP_BETA.md).

@@ -5,8 +5,8 @@ services:
     network_mode: host
     command:
       - --listening-port=3478
-      - --min-port=49152
-      - --max-port=49663
+      - --min-port=49664
+      - --max-port=50175
       - --realm=live.84-247-161-82.sslip.io
       - --use-auth-secret
       - --static-auth-secret=${COMMUNITY_TURN_SECRET:?COMMUNITY_TURN_SECRET is required}
@@ -18,6 +18,62 @@ services:
       - --log-file=stdout
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/3478'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  coturn-udp443:
+    image: coturn/coturn:4.15.0-r0
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - --listening-port=443
+      - --min-port=49152
+      - --max-port=49663
+      - --realm=live.84-247-161-82.sslip.io
+      - --use-auth-secret
+      - --static-auth-secret=${COMMUNITY_TURN_SECRET:?COMMUNITY_TURN_SECRET is required}
+      - --fingerprint
+      - --no-tcp
+      - --no-tls
+      - --no-dtls
+      - --no-multicast-peers
+      - --pidfile=/var/tmp/turnserver-udp443.pid
+      - --log-file=stdout
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/udp/127.0.0.1/443'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  coturn-tls:
+    image: coturn/coturn:4.15.0-r0
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - --listening-ip=127.0.0.1
+      - --relay-ip=84.247.161.82
+      - --tls-listening-port=5349
+      - --min-port=50176
+      - --max-port=50687
+      - --realm=live.84-247-161-82.sslip.io
+      - --use-auth-secret
+      - --static-auth-secret=${COMMUNITY_TURN_SECRET:?COMMUNITY_TURN_SECRET is required}
+      - --fingerprint
+      - --no-udp
+      - --no-dtls
+      - --no-multicast-peers
+      - --cert=/certs/turn.crt
+      - --pkey=/certs/turn.key
+      - --pidfile=/var/tmp/turnserver-tls.pid
+      - --log-file=stdout
+    volumes:
+      - ./certs/turn.crt:/certs/turn.crt:ro
+      - ./certs/turn.key:/certs/turn.key:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/5349'"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -57,16 +113,28 @@ services:
     image: bluenviron/mediamtx:1.19.3
     restart: unless-stopped
     environment:
-      MTX_WEBRTCICESERVERS2_0_URL: stun:live.84-247-161-82.sslip.io:3478
+      MTX_WEBRTCICESERVERS2_0_URL: turns:turn.84-247-161-82.sslip.io:443
+      MTX_WEBRTCICESERVERS2_0_USERNAME: AUTH_SECRET
+      MTX_WEBRTCICESERVERS2_0_PASSWORD: ${COMMUNITY_TURN_SECRET:?COMMUNITY_TURN_SECRET is required}
       MTX_WEBRTCICESERVERS2_0_CLIENTONLY: "true"
-      MTX_WEBRTCICESERVERS2_1_URL: turn:live.84-247-161-82.sslip.io:3478?transport=tcp
-      MTX_WEBRTCICESERVERS2_1_USERNAME: AUTH_SECRET
-      MTX_WEBRTCICESERVERS2_1_PASSWORD: ${COMMUNITY_TURN_SECRET:?COMMUNITY_TURN_SECRET is required}
+      MTX_WEBRTCICESERVERS2_1_URL: stun:live.84-247-161-82.sslip.io:443
       MTX_WEBRTCICESERVERS2_1_CLIENTONLY: "true"
+      MTX_WEBRTCICESERVERS2_2_URL: turn:live.84-247-161-82.sslip.io:443?transport=udp
+      MTX_WEBRTCICESERVERS2_2_USERNAME: AUTH_SECRET
+      MTX_WEBRTCICESERVERS2_2_PASSWORD: ${COMMUNITY_TURN_SECRET:?COMMUNITY_TURN_SECRET is required}
+      MTX_WEBRTCICESERVERS2_2_CLIENTONLY: "true"
+      MTX_WEBRTCICESERVERS2_3_URL: turn:live.84-247-161-82.sslip.io:3478?transport=tcp
+      MTX_WEBRTCICESERVERS2_3_USERNAME: AUTH_SECRET
+      MTX_WEBRTCICESERVERS2_3_PASSWORD: ${COMMUNITY_TURN_SECRET:?COMMUNITY_TURN_SECRET is required}
+      MTX_WEBRTCICESERVERS2_3_CLIENTONLY: "true"
     depends_on:
       community-api:
         condition: service_started
       coturn:
+        condition: service_healthy
+      coturn-udp443:
+        condition: service_healthy
+      coturn-tls:
         condition: service_healthy
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
