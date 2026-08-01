@@ -192,17 +192,25 @@ def folder_dialog(reopen_after_oobe=None):
 
 
 def set_clipboard_text(value: str) -> None:
-    subprocess.run(
-        [
-            "powershell",
-            "-NoProfile",
-            "-Command",
-            "Set-Clipboard -Value ([Console]::In.ReadToEnd())",
-        ],
-        input=value,
-        text=True,
-        check=True,
-    )
+    import pywintypes
+    import win32clipboard
+
+    for attempt in range(10):
+        try:
+            win32clipboard.OpenClipboard()
+            try:
+                win32clipboard.EmptyClipboard()
+                win32clipboard.SetClipboardText(
+                    value,
+                    win32clipboard.CF_UNICODETEXT,
+                )
+            finally:
+                win32clipboard.CloseClipboard()
+            return
+        except pywintypes.error:
+            if attempt == 9:
+                raise
+            time.sleep(0.1)
 
 
 def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None:
@@ -229,12 +237,8 @@ def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None
 
     invoke_or_click(control(window, "Choose folder"))
     dialog = folder_dialog()
-    # PowerShell briefly owns the foreground while populating the clipboard.
-    # Do that before focusing the picker; otherwise the following Ctrl+L can
-    # reach Windows Search on a fresh hosted runner instead of Explorer.
     set_clipboard_text(str(music_path))
     dialog.set_focus()
-    time.sleep(0.5)
     send_keys("^l")
     send_keys("^v")
     send_keys("{ENTER}")
