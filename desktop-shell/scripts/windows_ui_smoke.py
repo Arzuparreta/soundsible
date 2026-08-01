@@ -192,28 +192,6 @@ def folder_dialog(reopen_after_oobe=None):
     )
 
 
-def set_clipboard_text(value: str) -> None:
-    import pywintypes
-    import win32clipboard
-
-    for attempt in range(10):
-        try:
-            win32clipboard.OpenClipboard()
-            try:
-                win32clipboard.EmptyClipboard()
-                win32clipboard.SetClipboardText(
-                    value,
-                    win32clipboard.CF_UNICODETEXT,
-                )
-            finally:
-                win32clipboard.CloseClipboard()
-            return
-        except pywintypes.error:
-            if attempt == 9:
-                raise
-            time.sleep(0.1)
-
-
 def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None:
     import win32gui
 
@@ -247,22 +225,40 @@ def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None
 
     invoke_or_click(control(window, "Choose folder"))
     dialog = folder_dialog()
-    set_clipboard_text(str(music_path))
-    dialog_width = dialog.rectangle().width()
-    dialog.click_input(coords=(dialog_width // 2, 12))
-    dialog.set_focus()
-    dialog_handles = {
-        dialog.handle,
-        win32gui.GetAncestor(dialog.handle, 2),  # GA_ROOT
-    }
-    wait_until(
-        lambda: win32gui.GetForegroundWindow() in dialog_handles,
-        "Native folder picker did not receive foreground focus",
+    dump_tree(dialog, artifact_path / "picker-tree.txt")
+    address_bar = next(
+        (
+            item
+            for item in dialog.descendants()
+            if item.element_info.control_type == "ToolBar"
+            and item.window_text().startswith("Address:")
+        ),
+        None,
+    )
+    if address_bar is None:
+        raise RuntimeError("Native folder picker address bar was not found")
+    address_rectangle = address_bar.rectangle()
+    address_bar.click_input()
+
+    def address_editor():
+        return next(
+            (
+                item
+                for item in dialog.descendants(control_type="Edit")
+                if item.is_visible()
+                and item.rectangle().top >= address_rectangle.top - 5
+                and item.rectangle().bottom <= address_rectangle.bottom + 5
+            ),
+            None,
+        )
+
+    editor = wait_until(
+        address_editor,
+        "Native folder picker address editor did not appear",
         timeout=10,
     )
-    send_keys("^l")
-    send_keys("^v")
-    send_keys("{ENTER}")
+    editor.set_edit_text(str(music_path))
+    editor.type_keys("{ENTER}")
     invoke_or_click(control(dialog, "Select Folder", timeout=10))
 
 
