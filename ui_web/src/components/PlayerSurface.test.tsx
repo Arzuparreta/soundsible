@@ -65,7 +65,29 @@ vi.mock('./NowPlaying', () => ({
     </div>
   ),
 }));
-vi.mock('./AutoMode', () => ({ AutoMode: () => <div data-testid="auto-mode-view">Auto</div> }));
+vi.mock('./AutoMode', () => ({
+  AutoMode: (props: {
+    panel: string;
+    onPanelChange: (panel: string) => void;
+    onCarouselProgress?: (index: number, live: boolean) => void;
+  }) => (
+    <div data-testid="auto-mode-view">
+      {props.panel}
+      <button
+        type="button"
+        onClick={() => {
+          props.onCarouselProgress?.(2, false);
+          props.onPanelChange('route');
+        }}
+      >
+        simulate auto swipe
+      </button>
+      <button type="button" onClick={() => props.onCarouselProgress?.(1.4, true)}>
+        simulate auto drag
+      </button>
+    </div>
+  ),
+}));
 
 import { PlayerSurface } from './PlayerSurface';
 
@@ -91,6 +113,7 @@ afterEach(() => {
     title: 'Current',
     artist: 'Artist',
     cover: '/current.jpg',
+    podcast_guid: undefined,
   });
   vi.clearAllMocks();
   vi.unstubAllGlobals();
@@ -192,6 +215,24 @@ describe('PlayerSurface', () => {
     expect(screen.getByRole('button', { name: 'nowPlaying.panel.stage' })).toHaveAttribute('aria-current', 'page');
   });
 
+  it('uses the same live pager contract in Auto Mode', async () => {
+    render(() => <PlayerSurface />);
+    fireEvent.click(screen.getByRole('tab', { name: 'autoMode.label' }));
+    await screen.findByTestId('auto-mode-view');
+    const nav = screen.getByRole('navigation', { name: 'autoMode.mobile.controls' });
+
+    expect(nav).toHaveStyle('--carousel-index: 1');
+    fireEvent.click(screen.getByRole('button', { name: 'simulate auto drag' }));
+    expect(nav).toHaveStyle('--carousel-index: 1.4');
+    expect(nav).toHaveAttribute('data-live');
+    expect(screen.getByRole('button', { name: 'autoMode.panel.stage' })).toHaveAttribute('aria-current', 'page');
+
+    fireEvent.click(screen.getByRole('button', { name: 'simulate auto swipe' }));
+    expect(nav).toHaveStyle('--carousel-index: 2');
+    expect(screen.getByTestId('auto-mode-view')).toHaveTextContent('route');
+    expect(screen.getByRole('button', { name: 'autoMode.panel.route' })).toHaveAttribute('aria-current', 'page');
+  });
+
   it('resets the compact carousel only once the surface has animated out', () => {
     harness.mobileViewport = true;
     render(() => <PlayerSurface />);
@@ -246,6 +287,19 @@ describe('PlayerSurface', () => {
     target.dispatchEvent(touch('touchend', 60, 240));
 
     expect(surface).toHaveAttribute('data-player-surface-open');
+  });
+
+  it('inherits the surface swipe-down gesture in Auto Mode', async () => {
+    harness.mobileViewport = true;
+    render(() => <PlayerSurface />);
+    fireEvent.click(screen.getByRole('tab', { name: 'autoMode.label' }));
+    const target = await screen.findByRole('button', { name: 'simulate auto swipe' });
+    const surface = target.closest('[data-player-stage]')!;
+
+    swipeDown(target);
+
+    expect(surface).not.toHaveAttribute('data-player-surface-open');
+    expect(harness.actions.exitAutoMode).not.toHaveBeenCalled();
   });
 
   it('opens the compact browser from the dedicated mobile search action', () => {

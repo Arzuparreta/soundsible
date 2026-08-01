@@ -107,6 +107,12 @@ export function PlayerWorkspace<PanelId extends string>(props: {
   };
 
   const beginCarouselGesture = () => {
+    // Auto is lazy-mounted when the user flips the mode pill. Its initial
+    // alignment schedules a confirming frame after the synchronous jump; if a
+    // finger lands before that frame, the old callback must not pull the
+    // carousel back to Stage underneath the gesture.
+    cancelAnimationFrame(carouselFrame);
+    carouselFrame = 0;
     window.clearTimeout(carouselSettleTimer);
     carouselSettleTimer = undefined;
   };

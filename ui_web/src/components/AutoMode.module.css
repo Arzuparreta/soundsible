@@ -6,10 +6,6 @@
   color: var(--ink-primary);
 }
 
-.workspace {
-  padding-top: clamp(5.6rem, 9vh, 7.4rem);
-}
-
 .tile {
   background: color-mix(in srgb, var(--stage-panel) 72%, var(--bg-base));
   animation: auto-panel-in 560ms cubic-bezier(.2, .8, .2, 1) both;
@@ -392,10 +388,6 @@
   to { opacity: 1; transform: none; }
 }
 
-.root :global([data-player-stage-mode='auto']) h1 {
-  font-size: clamp(26px, 3vw, 42px);
-}
-
 .root :global([data-auto-cover-slot]) > div:first-child {
   animation: auto-cover-breathe 9s ease-in-out infinite alternate;
 }
@@ -411,11 +403,17 @@
   }
 }
 
-@media (max-width: 1023px) {
+@media (min-width: 1024px) {
   .workspace {
-    padding-top: 5rem;
+    padding-top: clamp(5.6rem, 9vh, 7.4rem);
   }
 
+  .root :global([data-player-stage-mode='auto']) h1 {
+    font-size: clamp(26px, 3vw, 42px);
+  }
+}
+
+@media (max-width: 1023px) {
   .focusToggle {
     display: none;
   }
@@ -425,12 +423,9 @@
   }
 
   .tile {
-    animation-delay: 0ms;
+    animation: none;
   }
 
-  .root :global([data-player-stage-mode='auto']) h1 {
-    font-size: clamp(22px, 7vw, 32px);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

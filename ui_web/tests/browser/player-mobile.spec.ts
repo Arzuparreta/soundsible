@@ -76,6 +76,74 @@ async function snapCarousel(page: Page, panel: 'queue' | 'stage' | 'browser') {
   }, panel);
 }
 
+async function holdCarousel(page: Page, selector: string) {
+  await page.locator(selector).dispatchEvent('pointerdown', {
+    pointerId: 1,
+    pointerType: 'touch',
+    isPrimary: true,
+    clientX: 200,
+    clientY: 400,
+  });
+}
+
+async function releaseCarousel(page: Page, selector: string) {
+  await page.locator(selector).dispatchEvent('pointerup', {
+    pointerId: 1,
+    pointerType: 'touch',
+    isPrimary: true,
+    clientX: 80,
+    clientY: 400,
+  });
+}
+
+async function snapPlayerCarousel(
+  page: Page,
+  scope: 'now-playing' | 'auto',
+  panel: string,
+) {
+  await page.locator(`[data-${scope}-carousel]`).evaluate(async (element, args) => {
+    const carousel = element as HTMLElement;
+    const target = carousel.querySelector<HTMLElement>(`[data-${args.scope}-tile="${args.panel}"]`)!;
+    const previousBehavior = carousel.style.scrollBehavior;
+    carousel.style.scrollBehavior = 'auto';
+    carousel.scrollLeft += target.getBoundingClientRect().left - carousel.getBoundingClientRect().left;
+    carousel.dispatchEvent(new Event('scroll'));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    carousel.style.scrollBehavior = previousBehavior;
+  }, { scope, panel });
+}
+
+async function swipeSurfaceDown(page: Page, targetSelector: string) {
+  await page.locator(targetSelector).evaluate((target) => {
+    const dispatch = (
+      type: 'touchstart' | 'touchmove' | 'touchend',
+      x: number,
+      y: number,
+    ) => {
+      const touch = new Touch({
+        identifier: 7,
+        target,
+        clientX: x,
+        clientY: y,
+        pageX: x,
+        pageY: y,
+        screenX: x,
+        screenY: y,
+      });
+      target.dispatchEvent(new TouchEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        touches: type === 'touchend' ? [] : [touch],
+        changedTouches: [touch],
+      }));
+    };
+    dispatch('touchstart', 180, 180);
+    dispatch('touchmove', 180, 225);
+    dispatch('touchmove', 180, 330);
+    dispatch('touchend', 180, 330);
+  });
+}
+
 test.beforeEach(async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   await mockEngine(page);
@@ -88,18 +156,20 @@ test('Now Playing keeps the visible card interactive after both lateral round tr
 
   for (const destination of ['queue', 'browser']) {
     const side = page.locator(`[data-now-playing-tile="${destination}"]`);
+    await holdCarousel(page, '[data-now-playing-carousel]');
     await snapCarousel(page, destination as 'queue' | 'browser');
 
     // During native movement the tile that received the gesture remains the
     // only interactive one. It is never made inert underneath the finger.
     await expect(stage).not.toHaveAttribute('inert', '');
-    await page.waitForTimeout(220);
+    await releaseCarousel(page, '[data-now-playing-carousel]');
     await expect(side).not.toHaveAttribute('inert', '');
     await expect(stage).toHaveAttribute('inert', '');
 
+    await holdCarousel(page, '[data-now-playing-carousel]');
     await snapCarousel(page, 'stage');
     await expect(side).not.toHaveAttribute('inert', '');
-    await page.waitForTimeout(220);
+    await releaseCarousel(page, '[data-now-playing-carousel]');
     await expect(stage).not.toHaveAttribute('inert', '');
     await expect(side).toHaveAttribute('inert', '');
 
@@ -128,26 +198,22 @@ test('Now Playing keeps the visible card interactive after both lateral round tr
   }
 });
 
-test('Auto stays anchored, contained and exposes booth and route as mobile sheets', async ({ page }) => {
+test('Auto reuses the compact workspace, pager and touch lifecycle', async ({ page }) => {
   await openNowPlaying(page);
-  const nowPlayingCover = await page.locator('[data-now-playing-cover-slot]').boundingBox();
-  expect(nowPlayingCover).not.toBeNull();
+  const nowPlayingStage = await page.locator('[data-now-playing-tile="stage"]').boundingBox();
+  expect(nowPlayingStage).not.toBeNull();
 
   await page.getByRole('tab', { name: 'AUTO' }).click();
-  const surface = page.locator('[data-player-surface-open]');
-  const autoCover = page.locator('[data-auto-cover-slot]');
-  await expect(page.locator('[data-mobile-cover-anchored]')).toBeAttached();
-  await expect(autoCover).toBeVisible();
-  await expect.poll(async () => {
-    const box = await autoCover.boundingBox();
-    return box ? Math.abs(box.y - nowPlayingCover!.y) : Number.POSITIVE_INFINITY;
-  }).toBeLessThanOrEqual(2);
-
-  const autoBox = await autoCover.boundingBox();
-  expect(autoBox).not.toBeNull();
-  expect(Math.abs(autoBox!.x - nowPlayingCover!.x)).toBeLessThanOrEqual(2);
-  expect(Math.abs(autoBox!.y - nowPlayingCover!.y)).toBeLessThanOrEqual(2);
-  expect(Math.abs(autoBox!.width - nowPlayingCover!.width)).toBeLessThanOrEqual(2);
+  const surface = page.locator('[data-player-stage]');
+  const carousel = page.locator('[data-auto-carousel]');
+  const autoStage = page.locator('[data-auto-tile="stage"]');
+  await expect(autoStage).toBeVisible();
+  const autoStageBox = await autoStage.boundingBox();
+  expect(autoStageBox).not.toBeNull();
+  expect(Math.abs(autoStageBox!.x - nowPlayingStage!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(autoStageBox!.y - nowPlayingStage!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(autoStageBox!.width - nowPlayingStage!.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(autoStageBox!.height - nowPlayingStage!.height)).toBeLessThanOrEqual(1);
 
   const containment = await surface.evaluate((element) => ({
     scrollLeft: element.scrollLeft,
@@ -158,38 +224,38 @@ test('Auto stays anchored, contained and exposes booth and route as mobile sheet
   expect(containment.scrollTop).toBe(0);
   expect(containment.overflow).toBe('clip');
 
-  for (const locator of [
-    autoCover,
-    page.getByRole('button', { name: /Cabina/ }),
-    page.getByRole('button', { name: /Ruta/ }),
-  ]) {
-    const box = await locator.boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.x).toBeGreaterThanOrEqual(0);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+  for (const destination of ['booth', 'route'] as const) {
+    const side = page.locator(`[data-auto-tile="${destination}"]`);
+    await holdCarousel(page, '[data-auto-carousel]');
+    await snapPlayerCarousel(page, 'auto', destination);
+    await expect(autoStage).not.toHaveAttribute('inert', '');
+    await releaseCarousel(page, '[data-auto-carousel]');
+    await expect(side).not.toHaveAttribute('inert', '');
+    await expect(autoStage).toHaveAttribute('inert', '');
+
+    if (destination === 'booth') {
+      await expect(side.getByRole('textbox', { name: /Dile a la cabina/ })).toBeVisible();
+    } else {
+      await expect(side).toContainText(/Luz de verano|Horizonte|El DJ aún está preparando/);
+    }
+
+    await holdCarousel(page, '[data-auto-carousel]');
+    await snapPlayerCarousel(page, 'auto', 'stage');
+    await expect(side).not.toHaveAttribute('inert', '');
+    await releaseCarousel(page, '[data-auto-carousel]');
+    await expect(autoStage).not.toHaveAttribute('inert', '');
+    await expect(side).toHaveAttribute('inert', '');
   }
 
-  const accessibility = await new AxeBuilder({ page })
-    .include('[data-player-surface-open]')
-    .analyze();
+  await expect(carousel).toBeVisible();
+  const accessibility = await new AxeBuilder({ page }).include('[data-player-surface-open]').analyze();
   expect(accessibility.violations).toEqual([]);
 
-  await page.getByRole('button', { name: /Cabina/ }).click();
-  const booth = page.getByRole('dialog', { name: 'Controles de la cabina' });
-  await expect(booth).toBeVisible();
-  await expect(booth.getByRole('textbox', { name: /Dile a la cabina/ })).toBeVisible();
-  await booth.getByRole('button', { name: 'Cerrar' }).click();
-
-  await page.getByRole('button', { name: /Ruta/ }).click();
-  const route = page.getByRole('dialog', { name: 'A continuación' });
-  await expect(route).toBeVisible();
-  await expect(route).toContainText(/Luz de verano|Horizonte|El DJ aún está preparando/);
-  const routeBox = await route.boundingBox();
-  expect(routeBox!.x).toBeGreaterThanOrEqual(0);
-  expect(routeBox!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  await swipeSurfaceDown(page, '[data-auto-tile="stage"]');
+  await expect(surface).not.toHaveAttribute('data-player-surface-open');
 });
 
-test('Auto composition stays inside compact portrait and landscape viewports', async ({ page }) => {
+test('the shared mode pill and Auto workspace stay contained in compact viewports', async ({ page }) => {
   test.setTimeout(60_000);
   const viewports = [
     { width: 320, height: 568 },
@@ -198,7 +264,6 @@ test('Auto composition stays inside compact portrait and landscape viewports', a
   ];
   await page.setViewportSize(viewports[0]);
   await openNowPlaying(page);
-  await page.getByRole('tab', { name: 'AUTO' }).click();
 
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
@@ -210,19 +275,39 @@ test('Auto composition stays inside compact portrait and landscape viewports', a
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     }));
 
-    for (const [name, locator] of [
-      ['cover', page.locator('[data-auto-cover-slot]')],
-      ['booth', page.getByRole('button', { name: /Cabina/ })],
-      ['route', page.getByRole('button', { name: /Ruta/ })],
-    ] as const) {
-      await expect(locator).toBeVisible();
-      const box = await locator.boundingBox();
+    for (const mode of ['now-playing', 'auto'] as const) {
+      if (mode === 'auto') await page.getByRole('tab', { name: 'AUTO' }).click();
+      else await page.getByRole('tab', { name: 'Now Playing' }).click();
+
+      const pill = page.getByRole('tablist');
+      const close = page.getByRole('button', { name: 'Cerrar' });
+      const pillBox = await pill.boundingBox();
+      const closeBox = await close.boundingBox();
+      expect(pillBox).not.toBeNull();
+      expect(closeBox).not.toBeNull();
+      expect(pillBox!.x, `${mode} pill left at ${viewport.width}x${viewport.height}`).toBeGreaterThanOrEqual(0);
+      expect(pillBox!.x + pillBox!.width, `${mode} pill right at ${viewport.width}x${viewport.height}`)
+        .toBeLessThanOrEqual(viewport.width);
+      expect(Math.abs(pillBox!.x + pillBox!.width / 2 - viewport.width / 2), `${mode} pill centering`)
+        .toBeLessThanOrEqual(1);
+      expect(pillBox!.x + pillBox!.width, `${mode} pill must not overlap close`)
+        .toBeLessThanOrEqual(closeBox!.x);
+
+      if (mode === 'now-playing') {
+        const searchBox = await page.getByRole('button', { name: /Abrir búsqueda/ }).boundingBox();
+        expect(searchBox).not.toBeNull();
+        expect(searchBox!.x + searchBox!.width, 'pill must not overlap search').toBeLessThanOrEqual(pillBox!.x);
+      }
+
+      const workspace = page.locator(`[data-player-workspace="${mode}"]`);
+      await expect(workspace).toBeVisible();
+      const box = await workspace.boundingBox();
       expect(box).not.toBeNull();
-      expect(box!.x, `${name} left at ${viewport.width}x${viewport.height}`).toBeGreaterThanOrEqual(-1);
-      expect(box!.y, `${name} top at ${viewport.width}x${viewport.height}`).toBeGreaterThanOrEqual(-1);
-      expect(box!.x + box!.width, `${name} right at ${viewport.width}x${viewport.height}`)
+      expect(box!.x, `${mode} left at ${viewport.width}x${viewport.height}`).toBeGreaterThanOrEqual(-1);
+      expect(box!.y, `${mode} top at ${viewport.width}x${viewport.height}`).toBeGreaterThanOrEqual(-1);
+      expect(box!.x + box!.width, `${mode} right at ${viewport.width}x${viewport.height}`)
         .toBeLessThanOrEqual(viewport.width + 1);
-      expect(box!.y + box!.height, `${name} bottom at ${viewport.width}x${viewport.height}`)
+      expect(box!.y + box!.height, `${mode} bottom at ${viewport.width}x${viewport.height}`)
         .toBeLessThanOrEqual(viewport.height + 1);
     }
   }

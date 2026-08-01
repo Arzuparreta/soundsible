@@ -158,14 +158,21 @@
 }
 
 .floatingChrome {
+  --player-chrome-side: max(var(--player-chrome-size), var(--control-h));
+  --player-chrome-column-gap: clamp(8px, 1.2vw, 14px);
+
   position: absolute;
   z-index: 40;
   top: var(--player-chrome-top);
-  left: clamp(14px, 2.2vw, 34px);
-  right: clamp(14px, 2.2vw, 34px);
+  left: max(clamp(14px, 2.2vw, 34px), env(safe-area-inset-left, 0px));
+  right: max(clamp(14px, 2.2vw, 34px), env(safe-area-inset-right, 0px));
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns:
+    var(--player-chrome-side)
+    minmax(0, 1fr)
+    var(--player-chrome-side);
   align-items: center;
+  column-gap: var(--player-chrome-column-gap);
   pointer-events: none;
 }
 
@@ -209,6 +216,7 @@
 
 .modePill {
   grid-column: 2;
+  justify-self: center;
 }
 
 .closeButton {
@@ -232,7 +240,7 @@
 .modePill {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  width: clamp(244px, 23vw, 320px);
+  width: min(100%, clamp(244px, 23vw, 320px));
   min-height: 48px;
   padding: 4px;
   background: var(--stage-chrome);
@@ -246,11 +254,13 @@
 .modeOption {
   min-width: 0;
   padding: 0 16px;
+  overflow: hidden;
   color: var(--ink-secondary);
   font: inherit;
   font-size: var(--text-label);
   font-weight: var(--fw-semibold);
   white-space: nowrap;
+  text-overflow: ellipsis;
   background: transparent;
   border: 0;
   border-radius: var(--radius-full);
@@ -383,12 +393,15 @@
   }
 
   .floatingChrome {
-    left: 10px;
-    right: 10px;
+    --player-chrome-side: 42px;
+    --player-chrome-column-gap: 8px;
+
+    left: max(10px, env(safe-area-inset-left, 0px));
+    right: max(10px, env(safe-area-inset-right, 0px));
   }
 
   .modePill {
-    width: min(62vw, 284px);
+    width: min(100%, 62vw, 284px);
     min-height: 44px;
     padding: 3px;
   }
