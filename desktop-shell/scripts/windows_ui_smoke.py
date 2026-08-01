@@ -72,6 +72,13 @@ def control(window, title: str, control_type: str = "Button", timeout: float = 3
     return spec.wrapper_object()
 
 
+def invoke_or_click(item) -> None:
+    try:
+        item.invoke()
+    except Exception:
+        item.click_input()
+
+
 def dismiss_runner_first_boot(desktop) -> bool:
     """Dismiss the hosted runner's privacy OOBE if Explorer starts it."""
 
@@ -216,18 +223,17 @@ def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None
     control(window, "Choose folder").click_input()
     dialog = folder_dialog(reopen_picker_after_oobe)
     screenshot(artifact_path / "picker-cancel.png")
-    dialog.set_focus()
-    send_keys("{ESC}")
+    invoke_or_click(control(dialog, "Cancel", timeout=10))
     control(window, "Choose folder", timeout=10)
 
-    control(window, "Choose folder").click_input()
+    invoke_or_click(control(window, "Choose folder"))
     dialog = folder_dialog()
     dialog.set_focus()
     set_clipboard_text(str(music_path))
     send_keys("^l")
     send_keys("^v")
     send_keys("{ENTER}")
-    control(dialog, "Select Folder", timeout=10).click_input()
+    invoke_or_click(control(dialog, "Select Folder", timeout=10))
 
 
 def wait_for_engine_state(state_file: Path, timeout: float = 120.0) -> dict:
