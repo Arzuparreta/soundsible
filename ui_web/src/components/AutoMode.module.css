@@ -376,3 +376,56 @@
     transition: none;
   }
 }
+.liveBooth {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.liveBooth > header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 52px;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--stage-line);
+}
+
+.liveBooth > header button,
+.liveChatButton {
+  min-height: 32px;
+  padding: 0 var(--space-sm);
+  color: var(--ink-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-full);
+  font: inherit;
+  font-size: var(--text-micro);
+  font-weight: var(--fw-bold);
+}
+
+.liveBooth > header strong {
+  margin-left: auto;
+  color: var(--accent-ink);
+  font-size: var(--text-micro);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.liveChatButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-left: auto;
+  background: var(--stage-material);
+  border: 1px solid var(--stage-line);
+}
+
+.liveChatButton i {
+  width: 7px;
+  height: 7px;
+  background: var(--danger);
+  border-radius: 50%;
+}

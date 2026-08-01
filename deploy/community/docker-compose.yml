@@ -1,0 +1,34 @@
+services:
+  community-api:
+    build:
+      context: ../..
+      dockerfile: community_service/Dockerfile
+    restart: unless-stopped
+    environment:
+      COMMUNITY_DB_PATH: /data/community.db
+      COMMUNITY_PUBLIC_URL: ${COMMUNITY_PUBLIC_URL}
+      COMMUNITY_MEDIA_URL: ${COMMUNITY_MEDIA_URL}
+      COMMUNITY_SECRET_KEY: ${COMMUNITY_SECRET_KEY}
+      COMMUNITY_SOCKET_ASYNC_MODE: gevent
+      COMMUNITY_MAX_ACTIVE_SESSIONS: ${COMMUNITY_MAX_ACTIVE_SESSIONS:-5}
+      COMMUNITY_MAX_SESSION_LISTENERS: ${COMMUNITY_MAX_SESSION_LISTENERS:-100}
+      COMMUNITY_MAX_TOTAL_LISTENERS: ${COMMUNITY_MAX_TOTAL_LISTENERS:-250}
+    volumes:
+      - community-data:/data
+    ports:
+      - "127.0.0.1:18080:8080"
+
+  mediamtx:
+    image: bluenviron/mediamtx:1
+    restart: unless-stopped
+    depends_on:
+      - community-api
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    ports:
+      - "127.0.0.1:18889:8889"
+      - "8189:8189/udp"
+      - "8189:8189/tcp"
+
+volumes:
+  community-data:

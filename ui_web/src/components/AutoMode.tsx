@@ -32,6 +32,8 @@ import { PlayerLayoutControl } from './PlayerLayoutControl';
 import { PlayerStage } from './PlayerStage';
 import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
 import { PlayerWorkspace } from './PlayerWorkspace';
+import { LiveRoomPanel } from './LiveRoomPanel';
+import { hostSession } from '../lib/community';
 import styles from './AutoMode.module.css';
 
 const IDLE_MS = 12_000;
@@ -123,7 +125,7 @@ export function AutoMode(props: {
   const [layout, setLayout] = createSignal(readLayout());
   const [resting, setResting] = createSignal(false);
   const [profileOpen, setProfileOpen] = createSignal(false);
-  const [boothView, setBoothView] = createSignal<'controls' | 'request'>('controls');
+  const [boothView, setBoothView] = createSignal<'controls' | 'request' | 'chat'>('controls');
   const [prompt, setPrompt] = createSignal('');
   const [activityVisible, setActivityVisible] = createSignal(Boolean(state.autoMode.activity));
   let idleTimer: number | undefined;
@@ -334,12 +336,28 @@ export function AutoMode(props: {
       <Show
         when={boothView() === 'controls'}
         fallback={
-          <NowPlayingBrowser
-            purpose="auto-request"
-            dragHandle={boothProps.dragHandle}
-            onClose={() => setBoothView('controls')}
-            onRequested={() => setBoothView('controls')}
-          />
+          <Show
+            when={boothView() === 'chat'}
+            fallback={
+              <NowPlayingBrowser
+                purpose="auto-request"
+                dragHandle={boothProps.dragHandle}
+                onClose={() => setBoothView('controls')}
+                onRequested={() => setBoothView('controls')}
+              />
+            }
+          >
+            <div class={styles.liveBooth}>
+              <header>
+                {boothProps.dragHandle}
+                <button type="button" onClick={() => setBoothView('controls')}>
+                  {t('autoMode.mobile.booth')}
+                </button>
+                <strong>{t('live.chat')}</strong>
+              </header>
+              <LiveRoomPanel compact />
+            </div>
+          </Show>
         }
       >
         <header class={styles.boothHeader}>
@@ -348,6 +366,12 @@ export function AutoMode(props: {
             <small>{t('autoMode.label')}</small>
             <strong>{t('autoMode.mobile.booth')}</strong>
           </span>
+          <Show when={hostSession()}>
+            <button class={styles.liveChatButton} type="button" onClick={() => setBoothView('chat')}>
+              <i />
+              {t('live.chat')}
+            </button>
+          </Show>
         </header>
 
         <Show when={current() && !isPodcastTrack(current()!)} fallback={

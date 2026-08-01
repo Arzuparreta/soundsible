@@ -1,0 +1,35 @@
+logLevel: info
+readTimeout: 10s
+writeTimeout: 10s
+writeQueueSize: 1024
+
+rtsp: false
+rtmp: false
+hls: false
+srt: false
+playback: false
+api: false
+metrics: true
+metricsAddress: 127.0.0.1:9998
+
+authMethod: http
+authHTTPAddress: http://community-api:8080/internal/media-auth
+authHTTPExclude:
+  - action: metrics
+
+webrtc: true
+webrtcAddress: :8889
+webrtcAllowOrigins: ["*"]
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcAdditionalHosts:
+  - 84.247.161.82
+  - live.84-247-161-82.sslip.io
+
+pathDefaults:
+  source: publisher
+  maxReaders: 100
+  overridePublisher: false
+
+paths:
+  all_others:

@@ -20,8 +20,8 @@ describe('desktop sidebar', () => {
     const groups = view.container.querySelectorAll('nav');
 
     expect(within(groups[0] as HTMLElement).getAllByRole('link').map((link) => link.textContent?.trim()))
-      .toEqual(['Biblioteca', 'Buscar', 'Listas', 'Podcasts', 'Ajustes']);
+      .toEqual(['Biblioteca', 'Buscar', 'Live', 'Listas', 'Ajustes']);
     expect(within(groups[1] as HTMLElement).getAllByRole('link').map((link) => link.textContent?.trim()))
-      .toEqual(['Favoritos', 'Descargas']);
+      .toEqual(['Podcasts', 'Favoritos', 'Descargas']);
   });
 });

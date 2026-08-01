@@ -34,8 +34,8 @@ describe('mobile tab bar', () => {
     expect(screen.getAllByRole('link').map((link) => link.textContent?.trim())).toEqual([
       'Biblioteca',
       'Buscar',
+      'Live',
       'Listas',
-      'Podcasts',
       'Ajustes',
     ]);
   });

@@ -7,6 +7,7 @@ import { PlayerSurface } from './components/PlayerSurface';
 import { ResumeBanner } from './components/ResumeBanner';
 import { ContextMenuOutlet } from './lib/contextMenu';
 import { ScrollHistoryManager } from './lib/scrollHistory';
+import { CommunityBridge } from './components/CommunityBridge';
 import styles from './app.module.css';
 
 /**
@@ -18,6 +19,7 @@ export default function Shell(props: RouteSectionProps) {
   return (
     <div class={styles.app}>
       <ScrollHistoryManager />
+      <CommunityBridge />
       <Sidebar />
       <main class={styles.content}>{props.children}</main>
       <div class={styles.dock}>

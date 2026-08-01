@@ -39,11 +39,17 @@ interface DeckEffects {
   echoFeedback?: GainNode;
 }
 let deckEffects: DeckEffects[] | null = null;
+/** Unity-gain program bus. Local volume is deliberately downstream. */
 let masterGain: GainNode | null = null;
+/** Device-only monitor gain: volume and mute never alter the broadcast bus. */
+let monitorGain: GainNode | null = null;
 let masterVolume = storedVolume();
 let allMuted = false;
 /** Peak limiter on the master bus, transparent until a blend needs it. */
 let limiter: DynamicsCompressorNode | null = null;
+/** The post-limiter node shared by the local monitor and an optional live tap. */
+let programOutput: AudioNode | null = null;
+let broadcastDestination: MediaStreamAudioDestinationNode | null = null;
 /** Master-bus tap used to tell "quiet music" from "no output at all". */
 let analyser: AnalyserNode | null = null;
 
@@ -147,13 +153,17 @@ export function isActiveDeck(target: EventTarget | null): boolean {
 
 function applyDeckVolume(): void {
   if (!elements) return;
-  if (masterGain && audioContext) {
-    masterGain.gain.value = masterVolume;
-    for (const deck of elements) deck.volume = 1;
+  if (monitorGain && audioContext) {
+    monitorGain.gain.value = allMuted ? 0 : masterVolume;
+    for (const deck of elements) {
+      deck.volume = 1;
+      deck.muted = false;
+    }
     return;
   }
   elements.forEach((deck, index) => {
     deck.volume = Math.min(1, Math.max(0, mixGains[index] * masterVolume));
+    deck.muted = allMuted;
   });
 }
 
@@ -214,6 +224,9 @@ export function unlockAudio(): boolean {
     void context.resume?.().catch(() => {});
     primeAudioSession(context);
     const master = context.createGain();
+    master.gain.value = 1;
+    const monitor = context.createGain();
+    monitor.gain.value = allMuted ? 0 : masterVolume;
     // Reach the speakers before anything is routed in: a graph that throws
     // halfway would otherwise leave a deck connected to nothing audible.
     if (typeof context.createDynamicsCompressor === 'function') {
@@ -226,18 +239,21 @@ export function unlockAudio(): boolean {
       peak.ratio.value = 6;
       peak.attack.value = 0.003;
       peak.release.value = 0.18;
-      master.connect(peak).connect(context.destination);
+      master.connect(peak);
+      peak.connect(monitor);
       limiter = peak;
+      programOutput = peak;
     } else {
-      master.connect(context.destination);
+      master.connect(monitor);
+      programOutput = master;
     }
+    monitor.connect(context.destination);
     if (typeof context.createAnalyser === 'function') {
       const tap = context.createAnalyser();
       tap.fftSize = 256;
-      master.connect(tap);
+      programOutput.connect(tap);
       analyser = tap;
     }
-    master.gain.value = masterVolume;
     const effects: DeckEffects[] = [];
     const gains = list.map((deck, index) => {
       const gain = context.createGain();
@@ -266,6 +282,7 @@ export function unlockAudio(): boolean {
     deckGains = gains;
     deckEffects = effects;
     masterGain = master;
+    monitorGain = monitor;
     graphState = 'ready';
     bindAudibilityTriggers();
     watchContextState(context);
@@ -308,7 +325,7 @@ function unlockDecks(): void {
     deck.muted = true;
     deck.src = SILENT_WAV;
     const release = () => {
-      deck.muted = allMuted;
+      deck.muted = graphState === 'ready' ? false : allMuted;
       if (deck.src !== SILENT_WAV) return; // a real track claimed this deck
       deck.pause();
       deck.removeAttribute('src');
@@ -466,7 +483,10 @@ function discardGraph(): void {
   deckGains = null;
   deckEffects = null;
   masterGain = null;
+  monitorGain = null;
   limiter = null;
+  programOutput = null;
+  broadcastDestination = null;
   analyser = null;
   silenceProbe = null;
   if (context && typeof context.close === 'function') void context.close().catch(() => {});
@@ -539,7 +559,72 @@ function abandonGraph(reason: GraphFailure['reason']): void {
 
 /** Whether the decks are routed through a graph that is believed to be sounding. */
 export function graphReady(): boolean {
-  return graphState === 'ready' && Boolean(audioContext && deckGains && masterGain);
+  return graphState === 'ready' && Boolean(audioContext && deckGains && masterGain && monitorGain);
+}
+
+/** Lazily expose the post-limiter Soundsible program as a WebRTC-ready stream. */
+export function broadcastStream(): MediaStream | null {
+  if (!graphReady() || !audioContext || !programOutput) return null;
+  if (!broadcastDestination) {
+    if (typeof audioContext.createMediaStreamDestination !== 'function') return null;
+    broadcastDestination = audioContext.createMediaStreamDestination();
+    programOutput.connect(broadcastDestination);
+    const track = broadcastDestination.stream.getAudioTracks()[0];
+    if (track && 'contentHint' in track) track.contentHint = 'music';
+  }
+  return broadcastDestination.stream;
+}
+
+/** Release the live tap without disturbing the local monitor graph. */
+export function releaseBroadcastStream(): void {
+  if (!broadcastDestination) return;
+  try {
+    programOutput?.disconnect(broadcastDestination);
+  } catch {
+    /* already disconnected by a context failure */
+  }
+  for (const track of broadcastDestination.stream.getTracks()) track.stop();
+  broadcastDestination = null;
+}
+
+export interface ProgramMixSnapshot {
+  contextTime: number;
+  activeIndex: number;
+  phase: MixPhase;
+  technique?: LiveTransitionPlan['technique'];
+  progress: number;
+  dominant: boolean;
+  decks: Array<{ index: number; position: number; duration: number; gain: number }>;
+}
+
+/** Read-only sample of the exact graph state used for live metadata. */
+export function programMixSnapshot(): ProgramMixSnapshot {
+  const list = decks();
+  let progress = 0;
+  if (mix?.mixStart != null) {
+    const incoming = list[mix.toIndex];
+    progress = Math.min(1, Math.max(0, (incoming.currentTime - mix.mixStart) / Math.max(0.001, mix.overlap * mix.rate)));
+  }
+  const liveGains = mix?.phase === 'crossfading'
+    ? [
+        mix.fromIndex === 0 ? Math.cos(progress * Math.PI * 0.5) : Math.sin(progress * Math.PI * 0.5),
+        mix.fromIndex === 1 ? Math.cos(progress * Math.PI * 0.5) : Math.sin(progress * Math.PI * 0.5),
+      ]
+    : mixGains;
+  return {
+    contextTime: audioContext?.currentTime ?? 0,
+    activeIndex,
+    phase: mix?.phase ?? 'idle',
+    technique: mix?.technique,
+    progress,
+    dominant: mix?.dominant ?? false,
+    decks: list.map((deck, index) => ({
+      index,
+      position: Number.isFinite(deck.currentTime) ? deck.currentTime : 0,
+      duration: Number.isFinite(deck.duration) ? deck.duration : 0,
+      gain: liveGains[index],
+    })),
+  };
 }
 
 /**
@@ -1087,7 +1172,7 @@ export const audioService = {
   setVolume(v: number): void {
     const clamped = Math.min(1, Math.max(0, v));
     masterVolume = clamped;
-    if (masterGain) masterGain.gain.value = clamped;
+    if (monitorGain) monitorGain.gain.value = allMuted ? 0 : clamped;
     else applyDeckVolume();
     try {
       localStorage.setItem(VOLUME_KEY, String(clamped));
@@ -1100,10 +1185,13 @@ export const audioService = {
   },
   setMuted(muted: boolean): void {
     allMuted = muted;
-    for (const deck of decks()) deck.muted = muted;
+    applyDeckVolume();
   },
   unlockAudio,
   graphReady,
+  broadcastStream,
+  releaseBroadcastStream,
+  programMixSnapshot,
 
   /**
    * Cue the next track on the idle deck without playing it.
@@ -1123,7 +1211,7 @@ export const audioService = {
     if (stagedUrl === url && (idle.getAttribute('src') !== null || idle.currentSrc)) return;
     stagedUrl = url;
     setDeckGain(index, 0);
-    idle.muted = allMuted;
+    idle.muted = graphReady() ? false : allMuted;
     idle.playbackRate = 1;
     idle.src = url;
     idle.load();
@@ -1231,7 +1319,7 @@ export const audioService = {
     setDeckGain(toIndex, 0);
     resetDeckEffects(toIndex);
     resetDeckEffects(fromIndex);
-    to.muted = allMuted;
+    to.muted = graphReady() ? false : allMuted;
     to.src = url;
     to.load();
     to.playbackRate = rate;

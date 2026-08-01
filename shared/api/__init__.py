@@ -1445,6 +1445,7 @@ from shared.api.routes.migration import migration_bp
 from shared.api.routes.car import car_bp
 from shared.api.routes.auth import auth_bp
 from shared.api.routes.lossless import lossless_bp
+from shared.api.routes.community import community_bp
 app.register_blueprint(library_bp)
 app.register_blueprint(playback_bp)
 app.register_blueprint(downloader_bp)
@@ -1459,6 +1460,7 @@ app.register_blueprint(migration_bp)
 app.register_blueprint(car_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(lossless_bp)
+app.register_blueprint(community_bp)
 
 
 @app.route('/api/health')

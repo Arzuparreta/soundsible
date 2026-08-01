@@ -204,6 +204,12 @@ export default function Library() {
                 <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z" />
               </svg>
             </A>
+            <A class={styles.headerAction} href="/podcasts" aria-label={t('nav.podcasts')} data-pressable>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="11" r="1" />
+                <path d="M17.7 17.7A8 8 0 1012 20v-5M15.5 14.5a5 5 0 10-7 0" />
+              </svg>
+            </A>
             <A class={styles.headerAction} href="/downloads" aria-label={t('library.downloads')} data-pressable>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" />

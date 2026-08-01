@@ -25,6 +25,7 @@ const Migrate = lazy(() => import('./routes/Migrate'));
 const Artist = lazy(() => import('./routes/Artist'));
 const Album = lazy(() => import('./routes/Album'));
 const Users = lazy(() => import('./routes/Users'));
+const Live = lazy(() => import('./routes/Live'));
 const DesignPreview = lazy(() => import('./pages/DesignPreview'));
 const Placeholder = lazy(() =>
   import('./routes/Placeholder').then((m) => ({ default: m.Placeholder })),
@@ -111,6 +112,7 @@ function Player() {
       <Route path="/playlists/:name" component={PlaylistDetail} />
       <Route path="/podcasts" component={Podcasts} />
       <Route path="/podcasts/:id" component={PodcastShow} />
+      <Route path="/live" component={Live} />
       <Route path="/downloads" component={Downloads} />
       <Route path="/import" component={Migrate} />
       <Route path="/artist/:name" component={Artist} />

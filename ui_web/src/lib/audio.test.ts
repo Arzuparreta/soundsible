@@ -18,6 +18,7 @@ class FakeAudioNode {
   connect<T>(target: T): T {
     return target;
   }
+  disconnect = vi.fn();
 }
 
 class FakeGainNode extends FakeAudioNode {
@@ -48,16 +49,30 @@ class FakeAudioContext {
   state = 'running';
   destination = new FakeAudioNode();
   analyser = new FakeAnalyserNode();
+  gains: FakeGainNode[] = [];
+  broadcastTrack = { contentHint: '', stop: vi.fn() };
   resume = vi.fn(async () => { this.state = 'running'; });
   suspend = vi.fn(async () => { this.state = 'suspended'; });
   close = vi.fn(async () => { this.state = 'closed'; });
   addEventListener = vi.fn();
-  createGain = () => new FakeGainNode();
+  createGain = () => {
+    const gain = new FakeGainNode();
+    this.gains.push(gain);
+    return gain;
+  };
   createMediaElementSource = () => new FakeAudioNode();
   createAnalyser = () => this.analyser;
   sampleRate = 44100;
   createBuffer = () => ({});
   createBufferSource = () => ({ buffer: null, connect: () => {}, start: () => {} });
+  createMediaStreamDestination = () => ({
+    connect: <T>(target: T) => target,
+    disconnect: vi.fn(),
+    stream: {
+      getAudioTracks: () => [this.broadcastTrack],
+      getTracks: () => [this.broadcastTrack],
+    },
+  });
 }
 
 /** A context whose clock never moves: `running` in name only, which is how an
@@ -176,6 +191,29 @@ afterEach(() => {
 });
 
 describe('two-deck mixer', () => {
+  it('keeps local mute and volume downstream from the live program tap', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+
+    expect(module.audioService.unlockAudio()).toBe(true);
+    const stream = module.audioService.broadcastStream();
+    expect(stream).not.toBeNull();
+    const context = contexts[0];
+
+    module.audioService.setVolume(0.35);
+    expect(context.gains[0].gain.value).toBe(1);
+    expect(context.gains[1].gain.value).toBe(0.35);
+    module.audioService.setMuted(true);
+    expect(context.gains[1].gain.value).toBe(0);
+    expect(created.every((deck) => !deck.muted)).toBe(true);
+    expect(context.broadcastTrack.stop).not.toHaveBeenCalled();
+
+    module.audioService.releaseBroadcastStream();
+    expect(context.broadcastTrack.stop).toHaveBeenCalledOnce();
+    module.audioService.setMuted(false);
+    module.audioService.setVolume(1);
+  });
+
   it('hands playback over at the cue without reloading the incoming deck', async () => {
     const { audioEl, audioService, outgoing, incoming, handlers } = await armed();
 

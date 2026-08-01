@@ -37,7 +37,7 @@ export function PlayerWorkspace<PanelId extends string>(props: {
   defaults: Record<PanelId, number>;
   panelLabel: (panel: PanelId) => string;
   ariaLabel: string;
-  dataScope: 'now-playing' | 'auto';
+  dataScope: 'now-playing' | 'auto' | 'live';
   renderPanel: (panel: PanelId, dragHandle: JSX.Element) => JSX.Element;
   layoutControl?: JSX.Element;
   soloPanel?: PanelId | null;

@@ -1,0 +1,357 @@
+.page {
+  min-height: 100%;
+  color: var(--ink-primary);
+}
+
+.goLive,
+.endLive,
+.directoryHead button,
+.roomTop button,
+.hostCard form button {
+  min-height: var(--control-h);
+  padding: 0 var(--space-lg);
+  color: var(--ink-on-accent);
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-full);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--fw-bold);
+}
+
+.goLive:disabled {
+  opacity: .45;
+}
+
+.endLive {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg-raised));
+  border: 1px solid color-mix(in srgb, var(--danger) 38%, var(--hairline));
+}
+
+.banner {
+  margin: 0 var(--gutter) var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-raised));
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--hairline));
+  border-radius: var(--radius-md);
+}
+
+.hostCard {
+  display: grid;
+  grid-template-columns: minmax(220px, .8fr) minmax(300px, 1.2fr);
+  min-height: 360px;
+  margin: 0 var(--gutter) var(--space-xl);
+  overflow: hidden;
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+}
+
+.hostCard > div:first-child {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+  padding: var(--space-2xl);
+  background:
+    radial-gradient(circle at 20% 10%, var(--accent-soft), transparent 55%),
+    var(--bg-inset);
+}
+
+.hostCard h2 {
+  margin: var(--space-sm) 0;
+  font-size: var(--text-h2);
+}
+
+.hostCard p {
+  color: var(--ink-secondary);
+}
+
+.hostCard form {
+  display: flex;
+  gap: var(--space-sm);
+  width: 100%;
+}
+
+.hostCard form input {
+  min-width: 0;
+  flex: 1;
+  padding: 0 var(--space-md);
+  color: var(--ink-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+}
+
+.onAir {
+  color: var(--accent-ink);
+  font-size: var(--text-micro);
+  font-weight: var(--fw-bold);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.directory {
+  padding: 0 var(--gutter) var(--space-2xl);
+}
+
+.directoryHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-lg);
+}
+
+.directoryHead h2 {
+  margin: 0;
+  font-size: var(--text-h2);
+}
+
+.directoryHead button,
+.roomTop button {
+  color: var(--ink-secondary);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: var(--space-lg);
+}
+
+.card {
+  display: grid;
+  gap: var(--space-md);
+  min-width: 0;
+  padding: var(--space-lg);
+  color: inherit;
+  text-align: left;
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+}
+
+.cardHead {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.cardHead > span:nth-child(2),
+.deck > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.cardHead strong,
+.cardHead small,
+.deck strong,
+.deck small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardHead small,
+.deck small,
+.card footer,
+.waiting {
+  color: var(--ink-tertiary);
+  font-size: var(--text-caption);
+}
+
+.avatar,
+.deckArt {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  overflow: hidden;
+  color: var(--ink-on-accent);
+  background: var(--accent);
+  border-radius: var(--radius-md);
+  font-weight: var(--fw-bold);
+}
+
+.deckArt img,
+.heroArt img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.status {
+  padding: 5px 8px;
+  color: var(--ink-tertiary);
+  background: var(--bg-inset);
+  border-radius: var(--radius-full);
+  font-size: var(--text-micro);
+}
+
+.status[data-status='live'] {
+  color: var(--success);
+}
+
+.status[data-status='reconnecting'] {
+  color: var(--warning);
+}
+
+.deck {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.deck[data-secondary] {
+  opacity: .72;
+}
+
+.transitionBar,
+.blend > div {
+  height: 3px;
+  overflow: hidden;
+  background: var(--hairline);
+  border-radius: var(--radius-full);
+}
+
+.transitionBar span,
+.blend > div span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.empty {
+  padding: var(--space-3xl);
+  color: var(--ink-tertiary);
+  text-align: center;
+  background: var(--bg-raised);
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-lg);
+}
+
+.room {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(300px, .6fr);
+  min-height: calc(var(--app-viewport-height, 100vh) - var(--omni-h, 0px));
+  background: var(--bg-inset);
+}
+
+.roomStage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  flex-direction: column;
+  padding: var(--space-2xl);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 35%, var(--accent-soft), transparent 44%),
+    var(--bg-base);
+}
+
+.roomTop {
+  position: absolute;
+  top: var(--space-lg);
+  left: var(--space-lg);
+  right: var(--space-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--ink-secondary);
+}
+
+.heroArt {
+  display: grid;
+  place-items: center;
+  width: min(48vh, 58vw, 460px);
+  aspect-ratio: 1;
+  overflow: hidden;
+  color: var(--accent);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: clamp(24px, 4vw, 52px);
+  box-shadow: var(--shadow-3);
+  font-size: 5rem;
+}
+
+.now {
+  max-width: 680px;
+  margin-top: var(--space-xl);
+  text-align: center;
+}
+
+.now span {
+  color: var(--accent-ink);
+  font-size: var(--text-micro);
+  font-weight: var(--fw-bold);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.now h2 {
+  margin: var(--space-sm) 0 var(--space-xs);
+  font-size: clamp(var(--text-h2), 4vw, var(--text-display));
+}
+
+.now p,
+.blend {
+  margin: 0;
+  color: var(--ink-secondary);
+}
+
+.blend {
+  display: grid;
+  width: min(440px, 80%);
+  gap: var(--space-xs);
+  margin-top: var(--space-lg);
+  text-align: center;
+}
+
+.listen {
+  min-height: var(--control-h);
+  margin-top: var(--space-xl);
+  padding: 0 var(--space-xl);
+  color: var(--ink-on-accent);
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-full);
+  font: inherit;
+  font-weight: var(--fw-bold);
+}
+
+.error {
+  color: var(--danger);
+}
+
+@media (max-width: 1023px) {
+  .hostCard,
+  .room {
+    grid-template-columns: 1fr;
+  }
+
+  .hostCard {
+    min-height: 620px;
+  }
+
+  .roomStage {
+    min-height: min(70vh, 680px);
+    padding: 72px var(--gutter) var(--space-xl);
+  }
+
+  .room > :last-child {
+    min-height: 420px;
+  }
+
+  .heroArt {
+    width: min(58vh, 72vw, 380px);
+  }
+}

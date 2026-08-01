@@ -1,0 +1,122 @@
+.panel {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  color: var(--ink-primary);
+  background: var(--stage-panel, var(--bg-raised));
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-height: 68px;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.header div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.header small {
+  color: var(--accent-ink);
+  font-size: var(--text-micro);
+  font-weight: var(--fw-bold);
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+.header strong {
+  overflow: hidden;
+  font-size: var(--text-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header > span {
+  flex: none;
+  color: var(--ink-tertiary);
+  font-size: var(--text-caption);
+}
+
+.messages {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+  overflow-y: auto;
+}
+
+.empty {
+  margin: auto;
+  max-width: 26ch;
+  color: var(--ink-tertiary);
+  font-size: var(--text-caption);
+  line-height: var(--lh-normal);
+  text-align: center;
+}
+
+.message {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  font-size: var(--text-caption);
+  line-height: var(--lh-normal);
+  overflow-wrap: anywhere;
+}
+
+.message strong {
+  font-size: var(--text-micro);
+}
+
+.message span {
+  color: var(--ink-secondary);
+}
+
+.form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border-top: 1px solid var(--hairline);
+}
+
+.form input {
+  min-width: 0;
+  height: var(--control-h);
+  padding: 0 var(--space-md);
+  color: var(--ink-primary);
+  background: var(--bg-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  outline: 0;
+}
+
+.form input:focus {
+  border-color: var(--accent);
+}
+
+.form button {
+  min-height: var(--control-h);
+  padding: 0 var(--space-lg);
+  color: var(--ink-on-accent);
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-full);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--fw-bold);
+}
+
+.form button:disabled {
+  opacity: .45;
+}

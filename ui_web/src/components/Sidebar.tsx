@@ -8,6 +8,16 @@ import styles from './Sidebar.module.css';
 /** Secondary library shortcuts shared by the desktop rail only. */
 const shortcuts: PrimaryNavItem[] = [
   {
+    href: '/podcasts',
+    label: () => t('nav.podcasts'),
+    icon: () => (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="11" r="1" />
+        <path d="M17.7 17.7A8 8 0 1012 20v-5M15.5 14.5a5 5 0 10-7 0" />
+      </svg>
+    ),
+  },
+  {
     href: '/favourites',
     label: () => t('nav.favourites'),
     icon: () => (

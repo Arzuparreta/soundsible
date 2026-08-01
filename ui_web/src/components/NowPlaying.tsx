@@ -21,6 +21,8 @@ import {
   type PlayerTrackListSection,
 } from './PlayerTrackList';
 import { PlayerWorkspace } from './PlayerWorkspace';
+import { LiveRoomPanel } from './LiveRoomPanel';
+import { hostSession } from '../lib/community';
 import styles from './NowPlaying.module.css';
 
 export type NowPlayingMobilePanel = NowPlayingPanelId;
@@ -37,6 +39,7 @@ export function NowPlaying(props: {
   );
   const [contextExpanded, setContextExpanded] = createSignal(false);
   const [generatedExpanded, setGeneratedExpanded] = createSignal(false);
+  const [browserView, setBrowserView] = createSignal<'browser' | 'chat'>('browser');
   let desktopQueueEl: HTMLDivElement | undefined;
   let dragFrom: number | null = null;
 
@@ -228,11 +231,33 @@ export function NowPlaying(props: {
               />
             );
           }
+          if (hostSession() && browserView() === 'chat') {
+            return (
+              <section class={styles.liveBrowser}>
+                <header>
+                  {dragHandle}
+                  <button type="button" onClick={() => setBrowserView('browser')}>
+                    {t('nowPlaying.panel.browser')}
+                  </button>
+                  <strong>{t('live.chat')}</strong>
+                </header>
+                <LiveRoomPanel compact />
+              </section>
+            );
+          }
           return (
-            <NowPlayingBrowser
-              onClose={() => props.onMobilePanelChange('stage')}
-              dragHandle={dragHandle}
-            />
+            <div class={styles.browserWithLive}>
+              <Show when={hostSession()}>
+                <button class={styles.openLiveChat} type="button" onClick={() => setBrowserView('chat')}>
+                  <span />
+                  {t('live.chat')}
+                </button>
+              </Show>
+              <NowPlayingBrowser
+                onClose={() => props.onMobilePanelChange('stage')}
+                dragHandle={dragHandle}
+              />
+            </div>
           );
         }}
       />

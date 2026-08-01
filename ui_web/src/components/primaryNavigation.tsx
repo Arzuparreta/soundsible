@@ -32,21 +32,21 @@ export const primaryNavigation: PrimaryNavItem[] = [
     ),
   },
   {
+    href: '/live',
+    label: () => t('nav.live'),
+    icon: () => (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M8.5 8.5a5 5 0 017 7M5.7 5.7a9 9 0 0112.6 12.6" />
+        <circle cx="12" cy="12" r="2" />
+      </svg>
+    ),
+  },
+  {
     href: '/playlists',
     label: () => t('nav.playlists'),
     icon: () => (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M9 6h11M9 12h11M9 18h7M5 6v.01M5 12v.01M5 18v.01" />
-      </svg>
-    ),
-  },
-  {
-    href: '/podcasts',
-    label: () => t('nav.podcasts'),
-    icon: () => (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="12" cy="11" r="1" />
-        <path d="M17.7 17.7A8 8 0 1012 20v-5M15.5 14.5a5 5 0 10-7 0" />
       </svg>
     ),
   },
