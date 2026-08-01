@@ -145,11 +145,11 @@ async function swipeSurfaceDown(page: Page, targetSelector: string) {
 }
 
 test.beforeEach(async ({ page }) => {
-  test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   await mockEngine(page);
 });
 
 test('Now Playing keeps the visible card interactive after both lateral round trips', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   await openNowPlaying(page);
   const carousel = page.locator('[data-now-playing-carousel]');
   const stage = page.locator('[data-now-playing-tile="stage"]');
@@ -199,9 +199,17 @@ test('Now Playing keeps the visible card interactive after both lateral round tr
 });
 
 test('Auto reuses the compact workspace, pager and touch lifecycle', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   await openNowPlaying(page);
   const nowPlayingStage = await page.locator('[data-now-playing-tile="stage"]').boundingBox();
   expect(nowPlayingStage).not.toBeNull();
+  const nowPlayingCover = await page.locator('[data-now-playing-cover-slot]').boundingBox();
+  const nowPlayingTransport = await page.locator('[data-player-stage-mode="now-playing"]')
+    .getByRole('button', { name: /Reintentar|Pausa|Reproducir/ })
+    .first()
+    .boundingBox();
+  expect(nowPlayingCover).not.toBeNull();
+  expect(nowPlayingTransport).not.toBeNull();
 
   await page.getByRole('tab', { name: 'AUTO' }).click();
   const surface = page.locator('[data-player-stage]');
@@ -214,6 +222,17 @@ test('Auto reuses the compact workspace, pager and touch lifecycle', async ({ pa
   expect(Math.abs(autoStageBox!.y - nowPlayingStage!.y)).toBeLessThanOrEqual(1);
   expect(Math.abs(autoStageBox!.width - nowPlayingStage!.width)).toBeLessThanOrEqual(1);
   expect(Math.abs(autoStageBox!.height - nowPlayingStage!.height)).toBeLessThanOrEqual(1);
+  const autoCover = await page.locator('[data-auto-cover-slot]').boundingBox();
+  const autoTransport = await page.locator('[data-player-stage-mode="auto"]')
+    .getByRole('button', { name: /Reintentar|Pausa|Reproducir/ })
+    .first()
+    .boundingBox();
+  expect(autoCover).not.toBeNull();
+  expect(autoTransport).not.toBeNull();
+  expect(Math.abs(autoCover!.x - nowPlayingCover!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(autoCover!.y - nowPlayingCover!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(autoTransport!.x - nowPlayingTransport!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(autoTransport!.y - nowPlayingTransport!.y)).toBeLessThanOrEqual(1);
 
   const containment = await surface.evaluate((element) => ({
     scrollLeft: element.scrollLeft,
@@ -256,6 +275,7 @@ test('Auto reuses the compact workspace, pager and touch lifecycle', async ({ pa
 });
 
 test('the shared mode pill and Auto workspace stay contained in compact viewports', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   test.setTimeout(60_000);
   const viewports = [
     { width: 320, height: 568 },
@@ -310,5 +330,84 @@ test('the shared mode pill and Auto workspace stay contained in compact viewport
       expect(box!.y + box!.height, `${mode} bottom at ${viewport.width}x${viewport.height}`)
         .toBeLessThanOrEqual(viewport.height + 1);
     }
+  }
+});
+
+test('Now Playing and Auto share centered desktop Stage geometry through scale reflows', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 1024) <= 1023, 'desktop player regression');
+  await page.addInitScript(() => {
+    localStorage.setItem('soundsible:interface-size', 'large');
+  });
+  await page.setViewportSize({ width: 1138, height: 640 });
+  await openNowPlaying(page);
+  await expect(page.locator('html')).toHaveAttribute('data-interface-size', 'large');
+
+  const geometry = async (mode: 'now-playing' | 'auto') =>
+    page.locator(`[data-player-stage-mode="${mode}"]`).evaluate((stage) => {
+      const box = (element: Element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+          bottom: rect.bottom,
+          centerX: rect.x + rect.width / 2,
+          centerY: rect.y + rect.height / 2,
+        };
+      };
+      const transport = [...stage.querySelectorAll('button')]
+        .find((button) => Math.round(button.getBoundingClientRect().width) === 64);
+      const tile = stage.closest('[data-player-tile]');
+      const cover = stage.querySelector('[data-player-cover-slot]');
+      const coverArt = cover?.firstElementChild;
+      if (!tile || !cover || !coverArt || !transport) throw new Error(`Incomplete ${mode} Stage`);
+      return {
+        body: box(stage),
+        tile: box(tile),
+        cover: box(cover),
+        coverArt: box(coverArt),
+        transport: box(transport),
+        emptyPresentationElements:
+          stage.querySelectorAll(':scope > div[aria-hidden="true"]:empty').length,
+      };
+    });
+
+  for (const configuration of [
+    { viewport: { width: 1366, height: 768 }, interfaceSize: 'normal' },
+    { viewport: { width: 1138, height: 640 }, interfaceSize: 'large' },
+    { viewport: { width: 1600, height: 900 }, interfaceSize: 'large' },
+  ]) {
+    const { viewport, interfaceSize } = configuration;
+    await page.setViewportSize(viewport);
+    await page.evaluate((size) => {
+      document.documentElement.dataset.interfaceSize = size;
+      localStorage.setItem('soundsible:interface-size', size);
+    }, interfaceSize);
+    await expect(page.locator('html')).toHaveAttribute('data-interface-size', interfaceSize);
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
+
+    await page.getByRole('tab', { name: 'Now Playing' }).click();
+    const nowPlaying = await geometry('now-playing');
+    await page.getByRole('tab', { name: 'AUTO' }).click();
+    await expect(page.locator('[data-player-stage-mode="auto"]')).toBeVisible();
+    const auto = await geometry('auto');
+
+    expect(nowPlaying.emptyPresentationElements, `${viewport.width}x${viewport.height} separator`).toBe(0);
+    expect(auto.emptyPresentationElements, `${viewport.width}x${viewport.height} Auto separator`).toBe(0);
+    expect(nowPlaying.body.bottom).toBeLessThanOrEqual(nowPlaying.tile.bottom + 1);
+    expect(auto.body.bottom).toBeLessThanOrEqual(auto.tile.bottom + 1);
+    expect(Math.abs(nowPlaying.body.centerX - viewport.width / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(auto.body.centerX - viewport.width / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(nowPlaying.cover.width - nowPlaying.cover.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(auto.cover.width - auto.cover.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(auto.cover.centerX - nowPlaying.cover.centerX)).toBeLessThanOrEqual(1);
+    expect(Math.abs(auto.cover.centerY - nowPlaying.cover.centerY)).toBeLessThanOrEqual(1);
+    expect(Math.abs(auto.coverArt.width - nowPlaying.coverArt.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(auto.coverArt.height - nowPlaying.coverArt.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(auto.transport.centerX - nowPlaying.transport.centerX)).toBeLessThanOrEqual(1);
+    expect(Math.abs(auto.transport.centerY - nowPlaying.transport.centerY)).toBeLessThanOrEqual(1);
   }
 });

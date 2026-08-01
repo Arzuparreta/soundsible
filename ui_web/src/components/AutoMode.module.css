@@ -8,15 +8,6 @@
 
 .tile {
   background: color-mix(in srgb, var(--stage-panel) 72%, var(--bg-base));
-  animation: auto-panel-in 560ms cubic-bezier(.2, .8, .2, 1) both;
-}
-
-.tile:nth-of-type(3) {
-  animation-delay: 60ms;
-}
-
-.tile:nth-of-type(5) {
-  animation-delay: 120ms;
 }
 
 .booth {
@@ -367,29 +358,9 @@
   transition: opacity 500ms ease;
 }
 
-@keyframes auto-panel-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: none; }
-}
-
-.root :global([data-auto-cover-slot]) > div:first-child {
-  animation: auto-cover-breathe 9s ease-in-out infinite alternate;
-}
-
-@keyframes auto-cover-breathe {
-  from { transform: scale(1); }
-  to { transform: scale(1.012); }
-}
-
 @media (hover: hover) and (pointer: fine) {
   .resting[data-playing='true'] {
     --auto-rest-opacity: 1;
-  }
-}
-
-@media (min-width: 1024px) {
-  .root :global([data-player-stage-mode='auto']) h1 {
-    font-size: clamp(26px, 3vw, 42px);
   }
 }
 
@@ -398,20 +369,10 @@
     padding-bottom: 4rem;
   }
 
-  .tile {
-    animation: none;
-  }
-
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tile {
-    animation: none;
-  }
-
-  .switchThumb,
-  .root :global([data-auto-cover-slot]) > div:first-child {
+  .switchThumb {
     transition: none;
-    animation: none;
   }
 }

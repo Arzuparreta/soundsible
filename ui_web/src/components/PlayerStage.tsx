@@ -474,7 +474,6 @@ export function PlayerStage(props: {
                   </button>
                 </div>
               </div>
-              <div class={styles.lyricsControlPill} aria-hidden="true" />
             </>
           )}
         </Show>

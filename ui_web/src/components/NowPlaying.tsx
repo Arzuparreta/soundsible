@@ -52,7 +52,7 @@ export function NowPlaying(props: {
   );
   const visibleContextQueue = createMemo(() => contextExpanded() ? contextQueue() : contextQueue().slice(0, 5));
   const visibleGeneratedQueue = createMemo(() => generatedExpanded() ? generatedQueue() : generatedQueue().slice(0, 3));
-  const panelMinimum: Record<NowPlayingPanelId, number> = { browser: 240, stage: 360, queue: 220 };
+  const panelMinimum: Record<NowPlayingPanelId, number> = { browser: 240, stage: 360, queue: 240 };
 
   createEffect(() => {
     try {

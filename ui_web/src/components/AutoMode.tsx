@@ -36,7 +36,7 @@ import styles from './AutoMode.module.css';
 
 const IDLE_MS = 12_000;
 const DIRECTION_LEVELS = [-0.65, 0, 0.65] as const;
-const AUTO_MINIMUMS = { booth: 250, stage: 390, route: 260 };
+const AUTO_MINIMUMS = { booth: 260, stage: 390, route: 260 };
 
 const DJ_PROFILES: Array<{ id: DjProfile; titleKey: string; traitKey: string }> = [
   { id: 'adaptive', titleKey: 'autoMode.dj.adaptive', traitKey: 'autoMode.dj.adaptiveTrait' },

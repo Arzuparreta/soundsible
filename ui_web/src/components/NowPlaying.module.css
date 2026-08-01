@@ -97,8 +97,7 @@
 .splitter,
 .panelGrip,
 .desktopLyrics,
-.desktopLyricsToggle,
-.lyricsControlPill {
+.desktopLyricsToggle {
   display: none;
 }
 
@@ -119,6 +118,11 @@
      top, and no scroll-chaining to the sheet behind it. Swipe-down is handled
      at the sheet level (pointer events), not by the body's native scroll. */
   overscroll-behavior-y: none;
+}
+
+:global([data-player-workspace] [data-player-tile='stage']) > .body {
+  width: 100%;
+  height: 100%;
 }
 
 .media,
@@ -146,7 +150,7 @@
   width: min(100%, 360px, 42dvh);
   max-width: 360px;
   aspect-ratio: 1;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
   min-height: 0;
   margin: 0 auto;
@@ -1050,7 +1054,7 @@
   }
 
   .visualSlot {
-    width: min(100%, 400px, 44dvh);
+    width: min(100%, 400px, clamp(180px, calc(100dvh - 510px), 44dvh));
     max-width: 400px;
   }
 
@@ -1424,18 +1428,6 @@
     width: clamp(52px, 7vw, 92px);
   }
 
-  .lyricsControlPill {
-    z-index: 1;
-    grid-column: 1 / -1;
-    grid-row: 2;
-    display: block;
-    border: 1px solid var(--stage-line);
-    border-radius: var(--radius-full);
-    background: var(--stage-material);
-    box-shadow: var(--stage-shadow-md), inset 0 1px var(--stage-rim);
-    backdrop-filter: var(--stage-material-filter);
-  }
-
   @container (max-width: 620px) {
     .desktopLyricsStage {
       grid-template-columns: minmax(80px, 0.8fr) minmax(190px, 1.4fr) minmax(92px, 0.8fr);
@@ -1450,10 +1442,6 @@
   .body {
     gap: var(--space-md);
     padding-block: var(--space-sm);
-  }
-
-  .visualSlot {
-    width: min(100%, 320px, 40dvh);
   }
 
   .controlsPanel {
@@ -1525,8 +1513,6 @@
   }
 
   :global([data-player-workspace] [data-player-tile='stage']) > .body {
-    width: 100%;
-    height: 100%;
     max-width: none;
     margin: 0;
     padding:

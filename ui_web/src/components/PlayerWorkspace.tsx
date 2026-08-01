@@ -69,12 +69,19 @@ export function PlayerWorkspace<PanelId extends string>(props: {
     return props.soloPanel ? [props.soloPanel] : [...props.layout.order];
   });
   const gridColumns = createMemo(() =>
-    renderedPanels().flatMap((panel, index) => [
-      props.soloPanel
-        ? 'minmax(0, 1fr)'
-        : `minmax(${props.minimums[panel]}px, ${props.layout.ratios[panel]}fr)`,
-      ...(index < renderedPanels().length - 1 ? ['14px'] : []),
-    ]).join(' '),
+    renderedPanels().flatMap((panel, index) => {
+      // Fractional flex factors below 1 can leave unused grid space as soon as
+      // one panel reaches its minimum. Integer weights preserve the same
+      // proportions while keeping the workspace filled across browser zoom and
+      // native interface-scale reflows.
+      const ratioWeight = props.layout.ratios[panel] * 1000;
+      return [
+        props.soloPanel
+          ? 'minmax(0, 1fr)'
+          : `minmax(${props.minimums[panel]}px, ${ratioWeight}fr)`,
+        ...(index < renderedPanels().length - 1 ? ['14px'] : []),
+      ];
+    }).join(' '),
   );
 
   const tileOffset = (tile: HTMLElement) => {
