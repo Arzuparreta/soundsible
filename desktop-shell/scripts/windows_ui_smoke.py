@@ -158,7 +158,7 @@ def folder_dialog(reopen_after_oobe=None):
             (
                 window
                 for window in desktop.windows()
-                if window.window_text() == "Choose your music folder"
+                if window.window_text().startswith("Choose your music folder")
             ),
             None,
         )
