@@ -140,6 +140,27 @@ def folder_dialog(reopen_after_oobe=None):
     dismissed_oobe = False
     reopened_picker = False
 
+    def picker_window():
+        for window in desktop.windows():
+            candidates = [window]
+            try:
+                candidates.extend(window.descendants(control_type="Window"))
+            except Exception:
+                pass
+            match = next(
+                (
+                    candidate
+                    for candidate in candidates
+                    if candidate.window_text().startswith(
+                        "Choose your music folder"
+                    )
+                ),
+                None,
+            )
+            if match is not None:
+                return match
+        return None
+
     def find_dialog():
         nonlocal dismissed_oobe, reopened_picker
         # A fresh Windows ARM hosted runner can defer its privacy OOBE until
@@ -154,14 +175,7 @@ def folder_dialog(reopen_after_oobe=None):
             reopen_after_oobe()
             reopened_picker = True
             return None
-        return next(
-            (
-                window
-                for window in desktop.windows()
-                if window.window_text().startswith("Choose your music folder")
-            ),
-            None,
-        )
+        return picker_window()
 
     return wait_until(
         find_dialog,
