@@ -110,7 +110,14 @@ async function loadStore(
   // `request` is the raw helper the discover cache uses directly; initStore
   // warms it, so the mock has to cover it too.
   vi.doMock('../lib/api', () => ({ api, request: vi.fn().mockResolvedValue({}) }));
-  const deck = { duration: 180, currentTime: 0, paused: false, ended: false } as HTMLAudioElement;
+  const deck = {
+    duration: 180,
+    currentTime: 0,
+    paused: false,
+    ended: false,
+    currentSrc: '',
+    getAttribute: vi.fn((name: string) => name === 'src' ? deck.currentSrc : null),
+  } as unknown as HTMLAudioElement;
   /** Media events the store bound, so a test can fire one the way a deck would. */
   const deckHandlers = new Map<string, ((event: Event) => void)[]>();
   const fireDeckEvent = (type: string) => {
@@ -206,6 +213,33 @@ describe('Solid store library and playback resume', () => {
 
     expect(state.playback.currentTrack).toBeNull();
     expect(resumeState()?.track_id).toBe('t1');
+  });
+
+  it('does not report a failed same-device preload as a playback failure on boot', async () => {
+    const { initStore, state, deck, fireDeckEvent, audioService } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({ tracks: [t1], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+      getPlaybackState: vi.fn().mockResolvedValue({
+        device_id: 'dev1',
+        device_name: 'Soundsible Web',
+        track_id: 't1',
+        track: t1,
+        position_sec: 37,
+        is_playing: false,
+        updated_at: Date.now() / 1000,
+      }),
+    });
+    const { toast } = await import('../lib/toast');
+
+    initStore();
+    await flush();
+
+    expect(audioService.prime).toHaveBeenCalledWith('/stream/t1', 37);
+    (deck as unknown as { currentSrc: string }).currentSrc = '/stream/t1';
+    fireDeckEvent('error');
+
+    expect(state.playback.phase).toBe('paused');
+    expect(state.playback.loadError).toBe(false);
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it('removes a deleted track from library-derived and playback state immediately', async () => {

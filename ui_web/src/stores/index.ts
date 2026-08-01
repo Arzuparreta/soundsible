@@ -2688,6 +2688,11 @@ export function initStore(): void {
     // loaded and nothing is expected to be — not a playback failure.
     const deck = audioEl();
     if (!deck.getAttribute('src') && !deck.currentSrc) return;
+    // Restoring this device's last session primes the track while leaving it
+    // paused. A stale or temporarily unreachable stream may reject that
+    // best-effort preload, but nobody asked Soundsible to play it. Only a real
+    // playback attempt is allowed to fail visibly.
+    if (!activeAttempt) return;
     onPlaybackFailed(loadGeneration, 'media_error');
   });
   // Buffering, both cold (nothing has sounded yet) and mid-track. Either way the
