@@ -1,11 +1,14 @@
 import importlib.util
 import sys
+import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 from flask import Flask
 
+from shared.api.memo import Memo
 from shared.models import LibraryMetadata, Track
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 
@@ -86,13 +89,13 @@ def _fake_api(metadata):
 def _reset(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)
-    catalog_routes._CATALOG_CACHE.clear()
-    catalog_routes._ARTIST_CACHE.clear()
-    catalog_routes._ALBUM_CACHE.clear()
+    catalog_routes._catalog_memo.clear()
+    catalog_routes._artist_memo.clear()
+    catalog_routes._album_memo.clear()
     yield
-    catalog_routes._CATALOG_CACHE.clear()
-    catalog_routes._ARTIST_CACHE.clear()
-    catalog_routes._ALBUM_CACHE.clear()
+    catalog_routes._catalog_memo.clear()
+    catalog_routes._artist_memo.clear()
+    catalog_routes._album_memo.clear()
     reset_runtime()
 
 
@@ -195,6 +198,344 @@ def test_catalog_rank_never_uses_library_ownership_for_ties():
         "neutral song",
         0,
     )
+
+
+def test_popularity_is_neutral_for_every_source_that_publishes_no_metric():
+    """A library row and a MusicBrainz artist row are treated identically.
+
+    The neutral midpoint keys off "this cohort has no popularity signal", never
+    off ownership — otherwise the term would smuggle a library boost (or penalty)
+    back into a ranking that is contractually query-only.
+    """
+    rows = [
+        catalog_routes._catalog_item(
+            item_id="library:track:1", item_type="library_track", source="library",
+            title="Song", artist="Artist", in_library=True,
+        ),
+        catalog_routes._catalog_item(
+            item_id="mb:artist:1", item_type="artist", source="musicbrainz", title="Artist",
+        ),
+        catalog_routes._catalog_item(
+            item_id="deezer:track:1", item_type="track", source="deezer",
+            title="Song", artist="Artist", popularity=900000,
+        ),
+        catalog_routes._catalog_item(
+            item_id="deezer:track:2", item_type="track", source="deezer",
+            title="Song", artist="Artist", popularity=10,
+        ),
+    ]
+
+    scores = catalog_routes._popularity_scores(rows)
+
+    assert scores["library:track:1"] == scores["mb:artist:1"] == catalog_routes._POPULARITY_NEUTRAL
+    assert scores["deezer:track:1"] == catalog_routes._POPULARITY_MAX
+    assert scores["deezer:track:2"] == 0.0
+
+
+def test_popularity_gives_equal_raw_values_equal_scores():
+    rows = [
+        catalog_routes._catalog_item(
+            item_id=f"deezer:track:{i}", item_type="track", source="deezer",
+            title="Song", artist="Artist", popularity=pop,
+        )
+        for i, pop in enumerate((500, 500, 1))
+    ]
+
+    scores = catalog_routes._popularity_scores(rows)
+
+    assert scores["deezer:track:0"] == scores["deezer:track:1"]
+    assert scores["deezer:track:0"] > scores["deezer:track:2"]
+
+
+def test_title_score_prefers_the_title_the_query_nearly_fills():
+    q, tokens = "radio", frozenset({"radio"})
+
+    def score(title):
+        return catalog_routes._text_score(
+            q, tokens, title,
+            catalog_routes._TITLE_EXACT, catalog_routes._TITLE_PREFIX, catalog_routes._TITLE_CONTAINS,
+            apply_coverage=True,
+        )
+
+    assert score("Radio") == catalog_routes._TITLE_EXACT
+    assert score("Radio") > score("Radiohead") > score("Radiohead - Creep Forever And Ever")
+    # Provider boilerplate must not manufacture a penalty.
+    assert score("Radiohead (Official Video) [HD]") == score("Radiohead")
+
+
+def test_text_score_folds_accents_and_accepts_reordered_tokens():
+    def score(query, title):
+        return catalog_routes._text_score(
+            catalog_routes.fold_text(query),
+            frozenset(catalog_routes.match_tokens(query)),
+            title,
+            catalog_routes._TITLE_EXACT, catalog_routes._TITLE_PREFIX, catalog_routes._TITLE_CONTAINS,
+            apply_coverage=False,
+        )
+
+    assert score("jose", "José") == catalog_routes._TITLE_EXACT
+    assert score("rainbows in", "In Rainbows") == catalog_routes._TITLE_CONTAINS
+    assert score("nothing alike", "In Rainbows") == 0.0
+
+
+def _entity_search(monkeypatch, *, deezer=(), musicbrainz=(), youtube=(), tracks=()):
+    metadata = LibraryMetadata(version=1, tracks=list(tracks), playlists={}, settings={})
+    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_routes, "_deezer_search", lambda q, limit: list(deezer))
+    monkeypatch.setattr(catalog_routes, "_musicbrainz_search", lambda q, limit: list(musicbrainz))
+    monkeypatch.setattr(catalog_routes, "_youtube_search", lambda q, limit: list(youtube))
+    return lambda query: _make_app().test_client().get(f"/api/catalog/search?q={query}").get_json()
+
+
+def _deezer_artist_rows(name: str, songs: list[str]) -> list[dict]:
+    rows = [
+        catalog_routes._catalog_item(
+            item_id=f"deezer:artist:{name}", item_type="artist", source="deezer",
+            title=name, subtitle="Artist", artist=name,
+            external_ids={"deezer_artist_id": name},
+        )
+    ]
+    rows += [
+        catalog_routes._catalog_item(
+            item_id=f"deezer:track:{i}", item_type="track", source="deezer",
+            title=title, subtitle=name, artist=name, album="Some Album",
+            popularity=900000 - i, external_ids={"deezer_id": str(i)},
+        )
+        for i, title in enumerate(songs)
+    ]
+    return rows
+
+
+def test_artist_name_query_leads_with_the_artist_not_their_songs(monkeypatch):
+    """The complaint this whole rewrite exists for.
+
+    Under the old scoring a YouTube row for `Radiohead - Creep` tied the artist
+    row exactly — 70 (title prefix) + 48 (artist exact) + 12 + **25** = 155 for
+    the song, 100 + 48 + 7 + **0** = 155 for the artist — and the merge order
+    broke the tie in the song's favour.
+    """
+    songs = ["Creep", "Karma Police", "No Surprises", "Nude", "Bodysnatchers"]
+    search = _entity_search(
+        monkeypatch,
+        deezer=[
+            *_deezer_artist_rows("Radiohead", songs),
+            catalog_routes._catalog_item(
+                item_id="deezer:artist:tribute", item_type="artist", source="deezer",
+                title="Radiohead Tribute Band", subtitle="Artist", artist="Radiohead Tribute Band",
+                external_ids={"deezer_artist_id": "tribute"},
+            ),
+        ],
+        youtube=[
+            catalog_routes._catalog_item(
+                item_id=f"youtube:track:{i}", item_type="track", source="youtube",
+                title=f"Radiohead - {title} (Official Video)", subtitle="Radiohead",
+                artist="Radiohead", popularity=50_000_000,
+                external_ids={"youtube_id": f"yt{i}"}, playable=True,
+            )
+            for i, title in enumerate(songs)
+        ],
+    )
+
+    body = search("radiohead")
+
+    assert body["items"][0]["type"] == "artist"
+    assert body["top_result"] == "deezer:artist:Radiohead"
+    assert body["sections"][0]["id"] == "top"
+    # The artist that *is* the answer becomes the hero card, so what is left in
+    # the Artists rail is tribute acts — songs deserve to come first. The rail
+    # only outranks songs when the query names something the hero did not take,
+    # which is what the album test covers.
+    assert [s["id"] for s in body["sections"][1:3]] == ["songs", "artists"]
+    assert body["sections"][2]["item_ids"] == ["deezer:artist:tribute"]
+
+
+def test_song_title_query_leads_with_songs(monkeypatch):
+    search = _entity_search(
+        monkeypatch,
+        deezer=[
+            catalog_routes._catalog_item(
+                item_id="deezer:track:1", item_type="track", source="deezer",
+                title="Karma Police", subtitle="Radiohead", artist="Radiohead",
+                duration=261, popularity=900000, external_ids={"deezer_id": "1"},
+            ),
+            catalog_routes._catalog_item(
+                item_id="deezer:track:2", item_type="track", source="deezer",
+                title="Karma Police (Live In Praha)", subtitle="Radiohead", artist="Radiohead",
+                duration=300, popularity=1000, external_ids={"deezer_id": "2"},
+            ),
+            catalog_routes._catalog_item(
+                item_id="deezer:artist:1", item_type="artist", source="deezer",
+                title="Radiohead", subtitle="Artist", artist="Radiohead",
+                external_ids={"deezer_artist_id": "1"},
+            ),
+        ],
+    )
+
+    body = search("karma%20police")
+
+    assert body["top_result"] == "deezer:track:1"
+    assert [s["id"] for s in body["sections"][:2]] == ["top", "songs"]
+
+
+def test_album_name_query_leads_with_the_album(monkeypatch):
+    search = _entity_search(
+        monkeypatch,
+        deezer=[
+            catalog_routes._catalog_item(
+                item_id="deezer:album:1", item_type="album", source="deezer",
+                title="In Rainbows", subtitle="Radiohead", artist="Radiohead", album="In Rainbows",
+                external_ids={"deezer_album_id": "1"},
+            ),
+            catalog_routes._catalog_item(
+                item_id="deezer:album:2", item_type="album", source="deezer",
+                title="In Rainbows Disk 2", subtitle="Radiohead", artist="Radiohead",
+                album="In Rainbows Disk 2", external_ids={"deezer_album_id": "2"},
+            ),
+            *[
+                catalog_routes._catalog_item(
+                    item_id=f"deezer:track:{i}", item_type="track", source="deezer",
+                    title=title, subtitle="Radiohead", artist="Radiohead", album="In Rainbows",
+                    popularity=900000, external_ids={"deezer_id": str(i)},
+                )
+                for i, title in enumerate(("15 Step", "Bodysnatchers", "Nude", "Reckoner"))
+            ],
+        ],
+    )
+
+    body = search("in%20rainbows")
+
+    assert body["top_result"] == "deezer:album:1"
+    assert [s["id"] for s in body["sections"][:2]] == ["top", "albums"]
+
+
+def test_no_top_result_when_nothing_matches_confidently(monkeypatch):
+    """Better no hero card than a wrong one — it is the biggest target on the page."""
+    search = _entity_search(
+        monkeypatch,
+        deezer=[
+            catalog_routes._catalog_item(
+                item_id="deezer:track:1", item_type="track", source="deezer",
+                title="Something Else Entirely", subtitle="Another Band", artist="Another Band",
+                external_ids={"deezer_id": "1"},
+            )
+        ],
+    )
+
+    body = search("qwertzuiop")
+
+    assert body["top_result"] is None
+    assert all(section["id"] != "top" for section in body["sections"])
+
+
+def test_no_top_result_when_a_type_boost_alone_decided_the_winner(monkeypatch):
+    """An album and an artist both named exactly the query is not evidence."""
+    search = _entity_search(
+        monkeypatch,
+        deezer=[
+            catalog_routes._catalog_item(
+                item_id="deezer:artist:1", item_type="artist", source="deezer",
+                title="Ambiguous", subtitle="Artist", artist="Ambiguous",
+                external_ids={"deezer_artist_id": "1"},
+            ),
+            catalog_routes._catalog_item(
+                item_id="deezer:album:1", item_type="album", source="deezer",
+                title="Ambiguous", subtitle="Ambiguous", artist="Ambiguous", album="Ambiguous",
+                external_ids={"deezer_album_id": "1"},
+            ),
+        ],
+    )
+
+    body = search("ambiguous")
+
+    assert body["top_result"] is None
+
+
+def test_owned_song_collapses_with_its_public_copies_without_moving_up(monkeypatch):
+    search = _entity_search(
+        monkeypatch,
+        tracks=[_track("local-1", "Karma Police", "Radiohead")],
+        deezer=[
+            catalog_routes._catalog_item(
+                item_id="deezer:track:1", item_type="track", source="deezer",
+                title="Karma Police", subtitle="Radiohead", artist="Radiohead",
+                duration=180, popularity=900000, external_ids={"deezer_id": "1"},
+            )
+        ],
+    )
+
+    body = search("karma%20police")
+    songs = [item for item in body["items"] if item["type"] in ("track", "library_track")]
+
+    assert len(songs) == 1, "the same recording must not be listed once per provider"
+    assert songs[0]["action_state"]["in_library"] is True
+    assert songs[0]["action_state"]["playable"] is True
+    assert songs[0]["track_id"] == "local-1"
+
+
+def test_a_different_cut_of_the_same_title_stays_separate(monkeypatch):
+    """Twelve minutes of live version is not the three-minute studio take."""
+    search = _entity_search(
+        monkeypatch,
+        tracks=[_track("local-1", "Karma Police", "Radiohead")],
+        deezer=[
+            catalog_routes._catalog_item(
+                item_id="deezer:track:1", item_type="track", source="deezer",
+                title="Karma Police", subtitle="Radiohead", artist="Radiohead",
+                duration=720, popularity=900000, external_ids={"deezer_id": "1"},
+            )
+        ],
+    )
+
+    body = search("karma%20police")
+    songs = [item for item in body["items"] if item["type"] in ("track", "library_track")]
+
+    assert len(songs) == 2
+
+
+def test_ranking_is_identical_whatever_order_the_providers_finish_in(monkeypatch):
+    rows = _deezer_artist_rows("Radiohead", ["Creep", "Nude", "Reckoner"])
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_routes, "_musicbrainz_search", lambda q, limit: [])
+    monkeypatch.setattr(catalog_routes, "_youtube_search", lambda q, limit: [])
+
+    orders = []
+    for shuffled in (rows, list(reversed(rows))):
+        catalog_routes._catalog_memo.clear()
+        monkeypatch.setattr(catalog_routes, "_deezer_search", lambda q, limit, r=shuffled: list(r))
+        body = _make_app().test_client().get("/api/catalog/search?q=radiohead").get_json()
+        orders.append([item["id"] for item in body["items"]])
+
+    assert orders[0] == orders[1]
+
+
+def test_local_catalog_finds_the_artist_behind_a_wall_of_their_own_songs(monkeypatch):
+    """The old shared budget stopped scanning before ever reaching this row."""
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[_track(f"t{i}", f"Song {i}", "Rosalia") for i in range(200)],
+        playlists={},
+        settings={},
+    )
+    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+
+    rows = catalog_routes._local_catalog("rosalia", 30)
+
+    assert any(row["type"] == "artist" and row["title"] == "Rosalia" for row in rows)
+
+
+def test_local_catalog_does_not_match_across_field_boundaries(monkeypatch):
+    """`"title artist album"` joined together used to match a query spanning two."""
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[_track("t1", "Closer", "Nine Inch Nails")],
+        playlists={},
+        settings={},
+    )
+    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+
+    assert catalog_routes._local_catalog("closer nine", 30) == []
+    assert catalog_routes._local_catalog("closer", 30)
 
 
 def test_catalog_save_confirmed_video_queues_download(monkeypatch):
@@ -672,34 +1013,54 @@ def test_gather_reports_timed_out_job(monkeypatch):
     assert failures == [{"source": "deezer", "error": "timed out"}]
 
 
-def test_cache_put_evicts_expired_and_caps_size(monkeypatch):
-    cache = {}
-    monkeypatch.setattr(catalog_routes, "_CACHE_MAX_ENTRIES", 3)
-
-    catalog_routes._cache_put(cache, "stale", -1, {"v": "stale"})
-    assert catalog_routes._cache_get(cache, "stale") is None
-
+def test_memo_resolve_caps_size_and_reports_hits():
+    memo = Memo(ttl_sec=600, maxsize=3)
     for i in range(10):
-        catalog_routes._cache_put(cache, f"k{i}", 600, {"v": i})
+        body, cached = catalog_routes._memo_resolve(memo, f"k{i}", lambda i=i: {"v": i})
+        assert cached is False
 
-    assert len(cache) <= 3
-    assert "stale" not in cache
-    assert catalog_routes._cache_get(cache, "k9") == {"v": 9}
+    assert len(memo) <= 3
+    assert catalog_routes._memo_resolve(memo, "k9", lambda: {"v": "recomputed"}) == ({"v": 9}, True)
 
 
-def test_cache_get_drops_expired_entry():
-    cache = {}
-    catalog_routes._cache_put(cache, "k", -1, {"v": 1})
-    assert catalog_routes._cache_get(cache, "k") is None
-    assert "k" not in cache, "expired entry should not linger after a read"
+def test_memo_resolve_drops_expired_entry():
+    memo = Memo(ttl_sec=-1)
+    catalog_routes._memo_resolve(memo, "k", lambda: {"v": 1})
+    assert memo.get(catalog_routes._scoped("k")) is None
 
 
 def test_cached_body_is_isolated_from_caller_mutation():
-    cache = {}
-    catalog_routes._cache_put(cache, "k", 600, {"v": 1})
-    first = catalog_routes._cache_get(cache, "k")
+    memo = Memo(ttl_sec=600)
+    first, _ = catalog_routes._memo_resolve(memo, "k", lambda: {"v": 1})
     first["v"] = "mutated"
-    assert catalog_routes._cache_get(cache, "k") == {"v": 1}
+    assert catalog_routes._memo_resolve(memo, "k", lambda: {"v": "recomputed"}) == ({"v": 1}, True)
+
+
+def test_memo_resolve_collapses_concurrent_identical_searches():
+    """One fan-out, not N. A cache only helps *after* the first call returns."""
+    memo = Memo(ttl_sec=600)
+    calls = []
+    release = threading.Event()
+
+    def compute():
+        calls.append(1)
+        release.wait(5)
+        return {"v": "once"}
+
+    results: list[dict] = []
+    threads = [
+        threading.Thread(target=lambda: results.append(catalog_routes._memo_resolve(memo, "k", compute)[0]))
+        for _ in range(5)
+    ]
+    for thread in threads:
+        thread.start()
+    time.sleep(0.05)
+    release.set()
+    for thread in threads:
+        thread.join(5)
+
+    assert len(calls) == 1
+    assert results == [{"v": "once"}] * 5
 
 
 def test_resolve_artist_id_returns_other_exact_matches_as_candidates(monkeypatch):

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Search from './Search';
 import { setLocale } from '../lib/i18n';
+import { clearSearchCache } from '../lib/searchCache';
 import { encodeTrackCapsule } from '../lib/trackShare';
 
 const apiMock = vi.hoisted(() => ({
@@ -74,6 +75,8 @@ vi.mock('../stores', async () => {
 describe('Search route', () => {
   beforeEach(() => {
     setLocale('en');
+    // Module scope outlives a test the way it outlives a navigation.
+    clearSearchCache();
     vi.useFakeTimers();
     nodeMock.items = [];
     nodeMock.loading = false;
@@ -126,7 +129,6 @@ describe('Search route', () => {
     await waitFor(() => expect(apiMock.searchCatalog).toHaveBeenCalledWith(
       'Boards of Canada',
       expect.any(AbortSignal),
-      'album',
     ));
     expect(screen.getByDisplayValue('Boards of Canada')).toBeInTheDocument();
     expect(routerMock.setParams).toHaveBeenCalledWith(
@@ -176,8 +178,10 @@ describe('Search route', () => {
     expect(apiMock.searchYouTube).not.toHaveBeenCalled();
   });
 
-  it('keeps completed results inert and visibly busy while a tab refreshes', async () => {
-    apiMock.searchCatalog.mockResolvedValueOnce({
+  it('switches tabs by filtering the response it already has', async () => {
+    // Every tab used to re-run the whole provider fan-out for a strictly
+    // smaller answer than `type=all` had already returned.
+    apiMock.searchCatalog.mockResolvedValue({
       items: [
         {
           id: 'deezer:track:one',
@@ -194,14 +198,11 @@ describe('Search route', () => {
           subtitle: 'Artist',
         },
       ],
-      sections: [],
+      sections: [
+        { id: 'songs', layout: 'rows', item_ids: ['deezer:track:one'], total: 1 },
+        { id: 'artists', layout: 'grid_round', item_ids: ['deezer:artist:one'], total: 1 },
+      ],
     });
-    let resolveArtists!: (value: unknown) => void;
-    apiMock.searchCatalog.mockImplementationOnce(
-      () => new Promise((resolve) => {
-        resolveArtists = resolve;
-      }),
-    );
     render(() => <Search />);
 
     fireEvent.input(screen.getByPlaceholderText('What do you want to play?'), {
@@ -209,57 +210,101 @@ describe('Search route', () => {
     });
     await vi.advanceTimersByTimeAsync(230);
     expect(await screen.findByText('Previous song')).toBeInTheDocument();
+    expect(apiMock.searchCatalog).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Artists' }));
-    await waitFor(() =>
-      expect(apiMock.searchCatalog).toHaveBeenLastCalledWith(
-        'previous',
-        expect.any(AbortSignal),
-        'artist',
-      ),
-    );
 
-    const busyResults = screen.getByText('Previous song').closest('[aria-busy="true"]');
-    expect(busyResults).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByRole('status', { name: /Loading/ })).toBeInTheDocument();
-
-    resolveArtists({
-      items: [
-        {
-          id: 'deezer:artist:two',
-          type: 'artist',
-          source: 'deezer',
-          title: 'Fresh artist',
-          subtitle: 'Artist',
-        },
-      ],
-      sections: [],
-    });
-
-    expect(await screen.findByText('Fresh artist')).toBeInTheDocument();
+    expect(await screen.findByText('Previous artist')).toBeInTheDocument();
     expect(screen.queryByText('Previous song')).not.toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.queryByRole('status', { name: /Loading/ })).not.toBeInTheDocument(),
+    expect(apiMock.searchCatalog).toHaveBeenCalledTimes(1);
+    expect(routerMock.setParams).toHaveBeenLastCalledWith(
+      { q: 'previous', domain: undefined, tab: 'artist' },
+      { replace: true },
     );
   });
 
-  it('uses a round card skeleton for a cold Artists request', async () => {
-    apiMock.searchCatalog.mockImplementation(() => new Promise(() => {}));
+  it('leads with the top result the server picked, above a capped songs list', async () => {
+    apiMock.searchCatalog.mockResolvedValue({
+      top_result: 'deezer:artist:one',
+      items: [
+        {
+          id: 'deezer:artist:one',
+          type: 'artist',
+          source: 'deezer',
+          title: 'Radiohead',
+          subtitle: 'Artist',
+        },
+        ...Array.from({ length: 8 }, (_, i) => ({
+          id: `deezer:track:${i}`,
+          type: 'track',
+          source: 'deezer',
+          title: `Song ${i}`,
+          artist: 'Radiohead',
+        })),
+      ],
+      sections: [
+        { id: 'top', layout: 'hero', item_ids: ['deezer:artist:one'], total: 1 },
+        {
+          id: 'songs',
+          layout: 'rows',
+          item_ids: Array.from({ length: 8 }, (_, i) => `deezer:track:${i}`),
+          total: 61,
+        },
+      ],
+    });
     render(() => <Search />);
 
     fireEvent.input(screen.getByPlaceholderText('What do you want to play?'), {
-      target: { value: 'artist query' },
+      target: { value: 'radiohead' },
     });
     await vi.advanceTimersByTimeAsync(230);
-    fireEvent.click(screen.getByRole('tab', { name: 'Artists' }));
 
-    await waitFor(() =>
-      expect(apiMock.searchCatalog).toHaveBeenLastCalledWith(
-        'artist query',
-        expect.any(AbortSignal),
-        'artist',
-      ),
-    );
+    expect(await screen.findByText('Top result')).toBeInTheDocument();
+    // The card says *what kind of thing* it is — that is the whole point of it.
+    expect(screen.getByText('Artist')).toBeInTheDocument();
+    expect(screen.getAllByText('Radiohead').length).toBeGreaterThan(0);
+    // Five of the eight, with the count from the server's pre-cap total.
+    expect(screen.getByText('Song 4')).toBeInTheDocument();
+    expect(screen.queryByText('Song 5')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'See all 61 songs' }));
+
+    expect(await screen.findByText('Song 5')).toBeInTheDocument();
+    expect(apiMock.searchCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders sections in the order the server sent them', async () => {
+    // An album search leads with albums; the client used to hardcode
+    // songs -> artists -> albums regardless of what was asked for.
+    apiMock.searchCatalog.mockResolvedValue({
+      items: [
+        { id: 'deezer:album:1', type: 'album', source: 'deezer', title: 'In Rainbows', subtitle: 'Radiohead' },
+        { id: 'deezer:artist:1', type: 'artist', source: 'deezer', title: 'Radiohead', subtitle: 'Artist' },
+      ],
+      sections: [
+        { id: 'albums', layout: 'grid', item_ids: ['deezer:album:1'], total: 1 },
+        { id: 'artists', layout: 'grid_round', item_ids: ['deezer:artist:1'], total: 1 },
+      ],
+    });
+    render(() => <Search />);
+
+    fireEvent.input(screen.getByPlaceholderText('What do you want to play?'), {
+      target: { value: 'in rainbows' },
+    });
+    await vi.advanceTimersByTimeAsync(230);
+
+    await screen.findByText('In Rainbows');
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((el) => el.textContent);
+    expect(headings).toEqual(['Albums', 'Artists']);
+  });
+
+  it('uses a round card skeleton for a cold Artists tab', async () => {
+    apiMock.searchCatalog.mockImplementation(() => new Promise(() => {}));
+    routerMock.params = { q: 'artist query', tab: 'artist' };
+    render(() => <Search />);
+
+    await vi.advanceTimersByTimeAsync(230);
+
     expect(document.querySelector('[data-shape="round"]')).toBeInTheDocument();
   });
 

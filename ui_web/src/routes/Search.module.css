@@ -450,6 +450,41 @@
   min-width: 0;
 }
 
+/* Top result and the songs preview answer two different questions — "which
+   one?" and "what can I play right now?" — so they sit side by side where
+   there is room and stack where there is not. */
+.topBlock {
+  display: grid;
+  gap: var(--space-xl);
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .topBlock {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    align-items: start;
+  }
+}
+
+.seeAll {
+  margin-top: var(--space-xs);
+  padding: var(--space-xs) var(--space-md);
+  color: var(--ink-secondary);
+  font-size: var(--text-label);
+  font-weight: var(--fw-medium);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .seeAll:hover {
+    color: var(--ink-primary);
+  }
+}
+
 .sectionTitle {
   margin: 0 0 var(--space-sm);
   color: var(--ink-primary);

@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Track } from '../types/music';
+import { clearSearchCache, writeSearchCache } from '../lib/searchCache';
+import { CATALOG_CACHE_NS } from '../lib/searchSections';
 
 const apiMock = vi.hoisted(() => ({
   searchCatalog: vi.fn(),
@@ -88,6 +90,8 @@ async function typeGlobalQuery(value: string) {
 describe('NowPlayingBrowser', () => {
   beforeEach(() => {
     setLocale('en');
+    // Shared with the Search route and with every other test in this file.
+    clearSearchCache();
     apiMock.searchCatalog.mockResolvedValue({ items: [], sections: [] });
     apiMock.searchYouTube.mockResolvedValue([]);
     apiMock.peekYouTube.mockResolvedValue(null);
@@ -122,8 +126,53 @@ describe('NowPlayingBrowser', () => {
     expect(apiMock.searchCatalog).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Search “local” everywhere' }));
-    await waitFor(() => expect(apiMock.searchCatalog).toHaveBeenCalledWith('local', expect.any(AbortSignal), 'all'));
+    await waitFor(() => expect(apiMock.searchCatalog).toHaveBeenCalledWith('local', expect.any(AbortSignal)));
     expect(screen.getByPlaceholderText('Search everywhere')).toHaveValue('local');
+  });
+
+  it('renders global results in the order the server sent, hero first', async () => {
+    // The panel used to draw entities and then songs, while the Search route
+    // drew songs and then entities. Both now follow one server-side decision.
+    apiMock.searchCatalog.mockResolvedValue({
+      top_result: 'deezer:artist:1',
+      items: [
+        { id: 'deezer:artist:1', type: 'artist', source: 'deezer', title: 'Radiohead' },
+        { id: 'deezer:track:1', type: 'track', source: 'deezer', title: 'Creep', artist: 'Radiohead' },
+        { id: 'deezer:album:1', type: 'album', source: 'deezer', title: 'In Rainbows', artist: 'Radiohead' },
+      ],
+      sections: [
+        { id: 'top', layout: 'hero', item_ids: ['deezer:artist:1'], total: 1 },
+        { id: 'songs', layout: 'rows', item_ids: ['deezer:track:1'], total: 1 },
+        { id: 'albums', layout: 'grid', item_ids: ['deezer:album:1'], total: 1 },
+      ],
+    });
+
+    render(() => <NowPlayingBrowser onClose={vi.fn()} />);
+    await typeGlobalQuery('radiohead');
+    await screen.findByText('Creep');
+
+    const rendered = screen
+      .getAllByRole('button')
+      .map((el) => el.textContent ?? '')
+      .filter((text) => /Radiohead|Creep|In Rainbows/.test(text));
+    const firstIndexOf = (label: string) => rendered.findIndex((text) => text.includes(label));
+
+    expect(firstIndexOf('Radiohead')).toBeLessThan(firstIndexOf('Creep'));
+    expect(firstIndexOf('Creep')).toBeLessThan(firstIndexOf('In Rainbows'));
+  });
+
+  it('reuses the cache the Search route filled instead of re-fetching', async () => {
+    writeSearchCache(CATALOG_CACHE_NS, 'cached query', {
+      items: [{ id: 'deezer:track:9', type: 'track', source: 'deezer', title: 'Already Fetched' }],
+      sections: [{ id: 'songs', layout: 'rows', item_ids: ['deezer:track:9'], total: 1 }],
+      interpretedAs: '',
+    });
+
+    render(() => <NowPlayingBrowser onClose={vi.fn()} />);
+    await typeGlobalQuery('cached query');
+
+    expect(await screen.findByText('Already Fetched')).toBeInTheDocument();
+    expect(apiMock.searchCatalog).not.toHaveBeenCalled();
   });
 
   it('plays global results without replacing the existing queue', async () => {

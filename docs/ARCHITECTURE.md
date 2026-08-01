@@ -153,8 +153,46 @@ Catalog resolve queues the winner's stream-URL resolution on the **preview prefe
 - Ranking is query-only. It never reads recommendation signals, favourites, or
   account preferences, including for tie-breaking. Ownership is an action-state
   badge, not a rank boost.
+- **The server owns the layout.** The response carries `top_result` (an item id
+  or `null`) and an ordered `sections` list of
+  `{id, layout, item_ids, total}` — `layout` is one of
+  `hero | rows | grid | grid_round`, and `total` is the pre-cap count so a client
+  can offer "see all N" without asking again. Section order is part of the
+  answer: an artist-name query leads with artists, an album name with albums.
+  Every search surface renders that one order (`ui_web/src/lib/searchSections.ts`);
+  the Search route and the Now Playing panel used to hardcode two different ones.
+  Clients send `type=all` and filter tabs locally — a `type=artist` request costs
+  a full provider fan-out for a strictly smaller answer.
+- **`top_result` is gated, not just "the first row".** It is emitted only above a
+  score floor, and an artist or album additionally has to beat the best row of a
+  different type by a margin — otherwise the type boost alone decided it, which
+  is not evidence. No card is better than a wrong one: it is the largest target
+  on the page and, for an entity, it navigates away.
+- **Ranking signals**, all derived from the query plus the rows the providers
+  just returned: tiered title/artist matching over accent-folded text
+  (`shared/text_utils.fold_text`) with order-free token matching; a coverage
+  factor so a title the query nearly fills outranks a long one it merely prefixes
+  (release boilerplate is stripped first, so `(Official Video) [HD]` costs
+  nothing); popularity ranked *within* each `(source, type)` cohort and bounded
+  below the smallest text tier, since raw popularity is incomparable across
+  providers and a source that publishes none scores the neutral midpoint; a
+  corroboration bonus when several providers name the same entity; and an
+  artist/album intent bonus when a quorum of the top songs share one name that
+  also matches the query.
+- Rows from different providers that resolve to the same recording collapse into
+  one. The surviving row and its position are chosen by query-only score;
+  ownership only merges into the survivor's action state, so an owned copy makes
+  the row instantly playable without moving it up the page. Rows whose durations
+  disagree by more than a few seconds are treated as different cuts and stay
+  separate. YouTube rows are excluded from title-based collapsing, because their
+  titles embed the artist and the parse that would match them is the change most
+  likely to hide the exact row somebody was looking for.
 - Repeated public creator results may supply a one-edit intent correction
   (`fari` → `El Fary`). Literal matches remain in the response.
+- Search, artist and album bodies are cached in `Memo` (`shared/api/memo.py`),
+  which is bounded *and* single-flight: concurrent callers for one query collapse
+  onto one fan-out instead of each running their own. Keys are account-scoped
+  because the bodies carry `in_library` state.
 
 **Local recommendation profile** (`shared/discovery_intelligence.py`,
 `shared/database.py`):

@@ -48,7 +48,15 @@ import { SkeletonRows } from './Skeleton';
 import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
 import { createResponsiveTap } from '../lib/responsiveTap';
-import type { CatalogItem, SearchResult, Track } from '../types/music';
+import { readSearchCache, writeSearchCache } from '../lib/searchCache';
+import {
+  resolveSections,
+  topResultItem,
+  CATALOG_CACHE_NS,
+  type CachedCatalog,
+  type ResolvedSection,
+} from '../lib/searchSections';
+import type { CatalogItem, CatalogSection, SearchResult, Track } from '../types/music';
 import styles from './NowPlayingBrowser.module.css';
 
 export type BrowserView =
@@ -141,6 +149,7 @@ export function NowPlayingBrowser(props: {
   const [scope, setScope] = createSignal<'global' | 'library'>('global');
   const [query, setQuery] = createSignal('');
   const [items, setItems] = createSignal<CatalogItem[]>([]);
+  const [sections, setSections] = createSignal<CatalogSection[]>([]);
   const [ytResults, setYtResults] = createSignal<SearchResult[]>([]);
   const [direct, setDirect] = createSignal<SearchResult | null>(null);
   const [loading, setLoading] = createSignal(false);
@@ -163,12 +172,24 @@ export function NowPlayingBrowser(props: {
   );
   const globalSearching = createMemo(() => scope() === 'global' && query().trim().length >= 2);
   const localSearching = createMemo(() => scope() === 'library' && query().trim().length > 0);
-  const songs = createMemo(() =>
-    items().filter((item) => item.type === 'track' || item.type === 'library_track').slice(0, 24),
-  );
-  const entities = createMemo(() =>
-    items().filter((item) => item.type === 'artist' || item.type === 'album').slice(0, 10),
-  );
+  // The panel used to render entities first and then songs, while the Search
+  // route rendered songs first and then entities — two hardcoded orders, both
+  // wrong in the other's case. Both now follow the one the server sends.
+  const resolved = createMemo(() => resolveSections(items(), sections()));
+  const topResult = createMemo(() => topResultItem(resolved()));
+  const panelSections = createMemo<ResolvedSection[]>(() => {
+    const body = resolved().filter((section) => section.id !== 'top');
+    // Asking the DJ for something only makes sense for an artist.
+    if (!requestMode()) return body;
+    return body
+      .map((section) => ({
+        ...section,
+        items: section.items.filter(
+          (item) => item.type !== 'album' && item.type !== 'playlist',
+        ),
+      }))
+      .filter((section) => section.items.length > 0);
+  });
   const playlistNames = createMemo(() => Object.keys(state.playlists));
   const byId = createMemo(() => new Map(state.library.map((track) => [track.id, track] as const)));
   const currentMusic = createMemo(() => {
@@ -208,6 +229,7 @@ export function NowPlayingBrowser(props: {
     requestId += 1;
     aborter?.abort();
     setItems([]);
+    setSections([]);
     setYtResults([]);
     setDirect(null);
     setLoading(false);
@@ -222,6 +244,7 @@ export function NowPlayingBrowser(props: {
     aborter = undefined;
     setFailed(false);
     setItems([]);
+    setSections([]);
     setYtResults([]);
     setDirect(null);
 
@@ -253,11 +276,28 @@ export function NowPlayingBrowser(props: {
       return;
     }
 
+    // Same namespace the Search route writes to, so opening the panel after a
+    // search — or searching the same thing in both — costs nothing. This panel
+    // used to re-fetch every single time.
+    const cached = readSearchCache<CachedCatalog>(CATALOG_CACHE_NS, q);
+    if (cached) {
+      setItems(cached.items);
+      setSections(cached.sections);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
-    api.searchCatalog(q, signal, 'all')
+    api.searchCatalog(q, signal)
       .then((response) => {
         if (request !== requestId) return;
         setItems(response.items ?? []);
+        setSections(response.sections ?? []);
+        writeSearchCache(CATALOG_CACHE_NS, q, {
+          items: response.items ?? [],
+          sections: response.sections ?? [],
+          interpretedAs: response.interpreted_as ?? '',
+        });
         if (!(response.items ?? []).some((item) => item.type === 'track' || item.type === 'library_track')) {
           setYtLoading(true);
           return api.searchYouTube(q, signal).then((results) => {
@@ -360,7 +400,10 @@ export function NowPlayingBrowser(props: {
 
   createEffect(() => {
     const ids = [
-      ...songs().map(catalogPreviewId).filter((id): id is string => !!id),
+      ...items()
+        .filter((item) => item.type === 'track' || item.type === 'library_track')
+        .map(catalogPreviewId)
+        .filter((id): id is string => !!id),
       ...ytResults().map((result) => result.id),
       ...(direct() ? [direct()!.id] : []),
     ].slice(0, 8);
@@ -457,8 +500,8 @@ export function NowPlayingBrowser(props: {
         </Match>
         <Match when={globalSearching()}>
           <GlobalSearchView
-            items={songs()}
-            entities={requestMode() ? entities().filter((item) => item.type === 'artist') : entities()}
+            sections={panelSections()}
+            top={topResult()}
             youtube={ytResults()}
             direct={direct()}
             loading={loading() || ytLoading()}
@@ -812,8 +855,8 @@ function PlaylistView(props: {
 }
 
 function GlobalSearchView(props: {
-  items: CatalogItem[];
-  entities: CatalogItem[];
+  sections: ResolvedSection[];
+  top: CatalogItem | null;
   youtube: SearchResult[];
   direct: SearchResult | null;
   loading: boolean;
@@ -827,39 +870,43 @@ function GlobalSearchView(props: {
   primaryLabel?: string;
   hideSecondary?: boolean;
 }) {
+  const empty = () => props.sections.every((section) => section.items.length === 0);
+  // The panel is a list, not a page: the server's *order* applies, its grid and
+  // hero layouts do not.
+  const row = (item: CatalogItem) =>
+    item.type === 'artist' || item.type === 'album' || item.type === 'playlist' ? (
+      <NavigationRow
+        title={item.title}
+        subtitle={item.type === 'artist' ? t('searchPanel.chipArtist') : `${t('searchPanel.chipAlbum')} · ${itemArtist(item)}`}
+        cover={item.cover}
+        round={item.type === 'artist'}
+        onClick={() => props.onEntity(item)}
+      />
+    ) : (
+      <BrowserTrackRow
+        title={item.title}
+        subtitle={item.subtitle || itemArtist(item)}
+        cover={item.cover || (item.track_id ? coverUrl(item.track_id) : undefined)}
+        seed={item.id}
+        active={isPlayingItem(item)}
+        queued={isQueuedItem(item)}
+        resolving={props.resolving.has(item.id)}
+        owned={item.type === 'library_track' || !!ownedTrackForItem(item)}
+        primaryLabel={props.primaryLabel}
+        hideSecondary={props.hideSecondary}
+        onPlay={() => props.onTrack(item)}
+        onQueue={() => props.onQueue(item)}
+      />
+    );
+
   return (
     <div class={styles.body} aria-busy={props.loading}>
-      <Show when={props.loading && props.items.length === 0 && props.youtube.length === 0 && !props.direct}>
+      <Show when={props.loading && empty() && props.youtube.length === 0 && !props.direct}>
         <SkeletonRows count={8} />
       </Show>
-      <For each={props.entities}>
-        {(item) => (
-          <NavigationRow
-            title={item.title}
-            subtitle={item.type === 'artist' ? t('searchPanel.chipArtist') : `${t('searchPanel.chipAlbum')} · ${itemArtist(item)}`}
-            cover={item.cover}
-            round={item.type === 'artist'}
-            onClick={() => props.onEntity(item)}
-          />
-        )}
-      </For>
-      <For each={props.items}>
-        {(item) => (
-          <BrowserTrackRow
-            title={item.title}
-            subtitle={item.subtitle || itemArtist(item)}
-            cover={item.cover || (item.track_id ? coverUrl(item.track_id) : undefined)}
-            seed={item.id}
-            active={isPlayingItem(item)}
-            queued={isQueuedItem(item)}
-            resolving={props.resolving.has(item.id)}
-            owned={item.type === 'library_track' || !!ownedTrackForItem(item)}
-            primaryLabel={props.primaryLabel}
-            hideSecondary={props.hideSecondary}
-            onPlay={() => props.onTrack(item)}
-            onQueue={() => props.onQueue(item)}
-          />
-        )}
+      <Show when={props.top}>{(item) => row(item())}</Show>
+      <For each={props.sections}>
+        {(section) => <For each={section.items}>{(item) => row(item)}</For>}
       </For>
       <Show when={props.direct}>
         {(result) => <YoutubeRow result={result()} onPlay={() => props.onYoutube(result())} primaryLabel={props.primaryLabel} hideSecondary={props.hideSecondary} />}
@@ -867,7 +914,7 @@ function GlobalSearchView(props: {
       <For each={props.youtube}>
         {(result) => <YoutubeRow result={result} onPlay={() => props.onYoutube(result)} primaryLabel={props.primaryLabel} hideSecondary={props.hideSecondary} />}
       </For>
-      <Show when={!props.loading && !props.direct && props.items.length === 0 && props.youtube.length === 0}>
+      <Show when={!props.loading && !props.direct && empty() && props.youtube.length === 0}>
         <div class={styles.empty}>
           <p>{props.failed ? t('searchPanel.searchError') : t('searchPanel.noResults')}</p>
           <Show when={props.failed}><button type="button" onClick={props.onRetry}>{t('common.retry')}</button></Show>

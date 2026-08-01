@@ -39,6 +39,15 @@ export function readSearchCache<T>(namespace: string, query: string): T | null {
   return entry.value;
 }
 
+/**
+ * Drop everything. Module scope outlives a test file the way it outlives a
+ * navigation, so a suite that does not reset this reads the previous test's
+ * answer and never calls the API it is asserting on.
+ */
+export function clearSearchCache(): void {
+  buckets.clear();
+}
+
 export function writeSearchCache<T>(namespace: string, query: string, value: T): void {
   const store = bucket(namespace);
   // Re-insert so iteration order stays least-recently-written first.

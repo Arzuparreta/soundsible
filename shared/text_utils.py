@@ -3,6 +3,7 @@ Plain-text helpers for user-visible strings (e.g. API errors from CLI tools).
 """
 
 import re
+import unicodedata
 
 # Standard ANSI CSI sequences (ECMA-48).
 _ANSI_CSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -41,6 +42,51 @@ def collapse_text(value: object, limit: int | None = None) -> str:
 def normalize_text(value: object) -> str:
     """`collapse_text` folded for case-insensitive comparison."""
     return collapse_text(value).casefold()
+
+
+_TOKEN = re.compile(r"\w+", re.UNICODE)
+
+
+_RELEASE_JUNK = re.compile(
+    r"\s*[\(\[][^\)\]]*\b("
+    r"official|video|audio|lyrics?|hd|4k|8k|remaster(?:ed)?|mv|visuali[sz]er|"
+    r"full album|topic|explicit|clean|hq|music video"
+    r")\b[^\)\]]*[\)\]]",
+    re.IGNORECASE,
+)
+
+
+def fold_text(value: object) -> str:
+    """`normalize_text` with diacritics folded away. For matching, never display.
+
+    Deliberately separate from `normalize_text`, which backs `identity_key` and
+    therefore decides what counts as the same recording app-wide: folding
+    accents there would silently change ownership matching everywhere.
+
+    Case is folded *before* decomposition so `Straße` still reaches `strasse`,
+    and only combining marks are dropped rather than forcing ASCII — an
+    ascii-encode would flatten every Cyrillic or CJK title to an empty string
+    and make them all match each other.
+    """
+    text = normalize_text(value)
+    return "".join(ch for ch in unicodedata.normalize("NFD", text) if not unicodedata.combining(ch))
+
+
+def match_tokens(value: object) -> tuple[str, ...]:
+    """Word tokens of the folded text: ``In Rainbows!`` -> ``('in', 'rainbows')``."""
+    return tuple(_TOKEN.findall(fold_text(value)))
+
+
+def strip_release_junk(value: object) -> str:
+    """Drop bracketed format/release annotations from a title.
+
+    `Creep (Official Video) [HD Remaster]` is the same recording as `Creep`, but
+    it is four times as long — and any relevance score that weighs how much of a
+    title the query accounts for would punish it for boilerplate the uploader
+    added. Only format words are matched, so `(Live)`, `(Remix)` and `(Acoustic)`
+    survive: those distinguish genuinely different recordings.
+    """
+    return collapse_text(_RELEASE_JUNK.sub("", collapse_text(value)))
 
 
 def identity_key(title: object, artist: object) -> str:

@@ -116,8 +116,11 @@ export interface CatalogItem {
 
 export interface CatalogSection {
   id: string;
-  title: string;
+  /** How the section wants to be drawn. Absent on responses predating the contract. */
+  layout?: 'hero' | 'rows' | 'grid' | 'grid_round';
   item_ids: string[];
+  /** Pre-cap member count, for "see all N" without a second request. */
+  total?: number;
 }
 
 export interface CatalogSearchResponse {
@@ -125,6 +128,8 @@ export interface CatalogSearchResponse {
   interpreted_as?: string | null;
   generated_at?: number;
   cached?: boolean;
+  /** Id of the row confident enough to lead the page, or null when none is. */
+  top_result?: string | null;
   items: CatalogItem[];
   sections: CatalogSection[];
   partial_failures?: Array<{ source: string; error: string }>;

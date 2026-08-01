@@ -27,7 +27,7 @@ import {
 import SearchResultRow from '../components/SearchResultRow';
 import { savedFromTrack } from '../lib/saved';
 import { Spinner } from '../components/Spinner';
-import type { CatalogItem, CatalogSaveResponse, SavedEntry, SearchResult, Track } from '../types/music';
+import type { CatalogItem, CatalogSaveResponse, CatalogSection, SavedEntry, SearchResult, Track } from '../types/music';
 import styles from './Search.module.css';
 import { coverStyle } from '../lib/cover';
 import { attachContextMenu } from '../lib/contextMenu';
@@ -41,6 +41,16 @@ import { SearchField } from '../components/SearchField';
 import { CatalogResultRow } from '../components/CatalogResultRow';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { readSearchCache, writeSearchCache } from '../lib/searchCache';
+import {
+  bodySections,
+  itemsForTypes,
+  resolveSections,
+  topResultItem,
+  CATALOG_CACHE_NS,
+  type CachedCatalog,
+  type ResolvedSection,
+} from '../lib/searchSections';
+import { TopResultCard } from '../components/TopResultCard';
 
 type SearchDomain = 'music' | 'youtube';
 type SearchTab = 'all' | 'track,library_track' | 'artist' | 'album';
@@ -51,6 +61,30 @@ const tabs: Array<{ id: SearchTab; label: () => string }> = [
   { id: 'artist', label: () => tr('search.tabArtists') },
   { id: 'album', label: () => tr('search.tabAlbums') },
 ];
+
+const TAB_SECTION_ID: Record<SearchTab, string> = {
+  all: 'songs',
+  'track,library_track': 'songs',
+  artist: 'artists',
+  album: 'albums',
+};
+
+/** Section headings, by the server's stable ids — never its English strings. */
+const SECTION_TITLE: Record<string, () => string> = {
+  top: () => tr('search.topResultSection'),
+  songs: () => tr('search.tabSongs'),
+  artists: () => tr('search.tabArtists'),
+  albums: () => tr('search.tabAlbums'),
+  playlists: () => tr('search.labelPlaylist'),
+};
+
+/**
+ * How many songs the All tab shows before handing off to the Songs tab.
+ *
+ * It used to show every one of them, which is what buried the artist and album
+ * rails under a wall of tracks.
+ */
+const SONGS_PREVIEW = 5;
 
 const RECENTS_KEY = 'catalog_search_recents';
 const RECENTS_KEY_YOUTUBE = 'youtube_search_recents';
@@ -102,6 +136,7 @@ export default function Search() {
   const [q, setQ] = createSignal(initialQuery);
   const [tab, setTab] = createSignal<SearchTab>(initialTab);
   const [items, setItems] = createSignal<CatalogItem[]>([]);
+  const [sections, setSections] = createSignal<CatalogSection[]>([]);
   const [interpretedAs, setInterpretedAs] = createSignal('');
   const [loading, setLoading] = createSignal(false);
   const [searchError, setSearchError] = createSignal(false);
@@ -128,12 +163,31 @@ export default function Search() {
   let requestId = 0;
   let searchInput: HTMLInputElement | undefined;
 
-  const songs = createMemo(() =>
-    items().filter((item) => ['track', 'library_track'].includes(item.type)),
-  );
-  const artists = createMemo(() => items().filter((item) => item.type === 'artist'));
-  const albums = createMemo(() => items().filter((item) => item.type === 'album'));
-  const playlists = createMemo(() => items().filter((item) => item.type === 'playlist'));
+  // One response, laid out by the server. The tabs slice it rather than each
+  // asking for their own — a `type=artist` request re-ran the whole provider
+  // fan-out just to filter what `type=all` already had.
+  const resolved = createMemo(() => resolveSections(items(), sections()));
+  const topResult = createMemo(() => topResultItem(resolved()));
+  const songs = createMemo(() => itemsForTypes(items(), ['track', 'library_track']));
+  const songsSection = createMemo(() => resolved().find((section) => section.id === 'songs'));
+  const songsPreview = createMemo(() => (songsSection()?.items ?? []).slice(0, SONGS_PREVIEW));
+  const songsTotal = createMemo(() => songsSection()?.total ?? songs().length);
+
+  /** The sections rendered below the hero + songs block, for the active tab. */
+  const visibleSections = createMemo<ResolvedSection[]>(() => {
+    const active = tab();
+    if (active === 'all') {
+      // Songs already appear in the pinned block above.
+      return bodySections(resolved()).filter((section) => section.id !== 'songs');
+    }
+    const members = itemsForTypes(items(), active.split(','));
+    if (!members.length) return [];
+    const layout: ResolvedSection['layout'] =
+      active === 'artist' ? 'grid_round' : active === 'album' ? 'grid' : 'rows';
+    return [{ id: TAB_SECTION_ID[active], layout, items: members, total: members.length }];
+  });
+
+  const sectionTitle = (id: string) => SECTION_TITLE[id]?.() ?? id;
   const openSharedTrack = (capsule: TrackShareCapsuleV1) => {
     const current = ++requestId;
     aborter?.abort();
@@ -142,6 +196,7 @@ export default function Search() {
     setQ(`${capsule.title} — ${capsule.artist}`);
     setDomain('music');
     setItems([]);
+    setSections([]);
     setSharedItem(null);
     setSharedError(false);
     setSharedInvalid(false);
@@ -223,7 +278,7 @@ export default function Search() {
     }
   });
 
-  const runCatalog = (query: string, nextTab = tab()) => {
+  const runCatalog = (query: string) => {
     query = query.trim();
     const current = ++requestId;
     aborter?.abort();
@@ -236,17 +291,17 @@ export default function Search() {
     setYoutubeLoading(false);
     if (query.length < 2) {
       setItems([]);
+      setSections([]);
       setLoading(false);
       return;
     }
     // Catalog results had no cache at all, so returning to Search re-ran the
-    // query the user had just made.
-    const cachedCatalog = readSearchCache<{ items: CatalogItem[]; interpretedAs: string }>(
-      `catalog:${nextTab}`,
-      query,
-    );
+    // query the user had just made. One namespace, not one per tab, so the
+    // Now Playing panel shares the entry too.
+    const cachedCatalog = readSearchCache<CachedCatalog>(CATALOG_CACHE_NS, query);
     if (cachedCatalog) {
       setItems(cachedCatalog.items);
+      setSections(cachedCatalog.sections);
       setInterpretedAs(cachedCatalog.interpretedAs);
       setLoading(false);
       return;
@@ -254,18 +309,21 @@ export default function Search() {
     aborter = new AbortController();
     setLoading(true);
     api
-      .searchCatalog(query, aborter.signal, nextTab)
+      .searchCatalog(query, aborter.signal)
       .then((res) => {
         if (current !== requestId) return;
         const items = res.items ?? [];
+        const sections = res.sections ?? [];
         const interpretedAs = res.interpreted_as ?? '';
-        writeSearchCache(`catalog:${nextTab}`, query, { items, interpretedAs });
+        writeSearchCache(CATALOG_CACHE_NS, query, { items, sections, interpretedAs });
         setItems(items);
+        setSections(sections);
         setInterpretedAs(interpretedAs);
       })
       .catch((e) => {
         if (current !== requestId || isAbort(e)) return;
         setItems([]);
+        setSections([]);
         setInterpretedAs('');
         setSearchError(true);
       })
@@ -290,6 +348,7 @@ export default function Search() {
     setInterpretedAs('');
     setLoading(false);
     setItems([]);
+    setSections([]);
     const direct = parseYouTubeInput(query);
     if (direct) {
       aborter = new AbortController();
@@ -353,7 +412,7 @@ export default function Search() {
       { replace: true },
     );
     if (nextDomain === 'youtube') runYouTube(query);
-    else runCatalog(query, nextTab);
+    else runCatalog(query);
   };
 
   // True while the YouTube box holds a query nobody has confirmed yet. The
@@ -456,10 +515,15 @@ export default function Search() {
     }
   };
 
+  // Filtering, not fetching. Every tab is a view of the one `type=all` response
+  // the server already ranked, so switching is instant and the orders agree.
   const setActiveTab = (next: SearchTab) => {
-    if (next === tab() && !loading()) return;
+    if (next === tab()) return;
     setTab(next);
-    runSearch(parseSearchInput(q()).query, 'music', next);
+    setSearchParams(
+      { q: q().trim() || undefined, domain: undefined, tab: next === 'all' ? undefined : next },
+      { replace: true },
+    );
   };
 
   const setActiveDomain = (next: SearchDomain) => {
@@ -785,48 +849,89 @@ export default function Search() {
                   </p>
                 )}
               </Show>
-              <Show when={songs().length > 0}>
-                <section class={styles.section}>
-                  <h2 class={styles.sectionTitle}>{tr('search.tabSongs')}</h2>
-                  <For each={songs()}>
+              {/* The hero and the songs preview sit side by side on a wide
+                  screen and stack on a narrow one — the one part of the layout
+                  that is fixed, because a search always wants to answer
+                  "which one?" and "what can I play right now?" together. */}
+              <Show when={tab() === 'all' && (topResult() || songsPreview().length > 0)}>
+                <div class={styles.topBlock}>
+                  <Show when={topResult()}>
                     {(item) => (
-                      <CatalogResultRow
-                        item={item}
-                        active={isPlayingItem(item)}
-                        saving={saving().has(item.id)}
-                        showSource
-                        onPlay={() => playItem(item)}
-                        onDownload={() => void saveItem(item)}
-                      />
+                      <section class={styles.section}>
+                        <h2 class={styles.sectionTitle}>{tr('search.topResultSection')}</h2>
+                        <TopResultCard
+                          item={item()}
+                          active={isPlayingItem(item())}
+                          coverStyle={itemCoverStyle}
+                          onPick={() => playItem(item())}
+                        />
+                      </section>
                     )}
-                  </For>
-                </section>
+                  </Show>
+                  <Show when={songsPreview().length > 0}>
+                    <section class={styles.section}>
+                      <h2 class={styles.sectionTitle}>{tr('search.tabSongs')}</h2>
+                      <For each={songsPreview()}>
+                        {(item) => (
+                          <CatalogResultRow
+                            item={item}
+                            active={isPlayingItem(item)}
+                            saving={saving().has(item.id)}
+                            showSource
+                            onPlay={() => playItem(item)}
+                            onDownload={() => void saveItem(item)}
+                          />
+                        )}
+                      </For>
+                      <Show when={songsTotal() > songsPreview().length}>
+                        <button
+                          class={styles.seeAll}
+                          type="button"
+                          onClick={() => setActiveTab('track,library_track')}
+                        >
+                          {tr('search.seeAllSongs', { count: String(songsTotal()) })}
+                        </button>
+                      </Show>
+                    </section>
+                  </Show>
+                </div>
               </Show>
-              <Show when={artists().length > 0}>
-                <EntitySection
-                  title={tr('search.tabArtists')}
-                  items={artists()}
-                  round
-                  coverStyle={itemCoverStyle}
-                  onPick={playItem}
-                />
-              </Show>
-              <Show when={albums().length > 0}>
-                <EntitySection
-                  title={tr('search.tabAlbums')}
-                  items={albums()}
-                  coverStyle={itemCoverStyle}
-                  onPick={playItem}
-                />
-              </Show>
-              <Show when={playlists().length > 0}>
-                <EntitySection
-                  title={tr('search.labelPlaylist')}
-                  items={playlists()}
-                  coverStyle={itemCoverStyle}
-                  onPick={playItem}
-                />
-              </Show>
+              {/* Everything else in the order the server decided. An album
+                  search leads with albums; an artist search leads with the
+                  artist. It used to be songs, then artists, then albums, every
+                  single time. */}
+              <For each={visibleSections()}>
+                {(section) => (
+                  <Switch>
+                    <Match when={section.layout === 'rows'}>
+                      <section class={styles.section}>
+                        <h2 class={styles.sectionTitle}>{sectionTitle(section.id)}</h2>
+                        <For each={section.items}>
+                          {(item) => (
+                            <CatalogResultRow
+                              item={item}
+                              active={isPlayingItem(item)}
+                              saving={saving().has(item.id)}
+                              showSource
+                              onPlay={() => playItem(item)}
+                              onDownload={() => void saveItem(item)}
+                            />
+                          )}
+                        </For>
+                      </section>
+                    </Match>
+                    <Match when={true}>
+                      <EntitySection
+                        title={sectionTitle(section.id)}
+                        items={section.items}
+                        round={section.layout === 'grid_round'}
+                        coverStyle={itemCoverStyle}
+                        onPick={playItem}
+                      />
+                    </Match>
+                  </Switch>
+                )}
+              </For>
             </div>
           </Match>
         </Switch>

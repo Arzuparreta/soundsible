@@ -23,7 +23,15 @@ from shared.database import instance_db
 from shared.providers import deezer
 from shared.hardening import rate_limit
 from shared.resolution_confidence import best_candidate, classify_confidence
-from shared.text_utils import collapse_text, identity_key, normalize_text, sanitize_cli_message
+from shared.text_utils import (
+    collapse_text,
+    fold_text,
+    identity_key,
+    match_tokens,
+    normalize_text,
+    sanitize_cli_message,
+    strip_release_junk,
+)
 from shared.url_utils import validate_youtube_video_id
 
 
@@ -33,16 +41,30 @@ catalog_bp = Blueprint("catalog", __name__, url_prefix="")
 
 _DEEZER_HOST = "https://api.deezer.com"
 _MUSICBRAINZ_HOST = "https://musicbrainz.org/ws/2"
-_CATALOG_CACHE_TTL_SEC = 180
-_CATALOG_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
-_ARTIST_CACHE_TTL_SEC = 600
-_ARTIST_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
-_ALBUM_CACHE_TTL_SEC = 600
-_ALBUM_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
-# Every distinct query/artist/album mints a cache entry, so an unbounded dict
-# grows for the lifetime of a long-running server. Expired entries are dropped
-# on write and the cache is capped by evicting whatever expires soonest.
+# Every distinct query/artist/album mints a cache entry, so these have to be
+# bounded. They also have to be single-flight: a TTL cache only helps *after*
+# the first call returns, and these misses cost a Deezer/MusicBrainz/yt-dlp
+# fan-out — so two devices, or the Search route and the Now Playing panel, or a
+# debounced keystroke racing its own retry, each ran the whole thing.
+#
+# `wait_timeout_sec` is 15, not `Memo`'s yt-dlp-sized default of 120: the
+# client gives up on `/api/catalog/search` after 15s (ui_web/src/lib/api.ts), and
+# a waiter blocked eight times longer than anyone is listening is just a pinned
+# worker.
 _CACHE_MAX_ENTRIES = 256
+_CATALOG_CACHE_TTL_SEC = 180
+_ARTIST_CACHE_TTL_SEC = 600
+_ALBUM_CACHE_TTL_SEC = 600
+_CACHE_WAIT_TIMEOUT_SEC = 15.0
+_catalog_memo: Memo[dict[str, Any]] = Memo(
+    ttl_sec=_CATALOG_CACHE_TTL_SEC, maxsize=_CACHE_MAX_ENTRIES, wait_timeout_sec=_CACHE_WAIT_TIMEOUT_SEC
+)
+_artist_memo: Memo[dict[str, Any]] = Memo(
+    ttl_sec=_ARTIST_CACHE_TTL_SEC, maxsize=_CACHE_MAX_ENTRIES, wait_timeout_sec=_CACHE_WAIT_TIMEOUT_SEC
+)
+_album_memo: Memo[dict[str, Any]] = Memo(
+    ttl_sec=_ALBUM_CACHE_TTL_SEC, maxsize=_CACHE_MAX_ENTRIES, wait_timeout_sec=_CACHE_WAIT_TIMEOUT_SEC
+)
 _DEEZER_FANOUT_TIMEOUT_SEC = 12
 # Deezer/MusicBrainz rows carry no video id, so playing or saving one costs a
 # yt-dlp search. Two callers routinely want the same row at the same moment: the
@@ -60,6 +82,24 @@ _MUSICBRAINZ_HEADERS = {
     "Accept": "application/json",
 }
 _SEARCH_WORKERS = 4
+# Two rows that agree on artist and title but disagree on length by more than
+# this are different cuts, not duplicates.
+_DEDUPE_DURATION_TOLERANCE_SEC = 10
+# Per-shape budgets. The local provider used to draw tracks, artists and albums
+# from one shared budget and stop at the first match past it, so a large library
+# returned whatever sorted first rather than what matched best.
+_LOCAL_TRACK_BUDGET = 24
+_LOCAL_ENTITY_BUDGET = 8
+# Section caps. These bound the response, which was previously unlimited: `limit`
+# only ever sized the provider fan-out, never the payload.
+_SECTION_CAPS = {"songs": 40, "artists": 20, "albums": 20, "playlists": 12}
+# The query has to essentially *be* the name: 70 (title prefix) + 32 (artist
+# prefix) = 102 clears this; 42 (title substring) + 48 (artist exact) = 90 does
+# not.
+_TOP_FLOOR = 92.0
+# One type-boost tier. If the runner-up is a different type and within a type
+# boost, the type boost alone decided the winner — that is not evidence.
+_TOP_MARGIN = 12.0
 
 
 def _scoped(key: str) -> str:
@@ -74,30 +114,19 @@ def _scoped(key: str) -> str:
     return f"{current_user_id() or '-'}|{key}"
 
 
-def _cache_get(cache: dict[str, tuple[float, dict[str, Any]]], key: str) -> dict[str, Any] | None:
-    key = _scoped(key)
-    entry = cache.get(key)
-    if not entry:
-        return None
-    if entry[0] <= time.time():
-        cache.pop(key, None)
-        return None
-    return dict(entry[1])
+def _memo_resolve(
+    memo: Memo[dict[str, Any]], key: str, compute: Any
+) -> tuple[dict[str, Any], bool]:
+    """Account-scoped, single-flight, copy-on-read access to a cached body.
 
-
-def _cache_put(
-    cache: dict[str, tuple[float, dict[str, Any]]],
-    key: str,
-    ttl_sec: int,
-    body: dict[str, Any],
-) -> None:
+    The copy matters: callers mutate what they get back (`body["cached"] = ...`),
+    and `Memo` hands out the stored object itself.
+    """
     key = _scoped(key)
-    now = time.time()
-    cache[key] = (now + ttl_sec, dict(body))
-    for expired in [k for k, (expires_at, _) in cache.items() if expires_at <= now]:
-        cache.pop(expired, None)
-    while len(cache) > _CACHE_MAX_ENTRIES:
-        cache.pop(min(cache.items(), key=lambda kv: kv[1][0])[0], None)
+    hit = memo.get(key)
+    if hit is not None:
+        return dict(hit), True
+    return dict(memo.resolve(key, compute)), False
 
 
 def _get_api():
@@ -242,32 +271,237 @@ def _edit_distance_at_most_one(left: str, right: str) -> bool:
     return edits + (len(right) - j) <= 1
 
 
-def _rank(item: dict[str, Any], query: str, index: int, intent_creator: str = "") -> float:
-    q = _norm(query)
-    title = _norm(item.get("title"))
-    artist = _norm(item.get("artist") or item.get("subtitle"))
-    score = 0.0
-    if title == q:
-        score += 100
-    elif title.startswith(q):
-        score += 70
-    elif q and q in title:
-        score += 42
-    if artist == q:
-        score += 48
-    elif artist.startswith(q):
-        score += 32
-    elif q and q in artist:
-        score += 18
-    type_boost = {"library_track": 12, "track": 12, "artist": 7, "album": 5, "playlist": 4}
-    score += type_boost.get(str(item.get("type")), 0)
-    score += min(25.0, float(item.get("popularity") or 0) / 40000.0)
+# ── Ranking ──────────────────────────────────────────────────────────────────
+# Query-only by contract (docs/ARCHITECTURE.md): nothing below may read
+# favourites, listening history, or any other account signal, not even to break
+# a tie. Every term is a function of the query plus the public rows the
+# providers just returned.
+#
+# The text tiers are the load-bearing quantity. Every other term is sized to fit
+# *inside* the smallest gap between two tiers, so it can reorder rows that match
+# the query equally well but can never overturn a better text match.
+_TITLE_EXACT, _TITLE_PREFIX, _TITLE_CONTAINS = 100.0, 70.0, 42.0
+_ARTIST_EXACT, _ARTIST_PREFIX, _ARTIST_CONTAINS = 48.0, 32.0, 18.0
+# Smallest title gap 100-70 = 30. Smallest artist gap 48-32 = 16.
+_TYPE_BOOST = {"library_track": 12.0, "track": 12.0, "artist": 7.0, "album": 5.0, "playlist": 4.0}
+
+# A non-exact title keeps at least this share of its tier, so the coverage
+# factor can only order rows within a tier.
+_COVERAGE_FLOOR = 0.55
+_POPULARITY_MAX = 8.0  # < 16, so popularity never crosses an artist tier.
+_POPULARITY_NEUTRAL = _POPULARITY_MAX / 2  # cohorts that publish no metric at all.
+# > (12-7) + 8: enough to beat "the track only won on type boost and views".
+# < 30: not enough to promote a substring match over an exact one.
+_ENTITY_INTENT_BONUS = 22.0
+_CORROBORATION_BONUS = 6.0  # < 16: provider availability reorders within a tier only.
+_CREATOR_INTENT_BONUS = 135.0
+_INTENT_WINDOW = 8
+_INTENT_ARTIST_QUORUM = 4
+_INTENT_ALBUM_QUORUM = 3
+_TRACK_TYPES = ("library_track", "track")
+
+# Public, fixed tie-breaks. `_MERGE_ORDER` reproduces the provider merge order
+# this endpoint has always used, in which library is last: keeping it means this
+# rewrite cannot change the outcome of any existing tie. Do not move library to
+# the front either — ARCHITECTURE forbids ownership as a tie-break in *both*
+# directions.
+_MERGE_ORDER = {"youtube": 0, "deezer": 1, "musicbrainz": 2, "library": 3}
+_TYPE_ORDER = {"artist": 0, "album": 1, "library_track": 2, "track": 3, "playlist": 4}
+
+
+def _coverage(q_folded: str, text_folded: str) -> float:
+    """How much of the field the query accounts for, 0..1."""
+    if not q_folded or not text_folded:
+        return 0.0
+    return min(1.0, len(q_folded) / max(len(q_folded), len(text_folded)))
+
+
+def _text_score(
+    q_folded: str,
+    q_tokens: frozenset[str],
+    value: object,
+    exact: float,
+    prefix: float,
+    contains: float,
+    *,
+    apply_coverage: bool,
+) -> float:
+    """Score one field against the query, on the original tier scale.
+
+    `apply_coverage` is on for titles and off for artists. A prefix match on
+    ``Radio`` and one on ``Radiohead - Creep`` used to score identically, and
+    titles are where provider boilerplate lives. Artist fields are short clean
+    names everywhere except YouTube channels, so a length ratio carries almost
+    no signal there and would only penalise bands with long names.
+    """
+    text = fold_text(strip_release_junk(value) if apply_coverage else value)
+    if not text or not q_folded:
+        return 0.0
+    if text == q_folded:
+        return exact
+    if text.startswith(q_folded):
+        tier = prefix
+    elif q_folded in text:
+        tier = contains
+    elif q_tokens and q_tokens.issubset(set(match_tokens(text))):
+        # Every query word is present, just not in that order: `rainbows in`
+        # finds `In Rainbows`. Worth the same as a substring match.
+        tier = contains
+    else:
+        return 0.0
+    if not apply_coverage:
+        return tier
+    return tier * (_COVERAGE_FLOOR + (1.0 - _COVERAGE_FLOOR) * _coverage(q_folded, text))
+
+
+def _popularity_scores(items: list[dict[str, Any]]) -> dict[str, float]:
+    """Bounded popularity, ranked *within* each (source, type) cohort.
+
+    Raw popularity is not comparable across providers: Deezer `rank` tops out at
+    1e6, MusicBrainz `score` at 100, YouTube view counts are unbounded, and
+    Deezer artist rows publish none at all. The absolute term this replaces
+    (`min(25, popularity/40000)`) was therefore a near-binary +25 for YouTube and
+    Deezer *tracks* and 0 for everything else — a flat 25-point thumb on the
+    scale that alone was enough to tie an exact artist-name match.
+
+    A cohort with no variance scores the neutral midpoint. That rule keys off the
+    absence of a published metric, never off ownership: MusicBrainz artist rows
+    get exactly the same treatment library rows do.
+    """
+    cohorts: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for item in items:
+        cohorts.setdefault((str(item.get("source")), str(item.get("type"))), []).append(item)
+
+    scores: dict[str, float] = {}
+    for members in cohorts.values():
+        values = sorted({float(item.get("popularity") or 0.0) for item in members}, reverse=True)
+        if len(values) <= 1:
+            for item in members:
+                scores[item["id"]] = _POPULARITY_NEUTRAL
+            continue
+        # Dense rank, so equal popularity always scores equal — required for a
+        # reproducible order.
+        dense = {value: idx for idx, value in enumerate(values)}
+        span = len(values) - 1
+        for item in members:
+            rank = dense[float(item.get("popularity") or 0.0)]
+            scores[item["id"]] = _POPULARITY_MAX * (1.0 - rank / span)
+    return scores
+
+
+def _entity_key(item: dict[str, Any]) -> str:
+    return f"{item.get('type')}\x00{fold_text(item.get('title'))}"
+
+
+def _corroboration_scores(items: list[dict[str, Any]]) -> dict[str, float]:
+    """Entity names independent providers agree on are more likely to be real."""
+    sources: dict[str, set[str]] = {}
+    for item in items:
+        if item.get("type") in ("artist", "album"):
+            sources.setdefault(_entity_key(item), set()).add(str(item.get("source")))
+    return {
+        key: _CORROBORATION_BONUS
+        for key, found in sources.items()
+        if len(found) >= 2
+    }
+
+
+def _entity_intent(
+    ranked: list[dict[str, Any]], q_folded: str, q_tokens: frozenset[str]
+) -> tuple[str, str]:
+    """Read 'you meant the artist/album, not these songs' off the songs themselves.
+
+    Eight Radiohead songs at the top of a `radiohead` search are eight pieces of
+    public evidence that the artist page is the answer. Query-only: the vote runs
+    over provider rows, and the winner still has to match the query by name — the
+    quorum alone would fire on any query with one dominant artist.
+
+    Album intent fires rarely by construction: only Deezer and library track rows
+    carry an `album` field at all.
+    """
+    window = [item for item in ranked if item.get("type") in _TRACK_TYPES][:_INTENT_WINDOW]
+    return (
+        _intent_winner(window, "artist", _INTENT_ARTIST_QUORUM, q_folded, q_tokens),
+        _intent_winner(window, "album", _INTENT_ALBUM_QUORUM, q_folded, q_tokens),
+    )
+
+
+def _intent_winner(
+    window: list[dict[str, Any]],
+    field: str,
+    quorum: int,
+    q_folded: str,
+    q_tokens: frozenset[str],
+) -> str:
+    votes: dict[str, int] = {}
+    for item in window:
+        name = fold_text(item.get(field))
+        if name:
+            votes[name] = votes.get(name, 0) + 1
+    if not votes:
+        return ""
+    # Ties broken by name so the winner never depends on dict ordering.
+    name, count = max(votes.items(), key=lambda kv: (kv[1], kv[0]))
+    if count < quorum:
+        return ""
+    matches = _text_score(
+        q_folded, q_tokens, name, _TITLE_EXACT, _TITLE_PREFIX, _TITLE_CONTAINS, apply_coverage=False
+    )
+    return name if matches >= _TITLE_CONTAINS else ""
+
+
+def _rank(
+    item: dict[str, Any],
+    query: str,
+    index: int = 0,
+    intent_creator: str = "",
+    *,
+    popularity: float = _POPULARITY_NEUTRAL,
+    corroboration: float = 0.0,
+    entity_intent: float = 0.0,
+) -> float:
+    """Score one row against the query.
+
+    `index` is accepted and ignored. It used to subtract `index * 0.01`, which
+    over a ~150-row merge drifted far enough to reorder rows whose real scores
+    differed by less than 1.5 points — every small term below would have been
+    partly noise. Ordering is now an explicit total order (`_sort_key`). The
+    parameter stays so the neutrality regression test keeps calling this
+    positionally; the cross-row terms are keyword-only with neutral defaults so
+    that test still compares two rows that differ only in ownership.
+    """
+    q_folded = fold_text(query)
+    q_tokens = frozenset(match_tokens(query))
+    score = _text_score(
+        q_folded, q_tokens, item.get("title"),
+        _TITLE_EXACT, _TITLE_PREFIX, _TITLE_CONTAINS, apply_coverage=True,
+    )
+    score += _text_score(
+        q_folded, q_tokens, item.get("artist") or item.get("subtitle"),
+        _ARTIST_EXACT, _ARTIST_PREFIX, _ARTIST_CONTAINS, apply_coverage=False,
+    )
+    score += _TYPE_BOOST.get(str(item.get("type")), 0.0)
+    score += popularity + corroboration + entity_intent
     if intent_creator:
-        creator = _norm(item.get("artist") or item.get("subtitle"))
-        intent = _norm(intent_creator)
+        creator = fold_text(item.get("artist") or item.get("subtitle"))
+        intent = fold_text(intent_creator)
         if creator == intent or creator.startswith(f"{intent} -") or intent in creator:
-            score += 135
-    return score - index * 0.01
+            score += _CREATOR_INTENT_BONUS
+    return score
+
+
+def _sort_key(item: dict[str, Any]) -> tuple[float, int, int, str]:
+    """A total order, so the same rows always produce the same page.
+
+    Providers finish in whatever order the network gives us, so score alone is
+    not enough: the tie-breaks have to be properties of the row.
+    """
+    return (
+        -item["_rank"],
+        _MERGE_ORDER.get(str(item.get("source")), 9),
+        _TYPE_ORDER.get(str(item.get("type")), 9),
+        str(item.get("id") or ""),
+    )
 
 
 def _dedupe(
@@ -275,54 +509,212 @@ def _dedupe(
     query: str,
     intent_creator: str = "",
 ) -> list[dict[str, Any]]:
-    by_key: dict[str, dict[str, Any]] = {}
-    for idx, item in enumerate(items):
-        ids = item.get("external_ids") or {}
-        if item.get("track_id"):
-            dedupe_key = f"library:{item['track_id']}"
-        elif ids.get("isrc"):
-            dedupe_key = f"isrc:{_norm(ids.get('isrc'))}"
-        elif ids.get("deezer_id"):
-            dedupe_key = f"deezer:{ids.get('deezer_id')}"
-        elif ids.get("musicbrainz_id"):
-            dedupe_key = f"mb:{ids.get('musicbrainz_id')}"
-        else:
-            dedupe_key = f"{item.get('type')}:{_key(item.get('title'), item.get('artist') or item.get('subtitle'))}"
+    """Score every row, collapse the ones that are the same recording, and order.
 
-        item["_rank"] = _rank(item, query, idx, intent_creator)
-        existing = by_key.get(dedupe_key)
-        if not existing or item["_rank"] > existing["_rank"]:
-            by_key[dedupe_key] = item
+    Two passes: the first ranks on text and per-row signals, the second applies
+    the entity intent read off that first ranking. Deriving intent from the final
+    order and feeding it back in would be a cycle whose fixed point depends on
+    iteration order.
+    """
+    q_folded = fold_text(query)
+    q_tokens = frozenset(match_tokens(query))
+    popularity = _popularity_scores(items)
+    corroboration = _corroboration_scores(items)
 
-    return [
-        {k: v for k, v in item.items() if k != "_rank"}
-        for item in sorted(by_key.values(), key=lambda x: x["_rank"], reverse=True)
-    ]
+    for item in items:
+        item["_rank"] = _rank(
+            item, query, intent_creator=intent_creator,
+            popularity=popularity.get(item["id"], _POPULARITY_NEUTRAL),
+            corroboration=corroboration.get(_entity_key(item), 0.0),
+        )
+    first_pass = sorted(items, key=_sort_key)
+
+    artist_intent, album_intent = _entity_intent(first_pass, q_folded, q_tokens)
+    if artist_intent or album_intent:
+        for item in items:
+            name = fold_text(item.get("title"))
+            wanted = artist_intent if item.get("type") == "artist" else (
+                album_intent if item.get("type") == "album" else ""
+            )
+            if wanted and name == wanted:
+                item["_rank"] += _ENTITY_INTENT_BONUS
+
+    survivors = _collapse_duplicates(items)
+    for item in survivors:
+        item["_title_score"] = _text_score(
+            q_folded, q_tokens, item.get("title"),
+            _TITLE_EXACT, _TITLE_PREFIX, _TITLE_CONTAINS, apply_coverage=True,
+        )
+    return sorted(survivors, key=_sort_key)
+
+
+def _dedupe_keys(item: dict[str, Any]) -> list[str]:
+    """Every identity this row can be recognised by, strongest evidence first."""
+    ids = item.get("external_ids") or {}
+    keys: list[str] = []
+    if ids.get("isrc"):
+        keys.append(f"isrc:{_norm(ids.get('isrc'))}")
+    if item.get("track_id"):
+        keys.append(f"library:{item['track_id']}")
+    for field, prefix in (
+        ("deezer_id", "deezer"),
+        ("musicbrainz_id", "mb"),
+        ("deezer_artist_id", "deezer-artist"),
+        ("musicbrainz_artist_id", "mb-artist"),
+        ("deezer_album_id", "deezer-album"),
+        ("musicbrainz_release_id", "mb-release"),
+        ("youtube_id", "youtube"),
+    ):
+        if ids.get(field):
+            keys.append(f"{prefix}:{ids.get(field)}")
+    # YouTube titles are `Artist - Title (Official Video)` with the artist
+    # repeated as the channel, so the soft key almost never matches one and the
+    # parse that would make it match is the change most likely to *hide* the
+    # exact row somebody was hunting for. Left out on purpose.
+    if item.get("source") != "youtube":
+        # `library_track` and `track` are the same shape from different places —
+        # bucketing them apart is precisely what let one song be listed once per
+        # provider.
+        shape = "track" if item.get("type") in _TRACK_TYPES else str(item.get("type"))
+        soft = f"{fold_text(item.get('artist') or item.get('subtitle'))}\x00{fold_text(strip_release_junk(item.get('title')))}"
+        keys.append(f"soft:{shape}:{soft}")
+    return keys
+
+
+def _collapse_duplicates(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One row per recording, merging what the other copies knew about it.
+
+    The same song routinely arrived three times — from the library, from Deezer,
+    from MusicBrainz — because a library row was keyed by its track id and so
+    could never match anything else.
+
+    The survivor and its position are chosen by score alone. Ownership only
+    merges into the survivor's action state, which is exactly what ARCHITECTURE
+    permits: an owned copy makes the row instantly playable, it does not move the
+    row up the page.
+    """
+    representative: dict[str, dict[str, Any]] = {}
+    groups: dict[int, list[dict[str, Any]]] = {}
+    order: list[int] = []
+
+    for item in items:
+        keys = _dedupe_keys(item)
+        found = next((representative[k] for k in keys if k in representative), None)
+        if found is None or not _same_recording(found, item):
+            groups[id(item)] = [item]
+            order.append(id(item))
+            for key in keys:
+                representative.setdefault(key, item)
+            continue
+        groups[id(found)].append(item)
+        for key in keys:
+            representative.setdefault(key, found)
+
+    survivors: list[dict[str, Any]] = []
+    for group_id in order:
+        group = groups[group_id]
+        winner = min(group, key=_sort_key)
+        if len(group) > 1:
+            winner["_rank"] = max(row["_rank"] for row in group)
+            _merge_action_state(winner, group)
+        survivors.append(winner)
+    return survivors
+
+
+def _merge_action_state(winner: dict[str, Any], group: list[dict[str, Any]]) -> None:
+    state = dict(winner.get("action_state") or {})
+    for row in group:
+        other = row.get("action_state") or {}
+        for flag in ("in_library", "playable", "downloadable"):
+            state[flag] = bool(state.get(flag)) or bool(other.get(flag))
+        if not winner.get("track_id") and row.get("track_id"):
+            winner["track_id"] = row["track_id"]
+            winner["raw"] = row.get("raw") or winner.get("raw")
+    state["needs_resolution"] = not bool(winner.get("track_id"))
+    winner["action_state"] = state
+    winner["alternates"] = [row["id"] for row in group if row["id"] != winner["id"]]
+
+
+def _same_recording(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    """Guard against merging two different cuts that share a title and artist.
+
+    A three-minute studio take and a twelve-minute live version are not the same
+    row. When either side has no duration there is nothing to contradict, so the
+    identity keys stand on their own.
+    """
+    if left.get("type") in _TRACK_TYPES and right.get("type") not in _TRACK_TYPES:
+        return False
+    if right.get("type") in _TRACK_TYPES and left.get("type") not in _TRACK_TYPES:
+        return False
+    a, b = left.get("duration"), right.get("duration")
+    if not a or not b:
+        return True
+    return abs(int(a) - int(b)) <= _DEDUPE_DURATION_TOLERANCE_SEC
 
 
 def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
-    tracks = _library_tracks()
-    q = _norm(query)
-    out: list[dict[str, Any]] = []
-    seen_artists: set[str] = set()
-    seen_albums: set[str] = set()
+    """The best local matches per shape, instead of the first N in library order.
 
-    for track in tracks:
+    Two things were wrong here. Tracks, artists and albums drew on one shared
+    budget and the scan stopped at the first match past it, so in a large library
+    the artist you were searching for could sit behind two dozen of their own
+    songs and never be emitted at all. And the match test was a substring of
+    ``"title artist album"`` joined together, which matched across field
+    boundaries.
+
+    Scoring runs on the raw strings and only the winners are materialised: each
+    `_catalog_item` embeds a full `track.to_dict()`, so building one per match
+    would mean tens of thousands of them per keystroke on a big library.
+
+    `limit` is accepted so this reads like the other providers, and ignored: the
+    per-shape budgets below are what bound the output.
+    """
+    q_folded = fold_text(query)
+    q_tokens = frozenset(match_tokens(query))
+    scored: list[tuple[float, str, Any]] = []
+    artists: dict[str, tuple[float, str, Any]] = {}
+    albums: dict[str, tuple[float, str, Any]] = {}
+
+    def score(value: object, *, coverage: bool) -> float:
+        return _text_score(
+            q_folded, q_tokens, value,
+            _TITLE_EXACT, _TITLE_PREFIX, _TITLE_CONTAINS, apply_coverage=coverage,
+        )
+
+    for track in _library_tracks():
         title = getattr(track, "title", "") or ""
         artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
         album = getattr(track, "album", "") or ""
-        haystack = f"{title} {artist} {album}".casefold()
-        if q and q not in haystack:
+        title_score = score(title, coverage=True)
+        artist_score = score(artist, coverage=False)
+        album_score = score(album, coverage=False)
+        if not (title_score or artist_score or album_score):
             continue
+        track_id = str(getattr(track, "id", ""))
+        scored.append((title_score * 2 + artist_score + album_score, track_id, track))
+        if artist and artist_score:
+            key = fold_text(artist)
+            if artist_score > artists.get(key, (0.0, "", None))[0]:
+                artists[key] = (artist_score, artist, track)
+        if album and (album_score or artist_score):
+            key = f"{fold_text(artist)}\x00{fold_text(album)}"
+            weight = max(album_score, artist_score)
+            if weight > albums.get(key, (0.0, "", None))[0]:
+                albums[key] = (weight, album, track)
+
+    out: list[dict[str, Any]] = []
+    best_tracks = sorted(scored, key=lambda row: (-row[0], row[1]))[:_LOCAL_TRACK_BUDGET]
+    for _, _, track in best_tracks:
+        artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
         out.append(
             _catalog_item(
                 item_id=f"library:track:{track.id}",
                 item_type="library_track",
                 source="library",
-                title=title,
+                title=getattr(track, "title", "") or "",
                 subtitle=artist,
                 artist=artist,
-                album=album,
+                album=getattr(track, "album", "") or "",
                 duration=_duration(getattr(track, "duration", None)),
                 cover=_cover_from_track(track),
                 track_id=track.id,
@@ -337,47 +729,47 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
                 raw=_track_dict(track),
             )
         )
-        artist_key = _norm(artist)
-        if artist_key and artist_key not in seen_artists and q in artist_key:
-            seen_artists.add(artist_key)
-            out.append(
-                _catalog_item(
-                    item_id=f"library:artist:{artist_key}",
-                    item_type="artist",
-                    source="library",
-                    title=artist,
-                    subtitle="Artist in your library",
-                    artist=artist,
-                    cover=_cover_from_track(track),
-                    track_id=None,
-                    in_library=True,
-                    playable=False,
-                    downloadable=False,
-                    raw={"artist": artist},
-                )
+
+    for key, (_, name, track) in sorted(artists.items(), key=lambda kv: (-kv[1][0], kv[0]))[:_LOCAL_ENTITY_BUDGET]:
+        out.append(
+            _catalog_item(
+                item_id=f"library:artist:{key}",
+                item_type="artist",
+                source="library",
+                title=name,
+                subtitle="",
+                artist=name,
+                cover=_cover_from_track(track),
+                track_id=None,
+                in_library=True,
+                playable=False,
+                downloadable=False,
+                raw={"artist": name},
             )
-        album_key = f"{_norm(artist)}\x00{_norm(album)}"
-        if album and album_key not in seen_albums and (q in _norm(album) or q in artist_key):
-            seen_albums.add(album_key)
-            out.append(
-                _catalog_item(
-                    item_id=f"library:album:{album_key}",
-                    item_type="album",
-                    source="library",
-                    title=album,
-                    subtitle=artist,
-                    artist=artist,
-                    album=album,
-                    cover=_cover_from_track(track),
-                    in_library=True,
-                    playable=False,
-                    downloadable=False,
-                    raw={"artist": artist, "album": album},
-                )
+        )
+
+    for key, (_, name, track) in sorted(albums.items(), key=lambda kv: (-kv[1][0], kv[0]))[:_LOCAL_ENTITY_BUDGET]:
+        artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
+        out.append(
+            _catalog_item(
+                item_id=f"library:album:{key}",
+                item_type="album",
+                source="library",
+                title=name,
+                subtitle=artist,
+                artist=artist,
+                album=name,
+                cover=_cover_from_track(track),
+                in_library=True,
+                playable=False,
+                downloadable=False,
+                raw={"artist": artist, "album": name},
             )
-        if len(out) >= limit:
-            break
-    return out[:limit]
+        )
+    # Deliberately not truncated by `limit`: the per-shape budgets above already
+    # bound this at 40 rows, and slicing here would cut the entity rows off the
+    # end again — the exact bug this rewrite exists to fix.
+    return out
 
 
 def _deezer_search(query: str, limit: int) -> list[dict[str, Any]]:
@@ -587,40 +979,80 @@ def _filter_types(items: list[dict[str, Any]], wanted: set[str]) -> list[dict[st
     return [item for item in items if item.get("type") in wanted]
 
 
-def _build_sections(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    top = items[0]["id"] if items else None
+def _top_result(ranked: list[dict[str, Any]]) -> str | None:
+    """The one row confident enough to lead the page, or nothing at all.
+
+    A wrong top result costs more than a missing one: it is the largest target on
+    the page, and for an artist or album it navigates somewhere else entirely.
+    The margin over the best row of a *different* type only applies to those two
+    types, because a wrong song at the top is one tap to undo.
+    """
+    if not ranked:
+        return None
+    head = ranked[0]
+    if head.get("_rank", 0.0) < _TOP_FLOOR:
+        return None
+    if head.get("type") not in ("artist", "album"):
+        return head["id"]
+    runner = next((row for row in ranked[1:] if row.get("type") != head.get("type")), None)
+    if runner is not None and head["_rank"] - runner["_rank"] < _TOP_MARGIN:
+        return None
+    return head["id"]
+
+
+def _build_sections(ranked: list[dict[str, Any]], top: str | None = None) -> list[dict[str, Any]]:
+    """The page layout, decided once, here.
+
+    The client used to re-group a rank-ordered list into a fixed songs ->
+    artists -> albums order, which buried the artist page under thirty songs on
+    an artist search — and the Now Playing panel had its own, opposite order.
+    Section order lives on the server so every surface agrees, and so the answer
+    can depend on what was actually asked for: an artist name leads with artists,
+    a song title leads with songs.
+
+    `total` is the pre-cap count, so the client can offer "see all 61" without
+    asking for anything else.
+    """
+    canonical = ("songs", "artists", "albums", "playlists")
+    specs = (
+        ("songs", "rows", frozenset(_TRACK_TYPES)),
+        ("artists", "grid_round", frozenset({"artist"})),
+        ("albums", "grid", frozenset({"album"})),
+        ("playlists", "grid", frozenset({"playlist"})),
+    )
     sections: list[dict[str, Any]] = []
+    for section_id, layout, types in specs:
+        members = [row for row in ranked if row.get("type") in types and row["id"] != top]
+        if not members:
+            continue
+        sections.append({
+            "id": section_id,
+            "layout": layout,
+            "item_ids": [row["id"] for row in members[:_SECTION_CAPS[section_id]]],
+            "total": len(members),
+            "_best": members[0].get("_rank", 0.0),
+        })
+    sections.sort(key=lambda s: (-s["_best"], canonical.index(s["id"])))
+    ordered = [{k: v for k, v in section.items() if k != "_best"} for section in sections]
     if top:
-        sections.append({"id": "top", "title": "Top result", "item_ids": [top]})
-    for section_id, title, types in (
-        ("songs", "Songs", {"library_track", "track"}),
-        ("artists", "Artists", {"artist"}),
-        ("albums", "Albums", {"album"}),
-        ("playlists", "Playlists", {"playlist"}),
-    ):
-        ids = [item["id"] for item in items if item.get("type") in types and item["id"] != top][:12]
-        if ids:
-            sections.append({"id": section_id, "title": title, "item_ids": ids})
-    return sections
+        ordered.insert(0, {"id": "top", "layout": "hero", "item_ids": [top], "total": 1})
+    return ordered
 
 
-def _cached_search(query: str, types: set[str], limit: int) -> tuple[dict[str, Any], bool]:
-    key = f"{limit}:{','.join(sorted(types))}:{query.casefold()}"
+def _public(row: dict[str, Any]) -> dict[str, Any]:
+    """Strip the scoring fields the ranker hangs off each row."""
+    return {k: v for k, v in row.items() if not k.startswith("_")}
+
+
+def _search_uncached(query: str, types: set[str], limit: int) -> dict[str, Any]:
     now = time.time()
-    cached = _cache_get(_CATALOG_CACHE, key)
-    if cached is not None:
-        return cached, True
-
     items: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
-    local_rows: list[dict[str, Any]] = []
-    try:
-        local_rows = _local_catalog(query, limit)
-    except Exception as exc:
-        logger.info("Catalog provider library failed: %s", exc)
-        failures.append({"source": "library", "error": sanitize_cli_message(str(exc))})
 
     providers = [
+        # The library used to be scanned inline, before the fan-out, so its cost
+        # was added to the network's instead of hidden behind it.
+        ("library", lambda: _local_catalog(query, limit)),
         ("deezer", lambda: _deezer_search(query, limit)),
         ("musicbrainz", lambda: _musicbrainz_search(query, limit)),
     ]
@@ -644,21 +1076,33 @@ def _cached_search(query: str, types: set[str], limit: int) -> tuple[dict[str, A
 
     # Provider completion order is timing-dependent. Merge in a fixed public
     # order so even exact score ties cannot become account/device dependent.
-    for name in ("youtube", "deezer", "musicbrainz"):
+    for name in ("youtube", "deezer", "musicbrainz", "library"):
         items.extend(provider_rows.get(name, []))
-    items.extend(local_rows)
     intent_creator = _intent_creator(provider_rows.get("youtube", []), query)
     ranked = _filter_types(_dedupe(items, query, intent_creator), types)
-    body = {
+    top = _top_result(ranked)
+    sections = _build_sections(ranked, top)
+    # The response used to be unbounded — `limit` only ever sized the provider
+    # fan-out — so a single search could ship a few hundred rows the UI then
+    # rendered in full. Shipping exactly the rows the sections reference bounds
+    # it without costing the client anything it was showing.
+    keep = {item_id for section in sections for item_id in section["item_ids"]}
+    return {
         "query": query,
         "interpreted_as": intent_creator or None,
         "generated_at": int(now),
-        "items": ranked,
-        "sections": _build_sections(ranked),
+        "top_result": top,
+        "items": [_public(row) for row in ranked if row["id"] in keep],
+        "sections": sections,
         "partial_failures": failures,
     }
-    _cache_put(_CATALOG_CACHE, key, _CATALOG_CACHE_TTL_SEC, body)
-    return body, False
+
+
+def _cached_search(query: str, types: set[str], limit: int) -> tuple[dict[str, Any], bool]:
+    # `v2` because the shape gained `top_result` and the sections gained
+    # `layout`/`total`: a hot reload must not serve pre-migration bodies.
+    key = f"v2:{limit}:{','.join(sorted(types))}:{query.casefold()}"
+    return _memo_resolve(_catalog_memo, key, lambda: _search_uncached(query, types, limit))
 
 
 @catalog_bp.route("/api/catalog/search", methods=["GET"])
@@ -1204,12 +1648,15 @@ def catalog_artist():
     deezer_id = _clean(request.args.get("deezer_id", ""), 32) or None
 
     cache_key = f"artist:{deezer_id or name.casefold()}"
-    now = time.time()
-    cached = _cache_get(_ARTIST_CACHE, cache_key)
-    if cached is not None:
-        cached["cached"] = True
-        return jsonify(cached)
+    body, cached = _memo_resolve(
+        _artist_memo, cache_key, lambda: _artist_profile_uncached(name, deezer_id)
+    )
+    body["cached"] = cached
+    return jsonify(body)
 
+
+def _artist_profile_uncached(name: str, deezer_id: str | None) -> dict[str, Any]:
+    now = time.time()
     library_keys = _library_artist_keys(name)
 
     resolved_id: str | None = None
@@ -1247,7 +1694,7 @@ def catalog_artist():
         singles_eps = releases.get("singles_eps") or []
         related = results.get("related") or []
 
-    body = {
+    return {
         "name": name,
         "resolved": resolved,
         "deezer_id": resolved_id,
@@ -1262,8 +1709,6 @@ def catalog_artist():
         "cached": False,
         "generated_at": int(now),
     }
-    _cache_put(_ARTIST_CACHE, cache_key, _ARTIST_CACHE_TTL_SEC, body)
-    return jsonify(body)
 
 
 @catalog_bp.route("/api/catalog/album", methods=["GET"])
@@ -1276,12 +1721,15 @@ def catalog_album():
     deezer_id = _clean(request.args.get("deezer_id", ""), 32) or None
 
     cache_key = f"album:{deezer_id or (name + '|' + (artist or '')).casefold()}"
-    now = time.time()
-    cached = _cache_get(_ALBUM_CACHE, cache_key)
-    if cached is not None:
-        cached["cached"] = True
-        return jsonify(cached)
+    body, cached = _memo_resolve(
+        _album_memo, cache_key, lambda: _album_profile_uncached(name, artist, deezer_id)
+    )
+    body["cached"] = cached
+    return jsonify(body)
 
+
+def _album_profile_uncached(name: str, artist: str | None, deezer_id: str | None) -> dict[str, Any]:
+    now = time.time()
     library_keys = _library_album_keys(name, artist or "")
 
     title = name
@@ -1314,7 +1762,7 @@ def catalog_album():
             logger.info("Album profile fetch failed for %s: %s", deezer_id, exc)
             failures.append({"source": "deezer", "error": sanitize_cli_message(str(exc))})
 
-    body = {
+    return {
         "title": title,
         "artist": album_artist,
         "cover": cover,
@@ -1327,5 +1775,3 @@ def catalog_album():
         "cached": False,
         "generated_at": int(now),
     }
-    _cache_put(_ALBUM_CACHE, cache_key, _ALBUM_CACHE_TTL_SEC, body)
-    return jsonify(body)

@@ -1,0 +1,85 @@
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-lg);
+  color: inherit;
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius-md);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--dur-micro) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+
+.card:active {
+  transform: scale(0.995);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card:hover {
+    background: var(--bg-hover);
+    border-color: var(--hairline);
+  }
+}
+
+[data-now-playing].card .title {
+  color: var(--accent-ink);
+}
+
+.cover {
+  /* Deliberately larger than every other cover on the page: the card has to
+     read as the answer, not as the first item of a list. */
+  width: clamp(72px, 18vw, 104px);
+  height: clamp(72px, 18vw, 104px);
+  flex: none;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-1);
+}
+
+.coverRound {
+  border-radius: var(--radius-full);
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--space-2xs, 2px);
+}
+
+.title,
+.subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  color: var(--ink-primary);
+  font-size: var(--text-h2);
+  font-weight: var(--fw-bold);
+}
+
+.subtitle {
+  color: var(--ink-secondary);
+  font-size: var(--text-label);
+}
+
+/* On a phone the card stacks above the songs list rather than beside it, so it
+   does not need to hold its own against a column of rows. */
+@media (max-width: 767px) {
+  .card {
+    padding: var(--space-md);
+  }
+
+  .title {
+    font-size: var(--text-h3);
+  }
+}
