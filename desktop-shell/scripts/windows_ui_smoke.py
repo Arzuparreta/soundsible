@@ -72,18 +72,63 @@ def control(window, title: str, control_type: str = "Button", timeout: float = 3
     return spec.wrapper_object()
 
 
+def dismiss_runner_first_boot(desktop) -> bool:
+    """Dismiss the hosted runner's privacy OOBE if Explorer starts it."""
+
+    controls = []
+    for window in desktop.windows():
+        try:
+            controls.extend(window.descendants())
+        except Exception:
+            continue
+
+    if not any(
+        item.window_text() == "Choose privacy settings for your device"
+        for item in controls
+    ):
+        return False
+
+    for label in ("Next", "Accept"):
+        button = next(
+            (
+                item
+                for item in controls
+                if item.element_info.control_type == "Button"
+                and item.window_text() == label
+                and item.is_visible()
+                and item.is_enabled()
+            ),
+            None,
+        )
+        if button is not None:
+            button.click_input()
+            time.sleep(0.75)
+            return True
+    return True
+
+
 def folder_dialog():
     desktop = Desktop(backend="uia")
-    return wait_until(
-        lambda: next(
+
+    def find_dialog():
+        # A fresh Windows ARM hosted runner can defer its privacy OOBE until
+        # Explorer first opens. Clear that system-owned screen, then continue
+        # waiting for the folder picker that the app requested.
+        if dismiss_runner_first_boot(desktop):
+            return None
+        return next(
             (
                 window
                 for window in desktop.windows()
                 if window.window_text() == "Choose your music folder"
             ),
             None,
-        ),
+        )
+
+    return wait_until(
+        find_dialog,
         "Native folder picker did not appear",
+        timeout=60,
     )
 
 
