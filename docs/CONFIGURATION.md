@@ -57,10 +57,12 @@ The current runtime layer supports these top-level environment variables:
 - `SOUNDSIBLE_PREVIEW_CACHE_MB` — LRU preview-audio disk cache, `2048` by
   default. This is disk, not reserved RAM; `0` disables audio caching while URL
   warming remains available.
-- `SOUNDSIBLE_COMMUNITY_URL` — optional HTTPS origin of a Soundsible Community
-  control plane. When unset, the Live directory remains visible but publishing
-  is disabled. The supported self-hosted stack and its privacy/capacity
-  contract are documented in [deploy/community/README.md](../deploy/community/README.md).
+- Community works without configuration through Soundsible's official service.
+  Set `SOUNDSIBLE_COMMUNITY_DISABLED=true` to disable Live, or set
+  `SOUNDSIBLE_COMMUNITY_URL` to the bare HTTPS origin of your own relay. Custom
+  origins cannot contain credentials, a path, query or fragment. The supported
+  self-hosted stack and its privacy/capacity contract are documented in
+  [deploy/community/README.md](../deploy/community/README.md).
 
 Notes:
 

@@ -7,8 +7,8 @@ import {
 } from '../lib/audio';
 import {
   hostSession,
-  initCommunity,
   publisherConnected,
+  resumeCommunityIfActive,
   sendProgramEvent,
   startHostPublisher,
   uploadHostArtwork,
@@ -72,7 +72,7 @@ export function CommunityBridge() {
   let publishing = false;
 
   onMount(() => {
-    void initCommunity();
+    void resumeCommunityIfActive();
     timer = window.setInterval(() => {
       const session = hostSession();
       if (!session) return;

@@ -17,6 +17,8 @@ import shutil
 import sqlite3
 import threading
 import time
+import urllib.error
+import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -40,6 +42,10 @@ DB_PATH = Path(os.getenv("COMMUNITY_DB_PATH", "/data/community.db"))
 ARTWORK_DIR = Path(os.getenv("COMMUNITY_ARTWORK_DIR", "/data/artwork"))
 PUBLIC_URL = (os.getenv("COMMUNITY_PUBLIC_URL") or "http://localhost:8080").rstrip("/")
 MEDIA_PUBLIC_URL = (os.getenv("COMMUNITY_MEDIA_URL") or f"{PUBLIC_URL}/media").rstrip("/")
+MEDIA_HEALTH_URL = (
+    os.getenv("COMMUNITY_MEDIA_HEALTH_URL")
+    or "http://mediamtx:9997/v3/config/global/get"
+).strip()
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("COMMUNITY_SECRET_KEY") or secrets.token_hex(32)
@@ -300,7 +306,26 @@ def _delete_expired_sessions() -> None:
 
 @app.get("/health")
 def health():
-    return jsonify({"status": "healthy", "service": "soundsible-community"})
+    checks = {"sqlite": "ok", "mediamtx": "ok"}
+    try:
+        with db() as conn:
+            result = conn.execute("PRAGMA quick_check").fetchone()
+            if result is None or result[0] != "ok":
+                raise sqlite3.DatabaseError("quick_check failed")
+    except (OSError, sqlite3.Error):
+        checks["sqlite"] = "error"
+    try:
+        with urllib.request.urlopen(MEDIA_HEALTH_URL, timeout=3) as response:  # nosec B310 - operator-owned fixed URL
+            if response.status >= 400:
+                raise urllib.error.URLError(f"MediaMTX returned {response.status}")
+    except (OSError, urllib.error.URLError):
+        checks["mediamtx"] = "error"
+    healthy = all(value == "ok" for value in checks.values())
+    return jsonify({
+        "status": "healthy" if healthy else "unhealthy",
+        "service": "soundsible-community",
+        "checks": checks,
+    }), 200 if healthy else 503
 
 
 @app.get("/v1/sessions")

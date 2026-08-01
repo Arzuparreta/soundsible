@@ -8,13 +8,15 @@ rtmp: false
 hls: false
 srt: false
 playback: false
-api: false
+api: true
+apiAddress: :9997
 metrics: false
 moq: false
 
 authMethod: http
 authHTTPAddress: http://community-api:8080/internal/media-auth
 authHTTPExclude:
+  - action: api
   - action: metrics
 
 webrtc: true

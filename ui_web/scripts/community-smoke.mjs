@@ -1,7 +1,11 @@
 import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 
 const apiUrl = (process.env.COMMUNITY_SMOKE_API || 'http://127.0.0.1:18080').replace(/\/$/, '');
+const socketClientPath = fileURLToPath(
+  new URL('../node_modules/socket.io-client/dist/socket.io.min.js', import.meta.url),
+);
 
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -47,9 +51,26 @@ const { session } = await created.json();
 const browser = await chromium.launch({ headless: true });
 let published;
 let received;
+let metadata;
+let chat;
+let ended;
 try {
   const publisherPage = await browser.newPage();
   await publisherPage.goto(`${apiUrl}/health`);
+  await publisherPage.addScriptTag({ path: socketClientPath });
+  await publisherPage.evaluate(({ sessionId, hostToken }) => new Promise((resolve, reject) => {
+    const socket = globalThis.io(location.origin, {
+      transports: ['websocket', 'polling'],
+      auth: { session_id: sessionId, host_token: hostToken },
+    });
+    globalThis.__communityHostSocket = socket;
+    const timer = setTimeout(() => reject(new Error('host socket timeout')), 8000);
+    socket.once('connect', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    socket.once('connect_error', reject);
+  }), { sessionId: session.id, hostToken: session.host_token });
   published = await publisherPage.evaluate(async ({ endpoint, token }) => {
     const context = new AudioContext();
     const oscillator = context.createOscillator();
@@ -95,6 +116,24 @@ try {
 
   const listenerPage = await browser.newPage();
   await listenerPage.goto(`${apiUrl}/health`);
+  await listenerPage.addScriptTag({ path: socketClientPath });
+  await listenerPage.evaluate((sessionId) => new Promise((resolve, reject) => {
+    const socket = globalThis.io(location.origin, {
+      transports: ['websocket', 'polling'],
+      auth: {
+        session_id: sessionId,
+        guest_id: 'guest-community-smoke',
+        guest_name: 'Smoke listener',
+      },
+    });
+    globalThis.__communityListenerSocket = socket;
+    const timer = setTimeout(() => reject(new Error('listener socket timeout')), 8000);
+    socket.once('connect', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    socket.once('connect_error', reject);
+  }), session.id);
   received = await listenerPage.evaluate(async (endpoint) => {
     const pc = new RTCPeerConnection();
     pc.addTransceiver('audio', { direction: 'recvonly' });
@@ -140,12 +179,90 @@ try {
       resource: response.headers.get('Location'),
     };
   }, session.whep_url);
+
+  // Emit after the listener is ready; keep exact metadata free of library ids.
+  const programEvent = {
+    v: 1,
+    seq: 1,
+    emitted_at: Date.now(),
+    program_time: 3.5,
+    transport: 'playing',
+    primary: {
+      id: 'public-smoke-track',
+      title: 'Community smoke tone',
+      artist: 'Soundsible',
+      artwork_url: null,
+      position: 3.5,
+      duration: 30,
+      gain: 1,
+    },
+    secondary: null,
+    transition: null,
+  };
+  const metadataPromise = listenerPage.evaluate(() => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('program metadata timeout')), 8000);
+    globalThis.__communityListenerSocket.once('program_event', (payload) => {
+      clearTimeout(timer);
+      resolve(payload);
+    });
+  }));
+  await publisherPage.evaluate((payload) => {
+    globalThis.__communityHostSocket.emit('program_event', payload);
+  }, programEvent);
+  metadata = await metadataPromise;
+
+  const chatPromise = publisherPage.evaluate(() => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('chat timeout')), 8000);
+    globalThis.__communityHostSocket.once('chat_message', (payload) => {
+      clearTimeout(timer);
+      resolve(payload);
+    });
+  }));
+  await listenerPage.evaluate(() => {
+    globalThis.__communityListenerSocket.emit('chat_message', { text: 'smoke request' });
+  });
+  chat = await chatPromise;
+
+  const endedPromise = listenerPage.evaluate(() => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('session end timeout')), 8000);
+    globalThis.__communityListenerSocket.once('session_ended', (payload) => {
+      clearTimeout(timer);
+      resolve(payload);
+    });
+  }));
+  const deleted = await signedRequest('DELETE', `/v1/sessions/${session.id}`, { profile });
+  if (!deleted.ok) throw new Error(`delete session failed: ${deleted.status} ${await deleted.text()}`);
+  ended = await endedPromise;
 } finally {
   await browser.close();
   await signedRequest('DELETE', `/v1/sessions/${session.id}`, { profile }).catch(() => {});
 }
 
-if (published?.state !== 'connected' || received?.state !== 'connected' || received.bytesReceived <= 0) {
-  throw new Error(`unexpected WebRTC result: ${JSON.stringify({ published, received })}`);
+const listing = await fetch(`${apiUrl}/v1/sessions`).then((response) => response.json());
+if (
+  published?.state !== 'connected'
+  || received?.state !== 'connected'
+  || received.bytesReceived <= 0
+  || metadata?.primary?.title !== 'Community smoke tone'
+  || chat?.text !== 'smoke request'
+  || ended?.session_id !== session.id
+  || listing.sessions.some((item) => item.id === session.id)
+) {
+  throw new Error(`unexpected Community result: ${JSON.stringify({
+    published,
+    received,
+    metadata,
+    chat,
+    ended,
+    remaining: listing.sessions,
+  })}`);
 }
-console.log(JSON.stringify({ published: published.state, received: received.state, bytesReceived: received.bytesReceived }));
+console.log(JSON.stringify({
+  published: published.state,
+  received: received.state,
+  bytesReceived: received.bytesReceived,
+  metadata: metadata.primary.title,
+  chat: chat.text,
+  ended: ended.session_id,
+  removed: true,
+}));

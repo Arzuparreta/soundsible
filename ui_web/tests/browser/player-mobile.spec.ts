@@ -120,7 +120,7 @@ async function swipeSurfaceDown(page: Page, targetSelector: string) {
       x: number,
       y: number,
     ) => {
-      const touch = new Touch({
+      const touch = {
         identifier: 7,
         target,
         clientX: x,
@@ -129,13 +129,17 @@ async function swipeSurfaceDown(page: Page, targetSelector: string) {
         pageY: y,
         screenX: x,
         screenY: y,
+      };
+      const touchList = (items: Array<typeof touch>) => Object.assign(items, {
+        item: (index: number) => items[index] ?? null,
       });
-      target.dispatchEvent(new TouchEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        touches: type === 'touchend' ? [] : [touch],
-        changedTouches: [touch],
-      }));
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperties(event, {
+        touches: { value: touchList(type === 'touchend' ? [] : [touch]) },
+        targetTouches: { value: touchList(type === 'touchend' ? [] : [touch]) },
+        changedTouches: { value: touchList([touch]) },
+      });
+      target.dispatchEvent(event);
     };
     dispatch('touchstart', 180, 180);
     dispatch('touchmove', 180, 225);

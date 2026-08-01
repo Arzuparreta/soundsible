@@ -110,6 +110,18 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Provision OpenSSL for Python cryptography (Windows ARM64)
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP "vcpkg"
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git $root
+          & "$root/bootstrap-vcpkg.bat" -disableMetrics
+          & "$root/vcpkg.exe" install openssl:arm64-windows
+          "VCPKG_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "OPENSSL_DIR=$root/installed/arm64-windows" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "OPENSSL_STATIC=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop-shell/src-tauri

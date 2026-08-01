@@ -8,6 +8,7 @@ services:
       COMMUNITY_DB_PATH: /data/community.db
       COMMUNITY_PUBLIC_URL: ${COMMUNITY_PUBLIC_URL}
       COMMUNITY_MEDIA_URL: ${COMMUNITY_MEDIA_URL}
+      COMMUNITY_MEDIA_HEALTH_URL: http://mediamtx:9997/v3/config/global/get
       COMMUNITY_SECRET_KEY: ${COMMUNITY_SECRET_KEY}
       COMMUNITY_SOCKET_ASYNC_MODE: gevent
       COMMUNITY_MAX_ACTIVE_SESSIONS: ${COMMUNITY_MAX_ACTIVE_SESSIONS:-5}
@@ -32,13 +33,20 @@ services:
     image: bluenviron/mediamtx:1.19.3
     restart: unless-stopped
     depends_on:
-      - community-api
+      community-api:
+        condition: service_started
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
     ports:
       - "127.0.0.1:18889:8889"
       - "8189:8189/udp"
       - "8189:8189/tcp"
+    healthcheck:
+      test: ["CMD", "/mediamtx", "--version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   community-data:

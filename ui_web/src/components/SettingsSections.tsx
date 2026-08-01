@@ -9,6 +9,7 @@ import { promptDialog } from '../lib/prompt';
 import { trackCount } from '../lib/format';
 import { changePassword, isAdmin, logout, updateProfile, user } from '../lib/session';
 import { associationUrl } from '../lib/trackShare';
+import { communityConfig, loadCommunityConfig } from '../lib/community';
 import { accessibleSections, findSectionById } from '../lib/settingsIndex';
 import { DevicesPanel } from './DeviceSheet';
 import { PairedDevicesPanel } from './PairDevice';
@@ -544,6 +545,48 @@ function DevicesSection() {
   );
 }
 
+/* ── Community ────────────────────────────────────────────────────────── */
+
+function CommunitySection() {
+  const [loading, setLoading] = createSignal(true);
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      await loadCommunityConfig(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+  onMount(() => void refresh().catch(() => {}));
+
+  const source = () => {
+    const value = communityConfig();
+    if (!value) return t('common.loading');
+    return t(`settings.communitySource.${value.source}`);
+  };
+  const status = () => {
+    const value = communityConfig();
+    if (!value) return loading() ? t('common.loading') : t('settings.communityState.unavailable');
+    return t(`settings.communityState.${value.state}`);
+  };
+
+  return (
+    <SettingsGroup label={t('settings.community')} note={t('settings.note.community')}>
+      <ValueRow label={t('settings.communityService')} value={source()} />
+      <ValueRow label={t('settings.communityStatus')} value={status()} />
+      <Show when={communityConfig()?.source === 'custom' && communityConfig()?.api_url}>
+        <ValueRow
+          label={t('settings.communityRelay')}
+          value={<span class={styles.mono}>{communityConfig()!.api_url}</span>}
+        />
+      </Show>
+      <Show when={!loading() && communityConfig()?.state === 'unavailable'}>
+        <ActionRow label={t('common.retry')} onClick={refresh} />
+      </Show>
+    </SettingsGroup>
+  );
+}
+
 /* ── About ────────────────────────────────────────────────────────────── */
 
 function AboutSection() {
@@ -721,6 +764,27 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     content: () => <DevicesSection />,
   },
   {
+    id: 'community',
+    title: () => t('settings.community'),
+    blurb: () => t('settings.blurb.community'),
+    tone: 'success',
+    icon: () =>
+      svg(
+        <>
+          <path d="M4 16.5a5.5 5.5 0 0 1 0-9M20 7.5a5.5 5.5 0 0 1 0 9" />
+          <path d="M7.5 13.5a2.5 2.5 0 0 1 0-3M16.5 10.5a2.5 2.5 0 0 1 0 3" />
+          <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+        </>,
+      ),
+    keywords: () => [
+      t('settings.communityService'),
+      t('settings.communityStatus'),
+      t('settings.communityRelay'),
+      'Live',
+    ],
+    content: () => <CommunitySection />,
+  },
+  {
     id: 'about',
     title: () => t('settings.about'),
     blurb: () => t('settings.blurb.about'),
@@ -741,7 +805,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
 export const SETTINGS_GROUPS: { label: () => string; ids: string[] }[] = [
   { label: () => t('settings.group.you'), ids: ['account'] },
   { label: () => t('settings.group.preferences'), ids: ['appearance', 'accessibility', 'playback'] },
-  { label: () => t('settings.group.system'), ids: ['library', 'downloads', 'devices', 'about'] },
+  { label: () => t('settings.group.system'), ids: ['library', 'downloads', 'devices', 'community', 'about'] },
 ];
 
 /** Sections the signed-in account is actually allowed to open. */

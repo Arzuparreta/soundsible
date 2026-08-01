@@ -43,13 +43,16 @@ docker compose --env-file deploy/community/.env \
 
 ## Connect a Station
 
-Set the public control-plane origin on the Soundsible service and restart it:
+No Station configuration is required for the official Soundsible service.
+Opening **Live** connects to it on demand; ordinary startup makes no external
+Community request unless the Station has an active broadcast to resume.
 
-```bash
-SOUNDSIBLE_COMMUNITY_URL=https://live.84-247-161-82.sslip.io
-```
+Operators can set `SOUNDSIBLE_COMMUNITY_DISABLED=true` to remove access, or
+`SOUNDSIBLE_COMMUNITY_URL=https://live.example.org` to use their own relay. A
+custom value must be an HTTPS origin only: credentials, paths, queries and
+fragments are rejected.
 
-When Community is configured, each local Soundsible account receives an
+When Community is first opened, each local Soundsible account receives an
 Ed25519 identity stored with its account configuration. Only signed control
 requests leave the Station; the private key and Soundsible credentials do not.
 

@@ -30,12 +30,28 @@
 }
 
 .banner {
+  display: flex;
+  gap: var(--space-md);
+  align-items: center;
+  justify-content: space-between;
   margin: 0 var(--gutter) var(--space-lg);
   padding: var(--space-md) var(--space-lg);
   color: var(--warning);
   background: color-mix(in srgb, var(--warning) 10%, var(--bg-raised));
   border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--hairline));
   border-radius: var(--radius-md);
+}
+
+.banner button,
+.error button {
+  min-height: var(--control-h);
+  padding: 0 var(--space-md);
+  color: inherit;
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-full);
 }
 
 .hostCard {

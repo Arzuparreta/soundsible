@@ -297,6 +297,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code?: string,
+    readonly payload?: unknown,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -474,7 +476,19 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
       keepalive: opts.keepalive,
     });
     if (res.status === 401 && !path.startsWith('/api/auth/')) onUnauthorized?.();
-    if (!res.ok) throw new ApiError(res.status, `${method} ${path} → ${res.status}`);
+    if (!res.ok) {
+      const text = await res.text();
+      let payload: unknown;
+      try {
+        payload = text ? JSON.parse(text) : undefined;
+      } catch {
+        payload = text || undefined;
+      }
+      const code = payload && typeof payload === 'object' && 'code' in payload
+        ? String((payload as { code?: unknown }).code || '')
+        : undefined;
+      throw new ApiError(res.status, `${method} ${path} → ${res.status}`, code, payload);
+    }
     if (res.status === 204) return undefined as T;
     const text = await res.text();
     return (text ? JSON.parse(text) : undefined) as T;

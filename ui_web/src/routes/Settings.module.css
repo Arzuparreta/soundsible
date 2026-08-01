@@ -190,7 +190,10 @@
 .catBlurb {
   font-size: var(--text-caption);
   line-height: var(--lh-snug);
-  color: var(--ink-secondary);
+  /* WebKit evaluates link text during its mobile navigation handoff with a
+     partially composited foreground. This stronger semantic secondary remains
+     AA at that intermediate frame as well as at rest. */
+  color: color-mix(in srgb, var(--ink-secondary) 70%, var(--ink-primary));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

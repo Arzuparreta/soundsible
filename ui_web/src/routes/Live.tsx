@@ -7,14 +7,20 @@ import {
   createHostSession,
   endHostSession,
   hostSession,
+  initCommunity,
   joinedSession,
   joinLiveSession,
   leaveLiveSession,
+  listenerState,
   listenerStream,
   liveProgram,
   liveSessions,
   publisherConnected,
+  publisherState,
   refreshLiveSessions,
+  retryCommunity,
+  retryHostPublisher,
+  retryListening,
   startListening,
   updateHostTitle,
   type LiveDeck,
@@ -81,7 +87,11 @@ function ListenerRoom() {
 
   createEffect(() => {
     const stream = listenerStream();
-    if (audio && stream) audio.srcObject = stream;
+    if (audio && stream) {
+      audio.srcObject = stream;
+      if (listenerState() === 'connected') void audio.play().catch(() => setFailed(true));
+    }
+    if (listenerState() === 'connected') setFailed(false);
   });
 
   const listen = async () => {
@@ -139,7 +149,14 @@ function ListenerRoom() {
                 ? t('live.listen')
                 : t('live.waiting')}
         </button>
-        <Show when={failed()}><p class={styles.error}>{t('live.listenFailed')}</p></Show>
+        <Show when={failed() || listenerState() === 'failed'}>
+          <p class={styles.error}>
+            {t('live.listenFailed')}{' '}
+            <button type="button" onClick={() => void retryListening().then(() => setFailed(false)).catch(() => setFailed(true))}>
+              {t('common.retry')}
+            </button>
+          </p>
+        </Show>
       </div>
       <LiveRoomPanel />
     </section>
@@ -154,7 +171,7 @@ export default function Live() {
 
   onMount(() => {
     setTitle(`Session by ${user()?.display_name ?? 'DJ'}`);
-    void refreshLiveSessions();
+    void initCommunity();
     refreshTimer = window.setInterval(() => void refreshLiveSessions(), 10_000);
   });
   onCleanup(() => window.clearInterval(refreshTimer));
@@ -163,6 +180,8 @@ export default function Live() {
     setCreating(true);
     try {
       await createHostSession(title());
+    } catch {
+      /* the actionable global status owns the error */
     } finally {
       setCreating(false);
     }
@@ -171,6 +190,17 @@ export default function Live() {
   const join = (session: LiveSession) => {
     if (state.playback.isPlaying) actions.togglePlay();
     joinLiveSession(session);
+  };
+
+  const retryIssue = async () => {
+    const issue = communityError();
+    if (issue === 'publish_failed') {
+      await retryHostPublisher();
+    } else if (issue === 'listen_failed') {
+      await retryListening();
+    } else {
+      await retryCommunity();
+    }
   };
 
   return (
@@ -183,7 +213,12 @@ export default function Live() {
             <Show
               when={hostSession()}
               fallback={
-                <button class={styles.goLive} type="button" disabled={creating() || !communityConfig()?.enabled} onClick={() => void create()}>
+                <button
+                  class={styles.goLive}
+                  type="button"
+                  disabled={creating() || communityError() === 'loading' || !communityConfig()?.enabled}
+                  onClick={() => void create()}
+                >
                   {creating() ? t('common.loading') : t('live.goLive')}
                 </button>
               }
@@ -196,14 +231,29 @@ export default function Live() {
         />
 
         <Show when={communityError()}>
-          <div class={styles.banner}>{t('live.unavailable')}</div>
+          {(issue) => (
+            <div class={styles.banner} data-state={issue()}>
+              <span>{t(`live.service.${issue()}`)}</span>
+              <Show when={issue() !== 'loading' && issue() !== 'disabled' && issue() !== 'invalid'}>
+                <button type="button" onClick={() => void retryIssue().catch(() => {})}>{t('common.retry')}</button>
+              </Show>
+            </div>
+          )}
         </Show>
 
         <Show when={hostSession()}>
           {(session) => (
             <section class={styles.hostCard}>
               <div>
-                <span class={styles.onAir}>{publisherConnected() ? t('live.onAir') : t('live.waiting')}</span>
+                <span class={styles.onAir} data-state={publisherState()}>
+                  {publisherConnected()
+                    ? t('live.onAir')
+                    : publisherState() === 'recovering'
+                      ? t('live.reconnectingAudio')
+                      : publisherState() === 'failed'
+                        ? t('live.publishFailed')
+                        : t('live.waiting')}
+                </span>
                 <Show
                   when={editing()}
                   fallback={<h2 onDblClick={() => setEditing(true)}>{session().title}</h2>}

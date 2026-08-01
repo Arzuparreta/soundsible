@@ -37,6 +37,18 @@ export const en = {
     listen: 'Listen live',
     listening: 'Listening live',
     listenFailed: 'The live audio could not be connected.',
+    reconnectingAudio: 'Recovering audio',
+    publishFailed: 'Audio publishing failed',
+    service: {
+      loading: 'Connecting to Soundsible Community…',
+      disabled: 'Community is disabled on this station.',
+      invalid: 'The custom Community relay address is invalid.',
+      unavailable: 'The Community relay cannot be reached.',
+      capacity: 'The live directory is currently at capacity.',
+      reconnecting: 'The live connection is recovering…',
+      publish_failed: 'Soundsible could not publish the live audio.',
+      listen_failed: 'Soundsible could not restore the live audio.',
+    },
     status: {
       waiting: 'Waiting',
       live: 'Live',
@@ -328,6 +340,21 @@ export const en = {
     pickSectionBody: 'Everything is grouped on the left — choose one to see its options.',
     playback: 'Playback',
     deviceName: 'Name',
+    community: 'Community',
+    communityService: 'Service',
+    communityStatus: 'Status',
+    communityRelay: 'Relay',
+    communitySource: {
+      official: 'Soundsible official service',
+      custom: 'Custom relay',
+      disabled: 'Disabled',
+    },
+    communityState: {
+      available: 'Available',
+      disabled: 'Disabled by configuration',
+      invalid: 'Invalid configuration',
+      unavailable: 'Unreachable',
+    },
     /* One line under each category on the index: what you will find inside. */
     blurb: {
       account: 'Your name, password and who else can sign in',
@@ -337,6 +364,7 @@ export const en = {
       library: 'Sync, import, clean up and remove tracks',
       downloads: 'Audio quality and the download engine',
       devices: 'This device, paired phones and remote control',
+      community: 'Official Live service or your own relay',
       about: 'Engine status and version',
     },
     /* Headers used by the index and inside the submenus. */
@@ -366,6 +394,7 @@ export const en = {
       updates: 'Keeps downloads working when the sources change. Leave these on unless you pin versions yourself.',
       device: 'The name other devices see when they control this player.',
       network: 'Devices signed in to this server. Control what they are playing from here.',
+      community: 'Live uses the official service automatically. Environment variables are only needed to disable it or select your own HTTPS relay.',
     },
     appearance: 'Appearance',
     theme: 'Theme',

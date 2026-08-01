@@ -13,9 +13,83 @@ from shared.hardening import current_user, current_user_id_from_request, rate_li
 
 community_bp = Blueprint("community", __name__, url_prefix="")
 
+OFFICIAL_COMMUNITY_URL = "https://live.84-247-161-82.sslip.io"
+
+
+def _enabled_flag(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _valid_https_origin(value: str) -> str | None:
+    """Return a canonical HTTPS origin, rejecting every URL-shaped extension."""
+    if not value or value != value.strip() or any(char.isspace() for char in value):
+        return None
+    try:
+        parsed = urlparse(value)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+    host = parsed.hostname
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"https://{host}{f':{port}' if port is not None else ''}"
+
+
+def community_configuration() -> dict:
+    if _enabled_flag(os.getenv("SOUNDSIBLE_COMMUNITY_DISABLED")):
+        return {
+            "enabled": False,
+            "api_url": None,
+            "source": "disabled",
+            "state": "disabled",
+            "error": {
+                "code": "community_disabled",
+                "message": "Community is disabled by this station",
+            },
+        }
+    override = os.getenv("SOUNDSIBLE_COMMUNITY_URL")
+    if override is not None and override.strip():
+        origin = _valid_https_origin(override)
+        if origin is None:
+            return {
+                "enabled": False,
+                "api_url": None,
+                "source": "custom",
+                "state": "invalid",
+                "error": {
+                    "code": "community_invalid_url",
+                    "message": "SOUNDSIBLE_COMMUNITY_URL must be an HTTPS origin without credentials, path, query or fragment",
+                },
+            }
+        return {
+            "enabled": True,
+            "api_url": origin,
+            "source": "custom",
+            "state": "available",
+            "error": None,
+        }
+    return {
+        "enabled": True,
+        "api_url": OFFICIAL_COMMUNITY_URL,
+        "source": "official",
+        "state": "available",
+        "error": None,
+    }
+
 
 def community_url() -> str:
-    return (os.getenv("SOUNDSIBLE_COMMUNITY_URL") or "").strip().rstrip("/")
+    return str(community_configuration().get("api_url") or "")
 
 
 def _safe_error(response: requests.Response) -> tuple[dict, int]:
@@ -27,9 +101,14 @@ def _safe_error(response: requests.Response) -> tuple[dict, int]:
 
 
 def _remote(method: str, path: str, body: dict | None = None):
-    base = community_url()
+    resolved = community_configuration()
+    base = str(resolved.get("api_url") or "")
     if not base:
-        return jsonify({"error": "Community is not configured", "code": "community_disabled"}), 503
+        error = resolved.get("error") or {
+            "code": "community_disabled",
+            "message": "Community is unavailable",
+        }
+        return jsonify({"error": error["message"], "code": error["code"]}), 503
     user_id = current_user_id_from_request()
     profile = current_user()
     if not user_id or not profile:
@@ -60,17 +139,25 @@ def _remote(method: str, path: str, body: dict | None = None):
 @community_bp.get("/api/community/config")
 @rate_limit("community_config", limit=120, window_sec=60)
 def config():
-    base = community_url()
+    resolved = community_configuration()
+    base = str(resolved.get("api_url") or "")
     identity = None
     user_id = current_user_id_from_request()
     if base and user_id:
         public = load_or_create_identity(user_id)
         identity = {"community_id": public["community_id"]}
-    return jsonify({
-        "enabled": bool(base),
-        "api_url": base or None,
-        "identity": identity,
-    })
+    if base:
+        try:
+            response = requests.get(f"{base}/health", timeout=(2, 4))
+            if not response.ok:
+                raise requests.RequestException(f"health returned {response.status_code}")
+        except requests.RequestException:
+            resolved["state"] = "unavailable"
+            resolved["error"] = {
+                "code": "community_unreachable",
+                "message": "Community relay is currently unreachable",
+            }
+    return jsonify({**resolved, "identity": identity})
 
 
 @community_bp.post("/api/community/sessions")
@@ -103,10 +190,9 @@ def end_session(session_id: str):
 @rate_limit("community_open", limit=60, window_sec=60)
 def open_community():
     """A constrained redirect target for native/open-in-browser affordances."""
-    base = community_url()
+    resolved = community_configuration()
+    base = str(resolved.get("api_url") or "")
     if not base:
-        return jsonify({"error": "Community is not configured"}), 503
-    parsed = urlparse(base)
-    if parsed.scheme != "https" or not parsed.netloc:
-        return jsonify({"error": "Community URL must use HTTPS"}), 503
+        error = resolved.get("error") or {"message": "Community is unavailable"}
+        return jsonify({"error": error["message"]}), 503
     return jsonify({"url": base})

@@ -1,6 +1,6 @@
 import { createSignal } from 'solid-js';
 import { io, type Socket } from 'socket.io-client';
-import { request } from './api';
+import { ApiError, request } from './api';
 
 export type LiveSessionStatus = 'waiting' | 'live' | 'reconnecting';
 export type LiveTransport = 'playing' | 'paused';
@@ -71,9 +71,25 @@ export interface LiveChatMessage {
   sent_at: number;
 }
 
-interface CommunityConfig {
+export type CommunitySource = 'official' | 'custom' | 'disabled';
+export type CommunityState = 'available' | 'disabled' | 'invalid' | 'unavailable';
+export type CommunityIssue =
+  | 'loading'
+  | 'disabled'
+  | 'invalid'
+  | 'unavailable'
+  | 'capacity'
+  | 'reconnecting'
+  | 'publish_failed'
+  | 'listen_failed';
+export type MediaConnectionState = 'idle' | 'connecting' | 'connected' | 'recovering' | 'failed';
+
+export interface CommunityConfig {
   enabled: boolean;
   api_url: string | null;
+  source: CommunitySource;
+  state: CommunityState;
+  error?: { code: string; message: string } | null;
   identity?: { community_id: string } | null;
 }
 
@@ -87,8 +103,10 @@ const [joinedSession, setJoinedSession] = createSignal<LiveSession | null>(null)
 const [program, setProgram] = createSignal<LiveProgram | null>(null);
 const [messages, setMessages] = createSignal<LiveChatMessage[]>([]);
 const [listenerStream, setListenerStream] = createSignal<MediaStream | null>(null);
-const [communityError, setCommunityError] = createSignal<string | null>(null);
+const [communityError, setCommunityError] = createSignal<CommunityIssue | null>(null);
 const [publisherConnected, setPublisherConnected] = createSignal(false);
+const [publisherState, setPublisherState] = createSignal<MediaConnectionState>('idle');
+const [listenerState, setListenerState] = createSignal<MediaConnectionState>('idle');
 
 export {
   config as communityConfig,
@@ -100,6 +118,8 @@ export {
   listenerStream,
   communityError,
   publisherConnected,
+  publisherState,
+  listenerState,
 };
 
 let socket: Socket | null = null;
@@ -108,6 +128,18 @@ let listener: PeerHandle | null = null;
 let listenerStatsTimer: number | undefined;
 let playoutDelayMs = 120;
 let programTimer: number | undefined;
+let publisherRetryTimer: number | undefined;
+let listenerRetryTimer: number | undefined;
+let publisherSource: MediaStream | null = null;
+let publisherGeneration = 0;
+let listenerGeneration = 0;
+let publisherRecoveryDeadline = 0;
+let listenerRecoveryDeadline = 0;
+let publisherRetryAttempt = 0;
+let listenerRetryAttempt = 0;
+let listenerAuthorized = false;
+
+const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
 
 interface PeerHandle {
   pc: RTCPeerConnection;
@@ -151,20 +183,38 @@ function guestIdentity(): { id: string; name: string } {
   return { id: `guest-${id}`, name: `Guest-${id.slice(-4).toUpperCase()}` };
 }
 
-async function loadConfig(): Promise<CommunityConfig> {
+function issueForConfig(value: CommunityConfig): CommunityIssue | null {
+  if (value.state === 'disabled') return 'disabled';
+  if (value.state === 'invalid') return 'invalid';
+  if (value.state === 'unavailable') return 'unavailable';
+  return null;
+}
+
+export async function loadCommunityConfig(force = false): Promise<CommunityConfig> {
   const current = config();
-  if (current) return current;
+  if (current && !force) return current;
   const loaded = await request<CommunityConfig>('/api/community/config');
   setConfig(loaded);
+  setCommunityError(issueForConfig(loaded));
   return loaded;
 }
 
 async function publicRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const current = await loadConfig();
+  const current = await loadCommunityConfig();
   if (!current.enabled || !current.api_url) throw new Error('community_disabled');
   const response = await fetch(`${current.api_url}${path}`, options);
-  if (!response.ok) throw new Error(`community_${response.status}`);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { code?: string } | null;
+    throw new ApiError(response.status, `Community ${path} → ${response.status}`, payload?.code, payload);
+  }
   return response.json() as Promise<T>;
+}
+
+function issueForError(error: unknown, fallback: CommunityIssue): CommunityIssue {
+  if (error instanceof ApiError && error.code === 'session_capacity') return 'capacity';
+  if (error instanceof ApiError && error.code === 'community_disabled') return 'disabled';
+  if (error instanceof ApiError && error.code === 'community_invalid_url') return 'invalid';
+  return fallback;
 }
 
 function mergeSession(next: LiveSession): void {
@@ -191,6 +241,10 @@ function connectSocket(session: LiveSession, host?: HostLiveSession): void {
   if (!endpoint) return;
   socket = io(endpoint, {
     transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionAttempts: 8,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 8000,
     auth: host
       ? { session_id: session.id, host_token: host.host_token }
       : { session_id: session.id, guest_id: guest.id, guest_name: guest.name },
@@ -229,12 +283,18 @@ function connectSocket(session: LiveSession, host?: HostLiveSession): void {
     if (hostSession()?.id === session_id) void clearHostState();
   });
   socket.on('connect_error', () => setCommunityError('reconnecting'));
-  socket.on('connect', () => setCommunityError(null));
+  socket.io.on('reconnect_attempt', () => setCommunityError('reconnecting'));
+  socket.io.on('reconnect_failed', () => setCommunityError('unavailable'));
+  socket.on('connect', () => {
+    const current = config();
+    setCommunityError(current ? issueForConfig(current) : null);
+  });
 }
 
 export async function initCommunity(): Promise<void> {
+  setCommunityError('loading');
   try {
-    const current = await loadConfig();
+    const current = await loadCommunityConfig(true);
     if (!current.enabled) return;
     await refreshLiveSessions();
     const previousId = activeHostId();
@@ -257,6 +317,19 @@ export async function initCommunity(): Promise<void> {
   }
 }
 
+/** The shell calls this once, but it remains completely local unless a room id
+ * proves that this device has a broadcast to recover. */
+export async function resumeCommunityIfActive(): Promise<void> {
+  if (!activeHostId()) return;
+  await initCommunity();
+}
+
+export async function retryCommunity(): Promise<void> {
+  setCommunityError('loading');
+  setConfig(null);
+  await initCommunity();
+}
+
 export async function refreshLiveSessions(): Promise<LiveSession[]> {
   try {
     const response = await publicRequest<{ sessions: LiveSession[] }>('/v1/sessions');
@@ -270,18 +343,24 @@ export async function refreshLiveSessions(): Promise<LiveSession[]> {
 }
 
 export async function createHostSession(title: string): Promise<HostLiveSession> {
-  const response = await request<{ session: HostLiveSession }>('/api/community/sessions', {
-    method: 'POST',
-    body: { title },
-    timeoutMs: 15000,
-  });
-  setHostSession(response.session);
-  setProgram(null);
-  setMessages([]);
-  rememberHost(response.session.id);
-  mergeSession(response.session);
-  connectSocket(response.session, response.session);
-  return response.session;
+  try {
+    const response = await request<{ session: HostLiveSession }>('/api/community/sessions', {
+      method: 'POST',
+      body: { title },
+      timeoutMs: 15000,
+    });
+    setHostSession(response.session);
+    setProgram(null);
+    setMessages([]);
+    rememberHost(response.session.id);
+    mergeSession(response.session);
+    connectSocket(response.session, response.session);
+    setCommunityError(null);
+    return response.session;
+  } catch (error) {
+    setCommunityError(issueForError(error, 'unavailable'));
+    throw error;
+  }
 }
 
 export async function updateHostTitle(title: string): Promise<void> {
@@ -302,6 +381,16 @@ function closePeer(handle: PeerHandle | null): void {
   }
 }
 
+function clearPublisherRetry(): void {
+  window.clearTimeout(publisherRetryTimer);
+  publisherRetryTimer = undefined;
+}
+
+function clearListenerRetry(): void {
+  window.clearTimeout(listenerRetryTimer);
+  listenerRetryTimer = undefined;
+}
+
 function musicOffer(sdp: string | undefined): string | undefined {
   if (!sdp) return sdp;
   const match = /^a=rtpmap:(\d+) opus\/48000\/2$/m.exec(sdp);
@@ -315,9 +404,14 @@ function musicOffer(sdp: string | undefined): string | undefined {
 }
 
 async function clearHostState(): Promise<void> {
+  publisherGeneration += 1;
+  clearPublisherRetry();
   closePeer(publisher);
   publisher = null;
+  publisherSource = null;
+  publisherRetryAttempt = 0;
   setPublisherConnected(false);
+  setPublisherState('idle');
   socket?.disconnect();
   socket = null;
   rememberHost(null);
@@ -363,9 +457,10 @@ function resourceLocation(endpoint: string, response: Response): string | undefi
   return new URL(value, endpoint).href;
 }
 
-export async function startHostPublisher(stream: MediaStream): Promise<void> {
+async function establishHostPublisher(stream: MediaStream, generation: number): Promise<void> {
   const session = hostSession();
-  if (!session || publisher) return;
+  if (!session || generation !== publisherGeneration) return;
+  setPublisherState(publisherRetryAttempt > 0 ? 'recovering' : 'connecting');
   const track = stream.getAudioTracks()[0];
   if (!track) throw new Error('program_stream_missing');
   const pc = new RTCPeerConnection();
@@ -390,16 +485,97 @@ export async function startHostPublisher(stream: MediaStream): Promise<void> {
     throw new Error(`whip_${response.status}`);
   }
   await pc.setRemoteDescription({ type: 'answer', sdp: await response.text() });
+  if (generation !== publisherGeneration) {
+    pc.close();
+    return;
+  }
   publisher = { pc, resourceUrl: resourceLocation(session.whip_url, response) };
   pc.addEventListener('connectionstatechange', () => {
+    if (generation !== publisherGeneration || publisher?.pc !== pc) return;
     const connected = pc.connectionState === 'connected';
     setPublisherConnected(connected);
+    if (connected) {
+      publisherRetryAttempt = 0;
+      setPublisherState('connected');
+      if (communityError() === 'publish_failed' || communityError() === 'reconnecting') {
+        setCommunityError(null);
+      }
+    }
     if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
       publisher = null;
       setPublisherConnected(false);
+      schedulePublisherRecovery(generation);
+    } else if (pc.connectionState === 'disconnected') {
+      schedulePublisherRecovery(generation);
     }
   });
-  setPublisherConnected(pc.connectionState === 'connected');
+  if (pc.connectionState === 'connected') {
+    publisherRetryAttempt = 0;
+    setPublisherConnected(true);
+    setPublisherState('connected');
+    setCommunityError(null);
+  } else {
+    setPublisherConnected(false);
+  }
+}
+
+function schedulePublisherRecovery(generation: number): void {
+  if (generation !== publisherGeneration || publisherRetryTimer !== undefined || !publisherSource) return;
+  if (publisherRetryAttempt === 0 && publisherState() === 'connected') {
+    publisherRecoveryDeadline = Date.now() + (hostSession()?.reconnect_grace_seconds ?? 90) * 1000;
+  }
+  if (Date.now() >= publisherRecoveryDeadline) {
+    setPublisherState('failed');
+    setCommunityError('publish_failed');
+    return;
+  }
+  setPublisherState('recovering');
+  setCommunityError('reconnecting');
+  const delay = RETRY_DELAYS_MS[Math.min(publisherRetryAttempt, RETRY_DELAYS_MS.length - 1)];
+  publisherRetryAttempt += 1;
+  publisherRetryTimer = window.setTimeout(() => {
+    publisherRetryTimer = undefined;
+    if (generation !== publisherGeneration || !publisherSource) return;
+    const previous = publisher;
+    publisher = null;
+    closePeer(previous);
+    void establishHostPublisher(publisherSource, generation).catch(() => schedulePublisherRecovery(generation));
+  }, delay);
+}
+
+export async function startHostPublisher(stream: MediaStream): Promise<void> {
+  if (!hostSession()) return;
+  publisherSource = stream;
+  if (publisher || publisherState() === 'connecting' || publisherState() === 'recovering') return;
+  publisherGeneration += 1;
+  const generation = publisherGeneration;
+  publisherRecoveryDeadline = Date.now() + (hostSession()?.reconnect_grace_seconds ?? 90) * 1000;
+  publisherRetryAttempt = 0;
+  clearPublisherRetry();
+  try {
+    await establishHostPublisher(stream, generation);
+  } catch (error) {
+    schedulePublisherRecovery(generation);
+    throw error;
+  }
+}
+
+export async function retryHostPublisher(): Promise<void> {
+  if (!publisherSource || !hostSession()) return;
+  publisherGeneration += 1;
+  const generation = publisherGeneration;
+  clearPublisherRetry();
+  closePeer(publisher);
+  publisher = null;
+  publisherRetryAttempt = 0;
+  publisherRecoveryDeadline = Date.now() + (hostSession()?.reconnect_grace_seconds ?? 90) * 1000;
+  setCommunityError(null);
+  try {
+    await establishHostPublisher(publisherSource, generation);
+  } catch (error) {
+    schedulePublisherRecovery(generation);
+    throw error;
+  }
 }
 
 export function sendProgramEvent(next: LiveProgram): void {
@@ -458,8 +634,13 @@ export function sendChatMessage(text: string): void {
 }
 
 export function joinLiveSession(session: LiveSession): void {
+  listenerGeneration += 1;
+  clearListenerRetry();
   closePeer(listener);
   listener = null;
+  listenerAuthorized = false;
+  listenerRetryAttempt = 0;
+  setListenerState('idle');
   socket?.disconnect();
   setJoinedSession(session);
   setProgram(session.program ?? null);
@@ -468,10 +649,28 @@ export function joinLiveSession(session: LiveSession): void {
   connectSocket(session);
 }
 
-export async function startListening(): Promise<MediaStream> {
+function startListenerStats(pc: RTCPeerConnection): void {
+  window.clearInterval(listenerStatsTimer);
+  listenerStatsTimer = window.setInterval(() => {
+    void pc.getStats().then((report) => {
+      report.forEach((stat) => {
+        if (stat.type !== 'inbound-rtp' || stat.kind !== 'audio') return;
+        if (typeof stat.estimatedPlayoutTimestamp === 'number' && typeof stat.timestamp === 'number') {
+          const estimate = stat.estimatedPlayoutTimestamp - stat.timestamp;
+          if (estimate >= 0 && estimate < 2000) playoutDelayMs = estimate;
+        } else if (stat.jitterBufferEmittedCount > 0) {
+          const estimate = (stat.jitterBufferDelay / stat.jitterBufferEmittedCount) * 1000;
+          if (Number.isFinite(estimate)) playoutDelayMs = Math.min(1000, Math.max(20, estimate + 20));
+        }
+      });
+    }).catch(() => {});
+  }, 1000);
+}
+
+async function establishListener(generation: number): Promise<MediaStream> {
   const session = joinedSession();
-  if (!session) throw new Error('session_missing');
-  if (listenerStream()) return listenerStream()!;
+  if (!session || generation !== listenerGeneration) throw new Error('session_missing');
+  setListenerState(listenerRetryAttempt > 0 ? 'recovering' : 'connecting');
   const pc = new RTCPeerConnection();
   pc.addTransceiver('audio', { direction: 'recvonly' });
   const incoming = new MediaStream();
@@ -492,26 +691,96 @@ export async function startListening(): Promise<MediaStream> {
     throw new Error(`whep_${response.status}`);
   }
   await pc.setRemoteDescription({ type: 'answer', sdp: await response.text() });
+  if (generation !== listenerGeneration) {
+    pc.close();
+    throw new Error('listener_superseded');
+  }
   listener = { pc, resourceUrl: resourceLocation(session.whep_url, response) };
-  window.clearInterval(listenerStatsTimer);
-  listenerStatsTimer = window.setInterval(() => {
-    void pc.getStats().then((report) => {
-      report.forEach((stat) => {
-        if (stat.type !== 'inbound-rtp' || stat.kind !== 'audio') return;
-        if (typeof stat.estimatedPlayoutTimestamp === 'number' && typeof stat.timestamp === 'number') {
-          const estimate = stat.estimatedPlayoutTimestamp - stat.timestamp;
-          if (estimate >= 0 && estimate < 2000) playoutDelayMs = estimate;
-        } else if (stat.jitterBufferEmittedCount > 0) {
-          const estimate = (stat.jitterBufferDelay / stat.jitterBufferEmittedCount) * 1000;
-          if (Number.isFinite(estimate)) playoutDelayMs = Math.min(1000, Math.max(20, estimate + 20));
-        }
-      });
-    }).catch(() => {});
-  }, 1000);
+  pc.addEventListener('connectionstatechange', () => {
+    if (generation !== listenerGeneration || listener?.pc !== pc) return;
+    if (pc.connectionState === 'connected') {
+      listenerRetryAttempt = 0;
+      setListenerState('connected');
+      if (communityError() === 'listen_failed' || communityError() === 'reconnecting') {
+        setCommunityError(null);
+      }
+    } else if (
+      pc.connectionState === 'failed'
+      || pc.connectionState === 'closed'
+      || pc.connectionState === 'disconnected'
+    ) {
+      listener = null;
+      scheduleListenerRecovery(generation);
+    }
+  });
+  if (pc.connectionState === 'connected') {
+    listenerRetryAttempt = 0;
+    setListenerState('connected');
+    setCommunityError(null);
+  }
+  startListenerStats(pc);
   return incoming;
 }
 
+function scheduleListenerRecovery(generation: number): void {
+  if (
+    generation !== listenerGeneration
+    || listenerRetryTimer !== undefined
+    || !listenerAuthorized
+    || !joinedSession()
+  ) return;
+  if (listenerRetryAttempt === 0 && listenerState() === 'connected') {
+    listenerRecoveryDeadline = Date.now() + 90_000;
+  }
+  if (Date.now() >= listenerRecoveryDeadline) {
+    setListenerState('failed');
+    setCommunityError('listen_failed');
+    return;
+  }
+  setListenerState('recovering');
+  setCommunityError('reconnecting');
+  const delay = RETRY_DELAYS_MS[Math.min(listenerRetryAttempt, RETRY_DELAYS_MS.length - 1)];
+  listenerRetryAttempt += 1;
+  listenerRetryTimer = window.setTimeout(() => {
+    listenerRetryTimer = undefined;
+    if (generation !== listenerGeneration || !listenerAuthorized) return;
+    const previous = listener;
+    listener = null;
+    closePeer(previous);
+    window.clearInterval(listenerStatsTimer);
+    setListenerStream(null);
+    void establishListener(generation).catch(() => scheduleListenerRecovery(generation));
+  }, delay);
+}
+
+export async function startListening(): Promise<MediaStream> {
+  if (!joinedSession()) throw new Error('session_missing');
+  if (listenerStream() && listenerState() !== 'failed') return listenerStream()!;
+  listenerAuthorized = true;
+  listenerGeneration += 1;
+  const generation = listenerGeneration;
+  listenerRecoveryDeadline = Date.now() + 90_000;
+  listenerRetryAttempt = 0;
+  clearListenerRetry();
+  closePeer(listener);
+  listener = null;
+  try {
+    return await establishListener(generation);
+  } catch (error) {
+    scheduleListenerRecovery(generation);
+    throw error;
+  }
+}
+
+export async function retryListening(): Promise<MediaStream> {
+  setCommunityError(null);
+  return startListening();
+}
+
 export async function leaveLiveSession(): Promise<void> {
+  listenerGeneration += 1;
+  listenerAuthorized = false;
+  clearListenerRetry();
   closePeer(listener);
   listener = null;
   window.clearInterval(listenerStatsTimer);
@@ -522,4 +791,15 @@ export async function leaveLiveSession(): Promise<void> {
   setProgram(null);
   setMessages([]);
   setListenerStream(null);
+  setListenerState('idle');
+}
+
+/** Keeps Vitest cases isolated without exposing private identity or tokens. */
+export async function resetCommunityStateForTests(): Promise<void> {
+  await clearHostState();
+  await leaveLiveSession();
+  setConfig(null);
+  setSessions([]);
+  setCommunityError(null);
+  rememberHost(null);
 }

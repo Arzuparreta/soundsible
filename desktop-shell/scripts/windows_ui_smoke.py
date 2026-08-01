@@ -60,7 +60,14 @@ def main_window(pid: int):
 
 def control(window, title: str, control_type: str = "Button", timeout: float = 30.0):
     title_pattern = rf"^{re.escape(title)}(?:…|\.\.\.)?$"
-    spec = window.child_window(title_re=title_pattern, control_type=control_type)
+    # ``Desktop.windows`` returns a UIAWrapper, while ``child_window`` belongs
+    # to WindowSpecification. Re-wrap the stable native handle before querying.
+    root = (
+        window
+        if hasattr(window, "child_window")
+        else Desktop(backend="uia").window(handle=window.handle)
+    )
+    spec = root.child_window(title_re=title_pattern, control_type=control_type)
     spec.wait("exists enabled visible ready", timeout=timeout)
     return spec.wrapper_object()
 

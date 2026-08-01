@@ -44,7 +44,9 @@ def _listener_inodes(port: int) -> set[str]:
 def _process_socket_inodes(pid: int) -> set[str]:
     sockets: set[str] = set()
     try:
-        descriptors = (Path("/proc") / str(pid) / "fd").iterdir()
+        # ``Path.iterdir`` is lazy: opening a protected fd directory raises on
+        # first iteration, outside the old try block, on hardened CI hosts.
+        descriptors = list((Path("/proc") / str(pid) / "fd").iterdir())
     except OSError:
         return sockets
     for descriptor in descriptors:

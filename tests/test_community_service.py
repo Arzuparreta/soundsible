@@ -1,6 +1,7 @@
 import importlib
 import io
 import json
+from unittest.mock import patch
 
 from shared.community_identity import signed_request
 from tests.conftest import TEST_USER_ID
@@ -137,3 +138,52 @@ def test_stale_host_disconnect_cannot_expire_replacement_socket(tmp_path, monkey
     assert second.is_connected()
     assert client.get(f"/v1/sessions/{session['id']}").get_json()["session"]["status"] == "waiting"
     second.disconnect()
+
+
+def test_signed_resume_rotates_media_credentials(tmp_path, monkeypatch):
+    monkeypatch.setenv("COMMUNITY_DB_PATH", str(tmp_path / "community.db"))
+    monkeypatch.setenv("COMMUNITY_ARTWORK_DIR", str(tmp_path / "artwork"))
+    monkeypatch.setenv("COMMUNITY_SOCKET_ASYNC_MODE", "threading")
+    import community_service.app as module
+    module = importlib.reload(module)
+    client = module.app.test_client()
+
+    body = {"title": "Recoverable", "profile": {"display_name": "DJ Test"}}
+    encoded, headers = _headers("POST", "/v1/sessions", body)
+    original = client.post("/v1/sessions", data=encoded, headers=headers).get_json()["session"]
+    resume_body = {"profile": {"display_name": "DJ Test"}}
+    path = f"/v1/sessions/{original['id']}/resume"
+    encoded, headers = _headers("POST", path, resume_body)
+    resumed = client.post(path, data=encoded, headers=headers)
+
+    assert resumed.status_code == 200
+    session = resumed.get_json()["session"]
+    assert session["id"] == original["id"]
+    assert session["host_token"] != original["host_token"]
+    assert session["publish_token"] != original["publish_token"]
+    assert session["reconnect_grace_seconds"] == 90
+
+
+def test_health_checks_sqlite_and_mediamtx(tmp_path, monkeypatch):
+    monkeypatch.setenv("COMMUNITY_DB_PATH", str(tmp_path / "community.db"))
+    monkeypatch.setenv("COMMUNITY_ARTWORK_DIR", str(tmp_path / "artwork"))
+    monkeypatch.setenv("COMMUNITY_SOCKET_ASYNC_MODE", "threading")
+    import community_service.app as module
+    module = importlib.reload(module)
+    client = module.app.test_client()
+
+    response = type("Health", (), {
+        "status": 200,
+        "__enter__": lambda self: self,
+        "__exit__": lambda self, *args: None,
+    })()
+    with patch.object(module.urllib.request, "urlopen", return_value=response):
+        healthy = client.get("/health")
+    assert healthy.status_code == 200
+    assert healthy.get_json()["checks"] == {"mediamtx": "ok", "sqlite": "ok"}
+
+    with patch.object(module.urllib.request, "urlopen", side_effect=OSError("offline")):
+        unhealthy = client.get("/health")
+    assert unhealthy.status_code == 503
+    assert unhealthy.get_json()["checks"]["sqlite"] == "ok"
+    assert unhealthy.get_json()["checks"]["mediamtx"] == "error"
