@@ -265,11 +265,21 @@ def global_shortcut(keys: str) -> None:
     send_keys(keys, pause=0.05)
 
 
-def wait_for_exit(process: subprocess.Popen, message: str, timeout: float = 15.0):
-    try:
-        process.wait(timeout=timeout)
-    except subprocess.TimeoutExpired as error:
-        raise RuntimeError(message) from error
+def quit_via_global_shortcut(process: subprocess.Popen, window) -> None:
+    for _ in range(3):
+        # A fresh hosted runner can leave Windows Search over the app after its
+        # deferred privacy OOBE. Close that system overlay, focus Soundsible,
+        # then verify the registered global shortcut by observing process exit.
+        send_keys("{ESC}")
+        time.sleep(0.5)
+        window.set_focus()
+        global_shortcut("^%q")
+        try:
+            process.wait(timeout=5)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+    raise RuntimeError("Global quit shortcut did not terminate Soundsible")
 
 
 def run_smoke(app_path: Path, artifact_path: Path) -> None:
@@ -310,8 +320,7 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
         screenshot(artifact_path / "player-ready.png")
 
         # A second launch must bypass onboarding and reuse the saved folder.
-        global_shortcut("^%q")
-        wait_for_exit(process, "Global quit shortcut did not terminate first launch")
+        quit_via_global_shortcut(process, window)
         wait_until(
             lambda: not state_file.exists(),
             "Engine state remained after first launch exited",
@@ -333,8 +342,7 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
         main_window(process.pid).wait("visible", timeout=10)
         screenshot(artifact_path / "restored-from-tray.png")
 
-        global_shortcut("^%q")
-        wait_for_exit(process, "Global quit shortcut did not terminate Soundsible")
+        quit_via_global_shortcut(process, window)
     except Exception:
         screenshot(artifact_path / "failure.png")
         raise
