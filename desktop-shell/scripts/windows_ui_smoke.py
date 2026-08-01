@@ -303,14 +303,13 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
             timeout=30,
         )
         screenshot(artifact_path / "folder-selected.png")
-        control(window, "Continue").click_input()
+        invoke_or_click(control(window, "Continue"))
 
         state = wait_for_engine_state(state_file)
         assert_healthy(state)
         screenshot(artifact_path / "player-ready.png")
 
         # A second launch must bypass onboarding and reuse the saved folder.
-        window.set_focus()
         global_shortcut("^%q")
         wait_for_exit(process, "Global quit shortcut did not terminate first launch")
         wait_until(
@@ -325,9 +324,8 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
         assert_healthy(state)
         screenshot(artifact_path / "returning-user.png")
 
-        # Alt+F4 hides to tray. Ctrl+Alt+O restores the same process.
-        window.set_focus()
-        send_keys("%{F4}")
+        # Closing the native window hides to tray. Ctrl+Alt+O restores it.
+        window.close()
         time.sleep(2)
         if process.poll() is not None:
             raise RuntimeError("Closing the window exited instead of hiding to tray")
