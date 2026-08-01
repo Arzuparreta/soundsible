@@ -38,6 +38,7 @@ export const zh: Dict = {
     listen: '收听直播',
     listening: '正在收听',
     listenFailed: '无法连接直播音频。',
+    connectingAudio: '正在连接音频',
     reconnectingAudio: '正在恢复音频',
     publishFailed: '音频发布失败',
     service: {

@@ -1,11 +1,56 @@
 import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from '@playwright/test';
+import { chromium, firefox } from '@playwright/test';
+import { build } from 'vite';
+
+const requestedBrowsers = (process.env.COMMUNITY_SMOKE_BROWSERS || process.env.COMMUNITY_SMOKE_BROWSER || 'chromium')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+if (requestedBrowsers.length > 1 && process.env.COMMUNITY_SMOKE_CHILD !== '1') {
+  for (const browserName of requestedBrowsers) {
+    execFileSync(process.execPath, [fileURLToPath(import.meta.url)], {
+      env: {
+        ...process.env,
+        COMMUNITY_SMOKE_BROWSERS: browserName,
+        COMMUNITY_SMOKE_BROWSER: browserName,
+        COMMUNITY_SMOKE_CHILD: '1',
+      },
+      stdio: 'inherit',
+    });
+  }
+  process.exit(0);
+}
+const browserName = requestedBrowsers[0];
+const browserType = { chromium, firefox }[browserName];
+if (!browserType) throw new Error(`unsupported smoke browser: ${browserName}`);
+const forceRelay = process.env.COMMUNITY_SMOKE_FORCE_RELAY === '1';
 
 const apiUrl = (process.env.COMMUNITY_SMOKE_API || 'http://127.0.0.1:18080').replace(/\/$/, '');
 const socketClientPath = fileURLToPath(
   new URL('../node_modules/socket.io-client/dist/socket.io.min.js', import.meta.url),
 );
+const harnessDir = await mkdtemp(join(tmpdir(), 'soundsible-community-smoke-'));
+await build({
+  configFile: false,
+  logLevel: 'silent',
+  build: {
+    lib: {
+      entry: fileURLToPath(new URL('../src/lib/communityWebrtc.ts', import.meta.url)),
+      name: 'SoundsibleCommunityWebrtc',
+      formats: ['iife'],
+      fileName: () => 'community-webrtc.js',
+    },
+    outDir: harnessDir,
+    emptyOutDir: true,
+    minify: false,
+  },
+});
+const communityWebrtcScript = await readFile(join(harnessDir, 'community-webrtc.js'), 'utf8');
 
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -48,16 +93,18 @@ const created = await signedRequest('POST', '/v1/sessions', { title: 'WebRTC smo
 if (!created.ok) throw new Error(`create session failed: ${created.status} ${await created.text()}`);
 const { session } = await created.json();
 
-const browser = await chromium.launch({ headless: true });
+let browser;
 let published;
 let received;
 let metadata;
 let chat;
 let ended;
 try {
+  browser = await browserType.launch({ headless: true });
   const publisherPage = await browser.newPage();
   await publisherPage.goto(`${apiUrl}/health`);
   await publisherPage.addScriptTag({ path: socketClientPath });
+  await publisherPage.addScriptTag({ content: communityWebrtcScript });
   await publisherPage.evaluate(({ sessionId, hostToken }) => new Promise((resolve, reject) => {
     const socket = globalThis.io(location.origin, {
       transports: ['websocket', 'polling'],
@@ -71,35 +118,20 @@ try {
     });
     socket.once('connect_error', reject);
   }), { sessionId: session.id, hostToken: session.host_token });
-  published = await publisherPage.evaluate(async ({ endpoint, token }) => {
+  published = await publisherPage.evaluate(async ({ endpoint, token, relayOnly }) => {
     const context = new AudioContext();
     const oscillator = context.createOscillator();
     const destination = context.createMediaStreamDestination();
     oscillator.connect(destination);
     oscillator.start();
-
-    const pc = new RTCPeerConnection();
-    pc.addTrack(destination.stream.getAudioTracks()[0], destination.stream);
-    await pc.setLocalDescription(await pc.createOffer());
-    if (pc.iceGatheringState !== 'complete') {
-      await new Promise((resolve) => {
-        const timer = setTimeout(resolve, 3000);
-        pc.addEventListener('icegatheringstatechange', () => {
-          if (pc.iceGatheringState === 'complete') {
-            clearTimeout(timer);
-            resolve();
-          }
-        });
-      });
-    }
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/sdp', Authorization: `Bearer ${token}` },
-      body: pc.localDescription.sdp,
+    const handle = await globalThis.SoundsibleCommunityWebrtc.openCommunityPublisher({
+      endpoint,
+      token,
+      stream: destination.stream,
+      iceTransportPolicy: relayOnly ? 'relay' : 'all',
     });
-    if (!response.ok) throw new Error(`WHIP ${response.status}: ${await response.text()}`);
-    await pc.setRemoteDescription({ type: 'answer', sdp: await response.text() });
-    globalThis.__communitySmoke = { context, oscillator, pc };
+    const pc = handle.pc;
+    globalThis.__communitySmoke = { context, oscillator, handle, pc };
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`publisher state ${pc.connectionState}`)), 12000);
       const check = () => {
@@ -111,12 +143,13 @@ try {
       pc.addEventListener('connectionstatechange', check);
       check();
     });
-    return { state: pc.connectionState, resource: response.headers.get('Location') };
-  }, { endpoint: session.whip_url, token: session.publish_token });
+    return { state: pc.connectionState, resource: handle.resourceUrl };
+  }, { endpoint: session.whip_url, token: session.publish_token, relayOnly: forceRelay });
 
   const listenerPage = await browser.newPage();
   await listenerPage.goto(`${apiUrl}/health`);
   await listenerPage.addScriptTag({ path: socketClientPath });
+  await listenerPage.addScriptTag({ content: communityWebrtcScript });
   await listenerPage.evaluate((sessionId) => new Promise((resolve, reject) => {
     const socket = globalThis.io(location.origin, {
       transports: ['websocket', 'polling'],
@@ -134,30 +167,14 @@ try {
     });
     socket.once('connect_error', reject);
   }), session.id);
-  received = await listenerPage.evaluate(async (endpoint) => {
-    const pc = new RTCPeerConnection();
-    pc.addTransceiver('audio', { direction: 'recvonly' });
+  received = await listenerPage.evaluate(async ({ endpoint, relayOnly }) => {
     let track;
-    pc.addEventListener('track', (event) => { track = event.track; });
-    await pc.setLocalDescription(await pc.createOffer());
-    if (pc.iceGatheringState !== 'complete') {
-      await new Promise((resolve) => {
-        const timer = setTimeout(resolve, 3000);
-        pc.addEventListener('icegatheringstatechange', () => {
-          if (pc.iceGatheringState === 'complete') {
-            clearTimeout(timer);
-            resolve();
-          }
-        });
-      });
-    }
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/sdp' },
-      body: pc.localDescription.sdp,
+    const handle = await globalThis.SoundsibleCommunityWebrtc.openCommunityListener({
+      endpoint,
+      iceTransportPolicy: relayOnly ? 'relay' : 'all',
+      onTrack: (event) => { track = event.track; },
     });
-    if (!response.ok) throw new Error(`WHEP ${response.status}: ${await response.text()}`);
-    await pc.setRemoteDescription({ type: 'answer', sdp: await response.text() });
+    const pc = handle.pc;
     await new Promise((resolve, reject) => {
       const started = Date.now();
       const check = async () => {
@@ -171,14 +188,14 @@ try {
     });
     const stats = await pc.getStats();
     const inbound = [...stats.values()].find((item) => item.type === 'inbound-rtp' && item.kind === 'audio');
-    globalThis.__communitySmoke = { pc };
+    globalThis.__communitySmoke = { handle, pc };
     return {
       state: pc.connectionState,
       track: track.readyState,
       bytesReceived: inbound.bytesReceived,
-      resource: response.headers.get('Location'),
+      resource: handle.resourceUrl,
     };
-  }, session.whep_url);
+  }, { endpoint: session.whep_url, relayOnly: forceRelay });
 
   // Emit after the listener is ready; keep exact metadata free of library ids.
   const programEvent = {
@@ -234,8 +251,9 @@ try {
   if (!deleted.ok) throw new Error(`delete session failed: ${deleted.status} ${await deleted.text()}`);
   ended = await endedPromise;
 } finally {
-  await browser.close();
+  await browser?.close();
   await signedRequest('DELETE', `/v1/sessions/${session.id}`, { profile }).catch(() => {});
+  await rm(harnessDir, { recursive: true, force: true });
 }
 
 const listing = await fetch(`${apiUrl}/v1/sessions`).then((response) => response.json());
@@ -258,6 +276,8 @@ if (
   })}`);
 }
 console.log(JSON.stringify({
+  browser: browserName,
+  relayOnly: forceRelay,
   published: published.state,
   received: received.state,
   bytesReceived: received.bytesReceived,

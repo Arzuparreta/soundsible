@@ -98,4 +98,19 @@ describe('Live operational UI', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'End session' }));
     expect(community.end).toHaveBeenCalledOnce();
   });
+
+  it('shows the real connection phase after playback starts', () => {
+    community.host = {
+      id: 'session-test',
+      title: 'Saturday',
+      listener_count: 0,
+      host: { display_name: 'Local DJ' },
+    };
+    community.publisherState = 'connecting';
+
+    render(() => <Live />);
+
+    expect(screen.getByText('Connecting audio')).toBeVisible();
+    expect(screen.queryByText('About to start')).not.toBeInTheDocument();
+  });
 });

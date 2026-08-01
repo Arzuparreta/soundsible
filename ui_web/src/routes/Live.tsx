@@ -252,7 +252,9 @@ export default function Live() {
                       ? t('live.reconnectingAudio')
                       : publisherState() === 'failed'
                         ? t('live.publishFailed')
-                        : t('live.waiting')}
+                        : publisherState() === 'connecting'
+                          ? t('live.connectingAudio')
+                          : t('live.waiting')}
                 </span>
                 <Show
                   when={editing()}

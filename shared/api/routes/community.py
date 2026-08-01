@@ -133,7 +133,16 @@ def _remote(method: str, path: str, body: dict | None = None):
     if not response.ok:
         payload, status = _safe_error(response)
         return jsonify(payload), status
-    return jsonify(response.json()), response.status_code
+    if response.status_code == 204 or not response.content:
+        return "", response.status_code
+    try:
+        payload = response.json()
+    except (TypeError, ValueError, requests.JSONDecodeError):
+        return jsonify({
+            "error": "Community service returned an invalid response",
+            "code": "community_invalid_response",
+        }), 502
+    return jsonify(payload), response.status_code
 
 
 @community_bp.get("/api/community/config")

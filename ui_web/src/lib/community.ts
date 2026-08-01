@@ -1,6 +1,11 @@
 import { createSignal } from 'solid-js';
 import { io, type Socket } from 'socket.io-client';
 import { ApiError, request } from './api';
+import {
+  openCommunityListener,
+  openCommunityPublisher,
+  type CommunityPeerHandle,
+} from './communityWebrtc';
 
 export type LiveSessionStatus = 'waiting' | 'live' | 'reconnecting';
 export type LiveTransport = 'playing' | 'paused';
@@ -123,8 +128,8 @@ export {
 };
 
 let socket: Socket | null = null;
-let publisher: PeerHandle | null = null;
-let listener: PeerHandle | null = null;
+let publisher: CommunityPeerHandle | null = null;
+let listener: CommunityPeerHandle | null = null;
 let listenerStatsTimer: number | undefined;
 let playoutDelayMs = 120;
 let programTimer: number | undefined;
@@ -140,11 +145,6 @@ let listenerRetryAttempt = 0;
 let listenerAuthorized = false;
 
 const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
-
-interface PeerHandle {
-  pc: RTCPeerConnection;
-  resourceUrl?: string;
-}
 
 function activeHostId(): string | null {
   try {
@@ -373,12 +373,9 @@ export async function updateHostTitle(title: string): Promise<void> {
   mergeSession(response.session);
 }
 
-function closePeer(handle: PeerHandle | null): void {
+function closePeer(handle: CommunityPeerHandle | null): void {
   if (!handle) return;
-  handle.pc.close();
-  if (handle.resourceUrl) {
-    void fetch(handle.resourceUrl, { method: 'DELETE' }).catch(() => {});
-  }
+  handle.close();
 }
 
 function clearPublisherRetry(): void {
@@ -431,65 +428,23 @@ export async function endHostSession(): Promise<void> {
   await clearHostState();
 }
 
-function waitForIce(pc: RTCPeerConnection): Promise<void> {
-  if (pc.iceGatheringState === 'complete') return Promise.resolve();
-  return new Promise((resolve) => {
-    const changed = () => {
-      if (pc.iceGatheringState !== 'complete') return;
-      pc.removeEventListener('icegatheringstatechange', changed);
-      resolve();
-    };
-    pc.addEventListener('icegatheringstatechange', changed);
-    window.setTimeout(() => {
-      pc.removeEventListener('icegatheringstatechange', changed);
-      resolve();
-    }, 2500);
-  });
-}
-
-function resourceLocation(endpoint: string, response: Response): string | undefined {
-  const value = response.headers.get('Location');
-  if (!value) return undefined;
-  const endpointUrl = new URL(endpoint);
-  if (value.startsWith('/') && endpointUrl.pathname.startsWith('/media/')) {
-    return new URL(`/media${value}`, endpointUrl.origin).href;
-  }
-  return new URL(value, endpoint).href;
-}
-
 async function establishHostPublisher(stream: MediaStream, generation: number): Promise<void> {
   const session = hostSession();
   if (!session || generation !== publisherGeneration) return;
   setPublisherState(publisherRetryAttempt > 0 ? 'recovering' : 'connecting');
-  const track = stream.getAudioTracks()[0];
-  if (!track) throw new Error('program_stream_missing');
-  const pc = new RTCPeerConnection();
-  const sender = pc.addTrack(track, stream);
-  const parameters = sender.getParameters();
-  if (parameters.encodings.length === 0) parameters.encodings = [{}];
-  parameters.encodings[0].maxBitrate = 192_000;
-  await sender.setParameters(parameters).catch(() => {});
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription({ type: offer.type, sdp: musicOffer(offer.sdp) });
-  await waitForIce(pc);
-  const response = await fetch(session.whip_url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/sdp',
-      Authorization: `Bearer ${session.publish_token}`,
-    },
-    body: pc.localDescription?.sdp,
+  const handle = await openCommunityPublisher({
+    endpoint: session.whip_url,
+    token: session.publish_token,
+    stream,
+    transformOffer: musicOffer,
+    onTransportError: () => schedulePublisherRecovery(generation),
   });
-  if (!response.ok) {
-    pc.close();
-    throw new Error(`whip_${response.status}`);
-  }
-  await pc.setRemoteDescription({ type: 'answer', sdp: await response.text() });
+  const { pc } = handle;
   if (generation !== publisherGeneration) {
-    pc.close();
+    handle.close();
     return;
   }
-  publisher = { pc, resourceUrl: resourceLocation(session.whip_url, response) };
+  publisher = handle;
   pc.addEventListener('connectionstatechange', () => {
     if (generation !== publisherGeneration || publisher?.pc !== pc) return;
     const connected = pc.connectionState === 'connected';
@@ -503,6 +458,7 @@ async function establishHostPublisher(stream: MediaStream, generation: number): 
     }
     if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
       publisher = null;
+      handle.close();
       setPublisherConnected(false);
       schedulePublisherRecovery(generation);
     } else if (pc.connectionState === 'disconnected') {
@@ -671,31 +627,21 @@ async function establishListener(generation: number): Promise<MediaStream> {
   const session = joinedSession();
   if (!session || generation !== listenerGeneration) throw new Error('session_missing');
   setListenerState(listenerRetryAttempt > 0 ? 'recovering' : 'connecting');
-  const pc = new RTCPeerConnection();
-  pc.addTransceiver('audio', { direction: 'recvonly' });
   const incoming = new MediaStream();
-  pc.addEventListener('track', (event) => {
-    for (const track of event.streams[0]?.getTracks() ?? [event.track]) incoming.addTrack(track);
-    setListenerStream(incoming);
+  const handle = await openCommunityListener({
+    endpoint: session.whep_url,
+    onTrack: (event) => {
+      for (const track of event.streams[0]?.getTracks() ?? [event.track]) incoming.addTrack(track);
+      setListenerStream(incoming);
+    },
+    onTransportError: () => scheduleListenerRecovery(generation),
   });
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  await waitForIce(pc);
-  const response = await fetch(session.whep_url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/sdp' },
-    body: pc.localDescription?.sdp,
-  });
-  if (!response.ok) {
-    pc.close();
-    throw new Error(`whep_${response.status}`);
-  }
-  await pc.setRemoteDescription({ type: 'answer', sdp: await response.text() });
+  const { pc } = handle;
   if (generation !== listenerGeneration) {
-    pc.close();
+    handle.close();
     throw new Error('listener_superseded');
   }
-  listener = { pc, resourceUrl: resourceLocation(session.whep_url, response) };
+  listener = handle;
   pc.addEventListener('connectionstatechange', () => {
     if (generation !== listenerGeneration || listener?.pc !== pc) return;
     if (pc.connectionState === 'connected') {
@@ -710,6 +656,7 @@ async function establishListener(generation: number): Promise<MediaStream> {
       || pc.connectionState === 'disconnected'
     ) {
       listener = null;
+      if (pc.connectionState !== 'disconnected') handle.close();
       scheduleListenerRecovery(generation);
     }
   });

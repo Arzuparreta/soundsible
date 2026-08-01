@@ -9,6 +9,7 @@ from tests.conftest import TEST_USER_ID
 class _Response:
     ok = True
     status_code = 201
+    content = b'{"session":{"id":"session-test"}}'
 
     @staticmethod
     def json():
@@ -18,6 +19,22 @@ class _Response:
 class _HealthResponse:
     ok = True
     status_code = 200
+
+
+class _EmptyResponse:
+    ok = True
+    status_code = 204
+    content = b""
+
+
+class _InvalidResponse:
+    ok = True
+    status_code = 200
+    content = b"not-json"
+
+    @staticmethod
+    def json():
+        raise ValueError("invalid json")
 
 
 def test_station_bridge_exposes_config_and_signs_profile(monkeypatch):
@@ -147,3 +164,29 @@ def test_station_bridge_reports_unreachable_relay_and_remote_errors(monkeypatch)
     failed = client.post("/api/community/sessions/example-session/resume")
     assert failed.status_code == 502
     assert failed.get_json()["code"] == "community_unreachable"
+
+
+def test_station_bridge_accepts_empty_delete_response(monkeypatch):
+    monkeypatch.setattr(routes, "current_user_id_from_request", lambda: TEST_USER_ID)
+    monkeypatch.setattr(routes, "current_user", lambda: {"display_name": "DJ"})
+    monkeypatch.setattr(routes.requests, "request", lambda *args, **kwargs: _EmptyResponse())
+    app = Flask(__name__)
+    app.register_blueprint(routes.community_bp)
+
+    response = app.test_client().delete("/api/community/sessions/session-test")
+
+    assert response.status_code == 204
+    assert response.data == b""
+
+
+def test_station_bridge_rejects_invalid_success_payload(monkeypatch):
+    monkeypatch.setattr(routes, "current_user_id_from_request", lambda: TEST_USER_ID)
+    monkeypatch.setattr(routes, "current_user", lambda: {"display_name": "DJ"})
+    monkeypatch.setattr(routes.requests, "request", lambda *args, **kwargs: _InvalidResponse())
+    app = Flask(__name__)
+    app.register_blueprint(routes.community_bp)
+
+    response = app.test_client().post("/api/community/sessions/session-test/resume")
+
+    assert response.status_code == 502
+    assert response.get_json()["code"] == "community_invalid_response"

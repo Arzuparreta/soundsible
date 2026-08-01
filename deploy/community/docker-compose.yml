@@ -1,4 +1,29 @@
 services:
+  coturn:
+    image: coturn/coturn:4.15.0-r0
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - --listening-port=3478
+      - --min-port=49152
+      - --max-port=49663
+      - --realm=live.84-247-161-82.sslip.io
+      - --use-auth-secret
+      - --static-auth-secret=${COMMUNITY_TURN_SECRET:?COMMUNITY_TURN_SECRET is required}
+      - --fingerprint
+      - --no-udp
+      - --no-tls
+      - --no-dtls
+      - --no-multicast-peers
+      - --pidfile=/var/tmp/turnserver.pid
+      - --log-file=stdout
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/3478'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
   community-api:
     build:
       context: ../..
@@ -32,9 +57,16 @@ services:
   mediamtx:
     image: bluenviron/mediamtx:1.19.3
     restart: unless-stopped
+    environment:
+      MTX_WEBRTCICESERVERS2_0_URL: turn:live.84-247-161-82.sslip.io:3478?transport=tcp
+      MTX_WEBRTCICESERVERS2_0_USERNAME: AUTH_SECRET
+      MTX_WEBRTCICESERVERS2_0_PASSWORD: ${COMMUNITY_TURN_SECRET:?COMMUNITY_TURN_SECRET is required}
+      MTX_WEBRTCICESERVERS2_0_CLIENTONLY: "true"
     depends_on:
       community-api:
         condition: service_started
+      coturn:
+        condition: service_healthy
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
     ports:

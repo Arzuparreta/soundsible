@@ -37,6 +37,7 @@ export const en = {
     listen: 'Listen live',
     listening: 'Listening live',
     listenFailed: 'The live audio could not be connected.',
+    connectingAudio: 'Connecting audio',
     reconnectingAudio: 'Recovering audio',
     publishFailed: 'Audio publishing failed',
     service: {

@@ -59,7 +59,17 @@ class FakePeerConnection {
   }
   removeEventListener() {}
   async createOffer() {
-    return { type: 'offer' as const, sdp: 'a=rtpmap:111 opus/48000/2\r\n' };
+    return {
+      type: 'offer' as const,
+      sdp: [
+        'v=0',
+        'm=audio 9 UDP/TLS/RTP/SAVPF 111',
+        'a=ice-ufrag:test-ufrag',
+        'a=ice-pwd:test-password',
+        'a=rtpmap:111 opus/48000/2',
+        '',
+      ].join('\r\n'),
+    };
   }
   async setLocalDescription(value: RTCSessionDescriptionInit) {
     this.localDescription = value;
@@ -151,6 +161,7 @@ describe('Community client state', () => {
       const url = String(input);
       if (url.includes('/api/community/sessions')) return json({ session }, 201);
       if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+      if (init?.method === 'OPTIONS') return new Response(null, { status: 204 });
       whipCalls += 1;
       if (whipCalls === 1) return new Response('busy', { status: 503 });
       return new Response('answer', {
@@ -161,7 +172,7 @@ describe('Community client state', () => {
     await createHostSession('Saturday');
     const stream = new FakeMediaStream() as unknown as MediaStream;
 
-    await expect(startHostPublisher(stream)).rejects.toThrow('whip_503');
+    await expect(startHostPublisher(stream)).rejects.toThrow('webrtc_offer_503');
     expect(publisherState()).toBe('recovering');
     await vi.advanceTimersByTimeAsync(1000);
 
@@ -174,13 +185,14 @@ describe('Community client state', () => {
     let whepCalls = 0;
     vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+      if (init?.method === 'OPTIONS') return new Response(null, { status: 204 });
       whepCalls += 1;
       if (whepCalls === 1) return new Response('offline', { status: 502 });
       return new Response('answer', { status: 201, headers: { Location: '/live/read' } });
     }));
     joinLiveSession(session);
 
-    await expect(startListening()).rejects.toThrow('whep_502');
+    await expect(startListening()).rejects.toThrow('webrtc_offer_502');
     expect(listenerState()).toBe('recovering');
     await vi.advanceTimersByTimeAsync(1000);
     expect(whepCalls).toBe(2);

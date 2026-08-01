@@ -38,6 +38,7 @@ export const es: Dict = {
     listen: 'Escuchar en directo',
     listening: 'Escuchando en directo',
     listenFailed: 'No se ha podido conectar el audio en directo.',
+    connectingAudio: 'Conectando audio',
     reconnectingAudio: 'Recuperando audio',
     publishFailed: 'Falló la publicación de audio',
     service: {
