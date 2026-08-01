@@ -248,7 +248,18 @@ def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None
     invoke_or_click(control(window, "Choose folder"))
     dialog = folder_dialog()
     set_clipboard_text(str(music_path))
+    dialog_width = dialog.rectangle().width()
+    dialog.click_input(coords=(dialog_width // 2, 12))
     dialog.set_focus()
+    dialog_handles = {
+        dialog.handle,
+        win32gui.GetAncestor(dialog.handle, 2),  # GA_ROOT
+    }
+    wait_until(
+        lambda: win32gui.GetForegroundWindow() in dialog_handles,
+        "Native folder picker did not receive foreground focus",
+        timeout=10,
+    )
     send_keys("^l")
     send_keys("^v")
     send_keys("{ENTER}")
