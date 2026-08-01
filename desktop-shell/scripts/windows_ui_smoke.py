@@ -229,8 +229,12 @@ def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None
 
     invoke_or_click(control(window, "Choose folder"))
     dialog = folder_dialog()
-    dialog.set_focus()
+    # PowerShell briefly owns the foreground while populating the clipboard.
+    # Do that before focusing the picker; otherwise the following Ctrl+L can
+    # reach Windows Search on a fresh hosted runner instead of Explorer.
     set_clipboard_text(str(music_path))
+    dialog.set_focus()
+    time.sleep(0.5)
     send_keys("^l")
     send_keys("^v")
     send_keys("{ENTER}")
