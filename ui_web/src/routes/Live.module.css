@@ -43,6 +43,7 @@
 }
 
 .banner button,
+.banner a,
 .error button {
   min-height: var(--control-h);
   padding: 0 var(--space-md);
@@ -52,6 +53,7 @@
   background: transparent;
   border: 1px solid currentColor;
   border-radius: var(--radius-full);
+  text-decoration: none;
 }
 
 .hostCard {

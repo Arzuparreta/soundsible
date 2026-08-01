@@ -11,7 +11,6 @@ services:
       - --use-auth-secret
       - --static-auth-secret=${COMMUNITY_TURN_SECRET:?COMMUNITY_TURN_SECRET is required}
       - --fingerprint
-      - --no-udp
       - --no-tls
       - --no-dtls
       - --no-multicast-peers
@@ -58,10 +57,12 @@ services:
     image: bluenviron/mediamtx:1.19.3
     restart: unless-stopped
     environment:
-      MTX_WEBRTCICESERVERS2_0_URL: turn:live.84-247-161-82.sslip.io:3478?transport=tcp
-      MTX_WEBRTCICESERVERS2_0_USERNAME: AUTH_SECRET
-      MTX_WEBRTCICESERVERS2_0_PASSWORD: ${COMMUNITY_TURN_SECRET:?COMMUNITY_TURN_SECRET is required}
+      MTX_WEBRTCICESERVERS2_0_URL: stun:live.84-247-161-82.sslip.io:3478
       MTX_WEBRTCICESERVERS2_0_CLIENTONLY: "true"
+      MTX_WEBRTCICESERVERS2_1_URL: turn:live.84-247-161-82.sslip.io:3478?transport=tcp
+      MTX_WEBRTCICESERVERS2_1_USERNAME: AUTH_SECRET
+      MTX_WEBRTCICESERVERS2_1_PASSWORD: ${COMMUNITY_TURN_SECRET:?COMMUNITY_TURN_SECRET is required}
+      MTX_WEBRTCICESERVERS2_1_CLIENTONLY: "true"
     depends_on:
       community-api:
         condition: service_started

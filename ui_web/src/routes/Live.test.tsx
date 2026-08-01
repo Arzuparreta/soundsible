@@ -6,6 +6,7 @@ const community = vi.hoisted(() => ({
   error: null as string | null,
   host: null as Record<string, unknown> | null,
   publisherState: 'idle',
+  secure: true,
   end: vi.fn(),
   retry: vi.fn(),
   init: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock('../lib/community', () => ({
   leaveLiveSession: vi.fn(),
   listenerState: () => 'idle',
   listenerStream: () => null,
+  liveMediaSecure: () => community.secure,
   liveProgram: () => null,
   liveSessions: () => [],
   publisherConnected: () => community.publisherState === 'connected',
@@ -58,6 +60,7 @@ beforeEach(() => {
   community.error = null;
   community.host = null;
   community.publisherState = 'idle';
+  community.secure = true;
   community.end.mockReset();
   community.retry.mockReset();
   community.init.mockReset();
@@ -112,5 +115,16 @@ describe('Live operational UI', () => {
 
     expect(screen.getByText('Connecting audio')).toBeVisible();
     expect(screen.queryByText('About to start')).not.toBeInTheDocument();
+  });
+
+  it('blocks broadcasting from an insecure IP origin and offers localhost', () => {
+    community.secure = false;
+
+    render(() => <Live />);
+
+    expect(screen.getByRole('button', { name: 'Go live' })).toBeDisabled();
+    expect(screen.getByText(/Firefox needs a secure browser context/)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Open Live on this computer' }))
+      .toHaveAttribute('href', 'http://localhost:3000/#/live');
   });
 });

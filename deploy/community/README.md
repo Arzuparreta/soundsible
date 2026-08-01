@@ -10,8 +10,8 @@ room; a listener can type a request like any other message.
 - `community-api`: signed DJ sessions, directory, synchronized programme
   metadata, presence, ephemeral cover cache and Socket.IO chat.
 - `mediamtx`: one Opus WHIP publisher and WHEP readers per active session.
-- `coturn`: authenticated TCP TURN fallback for browsers that cannot use the
-  direct MediaMTX candidates.
+- `coturn`: STUN discovery plus an authenticated TCP TURN fallback for browsers
+  that cannot use the direct MediaMTX candidates.
 - Nginx: TLS and the single public origin.
 - Defaults: 5 concurrent sessions, 100 listeners per session, 250 listeners
   total, 90 seconds for the DJ to reconnect.
@@ -33,10 +33,10 @@ docker compose --env-file deploy/community/.env \
   -f deploy/community/docker-compose.yml up -d --build
 ```
 
-Expose TCP 80/443/3478, UDP and TCP 8189, and UDP 49152–49663. Port 3478 is the
-TURN client connection; the bounded UDP range is used only for authenticated
-relay allocations. Ports 18080 and 18889 intentionally bind only to loopback
-for Nginx.
+Expose TCP 80/443/3478, UDP 3478, UDP and TCP 8189, and UDP 49152–49663. Port
+3478 provides STUN discovery over UDP and the TURN fallback over TCP; the
+bounded UDP range is used only for authenticated relay allocations. Ports
+18080 and 18889 intentionally bind only to loopback for Nginx.
 
 Health and capacity can be checked with:
 

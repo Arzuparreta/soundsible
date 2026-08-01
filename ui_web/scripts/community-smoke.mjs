@@ -29,8 +29,11 @@ const browserName = requestedBrowsers[0];
 const browserType = { chromium, firefox }[browserName];
 if (!browserType) throw new Error(`unsupported smoke browser: ${browserName}`);
 const forceRelay = process.env.COMMUNITY_SMOKE_FORCE_RELAY === '1';
+const debugIce = process.env.COMMUNITY_SMOKE_DEBUG_ICE === '1';
 
 const apiUrl = (process.env.COMMUNITY_SMOKE_API || 'http://127.0.0.1:18080').replace(/\/$/, '');
+const pageUrl = process.env.COMMUNITY_SMOKE_PAGE_URL || `${apiUrl}/health`;
+const listenerPageUrl = process.env.COMMUNITY_SMOKE_LISTENER_PAGE_URL || pageUrl;
 const socketClientPath = fileURLToPath(
   new URL('../node_modules/socket.io-client/dist/socket.io.min.js', import.meta.url),
 );
@@ -102,11 +105,11 @@ let ended;
 try {
   browser = await browserType.launch({ headless: true });
   const publisherPage = await browser.newPage();
-  await publisherPage.goto(`${apiUrl}/health`);
+  await publisherPage.goto(pageUrl);
   await publisherPage.addScriptTag({ path: socketClientPath });
   await publisherPage.addScriptTag({ content: communityWebrtcScript });
-  await publisherPage.evaluate(({ sessionId, hostToken }) => new Promise((resolve, reject) => {
-    const socket = globalThis.io(location.origin, {
+  await publisherPage.evaluate(({ sessionId, hostToken, socketUrl }) => new Promise((resolve, reject) => {
+    const socket = globalThis.io(socketUrl, {
       transports: ['websocket', 'polling'],
       auth: { session_id: sessionId, host_token: hostToken },
     });
@@ -117,23 +120,45 @@ try {
       resolve();
     });
     socket.once('connect_error', reject);
-  }), { sessionId: session.id, hostToken: session.host_token });
-  published = await publisherPage.evaluate(async ({ endpoint, token, relayOnly }) => {
+  }), { sessionId: session.id, hostToken: session.host_token, socketUrl: apiUrl });
+  published = await publisherPage.evaluate(async ({ endpoint, token, relayOnly, inspectIce }) => {
     const context = new AudioContext();
     const oscillator = context.createOscillator();
     const destination = context.createMediaStreamDestination();
     oscillator.connect(destination);
     oscillator.start();
-    const handle = await globalThis.SoundsibleCommunityWebrtc.openCommunityPublisher({
-      endpoint,
-      token,
-      stream: destination.stream,
-      iceTransportPolicy: relayOnly ? 'relay' : 'all',
-    });
+    let iceDiagnostic;
+    if (inspectIce) {
+      const response = await fetch(endpoint, {
+        method: 'OPTIONS',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      iceDiagnostic = {
+        status: response.status,
+        link: response.headers.get('Link'),
+        headers: [...response.headers.entries()],
+      };
+      globalThis.__iceDiagnostic = iceDiagnostic;
+    }
+    let handle;
+    try {
+      handle = await globalThis.SoundsibleCommunityWebrtc.openCommunityPublisher({
+        endpoint,
+        token,
+        stream: destination.stream,
+        iceTransportPolicy: relayOnly ? 'relay' : 'all',
+      });
+    } catch (error) {
+      throw new Error(`${error}; ICE ${JSON.stringify(iceDiagnostic)}`);
+    }
     const pc = handle.pc;
     globalThis.__communitySmoke = { context, oscillator, handle, pc };
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`publisher state ${pc.connectionState}`)), 12000);
+      const timer = setTimeout(() => reject(new Error(
+        `publisher state ${pc.connectionState}; gathering ${pc.iceGatheringState}; candidates ${JSON.stringify(
+          pc.localDescription?.sdp.match(/^a=candidate:.*$/gm) ?? [],
+        )}; ICE ${JSON.stringify(globalThis.__iceDiagnostic)}`,
+      )), 12000);
       const check = () => {
         if (pc.connectionState === 'connected') {
           clearTimeout(timer);
@@ -144,14 +169,19 @@ try {
       check();
     });
     return { state: pc.connectionState, resource: handle.resourceUrl };
-  }, { endpoint: session.whip_url, token: session.publish_token, relayOnly: forceRelay });
+  }, {
+    endpoint: session.whip_url,
+    token: session.publish_token,
+    relayOnly: forceRelay,
+    inspectIce: debugIce,
+  });
 
   const listenerPage = await browser.newPage();
-  await listenerPage.goto(`${apiUrl}/health`);
+  await listenerPage.goto(listenerPageUrl);
   await listenerPage.addScriptTag({ path: socketClientPath });
   await listenerPage.addScriptTag({ content: communityWebrtcScript });
-  await listenerPage.evaluate((sessionId) => new Promise((resolve, reject) => {
-    const socket = globalThis.io(location.origin, {
+  await listenerPage.evaluate(({ sessionId, socketUrl }) => new Promise((resolve, reject) => {
+    const socket = globalThis.io(socketUrl, {
       transports: ['websocket', 'polling'],
       auth: {
         session_id: sessionId,
@@ -166,7 +196,7 @@ try {
       resolve();
     });
     socket.once('connect_error', reject);
-  }), session.id);
+  }), { sessionId: session.id, socketUrl: apiUrl });
   received = await listenerPage.evaluate(async ({ endpoint, relayOnly }) => {
     let track;
     const handle = await globalThis.SoundsibleCommunityWebrtc.openCommunityListener({

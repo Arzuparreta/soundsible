@@ -155,6 +155,30 @@ describe('Community client state', () => {
     expect(communityError()).toBe('capacity');
   });
 
+  it('resumes the DJ session when the browser origin has no local host state', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.endsWith('/api/community/sessions')) {
+        return json({
+          error: 'This DJ already has an active session',
+          code: 'session_already_active',
+          session_id: session.id,
+        }, 409);
+      }
+      return json({ session });
+    }));
+
+    const resumed = await createHostSession('Saturday');
+
+    expect(resumed.id).toBe(session.id);
+    expect(calls).toEqual([
+      'http://localhost:3000/api/community/sessions',
+      `http://localhost:3000/api/community/sessions/${session.id}/resume`,
+    ]);
+  });
+
   it('recovers WHIP with bounded backoff and reports the connection', async () => {
     let whipCalls = 0;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

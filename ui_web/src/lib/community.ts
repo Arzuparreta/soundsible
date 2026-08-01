@@ -84,6 +84,7 @@ export type CommunityIssue =
   | 'invalid'
   | 'unavailable'
   | 'capacity'
+  | 'secure_context'
   | 'reconnecting'
   | 'publish_failed'
   | 'listen_failed';
@@ -344,11 +345,26 @@ export async function refreshLiveSessions(): Promise<LiveSession[]> {
 
 export async function createHostSession(title: string): Promise<HostLiveSession> {
   try {
-    const response = await request<{ session: HostLiveSession }>('/api/community/sessions', {
-      method: 'POST',
-      body: { title },
-      timeoutMs: 15000,
-    });
+    let response: { session: HostLiveSession };
+    try {
+      response = await request<{ session: HostLiveSession }>('/api/community/sessions', {
+        method: 'POST',
+        body: { title },
+        timeoutMs: 15000,
+      });
+    } catch (error) {
+      const payload = error instanceof ApiError
+        ? error.payload as { session_id?: string } | undefined
+        : undefined;
+      if (error instanceof ApiError && error.code === 'session_already_active' && payload?.session_id) {
+        response = await request<{ session: HostLiveSession }>(
+          `/api/community/sessions/${encodeURIComponent(payload.session_id)}/resume`,
+          { method: 'POST', timeoutMs: 15000 },
+        );
+      } else {
+        throw error;
+      }
+    }
     setHostSession(response.session);
     setProgram(null);
     setMessages([]);
@@ -361,6 +377,11 @@ export async function createHostSession(title: string): Promise<HostLiveSession>
     setCommunityError(issueForError(error, 'unavailable'));
     throw error;
   }
+}
+
+/** Browsers hide usable ICE candidates on non-trustworthy HTTP origins. */
+export function liveMediaSecure(): boolean {
+  return typeof window === 'undefined' || window.isSecureContext !== false;
 }
 
 export async function updateHostTitle(title: string): Promise<void> {
@@ -501,6 +522,11 @@ function schedulePublisherRecovery(generation: number): void {
 
 export async function startHostPublisher(stream: MediaStream): Promise<void> {
   if (!hostSession()) return;
+  if (!liveMediaSecure()) {
+    setPublisherState('failed');
+    setCommunityError('secure_context');
+    throw new Error('community_secure_context_required');
+  }
   publisherSource = stream;
   if (publisher || publisherState() === 'connecting' || publisherState() === 'recovering') return;
   publisherGeneration += 1;
@@ -702,6 +728,11 @@ function scheduleListenerRecovery(generation: number): void {
 
 export async function startListening(): Promise<MediaStream> {
   if (!joinedSession()) throw new Error('session_missing');
+  if (!liveMediaSecure()) {
+    setListenerState('failed');
+    setCommunityError('secure_context');
+    throw new Error('community_secure_context_required');
+  }
   if (listenerStream() && listenerState() !== 'failed') return listenerStream()!;
   listenerAuthorized = true;
   listenerGeneration += 1;

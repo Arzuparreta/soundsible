@@ -13,6 +13,7 @@ import {
   leaveLiveSession,
   listenerState,
   listenerStream,
+  liveMediaSecure,
   liveProgram,
   liveSessions,
   publisherConnected,
@@ -168,6 +169,16 @@ export default function Live() {
   const [creating, setCreating] = createSignal(false);
   const [editing, setEditing] = createSignal(false);
   let refreshTimer: number | undefined;
+  const mediaSecure = liveMediaSecure();
+  const localLiveUrl = (() => {
+    if (typeof window === 'undefined') return 'http://localhost:5005/player/#/live';
+    const url = new URL(window.location.href);
+    url.protocol = 'http:';
+    url.hostname = 'localhost';
+    url.pathname = url.pathname.includes('/player') ? '/player/' : url.pathname;
+    url.hash = '#/live';
+    return url.href;
+  })();
 
   onMount(() => {
     setTitle(`Session by ${user()?.display_name ?? 'DJ'}`);
@@ -216,7 +227,7 @@ export default function Live() {
                 <button
                   class={styles.goLive}
                   type="button"
-                  disabled={creating() || communityError() === 'loading' || !communityConfig()?.enabled}
+                  disabled={!mediaSecure || creating() || communityError() === 'loading' || !communityConfig()?.enabled}
                   onClick={() => void create()}
                 >
                   {creating() ? t('common.loading') : t('live.goLive')}
@@ -230,7 +241,14 @@ export default function Live() {
           }
         />
 
-        <Show when={communityError()}>
+        <Show when={!mediaSecure}>
+          <div class={styles.banner} data-state="secure_context">
+            <span>{t('live.service.secure_context')}</span>
+            <a href={localLiveUrl}>{t('live.openLocalSecure')}</a>
+          </div>
+        </Show>
+
+        <Show when={mediaSecure && communityError()}>
           {(issue) => (
             <div class={styles.banner} data-state={issue()}>
               <span>{t(`live.service.${issue()}`)}</span>
