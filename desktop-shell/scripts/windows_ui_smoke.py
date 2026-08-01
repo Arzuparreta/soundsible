@@ -186,11 +186,18 @@ def set_clipboard_text(value: str) -> None:
 def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None:
     def reopen_picker_after_oobe() -> None:
         # Explorer owns the foreground after Windows finishes its deferred
-        # privacy OOBE. Bring Soundsible back before using a physical UIA click.
-        window.set_focus()
-        time.sleep(0.5)
+        # privacy OOBE. Invoke the covered WebView button through UIA instead
+        # of sending a physical click to Explorer's coordinates.
         print("Reopening folder picker after runner privacy OOBE", flush=True)
-        control(window, "Choose folder", timeout=10).click_input()
+        chooser = control(window, "Choose folder", timeout=10)
+        try:
+            chooser.invoke()
+            print("Reopened folder picker through UIA Invoke", flush=True)
+        except Exception as error:
+            print(f"UIA Invoke failed, using focused click: {error}", flush=True)
+            window.set_focus()
+            time.sleep(0.5)
+            chooser.click_input()
 
     control(window, "Choose folder").click_input()
     dialog = folder_dialog(reopen_picker_after_oobe)
