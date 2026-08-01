@@ -197,9 +197,10 @@ def set_clipboard_text(value: str) -> None:
             "powershell",
             "-NoProfile",
             "-Command",
-            "Set-Clipboard -Value $args[0]",
-            value,
+            "Set-Clipboard -Value ([Console]::In.ReadToEnd())",
         ],
+        input=value,
+        text=True,
         check=True,
     )
 
