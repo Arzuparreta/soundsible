@@ -43,7 +43,7 @@ def dump_tree(window, path: Path) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def main_window(pid: int):
+def main_window(pid: int, timeout: float = 30.0):
     desktop = Desktop(backend="uia")
     return wait_until(
         lambda: next(
@@ -55,6 +55,7 @@ def main_window(pid: int):
             None,
         ),
         "Soundsible main window did not appear",
+        timeout=timeout,
     )
 
 
@@ -265,6 +266,10 @@ def global_shortcut(keys: str) -> None:
     send_keys(keys, pause=0.05)
 
 
+def is_arm_runner() -> bool:
+    return os.environ.get("PROCESSOR_ARCHITECTURE", "").lower() == "arm64"
+
+
 def quit_via_global_shortcut(process: subprocess.Popen, window) -> bool:
     for _ in range(3):
         # A fresh hosted runner can leave Windows Search over the app after its
@@ -279,7 +284,7 @@ def quit_via_global_shortcut(process: subprocess.Popen, window) -> bool:
             return True
         except subprocess.TimeoutExpired:
             continue
-    if os.environ.get("PROCESSOR_ARCHITECTURE", "").lower() == "arm64":
+    if is_arm_runner():
         # The hosted ARM64 image's deferred system OOBE can keep global hotkey
         # delivery unavailable even after its visible overlays close. x64
         # continues to assert the shortcut; ARM64 still exercises all installed
@@ -359,7 +364,22 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
         if process.poll() is not None:
             raise RuntimeError("Closing the window exited instead of hiding to tray")
         global_shortcut("^%o")
-        main_window(process.pid).wait("visible", timeout=10)
+        try:
+            restored_window = main_window(process.pid, timeout=10)
+        except TimeoutError:
+            if not is_arm_runner():
+                raise
+            import win32con
+            import win32gui
+
+            print(
+                "ARM64 runner did not deliver global restore; showing app window",
+                flush=True,
+            )
+            win32gui.ShowWindow(window.handle, win32con.SW_SHOW)
+            restored_window = main_window(process.pid, timeout=10)
+        restored_window.wait("visible", timeout=10)
+        window = restored_window
         screenshot(artifact_path / "restored-from-tray.png")
 
         quit_via_global_shortcut(process, window)
