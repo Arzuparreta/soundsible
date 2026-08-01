@@ -9,8 +9,8 @@ hls: false
 srt: false
 playback: false
 api: false
-metrics: true
-metricsAddress: 127.0.0.1:9998
+metrics: false
+moq: false
 
 authMethod: http
 authHTTPAddress: http://community-api:8080/internal/media-auth

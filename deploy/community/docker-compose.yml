@@ -17,9 +17,19 @@ services:
       - community-data:/data
     ports:
       - "127.0.0.1:18080:8080"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   mediamtx:
-    image: bluenviron/mediamtx:1
+    image: bluenviron/mediamtx:1.19.3
     restart: unless-stopped
     depends_on:
       - community-api
