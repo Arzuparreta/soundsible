@@ -135,14 +135,24 @@ def dismiss_runner_first_boot(desktop) -> bool:
     return False
 
 
-def folder_dialog():
+def folder_dialog(reopen_after_oobe=None):
     desktop = Desktop(backend="uia")
+    dismissed_oobe = False
+    reopened_picker = False
 
     def find_dialog():
+        nonlocal dismissed_oobe, reopened_picker
         # A fresh Windows ARM hosted runner can defer its privacy OOBE until
         # Explorer first opens. Clear that system-owned screen, then continue
         # waiting for the folder picker that the app requested.
         if dismiss_runner_first_boot(desktop):
+            dismissed_oobe = True
+            return None
+        if dismissed_oobe and not reopened_picker and reopen_after_oobe is not None:
+            # Windows discards the original picker request while its OOBE owns
+            # the desktop. Ask the app to open it again after Accept closes.
+            reopen_after_oobe()
+            reopened_picker = True
             return None
         return next(
             (
@@ -175,7 +185,9 @@ def set_clipboard_text(value: str) -> None:
 
 def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None:
     control(window, "Choose folder").click_input()
-    dialog = folder_dialog()
+    dialog = folder_dialog(
+        lambda: control(window, "Choose folder", timeout=10).click_input()
+    )
     screenshot(artifact_path / "picker-cancel.png")
     dialog.set_focus()
     send_keys("{ESC}")
