@@ -104,13 +104,30 @@ def dismiss_runner_first_boot(desktop) -> bool:
             None,
         )
         # The ARM image occasionally loses the accessible label while the
-        # primary blue button remains visible. It is the rightmost button.
+        # primary blue button remains visible. Restrict the fallback to wide
+        # controls in the lower part of the privacy card so the separate
+        # accessibility shortcut in the bottom-right corner is never chosen.
         if button is None and buttons:
-            button = max(buttons, key=lambda item: item.rectangle().left)
+            primary_buttons = [
+                item
+                for item in buttons
+                if item.rectangle().width() >= 100 and item.rectangle().top >= 500
+            ]
+            if primary_buttons:
+                button = max(
+                    primary_buttons,
+                    key=lambda item: item.rectangle().left,
+                )
 
         if button is not None:
+            print(
+                "Dismissing runner privacy OOBE with "
+                f"{button.window_text()!r} at {button.rectangle()}",
+                flush=True,
+            )
             button.click_input()
         else:
+            print("Dismissing runner privacy OOBE with Enter", flush=True)
             window.set_focus()
             send_keys("{ENTER}")
         time.sleep(1.5)
